@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/system.rs - endpoint hệ thống: /health cho compose và CI, /version cho giao diện. */
+/* api/system.rs - endpoint hệ thống: /api/health cho compose và CI, /api/version cho giao diện. */
 
 use axum::{extract::State, routing::get, Json, Router};
 use serde::Serialize;

@@ -197,7 +197,7 @@ Cập nhật khi có thay đổi.
 | Phần | Trạng thái |
 |---|---|
 | Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
-| `/health`, `/version` | Có |
+| `/api/health`, `/api/version`; mọi API dưới `/api`, đường dẫn API sai trả 404 JSON | Có |
 | Trait `LlmProvider` và ba cài đặt | Khung: mock chưa có câu mẫu, Gemini và Ollama chưa gọi thật |
 | Route cho dataset, ask, drill, auth | Có route, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |

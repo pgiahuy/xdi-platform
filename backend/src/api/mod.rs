@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/mod.rs - tầng HTTP: gom route của từng nhóm thành một router.
-Handler chỉ đọc request, gọi service, trả response; không chứa logic nghiệp vụ. */
+Handler chỉ đọc request, gọi service, trả response; không chứa logic nghiệp vụ.
+
+Mọi route API nằm dưới /api, để cùng một server phục vụ được cả giao diện (các đường dẫn còn lại) mà không trùng
+nhau. Đường dẫn dưới /api không tồn tại trả 404 JSON; nếu rơi xuống phần phục vụ giao diện, frontend sẽ nhận một
+trang HTML thay vì lỗi và khó biết vì sao. */
 
 mod auth;
 mod datasets;
@@ -9,15 +13,20 @@ mod system;
 
 use axum::Router;
 
-use crate::state::AppState;
+use crate::{error::AppError, state::AppState};
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    let api = Router::new()
         .merge(system::routes())
         .merge(auth::routes())
         .merge(datasets::routes())
         .merge(query::routes())
-        .with_state(state)
+        .fallback(api_not_found);
+    Router::new().nest("/api", api).with_state(state)
+}
+
+async fn api_not_found() -> AppError {
+    AppError::NotFound("Không có đường dẫn API này".to_string())
 }
 
 #[cfg(test)]
@@ -37,7 +46,7 @@ mod tests {
     #[tokio::test]
     async fn health_returns_ok() {
         let res = app()
-            .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+            .oneshot(Request::get("/api/health").body(Body::empty()).unwrap())
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::OK);
@@ -48,9 +57,35 @@ mod tests {
     #[tokio::test]
     async fn unfinished_endpoint_returns_501() {
         let res = app()
-            .oneshot(Request::get("/datasets").body(Body::empty()).unwrap())
+            .oneshot(Request::get("/api/datasets").body(Body::empty()).unwrap())
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::NOT_IMPLEMENTED);
+    }
+
+    #[tokio::test]
+    async fn unknown_api_path_returns_json_404() {
+        let res = app()
+            .oneshot(Request::get("/api/khong-co").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        let content_type = res.headers()["content-type"].to_str().unwrap().to_string();
+        assert!(
+            content_type.starts_with("application/json"),
+            "got {content_type}"
+        );
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["code"], "not_found");
+    }
+
+    #[tokio::test]
+    async fn old_paths_without_prefix_are_gone() {
+        let res = app()
+            .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }
 }
