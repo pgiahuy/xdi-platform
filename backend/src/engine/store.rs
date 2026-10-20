@@ -162,4 +162,165 @@ mod tests {
         );
         tx.rollback().await.expect("rollback");
     }
+
+    /// Tạo một workspace có nguồn, một dataset với hai phiên bản (phiên bản 2 là hiện hành) và một câu hỏi.
+    /// Trả về id của workspace, dataset, phiên bản 1, phiên bản 2.
+    async fn seed(tx: &mut sqlx::PgConnection) -> (uuid::Uuid, uuid::Uuid, uuid::Uuid, uuid::Uuid) {
+        let ws: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO workspaces (name, slug) VALUES ('W', 'test-' || left(gen_random_uuid()::text, 8)) RETURNING id",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("workspace");
+        let src: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO sources (workspace_id, kind) VALUES ($1, 'local_file') RETURNING id",
+        )
+        .bind(ws)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("source");
+        let ds: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO datasets (workspace_id, source_id, name, logical_table) VALUES ($1, $2, 'Sales', 'sales') RETURNING id",
+        )
+        .bind(ws)
+        .bind(src)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("dataset");
+        let mut versions = Vec::new();
+        for n in [1, 2] {
+            let v: uuid::Uuid = sqlx::query_scalar(
+                "INSERT INTO dataset_versions (workspace_id, dataset_id, version, source_kind) VALUES ($1, $2, $3, 'csv') RETURNING id",
+            )
+            .bind(ws)
+            .bind(ds)
+            .bind(n)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("version");
+            versions.push(v);
+        }
+        sqlx::query("UPDATE datasets SET current_version_id = $1 WHERE id = $2")
+            .bind(versions[1])
+            .bind(ds)
+            .execute(&mut *tx)
+            .await
+            .expect("set current");
+        sqlx::query(
+            "INSERT INTO queries (workspace_id, dataset_id, version_id, question, status) VALUES ($1, $2, $3, 'q', 'ok')",
+        )
+        .bind(ws)
+        .bind(ds)
+        .bind(versions[1])
+        .execute(&mut *tx)
+        .await
+        .expect("query");
+        (ws, ds, versions[0], versions[1])
+    }
+
+    #[tokio::test]
+    async fn delete_rules_keep_data_consistent() {
+        let Some(url) = database_url() else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let store = Store::connect(&url).await.expect("connect");
+        store.migrate().await.expect("migrate");
+
+        // Phiên bản hiện hành không xóa được; phiên bản khác thì được.
+        let mut tx = store.pool.begin().await.expect("begin");
+        let (_, _, v1, v2) = seed(&mut tx).await;
+        sqlx::query("SAVEPOINT s").execute(&mut *tx).await.unwrap();
+        let blocked = sqlx::query("DELETE FROM dataset_versions WHERE id = $1")
+            .bind(v2)
+            .execute(&mut *tx)
+            .await;
+        assert!(blocked.is_err(), "deleting the current version must fail");
+        sqlx::query("ROLLBACK TO SAVEPOINT s")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM dataset_versions WHERE id = $1")
+            .bind(v1)
+            .execute(&mut *tx)
+            .await
+            .expect("deleting a non-current version must succeed");
+        tx.rollback().await.unwrap();
+
+        // Xóa dataset: lịch sử câu hỏi còn, cả hai cột trỏ tới đều null, workspace_id giữ nguyên.
+        let mut tx = store.pool.begin().await.expect("begin");
+        let (ws, ds, _, _) = seed(&mut tx).await;
+        sqlx::query("DELETE FROM datasets WHERE id = $1")
+            .bind(ds)
+            .execute(&mut *tx)
+            .await
+            .expect("delete dataset");
+        let kept: (i64, bool) = sqlx::query_as(
+            "SELECT count(*), bool_and(dataset_id IS NULL AND version_id IS NULL) FROM queries WHERE workspace_id = $1",
+        )
+        .bind(ws)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+        assert_eq!(kept, (1, true));
+        tx.rollback().await.unwrap();
+
+        // Xóa workspace: mọi thứ của nó mất theo, kể cả nguồn đang có dataset.
+        let mut tx = store.pool.begin().await.expect("begin");
+        let (ws, _, _, _) = seed(&mut tx).await;
+        sqlx::query("DELETE FROM workspaces WHERE id = $1")
+            .bind(ws)
+            .execute(&mut *tx)
+            .await
+            .expect("delete workspace");
+        let left: i64 = sqlx::query_scalar(
+            "SELECT (SELECT count(*) FROM sources WHERE workspace_id = $1)
+                  + (SELECT count(*) FROM datasets WHERE workspace_id = $1)
+                  + (SELECT count(*) FROM queries WHERE workspace_id = $1)",
+        )
+        .bind(ws)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+        assert_eq!(left, 0);
+        tx.rollback().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn query_version_must_belong_to_its_dataset() {
+        let Some(url) = database_url() else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let store = Store::connect(&url).await.expect("connect");
+        store.migrate().await.expect("migrate");
+        let mut tx = store.pool.begin().await.expect("begin");
+        let (ws, _, _, v2) = seed(&mut tx).await;
+        let src: uuid::Uuid = sqlx::query_scalar("SELECT id FROM sources WHERE workspace_id = $1")
+            .bind(ws)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let other: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO datasets (workspace_id, source_id, name, logical_table) VALUES ($1, $2, 'Other', 'other') RETURNING id",
+        )
+        .bind(ws)
+        .bind(src)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+        let result = sqlx::query(
+            "INSERT INTO queries (workspace_id, dataset_id, version_id, question, status) VALUES ($1, $2, $3, 'q', 'ok')",
+        )
+        .bind(ws)
+        .bind(other)
+        .bind(v2)
+        .execute(&mut *tx)
+        .await;
+        assert!(
+            result.is_err(),
+            "a query must not point to another dataset's version"
+        );
+        tx.rollback().await.unwrap();
+    }
 }

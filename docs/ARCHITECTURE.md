@@ -115,7 +115,9 @@ Ba tầng tách riêng:
 
 Vai trong ứng dụng (`role`) và vai dữ liệu (`data_role`) là hai cột riêng của `memberships`: một Analyst có thể chỉ thấy
 miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store.rs` nhận kiểu `WorkspaceId`, chỉ tạo được từ JWT đã
-xác thực, nên quên lọc theo workspace là lỗi biên dịch. Postgres Row Level Security là lớp chặn thứ hai. File Parquet nằm
+xác thực, nên quên lọc theo workspace là lỗi biên dịch. Lớp chặn thứ hai nằm trong database: khóa ngoại giữa các bảng
+nghiệp vụ gồm cả `workspace_id`, nên một dòng không trỏ được sang dòng của workspace khác. Postgres Row Level Security
+sẽ thêm sau làm lớp thứ ba. File Parquet nằm
 dưới `/data/<workspace>/`, prompt gửi mô hình ngôn ngữ chỉ chứa hồ sơ của workspace hiện tại.
 
 ## 5. Nạp dữ liệu và lấy ngữ cảnh
