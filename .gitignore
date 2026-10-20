@@ -3,6 +3,9 @@ CLAUDE.local.md
 .env
 .env.*.local
 
+# Gói phát hành tạo bởi make release-artifacts
+release/
+
 # Rust
 backend/target/
 
