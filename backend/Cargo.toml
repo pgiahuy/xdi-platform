@@ -14,7 +14,8 @@ serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
-uuid = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid", "chrono", "json"] }
 
 [dev-dependencies]

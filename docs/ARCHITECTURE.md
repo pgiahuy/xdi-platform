@@ -78,7 +78,7 @@ backend/src/
   config.rs          biến môi trường
   api/               tầng HTTP: handler, request/response struct, lỗi -> status
   service/           tầng nghiệp vụ: ingest.rs, ask.rs, explain.rs; không biết gì về HTTP
-  engine/            tầng hạ tầng: analytics.rs (DuckDB), store.rs (Postgres), guard.rs, llm/
+  engine/            tầng hạ tầng: analytics.rs (DuckDB), store/ (Postgres, chia theo bảng), guard.rs, llm/
   auth/              JWT, role, demo-login
   error.rs           một enum lỗi chung
 ```
@@ -87,6 +87,8 @@ backend/src/
 - Trait duy nhất là `LlmProvider` với hàm `complete`; hàm `embed` thêm khi bật tìm theo nghĩa. Chọn implementation lúc khởi động theo cấu hình:
   `gemini`, `ollama`, hoặc `mock`. Mock trả SQL cố định cho bộ câu hỏi mẫu, dùng khi không có khóa và trong test.
 - Postgres và DuckDB không bọc trait. Service nhận struct `Store` và `Analytics` cụ thể.
+- Câu SQL của `Store` viết dạng chuỗi với `sqlx::query_as`, không dùng macro `query!` kiểm lúc biên dịch: không cần thư
+  mục `.sqlx/` và `sqlx-cli`, build không cần Postgres; đổi lại, mọi câu SQL được kiểm bằng test trên Postgres thật.
 - Trạng thái chia sẻ qua một `AppState`: `Store`, `Analytics`, `Arc<dyn LlmProvider>`, config. Không biến toàn cục.
 - Test ở tầng service với mock LLM, DuckDB in-memory và Postgres trong CI.
 
@@ -199,4 +201,5 @@ Cập nhật khi có thay đổi.
 | Trait `LlmProvider` và ba cài đặt | Khung: mock chưa có câu mẫu, Gemini và Ollama chưa gọi thật |
 | Route cho dataset, ask, drill, auth | Có route, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
-| Truy vấn Postgres theo workspace, DuckDB, guard, giải thích, auth, frontend | Chưa có |
+| Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có, chưa có tính năng nào gọi tới |
+| DuckDB, guard, giải thích, auth, frontend | Chưa có |
