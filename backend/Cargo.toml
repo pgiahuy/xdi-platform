@@ -3,7 +3,7 @@ name = "xdi-backend"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Backend của xdi-platform: API, guard SQL, engine phân tích"
+description = "Backend of xdi-platform: API, SQL guard, analytics engine"
 repository = "https://github.com/pgiahuy/xdi-platform"
 
 [dependencies]

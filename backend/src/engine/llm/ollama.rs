@@ -24,7 +24,7 @@ impl LlmProvider for Ollama {
     }
 
     async fn complete(&self, _prompt: &str) -> Result<String, AppError> {
-        tracing::debug!(url = %self.url, "ollama chưa cài đặt");
+        tracing::debug!(url = %self.url, "ollama provider not implemented yet");
         Err(AppError::NotImplemented("gọi Ollama"))
     }
 }

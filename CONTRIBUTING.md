@@ -14,12 +14,12 @@ Mỗi PR ứng với một Issue. Việc lớn tách thành nhiều Issue con.
 
 ## Chạy trên máy
 
-Xem [docs/INSTALL.md](docs/INSTALL.md) mục build từ nguồn. Tóm tắt:
+Cần Rust stable, Docker và GNU Make. Tóm tắt:
 
 ```bash
 make dev        # Postgres trong Docker, backend và frontend chạy local
-make check      # fmt, clippy, test, lint, build, so openapi.json; CI chạy đúng lệnh này
-make check-fast # bỏ build docker và frontend
+make check      # check-fast cộng build frontend và build image docker
+make check-fast # fmt, clippy, test backend; CI chạy lệnh này trên mỗi PR
 make hooks      # cài hook pre-push chạy check-fast (tùy chọn)
 ```
 
@@ -48,7 +48,7 @@ make hooks      # cài hook pre-push chạy check-fast (tùy chọn)
 - Tên biến, hàm, trường JSON, mã lỗi, biến môi trường, thông điệp log: tiếng Anh. Chú thích và tài liệu: tiếng Việt.
 - Không ghi cứng chuỗi, đường dẫn, cấu hình trong code.
 - Không commit khóa hay bí mật. `.env` nằm trong `.gitignore`; mẫu ở `.env.example`.
-- Thư viện mới phải có giấy phép tương thích Apache 2.0 và được ghi vào `docs/LICENSES.md`.
+- Thư viện mới phải có giấy phép tương thích Apache 2.0 (MIT, BSD, Apache, ISC, PostgreSQL) và được ghi vào bảng giấy phép thành phần.
 
 ## Giấy phép
 

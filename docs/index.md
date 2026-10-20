@@ -15,18 +15,17 @@ cd xdi-platform
 docker compose up
 ```
 
-Mở http://localhost:3000, bấm một nút đăng nhập demo, chọn dataset mẫu, bấm một câu hỏi gợi ý. Không cần khóa API:
-chế độ mặc định trả lời được các câu hỏi mẫu và báo rõ khi cần cấu hình mô hình ngôn ngữ cho câu hỏi tự do.
+Hiện mới có khung backend: `curl localhost:8000/health` trả `{"status":"ok"}`. Giao diện, dataset mẫu và câu hỏi mẫu
+đang được làm trong [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1).
 
 ## Tài liệu
 
-- [Cài đặt](INSTALL.md): Docker hoặc build từ nguồn, biến môi trường, lỗi hay gặp.
 - [Kiến trúc](ARCHITECTURE.md): sơ đồ, luồng một câu hỏi, hai kho dữ liệu, hướng phát triển.
-- [API](API.md): khái niệm, mã lỗi, Swagger UI.
-- [Guard SQL](GUARD.md): hệ thống cho phép gì, cấm gì, tiêm phân quyền ở đâu.
-- [Dữ liệu](DATA.md): định dạng nhận, cách suy vai trò cột, cách sửa bí danh.
-- [Giấy phép thành phần](LICENSES.md).
 - [Phát hành](RELEASING.md): quy trình ra phiên bản mới.
+
+Đang viết: cài đặt ([#54](https://github.com/pgiahuy/xdi-platform/issues/54)), API, guard SQL và dữ liệu
+([#56](https://github.com/pgiahuy/xdi-platform/issues/56)), giấy phép thành phần và quyền riêng tư
+([#57](https://github.com/pgiahuy/xdi-platform/issues/57)).
 
 ## Tham gia
 

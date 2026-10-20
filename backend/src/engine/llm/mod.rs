@@ -35,7 +35,10 @@ pub fn from_config(config: &Config) -> Arc<dyn LlmProvider> {
         )),
         other => {
             if other != "mock" {
-                tracing::warn!(provider = other, "LLM_PROVIDER không hợp lệ, dùng mock");
+                tracing::warn!(
+                    provider = other,
+                    "unknown LLM_PROVIDER, falling back to mock"
+                );
             }
             Arc::new(mock::Mock)
         }

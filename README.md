@@ -19,9 +19,13 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Kiểm tra: `curl localhost:8000/health` trả `{"status":"ok"}`. Không cần khóa API: chế độ mặc định `LLM_PROVIDER=mock`
-trả lời các câu hỏi mẫu của dataset mẫu. Muốn hỏi tự do, đặt `LLM_PROVIDER=gemini` kèm khóa, hoặc `ollama` với một
-máy chạy Ollama.
+Kiểm tra: `curl localhost:8000/health` trả `{"status":"ok"}`, `curl localhost:8000/version` trả phiên bản và nhà cung
+cấp LLM đang dùng.
+
+Dự án đang ở giai đoạn khung: backend chạy được, các tính năng nạp dữ liệu, hỏi, giải thích và giao diện đang được làm
+(xem [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1)). Khi xong, chế độ mặc định
+`LLM_PROVIDER=mock` sẽ trả lời được các câu hỏi mẫu trên dataset mẫu mà không cần khóa API; `gemini` cần khóa, `ollama`
+cần một máy chạy Ollama.
 
 ## Build từ nguồn
 
@@ -33,7 +37,7 @@ make check-fast   # fmt, clippy, test
 make help         # mọi target
 ```
 
-Chi tiết, biến môi trường và lỗi hay gặp: [docs/INSTALL.md](docs/INSTALL.md).
+Biến môi trường: [.env.example](.env.example). Hướng dẫn cài đặt đầy đủ đang viết ([#54](https://github.com/pgiahuy/xdi-platform/issues/54)).
 
 ## Cấu trúc
 
@@ -61,4 +65,4 @@ Kiến trúc, luồng một câu hỏi, hướng phát triển: [docs/ARCHITECTU
 
 ## Giấy phép
 
-[Apache License 2.0](LICENSE). Giấy phép của từng thành phần và dataset mẫu: [docs/LICENSES.md](docs/LICENSES.md).
+[Apache License 2.0](LICENSE). Bảng giấy phép của từng thành phần đang viết ([#57](https://github.com/pgiahuy/xdi-platform/issues/57)).

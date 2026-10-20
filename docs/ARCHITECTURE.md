@@ -48,15 +48,6 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    |  metrics           |
    |  rls_policies      |
    |  queries, settings |
-   +--------------------+   +-----------------+
-   |  sources           |        |  Gemini API        |   |  Ollama local   |
-   |  datasets          |        |  (có key)          |   |  (offline)      |
-   |  dataset_versions  |        +--------------------+   +-----------------+
-   |  columns           |
-   |  column_values     |
-   |  metrics           |
-   |  rls_policies      |
-   |  queries, settings |
    +--------------------+
 ```
 
@@ -93,7 +84,7 @@ backend/src/
 ```
 
 - `api` chỉ gọi `service`. `service` gọi `engine` và `auth`. Không có chiều ngược.
-- Trait duy nhất là `LlmProvider` với hai hàm `complete` và `embed`. Chọn implementation lúc khởi động theo cấu hình:
+- Trait duy nhất là `LlmProvider` với hàm `complete`; hàm `embed` thêm khi bật tìm theo nghĩa. Chọn implementation lúc khởi động theo cấu hình:
   `gemini`, `ollama`, hoặc `mock`. Mock trả SQL cố định cho bộ câu hỏi mẫu, dùng khi không có khóa và trong test.
 - Postgres và DuckDB không bọc trait. Service nhận struct `Store` và `Analytics` cụ thể.
 - Trạng thái chia sẻ qua một `AppState`: `Store`, `Analytics`, `Arc<dyn LlmProvider>`, config. Không biến toàn cục.
@@ -145,7 +136,7 @@ Mô tả và bí danh do mô hình ngôn ngữ viết một lần lúc nạp. L�
 | Value mapping | `column_values` | `unaccent` bỏ dấu, `pg_trgm` chịu lỗi gõ |
 | Few-shot | `queries` đã đánh dấu đúng | Từ khóa trùng |
 
-Cột `embedding` có sẵn trên ba bảng và trait có `embed`. Khi so chuỗi không đủ (cách diễn đạt không lường trước,
+Cột `embedding` có sẵn trên ba bảng; trait sẽ có thêm `embed`. Khi so chuỗi không đủ (cách diễn đạt không lường trước,
 nguồn nhiều bảng), bật tìm theo vector trong cùng Postgres, gộp với so chuỗi thành một danh sách ứng viên.
 
 ## 6. Engine không biết trước schema
@@ -176,7 +167,7 @@ Mỗi lần nạp file là một phiên bản, không ghi đè. `queries` trỏ 
 ## 8. API
 
 REST và JSON. OpenAPI sinh từ code bằng `utoipa`, phục vụ ở `/openapi.json` và Swagger UI ở `/docs`. Frontend sinh
-kiểu TypeScript từ spec. `openapi.json` commit vào repo, CI so lại để hai bên không lệch. Chi tiết ở [API.md](API.md).
+kiểu TypeScript từ spec. `openapi.json` commit vào repo, CI so lại để hai bên không lệch. Tài liệu API đang viết ([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
 
 ## 9. Hướng phát triển
 
@@ -196,4 +187,12 @@ liệu; mọi lời gọi ra ngoài đi qua một chỗ để thêm retry, timeo
 
 ## Trạng thái
 
-Cập nhật khi có thay đổi. Chưa có phần nào được cài đặt; tài liệu này là thiết kế ban đầu.
+Cập nhật khi có thay đổi.
+
+| Phần | Trạng thái |
+|---|---|
+| Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
+| `/health`, `/version` | Có |
+| Trait `LlmProvider` và ba cài đặt | Khung: mock chưa có câu mẫu, Gemini và Ollama chưa gọi thật |
+| Route cho dataset, ask, drill, auth | Có route, trả 501 |
+| Postgres, DuckDB, guard, giải thích, auth, frontend | Chưa có |

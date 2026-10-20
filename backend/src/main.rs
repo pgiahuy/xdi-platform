@@ -24,8 +24,8 @@ async fn main() {
     tracing::info!(%addr, "backend listening");
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .expect("không mở được cổng, kiểm tra BACKEND_PORT");
+        .expect("cannot bind port, check BACKEND_PORT");
     axum::serve(listener, app)
         .await
-        .expect("server dừng bất thường");
+        .expect("server stopped unexpectedly");
 }

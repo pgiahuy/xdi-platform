@@ -39,7 +39,8 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 
 - Mỗi file mở đầu bằng một khối chú thích: tên file, vai trò, cách nó nối với phần khác.
 - Chú thích giải thích vì sao, không kể lại mã làm gì. Đặt ngay trên dòng cần giải thích, nêu hệ quả nếu làm khác.
-- Mỗi file nguồn có dòng `// SPDX-License-Identifier: Apache-2.0` ở đầu.
+- Mỗi file mã nguồn chương trình (`.rs`, `.ts`, `.tsx`) có dòng `// SPDX-License-Identifier: Apache-2.0` ở đầu. File cấu hình
+  và script không bắt buộc.
 
 **Đặt tên**
 
