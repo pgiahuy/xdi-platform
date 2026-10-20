@@ -6,7 +6,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
 
 ```
                                  TRÌNH DUYỆT
-                 Next.js App Router, Tailwind, shadcn/ui, Recharts
+                 React, Vite, Tailwind, shadcn/ui, Recharts
             Bố cục 3 pane: dữ liệu | hỏi, bảng, biểu đồ | bằng chứng
                                       |
                               REST JSON, SSE cho ask
@@ -51,7 +51,8 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    +--------------------+
 ```
 
-Ba container: `backend`, `postgres`, `frontend`. DuckDB là thư viện nằm trong backend, không có tiến trình riêng.
+Hai container: `backend`, `postgres`. Giao diện build ra file tĩnh, backend phục vụ cùng địa chỉ với API (`/api`), nên
+không cần CORS và cookie đăng nhập đơn giản. DuckDB là thư viện nằm trong backend, không có tiến trình riêng.
 
 ## 2. Một câu hỏi đi qua chín bước
 
@@ -202,4 +203,6 @@ Cập nhật khi có thay đổi.
 | Route cho dataset, ask, drill, auth | Có route, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có, chưa có tính năng nào gọi tới |
-| DuckDB, guard, giải thích, auth, frontend | Chưa có |
+| Khung giao diện React và Vite, trang chủ hiện phiên bản máy chủ | Có |
+| Backend phục vụ giao diện | Chưa có (#14) |
+| DuckDB, guard, giải thích, auth, các trang nghiệp vụ | Chưa có |

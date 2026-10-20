@@ -1,7 +1,7 @@
 # Quy tắc dự án: dành cho trợ lý AI và cả đội
 
 xdi-platform: phân tích dữ liệu bằng ngôn ngữ tự nhiên, có bằng chứng cho từng con số. Backend Rust (Axum, DuckDB
-nhúng, Postgres), frontend Next.js. Giấy phép Apache 2.0. Trả lời người dùng bằng tiếng Việt.
+nhúng, Postgres), frontend React với Vite. Giấy phép Apache 2.0. Trả lời người dùng bằng tiếng Việt.
 
 Kiến trúc và lý do ở `docs/ARCHITECTURE.md`. Cách đóng góp ở `CONTRIBUTING.md`. File này là nguồn duy nhất cho quy
 tắc làm việc; tài liệu khác trỏ về đây, không chép lại.
@@ -21,7 +21,7 @@ tắc làm việc; tài liệu khác trỏ về đây, không chép lại.
 
 ```
 backend/     một crate Rust: api/ -> service/ -> engine/ và auth/. Phụ thuộc một chiều, không gọi ngược.
-frontend/    Next.js App Router. Kiểu API sinh từ openapi.json, không viết tay.
+frontend/    React với Vite, build ra file tĩnh, backend phục vụ. Kiểu API sinh từ openapi.json, không viết tay.
 docs/        tài liệu, cũng là nguồn GitHub Pages.
 data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB.
 ```
@@ -58,7 +58,14 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
   người dùng cách sửa.
 - Rust: `cargo fmt`, `cargo clippy` không cảnh báo trước khi commit. Crate phổ biến, module thẳng, không trait generic
   phức tạp, không macro tự viết. Trait duy nhất là `LlmProvider`.
-- Frontend: formatter và linter của dự án; không `any`.
+- Frontend: linter của dự án (`npm run lint`); không `any`.
+- Frontend chia ba lớp, để giao diện dễ đọc và để sau này chuyển sang framework khác (ví dụ Next.js) mà không viết lại
+  component:
+  - `src/api/`: nơi duy nhất gọi backend, dạng hook TanStack Query.
+  - `src/components/`: chỉ nhận dữ liệu qua props; không gọi API, không dùng router.
+  - `src/pages/`: nối hook với component; chỉ lớp này dùng router.
+- File trong `frontend/src/components/ui/` và `frontend/src/lib/utils.ts` sinh từ shadcn/ui (giấy phép MIT), giữ nguyên,
+  không thêm dòng SPDX.
 - Không ghi cứng chữ, màu, đường dẫn, tên cột trong code: lấy từ dữ liệu hoặc cấu hình.
 - Tách file khi một phần vượt khoảng 200 dòng hoặc có logic riêng đáng kể.
 
