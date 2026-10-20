@@ -46,11 +46,14 @@ hooks: ## Cài hook pre-push chạy check-fast
 	@echo "đã cài .git/hooks/pre-push"
 
 install: build ## Cài binary backend vào $(PREFIX)/bin (mặc định /usr/local; đổi bằng PREFIX=...)
-	install -d $(DESTDIR)$(PREFIX)/bin
-	install -m 755 backend/target/release/xdi-backend $(DESTDIR)$(PREFIX)/bin/xdi-backend
+	@test -n "$(PREFIX)" || { echo "PREFIX is empty" >&2; exit 1; }
+	install -d "$(DESTDIR)$(PREFIX)/bin"
+	install -m 755 backend/target/release/xdi-backend "$(DESTDIR)$(PREFIX)/bin/xdi-backend"
 
 uninstall: ## Gỡ binary đã cài bằng make install
-	rm -f $(DESTDIR)$(PREFIX)/bin/xdi-backend
+	@# PREFIX= rỗng sẽ biến lệnh dưới thành rm -f /bin/xdi-backend.
+	@test -n "$(PREFIX)" || { echo "PREFIX is empty" >&2; exit 1; }
+	rm -f "$(DESTDIR)$(PREFIX)/bin/xdi-backend"
 
 # Gói phát hành, CI gọi đúng target này. Ra thư mục release/:
 #   xdi-platform-$(VERSION).tar.gz                 mã nguồn, giải nén ra xdi-platform-$(VERSION)/
