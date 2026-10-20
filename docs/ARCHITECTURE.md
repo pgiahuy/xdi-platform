@@ -23,7 +23,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    |             ask    (schema context -> LLM -> guard -> run -> explain)|
    |             explain (phân rã chênh lệch, tổng đóng góp = chênh lệch) |
    |     |                                                                |
-   |  engine/    store.rs      sqlx  ----------------> POSTGRES           |
+   |  engine/    store/        sqlx  ----------------> POSTGRES           |
    |             analytics.rs  [DuckDB nhúng, chạy trong tiến trình này,  |
    |                            không container] -----> volume Parquet    |
    |             guard.rs      sqlparser, whitelist bảng và cột, tiêm RLS |
@@ -78,7 +78,7 @@ backend/src/
   config.rs          biến môi trường
   api/               tầng HTTP: handler, request/response struct, lỗi -> status
   service/           tầng nghiệp vụ: ingest.rs, ask.rs, explain.rs; không biết gì về HTTP
-  engine/            tầng hạ tầng: analytics.rs (DuckDB), store.rs (Postgres), guard.rs, llm/
+  engine/            tầng hạ tầng: analytics.rs (DuckDB), store/ (Postgres, chia theo bảng), guard.rs, llm/
   auth/              JWT, role, demo-login
   error.rs           một enum lỗi chung
 ```
@@ -87,6 +87,8 @@ backend/src/
 - Trait duy nhất là `LlmProvider` với hàm `complete`; hàm `embed` thêm khi bật tìm theo nghĩa. Chọn implementation lúc khởi động theo cấu hình:
   `gemini`, `ollama`, hoặc `mock`. Mock trả SQL cố định cho bộ câu hỏi mẫu, dùng khi không có khóa và trong test.
 - Postgres và DuckDB không bọc trait. Service nhận struct `Store` và `Analytics` cụ thể.
+- Câu SQL của `Store` viết dạng chuỗi với `sqlx::query_as`, không dùng macro `query!` kiểm lúc biên dịch: không cần thư
+  mục `.sqlx/` và `sqlx-cli`, build không cần Postgres; đổi lại, mọi câu SQL được kiểm bằng test trên Postgres thật.
 - Trạng thái chia sẻ qua một `AppState`: `Store`, `Analytics`, `Arc<dyn LlmProvider>`, config. Không biến toàn cục.
 - Test ở tầng service với mock LLM, DuckDB in-memory và Postgres trong CI.
 
@@ -114,7 +116,7 @@ Ba tầng tách riêng:
 | Lọc dòng | Trong dataset, thấy dòng nào | Thành viên có `data_role` là `sales_south` chỉ thấy `region = South`; guard thêm điều kiện vào SQL |
 
 Vai trong ứng dụng (`role`) và vai dữ liệu (`data_role`) là hai cột riêng của `memberships`: một Analyst có thể chỉ thấy
-miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store.rs` nhận kiểu `WorkspaceId`, chỉ tạo được từ JWT đã
+miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store/` nhận kiểu `WorkspaceId`, chỉ tạo được từ JWT đã
 xác thực, nên quên lọc theo workspace là lỗi biên dịch. Lớp chặn thứ hai nằm trong database: khóa ngoại giữa các bảng
 nghiệp vụ gồm cả `workspace_id`, nên một dòng không trỏ được sang dòng của workspace khác. Postgres Row Level Security
 sẽ thêm sau làm lớp thứ ba. File Parquet nằm
@@ -199,4 +201,5 @@ Cập nhật khi có thay đổi.
 | Trait `LlmProvider` và ba cài đặt | Khung: mock chưa có câu mẫu, Gemini và Ollama chưa gọi thật |
 | Route cho dataset, ask, drill, auth | Có route, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
-| Truy vấn Postgres theo workspace, DuckDB, guard, giải thích, auth, frontend | Chưa có |
+| Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có, chưa có tính năng nào gọi tới |
+| DuckDB, guard, giải thích, auth, frontend | Chưa có |

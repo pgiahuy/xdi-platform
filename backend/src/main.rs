@@ -20,7 +20,7 @@ async fn main() {
     let addr = format!("0.0.0.0:{}", config.port);
 
     // Migration chạy trước khi nhận request, để mọi request đều thấy schema đúng.
-    let store = engine::store::Store::connect(&config.database_url)
+    let store = engine::store::Store::connect(&config.database_url, config.db_max_connections)
         .await
         .expect("cannot connect to postgres, check DATABASE_URL");
     store

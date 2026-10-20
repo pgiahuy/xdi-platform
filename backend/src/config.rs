@@ -8,6 +8,8 @@ use std::env;
 pub struct Config {
     pub port: u16,
     pub database_url: String,
+    /// Số kết nối tối đa tới Postgres.
+    pub db_max_connections: u32,
     // Khung: data_dir dùng từ issue nạp dữ liệu, jwt_secret từ issue auth. Gỡ allow khi có code đọc tới.
     #[allow(dead_code)]
     pub data_dir: String,
@@ -30,6 +32,10 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(8000),
             database_url: var_or("DATABASE_URL", "postgres://xdi:xdi@localhost:5433/xdi"),
+            db_max_connections: env::var("DB_MAX_CONNECTIONS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
             data_dir: var_or("DATA_DIR", "./data"),
             jwt_secret: var_or("JWT_SECRET", "change-me-before-going-public"),
             llm_provider: var_or("LLM_PROVIDER", "mock"),
