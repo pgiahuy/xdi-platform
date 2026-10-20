@@ -111,9 +111,10 @@ Ba tầng tách riêng:
 |---|---|---|
 | Workspace | Người dùng thuộc phòng ban nào | Người phòng kinh doanh không thấy dataset, chỉ số, lịch sử của phòng tài chính, trừ khi được mời |
 | Vai trong ứng dụng | Trong workspace, được làm gì | Owner quản lý thành viên; Admin nạp dữ liệu, sửa chỉ số và chính sách; Analyst hỏi và lưu; Viewer chỉ xem |
-| Lọc dòng | Trong dataset, thấy dòng nào | Vai Sales Manager South chỉ thấy `region = South`; guard thêm điều kiện vào SQL |
+| Lọc dòng | Trong dataset, thấy dòng nào | Thành viên có `data_role` là `sales_south` chỉ thấy `region = South`; guard thêm điều kiện vào SQL |
 
-Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store.rs` nhận kiểu `WorkspaceId`, chỉ tạo được từ JWT đã
+Vai trong ứng dụng (`role`) và vai dữ liệu (`data_role`) là hai cột riêng của `memberships`: một Analyst có thể chỉ thấy
+miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store.rs` nhận kiểu `WorkspaceId`, chỉ tạo được từ JWT đã
 xác thực, nên quên lọc theo workspace là lỗi biên dịch. Postgres Row Level Security là lớp chặn thứ hai. File Parquet nằm
 dưới `/data/<workspace>/`, prompt gửi mô hình ngôn ngữ chỉ chứa hồ sơ của workspace hiện tại.
 
@@ -195,4 +196,5 @@ Cập nhật khi có thay đổi.
 | `/health`, `/version` | Có |
 | Trait `LlmProvider` và ba cài đặt | Khung: mock chưa có câu mẫu, Gemini và Ollama chưa gọi thật |
 | Route cho dataset, ask, drill, auth | Có route, trả 501 |
-| Postgres, DuckDB, guard, giải thích, auth, frontend | Chưa có |
+| Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
+| Truy vấn Postgres theo workspace, DuckDB, guard, giải thích, auth, frontend | Chưa có |

@@ -7,9 +7,8 @@ use std::env;
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
-    // Khung: dùng từ issue nạp dữ liệu và auth. Gỡ dòng allow này khi có code đọc tới.
-    #[allow(dead_code)]
     pub database_url: String,
+    // Khung: data_dir dùng từ issue nạp dữ liệu, jwt_secret từ issue auth. Gỡ allow khi có code đọc tới.
     #[allow(dead_code)]
     pub data_dir: String,
     #[allow(dead_code)]

@@ -23,6 +23,13 @@ make check-fast # fmt, clippy, test backend; CI chạy lệnh này trên mỗi P
 make hooks      # cài hook pre-push chạy check-fast (tùy chọn)
 ```
 
+Test cơ sở dữ liệu cần Postgres thật. Không có `DATABASE_URL` thì chúng tự bỏ qua trên máy (CI luôn chạy):
+
+```bash
+docker compose up -d postgres
+DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi make test
+```
+
 ## Nhánh và commit
 
 - Nhánh từ `main`: `<type>/<mô-tả-ngắn>` hoặc `<type>/<số-issue>-<mô-tả>`. Ví dụ `feat/ingest-xlsx`,
