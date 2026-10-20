@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Câu hỏi
+    url: https://github.com/pgiahuy/xdi-platform/discussions/categories/q-a
+    about: Hỏi về cài đặt, cách dùng, cách đọc kết quả
+  - name: Ý tưởng
+    url: https://github.com/pgiahuy/xdi-platform/discussions/categories/ideas
+    about: Đề xuất tính năng, góp ý
