@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- 0001_init.sql - schema đầu tiên của dữ liệu ứng dụng.
--- Mọi bảng nghiệp vụ có workspace_id. Khóa ngoại giữa các bảng nghiệp vụ gồm cả workspace_id, nên database tự từ chối
--- một dòng trỏ sang dòng của workspace khác; ứng dụng (kiểu WorkspaceId) là lớp chặn thứ hai.
+-- Mọi bảng nghiệp vụ có workspace_id. Ba lớp chặn dữ liệu lẫn giữa workspace (docs/ARCHITECTURE.md mục 4b): lớp một là
+-- kiểu WorkspaceId trong code; lớp hai là khóa ngoại ở đây, gồm cả workspace_id, nên database tự từ chối một dòng trỏ
+-- sang dòng của workspace khác; lớp ba là Postgres Row Level Security, thêm sau.
 -- users là bảng chung vì một người có thể thuộc nhiều workspace (qua memberships).
 -- Dữ liệu phân tích không nằm ở đây: nó là file Parquet, DuckDB đọc trực tiếp. Xem docs/ARCHITECTURE.md mục 4.
 

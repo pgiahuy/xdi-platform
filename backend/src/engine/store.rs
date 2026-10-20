@@ -235,7 +235,11 @@ mod tests {
             .bind(v2)
             .execute(&mut *tx)
             .await;
-        assert!(blocked.is_err(), "deleting the current version must fail");
+        let err = blocked.expect_err("deleting the current version must fail");
+        assert!(
+            err.to_string().contains("foreign key"),
+            "unexpected error: {err}"
+        );
         sqlx::query("ROLLBACK TO SAVEPOINT s")
             .execute(&mut *tx)
             .await
@@ -317,9 +321,11 @@ mod tests {
         .bind(v2)
         .execute(&mut *tx)
         .await;
+        // Kiểm đúng lỗi khóa ngoại, để lỗi khác (cú pháp, kết nối) không làm test xanh nhầm.
+        let err = result.expect_err("a query must not point to another dataset's version");
         assert!(
-            result.is_err(),
-            "a query must not point to another dataset's version"
+            err.to_string().contains("foreign key"),
+            "unexpected error: {err}"
         );
         tx.rollback().await.unwrap();
     }

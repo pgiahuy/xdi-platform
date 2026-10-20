@@ -34,8 +34,8 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    +--------v-----------+        +---------v-------------------+
    |   POSTGRES         |        |  VOLUME /data               |
    |  (1 container)     |        |  <workspace>/<dataset>/     |
-   |  mọi bảng có       |        |    <ver>/*.parquet          |
-   |  workspace_id      |        |  samples/ gắn ở /samples:ro |
+   |  workspace_id ở    |        |    <ver>/*.parquet          |
+   |  mọi bảng trừ users|        |  samples/ gắn ở /samples:ro |
    |                    |        +-----------------------------+
    |  workspaces        |
    |  memberships       |                   ngoài compose, tùy chọn
@@ -94,7 +94,7 @@ backend/src/
 
 | Kho | Chứa | Vì sao |
 |---|---|---|
-| Postgres (sqlx, migrations trong `backend/migrations/`) | `workspaces`, `memberships`, `users`, `sources`, `datasets`, `dataset_versions`, `columns`, `column_values`, `metrics`, `rls_policies`, `queries`, `settings`; mọi bảng có `workspace_id` | Nhiều ghi nhỏ, nhiều kết nối, đúng việc của database giao dịch |
+| Postgres (sqlx, migrations trong `backend/migrations/`) | `workspaces`, `memberships`, `users`, `sources`, `datasets`, `dataset_versions`, `columns`, `column_values`, `metrics`, `rls_policies`, `queries`, `settings`; mọi bảng có `workspace_id`, trừ `workspaces` và `users` | Nhiều ghi nhỏ, nhiều kết nối, đúng việc của database giao dịch |
 | DuckDB nhúng | Không giữ gì bền. Đọc Parquet trên volume theo từng câu SQL | Engine phân tích theo cột, nhận SQL chuẩn, đọc thẳng CSV, Parquet, xlsx, không thêm tiến trình |
 
 Image Postgres là `pgvector/pgvector`, có sẵn `unaccent`, `pg_trgm`, `vector`.
