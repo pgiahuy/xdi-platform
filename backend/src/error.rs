@@ -15,9 +15,8 @@ pub enum AppError {
     /// Tính năng có trong thiết kế nhưng chưa cài đặt. Tham số là tên tính năng.
     NotImplemented(&'static str),
     BadRequest(String),
-    // Khung: dùng khi có Postgres và DuckDB. Gỡ allow khi có code tạo ra hai biến thể này.
-    #[allow(dead_code)]
     NotFound(String),
+    // Khung: dùng khi có Postgres và DuckDB. Gỡ allow khi có code tạo ra biến thể này.
     #[allow(dead_code)]
     Internal(String),
 }

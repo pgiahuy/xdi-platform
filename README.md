@@ -21,7 +21,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Kiểm tra: `curl localhost:8000/health` trả `{"status":"ok"}`, `curl localhost:8000/version` trả phiên bản và nhà cung
+Kiểm tra: `curl localhost:8000/api/health` trả `{"status":"ok"}`, `curl localhost:8000/api/version` trả phiên bản và nhà cung
 cấp LLM đang dùng.
 
 `LLM_PROVIDER` chọn mô hình ngôn ngữ: `mock` (mặc định, không cần khóa API), `gemini` (cần khóa), `ollama` (cần một máy
