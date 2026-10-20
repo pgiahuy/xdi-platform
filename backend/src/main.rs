@@ -18,7 +18,18 @@ async fn main() {
 
     let config = config::Config::from_env();
     let addr = format!("0.0.0.0:{}", config.port);
-    let state = state::AppState::new(config);
+
+    // Migration chạy trước khi nhận request, để mọi request đều thấy schema đúng.
+    let store = engine::store::Store::connect(&config.database_url)
+        .await
+        .expect("cannot connect to postgres, check DATABASE_URL");
+    store
+        .migrate()
+        .await
+        .expect("cannot apply database migrations");
+    tracing::info!("database migrations applied");
+
+    let state = state::AppState::new(config, store);
     let app = api::router(state);
 
     tracing::info!(%addr, "backend listening");

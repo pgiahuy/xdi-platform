@@ -1,0 +1,232 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- 0001_init.sql - schema đầu tiên của dữ liệu ứng dụng.
+-- Mọi bảng nghiệp vụ có workspace_id. Ba lớp chặn dữ liệu lẫn giữa workspace (docs/ARCHITECTURE.md mục 4b): lớp một là
+-- kiểu WorkspaceId trong code; lớp hai là khóa ngoại ở đây, gồm cả workspace_id, nên database tự từ chối một dòng trỏ
+-- sang dòng của workspace khác; lớp ba là Postgres Row Level Security, thêm sau.
+-- users là bảng chung vì một người có thể thuộc nhiều workspace (qua memberships).
+-- Dữ liệu phân tích không nằm ở đây: nó là file Parquet, DuckDB đọc trực tiếp. Xem docs/ARCHITECTURE.md mục 4.
+
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- unaccent() không IMMUTABLE nên không dùng được trong chỉ mục; bọc lại với từ điển cố định để chỉ mục trigram trên
+-- giá trị đã bỏ dấu hoạt động ("mien nam" khớp "Miền Nam").
+CREATE FUNCTION immutable_unaccent(text) RETURNS text
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
+    AS $$ SELECT public.unaccent('public.unaccent', $1) $$;
+
+-- Workspace: một phòng ban, một workspace cá nhân, hoặc một workspace tạm của phiên demo.
+CREATE TABLE workspaces (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        text NOT NULL CHECK (length(btrim(name)) > 0),
+    -- Slug đi vào URL: chữ thường, số, gạch nối.
+    slug        text NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
+    kind        text NOT NULL DEFAULT 'team' CHECK (kind IN ('team', 'personal', 'demo_session')),
+    -- Workspace tạm bắt buộc có hạn; tiến trình dọn dẹp xóa khi quá hạn.
+    expires_at  timestamptz,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    CHECK (kind <> 'demo_session' OR expires_at IS NOT NULL)
+);
+
+CREATE TABLE users (
+    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Không khoảng trắng đầu cuối, có ký tự trước '@'. Kiểm định dạng đầy đủ để tầng ứng dụng.
+    email          text NOT NULL CHECK (email = btrim(email) AND position('@' IN email) > 1),
+    display_name   text NOT NULL DEFAULT '',
+    -- Null khi chạy AUTH_MODE=single hoặc đăng nhập qua SSO.
+    password_hash  text,
+    is_active      boolean NOT NULL DEFAULT true,
+    created_at     timestamptz NOT NULL DEFAULT now()
+);
+-- Email so không phân biệt hoa thường.
+CREATE UNIQUE INDEX users_email_key ON users (lower(email));
+
+-- Vai trong ứng dụng (role) quyết định được làm gì; data_role quyết định thấy dòng nào (xem rls_policies).
+CREATE TABLE memberships (
+    workspace_id  uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    user_id       uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    role          text NOT NULL CHECK (role IN ('owner', 'admin', 'analyst', 'viewer')),
+    data_role     text,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, user_id)
+);
+CREATE INDEX memberships_user_idx ON memberships (user_id);
+
+-- Nơi dữ liệu đến từ đâu. Bản đầu chỉ có local_file; các kind khác dành cho nguồn database.
+CREATE TABLE sources (
+    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id      uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    kind              text NOT NULL CHECK (kind IN ('local_file', 'postgres', 'mysql', 'sqlite')),
+    config            jsonb NOT NULL DEFAULT '{}',
+    -- Chuỗi kết nối có mật khẩu, mã hóa trước khi lưu. Không bao giờ trả về qua API.
+    secret_encrypted  bytea,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (workspace_id, id)
+);
+
+CREATE TABLE datasets (
+    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id        uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    source_id           uuid NOT NULL,
+    name                text NOT NULL CHECK (length(btrim(name)) > 0),
+    -- Tên bảng logic mà mô hình ngôn ngữ dùng khi viết SQL; engine đổi sang nguồn thật.
+    logical_table       text NOT NULL CHECK (logical_table ~ '^[A-Za-z_][A-Za-z0-9_]*$'),
+    -- Gói domain áp dụng, ví dụ 'retail'. Null nếu không có gói phù hợp.
+    domain              text,
+    -- Phiên bản đang dùng để trả lời câu hỏi. Khóa ngoại thêm sau khi có bảng dataset_versions.
+    -- Null chỉ trong lúc nạp phiên bản đầu tiên.
+    current_version_id  uuid,
+    created_by          uuid REFERENCES users (id) ON DELETE SET NULL,
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (workspace_id, id),
+    -- Cấm xóa nguồn đang có dataset. Xóa cả workspace vẫn được: dataset bị xóa theo trong cùng câu lệnh.
+    FOREIGN KEY (workspace_id, source_id) REFERENCES sources (workspace_id, id) ON DELETE RESTRICT
+);
+-- Tên bảng logic không phân biệt hoa thường: mô hình ngôn ngữ có thể viết Sales hay sales.
+CREATE UNIQUE INDEX datasets_logical_table_key ON datasets (workspace_id, lower(logical_table));
+CREATE INDEX datasets_source_idx ON datasets (source_id);
+CREATE INDEX datasets_created_by_idx ON datasets (created_by);
+
+-- Mỗi lần nạp file là một phiên bản, không ghi đè. Với nguồn database, phiên bản là bản chụp hồ sơ tại một thời điểm.
+CREATE TABLE dataset_versions (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id    uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    dataset_id      uuid NOT NULL,
+    version         integer NOT NULL CHECK (version > 0),
+    source_kind     text NOT NULL CHECK (source_kind IN ('csv', 'parquet', 'xlsx', 'postgres', 'mysql', 'sqlite')),
+    file_hash       text,
+    parquet_path    text,
+    row_count       bigint,
+    profile_status  text NOT NULL DEFAULT 'pending' CHECK (profile_status IN ('pending', 'structure', 'semantic', 'failed')),
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (dataset_id, version),
+    UNIQUE (workspace_id, id),
+    UNIQUE (dataset_id, id),
+    FOREIGN KEY (workspace_id, dataset_id) REFERENCES datasets (workspace_id, id) ON DELETE CASCADE
+);
+-- Cùng nội dung file thì không tạo phiên bản mới.
+CREATE UNIQUE INDEX dataset_versions_hash_key ON dataset_versions (dataset_id, file_hash) WHERE file_hash IS NOT NULL;
+
+-- Phiên bản hiện hành phải thuộc đúng dataset này, và không xóa được khi đang là hiện hành: ứng dụng chuyển phiên bản
+-- hiện hành trước, để dataset không bao giờ lặng lẽ mất phiên bản dùng để trả lời. Xóa cả dataset vẫn được.
+ALTER TABLE datasets
+    ADD CONSTRAINT datasets_current_version_fk
+    FOREIGN KEY (id, current_version_id) REFERENCES dataset_versions (dataset_id, id)
+    ON DELETE RESTRICT;
+
+-- Hồ sơ cột của một phiên bản. Lớp cấu trúc do code điền; mô tả, bí danh do mô hình ngôn ngữ đề xuất và người dùng sửa.
+CREATE TABLE columns (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id    uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    version_id      uuid NOT NULL,
+    position        integer NOT NULL CHECK (position >= 0),
+    name            text NOT NULL,
+    data_type       text NOT NULL,
+    role            text NOT NULL DEFAULT 'ignore' CHECK (role IN ('dimension', 'measure', 'time', 'key', 'text', 'ignore')),
+    description     text,
+    aliases         text[] NOT NULL DEFAULT '{}',
+    null_count      bigint,
+    distinct_count  bigint,
+    min_value       text,
+    max_value       text,
+    sample_values   jsonb,
+    -- Cột nhạy cảm: không đưa giá trị mẫu vào prompt.
+    is_sensitive    boolean NOT NULL DEFAULT false,
+    -- Để dành cho tìm theo nghĩa; chưa dùng.
+    embedding       vector,
+    UNIQUE (version_id, name),
+    UNIQUE (version_id, position),
+    UNIQUE (workspace_id, id),
+    FOREIGN KEY (workspace_id, version_id) REFERENCES dataset_versions (workspace_id, id) ON DELETE CASCADE
+);
+
+-- Giá trị của cột phân loại, để ánh xạ "miền Nam" sang "South".
+CREATE TABLE column_values (
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id  uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    column_id     uuid NOT NULL,
+    value         text NOT NULL,
+    aliases       text[] NOT NULL DEFAULT '{}',
+    frequency     bigint,
+    embedding     vector,
+    UNIQUE (column_id, value),
+    UNIQUE (workspace_id, id),
+    FOREIGN KEY (workspace_id, column_id) REFERENCES columns (workspace_id, id) ON DELETE CASCADE
+);
+CREATE INDEX column_values_trgm_idx ON column_values USING gin (lower(immutable_unaccent(value)) gin_trgm_ops);
+
+-- Định nghĩa chỉ số do tổ chức cung cấp. Sửa định nghĩa là thêm phiên bản mới; câu hỏi cũ vẫn tái lập được.
+CREATE TABLE metrics (
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id  uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    dataset_id    uuid NOT NULL,
+    name          text NOT NULL CHECK (length(btrim(name)) > 0),
+    description   text NOT NULL DEFAULT '',
+    -- Một biểu thức tổng hợp trên cột của dataset, ví dụ SUM("Order Item Total").
+    expression    text NOT NULL,
+    filter        text,
+    time_column   text,
+    unit          text,
+    status        text NOT NULL DEFAULT 'unconfirmed' CHECK (status IN ('confirmed', 'unconfirmed')),
+    origin        text NOT NULL CHECK (origin IN ('formula_table', 'ui', 'llm_suggested', 'sample')),
+    version       integer NOT NULL DEFAULT 1 CHECK (version > 0),
+    created_by    uuid REFERENCES users (id) ON DELETE SET NULL,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (dataset_id, name, version),
+    FOREIGN KEY (workspace_id, dataset_id) REFERENCES datasets (workspace_id, id) ON DELETE CASCADE
+);
+CREATE INDEX metrics_workspace_idx ON metrics (workspace_id);
+CREATE INDEX metrics_created_by_idx ON metrics (created_by);
+
+-- Lọc dòng theo data_role của thành viên: guard thêm điều kiện column_name IN allowed_values.
+CREATE TABLE rls_policies (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id    uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    dataset_id      uuid NOT NULL,
+    data_role       text NOT NULL,
+    column_name     text NOT NULL,
+    allowed_values  text[] NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (dataset_id, data_role, column_name),
+    FOREIGN KEY (workspace_id, dataset_id) REFERENCES datasets (workspace_id, id) ON DELETE CASCADE
+);
+CREATE INDEX rls_policies_workspace_idx ON rls_policies (workspace_id);
+
+-- Lịch sử câu hỏi; câu đánh dấu đúng còn dùng làm ví dụ cho câu sau và cho bộ đánh giá.
+CREATE TABLE queries (
+    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id   uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    dataset_id     uuid,
+    version_id     uuid,
+    user_id        uuid REFERENCES users (id) ON DELETE SET NULL,
+    question       text NOT NULL,
+    sql_generated  text,
+    sql_guarded    text,
+    status         text NOT NULL CHECK (status IN ('ok', 'rejected', 'error')),
+    error          text,
+    timings        jsonb NOT NULL DEFAULT '{}',
+    row_count      bigint,
+    feedback       text CHECK (feedback IN ('correct', 'incorrect')),
+    embedding      vector,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    -- Xóa dataset hay phiên bản thì giữ lịch sử, chỉ đặt null cột trỏ tới (workspace_id thì giữ nguyên).
+    FOREIGN KEY (workspace_id, dataset_id) REFERENCES datasets (workspace_id, id) ON DELETE SET NULL (dataset_id),
+    FOREIGN KEY (workspace_id, version_id) REFERENCES dataset_versions (workspace_id, id) ON DELETE SET NULL (version_id),
+    -- Phiên bản phải thuộc đúng dataset của câu hỏi, để lịch sử tái lập được.
+    -- Không thêm CHECK "có version thì có dataset": khi xóa dataset, Postgres đặt null hai cột qua hai bước riêng và
+    -- CHECK sẽ vỡ giữa chừng. Ứng dụng luôn ghi cả hai cột cùng nhau.
+    FOREIGN KEY (dataset_id, version_id) REFERENCES dataset_versions (dataset_id, id) ON DELETE SET NULL (version_id)
+);
+CREATE INDEX queries_workspace_idx ON queries (workspace_id, created_at DESC);
+CREATE INDEX queries_dataset_idx ON queries (dataset_id);
+CREATE INDEX queries_version_idx ON queries (version_id);
+CREATE INDEX queries_user_idx ON queries (user_id);
+
+CREATE TABLE settings (
+    workspace_id  uuid NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    key           text NOT NULL CHECK (length(btrim(key)) > 0),
+    value         jsonb NOT NULL,
+    updated_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, key)
+);

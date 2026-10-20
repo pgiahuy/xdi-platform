@@ -29,7 +29,9 @@ mod tests {
     use tower::ServiceExt;
 
     fn app() -> Router {
-        router(AppState::new(Config::from_env()))
+        let config = Config::from_env();
+        let store = crate::engine::store::Store::lazy(&config.database_url);
+        router(AppState::new(config, store))
     }
 
     #[tokio::test]

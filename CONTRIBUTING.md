@@ -23,6 +23,16 @@ make check-fast # fmt, clippy, test backend; CI chạy lệnh này trên mỗi P
 make hooks      # cài hook pre-push chạy check-fast (tùy chọn)
 ```
 
+Thay đổi schema Postgres là một file migration mới trong `backend/migrations/`, đặt tên `0002_mo_ta.sql`, `0003_...`.
+Không sửa file migration đã merge: mọi database đã áp nó sẽ từ chối khởi động vì checksum không khớp.
+
+Test cơ sở dữ liệu cần Postgres thật. Không có `DATABASE_URL` thì chúng tự bỏ qua trên máy (CI luôn chạy):
+
+```bash
+docker compose up -d postgres
+DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi make test
+```
+
 ## Nhánh và commit
 
 - Nhánh từ `main`: `<type>/<mô-tả-ngắn>` hoặc `<type>/<số-issue>-<mô-tả>`. Ví dụ `feat/ingest-xlsx`,
