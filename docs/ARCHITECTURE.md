@@ -171,7 +171,7 @@ Mỗi lần nạp file là một phiên bản, không ghi đè. `queries` trỏ 
 
 ## 8. API
 
-REST và JSON. OpenAPI sinh từ code bằng `utoipa`, phục vụ ở `/openapi.json` và Swagger UI ở `/docs`. Frontend sinh
+REST và JSON. OpenAPI sinh từ code bằng `utoipa`, phục vụ ở `/api/openapi.json` và Swagger UI ở `/api/docs`. Frontend sinh
 kiểu TypeScript từ spec. `openapi.json` commit vào repo, CI so lại để hai bên không lệch. Tài liệu API đang viết ([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
 
 ## 9. Hướng phát triển
