@@ -115,4 +115,51 @@ mod tests {
             "tables without workspace_id: {missing:?}"
         );
     }
+
+    #[tokio::test]
+    async fn cross_workspace_reference_is_rejected() {
+        let Some(url) = database_url() else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let store = Store::connect(&url).await.expect("connect");
+        store.migrate().await.expect("migrate");
+
+        // Mọi thứ trong một transaction rồi rollback, để test không để lại dữ liệu và chạy song song được.
+        let mut tx = store.pool.begin().await.expect("begin");
+        let ws_a: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO workspaces (name, slug) VALUES ('A', 'test-a-' || gen_random_uuid()) RETURNING id",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("workspace a");
+        let ws_b: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO workspaces (name, slug) VALUES ('B', 'test-b-' || gen_random_uuid()) RETURNING id",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("workspace b");
+        let source_a: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO sources (workspace_id, kind) VALUES ($1, 'local_file') RETURNING id",
+        )
+        .bind(ws_a)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("source in a");
+
+        // Dataset của workspace B trỏ tới nguồn của workspace A: database phải từ chối.
+        let result = sqlx::query(
+            "INSERT INTO datasets (workspace_id, source_id, name, logical_table) VALUES ($1, $2, 'x', 'x')",
+        )
+        .bind(ws_b)
+        .bind(source_a)
+        .execute(&mut *tx)
+        .await;
+        let err = result.expect_err("cross-workspace reference must fail");
+        assert!(
+            err.to_string().contains("foreign key"),
+            "unexpected error: {err}"
+        );
+        tx.rollback().await.expect("rollback");
+    }
 }
