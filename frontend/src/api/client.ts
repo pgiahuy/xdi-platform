@@ -22,7 +22,8 @@ export async function apiGet<T>(path: string): Promise<T> {
     throw new ApiError(0, 'network', 'Không kết nối được tới máy chủ. Kiểm tra backend đã chạy chưa.')
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => null)
+    // res.json() trả kiểu any; ghi rõ dạng lỗi của backend để TypeScript kiểm phần dùng bên dưới.
+    const body = (await res.json().catch(() => null)) as { code?: string; message?: string } | null
     if (body?.message) {
       throw new ApiError(res.status, body.code ?? 'unknown', body.message)
     }
