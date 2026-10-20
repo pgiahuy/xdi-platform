@@ -1,13 +1,12 @@
 # xdi-platform
 
-*Natural language data analysis with evidence for every number. Upload a CSV, Parquet or Excel file, ask a question in Vietnamese, get a table, a chart, the SQL that produced it, and the rows behind each figure. Rust backend, DuckDB for analytics, Postgres for application data, Next.js UI. Apache 2.0. Vietnamese documentation follows.*
+*Natural language data analysis, in early development. The goal: upload a CSV, Parquet or Excel file, ask a question in Vietnamese, and get a table, a chart, the SQL that produced it, and the rows behind each figure. Rust backend, DuckDB for analytics, Postgres for application data, Next.js UI. Apache 2.0. Vietnamese documentation follows.*
 
-Nạp một file dữ liệu, hỏi bằng tiếng Việt, nhận bảng, biểu đồ và bằng chứng: câu SQL đã chạy, dòng dữ liệu đứng sau
-mỗi con số, và với câu hỏi "tại sao", phần tính toán cho thấy nhóm nào kéo con số đó lên hay xuống.
+Mục tiêu: nạp một file dữ liệu, hỏi bằng tiếng Việt, nhận bảng, biểu đồ, câu SQL đã chạy và các dòng dữ liệu đứng sau
+mỗi con số; với câu hỏi "tại sao", hệ thống tính nhóm nào làm con số tăng hay giảm. Con số do engine phân tích tính trên
+dữ liệu; mô hình ngôn ngữ chỉ chuyển câu hỏi thành SQL và diễn giải kết quả.
 
-Số không do mô hình ngôn ngữ bịa. Mô hình chỉ dịch câu hỏi thành SQL và diễn giải kết quả. Số do engine tính.
-
-## Chạy thử trong ba lệnh
+## Chạy
 
 ```bash
 git clone https://github.com/pgiahuy/xdi-platform.git

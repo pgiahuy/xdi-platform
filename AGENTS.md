@@ -98,7 +98,7 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 - Viết xong thì giải thích ngắn gọn mã làm gì và vì sao, đủ để người dùng tự trình bày lại.
 - Code sinh ra phải đọc được với người mới học Rust: crate phổ biến, module thẳng, chú thích ở chỗ ownership hay
   async không hiển nhiên.
-- Không bịa quy tắc. Không chắc thì nói không chắc. Không chép mã từ repo của người khác.
+- Không tự đặt ra quy tắc ngoài tài liệu. Không chắc thì nói không chắc. Không chép mã từ repo của người khác.
 - Kết thúc mỗi phần việc: đề xuất tiêu đề PR tiếng Anh và nội dung PR tiếng Việt.
 
 ## 6. Trước khi push: tự kiểm

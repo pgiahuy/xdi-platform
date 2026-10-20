@@ -1,10 +1,12 @@
 # xdi-platform
 
-Phân tích dữ liệu bằng ngôn ngữ tự nhiên, có bằng chứng cho từng con số. Nạp một file CSV, Parquet hoặc Excel, hỏi
-bằng tiếng Việt, nhận bảng, biểu đồ, câu SQL đã chạy, và dòng dữ liệu đứng sau mỗi con số. Với câu hỏi "tại sao",
-hệ thống tự tính nhóm nào kéo con số đó lên hay xuống.
+Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên, đang phát triển. Mục tiêu: nạp một file CSV, Parquet hoặc Excel,
+hỏi bằng tiếng Việt, nhận bảng, biểu đồ, câu SQL đã chạy và các dòng dữ liệu đứng sau mỗi con số. Với câu hỏi "tại
+sao", hệ thống tính nhóm nào làm con số tăng hay giảm. Con số do engine phân tích tính trên dữ liệu; mô hình ngôn ngữ
+chỉ chuyển câu hỏi thành SQL và diễn giải kết quả.
 
-Số không do mô hình ngôn ngữ bịa. Mô hình chỉ dịch câu hỏi thành SQL và diễn giải kết quả. Số do engine tính.
+Trạng thái: mới có khung backend. Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1),
+lịch sử thay đổi ở [CHANGELOG.md](CHANGELOG.md).
 
 Backend Rust (Axum, DuckDB nhúng, Postgres), frontend Next.js. Giấy phép Apache 2.0.
 
@@ -22,10 +24,8 @@ docker compose up --build
 Kiểm tra: `curl localhost:8000/health` trả `{"status":"ok"}`, `curl localhost:8000/version` trả phiên bản và nhà cung
 cấp LLM đang dùng.
 
-Dự án đang ở giai đoạn khung: backend chạy được, các tính năng nạp dữ liệu, hỏi, giải thích và giao diện đang được làm
-(xem [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1)). Khi xong, chế độ mặc định
-`LLM_PROVIDER=mock` sẽ trả lời được các câu hỏi mẫu trên dataset mẫu mà không cần khóa API; `gemini` cần khóa, `ollama`
-cần một máy chạy Ollama.
+`LLM_PROVIDER` chọn mô hình ngôn ngữ: `mock` (mặc định, không cần khóa API), `gemini` (cần khóa), `ollama` (cần một máy
+chạy Ollama).
 
 ## Build từ nguồn
 
@@ -58,10 +58,6 @@ Kiến trúc, luồng một câu hỏi, hướng phát triển: [docs/ARCHITECTU
 - Ý tưởng: [Discussions, Ideas](https://github.com/pgiahuy/xdi-platform/discussions/categories/ideas).
 - Thông báo phát hành: [Discussions, Announcements](https://github.com/pgiahuy/xdi-platform/discussions/categories/announcements).
 - Đóng góp mã: [CONTRIBUTING.md](CONTRIBUTING.md). Quy tắc làm việc: [AGENTS.md](AGENTS.md).
-
-## Trạng thái
-
-Đang ở giai đoạn khung. Lịch sử thay đổi: [CHANGELOG.md](CHANGELOG.md).
 
 ## Giấy phép
 

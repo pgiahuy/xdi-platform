@@ -67,8 +67,8 @@ Ba container: `backend`, `postgres`, `frontend`. DuckDB là thư viện nằm tr
 9. api        trả gói: SQL thô, SQL sau guard, dòng, gợi ý biểu đồ, phân rã, timeline từng bước
 ```
 
-Mô hình ngôn ngữ chỉ chạm hai chỗ, bước 4 và bước 7. Nó không bao giờ đọc dữ liệu trực tiếp và không biết gì về
-phân quyền. Mọi bước đều được ghi lại và trả về cho giao diện hiển thị.
+Mô hình ngôn ngữ chỉ tham gia ở bước 4 và bước 7. Nó không nhận các dòng dữ liệu, chỉ nhận siêu dữ liệu của cột và vài
+giá trị mẫu của cột phân loại, và không biết gì về phân quyền. Mọi bước đều được ghi lại và trả về cho giao diện hiển thị.
 
 ## 3. Ba tầng, phụ thuộc một chiều
 
