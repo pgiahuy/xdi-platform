@@ -35,7 +35,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    |   POSTGRES         |        |  VOLUME /data               |
    |  (1 container)     |        |  <workspace>/<dataset>/     |
    |  mọi bảng có       |        |    <ver>/*.parquet          |
-   |  workspace_id      |        |  samples/                   |
+   |  workspace_id      |        |  (samples/ gắn riêng, chỉ đọc)|
    |                    |        +-----------------------------+
    |  workspaces        |
    |  memberships       |                   ngoài compose, tùy chọn

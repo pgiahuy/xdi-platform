@@ -8,7 +8,7 @@ Quy trình ra một phiên bản mới. Số phiên bản theo Semantic Versioni
 2. Đổi số phiên bản ở ba chỗ, cùng một số: `backend/Cargo.toml`, `frontend/package.json`, `docker-compose.yml`
    (tag image).
 3. `CHANGELOG.md`: đổi mục `Unreleased` thành `[x.y.z] - YYYY-MM-DD`, tạo mục `Unreleased` trống mới ở trên.
-4. Tài liệu trong `docs/` khớp với code: INSTALL.md chạy theo được, ARCHITECTURE.md mục Trạng thái cập nhật.
+4. Tài liệu trong `docs/` khớp với code: hướng dẫn cài đặt làm theo được trên máy sạch, ARCHITECTURE.md mục Trạng thái cập nhật.
 5. Mỗi file mã nguồn chương trình mới có dòng giấy phép ở đầu (`SPDX-License-Identifier: Apache-2.0`).
 6. Một PR tên `chore(release): vx.y.z` gồm các thay đổi trên. Merge xong mới tag.
 

@@ -1,4 +1,5 @@
-# ci.yml - chạy trên mỗi PR và push lên main. Chỉ gọi các target của Makefile, không có logic riêng.
+# ci.yml - chạy trên mỗi PR và push lên main. Job backend chỉ gọi Makefile; job docker có thêm bước lọc theo file
+# thay đổi và cache layer, vì hai việc đó chỉ có nghĩa trên CI.
 name: CI
 
 on:
@@ -41,6 +42,7 @@ jobs:
               - 'backend/**'
               - 'frontend/**'
               - 'docker-compose*.yml'
+              - '.github/workflows/ci.yml'
       - name: Validate compose file
         run: docker compose config -q
       - if: steps.changes.outputs.image == 'true' || github.event_name == 'push'

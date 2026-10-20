@@ -19,5 +19,6 @@ COPY --from=builder /app/target/release/xdi-backend /usr/local/bin/xdi-backend
 # Chạy bằng user không có quyền root.
 RUN useradd --system --uid 10001 --no-create-home xdi && mkdir -p /data && chown xdi /data
 USER xdi
+# Cổng mặc định; đổi bằng BACKEND_PORT.
 EXPOSE 8000
 CMD ["xdi-backend"]

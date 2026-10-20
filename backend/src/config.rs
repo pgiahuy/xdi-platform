@@ -32,7 +32,7 @@ impl Config {
                 .unwrap_or(8000),
             database_url: var_or("DATABASE_URL", "postgres://xdi:xdi@localhost:5433/xdi"),
             data_dir: var_or("DATA_DIR", "./data"),
-            jwt_secret: var_or("JWT_SECRET", "doi-gia-tri-nay-truoc-khi-dua-ra-ngoai"),
+            jwt_secret: var_or("JWT_SECRET", "change-me-before-going-public"),
             llm_provider: var_or("LLM_PROVIDER", "mock"),
             gemini_api_key: var_or("GEMINI_API_KEY", ""),
             gemini_model: var_or("GEMINI_MODEL", "gemini-2.5-flash"),

@@ -26,7 +26,7 @@ services:
       BACKEND_PORT: ${BACKEND_PORT:-8000}
       DATABASE_URL: postgres://xdi:xdi@postgres:5432/xdi
       DATA_DIR: /data
-      JWT_SECRET: ${JWT_SECRET:-doi-gia-tri-nay-truoc-khi-dua-ra-ngoai}
+      JWT_SECRET: ${JWT_SECRET:-change-me-before-going-public}
       RUST_LOG: ${RUST_LOG:-info}
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
