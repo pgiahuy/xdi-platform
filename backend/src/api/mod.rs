@@ -11,7 +11,7 @@ mod datasets;
 mod query;
 mod system;
 
-use axum::Router;
+use axum::{routing::any, Router};
 
 use crate::{error::AppError, state::AppState};
 
@@ -22,7 +22,12 @@ pub fn router(state: AppState) -> Router {
         .merge(datasets::routes())
         .merge(query::routes())
         .fallback(api_not_found);
-    Router::new().nest("/api", api).with_state(state)
+    Router::new()
+        .nest("/api", api)
+        // nest bắt "/api" và "/api/<gì đó>", nhưng không bắt "/api/" (đuôi phải có ít nhất một ký tự).
+        // Thiếu dòng này, "/api/" sẽ rơi xuống phần phục vụ giao diện và trả trang HTML.
+        .route("/api/", any(api_not_found))
+        .with_state(state)
 }
 
 async fn api_not_found() -> AppError {
@@ -64,20 +69,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unknown_api_path_returns_json_404() {
-        let res = app()
-            .oneshot(Request::get("/api/khong-co").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(res.status(), StatusCode::NOT_FOUND);
-        let content_type = res.headers()["content-type"].to_str().unwrap().to_string();
-        assert!(
-            content_type.starts_with("application/json"),
-            "got {content_type}"
-        );
-        let body = res.into_body().collect().await.unwrap().to_bytes();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["code"], "not_found");
+    async fn unknown_api_paths_return_json_404() {
+        for path in ["/api/does-not-exist", "/api", "/api/", "/api/health/"] {
+            let res = app()
+                .oneshot(Request::get(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::NOT_FOUND, "path {path}");
+            let content_type = res.headers()["content-type"].to_str().unwrap().to_string();
+            assert!(
+                content_type.starts_with("application/json"),
+                "path {path}: got {content_type}"
+            );
+            let body = res.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["code"], "not_found", "path {path}");
+        }
     }
 
     #[tokio::test]
