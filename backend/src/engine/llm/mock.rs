@@ -28,10 +28,10 @@ mod tests {
 
     #[tokio::test]
     async fn mock_explains_how_to_enable_real_llm() {
-        let err = Mock.complete("bất kỳ").await.unwrap_err();
+        let err = Mock.complete("anything").await.unwrap_err();
         match err {
             AppError::BadRequest(msg) => assert!(msg.contains("LLM_PROVIDER")),
-            other => panic!("lỗi không mong đợi: {other:?}"),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 }

@@ -87,8 +87,8 @@ mod tests {
 
     #[test]
     fn internal_hides_details() {
-        let (status, body) = AppError::Internal("mật khẩu db sai".into()).status_and_body();
+        let (status, body) = AppError::Internal("db password is wrong".into()).status_and_body();
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-        assert!(!body.message.contains("mật khẩu"));
+        assert!(!body.message.contains("password"));
     }
 }

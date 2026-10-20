@@ -9,7 +9,10 @@ tắc làm việc; tài liệu khác trỏ về đây, không chép lại.
 ## 1. Ngôn ngữ
 
 - Văn xuôi (README, docs, nội dung PR, issue, chú thích trong code): tiếng Việt có dấu.
-- Mọi thứ là mã: tiếng Anh. Tên biến, hàm, module, trường JSON, mã lỗi, cờ CLI, biến môi trường, thông điệp log.
+- Mọi thứ là mã: tiếng Anh. Tên biến, hàm, module, trường JSON, mã lỗi, cờ CLI, biến môi trường, thông điệp log,
+  thông điệp `panic!`, `expect`, `assert`, và dữ liệu trong test.
+- Ngoại lệ: trường `message` trong lỗi trả cho người dùng qua API (`AppError`) và chữ hiện trên giao diện là tiếng
+  Việt, vì người đọc là người dùng cuối.
   Ranh giới: cái gì máy đọc hoặc người dùng API đọc thì tiếng Anh; cái gì chỉ người trong đội đọc thì tiếng Việt.
 - Tiêu đề commit và tiêu đề PR: tiếng Anh, theo Conventional Commits.
 - Mặt ngoài trên GitHub (description, Discussions, label): tiếng Anh.
