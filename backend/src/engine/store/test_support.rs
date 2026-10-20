@@ -25,8 +25,15 @@ pub async fn store() -> Option<Store> {
 }
 
 /// Một workspace riêng cho từng test. Test xóa nó ở cuối; khóa ngoại xóa theo mọi dữ liệu bên trong.
-/// Nhờ vậy các test chạy song song không đụng nhau và không để lại dữ liệu.
+/// Nhờ vậy các test chạy song song không đụng nhau. Test thất bại giữa chừng thì không tới được bước xóa; Rust không
+/// có hàm hủy bất đồng bộ, nên thay vào đó mỗi lần tạo workspace mới thì dọn các workspace test cũ hơn 10 phút.
 pub async fn temp_workspace(store: &Store) -> WorkspaceId {
+    sqlx::query(
+        "DELETE FROM workspaces WHERE slug LIKE 'test-%' AND created_at < now() - interval '10 minutes'",
+    )
+    .execute(&store.pool)
+    .await
+    .expect("clean stale test workspaces");
     let slug = format!("test-{}", &Uuid::new_v4().simple().to_string()[..12]);
     let id = store
         .create_workspace("Test", &slug, super::WorkspaceKind::Team)

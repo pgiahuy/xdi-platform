@@ -23,7 +23,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    |             ask    (schema context -> LLM -> guard -> run -> explain)|
    |             explain (phân rã chênh lệch, tổng đóng góp = chênh lệch) |
    |     |                                                                |
-   |  engine/    store.rs      sqlx  ----------------> POSTGRES           |
+   |  engine/    store/        sqlx  ----------------> POSTGRES           |
    |             analytics.rs  [DuckDB nhúng, chạy trong tiến trình này,  |
    |                            không container] -----> volume Parquet    |
    |             guard.rs      sqlparser, whitelist bảng và cột, tiêm RLS |
@@ -116,7 +116,7 @@ Ba tầng tách riêng:
 | Lọc dòng | Trong dataset, thấy dòng nào | Thành viên có `data_role` là `sales_south` chỉ thấy `region = South`; guard thêm điều kiện vào SQL |
 
 Vai trong ứng dụng (`role`) và vai dữ liệu (`data_role`) là hai cột riêng của `memberships`: một Analyst có thể chỉ thấy
-miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store.rs` nhận kiểu `WorkspaceId`, chỉ tạo được từ JWT đã
+miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store/` nhận kiểu `WorkspaceId`, chỉ tạo được từ JWT đã
 xác thực, nên quên lọc theo workspace là lỗi biên dịch. Lớp chặn thứ hai nằm trong database: khóa ngoại giữa các bảng
 nghiệp vụ gồm cả `workspace_id`, nên một dòng không trỏ được sang dòng của workspace khác. Postgres Row Level Security
 sẽ thêm sau làm lớp thứ ba. File Parquet nằm

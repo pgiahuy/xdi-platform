@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
-use super::{db_error, Store};
+use super::{db_error, is_foreign_key_violation, Store};
 use crate::{auth::WorkspaceId, error::AppError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +23,25 @@ impl SourceKind {
             SourceKind::Csv => "csv",
             SourceKind::Parquet => "parquet",
             SourceKind::Xlsx => "xlsx",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileStatus {
+    Pending,
+    Structure,
+    Semantic,
+    Failed,
+}
+
+impl ProfileStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            ProfileStatus::Pending => "pending",
+            ProfileStatus::Structure => "structure",
+            ProfileStatus::Semantic => "semantic",
+            ProfileStatus::Failed => "failed",
         }
     }
 }
@@ -61,6 +80,10 @@ pub struct NewVersion<'a> {
 const DATASET_COLUMNS: &str = "id, name, logical_table, domain, current_version_id, created_at";
 const VERSION_COLUMNS: &str =
     "id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status, created_at";
+// Cùng danh sách cột, có tiền tố bảng, dùng khi câu SQL nối với datasets.
+const VERSION_COLUMNS_V: &str =
+    "v.id, v.dataset_id, v.version, v.source_kind, v.file_hash, v.parquet_path, \
+    v.row_count, v.profile_status, v.created_at";
 
 impl Store {
     /// Nguồn kiểu file nạp lên. Nguồn database thêm khi có tính năng nối database.
@@ -169,7 +192,8 @@ impl Store {
             .map_err(|e| db_error("create version", e))
     }
 
-    /// Đặt phiên bản hiện hành. Phiên bản phải thuộc đúng dataset này; khóa ngoại trong database chặn nếu sai.
+    /// Đặt phiên bản hiện hành. Phiên bản phải thuộc đúng dataset này: khóa ngoại trong database chặn nếu sai, và lỗi
+    /// đó trả về là "không tìm thấy" chứ không phải lỗi nội bộ, vì id sai đến từ người gọi.
     pub async fn set_current_version(
         &self,
         ws: &WorkspaceId,
@@ -183,10 +207,58 @@ impl Store {
         .bind(dataset_id)
         .bind(version_id)
         .execute(&self.pool)
+        .await;
+        match result {
+            Ok(r) if r.rows_affected() == 0 => {
+                Err(AppError::NotFound("Không tìm thấy dataset".to_string()))
+            }
+            Ok(_) => Ok(()),
+            Err(e) if is_foreign_key_violation(&e) => Err(AppError::NotFound(
+                "Không tìm thấy phiên bản này trong dataset".to_string(),
+            )),
+            Err(e) => Err(db_error("set current version", e)),
+        }
+    }
+
+    /// Phiên bản hiện hành của dataset, gồm đường dẫn Parquet để DuckDB đọc. None nếu dataset không có trong
+    /// workspace này hoặc chưa có phiên bản hiện hành.
+    pub async fn get_current_version(
+        &self,
+        ws: &WorkspaceId,
+        dataset_id: Uuid,
+    ) -> Result<Option<DatasetVersion>, AppError> {
+        let sql = format!(
+            "SELECT {VERSION_COLUMNS_V} FROM dataset_versions v
+             JOIN datasets d ON d.workspace_id = v.workspace_id AND d.current_version_id = v.id
+             WHERE d.workspace_id = $1 AND d.id = $2"
+        );
+        sqlx::query_as(&sql)
+            .bind(ws.as_uuid())
+            .bind(dataset_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| db_error("get current version", e))
+    }
+
+    /// Ghi tiến độ lập hồ sơ của một phiên bản: pending, rồi structure khi xong lớp cấu trúc, semantic khi xong lớp
+    /// ngữ nghĩa, hoặc failed.
+    pub async fn set_profile_status(
+        &self,
+        ws: &WorkspaceId,
+        version_id: Uuid,
+        status: ProfileStatus,
+    ) -> Result<(), AppError> {
+        let r = sqlx::query(
+            "UPDATE dataset_versions SET profile_status = $3 WHERE workspace_id = $1 AND id = $2",
+        )
+        .bind(ws.as_uuid())
+        .bind(version_id)
+        .bind(status.as_str())
+        .execute(&self.pool)
         .await
-        .map_err(|e| db_error("set current version", e))?;
-        if result.rows_affected() == 0 {
-            return Err(AppError::NotFound("Không tìm thấy dataset".to_string()));
+        .map_err(|e| db_error("set profile status", e))?;
+        if r.rows_affected() == 0 {
+            return Err(AppError::NotFound("Không tìm thấy phiên bản".to_string()));
         }
         Ok(())
     }
@@ -274,9 +346,86 @@ mod tests {
             .unwrap()
             .is_none());
 
+        assert!(store
+            .get_current_version(&ws, ds.id)
+            .await
+            .unwrap()
+            .is_none());
         store.set_current_version(&ws, ds.id, v2.id).await.unwrap();
         let ds = store.get_dataset(&ws, ds.id).await.unwrap().unwrap();
         assert_eq!(ds.current_version_id, Some(v2.id));
+        let current = store
+            .get_current_version(&ws, ds.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (current.id, current.parquet_path.as_deref()),
+            (v2.id, Some("/data/x.parquet"))
+        );
+
+        store
+            .set_profile_status(&ws, v2.id, ProfileStatus::Structure)
+            .await
+            .unwrap();
+        let current = store
+            .get_current_version(&ws, ds.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(current.profile_status, "structure");
+
+        drop_workspace(&store, ws).await;
+    }
+
+    #[tokio::test]
+    async fn concurrent_versions_never_share_a_number() {
+        let Some(store) = store().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let ws = temp_workspace(&store).await;
+        let src = store.create_local_source(&ws).await.unwrap();
+        let ds = store
+            .create_dataset(&ws, src, "Sales", "sales", None)
+            .await
+            .unwrap();
+
+        // Tám lần tạo phiên bản cùng lúc. Lần nào thành công thì số phải khác nhau; lần nào thất bại thì phải là lỗi
+        // trùng khóa (người gọi thử lại), không được ra hai phiên bản cùng số.
+        let mut tasks = Vec::new();
+        for i in 0..8 {
+            let store = store.clone();
+            tasks.push(tokio::spawn(async move {
+                let hash = format!("h{i}");
+                let new = NewVersion {
+                    source_kind: SourceKind::Csv,
+                    file_hash: &hash,
+                    parquet_path: "/data/x.parquet",
+                    row_count: 1,
+                };
+                store.create_version(&ws, ds.id, &new).await
+            }));
+        }
+        let mut numbers = Vec::new();
+        for t in tasks {
+            match t.await.unwrap() {
+                Ok(v) => numbers.push(v.version),
+                Err(AppError::Internal(m)) => {
+                    assert!(m.contains("duplicate key"), "unexpected error: {m}")
+                }
+                Err(other) => panic!("unexpected error: {other:?}"),
+            }
+        }
+        assert!(!numbers.is_empty(), "at least one insert must succeed");
+        let mut unique = numbers.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(
+            unique.len(),
+            numbers.len(),
+            "duplicate version numbers: {numbers:?}"
+        );
 
         drop_workspace(&store, ws).await;
     }

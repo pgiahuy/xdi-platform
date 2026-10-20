@@ -22,7 +22,7 @@ mod test_support;
 mod workspaces;
 
 #[allow(unused_imports)]
-pub use datasets::{Dataset, DatasetVersion, NewVersion, SourceKind};
+pub use datasets::{Dataset, DatasetVersion, NewVersion, ProfileStatus, SourceKind};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, QueryStatus};
 #[allow(unused_imports)]
@@ -70,9 +70,18 @@ impl Store {
 }
 
 /// Đổi lỗi sqlx thành AppError. Không tìm thấy dòng là lỗi của người gọi, còn lại là lỗi nội bộ.
+/// context là tiếng Anh, chỉ đi vào log; thông báo trả người dùng là tiếng Việt (AGENTS.md mục 1).
 fn db_error(context: &str, e: sqlx::Error) -> AppError {
     match e {
-        sqlx::Error::RowNotFound => AppError::NotFound(format!("Không tìm thấy: {context}")),
+        sqlx::Error::RowNotFound => {
+            tracing::debug!(context, "row not found");
+            AppError::NotFound("Không tìm thấy dữ liệu".to_string())
+        }
         other => AppError::Internal(format!("{context}: {other}")),
     }
+}
+
+/// Lỗi vi phạm khóa ngoại (mã 23503 của Postgres): một id do người gọi đưa vào không trỏ tới dòng hợp lệ.
+fn is_foreign_key_violation(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(db) if db.code().as_deref() == Some("23503"))
 }
