@@ -1,4 +1,4 @@
-# docker-compose.yml - ba dịch vụ: postgres, backend, frontend (frontend thêm khi có).
+# docker-compose.yml - hai dịch vụ: postgres, backend. Backend phục vụ cả giao diện (#14).
 # Mặc định chạy không cần khóa ngoài: LLM_PROVIDER=mock. Đổi trong .env.
 
 services:
@@ -46,7 +46,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:$${BACKEND_PORT:-8000}/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:$${BACKEND_PORT:-8000}/api/health"]
       interval: 10s
       timeout: 3s
       retries: 5

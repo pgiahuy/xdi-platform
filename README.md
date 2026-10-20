@@ -8,7 +8,7 @@ chỉ chuyển câu hỏi thành SQL và diễn giải kết quả.
 Trạng thái: mới có khung backend. Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1),
 lịch sử thay đổi ở [CHANGELOG.md](CHANGELOG.md).
 
-Backend Rust (Axum, DuckDB nhúng, Postgres), frontend Next.js. Giấy phép Apache 2.0.
+Backend Rust (Axum, DuckDB nhúng, Postgres), frontend React với Vite. Giấy phép Apache 2.0.
 
 Website và tài liệu: https://pgiahuy.github.io/xdi-platform/
 
@@ -21,7 +21,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Kiểm tra: `curl localhost:8000/health` trả `{"status":"ok"}`, `curl localhost:8000/version` trả phiên bản và nhà cung
+Kiểm tra: `curl localhost:8000/api/health` trả `{"status":"ok"}`, `curl localhost:8000/api/version` trả phiên bản và nhà cung
 cấp LLM đang dùng.
 
 `LLM_PROVIDER` chọn mô hình ngôn ngữ: `mock` (mặc định, không cần khóa API), `gemini` (cần khóa), `ollama` (cần một máy
@@ -43,7 +43,7 @@ Biến môi trường: [.env.example](.env.example). Hướng dẫn cài đặt 
 
 ```
 backend/     crate Rust: api/ -> service/ -> engine/ và auth/, migrations/ cho Postgres
-frontend/    Next.js App Router (đang thêm)
+frontend/    React, Vite, Tailwind, shadcn/ui; build ra file tĩnh
 docs/        tài liệu, cũng là nguồn GitHub Pages
 data/        nguồn và giấy phép dataset, download.sh, samples/
 Makefile     lối vào duy nhất cho build, test, chạy; CI gọi đúng các target này

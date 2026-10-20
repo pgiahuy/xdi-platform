@@ -5,7 +5,7 @@ SHELL := /bin/sh
 PREFIX ?= /usr/local
 COMPOSE ?= docker compose
 
-.PHONY: help dev build test check check-fast up down logs openapi hooks install uninstall release-artifacts clean
+.PHONY: help dev dev-frontend build test check check-fast up down logs openapi hooks install uninstall release-artifacts clean
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -13,6 +13,9 @@ help: ## In danh sách target
 dev: ## Postgres trong Docker, backend chạy local với cargo run
 	$(COMPOSE) up -d postgres
 	cd backend && cargo run
+
+dev-frontend: ## Giao diện chạy dev ở cổng 5173; /api chuyển sang backend
+	cd frontend && npm install && npm run dev
 
 build: ## Build backend ở chế độ release
 	cd backend && cargo build --release
