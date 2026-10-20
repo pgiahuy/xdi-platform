@@ -17,7 +17,8 @@ Mỗi PR ứng với một Issue. Việc lớn tách thành nhiều Issue con.
 Cần Rust stable, Docker và GNU Make. Tóm tắt:
 
 ```bash
-make dev        # Postgres trong Docker, backend và frontend chạy local
+make dev        # Postgres trong Docker, backend chạy bằng cargo run
+make dev-frontend # giao diện ở http://localhost:5173, /api chuyển sang backend
 make check      # check-fast cộng build frontend và build image docker
 make check-fast # fmt, clippy, test backend; CI chạy lệnh này trên mỗi PR
 make hooks      # cài hook pre-push chạy check-fast (tùy chọn)

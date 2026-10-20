@@ -1,4 +1,4 @@
-# docker-compose.yml - ba dịch vụ: postgres, backend, frontend (frontend thêm khi có).
+# docker-compose.yml - hai dịch vụ: postgres, backend. Backend phục vụ cả giao diện (#14).
 # Mặc định chạy không cần khóa ngoài: LLM_PROVIDER=mock. Đổi trong .env.
 
 services:
