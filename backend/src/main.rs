@@ -13,8 +13,19 @@ mod state;
 
 #[tokio::main]
 async fn main() {
+    // Có tham số là chạy lệnh quản trị (cli.rs): kết quả in ra stdout, nên log chỉ hiện từ mức cảnh báo, để không lẫn
+    // vào kết quả (compose đặt RUST_LOG=info cho server). Log luôn ghi ra stderr.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let filter = if args.is_empty() {
+        // Không đặt RUST_LOG thì in mức info: lần chạy đầu phải thấy được mã thiết lập và dòng "backend listening".
+        tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
+    } else {
+        tracing_subscriber::EnvFilter::new("warn")
+    };
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
         .init();
 
     let config = config::Config::from_env();
@@ -31,7 +42,6 @@ async fn main() {
     tracing::info!("database migrations applied");
 
     // Có tham số thì chạy lệnh quản trị (cli.rs) rồi thoát, không mở server.
-    let args: Vec<String> = std::env::args().skip(1).collect();
     if !args.is_empty() {
         let state = state::AppState::new(config, store);
         std::process::exit(cli::run(&state, &args).await);
