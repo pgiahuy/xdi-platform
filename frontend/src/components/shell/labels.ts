@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/shell/labels.ts - chữ hiện cho vai và chữ viết tắt của tên.
-Backend trả mã vai tiếng Anh (`admin`, `member`, xem docs/ARCHITECTURE.md mục 4b); người dùng đọc tên tiếng Việt.
+Backend trả mã vai (`admin`, `member`, xem docs/ARCHITECTURE.md mục 4b). `admin` giữ nguyên chữ Admin, cùng chữ với
+thông báo lỗi của backend và tài liệu, để không lẫn với "Quản trị hệ thống" (quyền của tài khoản, không phải vai).
 Vai mới thêm ở backend mà chưa có tên ở đây thì hiện nguyên mã, không hiện trống. */
 
 const roleLabels: Record<string, string> = {
-  admin: 'Quản lý',
+  admin: 'Admin',
   member: 'Thành viên',
 }
 

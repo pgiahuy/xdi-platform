@@ -22,6 +22,13 @@ export type WorkspaceOption = {
   href: string
 }
 
+/** Người đang đăng nhập, phần khung giao diện cần hiện. Trang dựng từ dữ liệu /auth/me. */
+export type SignedInUser = {
+  name: string
+  email: string
+  isSystemAdmin: boolean
+}
+
 export type ServerInfo = {
   name: string
   version: string

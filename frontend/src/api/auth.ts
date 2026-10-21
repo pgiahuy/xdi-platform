@@ -25,18 +25,27 @@ export type Me = {
   workspaces: Membership[]
 }
 
-const meKey = ['me']
+export const meKey = ['me']
 
 /** Người đang đăng nhập và các workspace của họ. Chưa đăng nhập thì lỗi ApiError status 401. */
 export function useMe() {
-  return useQuery({ queryKey: meKey, queryFn: () => apiGet<Me>('/auth/me') })
+  return useQuery({
+    queryKey: meKey,
+    queryFn: () => apiGet<Me>('/auth/me'),
+    // Trang gốc và khung workspace cùng đọc người dùng ngay sau nhau; không đặt staleTime thì mỗi lần một trang mới
+    // gắn vào lại gọi /auth/me. Phiên bị thu hồi vẫn được thấy ngay nhờ quy tắc 401 trong queryClient.ts.
+    staleTime: 10_000,
+  })
 }
 
 export function useLogout() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => apiPost<void>('/auth/logout'),
-    // Xóa mọi dữ liệu đã đệm: người đăng nhập kế tiếp trên cùng trình duyệt không thấy dữ liệu của người trước.
-    onSuccess: () => queryClient.clear(),
+    // Xóa dữ liệu đã đệm, để người đăng nhập kế tiếp trên cùng trình duyệt không thấy dữ liệu của người trước.
+    // Dùng resetQueries, không dùng clear: clear gỡ query khỏi bộ đệm mà không báo component đang hiện nó, nên trang
+    // vẫn hiện người dùng cũ. resetQueries báo cho component và tải lại query đang hiện; /auth/me trả 401 nên trang
+    // chuyển sang màn chưa đăng nhập.
+    onSuccess: () => queryClient.resetQueries(),
   })
 }

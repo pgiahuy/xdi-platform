@@ -15,7 +15,7 @@ type Props = {
 export function EmptyState({ title, description, action, heading: Heading = 'h2' }: Props) {
   return (
     <div className="flex max-w-md flex-col items-start gap-2">
-      <Heading className="text-base font-semibold">{title}</Heading>
+      <Heading className={Heading === 'h1' ? 'text-lg font-semibold' : 'text-sm font-semibold'}>{title}</Heading>
       {description && <p className="text-sm text-muted-foreground">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
