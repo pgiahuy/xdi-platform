@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
-use super::{db_error, Store, WorkspaceKind};
+use super::{db_error, Store};
 use crate::error::AppError;
 
 const USER_COLUMNS: &str = "id, email, display_name, is_system_admin";
@@ -105,37 +105,13 @@ impl Store {
             .await
             .map_err(|e| db_error("create admin", e))?;
 
-        // Bản cài có thể đã có workspace mẫu từ trước, nên slug có thể trùng: thêm hậu tố -2, -3 cho tới khi trống.
-        let mut slug = new.workspace_slug.to_string();
-        let mut n = 2;
-        while sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM workspaces WHERE slug = $1)",
+        super::workspaces::insert_with_admin(
+            &mut tx,
+            new.workspace_name,
+            new.workspace_slug,
+            user.id,
         )
-        .bind(&slug)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| db_error("check slug", e))?
-        {
-            slug = format!("{}-{n}", new.workspace_slug);
-            n += 1;
-        }
-        let workspace_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO workspaces (name, slug, kind) VALUES ($1, $2, $3) RETURNING id",
-        )
-        .bind(new.workspace_name)
-        .bind(&slug)
-        .bind(WorkspaceKind::Team.as_str())
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| db_error("create first workspace", e))?;
-        sqlx::query(
-            "INSERT INTO memberships (workspace_id, user_id, role) VALUES ($1, $2, 'admin')",
-        )
-        .bind(workspace_id)
-        .bind(user.id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| db_error("create first membership", e))?;
+        .await?;
 
         tx.commit().await.map_err(|e| db_error("commit setup", e))?;
         Ok(Some(user))

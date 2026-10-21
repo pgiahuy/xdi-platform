@@ -183,7 +183,12 @@ Mỗi lần nạp file là một phiên bản, không ghi đè. `queries` trỏ 
 
 ## 8. API
 
-REST và JSON. OpenAPI sinh từ code bằng `utoipa`, phục vụ ở `/api/openapi.json` và Swagger UI ở `/api/docs`. Frontend sinh
+REST và JSON. API dữ liệu nằm dưới workspace trong đường dẫn: `/api/workspaces/{slug}/datasets`,
+`/api/workspaces/{slug}/datasets/{id}/ask`. Workspace đang làm việc không lưu trong phiên, nên mỗi tab trình duyệt làm
+việc độc lập, tab này không đổi workspace của tab kia. Mỗi request kiểm phiên (chưa đăng nhập: 401) và kiểm người dùng
+thuộc workspace đó (không thuộc hoặc không có workspace: cùng một lỗi 404, không dò được tên workspace).
+
+OpenAPI sinh từ code bằng `utoipa`, phục vụ ở `/api/openapi.json` và Swagger UI ở `/api/docs`. Frontend sinh
 kiểu TypeScript từ spec. `openapi.json` commit vào repo, CI so lại để hai bên không lệch. Tài liệu API đang viết ([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
 
 ## 9. Hướng phát triển
@@ -211,10 +216,11 @@ Cập nhật khi có thay đổi.
 | Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
 | `/api/health`, `/api/version`; mọi API dưới `/api`, đường dẫn API sai trả 404 JSON | Có |
 | Trait `LlmProvider` và ba cài đặt | Khung: mock chưa có câu mẫu, Gemini và Ollama chưa gọi thật |
-| Route cho dataset, ask, drill, auth | Có route, trả 501 |
+| Route nạp dataset, ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
-| Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có, chưa có tính năng nào gọi tới |
+| Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có; liệt kê và xem dataset đã dùng |
+| Workspace: liệt kê, tạo mới (người tạo là admin), mọi API dữ liệu kiểm thành viên; `WorkspaceId` chỉ tạo từ dòng memberships của người đăng nhập | Có; chưa kiểm vai theo từng việc |
 | Khung giao diện React và Vite, trang chủ hiện phiên bản máy chủ | Có |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
-| Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; chưa có màn hình, chưa kiểm phiên ở các API dữ liệu |
+| Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; chưa có màn hình |
 | DuckDB, guard, giải thích, vai, các trang nghiệp vụ | Chưa có |

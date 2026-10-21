@@ -9,11 +9,13 @@ trang HTML thay vì lỗi và khó biết vì sao. Giao diện chỉ được ph
 mod admin;
 mod auth;
 mod datasets;
+mod extract;
 mod query;
 mod system;
 #[cfg(test)]
 mod test_support;
 mod web;
+mod workspaces;
 
 use axum::{routing::any, Router};
 
@@ -26,6 +28,7 @@ pub fn router(state: AppState) -> Router {
         .merge(system::routes())
         .merge(auth::routes())
         .merge(admin::routes())
+        .merge(workspaces::routes())
         .merge(datasets::routes())
         .merge(query::routes())
         .fallback(api_not_found);
@@ -72,13 +75,29 @@ mod tests {
         assert_eq!(&body[..], br#"{"status":"ok"}"#);
     }
 
+    /// Không cookie phiên thì mọi API dữ liệu trả 401 trước khi chạm tới database.
     #[tokio::test]
-    async fn unfinished_endpoint_returns_501() {
-        let res = app()
-            .oneshot(Request::get("/api/datasets").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(res.status(), StatusCode::NOT_IMPLEMENTED);
+    async fn data_endpoints_require_login() {
+        for (method, path) in [
+            ("GET", "/api/workspaces"),
+            ("GET", "/api/workspaces/any/datasets"),
+            ("POST", "/api/workspaces/any/datasets"),
+            ("GET", "/api/workspaces/any/datasets/x"),
+            ("POST", "/api/workspaces/any/datasets/x/drill"),
+            ("GET", "/api/auth/me"),
+        ] {
+            let res = app()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(path)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{method} {path}");
+        }
     }
 
     #[tokio::test]
