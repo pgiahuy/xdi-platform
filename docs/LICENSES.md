@@ -19,10 +19,10 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 Không có thành phần nào chỉ có giấy phép GPL, LGPL hay AGPL. Crate `r-efi` cho chọn `MIT OR Apache-2.0 OR
 LGPL-2.1-or-later`; dự án dùng nó theo MIT, và nó chỉ được biên dịch cho nền tảng UEFI, không có trong binary Linux.
 
-DuckDB (MIT) được biên dịch từ mã nguồn vào binary backend (crate `duckdb` với `bundled`, gói sẵn extension Parquet nên
-không tải gì lúc chạy). Mã nguồn DuckDB kèm các thư viện C/C++ trong thư mục `third_party` của nó (re2, zstd, lz4,
+DuckDB (MIT) được biên dịch từ mã nguồn vào binary backend (crate `duckdb` với `bundled`, gói sẵn extension Parquet; tự cài và tự nạp
+extension bị tắt trong `engine/analytics.rs`, nên không tải gì lúc chạy). Mã nguồn DuckDB kèm các thư viện C/C++ trong thư mục `third_party` của nó (re2, zstd, lz4,
 snappy, brotli, thrift, mbedtls, libpg_query, fmt, utf8proc và các thư viện nhỏ khác), theo giấy phép cho phép như
-MIT, BSD, Apache-2.0, Boost, zlib; mbedtls và zstd cho chọn thêm GPL, dự án dùng theo nhánh cho phép.
+MIT, BSD, Apache-2.0, Boost, zlib; zstd cho chọn thêm GPL, dự án dùng theo nhánh BSD.
 
 `webpki-roots` (CDLA-Permissive-2.0, danh sách chứng chỉ gốc) chỉ là phụ thuộc lúc build của `libduckdb-sys`, cho nhánh
 tải thư viện DuckDB dựng sẵn; dự án biên dịch DuckDB từ mã nguồn kèm trong crate nên nhánh đó không chạy, và crate

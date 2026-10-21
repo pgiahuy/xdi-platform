@@ -102,13 +102,19 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
 
     for (i, (file, reader)) in files.iter().zip(&readers).enumerate() {
         let target = out_dir.join(format!("part-{:04}.parquet", i + 1));
-        let sql = format!(
-            "COPY (SELECT *, {} AS {SOURCE_COLUMN} FROM {reader}) TO {} (FORMAT parquet)",
-            sql_string(&file.name),
-            sql_string(&path_text(&target)?),
-        );
-        conn.execute_batch(&sql)
-            .map_err(|e| user_file_error(&file.name, "ghi Parquet", e))?;
+        let target_text = path_text(&target)?;
+        match copy_to_parquet(&conn, file, reader, &target_text) {
+            Ok(()) => {}
+            // Bước đọc cột chỉ xem phần đầu file. Byte không phải UTF-8 nằm sâu trong file CSV thì tới đây mới lộ ra;
+            // đọc lại cả file theo latin-1.
+            Err(e) if file.format == FileFormat::Csv && is_unicode_error(&e) => {
+                let _ = std::fs::remove_file(&target);
+                let latin1 = csv_reader(&file.path, true)?;
+                copy_to_parquet(&conn, file, &latin1, &target_text)
+                    .map_err(|e| user_file_error(&file.name, "đổi sang Parquet", e))?;
+            }
+            Err(e) => return Err(user_file_error(&file.name, "đổi sang Parquet", e)),
+        }
     }
 
     // Đọc lại cả thư mục như bảng gộp: DuckDB gộp theo tên cột và nâng kiểu (BIGINT với DOUBLE thành DOUBLE). Kiểu
@@ -141,8 +147,43 @@ pub fn parquet_glob(dir: &Path) -> Result<String, AppError> {
     ))
 }
 
+/// Kết nối DuckDB trong bộ nhớ. Tắt tự cài và tự nạp extension: Parquet đã biên dịch sẵn vào binary, nên không có lý do
+/// gì để DuckDB tải code từ Internet lúc chạy (máy chủ không có mạng cũng chạy được).
 fn open() -> Result<Connection, AppError> {
-    Connection::open_in_memory().map_err(|e| AppError::Internal(format!("open duckdb: {e}")))
+    let conn = Connection::open_in_memory()
+        .map_err(|e| AppError::Internal(format!("open duckdb: {e}")))?;
+    conn.execute_batch(
+        "SET autoinstall_known_extensions = false; SET autoload_known_extensions = false;",
+    )
+    .map_err(|e| AppError::Internal(format!("configure duckdb: {e}")))?;
+    Ok(conn)
+}
+
+/// Ghi một file người dùng thành một phần Parquet, thêm cột SOURCE_COLUMN mang tên file gốc.
+fn copy_to_parquet(
+    conn: &Connection,
+    file: &InputFile,
+    reader: &str,
+    target: &str,
+) -> Result<(), duckdb::Error> {
+    conn.execute_batch(&format!(
+        "COPY (SELECT *, {} AS {SOURCE_COLUMN} FROM {reader}) TO {} (FORMAT parquet)",
+        sql_string(&file.name),
+        sql_string(target),
+    ))
+}
+
+fn csv_reader(path: &Path, latin1: bool) -> Result<String, AppError> {
+    let path = sql_string(&path_text(path)?);
+    Ok(if latin1 {
+        format!("read_csv({path}, header = true, encoding = 'latin-1')")
+    } else {
+        format!("read_csv({path}, header = true)")
+    })
+}
+
+fn is_unicode_error(e: &duckdb::Error) -> bool {
+    e.to_string().to_lowercase().contains("unicode")
 }
 
 /// Biểu thức đọc một file và danh sách cột của nó. CSV thử UTF-8 trước; DuckDB báo lỗi mã hóa thì thử latin-1, dạng
@@ -157,17 +198,28 @@ fn open_reader(conn: &Connection, file: &InputFile) -> Result<(String, Vec<Colum
             Ok((reader, columns))
         }
         FileFormat::Csv => {
-            let utf8 = format!("read_csv({path}, header = true)");
-            match describe(conn, &utf8) {
-                Ok(columns) => Ok((utf8, columns)),
-                Err(e) if e.to_string().to_lowercase().contains("unicode") => {
-                    let latin1 = format!("read_csv({path}, header = true, encoding = 'latin-1')");
+            let utf8 = csv_reader(&file.path, false)?;
+            let (reader, columns) = match describe(conn, &utf8) {
+                Ok(columns) => (utf8, columns),
+                Err(e) if is_unicode_error(&e) => {
+                    let latin1 = csv_reader(&file.path, true)?;
                     let columns = describe(conn, &latin1)
                         .map_err(|e| user_file_error(&file.name, "đọc CSV", e))?;
-                    Ok((latin1, columns))
+                    (latin1, columns)
                 }
-                Err(e) => Err(user_file_error(&file.name, "đọc CSV", e)),
+                Err(e) => return Err(user_file_error(&file.name, "đọc CSV", e)),
+            };
+            // Dòng thiếu hay thừa cột làm DuckDB bỏ cuộc tách cột: cả dòng thành một cột, tên cột là nguyên dòng tiêu
+            // đề ("region,amount"). Không chặn thì một bảng sai được lưu mà không ai biết.
+            if let [only] = columns.as_slice() {
+                if only.name.contains([',', ';', '\t', '|']) {
+                    return Err(AppError::BadRequest(format!(
+                        "File {} có dòng thiếu hoặc thừa cột so với dòng tiêu đề, không tách được cột",
+                        file.name
+                    )));
+                }
             }
+            Ok((reader, columns))
         }
     }
 }
@@ -202,16 +254,21 @@ fn check_same_columns(
         parts.push(format!("thừa cột {}", extra.join(", ")));
     }
     Err(AppError::BadRequest(format!(
-        "File {name} không cùng cột với file {first_name}: {}. Các file nạp cùng lúc phải có cùng tên cột",
+        "File {name} không cùng cột với file {first_name}: {}. Các file nạp cùng lúc phải có cùng tên cột (phân biệt chữ hoa, chữ thường)",
         parts.join("; ")
     )))
 }
 
 /// Lỗi khi DuckDB đọc file người dùng: chi tiết vào log, người dùng nhận thông báo kèm tên file.
+/// Lỗi IO (đầy ổ đĩa, mất quyền ghi) là lỗi máy chủ, không phải lỗi của file người dùng.
 fn user_file_error(file_name: &str, step: &str, e: duckdb::Error) -> AppError {
-    tracing::info!(file = file_name, step, error = %e, "duckdb rejected user file");
+    let text = e.to_string();
+    if text.contains("IO Error") {
+        return AppError::Internal(format!("{step} {file_name}: {text}"));
+    }
+    tracing::info!(file = file_name, step, error = %text, "duckdb rejected user file");
     AppError::BadRequest(format!(
-        "Không {step} được file {file_name}: file rỗng, hỏng, hoặc không đúng định dạng"
+        "Không {step} được file {file_name}: file hỏng hoặc không đúng định dạng"
     ))
 }
 
@@ -421,5 +478,62 @@ mod tests {
             Some(FileFormat::Parquet)
         );
         assert_eq!(FileFormat::from_file_name("x.xlsx"), None);
+    }
+
+    /// Byte latin-1 nằm sau phần DuckDB đọc thử (khoảng 20.000 dòng đầu): bước ghi gặp lỗi mã hóa và đọc lại theo latin-1.
+    #[test]
+    fn latin1_byte_deep_in_a_large_csv_is_read() {
+        let tmp = TempDir::new();
+        let mut bytes = b"name,amount\n".to_vec();
+        for i in 0..30_000 {
+            bytes.extend_from_slice(format!("row{i},1\n").as_bytes());
+        }
+        bytes.extend_from_slice(b"Caf\xe9,5\n");
+        let file = tmp.csv("big.csv", &bytes);
+        let result = materialize(&[file], &tmp.out()).unwrap();
+        assert_eq!(result.row_count, 30_001);
+        assert_eq!(
+            query_strings(&tmp.out(), "name FROM {t} WHERE amount = 5"),
+            ["Café"]
+        );
+    }
+
+    /// Một dòng thiếu cột làm DuckDB gộp cả dòng thành một cột; phải báo lỗi chứ không lưu bảng sai.
+    #[test]
+    fn rows_with_missing_columns_are_rejected() {
+        let tmp = TempDir::new();
+        let mut bytes = b"region,amount\n".to_vec();
+        for _ in 0..100 {
+            bytes.extend_from_slice(b"South,1\n");
+        }
+        bytes.extend_from_slice(b"onlyone\n");
+        let file = tmp.csv("ragged.csv", &bytes);
+        let err = materialize(&[file], &tmp.out()).unwrap_err();
+        assert!(
+            matches!(&err, AppError::BadRequest(m) if m.contains("ragged.csv")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn semicolon_csv_is_split_into_columns() {
+        let tmp = TempDir::new();
+        let file = tmp.csv("vn.csv", b"region;amount\nSouth;10\n");
+        let result = materialize(&[file], &tmp.out()).unwrap();
+        let names: Vec<&str> = result.columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["region", "amount", SOURCE_COLUMN]);
+    }
+
+    #[test]
+    fn extensions_are_not_auto_installed() {
+        let conn = open().unwrap();
+        let value: String = conn
+            .query_row(
+                "SELECT current_setting('autoinstall_known_extensions')::VARCHAR",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, "false");
     }
 }
