@@ -249,7 +249,7 @@ Cập nhật khi có thay đổi.
 |---|---|
 | Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
 | `/api/health`, `/api/version`; mọi API dưới `/api`, đường dẫn API sai trả 404 JSON | Có |
-| Trait `LlmProvider` và ba cài đặt | Khung: mock chưa có câu mẫu, Gemini và Ollama chưa gọi thật |
+| Trait `LlmProvider` và ba cài đặt; `complete` nhận loại việc, câu hỏi gốc và prompt | Mock trả lời 10 câu mẫu trên DataCo (bảng logic `dataco`) và hồ sơ viết sẵn của `dataco` (`engine/llm/mock_answers.json`); Gemini và Ollama chưa gọi thật |
 | Nạp dataset: `POST /api/workspaces/{slug}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB` | Có; chưa có xlsx (#21), hồ sơ cột (#22) |
 | Route ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
