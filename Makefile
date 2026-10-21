@@ -49,7 +49,7 @@ openapi: ## Sinh openapi.json từ backend (chưa có, thêm khi có utoipa)
 licenses: ## Sinh docs/licenses-dependencies.md từ Cargo.lock và package-lock.json
 	node scripts/licenses.mjs
 
-hooks: ## Cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/
+hooks: ## Cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/ hoặc Makefile
 	@# git rev-parse tìm đúng thư mục hook, kể cả khi đang ở một git worktree (.git là file, không phải thư mục).
 	install -m 755 scripts/pre-push "$$(git rev-parse --git-path hooks)/pre-push"
 	@echo "đã cài hook pre-push; chạy lại make hooks khi scripts/pre-push thay đổi"
