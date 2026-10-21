@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-/* main.tsx - điểm vào của giao diện: gắn bộ đệm dữ liệu (TanStack Query) và router. */
+/* main.tsx - điểm vào của giao diện: gắn bộ đệm dữ liệu (TanStack Query, cấu hình ở api/queryClient.ts) và router. */
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router'
+import { buildQueryClient } from './api/queryClient'
 import { router } from './router'
 import './index.css'
 
-// Mặc định TanStack thử lại 3 lần: backend tắt thì người dùng chờ lâu mới thấy thông báo lỗi. Một lần là đủ cho lỗi mạng
-// thoáng qua.
-const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1 } } })
+const queryClient = buildQueryClient()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

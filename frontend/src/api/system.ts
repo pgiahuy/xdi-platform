@@ -11,5 +11,6 @@ export type VersionInfo = {
 }
 
 export function useVersion() {
-  return useQuery({ queryKey: ['version'], queryFn: () => apiGet<VersionInfo>('/version') })
+  // Phiên bản chỉ đổi khi cập nhật máy chủ; đọc lại vài phút một lần là đủ.
+  return useQuery({ queryKey: ['version'], queryFn: () => apiGet<VersionInfo>('/version'), staleTime: 5 * 60_000 })
 }
