@@ -29,3 +29,8 @@ duckdb = { version = "1.10506", features = ["bundled", "parquet"] }
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+
+# DuckDB biên dịch từ mã C++ kèm trong crate. Bản debug kèm thông tin debug của C++ nặng hơn 2 GB mỗi lần build, làm
+# đầy đĩa của runner CI; thông tin đó không giúp debug code của dự án, nên tắt riêng cho crate này.
+[profile.dev.package.libduckdb-sys]
+debug = false
