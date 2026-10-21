@@ -100,6 +100,7 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 
 - Làm từng bước nhỏ, đúng phần được nhờ. Không viết cả tính năng lớn một lần, không sửa lan sang tệp khác.
 - Chỉ commit, push, mở PR khi người dùng yêu cầu rõ. Không bao giờ tự merge.
+- Không bỏ qua hook (`git push --no-verify`, `git commit --no-verify`). Hook báo lỗi thì sửa lỗi rồi push lại.
 - Tự đánh giá kích thước trước khi đề xuất PR: `git diff --stat` so với `main`. Vượt giới hạn hoặc trộn nhiều lớp thì
   nói rõ và đề xuất cách tách.
 - Viết xong thì giải thích ngắn gọn mã làm gì và vì sao, đủ để người dùng tự trình bày lại.
@@ -109,6 +110,9 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 - Kết thúc mỗi phần việc: đề xuất tiêu đề PR tiếng Anh và nội dung PR tiếng Việt.
 
 ## 6. Trước khi push: tự kiểm
+
+Sau khi clone, chạy `make hooks` một lần: hook pre-push tự chạy hai mục đầu dưới đây mỗi lần `git push` và chặn push
+nếu lỗi. Hook không nằm trong git nên mỗi người tự cài; chạy lại khi `scripts/pre-push` thay đổi.
 
 - [ ] `make check-fast` qua: fmt, clippy không cảnh báo, test.
 - [ ] Đụng `frontend/` thì `make check-frontend` qua: lint, kiểm kiểu, build.
