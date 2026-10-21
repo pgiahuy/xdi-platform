@@ -4,6 +4,7 @@ Phụ thuộc đi một chiều: api gọi service, service gọi engine và aut
 
 mod api;
 mod auth;
+mod cli;
 mod config;
 mod engine;
 mod error;
@@ -28,6 +29,13 @@ async fn main() {
         .await
         .expect("cannot apply database migrations");
     tracing::info!("database migrations applied");
+
+    // Có tham số thì chạy lệnh quản trị (cli.rs) rồi thoát, không mở server.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() {
+        let state = state::AppState::new(config, store);
+        std::process::exit(cli::run(&state, &args).await);
+    }
 
     // Chưa có tài khoản nào: in mã thiết lập ra log. Chỉ người đọc được log của máy chủ mới tạo được tài khoản quản trị
     // đầu tiên, nên người ngoài không chiếm được bản cài vừa đưa lên mạng.

@@ -152,7 +152,7 @@ async fn start_session(
 }
 
 // Băm tốn CPU (auth/password.rs): chạy trên luồng riêng để không chặn các request khác.
-async fn hash_password(plain: String) -> Result<String, AppError> {
+pub(crate) async fn hash_password(plain: String) -> Result<String, AppError> {
     tokio::task::spawn_blocking(move || password::hash(&plain))
         .await
         .map_err(|e| AppError::Internal(format!("hash password task: {e}")))?
@@ -166,7 +166,7 @@ fn dummy_hash() -> &'static str {
     })
 }
 
-fn clean_email(raw: &str) -> Result<String, AppError> {
+pub(crate) fn clean_email(raw: &str) -> Result<String, AppError> {
     let email = raw.trim();
     // Kiểm sơ bộ: đúng một dấu @, hai phía không rỗng, không khoảng trắng. Định dạng đầy đủ để lúc gửi thư mời (sau này)
     // xác nhận.
