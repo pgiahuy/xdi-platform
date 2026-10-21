@@ -75,11 +75,13 @@ giá trị mẫu của cột phân loại, và không biết gì về phân quy�
 
 ```
 backend/src/
-  main.rs            khởi động: đọc config, mở Postgres và DuckDB, dựng router
+  main.rs            khởi động: đọc config, mở Postgres và DuckDB, dựng router; hoặc chạy lệnh quản trị (cli.rs),
+                     tiến trình con đọc Excel (engine/excel_worker.rs)
   config.rs          biến môi trường
   api/               tầng HTTP: handler, request/response struct, lỗi -> status
-  service/           tầng nghiệp vụ: ingest.rs, ask.rs, explain.rs; không biết gì về HTTP
-  engine/            tầng hạ tầng: analytics.rs (DuckDB), store/ (Postgres, chia theo bảng), guard.rs, llm/
+  service/           tầng nghiệp vụ: ingest.rs, excel.rs, ask.rs, explain.rs; không biết gì về HTTP
+  engine/            tầng hạ tầng: analytics.rs (DuckDB), excel.rs (đọc xlsx), store/ (Postgres, chia theo bảng),
+                     guard.rs, llm/
   auth/              mật khẩu, mã phiên, role, demo-login
   error.rs           một enum lỗi chung
 ```
@@ -98,7 +100,7 @@ backend/src/
 | Kho | Chứa | Vì sao |
 |---|---|---|
 | Postgres (sqlx, migrations trong `backend/migrations/`) | `workspaces`, `memberships`, `users`, `sources`, `datasets`, `dataset_versions`, `columns`, `column_values`, `metrics`, `rls_policies`, `queries`, `settings`; mọi bảng có `workspace_id`, trừ `workspaces` và `users` | Nhiều ghi nhỏ, nhiều kết nối, đúng việc của database giao dịch |
-| DuckDB nhúng | Không giữ gì bền. Đọc Parquet trên volume theo từng câu SQL | Engine phân tích theo cột, nhận SQL chuẩn, đọc thẳng CSV, Parquet, xlsx, không thêm tiến trình |
+| DuckDB nhúng | Không giữ gì bền. Đọc Parquet trên volume theo từng câu SQL | Engine phân tích theo cột, nhận SQL chuẩn, đọc thẳng CSV, Parquet, không thêm tiến trình; file Excel đổi sang CSV trước (mục 5) |
 
 Image Postgres là `pgvector/pgvector`, có sẵn `unaccent`, `pg_trgm`, `vector`.
 
@@ -179,6 +181,25 @@ Nạp chạy một lần cho mỗi phiên bản dataset, ba bước độc lập
 | `columns`: tên, kiểu, vai trò (chiều, độ đo, thời gian), min, max, null, giá trị mẫu, mô tả và bí danh | Ghép vào prompt |
 | `column_values`: giá trị phân loại của cột ít giá trị, kèm bí danh | Ánh xạ "miền Nam" sang "South" |
 
+File Excel (.xlsx) đọc bằng crate `calamine` (`engine/excel.rs`): mỗi sheet được chọn ghi thành CSV rồi đi tiếp như
+CSV, cột `_source_file` ghi tên sheet. Không dùng extension `excel` của DuckDB vì extension đó phải tải từ Internet lúc
+chạy và không liệt kê được sheet.
+
+- Người dùng xem danh sách sheet (`POST .../datasets/sheets`: tên, sheet có ẩn không, tên cột, số dòng ước lượng) rồi
+  chọn. Không chọn thì file phải có đúng một sheet đang hiện.
+- Các sheet chọn cùng lúc phải cùng cột và gộp thành một dataset. Sheet khác cột thì nạp riêng từng lần, mỗi lần một
+  dataset: route nạp luôn trả về một dataset, giao diện gửi một lần nạp cho mỗi nhóm sheet cùng cột.
+- Dòng đầu có dữ liệu là dòng tiêu đề. Tên cột bỏ khoảng trắng hai đầu, ô tiêu đề trống lấy chữ cột Excel, tên trùng
+  thêm hậu tố, nên tên ở danh sách sheet trùng tên cột của dataset. Ô gộp và tiêu đề lệch dòng chưa hỗ trợ.
+- File Excel được đọc trong một tiến trình con (`xdi-backend excel-worker`, `engine/excel_worker.rs`) có trần RAM 2 GB
+  và 5 phút CPU, mỗi lúc một tiến trình. calamine tin những con số file tự khai, nên một file vài KB cố ý làm sai có
+  thể khiến nó cấp phát hàng trăm GB hay đọc rất lâu; khi đó chỉ tiến trình con dừng, request đó nhận 400, backend vẫn
+  phục vụ người khác. Client ngắt kết nối thì tiến trình con bị tắt theo. Trước khi đọc còn kiểm kích thước giải nén
+  (tổng tối đa 10 lần `MAX_UPLOAD_MB`, bảng chuỗi dùng chung tối đa 64 MB hoặc `MAX_UPLOAD_MB` nếu nhỏ hơn), số sheet
+  (100), độ dài tên sheet (100 ký tự), độ dài một dòng (16 MB) và dung lượng CSV ghi ra; kết quả tiến trình con trả về
+  tối đa 8 MB, để báo lỗi rõ thay vì để tiến trình con chạm trần. Một file như vậy vẫn giữ
+  lượt đọc Excel tới khi chạm trần, nên người khác nạp Excel lúc đó phải chờ.
+
 Mô tả và bí danh do mô hình ngôn ngữ viết một lần lúc nạp. Lúc hỏi, ngữ cảnh lấy bằng ba truy vấn Postgres:
 
 | Tầng | Nguồn | Cách lấy |
@@ -250,7 +271,7 @@ Cập nhật khi có thay đổi.
 | Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
 | `/api/health`, `/api/version`; mọi API dưới `/api`, đường dẫn API sai trả 404 JSON | Có |
 | Trait `LlmProvider` và ba cài đặt; `complete` nhận loại việc, câu hỏi gốc và prompt | Mock trả lời 10 câu mẫu trên DataCo (bảng logic `dataco`) và hồ sơ viết sẵn của `dataco` (`engine/llm/mock_answers.json`); Gemini và Ollama chưa gọi thật |
-| Nạp dataset: `POST /api/workspaces/{slug}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB` | Có; chưa có xlsx (#21), hồ sơ cột (#22) |
+| Nạp dataset: `POST /api/workspaces/{slug}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet, hoặc một file Excel kèm sheet đã chọn), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB`; liệt kê sheet của file Excel ở `POST .../datasets/sheets` | Có; sheet Excel khác cột nạp riêng từng lần; chưa có hồ sơ cột (#22) |
 | Route ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có; liệt kê và xem dataset đã dùng |
@@ -259,5 +280,5 @@ Cập nhật khi có thay đổi.
 | Khung giao diện React và Vite; bố cục chung: thanh bên, đổi workspace, hiện vai trong workspace đang mở, tài khoản và đăng xuất, dùng được ở bề ngang điện thoại; trang làm việc dưới `/w/<workspace>` | Có; chưa có màn đăng nhập (#48) |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
 | Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; chưa có màn hình |
-| DuckDB nhúng: đổi CSV (UTF-8, latin-1) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`) | Có |
+| DuckDB nhúng: đổi CSV (UTF-8, latin-1) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`); sheet Excel đổi sang CSV bằng `calamine` (`engine/excel.rs`) | Có |
 | Guard, giải thích, các trang nghiệp vụ | Chưa có |

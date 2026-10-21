@@ -4,6 +4,7 @@ Gọi engine và auth; không bao giờ gọi ngược lên api. */
 
 pub mod accounts;
 pub mod ask;
+pub mod excel;
 pub mod explain;
 pub mod ingest;
 pub mod users;

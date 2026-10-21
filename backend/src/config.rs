@@ -5,6 +5,8 @@ Mọi biến khai ở .env.example; thêm biến mới thì thêm ở cả hai n
 use std::env;
 use std::path::PathBuf;
 
+use crate::engine::excel_worker::ExcelWorker;
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
@@ -23,6 +25,8 @@ pub struct Config {
     pub ollama_model: String,
     /// Thư mục giao diện đã build (frontend/dist). Không đặt thì backend chỉ phục vụ API.
     pub static_dir: Option<PathBuf>,
+    /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
+    pub excel_worker: ExcelWorker,
 }
 
 impl Config {
@@ -49,6 +53,7 @@ impl Config {
                 .ok()
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
+            excel_worker: ExcelWorker::Process(worker_binary()),
         }
     }
 }
@@ -81,6 +86,15 @@ fn upload_limit_bytes(raw: Option<&str>) -> u64 {
 
 fn var_or(key: &str, default: &str) -> String {
     env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+/// Binary chạy tiến trình con đọc Excel: chính binary đang chạy. Trên Linux dùng /proc/self/exe, trỏ đúng bản đang chạy
+/// kể cả khi file trên đĩa đã bị thay (cài bản mới mà chưa khởi động lại), để hai bên luôn cùng một phiên bản.
+fn worker_binary() -> PathBuf {
+    if cfg!(target_os = "linux") {
+        return PathBuf::from("/proc/self/exe");
+    }
+    env::current_exe().unwrap_or_else(|_| PathBuf::from("xdi-backend"))
 }
 
 #[cfg(test)]

@@ -25,6 +25,8 @@ pub fn app_with(
 ) -> axum::Router {
     let mut config = Config::from_env();
     config.static_dir = None;
+    // Binary của test không phải xdi-backend, nên không chạy được tiến trình con excel-worker.
+    config.excel_worker = crate::engine::excel_worker::ExcelWorker::InProcess;
     configure(&mut config);
     let state = AppState::new(config, store);
     *state.setup_code.lock().unwrap() = setup_code.map(str::to_string);
