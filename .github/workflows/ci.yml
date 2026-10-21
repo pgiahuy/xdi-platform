@@ -59,6 +59,7 @@ jobs:
               - 'backend/**'
               - 'frontend/**'
               - 'docker-compose*.yml'
+              - '.dockerignore'
               - '.github/workflows/ci.yml'
       - name: Validate compose file
         run: docker compose config -q
@@ -68,7 +69,8 @@ jobs:
         name: Build backend image with layer cache
         uses: docker/build-push-action@v6
         with:
-          context: backend
+          context: .
+          file: backend/Dockerfile
           push: false
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend

@@ -14,8 +14,8 @@ cd xdi-platform
 docker compose up
 ```
 
-Hiện mới có khung backend: `curl localhost:8000/api/health` trả `{"status":"ok"}`. Giao diện, dataset mẫu và câu hỏi mẫu
-đang được làm trong [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1).
+Mở http://localhost:8000. Hiện mới có khung: trang chủ hiện phiên bản máy chủ, `curl localhost:8000/api/health` trả
+`{"status":"ok"}`. Dataset mẫu, câu hỏi mẫu và các trang nghiệp vụ đang được làm trong [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1).
 
 ## Tài liệu
 
