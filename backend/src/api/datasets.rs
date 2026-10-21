@@ -2,12 +2,9 @@
 /* api/datasets.rs - liệt kê, xem, nạp dataset trong một workspace. Nạp file và lập hồ sơ cột nằm ở service/ingest.rs.
 Mọi route nằm dưới /workspaces/{ws}/ và nhận Member (extract.rs): chưa đăng nhập 401, không thuộc workspace 404. */
 
-use axum::{
-    extract::{Path, State},
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, routing::get, Json, Router};
 
+use super::extract::PathParams;
 use crate::auth::Member;
 use crate::engine::store::Dataset;
 use crate::{error::AppError, service, state::AppState};
@@ -32,7 +29,7 @@ async fn create(State(state): State<AppState>, member: Member) -> Result<(), App
 async fn detail(
     State(state): State<AppState>,
     member: Member,
-    Path((_ws, id)): Path<(String, String)>,
+    PathParams((_ws, id)): PathParams<(String, String)>,
 ) -> Result<Json<Dataset>, AppError> {
     Ok(Json(
         service::ingest::dataset_detail(&state, &member, &id).await?,

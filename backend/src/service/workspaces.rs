@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/workspaces.rs - workspace của người dùng: liệt kê, tạo mới, và kiểm một người có thuộc workspace không.
+/* service/workspaces.rs - workspace của người dùng: liệt kê, tạo mới. Kiểm thành viên nằm ở auth::member_of.
 
 Workspace đang làm việc nằm trong đường dẫn (/api/workspaces/{ws}/...), không lưu trong phiên: mỗi tab trình duyệt
 làm việc độc lập, không có chuyện tab này đổi workspace của tab kia rồi nạp nhầm dữ liệu. */
 
-use crate::auth::Member;
 use crate::engine::store::{Membership, User};
 use crate::error::AppError;
 use crate::service::accounts::slug_from_name;
@@ -30,19 +29,4 @@ pub async fn create(state: &AppState, user: &User, name: &str) -> Result<Members
         .await?;
     tracing::info!(user_id = %user.id, slug = %membership.slug, "workspace created");
     Ok(membership)
-}
-
-/// Người dùng có thuộc workspace slug không. Không có workspace và không phải thành viên trả cùng một lỗi 404,
-/// để người ngoài không dò được tên workspace nào tồn tại.
-pub async fn member(state: &AppState, user: User, slug: &str) -> Result<Member, AppError> {
-    let membership = state
-        .store
-        .find_membership(user.id, slug)
-        .await?
-        .ok_or_else(|| {
-            AppError::NotFound(
-                "Không có workspace này hoặc bạn không thuộc workspace này".to_string(),
-            )
-        })?;
-    Ok(Member::from_membership(user, membership))
 }

@@ -3,16 +3,15 @@
 Logic và kiểm quyền ở service/users.rs; handler chỉ lấy người đang đăng nhập rồi chuyển tiếp. */
 
 use axum::{
-    extract::{Path, State},
+    extract::State,
     http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
-use axum_extra::extract::cookie::CookieJar;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::auth::session_user;
+use super::extract::{CurrentUser, JsonBody, PathParams};
 use crate::engine::store::{User, UserSummary};
 use crate::service::users;
 use crate::{error::AppError, state::AppState};
@@ -41,53 +40,48 @@ struct ResetPasswordResponse {
 
 async fn list(
     State(state): State<AppState>,
-    jar: CookieJar,
+    CurrentUser(actor): CurrentUser,
 ) -> Result<Json<Vec<UserSummary>>, AppError> {
-    let actor = session_user(&state, &jar).await?;
     Ok(Json(users::list(&state, &actor).await?))
 }
 
 async fn create(
     State(state): State<AppState>,
-    jar: CookieJar,
-    Json(req): Json<CreateUserRequest>,
+    CurrentUser(actor): CurrentUser,
+    JsonBody(req): JsonBody<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<User>), AppError> {
-    let actor = session_user(&state, &jar).await?;
     let user = users::create(&state, &actor, &req.email, &req.display_name, req.password).await?;
     Ok((StatusCode::CREATED, Json(user)))
 }
 
 async fn deactivate(
     State(state): State<AppState>,
-    jar: CookieJar,
-    Path(id): Path<String>,
+    CurrentUser(actor): CurrentUser,
+    PathParams(id): PathParams<String>,
 ) -> Result<StatusCode, AppError> {
-    let actor = session_user(&state, &jar).await?;
     users::deactivate(&state, &actor, parse_id(&id)?).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn activate(
     State(state): State<AppState>,
-    jar: CookieJar,
-    Path(id): Path<String>,
+    CurrentUser(actor): CurrentUser,
+    PathParams(id): PathParams<String>,
 ) -> Result<StatusCode, AppError> {
-    let actor = session_user(&state, &jar).await?;
     users::activate(&state, &actor, parse_id(&id)?).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn reset_password(
     State(state): State<AppState>,
-    jar: CookieJar,
-    Path(id): Path<String>,
+    CurrentUser(actor): CurrentUser,
+    PathParams(id): PathParams<String>,
 ) -> Result<Json<ResetPasswordResponse>, AppError> {
-    let actor = session_user(&state, &jar).await?;
     let temporary_password = users::reset_password(&state, &actor, parse_id(&id)?).await?;
     Ok(Json(ResetPasswordResponse { temporary_password }))
 }
 
-// Path<Uuid> của axum trả lỗi dạng chữ thường khi id sai; tự đọc để lỗi luôn là JSON như mọi lỗi khác.
+// Đọc id dạng chuỗi rồi tự đổi sang Uuid, để id sai báo 400 với lời rõ ràng thay vì 404 chung.
 fn parse_id(raw: &str) -> Result<Uuid, AppError> {
     Uuid::parse_str(raw).map_err(|_| AppError::BadRequest("Mã tài khoản không hợp lệ".to_string()))
 }

@@ -11,7 +11,8 @@ pub mod token;
 
 use uuid::Uuid;
 
-use crate::engine::store::{Membership, User};
+use crate::engine::store::{Membership, Store, User};
+use crate::error::AppError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkspaceId(Uuid);
@@ -43,15 +44,27 @@ pub struct Member {
     pub role: String,
 }
 
-impl Member {
-    /// Cách duy nhất ngoài test để có WorkspaceId: từ một dòng memberships vừa đọc cho đúng người dùng của phiên
-    /// (service/workspaces.rs). Membership đi kèm user là bằng chứng người đó thuộc workspace.
-    pub fn from_membership(user: User, membership: Membership) -> Self {
-        Self {
-            user,
-            workspace: WorkspaceId(membership.workspace_id),
-            slug: membership.slug,
-            role: membership.role,
-        }
+/// Kiểm người dùng có thuộc workspace slug không, và nếu có thì trả Member. Đây là cách duy nhất ngoài test để có
+/// WorkspaceId: hàm tự đọc dòng memberships cho đúng user, nên không ai dựng được WorkspaceId từ một UUID tùy ý.
+/// Không có workspace và không phải thành viên trả cùng một lỗi 404, để người ngoài không dò được tên workspace.
+pub async fn member_of(store: &Store, user: User, slug: &str) -> Result<Member, AppError> {
+    let membership = store
+        .find_membership(user.id, slug)
+        .await?
+        .ok_or_else(workspace_not_found)?;
+    Ok(member_from(user, membership))
+}
+
+pub fn workspace_not_found() -> AppError {
+    AppError::NotFound("Không có workspace này hoặc bạn không thuộc workspace này".to_string())
+}
+
+// Riêng tư: chỉ member_of gọi, sau khi chính nó đọc dòng memberships.
+fn member_from(user: User, membership: Membership) -> Member {
+    Member {
+        user,
+        workspace: WorkspaceId(membership.workspace_id),
+        slug: membership.slug,
+        role: membership.role,
     }
 }

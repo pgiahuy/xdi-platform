@@ -5,7 +5,7 @@ API dữ liệu nằm dưới /api/workspaces/{ws}/ (datasets.rs, query.rs) và 
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use serde::Deserialize;
 
-use super::extract::CurrentUser;
+use super::extract::{CurrentUser, JsonBody};
 use crate::engine::store::Membership;
 use crate::service::workspaces;
 use crate::{error::AppError, state::AppState};
@@ -29,7 +29,7 @@ async fn list(
 async fn create(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
-    Json(req): Json<CreateWorkspaceRequest>,
+    JsonBody(req): JsonBody<CreateWorkspaceRequest>,
 ) -> Result<(StatusCode, Json<Membership>), AppError> {
     let membership = workspaces::create(&state, &user, &req.name).await?;
     Ok((StatusCode::CREATED, Json(membership)))
@@ -275,6 +275,94 @@ mod tests {
         ];
         slugs.sort();
         assert_eq!(slugs, ["kinh-doanh", "kinh-doanh-2"]);
+
+        db.drop().await;
+    }
+
+    /// Lỗi do request sai (đường dẫn không phải UTF-8, body hỏng, thiếu Content-Type) vẫn trả JSON {code, message}.
+    #[tokio::test]
+    async fn malformed_requests_get_json_errors() {
+        use axum::{body::Body, http::Request};
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let app = app(db.store.clone(), Some(CODE));
+        let lan = setup_admin(&app).await;
+        let cookie = format!("{}={lan}", crate::api::auth::SESSION_COOKIE);
+
+        let cases = [
+            (
+                "GET",
+                "/api/workspaces/%FF/datasets",
+                None,
+                None,
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                "GET",
+                "/api/workspaces/cua-hang-online/datasets/%FF",
+                None,
+                None,
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                "POST",
+                "/api/workspaces",
+                Some("application/json"),
+                Some("{not json"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "POST",
+                "/api/workspaces",
+                Some("application/json"),
+                Some("{}"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "POST",
+                "/api/workspaces",
+                None,
+                Some(r#"{"name":"x"}"#),
+                StatusCode::BAD_REQUEST,
+            ),
+        ];
+        for (method, path, content_type, body, expected) in cases {
+            let mut req = Request::builder()
+                .method(method)
+                .uri(path)
+                .header("cookie", &cookie);
+            if let Some(ct) = content_type {
+                req = req.header("content-type", ct);
+            }
+            let req = req
+                .body(
+                    body.map(|b| Body::from(b.to_string()))
+                        .unwrap_or_else(Body::empty),
+                )
+                .unwrap();
+            let res = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(res.status(), expected, "{method} {path} {body:?}");
+            let ct = res
+                .headers()
+                .get("content-type")
+                .map(|v| v.to_str().unwrap().to_string());
+            assert!(
+                ct.as_deref()
+                    .is_some_and(|c| c.starts_with("application/json")),
+                "{path}: {ct:?}"
+            );
+            let bytes = res.into_body().collect().await.unwrap().to_bytes();
+            let json: Value = serde_json::from_slice(&bytes).unwrap();
+            assert!(
+                json["code"].is_string() && json["message"].is_string(),
+                "{path}: {json}"
+            );
+        }
 
         db.drop().await;
     }

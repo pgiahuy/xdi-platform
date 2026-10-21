@@ -13,6 +13,7 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use serde::{Deserialize, Serialize};
 
+use super::extract::JsonBody;
 use crate::engine::store::{Membership, User};
 use crate::service::accounts::{self, SetupInput, SESSION_DAYS};
 use crate::service::users;
@@ -74,7 +75,7 @@ async fn setup_status(State(state): State<AppState>) -> Json<SetupStatusResponse
 async fn setup(
     State(state): State<AppState>,
     jar: CookieJar,
-    Json(req): Json<SetupRequest>,
+    JsonBody(req): JsonBody<SetupRequest>,
 ) -> Result<(CookieJar, Json<MeResponse>), AppError> {
     let input = SetupInput {
         setup_code: req.setup_code,
@@ -91,7 +92,7 @@ async fn setup(
 async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
-    Json(req): Json<LoginRequest>,
+    JsonBody(req): JsonBody<LoginRequest>,
 ) -> Result<(CookieJar, Json<MeResponse>), AppError> {
     let (user, session) = accounts::login(&state, &req.email, req.password).await?;
     let body = me_response(&state, user).await?;
@@ -119,7 +120,7 @@ async fn me(State(state): State<AppState>, jar: CookieJar) -> Result<Json<MeResp
 async fn change_password(
     State(state): State<AppState>,
     jar: CookieJar,
-    Json(req): Json<ChangePasswordRequest>,
+    JsonBody(req): JsonBody<ChangePasswordRequest>,
 ) -> Result<StatusCode, AppError> {
     let user = session_user(&state, &jar).await?;
     // session_user đã kiểm có cookie, nên ở đây luôn có giá trị.
@@ -142,7 +143,7 @@ async fn demo_login() -> Result<(), AppError> {
     Err(AppError::NotImplemented("đăng nhập demo theo vai"))
 }
 
-/// Người dùng của cookie phiên. Các API khác dùng hàm này cho tới khi có lớp xác thực chung (#42).
+/// Người dùng của cookie phiên. Extractor CurrentUser và Member (extract.rs) gọi hàm này cho mọi API cần đăng nhập.
 pub async fn session_user(state: &AppState, jar: &CookieJar) -> Result<User, AppError> {
     let session = jar.get(SESSION_COOKIE).map(|c| c.value().to_string());
     accounts::current_user(state, session.as_deref()).await
