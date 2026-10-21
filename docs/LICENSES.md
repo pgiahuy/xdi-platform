@@ -11,13 +11,22 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 
 | Nhóm | Số lượng | Giấy phép | Đánh giá |
 |---|---|---|---|
-| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 244 | MIT, Apache-2.0, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
+| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 329 | MIT, Apache-2.0, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
 | Gói npm | 485 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak, 0BSD, CC0-1.0, CC-BY-4.0 (dữ liệu `caniuse-lite`) | Cho phép, dùng chung được |
 | Gói npm `lightningcss` | 2 phiên bản, mỗi phiên bản kèm bản build cho từng nền tảng | MPL-2.0 | Xem bên dưới |
 | Font Geist (`@fontsource-variable/geist`) | 1 | OFL-1.1 | Xem bên dưới |
 
 Không có thành phần nào chỉ có giấy phép GPL, LGPL hay AGPL. Crate `r-efi` cho chọn `MIT OR Apache-2.0 OR
 LGPL-2.1-or-later`; dự án dùng nó theo MIT, và nó chỉ được biên dịch cho nền tảng UEFI, không có trong binary Linux.
+
+DuckDB (MIT) được biên dịch từ mã nguồn vào binary backend (crate `duckdb` với `bundled`, gói sẵn extension Parquet nên
+không tải gì lúc chạy). Mã nguồn DuckDB kèm các thư viện C/C++ trong thư mục `third_party` của nó (re2, zstd, lz4,
+snappy, brotli, thrift, mbedtls, libpg_query, fmt, utf8proc và các thư viện nhỏ khác), theo giấy phép cho phép như
+MIT, BSD, Apache-2.0, Boost, zlib; mbedtls và zstd cho chọn thêm GPL, dự án dùng theo nhánh cho phép.
+
+`webpki-roots` (CDLA-Permissive-2.0, danh sách chứng chỉ gốc) chỉ là phụ thuộc lúc build của `libduckdb-sys`, cho nhánh
+tải thư viện DuckDB dựng sẵn; dự án biên dịch DuckDB từ mã nguồn kèm trong crate nên nhánh đó không chạy, và crate
+này không có trong binary.
 
 Công cụ chỉ chạy lúc build, không có trong image hay gói phát hành: image `rust:1.96-bookworm` và `node:24-bookworm-slim`
 (giai đoạn build của Dockerfile), `cargo-chef` (MIT OR Apache-2.0), Vite, TypeScript, oxlint, Tailwind. Giấy phép của

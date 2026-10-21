@@ -24,6 +24,7 @@ deunicode = "1.6.2"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 getrandom = "0.4"
 time = { version = "0.3", default-features = false }
+duckdb = { version = "1.10506", features = ["bundled", "parquet"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
