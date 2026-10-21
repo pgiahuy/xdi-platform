@@ -59,6 +59,18 @@ impl Store {
             .map_err(|e| db_error("find user by email", e))
     }
 
+    /// Như find_user_id_by_email nhưng bỏ qua tài khoản đã khóa: không thêm người đã nghỉ vào workspace.
+    pub async fn find_active_user_id_by_email(
+        &self,
+        email: &str,
+    ) -> Result<Option<Uuid>, AppError> {
+        sqlx::query_scalar("SELECT id FROM users WHERE lower(email) = lower($1) AND is_active")
+            .bind(email)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| db_error("find active user by email", e))
+    }
+
     /// Tài khoản thường (không phải quản trị hệ thống). Email trùng, không phân biệt hoa thường, thì báo lỗi rõ.
     pub async fn create_user(
         &self,

@@ -244,10 +244,16 @@ pub async fn upload(
     }
     std::fs::rename(staging.parquet_dir(), &final_dir)
         .map_err(|e| AppError::Internal(format!("move parquet to {}: {e}", final_dir.display())))?;
-    state
+    // Workspace hoặc dataset bị xóa đúng lúc đang nạp: bước trên đã tạo lại thư mục sau khi lệnh xóa dọn xong. Không
+    // dọn ở đây thì file nằm lại trên đĩa mà không còn dòng nào trong database trỏ tới.
+    if let Err(e) = state
         .store
         .set_current_version(ws, dataset.id, version.id)
-        .await?;
+        .await
+    {
+        remove_version_files(&state.config.data_dir, &relative);
+        return Err(e);
+    }
     let dataset = state
         .store
         .get_dataset(ws, dataset.id)
@@ -261,6 +267,22 @@ pub async fn upload(
         version,
         columns: materialized.columns,
     })
+}
+
+/// Xóa thư mục Parquet của một phiên bản, rồi các thư mục cha (dataset, workspace) nếu chúng đã trống. remove_dir chỉ
+/// xóa thư mục trống, nên file của phiên bản khác không bị đụng tới.
+fn remove_version_files(data_dir: &Path, relative: &str) {
+    let mut dir = data_dir.join(relative);
+    if let Err(e) = std::fs::remove_dir_all(&dir) {
+        tracing::warn!(dir = %dir.display(), error = %e, "could not remove files of a failed upload");
+        return;
+    }
+    // Đi ngược lên: thư mục dataset, rồi workspace. Dừng ở thư mục đầu tiên còn file, hoặc khi tới DATA_DIR.
+    while dir.pop() && dir != data_dir {
+        if std::fs::remove_dir(&dir).is_err() {
+            break;
+        }
+    }
 }
 
 /// Cùng một file chọn hai lần (cùng nội dung) làm số dòng nhân đôi; hai file khác thư mục mà trùng tên làm cột
@@ -402,6 +424,23 @@ fn dataset_not_found() -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Dọn phiên bản lỗi: xóa thư mục cha khi chúng trống, giữ thư mục còn phiên bản khác và chính DATA_DIR.
+    #[test]
+    fn remove_version_files_keeps_other_versions() {
+        let data = std::env::temp_dir().join(format!("xdi-ingest-{}", Uuid::new_v4()));
+        for version in ["ws/ds/v1", "ws/ds/v2"] {
+            std::fs::create_dir_all(data.join(version)).unwrap();
+            std::fs::write(data.join(version).join("part.parquet"), b"x").unwrap();
+        }
+        remove_version_files(&data, "ws/ds/v1");
+        assert!(!data.join("ws/ds/v1").exists());
+        assert!(data.join("ws/ds/v2/part.parquet").exists());
+        remove_version_files(&data, "ws/ds/v2");
+        assert!(!data.join("ws").exists());
+        assert!(data.is_dir());
+        std::fs::remove_dir_all(&data).unwrap();
+    }
 
     #[test]
     fn logical_table_names() {

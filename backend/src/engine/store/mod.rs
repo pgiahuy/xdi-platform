@@ -9,6 +9,7 @@ Mọi hàm chạm bảng nghiệp vụ nhận &WorkspaceId và lọc theo nó. N
 vì lúc đó chưa có workspace để lọc; và tài khoản, phiên (accounts.rs), vì chúng dùng chung cho mọi workspace. */
 
 mod accounts;
+mod members;
 mod users;
 // Khung: các hàm truy vấn dưới đây được gọi từ issue nạp dữ liệu (#20), endpoint hỏi (#33) và chế độ xác thực (#42).
 // Chưa có code gọi nên tạm cho phép "chưa dùng" ở đúng ba module này; gỡ khi có người gọi để clippy bắt lại.
@@ -26,6 +27,7 @@ mod workspaces;
 pub use accounts::{Membership, NewAdmin, User};
 #[allow(unused_imports)]
 pub use datasets::{Dataset, DatasetVersion, NewVersion, ProfileStatus, SourceKind};
+pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, QueryStatus};
 pub use users::{Deactivated, UserSummary};

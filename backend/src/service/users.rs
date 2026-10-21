@@ -13,7 +13,8 @@ use crate::error::AppError;
 use crate::service::accounts::{clean_email, hash_password};
 use crate::state::AppState;
 
-fn require_system_admin(actor: &User) -> Result<(), AppError> {
+/// Dùng chung cho mọi việc chỉ quản trị hệ thống làm được (ở đây và ở service/workspaces.rs).
+pub fn require_system_admin(actor: &User) -> Result<(), AppError> {
     if actor.is_system_admin {
         Ok(())
     } else {

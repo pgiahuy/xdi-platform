@@ -1,22 +1,48 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/workspaces.rs - workspace của người đang đăng nhập: liệt kê và tạo mới. Logic ở service/workspaces.rs.
+/* api/workspaces.rs - workspace của người đang đăng nhập: liệt kê, tạo, đổi tên, xóa; thành viên: xem, thêm, đổi vai,
+xóa hoặc tự rời. Logic và kiểm vai ở service/workspaces.rs.
 API dữ liệu nằm dưới /api/workspaces/{ws}/ (datasets.rs, query.rs) và đi qua kiểm thành viên ở extract.rs. */
 
-use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    routing::{get, patch},
+    Json, Router,
+};
 use serde::Deserialize;
+use uuid::Uuid;
 
-use super::extract::{CurrentUser, JsonBody};
-use crate::engine::store::Membership;
+use super::extract::{CurrentUser, JsonBody, PathParams};
+use crate::auth::Member;
+use crate::engine::store::{MemberRow, Membership};
 use crate::service::workspaces;
 use crate::{error::AppError, state::AppState};
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/workspaces", get(list).post(create))
+    Router::new()
+        .route("/workspaces", get(list).post(create))
+        .route("/workspaces/{ws}", patch(rename).delete(delete))
+        .route("/workspaces/{ws}/members", get(members).post(add_member))
+        .route(
+            "/workspaces/{ws}/members/{user_id}",
+            patch(set_role).delete(remove_member),
+        )
 }
 
 #[derive(Deserialize)]
 struct CreateWorkspaceRequest {
     name: String,
+}
+
+#[derive(Deserialize)]
+struct AddMemberRequest {
+    email: String,
+    role: String,
+}
+
+#[derive(Deserialize)]
+struct SetRoleRequest {
+    role: String,
 }
 
 async fn list(
@@ -33,6 +59,55 @@ async fn create(
 ) -> Result<(StatusCode, Json<Membership>), AppError> {
     let membership = workspaces::create(&state, &user, &req.name).await?;
     Ok((StatusCode::CREATED, Json(membership)))
+}
+
+async fn rename(
+    State(state): State<AppState>,
+    member: Member,
+    JsonBody(req): JsonBody<CreateWorkspaceRequest>,
+) -> Result<StatusCode, AppError> {
+    workspaces::rename(&state, &member, &req.name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete(State(state): State<AppState>, member: Member) -> Result<StatusCode, AppError> {
+    workspaces::delete(&state, &member).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn members(
+    State(state): State<AppState>,
+    member: Member,
+) -> Result<Json<Vec<MemberRow>>, AppError> {
+    Ok(Json(workspaces::members(&state, &member).await?))
+}
+
+async fn add_member(
+    State(state): State<AppState>,
+    member: Member,
+    JsonBody(req): JsonBody<AddMemberRequest>,
+) -> Result<StatusCode, AppError> {
+    workspaces::add_member(&state, &member, &req.email, &req.role).await?;
+    Ok(StatusCode::CREATED)
+}
+
+async fn set_role(
+    State(state): State<AppState>,
+    member: Member,
+    PathParams((_ws, user_id)): PathParams<(String, Uuid)>,
+    JsonBody(req): JsonBody<SetRoleRequest>,
+) -> Result<StatusCode, AppError> {
+    workspaces::set_role(&state, &member, user_id, &req.role).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn remove_member(
+    State(state): State<AppState>,
+    member: Member,
+    PathParams((_ws, user_id)): PathParams<(String, Uuid)>,
+) -> Result<StatusCode, AppError> {
+    workspaces::remove_member(&state, &member, user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
