@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* auth/token.rs - mã ngẫu nhiên: mã phiên trong cookie và mã thiết lập in ra log lần chạy đầu.
+/* auth/token.rs - mã ngẫu nhiên: mã phiên trong cookie, mã thiết lập in ra log lần chạy đầu, mật khẩu tạm khi đặt
+lại mật khẩu.
 
 Mã phiên gửi cho trình duyệt, còn database chỉ giữ SHA-256 của nó (bảng sessions). Mã có 256 bit ngẫu nhiên nên băm
 nhanh một lần là đủ, không cần thuật toán chậm như mật khẩu. */
@@ -20,17 +21,31 @@ pub fn hash_session_token(token: &str) -> String {
     to_hex(&Sha256::digest(token.as_bytes()))
 }
 
-/// Mã thiết lập người cài đọc từ log rồi gõ vào màn hình. Bỏ các ký tự dễ nhầm (0 và O, 1 và I, L).
+/// Mã thiết lập người cài đọc từ log rồi gõ vào màn hình: ba nhóm bốn ký tự.
 pub fn new_setup_code() -> Result<String, AppError> {
+    readable_code(3)
+}
+
+/// Mật khẩu tạm khi đặt lại mật khẩu: bốn nhóm bốn ký tự (khoảng 79 bit), người dùng đổi ngay sau khi đăng nhập.
+pub fn new_temporary_password() -> Result<String, AppError> {
+    readable_code(4)
+}
+
+/// Các nhóm bốn ký tự nối bằng gạch, dễ đọc và gõ lại. Bỏ các ký tự dễ nhầm (0 và O, 1 và I, L).
+fn readable_code(groups: usize) -> Result<String, AppError> {
     const ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-    let mut bytes = [0u8; 12];
+    let mut bytes = vec![0u8; groups * 4];
     getrandom::fill(&mut bytes).map_err(|e| AppError::Internal(format!("random bytes: {e}")))?;
-    // Lấy phần dư làm lệch phân bố một chút (256 không chia hết cho 31); với mã dùng một lần lúc cài thì chấp nhận.
-    let code: String = bytes
+    // Lấy phần dư làm lệch phân bố một chút (256 không chia hết cho 31); với mã dùng một lần thì chấp nhận.
+    let chars: Vec<char> = bytes
         .iter()
         .map(|b| ALPHABET[usize::from(*b) % ALPHABET.len()] as char)
         .collect();
-    Ok(format!("{}-{}-{}", &code[0..4], &code[4..8], &code[8..12]))
+    Ok(chars
+        .chunks(4)
+        .map(|group| group.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join("-"))
 }
 
 fn to_hex(bytes: &[u8]) -> String {
@@ -64,5 +79,12 @@ mod tests {
         assert_eq!(code.len(), 14, "got {code}");
         assert!(code.split('-').all(|part| part.len() == 4));
         assert!(!code.contains(['0', 'O', '1', 'I', 'L']), "got {code}");
+    }
+
+    #[test]
+    fn temporary_password_is_long_enough() {
+        let pw = new_temporary_password().unwrap();
+        assert_eq!(pw.len(), 19, "got {pw}");
+        assert!(crate::auth::password::validate(&pw).is_ok());
     }
 }

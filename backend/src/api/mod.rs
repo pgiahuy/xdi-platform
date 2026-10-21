@@ -6,10 +6,13 @@ Mọi route API nằm dưới /api, để cùng một server phục vụ đượ
 nhau. Đường dẫn dưới /api không tồn tại trả 404 JSON; nếu rơi xuống phần phục vụ giao diện, frontend sẽ nhận một
 trang HTML thay vì lỗi và khó biết vì sao. Giao diện chỉ được phục vụ khi có STATIC_DIR (xem web.rs). */
 
+mod admin;
 mod auth;
 mod datasets;
 mod query;
 mod system;
+#[cfg(test)]
+mod test_support;
 mod web;
 
 use axum::{routing::any, Router};
@@ -22,6 +25,7 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .merge(system::routes())
         .merge(auth::routes())
+        .merge(admin::routes())
         .merge(datasets::routes())
         .merge(query::routes())
         .fallback(api_not_found);

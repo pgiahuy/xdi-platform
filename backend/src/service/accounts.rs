@@ -70,7 +70,9 @@ pub async fn setup(state: &AppState, input: SetupInput) -> Result<(User, String)
     *state.setup_code.lock().expect("setup code lock") = None;
     tracing::info!(user_id = %user.id, "administrator account created");
 
-    let session = start_session(state, &user).await?;
+    let session = start_session(state, &user, &password_hash)
+        .await?
+        .ok_or_else(|| AppError::Unauthorized(NOT_LOGGED_IN.to_string()))?;
     Ok((user, session))
 }
 
@@ -86,6 +88,7 @@ pub async fn login(
         _ => (None, None),
     };
     let hash = stored_hash.unwrap_or_else(|| dummy_hash().to_string());
+    let verified_hash = hash.clone();
     let matches = tokio::task::spawn_blocking(move || password::verify(&password, &hash))
         .await
         .map_err(|e| AppError::Internal(format!("verify password task: {e}")))?;
@@ -98,7 +101,10 @@ pub async fn login(
         .find_user(user_id)
         .await?
         .ok_or_else(|| AppError::Unauthorized(WRONG_LOGIN.to_string()))?;
-    let session = start_session(state, &user).await?;
+    // None: tài khoản vừa bị khóa hoặc đổi mật khẩu trong lúc kiểm (xem Store::create_session).
+    let session = start_session(state, &user, &verified_hash)
+        .await?
+        .ok_or_else(|| AppError::Unauthorized(WRONG_LOGIN.to_string()))?;
     Ok((user, session))
 }
 
@@ -125,18 +131,28 @@ pub async fn memberships(state: &AppState, user: &User) -> Result<Vec<Membership
     state.store.list_memberships(user.id).await
 }
 
-async fn start_session(state: &AppState, user: &User) -> Result<String, AppError> {
+/// Mã phiên mới, hoặc None nếu tài khoản không còn khớp password_hash vừa kiểm.
+async fn start_session(
+    state: &AppState,
+    user: &User,
+    password_hash: &str,
+) -> Result<Option<String>, AppError> {
     let session = token::new_session_token()?;
     let expires_at = Utc::now() + Duration::days(SESSION_DAYS);
-    state
+    let created = state
         .store
-        .create_session(user.id, &token::hash_session_token(&session), expires_at)
+        .create_session(
+            user.id,
+            &token::hash_session_token(&session),
+            expires_at,
+            password_hash,
+        )
         .await?;
-    Ok(session)
+    Ok(created.then_some(session))
 }
 
 // Băm tốn CPU (auth/password.rs): chạy trên luồng riêng để không chặn các request khác.
-async fn hash_password(plain: String) -> Result<String, AppError> {
+pub(crate) async fn hash_password(plain: String) -> Result<String, AppError> {
     tokio::task::spawn_blocking(move || password::hash(&plain))
         .await
         .map_err(|e| AppError::Internal(format!("hash password task: {e}")))?
@@ -150,10 +166,13 @@ fn dummy_hash() -> &'static str {
     })
 }
 
-fn clean_email(raw: &str) -> Result<String, AppError> {
+pub(crate) fn clean_email(raw: &str) -> Result<String, AppError> {
     let email = raw.trim();
-    // Kiểm sơ bộ; định dạng đầy đủ để lúc gửi thư mời (sau này) xác nhận.
+    // Kiểm sơ bộ: đúng một dấu @, hai phía không rỗng, không khoảng trắng. Định dạng đầy đủ để lúc gửi thư mời (sau này)
+    // xác nhận.
     let valid = email.len() <= 254
+        && email.matches('@').count() == 1
+        && !email.chars().any(char::is_whitespace)
         && email
             .split_once('@')
             .is_some_and(|(local, domain)| !local.is_empty() && !domain.is_empty());
@@ -199,6 +218,8 @@ mod tests {
         assert!(clean_email("an@").is_err());
         assert!(clean_email("@example.com").is_err());
         assert!(clean_email("an.example.com").is_err());
+        assert!(clean_email("two@@example.com").is_err());
+        assert!(clean_email("an @example.com").is_err());
         // Bản cài trên máy cá nhân hay dùng tên miền không có dấu chấm.
         assert!(clean_email("admin@localhost").is_ok());
     }

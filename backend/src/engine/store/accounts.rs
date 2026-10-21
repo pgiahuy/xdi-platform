@@ -153,24 +153,37 @@ impl Store {
     }
 
     /// Lưu phiên mới; tiện thể xóa mọi phiên đã hết hạn để bảng không phình mãi, kể cả của người không quay lại.
+    /// Trả false, không tạo phiên, nếu lúc này tài khoản đã bị khóa hoặc mật khẩu đã đổi khác password_hash.
+    ///
+    /// Vì sao kiểm lại ở đây: đăng nhập đọc chuỗi băm, kiểm mật khẩu mất khoảng 0,4 giây, rồi mới tạo phiên. Nếu đúng
+    /// lúc đó quản trị khóa tài khoản hoặc đặt lại mật khẩu (xóa mọi phiên), thì phiên tạo sau sẽ còn sống. FOR SHARE
+    /// khóa dòng users: giao dịch khóa hay đổi mật khẩu đang chạy thì câu này chờ nó xong rồi đọc lại dòng mới và không
+    /// khớp; câu này chạy trước thì giao dịch kia chờ, rồi xóa luôn phiên vừa tạo.
     pub async fn create_session(
         &self,
         user_id: Uuid,
         token_hash: &str,
         expires_at: DateTime<Utc>,
-    ) -> Result<(), AppError> {
+        password_hash: &str,
+    ) -> Result<bool, AppError> {
         sqlx::query("DELETE FROM sessions WHERE expires_at <= now()")
             .execute(&self.pool)
             .await
             .map_err(|e| db_error("clean sessions", e))?;
-        sqlx::query("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)")
-            .bind(token_hash)
-            .bind(user_id)
-            .bind(expires_at)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| db_error("create session", e))?;
-        Ok(())
+        let result = sqlx::query(
+            "INSERT INTO sessions (token_hash, user_id, expires_at)
+             SELECT $1, id, $3 FROM users
+             WHERE id = $2 AND is_active AND password_hash = $4
+             FOR SHARE",
+        )
+        .bind(token_hash)
+        .bind(user_id)
+        .bind(expires_at)
+        .bind(password_hash)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| db_error("create session", e))?;
+        Ok(result.rows_affected() == 1)
     }
 
     /// Người dùng của phiên còn hạn. Tài khoản bị khóa thì như không có phiên.

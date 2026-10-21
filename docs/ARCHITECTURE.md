@@ -129,6 +129,11 @@ Mật khẩu băm bằng Argon2id. Phiên lưu trong Postgres (bảng `sessions`
 cookie httpOnly. Không dùng JWT: đăng xuất, khóa tài khoản, đổi vai phải có hiệu lực ngay ở request kế tiếp, mà JWT đã
 cấp thì không thu hồi được nếu không lưu thêm danh sách phiên.
 
+Quản trị hệ thống tạo tài khoản, khóa, mở tài khoản và đặt lại mật khẩu (sinh mật khẩu tạm hiện một lần, đăng xuất mọi
+phiên của người đó). Quản trị duy nhất quên mật khẩu thì chạy trên máy chủ: `xdi-backend reset-password --email <email>`
+(trong compose: `docker compose exec backend xdi-backend reset-password --email <email>`); ai chạy được lệnh trên máy
+chủ là chủ bản cài.
+
 ## 5. Nạp dữ liệu và lấy ngữ cảnh
 
 Nạp chạy một lần cho mỗi phiên bản dataset, ba bước độc lập: đăng ký nguồn, lập hồ sơ, vật chất hóa.
@@ -211,5 +216,5 @@ Cập nhật khi có thay đổi.
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có, chưa có tính năng nào gọi tới |
 | Khung giao diện React và Vite, trang chủ hiện phiên bản máy chủ | Có |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
-| Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất (API, phiên lưu trong Postgres) | Có; chưa có màn hình, quản lý tài khoản, kiểm phiên ở các API khác |
+| Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; chưa có màn hình, chưa kiểm phiên ở các API dữ liệu |
 | DuckDB, guard, giải thích, vai, các trang nghiệp vụ | Chưa có |
