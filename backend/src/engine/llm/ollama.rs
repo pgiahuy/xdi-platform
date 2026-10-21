@@ -3,7 +3,7 @@
 
 use async_trait::async_trait;
 
-use super::LlmProvider;
+use super::{LlmProvider, LlmRequest};
 use crate::error::AppError;
 
 pub struct Ollama {
@@ -23,7 +23,7 @@ impl LlmProvider for Ollama {
         format!("ollama:{}", self.model)
     }
 
-    async fn complete(&self, _prompt: &str) -> Result<String, AppError> {
+    async fn complete(&self, _request: &LlmRequest<'_>) -> Result<String, AppError> {
         tracing::debug!(url = %self.url, "ollama provider not implemented yet");
         Err(AppError::NotImplemented("gọi Ollama"))
     }

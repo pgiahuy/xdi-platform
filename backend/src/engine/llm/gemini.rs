@@ -3,7 +3,7 @@
 
 use async_trait::async_trait;
 
-use super::LlmProvider;
+use super::{LlmProvider, LlmRequest};
 use crate::error::AppError;
 
 pub struct Gemini {
@@ -23,7 +23,7 @@ impl LlmProvider for Gemini {
         self.model.clone()
     }
 
-    async fn complete(&self, _prompt: &str) -> Result<String, AppError> {
+    async fn complete(&self, _request: &LlmRequest<'_>) -> Result<String, AppError> {
         if self.api_key.is_empty() {
             return Err(AppError::BadRequest(
                 "Thiếu GEMINI_API_KEY trong .env".to_string(),
