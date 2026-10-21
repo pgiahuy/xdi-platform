@@ -309,4 +309,49 @@ mod tests {
 
         db.drop().await;
     }
+
+    /// Tự đổi mật khẩu chỉ ghi khi mật khẩu trong database vẫn là chuỗi vừa kiểm: nếu quản trị vừa đặt lại mật khẩu
+    /// thì không ghi đè mật khẩu tạm của quản trị.
+    #[tokio::test]
+    async fn password_write_requires_the_verified_hash() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let app = app(db.store.clone(), Some(CODE));
+        let (_, _, member_id) = admin_and_member(&app).await;
+        let member_id = uuid::Uuid::parse_str(&member_id).unwrap();
+        let current = db
+            .store
+            .find_credentials("minh@example.com")
+            .await
+            .unwrap()
+            .and_then(|c| c.password_hash)
+            .unwrap();
+        let new_hash = crate::auth::password::hash("chosen by member").unwrap();
+
+        let written = db
+            .store
+            .set_password_and_revoke(member_id, &new_hash, Some("$argon2id$stale"), None)
+            .await
+            .unwrap();
+        assert!(!written);
+        assert_eq!(
+            login(&app, "minh@example.com", PASSWORD).await.0,
+            StatusCode::OK
+        );
+
+        let written = db
+            .store
+            .set_password_and_revoke(member_id, &new_hash, Some(&current), None)
+            .await
+            .unwrap();
+        assert!(written);
+        assert_eq!(
+            login(&app, "minh@example.com", "chosen by member").await.0,
+            StatusCode::OK
+        );
+
+        db.drop().await;
+    }
 }

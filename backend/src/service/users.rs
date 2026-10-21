@@ -37,6 +37,7 @@ pub async fn change_password(
         .password_hash_of(user.id)
         .await?
         .unwrap_or_default();
+    let verified = stored.clone();
     let matches = tokio::task::spawn_blocking(move || password::verify(&current_password, &stored))
         .await
         .map_err(|e| AppError::Internal(format!("verify password task: {e}")))?;
@@ -46,7 +47,12 @@ pub async fn change_password(
         ));
     }
     let keep = token::hash_session_token(current_session);
-    set_password(state, user.id, new_password, Some(&keep)).await?;
+    // false: mật khẩu vừa bị quản trị đặt lại trong lúc kiểm; không ghi đè mật khẩu tạm của quản trị.
+    if !set_password(state, user.id, new_password, Some(&verified), Some(&keep)).await? {
+        return Err(AppError::Unauthorized(
+            "Mật khẩu vừa được đặt lại, hãy đăng nhập lại".to_string(),
+        ));
+    }
     Ok(())
 }
 
@@ -130,23 +136,24 @@ pub async fn reset_password_by_email(state: &AppState, email: &str) -> Result<St
 async fn reset_password_unchecked(state: &AppState, user_id: Uuid) -> Result<String, AppError> {
     let temporary = token::new_temporary_password()?;
     // Ai đang giữ phiên cũ (có thể chính là người lấy được mật khẩu cũ) bị đăng xuất ngay.
-    if !set_password(state, user_id, temporary.clone(), None).await? {
+    if !set_password(state, user_id, temporary.clone(), None, None).await? {
         return Err(not_found());
     }
     Ok(temporary)
 }
 
-/// Đổi mật khẩu và đăng xuất mọi phiên trừ keep, trong một giao dịch.
+/// Đổi mật khẩu và đăng xuất mọi phiên trừ keep, trong một giao dịch. Xem Store::set_password_and_revoke về expected.
 async fn set_password(
     state: &AppState,
     user_id: Uuid,
     plain: String,
+    expected: Option<&str>,
     keep: Option<&str>,
 ) -> Result<bool, AppError> {
     let hash = hash_password(plain).await?;
     state
         .store
-        .set_password_and_revoke(user_id, &hash, keep)
+        .set_password_and_revoke(user_id, &hash, expected, keep)
         .await
 }
 

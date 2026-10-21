@@ -86,11 +86,16 @@ impl Store {
 
     /// Đổi mật khẩu và xóa mọi phiên của người đó, trừ phiên keep (phiên đang dùng khi người đó tự đổi mật khẩu).
     /// Hai việc trong cùng giao dịch: lỗi giữa chừng thì không có trạng thái mật khẩu đã đổi mà phiên cũ còn sống.
-    /// Trả false nếu không có tài khoản này.
+    ///
+    /// expected: chuỗi băm người gọi vừa kiểm (tự đổi mật khẩu). Chỉ ghi khi mật khẩu trong database vẫn là chuỗi đó;
+    /// nếu quản trị vừa đặt lại mật khẩu, UPDATE chờ giao dịch kia xong, đọc lại dòng mới, thấy khác và không ghi, nên
+    /// mật khẩu tạm của quản trị không bị ghi đè. None: không kiểm (quản trị đặt lại).
+    /// Trả false nếu không có tài khoản này hoặc mật khẩu đã đổi khác expected.
     pub async fn set_password_and_revoke(
         &self,
         user_id: Uuid,
         hash: &str,
+        expected: Option<&str>,
         keep: Option<&str>,
     ) -> Result<bool, AppError> {
         let mut tx = self
@@ -98,12 +103,16 @@ impl Store {
             .begin()
             .await
             .map_err(|e| db_error("begin set password", e))?;
-        let updated = sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
-            .bind(user_id)
-            .bind(hash)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| db_error("set password", e))?;
+        let updated = sqlx::query(
+            "UPDATE users SET password_hash = $2
+             WHERE id = $1 AND ($3::text IS NULL OR password_hash = $3)",
+        )
+        .bind(user_id)
+        .bind(hash)
+        .bind(expected)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| db_error("set password", e))?;
         if updated.rows_affected() == 0 {
             return Ok(false);
         }
