@@ -50,6 +50,8 @@ async fn main() {
         Some(code)
     };
 
+    service::ingest::clear_staging(&config.data_dir);
+
     let state = state::AppState::new(config, store);
     *state.setup_code.lock().expect("setup code lock") = setup_code;
     let app = api::router(state);

@@ -470,4 +470,96 @@ mod tests {
 
         db.drop().await;
     }
+
+    /// Nhiều lần nạp KHÁC nội dung vào cùng dataset cùng lúc: hai lần có thể tính ra cùng số phiên bản; bên vấp
+    /// UNIQUE thử lại, không trả 500.
+    #[tokio::test]
+    async fn concurrent_different_uploads_all_succeed() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone()
+        });
+        let lan = setup(&app).await;
+        let (_, first) = upload(&app, &lan, &[("name", "Bán hàng")], &[("thang1.csv", T1)]).await;
+        let id = first["dataset"]["id"].as_str().unwrap().to_string();
+        // Bốn lần nạp chạy cùng lúc, mỗi lần một nội dung khác nhau.
+        let mut uploads = tokio::task::JoinSet::new();
+        for i in 0..4 {
+            let (app, lan, id) = (app.clone(), lan.clone(), id.clone());
+            uploads.spawn(async move {
+                let content = format!("region,amount\nSouth,{i}\n").into_bytes();
+                upload(
+                    &app,
+                    &lan,
+                    &[("dataset_id", id.as_str())],
+                    &[("t.csv", content.as_slice())],
+                )
+                .await
+            });
+        }
+        let mut versions: Vec<i64> = uploads
+            .join_all()
+            .await
+            .iter()
+            .map(|(status, body)| {
+                assert_eq!(*status, StatusCode::CREATED, "{body}");
+                body["version"]["version"].as_i64().unwrap()
+            })
+            .collect();
+        versions.sort();
+        assert_eq!(versions, [2, 3, 4, 5]);
+
+        db.drop().await;
+    }
+
+    #[tokio::test]
+    async fn odd_file_selections_are_handled() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone()
+        });
+        let lan = setup(&app).await;
+
+        // Cùng một file chọn hai lần: báo, không nhân đôi số dòng.
+        let (status, body) = upload(&app, &lan, &[], &[("a.csv", T1), ("b.csv", T1)]).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        // Hai file khác thư mục, trùng tên gốc: báo để cột _source_file phân biệt được.
+        let (status, _) = upload(
+            &app,
+            &lan,
+            &[],
+            &[("hanoi/thang1.csv", T1), ("hcm/thang1.csv", T2)],
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        // Tên file chỉ có đuôi: tên dataset mặc định, không 500.
+        let (status, body) = upload(&app, &lan, &[], &[(".csv", T1)]).await;
+        assert_eq!(
+            (status, body["dataset"]["name"].as_str()),
+            (StatusCode::CREATED, Some("Dataset")),
+            "{body}"
+        );
+
+        db.drop().await;
+    }
+
+    #[test]
+    fn leftover_staging_is_cleared() {
+        let data = DataDir::new();
+        let leftover = data.0.join("staging").join("dead-upload").join("upload");
+        std::fs::create_dir_all(&leftover).unwrap();
+        std::fs::write(leftover.join("0000"), b"half").unwrap();
+        crate::service::ingest::clear_staging(&data.0);
+        assert!(!data.0.join("staging").exists());
+        // Không có thư mục staging cũng không lỗi.
+        crate::service::ingest::clear_staging(&data.0);
+    }
 }

@@ -39,12 +39,7 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
             data_dir: PathBuf::from(var_or("DATA_DIR", "./data")),
-            max_upload_bytes: env::var("MAX_UPLOAD_MB")
-                .ok()
-                .and_then(|v| v.parse::<u64>().ok())
-                .unwrap_or(200)
-                * 1024
-                * 1024,
+            max_upload_bytes: upload_limit_bytes(env::var("MAX_UPLOAD_MB").ok().as_deref()),
             llm_provider: var_or("LLM_PROVIDER", "mock"),
             gemini_api_key: var_or("GEMINI_API_KEY", ""),
             gemini_model: var_or("GEMINI_MODEL", "gemini-2.5-flash"),
@@ -58,6 +53,46 @@ impl Config {
     }
 }
 
+/// MAX_UPLOAD_MB ra byte. Giá trị không phải số dương hoặc lớn tới mức tràn số thì cảnh báo và dùng mặc định 200,
+/// không để backend chết lúc khởi động hay lặng lẽ chặn mọi lần nạp.
+fn upload_limit_bytes(raw: Option<&str>) -> u64 {
+    const DEFAULT_MB: u64 = 200;
+    let Some(raw) = raw else {
+        return DEFAULT_MB * 1024 * 1024;
+    };
+    let parsed = raw
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|mb| *mb > 0)
+        .and_then(|mb| mb.checked_mul(1024 * 1024));
+    match parsed {
+        Some(bytes) => bytes,
+        None => {
+            tracing::warn!(
+                value = raw,
+                default_mb = DEFAULT_MB,
+                "invalid MAX_UPLOAD_MB, using default"
+            );
+            DEFAULT_MB * 1024 * 1024
+        }
+    }
+}
+
 fn var_or(key: &str, default: &str) -> String {
     env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upload_limit_parsing() {
+        assert_eq!(upload_limit_bytes(None), 200 * 1024 * 1024);
+        assert_eq!(upload_limit_bytes(Some("5")), 5 * 1024 * 1024);
+        for bad in ["abc", "0", "-1", "99999999999999"] {
+            assert_eq!(upload_limit_bytes(Some(bad)), 200 * 1024 * 1024, "{bad}");
+        }
+    }
 }

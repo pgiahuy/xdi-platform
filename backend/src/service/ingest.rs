@@ -2,13 +2,19 @@
 /* service/ingest.rs - nạp dữ liệu: đổi file người dùng gửi lên thành một phiên bản dataset. Lập hồ sơ cột (#22) và
 nguồn database (sau này) là bước riêng. Xem docs/ARCHITECTURE.md mục 5 và 7.
 
-Thứ tự để lỗi ở bước nào cũng không để lại dữ liệu nửa chừng:
+Các bước, sắp để lỗi ở bước đầu không để lại gì:
 1. Tầng api đã ghi file gửi lên vào thư mục tạm (Staging) và tính SHA-256 từng file.
 2. Bộ file trùng một phiên bản đã có thì trả phiên bản đó, không làm gì thêm.
 3. DuckDB đổi file sang Parquet trong thư mục tạm (spawn_blocking: DuckDB đồng bộ và tốn CPU).
-4. Ghi dataset, phiên bản vào Postgres, đặt phiên bản hiện hành.
-5. Chuyển thư mục Parquet về chỗ cuối: <DATA_DIR>/<workspace>/<dataset>/<thư mục phiên bản>. Thư mục tạm xóa khi
-   Staging ra khỏi phạm vi, kể cả khi lỗi. */
+4. Ghi dataset (nếu mới) và phiên bản vào Postgres.
+5. Chuyển thư mục Parquet về chỗ cuối <DATA_DIR>/<workspace>/<dataset>/<thư mục phiên bản>, rồi mới đặt phiên bản
+   hiện hành, để phiên bản hiện hành luôn có file.
+Thư mục tạm xóa khi Staging ra khỏi phạm vi, kể cả khi lỗi; backend chết giữa chừng thì lần khởi động sau xóa
+(clear_staging). Bước 4 và 5 chưa nằm trong một giao dịch: lỗi giữa hai bước có thể để lại dòng thừa trong Postgres
+(#79).
+
+Thao tác file (tạo, đổi tên, xóa thư mục) dùng std::fs đồng bộ: đều là thao tác ngắn trên metadata; riêng xóa thư mục
+tạm có thể chạm file tới MAX_UPLOAD_MB, chấp nhận ở quy mô một bản cài. */
 
 use std::path::{Path, PathBuf};
 
@@ -45,6 +51,17 @@ impl Staging {
 
     fn parquet_dir(&self) -> PathBuf {
         self.dir.join("parquet")
+    }
+}
+
+/// Xóa thư mục tạm còn sót từ lần chạy trước (backend chết giữa một lần nạp). Gọi lúc khởi động, khi chưa có lần
+/// nạp nào đang chạy; giả định mỗi DATA_DIR chỉ một backend dùng.
+pub fn clear_staging(data_dir: &Path) {
+    let dir = data_dir.join("staging");
+    match std::fs::remove_dir_all(&dir) {
+        Ok(()) => tracing::info!(dir = %dir.display(), "cleared leftover upload staging"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => tracing::warn!(dir = %dir.display(), error = %e, "cannot clear upload staging"),
     }
 }
 
@@ -107,6 +124,7 @@ pub async fn upload(
 ) -> Result<UploadResult, AppError> {
     let ws = &member.workspace;
     let format = common_format(&upload.files)?;
+    reject_repeated_files(&upload.files)?;
     let content_hash = content_hash(&upload.files);
 
     // Bước 2: chống trùng. Có dataset_id thì chỉ so trong dataset đó; không thì so cả workspace.
@@ -179,38 +197,43 @@ pub async fn upload(
         }
     };
     let relative = format!("{}/{}/{}", ws.as_uuid(), dataset.id, Uuid::new_v4());
-    let created = state
-        .store
-        .create_version(
-            ws,
-            dataset.id,
-            &NewVersion {
-                source_kind: source_kind(format),
-                file_hash: &content_hash,
-                parquet_path: &relative,
-                row_count: materialized.row_count,
-            },
-        )
-        .await;
-    let version = match created {
-        Ok(version) => version,
-        // Hai lần nạp cùng bộ file vào cùng dataset chạy song song: cả hai qua bước chống trùng, bên ghi sau vấp ràng
-        // buộc UNIQUE (dataset_id, file_hash). Có phiên bản cùng nội dung rồi thì trả nó, như nạp lại tuần tự.
-        Err(e) => match state
+    let new_version = NewVersion {
+        source_kind: source_kind(format),
+        file_hash: &content_hash,
+        parquet_path: &relative,
+        row_count: materialized.row_count,
+    };
+    let mut attempts = 0;
+    let version = loop {
+        match state
             .store
-            .find_version_by_hash(ws, dataset.id, &content_hash)
-            .await?
+            .create_version(ws, dataset.id, &new_version)
+            .await
         {
-            Some(version) => {
-                return Ok(UploadResult {
-                    created: false,
-                    dataset,
-                    version,
-                    columns: Vec::new(),
-                })
+            Ok(version) => break version,
+            Err(e) => {
+                // Cùng bộ file nạp song song vào cùng dataset: bên ghi sau vấp UNIQUE (dataset_id, file_hash). Có phiên
+                // bản cùng nội dung rồi thì trả nó, như nạp lại tuần tự.
+                if let Some(version) = state
+                    .store
+                    .find_version_by_hash(ws, dataset.id, &content_hash)
+                    .await?
+                {
+                    return Ok(UploadResult {
+                        created: false,
+                        dataset,
+                        version,
+                        columns: Vec::new(),
+                    });
+                }
+                // Khác nội dung nạp song song: hai lần cùng tính ra một số phiên bản (MAX + 1) và một bên vấp UNIQUE
+                // (dataset_id, version). Thử lại thì số kế tiếp đã khác. Lỗi khác cũng chỉ thử lại vài lần rồi báo.
+                attempts += 1;
+                if attempts >= 5 {
+                    return Err(e);
+                }
             }
-            None => return Err(e),
-        },
+        }
     };
 
     // Bước 5: đưa Parquet về chỗ cuối rồi mới đặt phiên bản hiện hành, để phiên bản hiện hành luôn có file.
@@ -238,6 +261,28 @@ pub async fn upload(
         version,
         columns: materialized.columns,
     })
+}
+
+/// Cùng một file chọn hai lần (cùng nội dung) làm số dòng nhân đôi; hai file khác thư mục mà trùng tên làm cột
+/// _source_file không phân biệt được. Cả hai trường hợp đều báo để người dùng chọn lại.
+fn reject_repeated_files(files: &[StagedFile]) -> Result<(), AppError> {
+    for (i, f) in files.iter().enumerate() {
+        for earlier in &files[..i] {
+            if earlier.sha256 == f.sha256 {
+                return Err(AppError::BadRequest(format!(
+                    "File {} và {} có nội dung giống hệt nhau; mỗi file chỉ chọn một lần",
+                    earlier.name, f.name
+                )));
+            }
+            if earlier.name == f.name {
+                return Err(AppError::BadRequest(format!(
+                    "Có hai file cùng tên {}; đổi tên một file để phân biệt dòng đến từ file nào",
+                    f.name
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Mọi file một lần nạp cùng định dạng: phiên bản ghi một source_kind, và gộp CSV với Parquet hiếm khi là ý người dùng.
@@ -291,7 +336,12 @@ fn dataset_name(upload: &Upload) -> Result<String, AppError> {
             let first = &upload.files[0].name;
             let stem = first
                 .rsplit_once('.')
-                .map_or(first.as_str(), |(stem, _)| stem);
+                .map_or(first.as_str(), |(stem, _)| stem)
+                .trim();
+            // Tên file chỉ có đuôi (".csv"): database không nhận tên rỗng.
+            if stem.is_empty() {
+                return Ok("Dataset".to_string());
+            }
             Ok(stem.chars().take(100).collect())
         }
     }

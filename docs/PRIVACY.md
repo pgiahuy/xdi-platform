@@ -15,7 +15,7 @@ trong [ARCHITECTURE.md](ARCHITECTURE.md).
 
 | Dữ liệu | Nơi lưu |
 |---|---|
-| File bạn nạp lên | Chuyển sang Parquet, lưu trong thư mục dữ liệu (`DATA_DIR`, volume `xdidata` khi chạy compose), mỗi workspace một thư mục, mỗi phiên bản một thư mục con. File gốc chỉ nằm trong thư mục tạm lúc nạp và bị xóa ngay sau đó |
+| File bạn nạp lên | Chuyển sang Parquet, lưu trong thư mục dữ liệu (`DATA_DIR`, volume `xdidata` khi chạy compose), mỗi workspace một thư mục, mỗi phiên bản một thư mục con. File gốc chỉ nằm trong thư mục tạm lúc nạp và bị xóa ngay sau đó; nếu backend dừng đột ngột giữa lúc nạp, lần khởi động sau xóa |
 | Hồ sơ dữ liệu (thiết kế): tên cột, kiểu, min, max, số ô trống, vài giá trị mẫu, giá trị phân loại, mô tả, bí danh | Postgres |
 | Lịch sử câu hỏi (thiết kế): câu hỏi, SQL đã chạy, trạng thái | Postgres |
 | Tài khoản: email, tên, mật khẩu đã băm (Argon2id) | Postgres; không lưu mật khẩu gốc |
