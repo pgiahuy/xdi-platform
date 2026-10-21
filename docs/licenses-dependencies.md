@@ -11,30 +11,30 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | Gói | Phiên bản | Giấy phép | Chỉ lúc build |
 | --- | --- | --- | --- |
 | @fontsource-variable/geist | 5.3.0 | OFL-1.1 |  |
-| lightningcss | 1.32.0 | MPL-2.0 |  |
-| lightningcss | 1.33.0 | MPL-2.0 |  |
-| lightningcss-android-arm64 | 1.32.0 | MPL-2.0 |  |
-| lightningcss-android-arm64 | 1.33.0 | MPL-2.0 |  |
-| lightningcss-darwin-arm64 | 1.32.0 | MPL-2.0 |  |
-| lightningcss-darwin-arm64 | 1.33.0 | MPL-2.0 |  |
-| lightningcss-darwin-x64 | 1.32.0 | MPL-2.0 |  |
-| lightningcss-darwin-x64 | 1.33.0 | MPL-2.0 |  |
-| lightningcss-freebsd-x64 | 1.32.0 | MPL-2.0 |  |
-| lightningcss-freebsd-x64 | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-arm-gnueabihf | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-arm-gnueabihf | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-arm64-gnu | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-arm64-gnu | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-arm64-musl | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-arm64-musl | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-x64-gnu | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-x64-gnu | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-x64-musl | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-x64-musl | 1.33.0 | MPL-2.0 |  |
-| lightningcss-win32-arm64-msvc | 1.32.0 | MPL-2.0 |  |
-| lightningcss-win32-arm64-msvc | 1.33.0 | MPL-2.0 |  |
-| lightningcss-win32-x64-msvc | 1.32.0 | MPL-2.0 |  |
-| lightningcss-win32-x64-msvc | 1.33.0 | MPL-2.0 |  |
+| lightningcss | 1.32.0 | MPL-2.0 | có |
+| lightningcss | 1.33.0 | MPL-2.0 | có |
+| lightningcss-android-arm64 | 1.32.0 | MPL-2.0 | có |
+| lightningcss-android-arm64 | 1.33.0 | MPL-2.0 | có |
+| lightningcss-darwin-arm64 | 1.32.0 | MPL-2.0 | có |
+| lightningcss-darwin-arm64 | 1.33.0 | MPL-2.0 | có |
+| lightningcss-darwin-x64 | 1.32.0 | MPL-2.0 | có |
+| lightningcss-darwin-x64 | 1.33.0 | MPL-2.0 | có |
+| lightningcss-freebsd-x64 | 1.32.0 | MPL-2.0 | có |
+| lightningcss-freebsd-x64 | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-arm-gnueabihf | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-arm-gnueabihf | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-arm64-gnu | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-arm64-gnu | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-arm64-musl | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-arm64-musl | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-x64-gnu | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-x64-gnu | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-x64-musl | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-x64-musl | 1.33.0 | MPL-2.0 | có |
+| lightningcss-win32-arm64-msvc | 1.32.0 | MPL-2.0 | có |
+| lightningcss-win32-arm64-msvc | 1.33.0 | MPL-2.0 | có |
+| lightningcss-win32-x64-msvc | 1.32.0 | MPL-2.0 | có |
+| lightningcss-win32-x64-msvc | 1.33.0 | MPL-2.0 | có |
 
 ## Rust
 
@@ -305,16 +305,16 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @floating-ui/utils | 0.2.12 | MIT |  |
 | @fontsource-variable/geist | 5.3.0 | OFL-1.1 |  |
 | @hono/node-server | 2.1.5 | MIT | có |
-| @jridgewell/gen-mapping | 0.3.13 | MIT |  |
-| @jridgewell/remapping | 2.3.5 | MIT |  |
-| @jridgewell/resolve-uri | 3.1.2 | MIT |  |
-| @jridgewell/sourcemap-codec | 1.6.0 | MIT |  |
-| @jridgewell/trace-mapping | 0.3.31 | MIT |  |
+| @jridgewell/gen-mapping | 0.3.13 | MIT | có |
+| @jridgewell/remapping | 2.3.5 | MIT | có |
+| @jridgewell/resolve-uri | 3.1.2 | MIT | có |
+| @jridgewell/sourcemap-codec | 1.6.0 | MIT | có |
+| @jridgewell/trace-mapping | 0.3.31 | MIT | có |
 | @modelcontextprotocol/sdk | 1.32.1 | MIT | có |
 | @nodelib/fs.scandir | 2.1.5 | MIT | có |
 | @nodelib/fs.stat | 2.0.5 | MIT | có |
 | @nodelib/fs.walk | 1.2.8 | MIT | có |
-| @oxc-project/types | 0.154.0 | MIT |  |
+| @oxc-project/types | 0.154.0 | MIT | có |
 | @oxlint/binding-android-arm-eabi | 1.89.0 | MIT | có |
 | @oxlint/binding-android-arm64 | 1.89.0 | MIT | có |
 | @oxlint/binding-darwin-arm64 | 1.89.0 | MIT | có |
@@ -395,44 +395,44 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @radix-ui/react-visually-hidden | 1.2.13 | MIT |  |
 | @radix-ui/rect | 1.1.3 | MIT |  |
 | @remix-run/route-pattern | 0.22.1 | MIT |  |
-| @rolldown/binding-android-arm-eabi | 1.2.14 | MIT |  |
-| @rolldown/binding-android-arm64 | 1.2.14 | MIT |  |
-| @rolldown/binding-darwin-arm64 | 1.2.14 | MIT |  |
-| @rolldown/binding-darwin-x64 | 1.2.14 | MIT |  |
-| @rolldown/binding-freebsd-x64 | 1.2.14 | MIT |  |
-| @rolldown/binding-linux-arm-gnueabihf | 1.2.14 | MIT |  |
-| @rolldown/binding-linux-arm64-gnu | 1.2.14 | MIT |  |
-| @rolldown/binding-linux-arm64-musl | 1.2.14 | MIT |  |
-| @rolldown/binding-linux-ppc64-gnu | 1.2.14 | MIT |  |
-| @rolldown/binding-linux-s390x-gnu | 1.2.14 | MIT |  |
-| @rolldown/binding-linux-x64-gnu | 1.2.14 | MIT |  |
-| @rolldown/binding-linux-x64-musl | 1.2.14 | MIT |  |
-| @rolldown/binding-openharmony-arm64 | 1.2.14 | MIT |  |
-| @rolldown/binding-win32-arm64-msvc | 1.2.14 | MIT |  |
-| @rolldown/binding-win32-x64-msvc | 1.2.14 | MIT |  |
-| @rolldown/pluginutils | 1.0.1 | MIT |  |
+| @rolldown/binding-android-arm-eabi | 1.2.14 | MIT | có |
+| @rolldown/binding-android-arm64 | 1.2.14 | MIT | có |
+| @rolldown/binding-darwin-arm64 | 1.2.14 | MIT | có |
+| @rolldown/binding-darwin-x64 | 1.2.14 | MIT | có |
+| @rolldown/binding-freebsd-x64 | 1.2.14 | MIT | có |
+| @rolldown/binding-linux-arm-gnueabihf | 1.2.14 | MIT | có |
+| @rolldown/binding-linux-arm64-gnu | 1.2.14 | MIT | có |
+| @rolldown/binding-linux-arm64-musl | 1.2.14 | MIT | có |
+| @rolldown/binding-linux-ppc64-gnu | 1.2.14 | MIT | có |
+| @rolldown/binding-linux-s390x-gnu | 1.2.14 | MIT | có |
+| @rolldown/binding-linux-x64-gnu | 1.2.14 | MIT | có |
+| @rolldown/binding-linux-x64-musl | 1.2.14 | MIT | có |
+| @rolldown/binding-openharmony-arm64 | 1.2.14 | MIT | có |
+| @rolldown/binding-win32-arm64-msvc | 1.2.14 | MIT | có |
+| @rolldown/binding-win32-x64-msvc | 1.2.14 | MIT | có |
+| @rolldown/pluginutils | 1.0.1 | MIT | có |
 | @sec-ant/readable-stream | 0.4.1 | MIT | có |
 | @shadcn/registry | 0.2.0 | MIT | có |
 | @sindresorhus/merge-streams | 4.0.0 | MIT | có |
-| @tailwindcss/node | 4.3.3 | MIT |  |
-| @tailwindcss/oxide | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-android-arm64 | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-darwin-arm64 | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-darwin-x64 | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-freebsd-x64 | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-linux-arm64-gnu | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-linux-arm64-musl | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-linux-x64-gnu | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-linux-x64-musl | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-wasm32-wasi | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-win32-arm64-msvc | 4.3.3 | MIT |  |
-| @tailwindcss/oxide-win32-x64-msvc | 4.3.3 | MIT |  |
-| @tailwindcss/vite | 4.3.3 | MIT |  |
+| @tailwindcss/node | 4.3.3 | MIT | có |
+| @tailwindcss/oxide | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-android-arm64 | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-darwin-arm64 | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-darwin-x64 | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-freebsd-x64 | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-linux-arm64-gnu | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-linux-arm64-musl | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-linux-x64-gnu | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-linux-x64-musl | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-wasm32-wasi | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-win32-arm64-msvc | 4.3.3 | MIT | có |
+| @tailwindcss/oxide-win32-x64-msvc | 4.3.3 | MIT | có |
+| @tailwindcss/vite | 4.3.3 | MIT | có |
 | @tanstack/query-core | 5.104.5 | MIT |  |
 | @tanstack/react-query | 5.104.5 | MIT |  |
 | @ts-morph/common | 0.27.0 | MIT | có |
-| @types/node | 24.19.2 | MIT |  |
+| @types/node | 24.19.2 | MIT | có |
 | @types/react | 19.3.0 | MIT |  |
 | @types/react-dom | 19.3.0 | MIT |  |
 | @types/validate-npm-package-name | 4.0.2 | MIT | có |
@@ -494,7 +494,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | define-lazy-prop | 2.0.0 | MIT | có |
 | define-lazy-prop | 3.0.0 | MIT | có |
 | depd | 2.0.0 | MIT | có |
-| detect-libc | 2.1.2 | Apache-2.0 |  |
+| detect-libc | 2.1.2 | Apache-2.0 | có |
 | detect-node-es | 1.1.0 | MIT |  |
 | diff | 8.0.4 | BSD-3-Clause | có |
 | dot-prop | 6.0.1 | MIT | có |
@@ -504,7 +504,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | electron-to-chromium | 1.5.462 | ISC | có |
 | emoji-regex | 10.6.0 | MIT | có |
 | encodeurl | 2.0.0 | MIT | có |
-| enhanced-resolve | 5.26.0 | MIT |  |
+| enhanced-resolve | 5.26.0 | MIT | có |
 | enquirer | 2.4.1 | MIT | có |
 | env-paths | 2.2.1 | MIT | có |
 | es-define-property | 1.0.1 | MIT | có |
@@ -524,7 +524,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | fast-glob | 3.3.3 | MIT | có |
 | fast-uri | 3.1.9 | BSD-3-Clause | có |
 | fastq | 1.20.3 | ISC | có |
-| fdir | 6.5.0 | MIT |  |
+| fdir | 6.5.0 | MIT | có |
 | figures | 6.1.0 | MIT | có |
 | fill-range | 7.1.1 | MIT | có |
 | finalhandler | 2.1.1 | MIT | có |
@@ -532,7 +532,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | forwarded | 0.2.0 | MIT | có |
 | fresh | 2.0.0 | MIT | có |
 | fs-extra | 11.4.1 | MIT | có |
-| fsevents | 2.3.3 | MIT |  |
+| fsevents | 2.3.3 | MIT | có |
 | function-bind | 1.1.2 | MIT | có |
 | fuzzysort | 3.1.0 | MIT | có |
 | gensync | 1.0.0-beta.2 | MIT | có |
@@ -545,7 +545,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | get-stream | 9.0.1 | MIT | có |
 | glob-parent | 5.1.2 | ISC | có |
 | gopd | 1.2.0 | MIT | có |
-| graceful-fs | 4.2.11 | ISC |  |
+| graceful-fs | 4.2.11 | ISC | có |
 | has-symbols | 1.1.0 | MIT | có |
 | hasown | 2.0.4 | MIT | có |
 | hono | 4.13.13 | MIT | có |
@@ -578,7 +578,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | is-wsl | 3.1.1 | MIT | có |
 | isexe | 2.0.0 | ISC | có |
 | isexe | 3.1.5 | BlueOak-1.0.0 | có |
-| jiti | 2.7.0 | MIT |  |
+| jiti | 2.7.0 | MIT | có |
 | jose | 6.2.13 | MIT | có |
 | js-tokens | 4.0.0 | MIT | có |
 | jsesc | 3.1.0 | MIT | có |
@@ -589,35 +589,35 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | jsonfile | 6.2.1 | MIT | có |
 | kleur | 3.0.3 | MIT | có |
 | kleur | 4.1.5 | MIT | có |
-| lightningcss | 1.32.0 | MPL-2.0 |  |
-| lightningcss | 1.33.0 | MPL-2.0 |  |
-| lightningcss-android-arm64 | 1.32.0 | MPL-2.0 |  |
-| lightningcss-android-arm64 | 1.33.0 | MPL-2.0 |  |
-| lightningcss-darwin-arm64 | 1.32.0 | MPL-2.0 |  |
-| lightningcss-darwin-arm64 | 1.33.0 | MPL-2.0 |  |
-| lightningcss-darwin-x64 | 1.32.0 | MPL-2.0 |  |
-| lightningcss-darwin-x64 | 1.33.0 | MPL-2.0 |  |
-| lightningcss-freebsd-x64 | 1.32.0 | MPL-2.0 |  |
-| lightningcss-freebsd-x64 | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-arm-gnueabihf | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-arm-gnueabihf | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-arm64-gnu | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-arm64-gnu | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-arm64-musl | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-arm64-musl | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-x64-gnu | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-x64-gnu | 1.33.0 | MPL-2.0 |  |
-| lightningcss-linux-x64-musl | 1.32.0 | MPL-2.0 |  |
-| lightningcss-linux-x64-musl | 1.33.0 | MPL-2.0 |  |
-| lightningcss-win32-arm64-msvc | 1.32.0 | MPL-2.0 |  |
-| lightningcss-win32-arm64-msvc | 1.33.0 | MPL-2.0 |  |
-| lightningcss-win32-x64-msvc | 1.32.0 | MPL-2.0 |  |
-| lightningcss-win32-x64-msvc | 1.33.0 | MPL-2.0 |  |
+| lightningcss | 1.32.0 | MPL-2.0 | có |
+| lightningcss | 1.33.0 | MPL-2.0 | có |
+| lightningcss-android-arm64 | 1.32.0 | MPL-2.0 | có |
+| lightningcss-android-arm64 | 1.33.0 | MPL-2.0 | có |
+| lightningcss-darwin-arm64 | 1.32.0 | MPL-2.0 | có |
+| lightningcss-darwin-arm64 | 1.33.0 | MPL-2.0 | có |
+| lightningcss-darwin-x64 | 1.32.0 | MPL-2.0 | có |
+| lightningcss-darwin-x64 | 1.33.0 | MPL-2.0 | có |
+| lightningcss-freebsd-x64 | 1.32.0 | MPL-2.0 | có |
+| lightningcss-freebsd-x64 | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-arm-gnueabihf | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-arm-gnueabihf | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-arm64-gnu | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-arm64-gnu | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-arm64-musl | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-arm64-musl | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-x64-gnu | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-x64-gnu | 1.33.0 | MPL-2.0 | có |
+| lightningcss-linux-x64-musl | 1.32.0 | MPL-2.0 | có |
+| lightningcss-linux-x64-musl | 1.33.0 | MPL-2.0 | có |
+| lightningcss-win32-arm64-msvc | 1.32.0 | MPL-2.0 | có |
+| lightningcss-win32-arm64-msvc | 1.33.0 | MPL-2.0 | có |
+| lightningcss-win32-x64-msvc | 1.32.0 | MPL-2.0 | có |
+| lightningcss-win32-x64-msvc | 1.33.0 | MPL-2.0 | có |
 | locate-path | 3.0.0 | MIT | có |
 | log-symbols | 6.0.0 | MIT | có |
 | lru-cache | 5.1.1 | ISC | có |
 | lucide-react | 1.60.0 | ISC |  |
-| magic-string | 0.30.21 | MIT |  |
+| magic-string | 0.30.21 | MIT | có |
 | math-intrinsics | 1.1.0 | MIT | có |
 | media-typer | 1.1.1 | MIT | có |
 | merge-descriptors | 2.0.0 | MIT | có |
@@ -632,7 +632,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | minimatch | 10.2.6 | BlueOak-1.0.0 | có |
 | minimist | 1.2.8 | MIT | có |
 | ms | 2.1.3 | MIT | có |
-| nanoid | 3.3.20 | MIT |  |
+| nanoid | 3.3.20 | MIT | có |
 | negotiator | 1.1.0 | MIT | có |
 | node-releases | 2.0.59 | MIT | có |
 | npm-run-path | 4.0.1 | MIT | có |
@@ -658,12 +658,12 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | path-key | 3.1.1 | MIT | có |
 | path-key | 4.0.0 | MIT | có |
 | path-to-regexp | 8.4.2 | MIT | có |
-| picocolors | 1.1.1 | ISC |  |
+| picocolors | 1.1.1 | ISC | có |
 | picomatch | 2.3.2 | MIT | có |
-| picomatch | 4.0.7 | MIT |  |
+| picomatch | 4.0.7 | MIT | có |
 | pkce-challenge | 5.0.1 | MIT | có |
 | pkg-up | 3.1.0 | MIT | có |
-| postcss | 8.5.31 | MIT |  |
+| postcss | 8.5.31 | MIT | có |
 | postcss-selector-parser | 7.1.7 | MIT | có |
 | powershell-utils | 0.2.1 | MIT | có |
 | pretty-ms | 9.3.1 | MIT | có |
@@ -684,7 +684,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | require-from-string | 2.0.2 | MIT | có |
 | restore-cursor | 5.1.0 | MIT | có |
 | reusify | 1.1.0 | MIT | có |
-| rolldown | 1.2.14 | MIT |  |
+| rolldown | 1.2.14 | MIT | có |
 | router | 2.2.0 | MIT | có |
 | run-applescript | 7.1.0 | MIT | có |
 | run-parallel | 1.2.0 | MIT | có |
@@ -708,7 +708,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | smart-buffer | 4.2.0 | MIT | có |
 | socks | 2.8.10 | MIT | có |
 | source-map | 0.6.1 | BSD-3-Clause | có |
-| source-map-js | 1.2.2 | BSD-3-Clause |  |
+| source-map-js | 1.2.2 | BSD-3-Clause | có |
 | statuses | 2.0.2 | MIT | có |
 | stdin-discarder | 0.2.2 | MIT | có |
 | string-width | 7.2.0 | MIT | có |
@@ -720,10 +720,10 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | strip-final-newline | 2.0.0 | MIT | có |
 | strip-final-newline | 4.0.0 | MIT | có |
 | systeminformation | 5.33.16 | MIT | có |
-| tailwindcss | 4.3.3 | MIT |  |
-| tapable | 2.3.3 | MIT |  |
+| tailwindcss | 4.3.3 | MIT | có |
+| tapable | 2.3.3 | MIT | có |
 | tiny-invariant | 1.3.3 | MIT | có |
-| tinyglobby | 0.2.17 | MIT |  |
+| tinyglobby | 0.2.17 | MIT | có |
 | to-regex-range | 5.0.1 | MIT | có |
 | toidentifier | 1.0.1 | MIT | có |
 | ts-morph | 26.0.0 | MIT | có |
@@ -734,7 +734,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | type-is | 2.1.0 | MIT | có |
 | typescript | 6.0.3 | Apache-2.0 | có |
 | undici | 7.30.1 | MIT | có |
-| undici-types | 7.24.6 | MIT |  |
+| undici-types | 7.24.6 | MIT | có |
 | unicorn-magic | 0.3.0 | MIT | có |
 | universalify | 2.0.1 | MIT | có |
 | unpipe | 1.0.0 | MIT | có |
@@ -744,7 +744,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | util-deprecate | 1.0.2 | MIT | có |
 | validate-npm-package-name | 7.0.2 | ISC | có |
 | vary | 1.1.2 | MIT | có |
-| vite | 8.3.4 | MIT |  |
+| vite | 8.3.4 | MIT | có |
 | which | 2.0.2 | ISC | có |
 | which | 4.0.0 | ISC | có |
 | wrappy | 1.0.2 | ISC | có |

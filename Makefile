@@ -63,7 +63,7 @@ uninstall: ## Gỡ binary đã cài bằng make install
 
 # Gói phát hành, CI gọi đúng target này. Ra thư mục release/:
 #   xdi-platform-$(VERSION).tar.gz                 mã nguồn, giải nén ra xdi-platform-$(VERSION)/
-#   xdi-backend-$(VERSION)-linux-x86_64.tar.gz     binary kèm LICENSE và README
+#   xdi-backend-$(VERSION)-linux-x86_64.tar.gz     binary kèm LICENSE, README, LICENSES.md và danh sách giấy phép phụ thuộc
 #   notes.md                                        ghi chú lấy từ CHANGELOG.md
 # DRY_RUN=1: chạy thử, chấp nhận CHANGELOG chưa có mục cho phiên bản này (CI dùng trên PR).
 release-artifacts: ## Đóng gói phát hành: make release-artifacts VERSION=x.y.z

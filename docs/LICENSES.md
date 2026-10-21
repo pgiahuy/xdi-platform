@@ -11,12 +11,17 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 
 | Nhóm | Số lượng | Giấy phép | Đánh giá |
 |---|---|---|---|
-| Crate Rust (biên dịch vào binary backend) | 224 | MIT, Apache-2.0, Unicode-3.0, Unlicense, BSD | Cho phép, dùng chung được |
-| Gói npm | 485 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak | Cho phép, dùng chung được |
-| Gói npm `lightningcss` | 1 (kèm bản build cho từng nền tảng) | MPL-2.0 | Xem bên dưới |
+| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 224 | MIT, Apache-2.0, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
+| Gói npm | 485 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak, 0BSD, CC0-1.0, CC-BY-4.0 (dữ liệu `caniuse-lite`) | Cho phép, dùng chung được |
+| Gói npm `lightningcss` | 2 phiên bản, mỗi phiên bản kèm bản build cho từng nền tảng | MPL-2.0 | Xem bên dưới |
 | Font Geist (`@fontsource-variable/geist`) | 1 | OFL-1.1 | Xem bên dưới |
 
-Không có thành phần nào theo GPL, LGPL hay AGPL được biên dịch hoặc đóng gói vào phần mềm.
+Không có thành phần nào chỉ có giấy phép GPL, LGPL hay AGPL. Crate `r-efi` cho chọn `MIT OR Apache-2.0 OR
+LGPL-2.1-or-later`; dự án dùng nó theo MIT, và nó chỉ được biên dịch cho nền tảng UEFI, không có trong binary Linux.
+
+Công cụ chỉ chạy lúc build, không có trong image hay gói phát hành: image `rust:1.96-bookworm` và `node:24-bookworm-slim`
+(giai đoạn build của Dockerfile), `cargo-chef` (MIT OR Apache-2.0), Vite, TypeScript, oxlint, Tailwind. Giấy phép của
+các gói npm trong số này có trong danh sách đầy đủ.
 
 ## Trường hợp cần ghi rõ
 
