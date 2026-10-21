@@ -179,7 +179,7 @@ pub async fn upload(
         }
     };
     let relative = format!("{}/{}/{}", ws.as_uuid(), dataset.id, Uuid::new_v4());
-    let version = state
+    let created = state
         .store
         .create_version(
             ws,
@@ -191,7 +191,27 @@ pub async fn upload(
                 row_count: materialized.row_count,
             },
         )
-        .await?;
+        .await;
+    let version = match created {
+        Ok(version) => version,
+        // Hai lần nạp cùng bộ file vào cùng dataset chạy song song: cả hai qua bước chống trùng, bên ghi sau vấp ràng
+        // buộc UNIQUE (dataset_id, file_hash). Có phiên bản cùng nội dung rồi thì trả nó, như nạp lại tuần tự.
+        Err(e) => match state
+            .store
+            .find_version_by_hash(ws, dataset.id, &content_hash)
+            .await?
+        {
+            Some(version) => {
+                return Ok(UploadResult {
+                    created: false,
+                    dataset,
+                    version,
+                    columns: Vec::new(),
+                })
+            }
+            None => return Err(e),
+        },
+    };
 
     // Bước 5: đưa Parquet về chỗ cuối rồi mới đặt phiên bản hiện hành, để phiên bản hiện hành luôn có file.
     let final_dir = state.config.data_dir.join(&relative);
@@ -260,23 +280,21 @@ fn dataset_name(upload: &Upload) -> Result<String, AppError> {
         .as_deref()
         .map(str::trim)
         .filter(|n| !n.is_empty());
-    let name = match from_field {
-        Some(n) => n.to_string(),
-        // Bỏ đuôi: "ban_hang_thang1.csv" thành "ban_hang_thang1".
+    match from_field {
+        Some(n) if n.chars().count() > 100 => Err(AppError::BadRequest(
+            "Tên dataset dài tối đa 100 ký tự".to_string(),
+        )),
+        Some(n) => Ok(n.to_string()),
+        // Người dùng không đặt tên: lấy tên file bỏ đuôi ("ban_hang_thang1.csv" thành "ban_hang_thang1"), cắt còn 100
+        // ký tự thay vì báo lỗi về cái tên họ không hề chọn.
         None => {
             let first = &upload.files[0].name;
-            first
+            let stem = first
                 .rsplit_once('.')
-                .map_or(first.as_str(), |(stem, _)| stem)
-                .to_string()
+                .map_or(first.as_str(), |(stem, _)| stem);
+            Ok(stem.chars().take(100).collect())
         }
-    };
-    if name.chars().count() > 100 {
-        return Err(AppError::BadRequest(
-            "Tên dataset dài tối đa 100 ký tự".to_string(),
-        ));
     }
-    Ok(name)
 }
 
 /// Tên bảng mô hình ngôn ngữ dùng trong SQL: "Bán hàng 2024" thành "ban_hang_2024", trùng thì thêm _2, _3.

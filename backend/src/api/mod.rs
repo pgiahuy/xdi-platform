@@ -29,7 +29,7 @@ pub fn router(state: AppState) -> Router {
         .merge(auth::routes())
         .merge(admin::routes())
         .merge(workspaces::routes())
-        .merge(datasets::routes())
+        .merge(datasets::routes(state.config.max_upload_bytes))
         .merge(query::routes())
         .fallback(api_not_found);
     let app = Router::new()

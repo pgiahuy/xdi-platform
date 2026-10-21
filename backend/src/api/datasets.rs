@@ -23,12 +23,23 @@ use crate::engine::store::Dataset;
 use crate::service::ingest::{self, StagedFile, Staging, Upload, UploadResult};
 use crate::{error::AppError, state::AppState};
 
-pub fn routes() -> Router<AppState> {
+/// Trần số trường multipart trong một request: chặn kiểu gửi hàng vạn trường rỗng để giữ kết nối.
+const MAX_FIELDS: usize = 1000;
+/// Tên file dài hơn thì từ chối: tên đi vào cột _source_file của mọi dòng.
+const MAX_FILE_NAME: usize = 255;
+
+/// max_upload_bytes: MAX_UPLOAD_MB. Giới hạn body cả request đặt rộng hơn một chút để chứa phần đầu và ranh giới của
+/// multipart; nội dung các trường thì handler đếm chính xác và trả 413 JSON.
+pub fn routes(max_upload_bytes: u64) -> Router<AppState> {
+    let body_limit = usize::try_from(max_upload_bytes)
+        .unwrap_or(usize::MAX)
+        .saturating_add(1024 * 1024);
     Router::new()
         .route(
             "/workspaces/{ws}/datasets",
-            // Tắt giới hạn 2 MB mặc định của axum cho route này: handler tự đếm theo MAX_UPLOAD_MB và trả 413 JSON.
-            get(list).post(create).layer(DefaultBodyLimit::disable()),
+            get(list)
+                .post(create)
+                .layer(DefaultBodyLimit::max(body_limit)),
         )
         .route("/workspaces/{ws}/datasets/{id}", get(detail))
 }
@@ -57,19 +68,27 @@ async fn create(
     let limit = state.config.max_upload_bytes;
     let mut received: u64 = 0;
 
+    let mut fields = 0;
     while let Some(mut field) = multipart.next_field().await.map_err(multipart_error)? {
+        fields += 1;
+        if fields > MAX_FIELDS {
+            return Err(AppError::BadRequest(format!(
+                "Quá {MAX_FIELDS} trường trong một lần nạp"
+            )));
+        }
         let field_name = field.name().unwrap_or_default().to_string();
         match field_name.as_str() {
             "file" => {
-                let name = field
-                    .file_name()
-                    .map(str::trim)
-                    .unwrap_or_default()
-                    .to_string();
+                let name = file_name_only(field.file_name().unwrap_or_default());
                 if name.is_empty() {
                     return Err(AppError::BadRequest(
                         "Trường file thiếu tên file".to_string(),
                     ));
+                }
+                if name.chars().count() > MAX_FILE_NAME {
+                    return Err(AppError::BadRequest(format!(
+                        "Tên file dài tối đa {MAX_FILE_NAME} ký tự"
+                    )));
                 }
                 let path = staging.upload_path(upload.files.len());
                 let mut out = tokio::fs::File::create(&path)
@@ -148,8 +167,24 @@ fn check_limit(received: u64, limit: u64) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Bỏ phần thư mục nếu trình duyệt hay công cụ gửi kèm ("../../a.csv" hay đường dẫn Windows thành "a.csv"). Tên này chỉ
+/// để hiển thị và ghi vào _source_file; đường dẫn trên đĩa do máy chủ đặt.
+fn file_name_only(raw: &str) -> String {
+    raw.rsplit(['/', '\\'])
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
 fn multipart_error(e: MultipartError) -> AppError {
     tracing::debug!(error = %e, "multipart rejected");
+    // Vượt giới hạn body cả request (DefaultBodyLimit) cũng đi qua đây.
+    if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        return AppError::TooLarge(
+            "Tổng dung lượng vượt giới hạn của một lần nạp (MAX_UPLOAD_MB)".to_string(),
+        );
+    }
     AppError::BadRequest("Dữ liệu multipart bị hỏng hoặc gửi không trọn".to_string())
 }
 
@@ -364,6 +399,74 @@ mod tests {
         assert_eq!(list.as_array().map(Vec::len), Some(0));
         assert_eq!(parquet_files(&data.0), 0);
         assert!(staging_is_empty(&data.0));
+
+        db.drop().await;
+    }
+
+    #[tokio::test]
+    async fn concurrent_duplicate_uploads_do_not_fail() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone()
+        });
+        let lan = setup(&app).await;
+        let (_, first) = upload(&app, &lan, &[("name", "Bán hàng")], &[("thang1.csv", T1)]).await;
+        let id = first["dataset"]["id"].as_str().unwrap().to_string();
+
+        // Cùng bộ file mới, gửi hai lần cùng lúc vào cùng dataset: một bên tạo phiên bản, bên kia nhận phiên bản đó.
+        let fields = [("dataset_id", id.as_str())];
+        let files: [(&str, &[u8]); 1] = [("thang2.csv", T2)];
+        let a = upload(&app, &lan, &fields, &files);
+        let b = upload(&app, &lan, &fields, &files);
+        let ((sa, ba), (sb, bb)) = tokio::join!(a, b);
+        let mut statuses = [sa, sb];
+        statuses.sort();
+        assert_eq!(statuses, [StatusCode::OK, StatusCode::CREATED], "{ba} {bb}");
+        assert_eq!(ba["version"]["id"], bb["version"]["id"]);
+        assert!(staging_is_empty(&data.0));
+
+        db.drop().await;
+    }
+
+    #[tokio::test]
+    async fn field_flood_and_file_names_are_bounded() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone()
+        });
+        let lan = setup(&app).await;
+
+        // Hàng nghìn trường rỗng: nội dung 0 byte nhưng vẫn bị chặn.
+        let empty: Vec<(&str, &str)> = (0..1500).map(|_| ("x", "")).collect();
+        let (status, _) = upload(&app, &lan, &empty, &[("a.csv", T1)]).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        let long = format!("{}.csv", "a".repeat(300));
+        let (status, _) = upload(&app, &lan, &[], &[(long.as_str(), T1)]).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        // Phần thư mục trong tên file bị bỏ: chỉ còn tên, cả ở tên dataset lẫn cột _source_file.
+        let (status, body) = upload(&app, &lan, &[], &[("../../secret/orders.csv", T1)]).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(body["dataset"]["name"], "orders");
+
+        // Tên mặc định dài thì cắt còn 100 ký tự, không báo lỗi.
+        let stem = "c".repeat(150);
+        let name = format!("{stem}.csv");
+        let (status, body) = upload(&app, &lan, &[], &[(name.as_str(), b"z\n9\n")]).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(
+            body["dataset"]["name"].as_str().map(|n| n.chars().count()),
+            Some(100)
+        );
 
         db.drop().await;
     }
