@@ -18,7 +18,8 @@ trong [ARCHITECTURE.md](ARCHITECTURE.md).
 | File bạn nạp lên (thiết kế) | Chuyển sang Parquet, lưu trong thư mục dữ liệu (`DATA_DIR`, volume `xdidata` khi chạy compose), mỗi workspace một thư mục |
 | Hồ sơ dữ liệu (thiết kế): tên cột, kiểu, min, max, số ô trống, vài giá trị mẫu, giá trị phân loại, mô tả, bí danh | Postgres |
 | Lịch sử câu hỏi (thiết kế): câu hỏi, SQL đã chạy, trạng thái | Postgres |
-| Tài khoản (thiết kế): email, tên, mật khẩu đã băm | Postgres; không lưu mật khẩu gốc |
+| Tài khoản: email, tên, mật khẩu đã băm (Argon2id) | Postgres; không lưu mật khẩu gốc |
+| Phiên đăng nhập: mã băm SHA-256, người dùng, hạn | Postgres; mã gốc chỉ nằm trong cookie của trình duyệt, xóa khi đăng xuất |
 
 ## Gửi gì cho mô hình ngôn ngữ
 

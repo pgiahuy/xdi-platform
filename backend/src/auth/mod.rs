@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-/* auth/mod.rs - danh tính và quyền. Hiện có kiểu WorkspaceId; JWT, vai, đăng nhập thêm ở các issue auth.
+/* auth/mod.rs - danh tính và quyền: băm mật khẩu (password.rs), mã phiên và mã thiết lập (token.rs), kiểu WorkspaceId.
+Phiên đăng nhập lưu trong Postgres (engine/store/accounts.rs), không dùng JWT, để thu hồi được ngay.
 
 WorkspaceId là lớp chặn thứ nhất giữ dữ liệu các workspace tách nhau (docs/ARCHITECTURE.md mục 4b): mọi hàm của
 engine/store nhận nó, nên một truy vấn không thể quên lọc theo workspace. Trường bên trong để private và chỉ module
 auth tạo được giá trị, nên service hay engine không thể dựng một WorkspaceId từ dữ liệu tùy ý (ví dụ từ URL). */
+
+pub mod password;
+pub mod token;
 
 use uuid::Uuid;
 

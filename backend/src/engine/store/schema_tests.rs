@@ -47,10 +47,11 @@ async fn every_business_table_has_workspace_id() {
     };
     let store = Store::connect(&url, 5).await.expect("connect");
     store.migrate().await.expect("migrate");
+    // Ngoại lệ có chủ đích: workspaces là chính nó; users và sessions thuộc về người dùng, dùng chung mọi workspace.
     let missing: Vec<String> = sqlx::query_scalar(
         "SELECT t.table_name::text FROM information_schema.tables t
          WHERE t.table_schema = 'public'
-           AND t.table_name NOT IN ('workspaces', 'users', '_sqlx_migrations')
+           AND t.table_name NOT IN ('workspaces', 'users', 'sessions', '_sqlx_migrations')
            AND NOT EXISTS (SELECT 1 FROM information_schema.columns c
                            WHERE c.table_name = t.table_name AND c.column_name = 'workspace_id')",
     )
