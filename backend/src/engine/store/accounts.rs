@@ -27,11 +27,22 @@ pub struct User {
 }
 
 /// Dữ liệu để kiểm đăng nhập. Không derive Serialize: không bao giờ gửi ra ngoài.
-#[derive(Debug, sqlx::FromRow)]
+#[derive(sqlx::FromRow)]
 pub struct Credentials {
     pub id: Uuid,
     pub password_hash: Option<String>,
     pub is_active: bool,
+}
+
+// Debug viết tay để bỏ chuỗi băm: lỡ in struct này vào log cũng không lộ.
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Credentials")
+            .field("id", &self.id)
+            .field("has_password", &self.password_hash.is_some())
+            .field("is_active", &self.is_active)
+            .finish()
+    }
 }
 
 /// Một workspace người dùng thuộc về, kèm vai của họ ở đó.
@@ -141,15 +152,14 @@ impl Store {
         .map_err(|e| db_error("find credentials", e))
     }
 
-    /// Lưu phiên mới; tiện thể xóa các phiên đã hết hạn của cùng người đó để bảng không phình mãi.
+    /// Lưu phiên mới; tiện thể xóa mọi phiên đã hết hạn để bảng không phình mãi, kể cả của người không quay lại.
     pub async fn create_session(
         &self,
         user_id: Uuid,
         token_hash: &str,
         expires_at: DateTime<Utc>,
     ) -> Result<(), AppError> {
-        sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND expires_at <= now()")
-            .bind(user_id)
+        sqlx::query("DELETE FROM sessions WHERE expires_at <= now()")
             .execute(&self.pool)
             .await
             .map_err(|e| db_error("clean sessions", e))?;

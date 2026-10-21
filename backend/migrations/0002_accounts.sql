@@ -14,8 +14,9 @@ CREATE TABLE sessions (
     token_hash    text PRIMARY KEY CHECK (token_hash ~ '^[0-9a-f]{64}$'),
     user_id       uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     created_at    timestamptz NOT NULL DEFAULT now(),
-    expires_at    timestamptz NOT NULL,
-    CHECK (expires_at > created_at)
+    expires_at    timestamptz NOT NULL
 );
 -- Xóa mọi phiên của một người (khóa tài khoản, đặt lại mật khẩu) đi theo user_id.
 CREATE INDEX sessions_user_idx ON sessions (user_id);
+-- Dọn phiên hết hạn của mọi người, kể cả người không quay lại.
+CREATE INDEX sessions_expires_idx ON sessions (expires_at);

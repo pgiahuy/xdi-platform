@@ -13,12 +13,20 @@ use crate::error::AppError;
 
 /// Độ dài tối thiểu, đếm theo ký tự (không theo byte, để mật khẩu tiếng Việt có dấu không bị tính dài hơn thực tế).
 pub const MIN_LENGTH: usize = 8;
+/// Độ dài tối đa: đủ cho cụm mật khẩu dài, chặn chuỗi cực dài bắt máy chủ băm tốn công.
+pub const MAX_LENGTH: usize = 128;
 
 /// Kiểm mật khẩu mới trước khi băm. Thông báo trả thẳng cho người dùng.
 pub fn validate(password: &str) -> Result<(), AppError> {
-    if password.chars().count() < MIN_LENGTH {
+    let length = password.chars().count();
+    if length < MIN_LENGTH {
         return Err(AppError::BadRequest(format!(
             "Mật khẩu cần ít nhất {MIN_LENGTH} ký tự"
+        )));
+    }
+    if length > MAX_LENGTH {
+        return Err(AppError::BadRequest(format!(
+            "Mật khẩu dài tối đa {MAX_LENGTH} ký tự"
         )));
     }
     Ok(())
@@ -75,5 +83,7 @@ mod tests {
         // 7 ký tự có dấu là 7 ký tự, dù chiếm hơn 8 byte.
         assert!(validate("mậtkhẩu").is_err());
         assert!(validate("mậtkhẩu1").is_ok());
+        assert!(validate(&"a".repeat(MAX_LENGTH)).is_ok());
+        assert!(validate(&"a".repeat(MAX_LENGTH + 1)).is_err());
     }
 }

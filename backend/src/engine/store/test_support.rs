@@ -120,3 +120,11 @@ async fn drop_database(admin: &Store, name: &str) {
         .await
         .expect("drop test database");
 }
+
+/// Chạy một câu SQL thô, để test dựng những trạng thái khó tạo qua API (phiên hết hạn, tài khoản bị khóa).
+pub async fn exec(store: &Store, sql: &str) {
+    sqlx::query(sql)
+        .execute(&store.pool)
+        .await
+        .expect("exec test sql");
+}

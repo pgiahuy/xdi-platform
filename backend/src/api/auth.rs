@@ -140,7 +140,10 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::config::Config;
-    use crate::engine::store::{test_support::fresh_database, Store};
+    use crate::engine::store::{
+        test_support::{exec, fresh_database},
+        Store,
+    };
     use crate::state::AppState;
 
     const CODE: &str = "ABCD-EFGH-JKMN";
@@ -339,6 +342,51 @@ mod tests {
         // Thất bại không tiêu mã thiết lập.
         let (_, _, body) = call(&app, "GET", "/api/auth/setup", None, None).await;
         assert_eq!(body["needed"], true);
+
+        db.drop().await;
+    }
+
+    #[tokio::test]
+    async fn expired_session_and_deactivated_account_are_rejected() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let app = app(db.store.clone(), Some(CODE));
+        let (_, session, _) = call(
+            &app,
+            "POST",
+            "/api/auth/setup",
+            None,
+            Some(setup_body(CODE)),
+        )
+        .await;
+
+        exec(
+            &db.store,
+            "UPDATE sessions SET expires_at = now() - interval '1 minute'",
+        )
+        .await;
+        let (status, _, _) = call(&app, "GET", "/api/auth/me", session.as_deref(), None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "expired session");
+
+        let login = json!({"email": "admin@example.com", "password": "a long password"});
+        let (status, session, _) =
+            call(&app, "POST", "/api/auth/login", None, Some(login.clone())).await;
+        assert_eq!(status, StatusCode::OK);
+        exec(&db.store, "UPDATE users SET is_active = false").await;
+        let (status, _, _) = call(&app, "GET", "/api/auth/me", session.as_deref(), None).await;
+        assert_eq!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "open session of a deactivated account"
+        );
+        let (status, _, _) = call(&app, "POST", "/api/auth/login", None, Some(login)).await;
+        assert_eq!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "login of a deactivated account"
+        );
 
         db.drop().await;
     }
