@@ -1,9 +1,9 @@
 # xdi-platform
 
-Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên, đang phát triển. Mục tiêu: nạp một file CSV, Parquet hoặc Excel,
-hỏi bằng tiếng Việt, nhận bảng, biểu đồ, câu SQL đã chạy và các dòng dữ liệu đứng sau mỗi con số. Với câu hỏi "tại
-sao", hệ thống tính nhóm nào làm con số tăng hay giảm. Con số do engine phân tích tính trên dữ liệu; mô hình ngôn ngữ
-chỉ chuyển câu hỏi thành SQL và diễn giải kết quả.
+Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên và giải thích kết quả, đang phát triển. Mục tiêu: nạp một file CSV,
+Parquet hoặc Excel, hỏi bằng tiếng Việt, nhận bảng, biểu đồ, câu SQL đã chạy và các dòng dữ liệu đứng sau mỗi con số.
+Với câu hỏi "tại sao", hệ thống tính nhóm nào làm con số tăng hay giảm. Con số do engine phân tích tính trên dữ liệu;
+mô hình ngôn ngữ chỉ chuyển câu hỏi thành SQL và diễn giải kết quả.
 
 Trạng thái: mới có khung backend và khung giao diện. Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1),
 lịch sử thay đổi ở [CHANGELOG.md](CHANGELOG.md).
@@ -61,4 +61,5 @@ Kiến trúc, luồng một câu hỏi, hướng phát triển: [docs/ARCHITECTU
 
 ## Giấy phép
 
-[Apache License 2.0](LICENSE). Bảng giấy phép của từng thành phần đang viết ([#57](https://github.com/pgiahuy/xdi-platform/issues/57)).
+[Apache License 2.0](LICENSE). Giấy phép của các thành phần bên thứ ba: [docs/LICENSES.md](docs/LICENSES.md). Dữ liệu
+nằm ở đâu và gửi gì cho mô hình ngôn ngữ: [docs/PRIVACY.md](docs/PRIVACY.md).

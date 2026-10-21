@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023 shadcn. Sinh từ shadcn/ui (https://ui.shadcn.com), giấy phép MIT; phần mã giữ nguyên.
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"

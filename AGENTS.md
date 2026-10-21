@@ -42,8 +42,8 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 
 - Mỗi file mở đầu bằng một khối chú thích: tên file, vai trò, cách nó nối với phần khác.
 - Chú thích giải thích vì sao, không kể lại mã làm gì. Đặt ngay trên dòng cần giải thích, nêu hệ quả nếu làm khác.
-- Mỗi file mã nguồn chương trình (`.rs`, `.ts`, `.tsx`) có dòng `// SPDX-License-Identifier: Apache-2.0` ở đầu. File cấu hình
-  và script không bắt buộc.
+- Mỗi file mã nguồn chương trình (`.rs`, `.ts`, `.tsx`) có dòng `// SPDX-License-Identifier: Apache-2.0` ở đầu. File
+  lấy từ dự án khác ghi giấy phép gốc của file đó (xem mục shadcn bên dưới). File cấu hình và script không bắt buộc.
 
 **Đặt tên**
 
@@ -64,8 +64,9 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
   - `src/api/`: nơi duy nhất gọi backend, dạng hook TanStack Query.
   - `src/components/`: chỉ nhận dữ liệu qua props; không gọi API, không dùng router.
   - `src/pages/`: nối hook với component; chỉ lớp này dùng router.
-- File trong `frontend/src/components/ui/` và `frontend/src/lib/utils.ts` sinh từ shadcn/ui (giấy phép MIT), giữ nguyên,
-  không thêm dòng SPDX.
+- File trong `frontend/src/components/ui/` và `frontend/src/lib/utils.ts` sinh từ shadcn/ui (giấy phép MIT): giữ nguyên
+  phần mã, chỉ thêm hai dòng đầu file: `// SPDX-License-Identifier: MIT` và dòng bản quyền kèm nguồn (chép từ file có
+  sẵn). Sinh thêm component bằng `npx shadcn add` thì thêm hai dòng này ngay.
 - Không ghi cứng chữ, màu, đường dẫn, tên cột trong code: lấy từ dữ liệu hoặc cấu hình.
 - Tách file khi một phần vượt khoảng 200 dòng hoặc có logic riêng đáng kể.
 

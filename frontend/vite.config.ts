@@ -13,4 +13,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   server: { proxy: { '/api': backend } },
+  // Ghi giấy phép của mọi gói đã đóng vào bundle ra dist/licenses.md, backend phục vụ ở /licenses.md.
+  // MIT, ISC, OFL đều yêu cầu kèm thông báo bản quyền khi phân phối lại.
+  build: { license: { fileName: 'licenses.md' } },
 })

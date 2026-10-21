@@ -21,10 +21,11 @@ Mở http://localhost:8000. Hiện mới có khung: trang chủ hiện phiên b�
 
 - [Kiến trúc](ARCHITECTURE.md): sơ đồ, luồng một câu hỏi, hai kho dữ liệu, hướng phát triển.
 - [Phát hành](RELEASING.md): quy trình ra phiên bản mới.
+- [Giấy phép](LICENSES.md): giấy phép của các thành phần bên thứ ba.
+- [Dữ liệu và quyền riêng tư](PRIVACY.md): dữ liệu nằm ở đâu, gửi gì cho mô hình ngôn ngữ, cách xóa.
 
 Đang viết: cài đặt ([#54](https://github.com/pgiahuy/xdi-platform/issues/54)), API, guard SQL và dữ liệu
-([#56](https://github.com/pgiahuy/xdi-platform/issues/56)), giấy phép thành phần và quyền riêng tư
-([#57](https://github.com/pgiahuy/xdi-platform/issues/57)).
+([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
 
 ## Tham gia
 
