@@ -6,6 +6,9 @@ pub mod analytics;
 mod csv_encoding;
 pub mod excel;
 pub mod excel_worker;
+// Khung: service/ask gọi guard từ issue endpoint hỏi (#33). Chưa có code gọi nên tạm cho phép "chưa dùng"; gỡ khi đó
+// để clippy bắt lại.
+#[allow(dead_code)]
 pub mod guard;
 pub mod llm;
 pub mod store;
