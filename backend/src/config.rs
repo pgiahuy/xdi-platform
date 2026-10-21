@@ -11,11 +11,9 @@ pub struct Config {
     pub database_url: String,
     /// Số kết nối tối đa tới Postgres.
     pub db_max_connections: u32,
-    // Khung: data_dir dùng từ issue nạp dữ liệu, jwt_secret từ issue auth. Gỡ allow khi có code đọc tới.
+    // Khung: data_dir dùng từ issue nạp dữ liệu. Gỡ allow khi có code đọc tới.
     #[allow(dead_code)]
     pub data_dir: String,
-    #[allow(dead_code)]
-    pub jwt_secret: String,
     /// "mock", "gemini" hoặc "ollama". Mặc định mock để chạy được không cần khóa.
     pub llm_provider: String,
     pub gemini_api_key: String,
@@ -40,7 +38,6 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
             data_dir: var_or("DATA_DIR", "./data"),
-            jwt_secret: var_or("JWT_SECRET", "change-me-before-going-public"),
             llm_provider: var_or("LLM_PROVIDER", "mock"),
             gemini_api_key: var_or("GEMINI_API_KEY", ""),
             gemini_model: var_or("GEMINI_MODEL", "gemini-2.5-flash"),

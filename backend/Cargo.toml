@@ -18,6 +18,12 @@ uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid", "chrono", "json"] }
 tower-http = { version = "0.7", features = ["fs"] }
+argon2 = "0.6.0"
+sha2 = "0.10"
+deunicode = "1.6.2"
+axum-extra = { version = "0.12.6", features = ["cookie"] }
+getrandom = "0.4"
+time = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

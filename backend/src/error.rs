@@ -15,9 +15,11 @@ pub enum AppError {
     /// Tính năng có trong thiết kế nhưng chưa cài đặt. Tham số là tên tính năng.
     NotImplemented(&'static str),
     BadRequest(String),
+    /// Chưa đăng nhập, phiên hết hạn hoặc sai email, mật khẩu (401).
+    Unauthorized(String),
+    /// Đã đăng nhập nhưng không được làm việc này (403).
+    Forbidden(String),
     NotFound(String),
-    // Khung: dùng khi có Postgres và DuckDB. Gỡ allow khi có code tạo ra biến thể này.
-    #[allow(dead_code)]
     Internal(String),
 }
 
@@ -41,6 +43,20 @@ impl AppError {
                 StatusCode::BAD_REQUEST,
                 ErrorBody {
                     code: "bad_request",
+                    message: msg.clone(),
+                },
+            ),
+            AppError::Unauthorized(msg) => (
+                StatusCode::UNAUTHORIZED,
+                ErrorBody {
+                    code: "unauthorized",
+                    message: msg.clone(),
+                },
+            ),
+            AppError::Forbidden(msg) => (
+                StatusCode::FORBIDDEN,
+                ErrorBody {
+                    code: "forbidden",
                     message: msg.clone(),
                 },
             ),
@@ -82,6 +98,17 @@ mod tests {
         let (status, body) = AppError::NotImplemented("ask").status_and_body();
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
         assert_eq!(body.code, "not_implemented");
+    }
+
+    #[test]
+    fn auth_errors_map_to_401_and_403() {
+        let (status, body) = AppError::Unauthorized("x".into()).status_and_body();
+        assert_eq!(
+            (status, body.code),
+            (StatusCode::UNAUTHORIZED, "unauthorized")
+        );
+        let (status, body) = AppError::Forbidden("x".into()).status_and_body();
+        assert_eq!((status, body.code), (StatusCode::FORBIDDEN, "forbidden"));
     }
 
     #[test]

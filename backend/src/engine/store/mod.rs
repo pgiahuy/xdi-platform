@@ -6,8 +6,9 @@ Postgres. Câu SQL viết dạng chuỗi với sqlx::query_as, không dùng macr
 thư mục .sqlx/ và sqlx-cli; đổi lại, mọi câu SQL được kiểm bằng test chạy trên Postgres thật trong CI.
 
 Mọi hàm chạm bảng nghiệp vụ nhận &WorkspaceId và lọc theo nó. Ngoại lệ có chủ đích: tạo và tìm workspace (workspaces.rs),
-vì lúc đó chưa có workspace để lọc. */
+vì lúc đó chưa có workspace để lọc; và tài khoản, phiên (accounts.rs), vì chúng dùng chung cho mọi workspace. */
 
+mod accounts;
 // Khung: các hàm truy vấn dưới đây được gọi từ issue nạp dữ liệu (#20), endpoint hỏi (#33) và chế độ xác thực (#42).
 // Chưa có code gọi nên tạm cho phép "chưa dùng" ở đúng ba module này; gỡ khi có người gọi để clippy bắt lại.
 #[allow(dead_code)]
@@ -17,10 +18,11 @@ mod queries;
 #[cfg(test)]
 mod schema_tests;
 #[cfg(test)]
-mod test_support;
+pub mod test_support;
 #[allow(dead_code)]
 mod workspaces;
 
+pub use accounts::{Membership, NewAdmin, User};
 #[allow(unused_imports)]
 pub use datasets::{Dataset, DatasetVersion, NewVersion, ProfileStatus, SourceKind};
 #[allow(unused_imports)]

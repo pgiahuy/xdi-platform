@@ -3,7 +3,7 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-224 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 485 gói npm
+244 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 485 gói npm
 (từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 25.
 
 ## Không thuộc nhóm cho phép thông dụng
@@ -43,32 +43,44 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | aho-corasick | 1.1.5 | Unlicense OR MIT |
 | allocator-api2 | 0.2.21 | MIT OR Apache-2.0 |
 | android_system_properties | 0.1.6 | MIT OR Apache-2.0 |
+| argon2 | 0.6.0 | MIT OR Apache-2.0 |
 | async-trait | 0.1.92 | MIT OR Apache-2.0 |
 | atoi | 2.0.0 | MIT |
 | atomic-waker | 1.1.2 | Apache-2.0 OR MIT |
 | autocfg | 1.5.1 | Apache-2.0 OR MIT |
 | axum | 0.8.9 | MIT |
 | axum-core | 0.5.6 | MIT |
+| axum-extra | 0.12.6 | MIT |
 | base64 | 0.22.1 | MIT OR Apache-2.0 |
 | base64ct | 1.8.3 | Apache-2.0 OR MIT |
 | bitflags | 2.13.2 | MIT OR Apache-2.0 |
+| blake2 | 0.11.0 | MIT OR Apache-2.0 |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 |
+| block-buffer | 0.12.1 | MIT OR Apache-2.0 |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | byteorder | 1.5.0 | Unlicense OR MIT |
 | bytes | 1.12.1 | MIT |
 | cc | 1.9.0 | MIT OR Apache-2.0 |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
 | chrono | 0.4.45 | MIT OR Apache-2.0 |
+| cmov | 0.5.4 | Apache-2.0 OR MIT |
 | const-oid | 0.9.6 | Apache-2.0 OR MIT |
+| cookie | 0.18.2 | MIT OR Apache-2.0 |
 | core-foundation-sys | 0.8.7 | MIT OR Apache-2.0 |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
+| cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
 | crc | 3.4.0 | MIT OR Apache-2.0 |
 | crc-catalog | 2.5.0 | MIT OR Apache-2.0 |
 | crossbeam-queue | 0.3.14 | MIT OR Apache-2.0 |
 | crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 |
+| crypto-common | 0.2.2 | MIT OR Apache-2.0 |
+| ctutils | 0.4.3 | Apache-2.0 OR MIT |
 | der | 0.7.10 | Apache-2.0 OR MIT |
+| deranged | 0.5.9 | MIT OR Apache-2.0 |
+| deunicode | 1.6.2 | BSD-3-Clause |
 | digest | 0.10.7 | MIT OR Apache-2.0 |
+| digest | 0.11.3 | MIT OR Apache-2.0 |
 | displaydoc | 0.2.7 | MIT OR Apache-2.0 |
 | dotenvy | 0.15.7 | MIT |
 | either | 1.19.0 | MIT OR Apache-2.0 |
@@ -105,6 +117,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | http-range-header | 0.4.2 | MIT |
 | httparse | 1.10.1 | MIT OR Apache-2.0 |
 | httpdate | 1.0.3 | MIT OR Apache-2.0 |
+| hybrid-array | 0.4.15 | MIT OR Apache-2.0 |
 | hyper | 1.12.0 | MIT |
 | hyper-util | 0.1.21 | MIT |
 | iana-time-zone | 0.1.65 | MIT OR Apache-2.0 |
@@ -138,6 +151,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | mio | 1.2.4 | MIT |
 | nu-ansi-term | 0.50.3 | MIT |
 | num-bigint-dig | 0.8.6 | MIT OR Apache-2.0 |
+| num-conv | 0.2.2 | MIT OR Apache-2.0 |
 | num-integer | 0.1.47 | MIT OR Apache-2.0 |
 | num-iter | 0.1.46 | MIT OR Apache-2.0 |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
@@ -145,14 +159,17 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | parking | 2.2.1 | Apache-2.0 OR MIT |
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
+| password-hash | 0.6.1 | MIT OR Apache-2.0 |
 | pem-rfc7468 | 0.7.0 | Apache-2.0 OR MIT |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
+| phc | 0.6.1 | Apache-2.0 OR MIT |
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT |
 | pkcs1 | 0.7.5 | Apache-2.0 OR MIT |
 | pkcs8 | 0.10.2 | Apache-2.0 OR MIT |
 | pkg-config | 0.3.34 | MIT OR Apache-2.0 |
 | plain | 0.2.3 | MIT OR Apache-2.0 |
 | potential_utf | 0.1.6 | Unicode-3.0 |
+| powerfmt | 0.2.1 | MIT OR Apache-2.0 |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
 | quote | 1.0.47 | MIT OR Apache-2.0 |
@@ -202,6 +219,9 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | thiserror | 2.0.21 | MIT OR Apache-2.0 |
 | thiserror-impl | 2.0.21 | MIT OR Apache-2.0 |
 | thread_local | 1.1.10 | MIT OR Apache-2.0 |
+| time | 0.3.55 | MIT OR Apache-2.0 |
+| time-core | 0.1.9 | MIT OR Apache-2.0 |
+| time-macros | 0.2.32 | MIT OR Apache-2.0 |
 | tinystr | 0.8.4 | Unicode-3.0 |
 | tinyvec | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
 | tokio | 1.54.0 | MIT |

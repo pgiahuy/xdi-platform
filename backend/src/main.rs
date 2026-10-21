@@ -29,7 +29,21 @@ async fn main() {
         .expect("cannot apply database migrations");
     tracing::info!("database migrations applied");
 
+    // Chưa có tài khoản nào: in mã thiết lập ra log. Chỉ người đọc được log của máy chủ mới tạo được tài khoản quản trị
+    // đầu tiên, nên người ngoài không chiếm được bản cài vừa đưa lên mạng.
+    let setup_code = if store.has_any_user().await.expect("cannot read users table") {
+        None
+    } else {
+        let code = auth::token::new_setup_code().expect("cannot generate setup code");
+        tracing::warn!(
+            setup_code = %code,
+            "no account yet: open the web UI and enter this setup code to create the administrator"
+        );
+        Some(code)
+    };
+
     let state = state::AppState::new(config, store);
+    *state.setup_code.lock().expect("setup code lock") = setup_code;
     let app = api::router(state);
 
     tracing::info!(%addr, "backend listening");

@@ -17,7 +17,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    +----------------------------------v-----------------------------------+
    |          BACKEND  (Rust, Axum, 1 container, phục vụ cả giao diện)    |
    |                                                                      |
-   |  api/       handler, request/response struct, JWT guard, OpenAPI     |
+   |  api/       handler, request/response struct, kiểm phiên, OpenAPI    |
    |     |                                                                |
    |  service/   ingest (register, profile, materialize)                  |
    |             ask    (schema context -> LLM -> guard -> run -> explain)|
@@ -28,7 +28,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    |                            không container] -----> volume Parquet    |
    |             guard.rs      sqlparser, whitelist bảng và cột, tiêm RLS |
    |             llm/          trait LlmProvider ----> gemini | ollama | mock
-   |  auth/      JWT (workspace, user, role), demo-login, OAuth tùy chọn     |
+   |  auth/      mật khẩu argon2, mã phiên, vai, demo-login, OAuth tùy chọn|
    +----------------------------------------------------------------------+
             |                              |
    +--------v-----------+        +---------v-------------------+
@@ -57,7 +57,7 @@ không cần CORS và cookie đăng nhập đơn giản. DuckDB là thư viện 
 ## 2. Một câu hỏi đi qua chín bước
 
 ```
-1. api        xác thực JWT, lấy workspace, role và dataset id
+1. api        kiểm phiên đăng nhập, lấy workspace, role và dataset id
 2. store      đọc hồ sơ cột, giá trị phân loại, chính sách phân quyền của role     (Postgres)
 3. ask        ghép prompt: schema context + bí danh + câu hỏi mẫu đã đúng
 4. llm        LlmProvider::complete -> SQL thô trên tên bảng logic
@@ -80,7 +80,7 @@ backend/src/
   api/               tầng HTTP: handler, request/response struct, lỗi -> status
   service/           tầng nghiệp vụ: ingest.rs, ask.rs, explain.rs; không biết gì về HTTP
   engine/            tầng hạ tầng: analytics.rs (DuckDB), store/ (Postgres, chia theo bảng), guard.rs, llm/
-  auth/              JWT, role, demo-login
+  auth/              mật khẩu, mã phiên, role, demo-login
   error.rs           một enum lỗi chung
 ```
 
@@ -117,11 +117,17 @@ Ba tầng tách riêng:
 | Lọc dòng | Trong dataset, thấy dòng nào | Thành viên có `data_role` là `sales_south` chỉ thấy `region = South`; guard thêm điều kiện vào SQL |
 
 Vai trong ứng dụng (`role`) và vai dữ liệu (`data_role`) là hai cột riêng của `memberships`: một Analyst có thể chỉ thấy
-miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store/` nhận kiểu `WorkspaceId`, chỉ tạo được từ JWT đã
-xác thực, nên quên lọc theo workspace là lỗi biên dịch. Lớp chặn thứ hai nằm trong database: khóa ngoại giữa các bảng
+miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store/` nhận kiểu `WorkspaceId`, chỉ tạo được từ phiên đăng
+nhập đã kiểm, nên quên lọc theo workspace là lỗi biên dịch. Lớp chặn thứ hai nằm trong database: khóa ngoại giữa các bảng
 nghiệp vụ gồm cả `workspace_id`, nên một dòng không trỏ được sang dòng của workspace khác. Postgres Row Level Security
 sẽ thêm sau làm lớp thứ ba. File Parquet nằm
 dưới `/data/<workspace>/`, prompt gửi mô hình ngôn ngữ chỉ chứa hồ sơ của workspace hiện tại.
+
+Đăng nhập: luôn bật, kể cả bản cài chỉ có một người. Lần chạy đầu, khi chưa có tài khoản nào, backend in ra log một mã
+thiết lập; ai nhập đúng mã thì tạo được tài khoản quản trị (quản lý tài khoản của cả bản cài) kèm workspace đầu tiên.
+Mật khẩu băm bằng Argon2id. Phiên lưu trong Postgres (bảng `sessions` giữ SHA-256 của mã phiên), mã phiên nằm trong
+cookie httpOnly. Không dùng JWT: đăng xuất, khóa tài khoản, đổi vai phải có hiệu lực ngay ở request kế tiếp, mà JWT đã
+cấp thì không thu hồi được nếu không lưu thêm danh sách phiên.
 
 ## 5. Nạp dữ liệu và lấy ngữ cảnh
 
@@ -182,7 +188,7 @@ Bản hiện tại nhắm dự án cỡ nhỏ và vừa, một instance. Các gi
 | Giới hạn | Nguyên nhân | Đường nâng cấp |
 |---|---|---|
 | Một instance backend cho phần phân tích | DuckDB nhúng trong tiến trình; dữ liệu ứng dụng đã ở Postgres nên không vướng | Tách engine phân tích thành service riêng đọc Parquet trên object storage |
-| Session và JWT tự quản | Không có identity provider | OIDC (Zitadel, Keycloak); `auth/` là module riêng |
+| Phiên đăng nhập tự quản trong Postgres | Không có identity provider | OIDC (Zitadel, Keycloak); `auth/` là module riêng |
 | Dataset trên đĩa local | Volume docker | S3 hoặc MinIO, chỉ đổi phần nạp file trong `engine/analytics.rs` |
 | Một crate | Chưa có gì để tách | Rút engine hoặc guard thành crate trong workspace khi cần dùng lại |
 | Không cache, không queue | Chưa có tải | Redis cho cache câu hỏi, queue cho nạp file lớn, cắm vào tầng service |
@@ -205,4 +211,5 @@ Cập nhật khi có thay đổi.
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có, chưa có tính năng nào gọi tới |
 | Khung giao diện React và Vite, trang chủ hiện phiên bản máy chủ | Có |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
-| DuckDB, guard, giải thích, auth, các trang nghiệp vụ | Chưa có |
+| Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất (API, phiên lưu trong Postgres) | Có; chưa có màn hình, quản lý tài khoản, kiểm phiên ở các API khác |
+| DuckDB, guard, giải thích, vai, các trang nghiệp vụ | Chưa có |
