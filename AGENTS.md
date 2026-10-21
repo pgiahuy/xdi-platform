@@ -111,6 +111,7 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 ## 6. Trước khi push: tự kiểm
 
 - [ ] `make check-fast` qua: fmt, clippy không cảnh báo, test.
+- [ ] Đụng `frontend/` thì `make check-frontend` qua: lint, kiểm kiểu, build.
 - [ ] Chạy được bằng `make dev`, không lỗi trong log.
 - [ ] Đụng compose, Dockerfile hoặc biến môi trường thì `docker compose up` vẫn chạy được.
 - [ ] Các luồng chính ra đúng: nạp dataset, hỏi, xem bằng chứng, đổi role.

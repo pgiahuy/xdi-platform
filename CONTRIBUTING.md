@@ -14,14 +14,16 @@ Mỗi PR ứng với một Issue. Việc lớn tách thành nhiều Issue con.
 
 ## Chạy trên máy
 
-Cần Rust stable, Docker và GNU Make. Tóm tắt:
+Cần Rust stable, Node.js 24 (hoặc 22.12 trở lên), Docker và GNU Make. Sau khi clone, chạy `make hooks` một lần để
+lỗi bị chặn trên máy trước khi push. Tóm tắt:
 
 ```bash
 make dev        # Postgres trong Docker, backend chạy bằng cargo run
 make dev-frontend # giao diện ở http://localhost:5173, /api chuyển sang backend
-make check      # check-fast cộng build frontend và build image docker
+make check      # check-fast, check-frontend và build image docker
 make check-fast # fmt, clippy, test backend; CI chạy lệnh này trên mỗi PR
-make hooks      # cài hook pre-push chạy check-fast (tùy chọn)
+make check-frontend # lint, kiểm kiểu, build giao diện; CI chạy khi PR đổi frontend/
+make hooks      # cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/
 ```
 
 Thay đổi schema Postgres là một file migration mới trong `backend/migrations/`, đặt tên `0002_mo_ta.sql`, `0003_...`.
