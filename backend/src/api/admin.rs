@@ -158,6 +158,13 @@ mod tests {
             assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
         }
 
+        for bad in ["two@@example.com", "an @example.com", "no-at-sign"] {
+            let body = json!({"email": bad, "password": PASSWORD});
+            let (status, _, _) =
+                call(&app, "POST", "/api/admin/users", Some(&admin), Some(body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+        }
+
         let duplicate = json!({"email": "MINH@example.com", "password": PASSWORD});
         let (status, _, _) = call(
             &app,

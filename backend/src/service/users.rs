@@ -45,11 +45,9 @@ pub async fn change_password(
             "Mật khẩu hiện tại không đúng".to_string(),
         ));
     }
-    set_password(state, user.id, new_password).await?;
-    state
-        .store
-        .delete_user_sessions(user.id, Some(&token::hash_session_token(current_session)))
-        .await
+    let keep = token::hash_session_token(current_session);
+    set_password(state, user.id, new_password, Some(&keep)).await?;
+    Ok(())
 }
 
 pub async fn list(state: &AppState, actor: &User) -> Result<Vec<UserSummary>, AppError> {
@@ -131,17 +129,25 @@ pub async fn reset_password_by_email(state: &AppState, email: &str) -> Result<St
 
 async fn reset_password_unchecked(state: &AppState, user_id: Uuid) -> Result<String, AppError> {
     let temporary = token::new_temporary_password()?;
-    if !set_password(state, user_id, temporary.clone()).await? {
+    // Ai đang giữ phiên cũ (có thể chính là người lấy được mật khẩu cũ) bị đăng xuất ngay.
+    if !set_password(state, user_id, temporary.clone(), None).await? {
         return Err(not_found());
     }
-    // Ai đang giữ phiên cũ (có thể chính là người lấy được mật khẩu cũ) bị đăng xuất ngay.
-    state.store.delete_user_sessions(user_id, None).await?;
     Ok(temporary)
 }
 
-async fn set_password(state: &AppState, user_id: Uuid, plain: String) -> Result<bool, AppError> {
+/// Đổi mật khẩu và đăng xuất mọi phiên trừ keep, trong một giao dịch.
+async fn set_password(
+    state: &AppState,
+    user_id: Uuid,
+    plain: String,
+    keep: Option<&str>,
+) -> Result<bool, AppError> {
     let hash = hash_password(plain).await?;
-    state.store.set_password_hash(user_id, &hash).await
+    state
+        .store
+        .set_password_and_revoke(user_id, &hash, keep)
+        .await
 }
 
 fn not_found() -> AppError {

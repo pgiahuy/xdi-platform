@@ -84,15 +84,41 @@ impl Store {
         })
     }
 
+    /// Đổi mật khẩu và xóa mọi phiên của người đó, trừ phiên keep (phiên đang dùng khi người đó tự đổi mật khẩu).
+    /// Hai việc trong cùng giao dịch: lỗi giữa chừng thì không có trạng thái mật khẩu đã đổi mà phiên cũ còn sống.
     /// Trả false nếu không có tài khoản này.
-    pub async fn set_password_hash(&self, user_id: Uuid, hash: &str) -> Result<bool, AppError> {
-        let result = sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
+    pub async fn set_password_and_revoke(
+        &self,
+        user_id: Uuid,
+        hash: &str,
+        keep: Option<&str>,
+    ) -> Result<bool, AppError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| db_error("begin set password", e))?;
+        let updated = sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
             .bind(user_id)
             .bind(hash)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| db_error("set password", e))?;
-        Ok(result.rows_affected() == 1)
+        if updated.rows_affected() == 0 {
+            return Ok(false);
+        }
+        sqlx::query(
+            "DELETE FROM sessions WHERE user_id = $1 AND ($2::text IS NULL OR token_hash <> $2)",
+        )
+        .bind(user_id)
+        .bind(keep)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| db_error("revoke sessions", e))?;
+        tx.commit()
+            .await
+            .map_err(|e| db_error("commit set password", e))?;
+        Ok(true)
     }
 
     pub async fn password_hash_of(&self, user_id: Uuid) -> Result<Option<String>, AppError> {
@@ -102,23 +128,6 @@ impl Store {
             .await
             .map(Option::flatten)
             .map_err(|e| db_error("read password hash", e))
-    }
-
-    /// Xóa mọi phiên của một người, trừ phiên keep (phiên đang dùng khi người đó tự đổi mật khẩu).
-    pub async fn delete_user_sessions(
-        &self,
-        user_id: Uuid,
-        keep: Option<&str>,
-    ) -> Result<(), AppError> {
-        sqlx::query(
-            "DELETE FROM sessions WHERE user_id = $1 AND ($2::text IS NULL OR token_hash <> $2)",
-        )
-        .bind(user_id)
-        .bind(keep)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| db_error("delete user sessions", e))?;
-        Ok(())
     }
 
     /// Khóa tài khoản và xóa mọi phiên của họ trong cùng giao dịch, nên khóa có hiệu lực ngay.
