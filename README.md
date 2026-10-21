@@ -61,4 +61,5 @@ Kiến trúc, luồng một câu hỏi, hướng phát triển: [docs/ARCHITECTU
 
 ## Giấy phép
 
-[Apache License 2.0](LICENSE). Bảng giấy phép của từng thành phần đang viết ([#57](https://github.com/pgiahuy/xdi-platform/issues/57)).
+[Apache License 2.0](LICENSE). Giấy phép của các thành phần bên thứ ba: [docs/LICENSES.md](docs/LICENSES.md). Dữ liệu
+nằm ở đâu và gửi gì cho mô hình ngôn ngữ: [docs/PRIVACY.md](docs/PRIVACY.md).

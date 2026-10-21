@@ -5,7 +5,7 @@ SHELL := /bin/sh
 PREFIX ?= /usr/local
 COMPOSE ?= docker compose
 
-.PHONY: help dev dev-frontend build test check check-fast up down logs openapi hooks install uninstall release-artifacts clean
+.PHONY: help dev dev-frontend build test check check-fast up down logs openapi licenses hooks install uninstall release-artifacts clean
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -44,6 +44,9 @@ logs: ## Xem log
 openapi: ## Sinh openapi.json từ backend (chưa có, thêm khi có utoipa)
 	@echo "chưa có: thêm khi backend có utoipa"
 
+licenses: ## Sinh docs/licenses-dependencies.md từ Cargo.lock và package-lock.json
+	node scripts/licenses.mjs
+
 hooks: ## Cài hook pre-push chạy check-fast
 	printf '#!/bin/sh\nmake check-fast\n' > .git/hooks/pre-push && chmod +x .git/hooks/pre-push
 	@echo "đã cài .git/hooks/pre-push"
@@ -60,7 +63,7 @@ uninstall: ## Gỡ binary đã cài bằng make install
 
 # Gói phát hành, CI gọi đúng target này. Ra thư mục release/:
 #   xdi-platform-$(VERSION).tar.gz                 mã nguồn, giải nén ra xdi-platform-$(VERSION)/
-#   xdi-backend-$(VERSION)-linux-x86_64.tar.gz     binary kèm LICENSE và README
+#   xdi-backend-$(VERSION)-linux-x86_64.tar.gz     binary kèm LICENSE, README, LICENSES.md và danh sách giấy phép phụ thuộc
 #   notes.md                                        ghi chú lấy từ CHANGELOG.md
 # DRY_RUN=1: chạy thử, chấp nhận CHANGELOG chưa có mục cho phiên bản này (CI dùng trên PR).
 release-artifacts: ## Đóng gói phát hành: make release-artifacts VERSION=x.y.z
@@ -69,7 +72,7 @@ release-artifacts: ## Đóng gói phát hành: make release-artifacts VERSION=x.
 	@scripts/release-notes.sh $(VERSION) > /dev/null || test "$(DRY_RUN)" = 1
 	cd backend && cargo build --release --locked
 	rm -rf release && mkdir -p release/xdi-backend-$(VERSION)-linux-x86_64
-	cp backend/target/release/xdi-backend LICENSE README.md release/xdi-backend-$(VERSION)-linux-x86_64/
+	cp backend/target/release/xdi-backend LICENSE README.md docs/LICENSES.md docs/licenses-dependencies.md release/xdi-backend-$(VERSION)-linux-x86_64/
 	tar -C release -czf release/xdi-backend-$(VERSION)-linux-x86_64.tar.gz xdi-backend-$(VERSION)-linux-x86_64
 	rm -rf release/xdi-backend-$(VERSION)-linux-x86_64
 	git archive --format=tar.gz --prefix=xdi-platform-$(VERSION)/ -o release/xdi-platform-$(VERSION).tar.gz HEAD

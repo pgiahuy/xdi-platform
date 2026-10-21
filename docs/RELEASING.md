@@ -25,9 +25,10 @@ ra bản vá `x.y.(z+1)`. Số phiên bản chỉ nhận dạng `x.y.z`, chưa c
 Workflow `release.yml` chạy khi có tag `v*`:
 
 - Kiểm số phiên bản ở tag khớp `backend/Cargo.toml` và `frontend/package.json` (`scripts/check-version.sh`).
-- `make release-artifacts VERSION=x.y.z`: binary Linux `xdi-backend-x.y.z-linux-x86_64.tar.gz` (kèm LICENSE, README),
-  mã nguồn `xdi-platform-x.y.z.tar.gz` giải nén ra thư mục `xdi-platform-x.y.z/`, ghi chú lấy từ mục `[x.y.z]` của
-  CHANGELOG.md (`scripts/release-notes.sh`). Thiếu mục đó thì workflow dừng.
+- `make release-artifacts VERSION=x.y.z`: binary Linux `xdi-backend-x.y.z-linux-x86_64.tar.gz` (kèm LICENSE, README,
+  LICENSES.md, licenses-dependencies.md), mã nguồn `xdi-platform-x.y.z.tar.gz` giải nén ra thư mục
+  `xdi-platform-x.y.z/`, ghi chú lấy từ mục `[x.y.z]` của CHANGELOG.md (`scripts/release-notes.sh`). Thiếu mục đó thì
+  workflow dừng.
 - Build image `ghcr.io/pgiahuy/xdi-platform`, đẩy với tag `x.y.z` và `latest`.
 - Tạo GitHub Release đính kèm hai file trên.
 
