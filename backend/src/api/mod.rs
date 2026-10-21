@@ -4,30 +4,38 @@ Handler chỉ đọc request, gọi service, trả response; không chứa logic
 
 Mọi route API nằm dưới /api, để cùng một server phục vụ được cả giao diện (các đường dẫn còn lại) mà không trùng
 nhau. Đường dẫn dưới /api không tồn tại trả 404 JSON; nếu rơi xuống phần phục vụ giao diện, frontend sẽ nhận một
-trang HTML thay vì lỗi và khó biết vì sao. */
+trang HTML thay vì lỗi và khó biết vì sao. Giao diện chỉ được phục vụ khi có STATIC_DIR (xem web.rs). */
 
 mod auth;
 mod datasets;
 mod query;
 mod system;
+mod web;
 
 use axum::{routing::any, Router};
 
 use crate::{error::AppError, state::AppState};
 
 pub fn router(state: AppState) -> Router {
+    // with_state ở cuối nhận luôn state (move), nên lấy static_dir ra trước.
+    let static_dir = state.config.static_dir.clone();
     let api = Router::new()
         .merge(system::routes())
         .merge(auth::routes())
         .merge(datasets::routes())
         .merge(query::routes())
         .fallback(api_not_found);
-    Router::new()
+    let app = Router::new()
         .nest("/api", api)
         // nest bắt "/api" và "/api/<gì đó>", nhưng không bắt "/api/" (đuôi phải có ít nhất một ký tự).
         // Thiếu dòng này, "/api/" sẽ rơi xuống phần phục vụ giao diện và trả trang HTML.
-        .route("/api/", any(api_not_found))
-        .with_state(state)
+        .route("/api/", any(api_not_found));
+    // Không có STATIC_DIR (chạy dev với Vite) thì chỉ phục vụ API.
+    let app = match static_dir {
+        Some(dir) => app.merge(web::routes(&dir)),
+        None => app,
+    };
+    app.with_state(state)
 }
 
 async fn api_not_found() -> AppError {
@@ -43,7 +51,8 @@ mod tests {
     use tower::ServiceExt;
 
     fn app() -> Router {
-        let config = Config::from_env();
+        let mut config = Config::from_env();
+        config.static_dir = None;
         let store = crate::engine::store::Store::lazy(&config.database_url);
         router(AppState::new(config, store))
     }

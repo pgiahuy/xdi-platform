@@ -1,0 +1,9 @@
+# .dockerignore - context build là gốc repo (backend/Dockerfile cần cả backend/ và frontend/).
+# Bỏ thư mục build và dữ liệu để context nhỏ, và để bản build trên máy không lọt vào image.
+.git
+**/target
+**/node_modules
+frontend/dist
+data
+release
+.env

@@ -38,7 +38,8 @@ trình phát hành (workflow, `scripts/`, Makefile) tự chạy workflow ở ch�
 
 1. Kiểm tra trên máy sạch: `docker compose up` với image vừa đẩy, không build local.
 2. Tải `xdi-backend-x.y.z-linux-x86_64.tar.gz` từ Release, giải nén, chạy binary với `DATABASE_URL` trỏ tới một
-   Postgres, `/api/health` trả ok. Không cần Rust. Tarball mã nguồn thì cần Rust: `make install PREFIX=/tmp/xdi`.
+   Postgres, `/api/health` trả ok. Không cần Rust. Gói này chỉ có backend: muốn có giao diện thì đặt `STATIC_DIR` trỏ tới
+   một bản `frontend/dist` đã build, hoặc dùng image Docker. Tarball mã nguồn thì cần Rust: `make install PREFIX=/tmp/xdi`.
 3. Đăng một bài ở Discussions mục Announcements: phiên bản, ba thay đổi đáng chú ý, link Release.
 4. Trang web (`docs/`) tự cập nhật theo `main`.
 

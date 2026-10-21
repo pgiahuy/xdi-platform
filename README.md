@@ -5,7 +5,7 @@ hỏi bằng tiếng Việt, nhận bảng, biểu đồ, câu SQL đã chạy v
 sao", hệ thống tính nhóm nào làm con số tăng hay giảm. Con số do engine phân tích tính trên dữ liệu; mô hình ngôn ngữ
 chỉ chuyển câu hỏi thành SQL và diễn giải kết quả.
 
-Trạng thái: mới có khung backend. Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1),
+Trạng thái: mới có khung backend và khung giao diện. Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1),
 lịch sử thay đổi ở [CHANGELOG.md](CHANGELOG.md).
 
 Backend Rust (Axum, DuckDB nhúng, Postgres), frontend React với Vite. Giấy phép Apache 2.0.
@@ -21,8 +21,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Kiểm tra: `curl localhost:8000/api/health` trả `{"status":"ok"}`, `curl localhost:8000/api/version` trả phiên bản và nhà cung
-cấp LLM đang dùng.
+Mở http://localhost:8000: trang chủ hiện phiên bản máy chủ và nhà cung cấp LLM đang dùng. API nằm dưới `/api`, ví dụ
+`curl localhost:8000/api/health` trả `{"status":"ok"}`.
 
 `LLM_PROVIDER` chọn mô hình ngôn ngữ: `mock` (mặc định, không cần khóa API), `gemini` (cần khóa), `ollama` (cần một máy
 chạy Ollama).

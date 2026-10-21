@@ -15,7 +15,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
 =================================== docker compose =============================
                                       |
    +----------------------------------v-----------------------------------+
-   |                      BACKEND  (Rust, Axum, 1 container)              |
+   |          BACKEND  (Rust, Axum, 1 container, phục vụ cả giao diện)    |
    |                                                                      |
    |  api/       handler, request/response struct, JWT guard, OpenAPI     |
    |     |                                                                |
@@ -204,5 +204,5 @@ Cập nhật khi có thay đổi.
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có, chưa có tính năng nào gọi tới |
 | Khung giao diện React và Vite, trang chủ hiện phiên bản máy chủ | Có |
-| Backend phục vụ giao diện | Chưa có (#14) |
+| Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
 | DuckDB, guard, giải thích, auth, các trang nghiệp vụ | Chưa có |

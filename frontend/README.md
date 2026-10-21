@@ -10,6 +10,9 @@ npm run build   # kiểm kiểu rồi build ra dist/
 npm run lint
 ```
 
+Xem bản build qua backend, giống khi chạy thật: `npm run build`, rồi ở gốc repo chạy
+`STATIC_DIR=$PWD/frontend/dist make dev` và mở http://localhost:8000.
+
 Cấu trúc và quy tắc:
 
 ```

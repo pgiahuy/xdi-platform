@@ -3,6 +3,7 @@
 Mọi biến khai ở .env.example; thêm biến mới thì thêm ở cả hai nơi. */
 
 use std::env;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -21,6 +22,8 @@ pub struct Config {
     pub gemini_model: String,
     pub ollama_url: String,
     pub ollama_model: String,
+    /// Thư mục giao diện đã build (frontend/dist). Không đặt thì backend chỉ phục vụ API.
+    pub static_dir: Option<PathBuf>,
 }
 
 impl Config {
@@ -43,6 +46,10 @@ impl Config {
             gemini_model: var_or("GEMINI_MODEL", "gemini-2.5-flash"),
             ollama_url: var_or("OLLAMA_URL", "http://localhost:11434"),
             ollama_model: var_or("OLLAMA_MODEL", "qwen2.5-coder:7b"),
+            static_dir: env::var("STATIC_DIR")
+                .ok()
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from),
         }
     }
 }
