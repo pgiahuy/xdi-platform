@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::extract::{CurrentUser, JsonBody, PathParams};
-use crate::engine::store::{User, UserSummary};
-use crate::service::users;
+use crate::engine::store::{User, UserSummary, WorkspaceOverview};
+use crate::service::{users, workspaces};
 use crate::{error::AppError, state::AppState};
 
 pub fn routes() -> Router<AppState> {
@@ -22,6 +22,37 @@ pub fn routes() -> Router<AppState> {
         .route("/admin/users/{id}/deactivate", post(deactivate))
         .route("/admin/users/{id}/activate", post(activate))
         .route("/admin/users/{id}/reset-password", post(reset_password))
+        .route("/admin/workspaces", get(workspaces_overview))
+        .route(
+            "/admin/workspaces/{id}/admins",
+            post(assign_workspace_admin),
+        )
+}
+
+#[derive(Deserialize)]
+struct AssignAdminRequest {
+    email: String,
+}
+
+/// Mọi workspace và thành viên, không có dữ liệu bên trong.
+async fn workspaces_overview(
+    State(state): State<AppState>,
+    CurrentUser(actor): CurrentUser,
+) -> Result<Json<Vec<WorkspaceOverview>>, AppError> {
+    Ok(Json(workspaces::overview(&state, &actor).await?))
+}
+
+/// Chỉ định admin cho workspace (ví dụ khi admin cuối không còn). Mỗi lần được ghi log.
+async fn assign_workspace_admin(
+    State(state): State<AppState>,
+    CurrentUser(actor): CurrentUser,
+    PathParams(id): PathParams<String>,
+    JsonBody(req): JsonBody<AssignAdminRequest>,
+) -> Result<StatusCode, AppError> {
+    let workspace_id = Uuid::parse_str(&id)
+        .map_err(|_| AppError::BadRequest("Mã workspace không hợp lệ".to_string()))?;
+    workspaces::assign_admin(&state, &actor, workspace_id, &req.email).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]

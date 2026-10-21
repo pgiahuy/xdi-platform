@@ -11,6 +11,8 @@ mod auth;
 mod datasets;
 mod extract;
 mod query;
+#[cfg(test)]
+mod roles_tests;
 mod system;
 #[cfg(test)]
 mod test_support;
@@ -85,6 +87,14 @@ mod tests {
             ("GET", "/api/workspaces/any/datasets/x"),
             ("POST", "/api/workspaces/any/datasets/x/drill"),
             ("GET", "/api/auth/me"),
+            ("PATCH", "/api/workspaces/any"),
+            ("DELETE", "/api/workspaces/any"),
+            ("GET", "/api/workspaces/any/members"),
+            ("POST", "/api/workspaces/any/members"),
+            ("PATCH", "/api/workspaces/any/members/x"),
+            ("DELETE", "/api/workspaces/any/members/x"),
+            ("GET", "/api/admin/workspaces"),
+            ("POST", "/api/admin/workspaces/x/admins"),
         ] {
             let res = app()
                 .oneshot(

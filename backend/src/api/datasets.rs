@@ -56,6 +56,8 @@ async fn create(
     member: Member,
     multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
 ) -> Result<(StatusCode, Json<UploadResult>), AppError> {
+    // Kiểm vai trước khi nhận file: member không phải chờ gửi xong cả tệp mới biết mình không có quyền.
+    member.require_admin()?;
     let mut multipart = multipart.map_err(|_| {
         AppError::BadRequest("Cần gửi file dạng multipart/form-data, trường file".to_string())
     })?;

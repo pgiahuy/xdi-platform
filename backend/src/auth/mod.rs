@@ -34,14 +34,50 @@ impl WorkspaceId {
 /// này thì không cần kiểm lại: tạo được Member nghĩa là phiên còn hạn và dòng memberships có thật.
 #[derive(Debug, Clone)]
 pub struct Member {
-    // Khung: kiểm vai theo từng việc (#44) đọc role và user. Gỡ allow khi có code đọc tới.
-    #[allow(dead_code)]
     pub user: User,
     pub workspace: WorkspaceId,
-    #[allow(dead_code)]
     pub slug: String,
-    #[allow(dead_code)]
-    pub role: String,
+    pub role: Role,
+}
+
+/// Vai trong một workspace. Bảng quyền đầy đủ ở docs/ARCHITECTURE.md mục 4b.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    /// Quản lý workspace: dữ liệu, chỉ số, thành viên, đổi tên, xóa.
+    Admin,
+    /// Xem dữ liệu, hỏi, lưu câu hỏi.
+    Member,
+}
+
+impl Role {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Role::Admin => "admin",
+            Role::Member => "member",
+        }
+    }
+
+    /// Đọc vai từ chuỗi (database hoặc request). Không nhận được thì None.
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "admin" => Some(Role::Admin),
+            "member" => Some(Role::Member),
+            _ => None,
+        }
+    }
+}
+
+impl Member {
+    /// Việc chỉ admin của workspace làm được. Thành viên thường nhận 403: họ biết workspace có thật, chỉ thiếu quyền.
+    pub fn require_admin(&self) -> Result<(), AppError> {
+        if self.role == Role::Admin {
+            Ok(())
+        } else {
+            Err(AppError::Forbidden(
+                "Chỉ admin của workspace làm được việc này".to_string(),
+            ))
+        }
+    }
 }
 
 /// Kiểm người dùng có thuộc workspace slug không, và nếu có thì trả Member. Đây là cách duy nhất ngoài test để có
@@ -65,6 +101,7 @@ fn member_from(user: User, membership: Membership) -> Member {
         user,
         workspace: WorkspaceId(membership.workspace_id),
         slug: membership.slug,
-        role: membership.role,
+        // Database chỉ cho hai giá trị (migration 0003); giá trị lạ thì cho quyền thấp nhất.
+        role: Role::parse(&membership.role).unwrap_or(Role::Member),
     }
 }

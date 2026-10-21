@@ -113,11 +113,11 @@ Ba tầng tách riêng:
 | Tầng | Câu hỏi | Ví dụ |
 |---|---|---|
 | Workspace | Người dùng thuộc phòng ban nào | Người phòng kinh doanh không thấy dataset, chỉ số, lịch sử của phòng tài chính, trừ khi được mời |
-| Vai trong ứng dụng | Trong workspace, được làm gì | Owner quản lý thành viên; Admin nạp dữ liệu, sửa chỉ số và chính sách; Analyst hỏi và lưu; Viewer chỉ xem |
+| Vai trong workspace | Trong workspace, được làm gì | `admin` nạp dữ liệu, quản lý thành viên; `member` xem và hỏi |
 | Lọc dòng | Trong dataset, thấy dòng nào | Thành viên có `data_role` là `sales_south` chỉ thấy `region = South`; guard thêm điều kiện vào SQL |
 
-Vai trong ứng dụng (`role`) và vai dữ liệu (`data_role`) là hai cột riêng của `memberships`: một Analyst có thể chỉ thấy
-miền Nam, một Viewer có thể thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store/` nhận kiểu `WorkspaceId`, chỉ tạo được từ phiên đăng
+Vai trong workspace (`role`) và vai dữ liệu (`data_role`) là hai cột riêng của `memberships`: một `member` có thể chỉ
+thấy miền Nam, một `member` khác thấy toàn bộ. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store/` nhận kiểu `WorkspaceId`, chỉ tạo được từ phiên đăng
 nhập đã kiểm, nên quên lọc theo workspace là lỗi biên dịch. Lớp chặn thứ hai nằm trong database: khóa ngoại giữa các bảng
 nghiệp vụ gồm cả `workspace_id`, nên một dòng không trỏ được sang dòng của workspace khác. Postgres Row Level Security
 sẽ thêm sau làm lớp thứ ba. File Parquet nằm
@@ -133,6 +133,40 @@ Quản trị hệ thống tạo tài khoản, khóa, mở tài khoản và đặ
 phiên của người đó). Quản trị duy nhất quên mật khẩu thì chạy trên máy chủ: `xdi-backend reset-password --email <email>`
 (trong compose: `docker compose exec backend xdi-backend reset-password --email <email>`); ai chạy được lệnh trên máy
 chủ là chủ bản cài.
+
+Trong workspace có hai vai. Người tạo workspace là `admin` của nó; workspace luôn còn ít nhất một `admin` (hạ vai hay
+xóa admin cuối cùng bị từ chối, kể cả khi hai admin hạ vai nhau cùng lúc). Admin có tài khoản đã khóa vẫn được tính;
+workspace chỉ còn admin như vậy thì quản trị hệ thống chỉ định admin mới.
+
+| Việc | `admin` | `member` |
+|---|---|---|
+| Xem dataset, hỏi, xem bằng chứng | Có | Có |
+| Xem danh sách thành viên | Có | Có |
+| Tự rời workspace | Có, nếu còn admin khác | Có |
+| Nạp file, tạo phiên bản mới | Có | Không (403) |
+| Đổi tên, xóa workspace (xóa cả file Parquet) | Có | Không (403) |
+| Thêm thành viên theo email, đổi vai, xóa thành viên | Có | Không (403) |
+| Xóa dataset; sửa mô tả cột, bí danh; chốt định nghĩa chỉ số; đánh dấu câu trả lời đúng | Có | Không |
+| Lưu câu hỏi, xem lịch sử | Có | Có |
+
+Hai dòng cuối chưa có endpoint. Khi thêm, việc chỉ admin làm được gọi `member.require_admin()` ở đầu service hoặc
+handler, kèm test cho cả hai vai.
+
+Quản trị hệ thống (`users.is_system_admin`) là thuộc tính của tài khoản, không phải vai trong workspace. Quản trị hệ
+thống quản lý tài khoản, xem danh sách mọi workspace kèm thành viên (`GET /api/admin/workspaces`), nhưng không tự có
+quyền vào dữ liệu của workspace mình không thuộc: gọi vào đó nhận 404 như mọi người ngoài. Quản trị hệ thống chỉ định
+được admin cho bất kỳ workspace nào, lúc nào cũng được, kể cả chính mình (`POST /api/admin/workspaces/{id}/admins`);
+dùng khi workspace mất admin, ví dụ admin cuối nghỉ việc và bị khóa tài khoản. Vì vậy tách quyền giữa quản trị hệ
+thống và dữ liệu workspace chỉ là tách mềm: mỗi lần chỉ định ghi một dòng log mức cảnh báo trong log của máy chủ,
+chưa lưu vào database.
+
+Thành viên mới phải có tài khoản đang hoạt động, do quản trị hệ thống tạo; admin thêm họ theo email. Vì ai cũng tạo được
+workspace của mình, mọi người đăng nhập đều biết được một email có tài khoản trong bản cài hay không, và thêm được người
+khác vào workspace mà không cần họ đồng ý (người bị thêm tự rời được). Chấp nhận vì một bản cài phục vụ một tổ chức,
+tài khoản là của người trong tổ chức đó.
+
+Bốn vai Owner, Admin, Analyst, Viewer của bản thiết kế đầu được gộp còn hai (migration `0003_two_roles.sql`): hai vai đủ
+cho nhóm nhỏ, tách thêm sau này chỉ cần thêm giá trị vào ràng buộc của cột `role` và một dòng trong bảng trên.
 
 ## 5. Nạp dữ liệu và lấy ngữ cảnh
 
@@ -220,9 +254,10 @@ Cập nhật khi có thay đổi.
 | Route ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có; liệt kê và xem dataset đã dùng |
-| Workspace: liệt kê, tạo mới (người tạo là admin), mọi API dữ liệu kiểm thành viên; `WorkspaceId` chỉ tạo từ dòng memberships của người đăng nhập | Có; chưa kiểm vai theo từng việc |
+| Workspace: liệt kê, tạo mới (người tạo là admin), đổi tên, xóa; mọi API dữ liệu kiểm thành viên; `WorkspaceId` chỉ tạo từ dòng memberships của người đăng nhập | Có |
+| Vai `admin` và `member` (mục 4b): quản lý thành viên, luật còn ít nhất một admin, quản trị hệ thống xem mọi workspace và chỉ định admin | Có (API); chưa có màn hình |
 | Khung giao diện React và Vite, trang chủ hiện phiên bản máy chủ | Có |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
 | Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; chưa có màn hình |
 | DuckDB nhúng: đổi CSV (UTF-8, latin-1) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`) | Có |
-| Guard, giải thích, vai, các trang nghiệp vụ | Chưa có |
+| Guard, giải thích, các trang nghiệp vụ | Chưa có |
