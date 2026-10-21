@@ -105,7 +105,8 @@ impl Store {
         Ok(result.rows_affected() == 1)
     }
 
-    /// Đổi vai hoặc xóa một thành viên, giữ luật luôn còn ít nhất một admin.
+    /// Đổi vai hoặc xóa một thành viên, giữ luật luôn còn ít nhất một admin. Admin có tài khoản đã khóa vẫn được tính:
+    /// workspace chỉ còn admin như vậy thì quản trị hệ thống chỉ định admin mới (make_workspace_admin).
     pub async fn change_member(
         &self,
         ws: &WorkspaceId,
@@ -190,7 +191,8 @@ impl Store {
     }
 
     /// Quản trị hệ thống chỉ định admin cho workspace (ví dụ khi admin cuối nghỉ việc và bị khóa tài khoản): thêm
-    /// người đó với vai admin, hoặc nâng lên admin nếu đã là thành viên. Trả false nếu không có workspace này.
+    /// người đó với vai admin, hoặc nâng lên admin nếu đã là thành viên. Trả false nếu không có workspace này, hoặc đó là
+    /// workspace tạm của bản demo.
     pub async fn make_workspace_admin(
         &self,
         workspace_id: Uuid,

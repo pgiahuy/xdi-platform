@@ -107,7 +107,7 @@ async fn member_reads_and_admin_manages() {
     let lan_id = user_id(&app, &lan, SHOP, "lan@example.com").await;
     let minh_id = user_id(&app, &lan, SHOP, "minh@example.com").await;
 
-    // Member xem được dữ liệu, danh sách thành viên, và hỏi được (route hỏi chưa làm xong nhưng không chặn vì vai).
+    // Member xem được dữ liệu, danh sách thành viên, và hỏi được.
     let (status, body) = upload_csv(&app, &lan).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
     let dataset_id = body["dataset"]["id"].as_str().unwrap().to_string();
@@ -118,10 +118,8 @@ async fn member_reads_and_admin_manages() {
     assert_eq!(status, StatusCode::OK);
     let ask = Some(json!({"question": "doanh thu"}));
     let (status, _, _) = call(&app, "POST", &format!("{path}/ask"), Some(&minh), ask).await;
-    assert!(
-        !matches!(status, StatusCode::FORBIDDEN | StatusCode::NOT_FOUND),
-        "{status}"
-    );
+    // Route hỏi chưa làm xong nên trả 501; làm xong thì đổi thành mã thành công. Quan trọng là không 403, không 404.
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
     assert_eq!(
         roles(&app, &minh, SHOP).await,
         [

@@ -244,15 +244,20 @@ pub async fn upload(
     }
     std::fs::rename(staging.parquet_dir(), &final_dir)
         .map_err(|e| AppError::Internal(format!("move parquet to {}: {e}", final_dir.display())))?;
-    // Workspace hoặc dataset bị xóa đúng lúc đang nạp: bước trên đã tạo lại thư mục sau khi lệnh xóa dọn xong. Không
-    // dọn ở đây thì file nằm lại trên đĩa mà không còn dòng nào trong database trỏ tới.
-    if let Err(e) = state
+    // Workspace hoặc dataset bị xóa đúng lúc đang nạp (NotFound): bước trên đã tạo lại thư mục sau khi lệnh xóa dọn
+    // xong. Không dọn thì file nằm lại trên đĩa mà không còn dòng nào trong database trỏ tới. Lỗi khác (mất kết nối
+    // database) thì giữ file: UPDATE có thể đã chạy xong mà chỉ mất phản hồi, xóa file lúc đó là xóa phiên bản hiện hành.
+    match state
         .store
         .set_current_version(ws, dataset.id, version.id)
         .await
     {
-        remove_version_files(&state.config.data_dir, &relative);
-        return Err(e);
+        Ok(()) => {}
+        Err(AppError::NotFound(message)) => {
+            remove_version_files(&state.config.data_dir, &relative);
+            return Err(AppError::NotFound(message));
+        }
+        Err(e) => return Err(e),
     }
     let dataset = state
         .store

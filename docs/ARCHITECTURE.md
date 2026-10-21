@@ -135,7 +135,8 @@ phiên của người đó). Quản trị duy nhất quên mật khẩu thì ch�
 chủ là chủ bản cài.
 
 Trong workspace có hai vai. Người tạo workspace là `admin` của nó; workspace luôn còn ít nhất một `admin` (hạ vai hay
-xóa admin cuối cùng bị từ chối, kể cả khi hai admin hạ vai nhau cùng lúc).
+xóa admin cuối cùng bị từ chối, kể cả khi hai admin hạ vai nhau cùng lúc). Admin có tài khoản đã khóa vẫn được tính;
+workspace chỉ còn admin như vậy thì quản trị hệ thống chỉ định admin mới.
 
 | Việc | `admin` | `member` |
 |---|---|---|
