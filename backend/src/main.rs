@@ -17,7 +17,9 @@ async fn main() {
     // vào kết quả (compose đặt RUST_LOG=info cho server). Log luôn ghi ra stderr.
     let args: Vec<String> = std::env::args().skip(1).collect();
     let filter = if args.is_empty() {
-        tracing_subscriber::EnvFilter::from_default_env()
+        // Không đặt RUST_LOG thì in mức info: lần chạy đầu phải thấy được mã thiết lập và dòng "backend listening".
+        tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
     } else {
         tracing_subscriber::EnvFilter::new("warn")
     };

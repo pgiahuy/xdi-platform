@@ -12,7 +12,10 @@ Phần mềm đang phát triển. Phần nào đã có, xem mục Trạng thái 
 
 ## 1. Chạy bằng Docker
 
-Cần: Docker Engine kèm Docker Compose v2 (`docker compose version` chạy được), Git.
+Cần: Docker Engine kèm Docker Compose v2 (`docker compose version` chạy được), Git. Chưa có Docker: xem
+https://docs.docker.com/engine/install/. Trên Linux, để chạy `docker` không cần `sudo`, thêm user vào nhóm `docker`
+theo https://docs.docker.com/engine/install/linux-postinstall/ (đăng xuất rồi đăng nhập lại). Trên Windows, chạy các
+lệnh dưới đây trong WSL2.
 
 ```bash
 git clone https://github.com/pgiahuy/xdi-platform.git
@@ -42,7 +45,7 @@ docker compose logs backend | grep setup_code
 ```
 
 Màn hình thiết lập trên giao diện đang làm. Trong lúc chờ, tạo tài khoản bằng lệnh (thay mã, email, mật khẩu, tên
-workspace):
+workspace). Lệnh ghi cookie đăng nhập vào `cookie.txt`; file này là chìa khóa phiên của bạn, xóa sau khi dùng xong:
 
 ```bash
 curl -c cookie.txt http://localhost:8000/api/auth/setup \
@@ -93,8 +96,8 @@ docker compose down -v                    # gỡ hẳn, XÓA cả hai volume d�
 
 Cần:
 
-- Rust stable từ 1.88 trở lên (`rustup`), kèm trình biên dịch C++ (`g++` hoặc `clang`) để biên dịch DuckDB.
-- Node.js 24 (hoặc 22.12 trở lên) để build giao diện.
+- Rust stable từ 1.89 trở lên (`rustup`), kèm trình biên dịch C++ (`g++` hoặc `clang`) để biên dịch DuckDB.
+- Node.js 24 (hoặc 22.22 trở lên) để build giao diện.
 - GNU Make, Docker (chỉ để chạy Postgres).
 
 ```bash
@@ -118,7 +121,11 @@ cd frontend && npm ci && npm run build && cd ..
 STATIC_DIR=$PWD/frontend/dist make dev   # mở http://localhost:8000
 ```
 
-Lần build đầu biên dịch DuckDB từ mã nguồn C++, mất vài phút; thư mục `backend/target` có thể lên vài GB. `make help`
+`make dev` không đọc `.env`; biến cần đổi thì đặt trên dòng lệnh, ví dụ `BACKEND_PORT=8001 make dev`. Lần chạy đầu
+mã thiết lập in ra terminal, tạo tài khoản như mục 1.
+
+Lần build đầu biên dịch DuckDB từ mã nguồn C++, mất vài phút; thư mục `backend/target` lớn dần qua mỗi lần build, có
+thể lên hàng chục GB (`cargo clean` để xóa). `make help`
 liệt kê mọi lệnh, `make check` chạy toàn bộ kiểm tra.
 
 Cài binary vào hệ thống (mặc định `/usr/local/bin`, đổi bằng `PREFIX`):
@@ -134,25 +141,25 @@ giao diện đã build (`STATIC_DIR`). Gói binary trong mỗi bản phát hành
 ## 3. Đưa lên Internet
 
 Cách dưới chạy Caddy trên cùng máy chủ, tự xin và gia hạn chứng chỉ HTTPS. Cần: một máy chủ Linux có Docker, một tên
-miền đã trỏ (bản ghi A hoặc AAAA) về địa chỉ IP của máy chủ, cổng 80 và 443 mở ra Internet.
+miền đã trỏ (bản ghi A hoặc AAAA) về địa chỉ IP của máy chủ, cổng 80 và 443 mở ra Internet và chưa có chương trình
+khác dùng (nginx, apache).
 
-1. Chạy phần mềm như mục 1.
-2. Không để Postgres và cổng 8000 lộ ra ngoài. Trong `.env`, cho Postgres chỉ nghe trên máy:
+1. Clone và tạo `.env` như mục 1, nhưng **trước khi chạy lần đầu**, cho backend và Postgres chỉ nghe trên chính máy
+   chủ. Thêm vào `.env`:
 
    ```bash
+   BACKEND_BIND=127.0.0.1
    POSTGRES_PORT=127.0.0.1:5433
    ```
 
-   Chặn cổng 8000 từ bên ngoài bằng tường lửa, chỉ mở 80, 443 (và SSH):
+   Không có hai dòng này, cổng 8000 (HTTP thường, chưa mã hóa) và Postgres (mật khẩu mặc định) mở ra Internet. Tường lửa
+   như ufw không chặn được, vì Docker tự mở cổng của container qua iptables. Đã chạy rồi mới thêm thì chạy lại
+   `docker compose up -d` để áp cấu hình. Kiểm: `ss -ltnp | grep -E ':8000|:5433'` chỉ thấy `127.0.0.1`.
 
-   ```bash
-   sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw enable
-   ```
+2. Chạy và tạo tài khoản quản trị như mục 1 (lệnh `curl` gọi `http://localhost:8000` vẫn chạy trên máy chủ).
 
-   Lưu ý: Docker tự mở cổng của container qua iptables, không đi qua ufw. Nếu máy chủ không có tường lửa của nhà cung
-   cấp chặn cổng 8000, hãy đặt Caddy chung mạng Docker với backend thay vì mở cổng 8000 ra host.
-
-3. Cài Caddy (theo hướng dẫn ở https://caddyserver.com/docs/install), tạo `/etc/caddy/Caddyfile`:
+3. Cài Caddy theo https://caddyserver.com/docs/install. Thay nội dung `/etc/caddy/Caddyfile` (gói cài sẵn đã tạo
+   file này) bằng:
 
    ```
    du-lieu.example.com {
@@ -162,32 +169,32 @@ miền đã trỏ (bản ghi A hoặc AAAA) về địa chỉ IP của máy ch�
 
    Rồi `sudo systemctl reload caddy`. Mở https://du-lieu.example.com.
 
-4. Tạo tài khoản quản trị ngay (mục 1), trước khi chia sẻ địa chỉ.
-
 Đang làm cho bản chạy thật ([#55](https://github.com/pgiahuy/xdi-platform/issues/55)): cookie đăng nhập có cờ `Secure`
 khi chạy sau HTTPS, compose riêng cho bản chạy thật với mật khẩu Postgres không mặc định, `make backup`.
 
 ## 4. Sao lưu và khôi phục
 
-Sao lưu cả hai phần: database và thư mục file Parquet. Chạy trong thư mục chứa `docker-compose.yml`:
+Sao lưu cả hai phần: database và thư mục file Parquet. Chạy trong thư mục chứa `docker-compose.yml`. Hai file sao lưu
+có dữ liệu và chuỗi băm mật khẩu: cất ở chỗ an toàn, ngoài thư mục repo.
 
 ```bash
-docker compose exec -T postgres pg_dump -U xdi -Fc xdi > xdi-db.dump
-docker run --rm -v xdi-platform_xdidata:/data:ro -v "$PWD":/backup debian:bookworm-slim \
-  tar czf /backup/xdi-data.tgz -C /data .
+docker compose exec -T postgres pg_dump -U xdi -Fc xdi > ~/xdi-db.dump
+docker compose exec -T backend tar czf - -C /data . > ~/xdi-data.tgz
 ```
 
-Khôi phục vào một bản cài mới (sau `docker compose up -d` lần đầu):
+Khôi phục vào một bản cài mới: chỉ bật Postgres, khôi phục, rồi mới bật backend. Nếu bật backend trước, nó tạo schema
+trống và in một mã thiết lập thừa.
 
 ```bash
-docker compose stop backend
-docker compose exec -T postgres pg_restore -U xdi -d xdi --clean --if-exists < xdi-db.dump
-docker run --rm -v xdi-platform_xdidata:/data -v "$PWD":/backup debian:bookworm-slim \
-  sh -c 'tar xzf /backup/xdi-data.tgz -C /data && chown -R 10001 /data'
-docker compose start backend
+docker compose up -d postgres
+docker compose exec -T postgres pg_restore -U xdi -d xdi < ~/xdi-db.dump
+docker compose run --rm --no-deps -T --user root backend \
+  sh -c 'tar xzf - -C /data && chown -R 10001 /data' < ~/xdi-data.tgz
+docker compose up -d
 ```
 
-`10001` là user không phải root mà backend chạy trong container.
+`10001` là user không phải root mà backend chạy trong container. Khi khởi động, backend áp thêm các migration mới hơn
+bản sao lưu (nếu có).
 
 ## 5. Quản trị
 
@@ -205,9 +212,14 @@ docker compose exec backend xdi-backend list-admins
 Linux chậm hoặc chập chờn. Build bằng mạng của máy host rồi chạy không build lại:
 
 ```bash
-docker build --network host -f backend/Dockerfile -t xdi-platform-backend .
+docker build --network host -f backend/Dockerfile -t "$(docker compose config --images | grep backend)" .
 docker compose up -d --no-build
 ```
+
+Tên image phải khớp tên compose dùng (`<tên thư mục>-backend`), nên lệnh trên lấy tên từ `docker compose config`.
+
+**`make dev` không in mã thiết lập.** Đã có tài khoản trong database dev, hoặc `RUST_LOG` đang đặt mức cao hơn
+`warn`. Không đặt `RUST_LOG` thì backend in log mức `info`.
 
 **Cổng đã có chương trình khác dùng.** Đổi `BACKEND_PORT` hoặc `POSTGRES_PORT` trong `.env`. Đổi `POSTGRES_PORT` thì
 `DATABASE_URL` trong `.env` (dùng khi chạy backend ngoài Docker) cũng đổi theo.
@@ -215,5 +227,8 @@ docker compose up -d --no-build
 **Không thấy mã thiết lập trong log.** Đã có tài khoản thì backend không in mã nữa. Quên mật khẩu thì dùng lệnh
 `reset-password` ở mục 5.
 
-**Hết dung lượng đĩa khi build từ mã nguồn.** Bản build DuckDB nặng. `cargo clean` trong `backend/` xóa thư mục build;
-`docker image prune` xóa image cũ.
+**Hết dung lượng đĩa.** Bản build DuckDB nặng. `cargo clean` trong `backend/` xóa thư mục build; `docker image prune`
+xóa image cũ, `docker builder prune` xóa cache build của Docker.
+
+**Caddy không khởi động, báo cổng 80 hoặc 443 đang bận.** Có web server khác (nginx, apache) đang dùng cổng đó. Tắt nó,
+hoặc cấu hình chính web server đó làm reverse proxy tới `localhost:8000`.

@@ -29,7 +29,7 @@ chạy Ollama).
 
 ## Build từ nguồn
 
-Cần Rust stable (từ 1.88) kèm trình biên dịch C++, Node.js 24, Docker cho Postgres, và GNU Make.
+Cần Rust stable (từ 1.89) kèm trình biên dịch C++, Node.js 24, Docker cho Postgres, và GNU Make.
 
 ```bash
 make dev          # Postgres trong Docker, backend chạy bằng cargo run
