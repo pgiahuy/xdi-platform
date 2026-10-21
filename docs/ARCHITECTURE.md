@@ -140,7 +140,7 @@ Nạp chạy một lần cho mỗi phiên bản dataset, ba bước độc lập
 
 | Lưu | Dùng để |
 |---|---|
-| File gốc chuyển sang Parquet trên volume | DuckDB đọc lại các phiên sau |
+| File gốc chuyển sang Parquet trên volume: mỗi phiên bản một thư mục `<DATA_DIR>/<workspace>/<dataset>/<thư mục phiên bản>/`, mỗi file gốc một phần `part-NNNN.parquet` kèm cột `_source_file` ghi tên file gốc | DuckDB đọc cả thư mục như một bảng (`read_parquet` với `union_by_name`); nhiều file cùng cột (mỗi tháng một file) thành một bảng, truy dòng nguồn biết dòng đến từ file nào |
 | `sources`, `datasets`, `dataset_versions` | Nguồn (kind, cấu hình), tên, hồ sơ tại thời điểm, đường dẫn và hash nếu là file |
 | `columns`: tên, kiểu, vai trò (chiều, độ đo, thời gian), min, max, null, giá trị mẫu, mô tả và bí danh | Ghép vào prompt |
 | `column_values`: giá trị phân loại của cột ít giá trị, kèm bí danh | Ánh xạ "miền Nam" sang "South" |
@@ -223,4 +223,5 @@ Cập nhật khi có thay đổi.
 | Khung giao diện React và Vite, trang chủ hiện phiên bản máy chủ | Có |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
 | Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; chưa có màn hình |
-| DuckDB, guard, giải thích, vai, các trang nghiệp vụ | Chưa có |
+| DuckDB nhúng: đổi CSV (UTF-8, latin-1) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`) | Có engine, chưa có API nạp file |
+| Guard, giải thích, vai, các trang nghiệp vụ | Chưa có |
