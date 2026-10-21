@@ -216,12 +216,13 @@ Cập nhật khi có thay đổi.
 | Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
 | `/api/health`, `/api/version`; mọi API dưới `/api`, đường dẫn API sai trả 404 JSON | Có |
 | Trait `LlmProvider` và ba cài đặt | Khung: mock chưa có câu mẫu, Gemini và Ollama chưa gọi thật |
-| Route nạp dataset, ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501 |
+| Nạp dataset: `POST /api/workspaces/{slug}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB` | Có; chưa có xlsx (#21), hồ sơ cột (#22) |
+| Route ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501 |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có; liệt kê và xem dataset đã dùng |
 | Workspace: liệt kê, tạo mới (người tạo là admin), mọi API dữ liệu kiểm thành viên; `WorkspaceId` chỉ tạo từ dòng memberships của người đăng nhập | Có; chưa kiểm vai theo từng việc |
 | Khung giao diện React và Vite, trang chủ hiện phiên bản máy chủ | Có |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
 | Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; chưa có màn hình |
-| DuckDB nhúng: đổi CSV (UTF-8, latin-1) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`) | Có engine, chưa có API nạp file |
+| DuckDB nhúng: đổi CSV (UTF-8, latin-1) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`) | Có |
 | Guard, giải thích, vai, các trang nghiệp vụ | Chưa có |

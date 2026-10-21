@@ -48,7 +48,7 @@ pub struct InputFile {
     pub format: FileFormat,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Column {
     pub name: String,
     /// Kiểu theo DuckDB, ví dụ BIGINT, DOUBLE, VARCHAR, DATE.

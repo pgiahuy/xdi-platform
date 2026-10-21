@@ -14,8 +14,18 @@ use crate::state::AppState;
 pub const CODE: &str = "ABCD-EFGH-JKMN";
 
 pub fn app(store: Store, setup_code: Option<&str>) -> axum::Router {
+    app_with(store, setup_code, |_| {})
+}
+
+/// Như app, cho test đổi cấu hình trước (ví dụ thư mục dữ liệu, giới hạn dung lượng nạp).
+pub fn app_with(
+    store: Store,
+    setup_code: Option<&str>,
+    configure: impl FnOnce(&mut Config),
+) -> axum::Router {
     let mut config = Config::from_env();
     config.static_dir = None;
+    configure(&mut config);
     let state = AppState::new(config, store);
     *state.setup_code.lock().unwrap() = setup_code.map(str::to_string);
     crate::api::router(state)
@@ -59,4 +69,52 @@ pub async fn call(
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     (status, session, json)
+}
+
+/// Body multipart/form-data: các trường chữ và các file (tên file, nội dung). Trả (content-type, body).
+pub fn multipart(fields: &[(&str, &str)], files: &[(&str, &[u8])]) -> (String, Vec<u8>) {
+    let boundary = "xdi-test-boundary-7d1f";
+    let mut body = Vec::new();
+    for (name, value) in fields {
+        body.extend_from_slice(
+            format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n").as_bytes(),
+        );
+    }
+    for (file_name, bytes) in files {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{file_name}\"\r\n\
+                 Content-Type: application/octet-stream\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(bytes);
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}
+
+/// Gửi body thô (multipart) kèm cookie phiên. Trả mã và body JSON.
+pub async fn send_raw(
+    app: &axum::Router,
+    path: &str,
+    cookie: &str,
+    content_type: &str,
+    body: Vec<u8>,
+) -> (StatusCode, Value) {
+    let req = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("cookie", format!("{SESSION_COOKIE}={cookie}"))
+        .header("content-type", content_type)
+        .body(Body::from(body))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let status = res.status();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }

@@ -11,9 +11,10 @@ pub struct Config {
     pub database_url: String,
     /// Số kết nối tối đa tới Postgres.
     pub db_max_connections: u32,
-    // Khung: data_dir dùng từ issue nạp dữ liệu. Gỡ allow khi có code đọc tới.
-    #[allow(dead_code)]
-    pub data_dir: String,
+    /// Thư mục giữ file Parquet của mọi workspace và file đang nạp dở.
+    pub data_dir: PathBuf,
+    /// Tổng dung lượng tối đa của một lần nạp file, tính bằng byte (đặt bằng MAX_UPLOAD_MB).
+    pub max_upload_bytes: u64,
     /// "mock", "gemini" hoặc "ollama". Mặc định mock để chạy được không cần khóa.
     pub llm_provider: String,
     pub gemini_api_key: String,
@@ -37,7 +38,8 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
-            data_dir: var_or("DATA_DIR", "./data"),
+            data_dir: PathBuf::from(var_or("DATA_DIR", "./data")),
+            max_upload_bytes: upload_limit_bytes(env::var("MAX_UPLOAD_MB").ok().as_deref()),
             llm_provider: var_or("LLM_PROVIDER", "mock"),
             gemini_api_key: var_or("GEMINI_API_KEY", ""),
             gemini_model: var_or("GEMINI_MODEL", "gemini-2.5-flash"),
@@ -51,6 +53,46 @@ impl Config {
     }
 }
 
+/// MAX_UPLOAD_MB ra byte. Giá trị không phải số dương hoặc lớn tới mức tràn số thì cảnh báo và dùng mặc định 200,
+/// không để backend chết lúc khởi động hay lặng lẽ chặn mọi lần nạp.
+fn upload_limit_bytes(raw: Option<&str>) -> u64 {
+    const DEFAULT_MB: u64 = 200;
+    let Some(raw) = raw else {
+        return DEFAULT_MB * 1024 * 1024;
+    };
+    let parsed = raw
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|mb| *mb > 0)
+        .and_then(|mb| mb.checked_mul(1024 * 1024));
+    match parsed {
+        Some(bytes) => bytes,
+        None => {
+            tracing::warn!(
+                value = raw,
+                default_mb = DEFAULT_MB,
+                "invalid MAX_UPLOAD_MB, using default"
+            );
+            DEFAULT_MB * 1024 * 1024
+        }
+    }
+}
+
 fn var_or(key: &str, default: &str) -> String {
     env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upload_limit_parsing() {
+        assert_eq!(upload_limit_bytes(None), 200 * 1024 * 1024);
+        assert_eq!(upload_limit_bytes(Some("5")), 5 * 1024 * 1024);
+        for bad in ["abc", "0", "-1", "99999999999999"] {
+            assert_eq!(upload_limit_bytes(Some(bad)), 200 * 1024 * 1024, "{bad}");
+        }
+    }
 }

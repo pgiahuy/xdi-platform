@@ -19,6 +19,8 @@ pub enum AppError {
     Unauthorized(String),
     /// Đã đăng nhập nhưng không được làm việc này (403).
     Forbidden(String),
+    /// Dữ liệu gửi lên vượt giới hạn dung lượng (413).
+    TooLarge(String),
     NotFound(String),
     Internal(String),
 }
@@ -57,6 +59,13 @@ impl AppError {
                 StatusCode::FORBIDDEN,
                 ErrorBody {
                     code: "forbidden",
+                    message: msg.clone(),
+                },
+            ),
+            AppError::TooLarge(msg) => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ErrorBody {
+                    code: "too_large",
                     message: msg.clone(),
                 },
             ),

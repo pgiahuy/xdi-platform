@@ -145,6 +145,41 @@ impl Store {
             .map_err(|e| db_error("get dataset", e))
     }
 
+    /// Tên bảng logic đã có trong workspace chưa (so không phân biệt hoa thường, như chỉ mục datasets_logical_table_key).
+    pub async fn logical_table_taken(
+        &self,
+        ws: &WorkspaceId,
+        name: &str,
+    ) -> Result<bool, AppError> {
+        sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM datasets WHERE workspace_id = $1 AND lower(logical_table) = lower($2))",
+        )
+        .bind(ws.as_uuid())
+        .bind(name)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| db_error("check logical table", e))
+    }
+
+    /// Phiên bản có cùng nội dung ở bất kỳ dataset nào của workspace: nạp lại đúng bộ file cũ dưới dạng dataset mới
+    /// thì trả về cái đã có thay vì tạo bản trùng.
+    pub async fn find_version_by_hash_in_workspace(
+        &self,
+        ws: &WorkspaceId,
+        file_hash: &str,
+    ) -> Result<Option<DatasetVersion>, AppError> {
+        let sql = format!(
+            "SELECT {VERSION_COLUMNS} FROM dataset_versions
+             WHERE workspace_id = $1 AND file_hash = $2 ORDER BY created_at LIMIT 1"
+        );
+        sqlx::query_as(&sql)
+            .bind(ws.as_uuid())
+            .bind(file_hash)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| db_error("find version in workspace", e))
+    }
+
     /// Phiên bản có cùng nội dung file, nếu đã nạp trước đó. Dùng để bỏ qua khi người dùng nạp lại đúng file cũ.
     pub async fn find_version_by_hash(
         &self,
