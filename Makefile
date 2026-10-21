@@ -5,7 +5,7 @@ SHELL := /bin/sh
 PREFIX ?= /usr/local
 COMPOSE ?= docker compose
 
-.PHONY: help dev dev-frontend build test check check-fast up down logs openapi licenses hooks install uninstall release-artifacts clean
+.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs openapi licenses hooks install uninstall release-artifacts clean
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -28,8 +28,10 @@ check-fast: ## fmt, clippy, test backend; không build docker và frontend
 	cd backend && cargo clippy --all-targets -- -D warnings
 	cd backend && cargo test
 
-check: check-fast ## check-fast cộng build frontend (khi có) và build docker
-	@if [ -f frontend/package.json ]; then cd frontend && npm ci && npm run lint && npm run build; fi
+check-frontend: ## Frontend: cài đúng theo package-lock, lint, kiểm kiểu, build
+	cd frontend && npm ci && npm run lint && npm run build
+
+check: check-fast check-frontend ## check-fast, check-frontend và build docker
 	$(COMPOSE) build
 
 up: ## Chạy toàn bộ bằng docker compose
@@ -47,9 +49,10 @@ openapi: ## Sinh openapi.json từ backend (chưa có, thêm khi có utoipa)
 licenses: ## Sinh docs/licenses-dependencies.md từ Cargo.lock và package-lock.json
 	node scripts/licenses.mjs
 
-hooks: ## Cài hook pre-push chạy check-fast
-	printf '#!/bin/sh\nmake check-fast\n' > .git/hooks/pre-push && chmod +x .git/hooks/pre-push
-	@echo "đã cài .git/hooks/pre-push"
+hooks: ## Cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/ hoặc Makefile
+	@# git rev-parse tìm đúng thư mục hook, kể cả khi đang ở một git worktree (.git là file, không phải thư mục).
+	install -m 755 scripts/pre-push "$$(git rev-parse --git-path hooks)/pre-push"
+	@echo "đã cài hook pre-push; chạy lại make hooks khi scripts/pre-push thay đổi"
 
 install: build ## Cài binary backend vào $(PREFIX)/bin (mặc định /usr/local; đổi bằng PREFIX=...)
 	@test -n "$(PREFIX)" || { echo "PREFIX is empty" >&2; exit 1; }

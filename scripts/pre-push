@@ -1,0 +1,11 @@
+#!/bin/sh
+# pre-push - hook git chạy trước mỗi lần push; cài bằng make hooks. Bắt lỗi trên máy trước khi tốn một lượt CI.
+# Bỏ qua một lần (không khuyến khích): git push --no-verify
+set -e
+make check-fast
+# Chỉ kiểm giao diện khi nhánh có đổi frontend/ hoặc Makefile (nơi định nghĩa check-frontend) so với main, giống bộ
+# lọc của CI. git diff --quiet trả 1 khi có khác biệt; nếu chưa có origin/main (chưa fetch) thì lệnh lỗi và vẫn kiểm,
+# để không bỏ sót.
+if ! git diff --quiet origin/main...HEAD -- frontend Makefile; then
+  make check-frontend
+fi

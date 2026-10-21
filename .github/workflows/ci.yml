@@ -1,5 +1,5 @@
-# ci.yml - chạy trên mỗi PR và push lên main. Job backend chỉ gọi Makefile; job docker có thêm bước lọc theo file
-# thay đổi và cache layer, vì hai việc đó chỉ có nghĩa trên CI.
+# ci.yml - chạy trên mỗi PR và push lên main. Job backend và frontend chỉ gọi Makefile; job frontend và docker có
+# thêm bước lọc theo file thay đổi và cache, vì hai việc đó chỉ có nghĩa trên CI.
 name: CI
 
 on:
@@ -41,9 +41,36 @@ jobs:
           workspaces: backend
       - run: make check-fast
 
+  frontend:
+    # Như job docker: luôn chạy để check "frontend" luôn có kết quả, nhưng chỉ cài Node và build khi PR đổi frontend/.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
+      - if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
+        uses: actions/setup-node@v4
+        with:
+          # Vite 8 cần Node 20.19 hoặc 22.12 trở lên.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
+        run: make check-frontend
+
   docker:
-    # Job luôn chạy để check "docker" luôn có kết quả (ruleset yêu cầu check này);
-    # chỉ build khi PR đổi code hoặc compose, để PR chỉ sửa tài liệu không tốn phút CI.
+    # Job luôn chạy để check "docker" luôn có kết quả (ruleset yêu cầu check này).
+    # Trên PR chỉ build image khi đổi file quyết định cách build: code đã được job backend và frontend biên dịch, build
+    # lại trong Docker chỉ thêm vài phút chờ. Push lên main luôn build, để bắt lỗi còn sót và giữ cache mới.
     runs-on: ubuntu-latest
     # paths-filter đọc danh sách file của PR qua API nên cần quyền đọc pull request.
     permissions:
@@ -56,8 +83,11 @@ jobs:
         with:
           filters: |
             image:
-              - 'backend/**'
-              - 'frontend/**'
+              - 'backend/Dockerfile'
+              - 'backend/Cargo.toml'
+              - 'backend/Cargo.lock'
+              - 'frontend/package.json'
+              - 'frontend/package-lock.json'
               - 'docker-compose*.yml'
               - '.dockerignore'
               - '.github/workflows/ci.yml'
