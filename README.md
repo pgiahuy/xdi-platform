@@ -29,7 +29,7 @@ chạy Ollama).
 
 ## Build từ nguồn
 
-Cần Rust (stable), Docker cho Postgres, và GNU Make.
+Cần Rust stable (từ 1.88) kèm trình biên dịch C++, Node.js 24, Docker cho Postgres, và GNU Make.
 
 ```bash
 make dev          # Postgres trong Docker, backend chạy bằng cargo run
@@ -37,7 +37,8 @@ make check-fast   # fmt, clippy, test
 make help         # mọi target
 ```
 
-Biến môi trường: [.env.example](.env.example). Hướng dẫn cài đặt đầy đủ đang viết ([#54](https://github.com/pgiahuy/xdi-platform/issues/54)).
+Biến môi trường: [.env.example](.env.example). Hướng dẫn cài đặt đầy đủ (Docker, build từ nguồn, đưa lên Internet với
+HTTPS, sao lưu, lỗi hay gặp): [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Cấu trúc
 
