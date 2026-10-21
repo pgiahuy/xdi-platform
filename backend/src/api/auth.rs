@@ -390,4 +390,56 @@ mod tests {
 
         db.drop().await;
     }
+
+    /// Tạo phiên kiểm lại tài khoản ngay trong câu INSERT: mật khẩu đã đổi hoặc tài khoản đã khóa thì không tạo.
+    /// Đây là chốt chặn cho đăng nhập chen giữa lúc quản trị đặt lại mật khẩu hay khóa tài khoản.
+    #[tokio::test]
+    async fn session_is_not_created_for_stale_password_or_locked_account() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let app = app(db.store.clone(), Some(CODE));
+        let (_, _, body) = call(
+            &app,
+            "POST",
+            "/api/auth/setup",
+            None,
+            Some(setup_body(CODE)),
+        )
+        .await;
+        let user_id = uuid::Uuid::parse_str(body["user"]["id"].as_str().unwrap()).unwrap();
+        let current = db
+            .store
+            .find_credentials("admin@example.com")
+            .await
+            .unwrap()
+            .and_then(|c| c.password_hash)
+            .unwrap();
+        let expires = chrono::Utc::now() + chrono::Duration::days(1);
+        let token = || {
+            crate::auth::token::hash_session_token(
+                &crate::auth::token::new_session_token().unwrap(),
+            )
+        };
+
+        assert!(db
+            .store
+            .create_session(user_id, &token(), expires, &current)
+            .await
+            .unwrap());
+        assert!(!db
+            .store
+            .create_session(user_id, &token(), expires, "$argon2id$stale")
+            .await
+            .unwrap());
+        exec(&db.store, "UPDATE users SET is_active = false").await;
+        assert!(!db
+            .store
+            .create_session(user_id, &token(), expires, &current)
+            .await
+            .unwrap());
+
+        db.drop().await;
+    }
 }
