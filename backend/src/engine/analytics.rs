@@ -132,7 +132,7 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
         .map_err(|e| AppError::Internal(format!("count rows: {e}")))?;
     if row_count == 0 {
         return Err(AppError::BadRequest(
-            "Các file không có dòng dữ liệu nào (chỉ có dòng tiêu đề?)".to_string(),
+            "Không đọc được dòng dữ liệu nào: file chỉ có dòng tiêu đề, hoặc các dòng không cùng số cột với dòng tiêu đề".to_string(),
         ));
     }
     Ok(Materialized { columns, row_count })
