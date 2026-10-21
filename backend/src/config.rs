@@ -11,9 +11,10 @@ pub struct Config {
     pub database_url: String,
     /// Số kết nối tối đa tới Postgres.
     pub db_max_connections: u32,
-    // Khung: data_dir dùng từ issue nạp dữ liệu. Gỡ allow khi có code đọc tới.
-    #[allow(dead_code)]
-    pub data_dir: String,
+    /// Thư mục giữ file Parquet của mọi workspace và file đang nạp dở.
+    pub data_dir: PathBuf,
+    /// Tổng dung lượng tối đa của một lần nạp file, tính bằng byte (đặt bằng MAX_UPLOAD_MB).
+    pub max_upload_bytes: u64,
     /// "mock", "gemini" hoặc "ollama". Mặc định mock để chạy được không cần khóa.
     pub llm_provider: String,
     pub gemini_api_key: String,
@@ -37,7 +38,13 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
-            data_dir: var_or("DATA_DIR", "./data"),
+            data_dir: PathBuf::from(var_or("DATA_DIR", "./data")),
+            max_upload_bytes: env::var("MAX_UPLOAD_MB")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(200)
+                * 1024
+                * 1024,
             llm_provider: var_or("LLM_PROVIDER", "mock"),
             gemini_api_key: var_or("GEMINI_API_KEY", ""),
             gemini_model: var_or("GEMINI_MODEL", "gemini-2.5-flash"),

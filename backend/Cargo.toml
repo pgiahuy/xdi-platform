@@ -7,7 +7,7 @@ description = "Backend of xdi-platform: API, SQL guard, analytics engine"
 repository = "https://github.com/pgiahuy/xdi-platform"
 
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
