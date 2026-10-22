@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AdminWorkspacesPage.tsx - trang Mọi workspace cho quản trị hệ thống: danh sách workspace kèm thành viên, chỉ
-định admin. Mục điều hướng chỉ hiện với quản trị hệ thống (workspaceNav.ts); người khác gõ thẳng đường dẫn thì thấy một
-câu báo và trang không gọi API (backend vẫn trả 403 nếu gọi). */
+định admin. Trang nằm ngoài workspace (globalNav.ts), nên quản trị hệ thống chưa thuộc workspace nào vẫn mở được để tự
+chỉ định mình làm admin. Mục điều hướng chỉ hiện với quản trị hệ thống; người khác gõ thẳng đường dẫn thì thấy một câu
+báo và trang không gọi API (backend vẫn trả 403 nếu gọi). */
 
 import { useMemo, useState } from 'react'
 import { useMe } from '@/api/auth'

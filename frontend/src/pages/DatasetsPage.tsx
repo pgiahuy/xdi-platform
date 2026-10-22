@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/DatasetsPage.tsx - trang Dữ liệu của workspace: danh sách dataset, và khung nạp file cho admin.
-Vai lấy từ /auth/me (đã có trong bộ đệm, WorkspaceLayout vừa đọc). Ẩn khung nạp với member chỉ để giao diện gọn;
+Vai lấy từ /auth/me (đã có trong bộ đệm, AppLayout vừa đọc). Ẩn khung nạp với member chỉ để giao diện gọn;
 quyền thật nằm ở backend, member gọi thẳng API vẫn nhận 403.
 Hồ sơ cột (kiểu, null, min, max, vai trò cột) chưa có endpoint (#22); tới lúc đó cột chỉ hiện ngay sau khi nạp. */
 

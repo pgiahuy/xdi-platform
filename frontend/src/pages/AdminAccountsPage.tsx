@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AdminAccountsPage.tsx - trang Quản lý tài khoản cho quản trị hệ thống: tạo tài khoản, khóa, mở, đặt lại mật
-khẩu. Mục điều hướng chỉ hiện với quản trị hệ thống (workspaceNav.ts); người khác gõ thẳng đường dẫn thì thấy một câu
-báo và trang không gọi API (backend vẫn trả 403 nếu gọi). */
+khẩu. Trang nằm ngoài workspace (globalNav.ts), nên quản trị hệ thống chưa thuộc workspace nào vẫn mở được. Mục điều
+hướng chỉ hiện với quản trị hệ thống; người khác gõ thẳng đường dẫn thì thấy một câu báo và trang không gọi API
+(backend vẫn trả 403 nếu gọi). */
 
 import { useMemo, useState } from 'react'
 import { passwordLength, useMe } from '@/api/auth'

@@ -20,8 +20,10 @@ src/api/          gọi backend: client.ts và các hook TanStack Query, một f
                   API sinh từ ../openapi.json (make openapi), không sửa tay
 src/components/   component hiển thị, chỉ nhận dữ liệu qua props; ui/ là component sinh từ shadcn/ui,
                   shell/ là bố cục chung (thanh bên, thanh trên, đổi workspace, tài khoản)
-src/pages/        trang: nơi duy nhất nối hook với component và dùng router; WorkspaceLayout dựng bố cục chung
-src/router.tsx    bảng đường dẫn; trang trong workspace nằm dưới /w/:ws, mục điều hướng ở pages/workspaceNav.ts
+src/pages/        trang: nơi duy nhất nối hook với component và dùng router; AppLayout dựng bố cục chung
+src/router.tsx    bảng đường dẫn; trang trong workspace nằm dưới /w/:ws, mục điều hướng ở pages/workspaceNav.ts;
+                  trang quản trị hệ thống (/admin/...) và tài khoản (/account) nằm ngoài workspace, cùng khung
+                  AppLayout, đường dẫn ở pages/globalNav.ts;
                   đăng nhập (/login) và thiết lập lần đầu (/setup) nằm ngoài khung, đường dẫn ở pages/authNav.ts
 ```
 
