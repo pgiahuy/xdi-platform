@@ -17,6 +17,12 @@ https://docs.docker.com/engine/install/. Trên Linux, để chạy `docker` khô
 theo https://docs.docker.com/engine/install/linux-postinstall/ (đăng xuất rồi đăng nhập lại). Trên Windows, chạy các
 lệnh dưới đây trong WSL2.
 
+Máy build image cần RAM trống khoảng 1 GiB cho mỗi nhân CPU, vì cargo biên dịch song song trên mọi nhân, và khoảng
+6 GB đĩa trống (cache build 4,8 GB theo `docker buildx du`, image backend 215 MB và image Postgres 640 MB theo
+`docker images`). Đo trên máy 16 nhân, 30 GiB RAM, build không dùng cache trong một builder buildx riêng, đọc bộ nhớ
+(không tính page cache) của container builder: build lần đầu mất 8 phút, các tiến trình build dùng tới 12,6 GiB RAM.
+Máy ít RAM hơn thì build theo cách giới hạn số nhân ở mục 6, nếu không máy có thể đứng giữa chừng.
+
 ```bash
 git clone https://github.com/pgiahuy/xdi-platform.git
 cd xdi-platform
@@ -24,7 +30,8 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Lần đầu build lâu vì phải biên dịch backend (Rust, kèm DuckDB) và giao diện. Các lần sau dùng lại cache.
+Lần đầu build lâu vì phải biên dịch backend (Rust, kèm DuckDB) và giao diện. Các lần sau dùng lại cache; đổi phụ thuộc
+(`Cargo.lock`) thì biên dịch lại cả phần phụ thuộc.
 
 Kiểm tra:
 
@@ -45,8 +52,8 @@ docker compose logs backend | grep setup_code
 ```
 
 Mở http://localhost:8000: lần đầu giao diện hiện màn **Thiết lập lần đầu**. Nhập mã thiết lập (gõ chữ thường hay thừa
-khoảng trắng vẫn nhận), email, mật khẩu từ 8 đến 128 ký tự và tên workspace đầu tiên. Xong thì giao diện vào thẳng
-workspace vừa tạo.
+khoảng trắng vẫn nhận), email, mật khẩu từ 8 đến 128 ký tự (nhập hai lần); tên hiển thị và tên workspace
+đầu tiên không bắt buộc. Xong thì giao diện vào thẳng workspace vừa tạo.
 
 Máy chủ không có trình duyệt thì tạo bằng lệnh (thay mã, email, mật khẩu, tên workspace):
 
@@ -61,7 +68,10 @@ lập chỉ dùng được một lần. Khởi động lại backend mà vẫn c
 
 ### Nạp dữ liệu
 
-Giao diện nạp file đang làm. Qua API: đăng nhập bằng lệnh để lấy cookie phiên vào `cookie.txt` (file này là chìa khóa
+Trên giao diện: mục **Dữ liệu** ở thanh bên, chọn một hoặc nhiều file rồi bấm **Nạp**. Chỉ `admin` của workspace thấy
+phần nạp file. Tên dataset để trống thì lấy theo tên file.
+
+Qua API, khi cần nạp bằng script: đăng nhập bằng lệnh để lấy cookie phiên vào `cookie.txt` (file này là chìa khóa
 phiên của bạn, xóa sau khi dùng xong), rồi nạp file. `<slug>` là slug của workspace, có trong kết quả lệnh đăng nhập,
 ví dụ `cua-hang`:
 
@@ -98,8 +108,9 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
 | `RUST_LOG` | `info` | Mức log |
 
-Dữ liệu nằm trong hai volume Docker: `xdi-platform_pgdata` (Postgres) và `xdi-platform_xdidata` (file Parquet). Tên
-có tiền tố là tên thư mục chứa `docker-compose.yml`.
+Dữ liệu nằm trong hai volume Docker: `xdi-platform_pgdata` (Postgres) và `xdi-platform_xdidata` (file Parquet). Tiền
+tố là tên project của compose: mặc định là tên thư mục chứa `docker-compose.yml`, đổi được bằng `COMPOSE_PROJECT_NAME`
+trong `.env`. Image backend cũng mang tên đó, ví dụ `xdi-platform-backend`.
 
 ### Dừng, cập nhật, gỡ
 
@@ -108,6 +119,9 @@ docker compose down                       # dừng, giữ dữ liệu
 git pull && docker compose up -d --build  # cập nhật; backend tự áp migration database khi khởi động
 docker compose down -v                    # gỡ hẳn, XÓA cả hai volume dữ liệu
 ```
+
+Gỡ hẳn và xóa luôn image backend: `docker compose down -v --rmi local`. `docker builder prune` xóa cache build (của
+mọi project trên máy, không riêng project này).
 
 ## 2. Build từ mã nguồn
 
@@ -138,11 +152,24 @@ cd frontend && npm ci && npm run build && cd ..
 STATIC_DIR=$PWD/frontend/dist make dev   # mở http://localhost:8000
 ```
 
-`make dev` không đọc `.env`; biến cần đổi thì đặt trên dòng lệnh, ví dụ `BACKEND_PORT=8001 make dev`. Lần chạy đầu
-mã thiết lập in ra terminal, tạo tài khoản như mục 1.
+Backend chạy bằng `make dev` không đọc `.env` (chỉ bước bật Postgres bằng `docker compose` đọc); biến cần đổi thì đặt
+trên dòng lệnh. Ví dụ đã đổi `POSTGRES_PORT=5434` trong `.env` và muốn backend ở cổng 8001:
+
+```bash
+DATABASE_URL=postgres://xdi:xdi@localhost:5434/xdi BACKEND_PORT=8001 make dev
+BACKEND_URL=http://localhost:8001 make dev-frontend   # giao diện dev gọi /api sang đúng cổng đó
+```
+
+Lần chạy đầu mã thiết lập in ra terminal, tạo tài khoản như mục 1. File dữ liệu nằm ở `backend/data` (`DATA_DIR`
+mặc định `./data`, tính từ thư mục `backend`).
+
+Đã chạy bản Docker ở mục 1 trong cùng thư mục thì `make dev` dùng lại Postgres của bản đó: tài khoản đã có nên không
+in mã thiết lập, còn file dữ liệu thì không chung (bản Docker giữ trong volume, bản dev ở `backend/data`). Backend
+Docker đang giữ cổng 8000 thì dừng nó trước bằng `docker compose stop backend`, hoặc đặt `BACKEND_PORT` khác.
 
 Lần build đầu biên dịch DuckDB từ mã nguồn C++, mất vài phút; thư mục `backend/target` lớn dần qua mỗi lần build, có
-thể lên hàng chục GB (`cargo clean` để xóa). `make help`
+thể lên hàng chục GB (`cargo clean` để xóa). Như build Docker, cargo biên dịch song song trên mọi nhân CPU; máy ít RAM
+thì giới hạn số tiến trình, ví dụ `CARGO_BUILD_JOBS=4 make dev`. `make help`
 liệt kê mọi lệnh, `make check` chạy toàn bộ kiểm tra.
 
 Cài binary vào hệ thống (mặc định `/usr/local/bin`, đổi bằng `PREFIX`):
@@ -216,14 +243,35 @@ bản sao lưu (nếu có).
 ## 5. Quản trị
 
 Quên mật khẩu quản trị, không còn ai đăng nhập được: chạy trên máy chủ, lệnh in một mật khẩu tạm và đăng xuất mọi phiên
-của tài khoản đó.
+của tài khoản đó. Đăng nhập bằng mật khẩu tạm rồi đổi ở **Tài khoản và mật khẩu** (menu
+tài khoản góc trên bên phải).
 
 ```bash
 docker compose exec backend xdi-backend reset-password --email ban@example.com
-docker compose exec backend xdi-backend list-admins
+docker compose exec backend xdi-backend list-admins   # các quản trị hệ thống: email, tên, trạng thái
 ```
 
+Build từ mã nguồn (mục 2) thì chạy cùng lệnh với cùng `DATABASE_URL` mà backend dùng, ví dụ
+`cd backend && cargo run -- list-admins`, hoặc `xdi-backend list-admins` nếu đã `make install`.
+
 ## 6. Lỗi hay gặp
+
+**Build Docker làm máy đứng, chậm hẳn, hoặc tiến trình biên dịch bị dừng vì hết RAM.** Mặc định cargo biên dịch song
+song trên mọi nhân CPU, mỗi nhân cần khoảng 1 GiB RAM khi biên dịch DuckDB. Build bằng một builder chỉ dùng `N` nhân,
+`N` bằng khoảng số GiB RAM còn trống và không quá số nhân của máy (`nproc`), rồi chạy không build lại:
+
+```bash
+N=4   # số nhân dùng để build
+docker buildx create --name xdi-build --driver docker-container --driver-opt cpuset-cpus=0-$((N - 1))
+docker buildx build --builder xdi-build --load -f backend/Dockerfile \
+  -t "$(docker compose config --images | grep backend)" .
+docker compose up -d --no-build
+```
+
+Đo trên máy 16 nhân với cách đo ở mục 1: `N=4` thì build dùng tới 4,0 GiB RAM và mất 19 phút. Lần cập nhật sau:
+`git pull` rồi chạy lại hai lệnh `docker buildx build` và `docker compose up -d --no-build`, thay cho
+`docker compose up -d --build`. Giữ builder `xdi-build` giữa các lần cập nhật, vì cache build nằm trong nó: xóa
+builder (`docker buildx rm xdi-build`) thì lần sau phải build lại từ đầu.
 
 **Build Docker lỗi `spurious network error` hoặc `transfer too slow` khi tải crate.** Mạng của Docker trên một số máy
 Linux chậm hoặc chập chờn. Build bằng mạng của máy host rồi chạy không build lại:
@@ -233,19 +281,29 @@ docker build --network host -f backend/Dockerfile -t "$(docker compose config --
 docker compose up -d --no-build
 ```
 
-Tên image phải khớp tên compose dùng (`<tên thư mục>-backend`), nên lệnh trên lấy tên từ `docker compose config`.
+Tên image phải khớp tên compose dùng (`<tên project>-backend`, mục 1), nên lệnh trên lấy tên từ `docker compose config`.
 
-**`make dev` không in mã thiết lập.** Đã có tài khoản trong database dev, hoặc `RUST_LOG` đang đặt mức cao hơn
-`warn`. Không đặt `RUST_LOG` thì backend in log mức `info`.
+**Cổng đã có chương trình khác dùng.** `docker compose up` báo `Bind for 0.0.0.0:5433 failed: port is already
+allocated` (một container khác giữ cổng) hoặc `failed to bind host port ... address already in use` (một chương trình
+ngoài Docker giữ cổng); `make dev` báo `cannot bind port, check BACKEND_PORT`.
 
-**Cổng đã có chương trình khác dùng.** Đổi `BACKEND_PORT` hoặc `POSTGRES_PORT` trong `.env`. Đổi `POSTGRES_PORT` thì
-`DATABASE_URL` trong `.env` (dùng khi chạy backend ngoài Docker) cũng đổi theo.
+- Chạy bằng Docker: đổi `BACKEND_PORT` hoặc `POSTGRES_PORT` trong `.env` rồi chạy lại.
+- `make dev`: backend không đọc `.env`, nên đặt `BACKEND_PORT` trên dòng lệnh (mục 2). Đã đổi `POSTGRES_PORT` trong
+  `.env` thì đặt cả `DATABASE_URL`, không thì backend báo `cannot connect to postgres, check DATABASE_URL`.
 
-**Không thấy mã thiết lập trong log.** Đã có tài khoản thì backend không in mã nữa. Quên mật khẩu thì dùng lệnh
-`reset-password` ở mục 5.
+Postgres cài sẵn trên máy thường ở cổng 5432 nên không đụng cổng mặc định 5433. Chạy hai bản cài trên cùng máy thì bản
+thứ hai đổi cả `BACKEND_PORT` và `POSTGRES_PORT`. Hai thư mục cùng tên (ví dụ cùng là `xdi-platform`) thì đổi cổng chưa
+đủ: hai bản có cùng tên project compose, bản thứ hai tạo lại container và dùng chung volume dữ liệu của bản thứ nhất.
+Bản thứ hai đặt thêm `COMPOSE_PROJECT_NAME` khác trong `.env` (mục 1).
+
+**Không thấy mã thiết lập trong log.** Backend chỉ in mã khi database chưa có tài khoản nào. Đã tạo tài khoản ở lần
+chạy trước (`docker compose down` giữ dữ liệu; `make dev` dùng chung Postgres với bản Docker trong cùng thư mục) thì
+không in nữa; quên mật khẩu thì dùng lệnh `reset-password` ở mục 5. Mã in ở mức `warn`, nên đặt `RUST_LOG=error` cũng
+làm mất dòng này.
 
 **Hết dung lượng đĩa.** Bản build DuckDB nặng. `cargo clean` trong `backend/` xóa thư mục build; `docker image prune`
-xóa image cũ, `docker builder prune` xóa cache build của Docker.
+xóa image cũ, `docker builder prune` xóa cache build của Docker, `docker buildx rm xdi-build` xóa builder riêng (nếu đã
+tạo theo mục trên) cùng cache của nó.
 
 **Caddy không khởi động, báo cổng 80 hoặc 443 đang bận.** Có web server khác (nginx, apache) đang dùng cổng đó. Tắt nó,
 hoặc cấu hình chính web server đó làm reverse proxy tới `localhost:8000`.

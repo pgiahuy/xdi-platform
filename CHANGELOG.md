@@ -1,6 +1,6 @@
 # Changelog
 
-Theo [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/). Số phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
+Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
@@ -10,7 +10,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/). Số phiên bản
 - Schema Postgres đầu tiên, tách dữ liệu theo workspace; backend tự chạy migration khi khởi động.
 - Khung giao diện React và Vite.
 - Backend phục vụ giao diện cùng cổng với API; `docker compose up` rồi mở http://localhost:8000.
-- Hướng dẫn cài đặt `docs/INSTALL.md`: Docker, build từ nguồn, đưa lên Internet với Caddy và HTTPS, sao lưu và khôi phục, lỗi hay gặp.
+- Hướng dẫn cài đặt `docs/INSTALL.md`: Docker, build từ nguồn, đưa lên Internet với Caddy và HTTPS, sao lưu và khôi phục, lỗi hay gặp; RAM và dung lượng đĩa cần khi build image (đo trên máy thật), cách build giới hạn số nhân CPU cho máy ít RAM.
 - Tài liệu giấy phép thành phần (`docs/LICENSES.md`, `make licenses`) và quyền riêng tư (`docs/PRIVACY.md`); giao diện kèm giấy phép các gói đã đóng ở `/licenses.md`.
 - Quy trình phát hành: binary Linux, tarball mã nguồn, image trên GitHub Container Registry; `make install` và `make uninstall`.
 - Tài khoản: lần chạy đầu in mã thiết lập ra log, dùng mã để tạo tài khoản quản trị kèm workspace đầu tiên; đăng nhập, đăng xuất, đổi mật khẩu qua API.
