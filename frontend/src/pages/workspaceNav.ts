@@ -13,9 +13,12 @@ export const workspaceRoute = '/w/:ws'
 /** Trang tài khoản trong workspace; mở từ menu tài khoản, không nằm trên thanh bên. */
 export const accountPath = 'account'
 
+export const membersPath = 'members'
+
 export const workspaceNav: WorkspaceNavEntry[] = [
   { path: '', label: 'Hỏi dữ liệu' },
   { path: 'datasets', label: 'Dữ liệu' },
+  { path: membersPath, label: 'Thành viên' },
 ]
 
 /** Đường dẫn tới một trang của workspace; path rỗng là trang đầu. Mọi chỗ dựng link tới workspace đi qua hàm này. */
