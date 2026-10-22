@@ -24,6 +24,7 @@ type Props = {
   currentWorkspace: WorkspaceOption
   workspaces: WorkspaceOption[]
   user: SignedInUser
+  accountHref: string
   onLogout: () => void
   logoutPending: boolean
   /** Lỗi cần báo ngay dưới thanh trên, ví dụ đăng xuất không được. */
@@ -107,7 +108,13 @@ export function AppShell(props: Props) {
           </div>
 
           <div className="ml-auto">
-            <UserMenu user={props.user} onLogout={props.onLogout} logoutPending={props.logoutPending} />
+            <UserMenu
+              user={props.user}
+              accountHref={props.accountHref}
+              link={props.link}
+              onLogout={props.onLogout}
+              logoutPending={props.logoutPending}
+            />
           </div>
         </header>
 

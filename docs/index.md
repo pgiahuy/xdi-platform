@@ -14,8 +14,8 @@ cd xdi-platform
 docker compose up
 ```
 
-Mở http://localhost:8000. Hiện mới có khung giao diện, chưa có màn đăng nhập; `curl localhost:8000/api/health` trả
-`{"status":"ok"}`. Dataset mẫu, câu hỏi mẫu và các trang nghiệp vụ đang được làm trong [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1).
+Mở http://localhost:8000; lần đầu, nhập mã thiết lập in trong log của backend để tạo tài khoản quản trị.
+`curl localhost:8000/api/health` trả `{"status":"ok"}`. Dataset mẫu, câu hỏi mẫu và các trang nghiệp vụ đang được làm trong [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1).
 
 ## Tài liệu
 

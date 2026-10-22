@@ -2,7 +2,7 @@
 /* api/queryClient.ts - bộ đệm dữ liệu (TanStack Query) dùng chung cho mọi hook trong src/api; main.tsx gắn nó vào app.
 Hai quy tắc chung cho mọi lời gọi: khi nào thử lại, và làm gì khi phiên đăng nhập không còn. */
 
-import { QueryCache, QueryClient } from '@tanstack/react-query'
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
 import { ApiError } from './client'
 import { meKey } from './auth'
 
@@ -14,6 +14,16 @@ export function buildQueryClient(): QueryClient {
       // đăng nhập.
       onError: (error, query) => {
         if (isUnauthorized(error) && query.queryKey[0] !== meKey[0]) {
+          void queryClient.invalidateQueries({ queryKey: meKey })
+        }
+      },
+    }),
+    // Cùng quy tắc cho thao tác ghi, ví dụ đổi mật khẩu khi quản trị vừa đặt lại mật khẩu (backend trả 401). Chỉ khi
+    // bộ đệm còn người dùng: đăng nhập sai cũng là 401, lúc đó chưa có ai để tải lại, và tải lại /auth/me sẽ đưa màn
+    // đăng nhập về trạng thái đang tải, xóa các ô đã gõ.
+    mutationCache: new MutationCache({
+      onError: (error) => {
+        if (isUnauthorized(error) && queryClient.getQueryData(meKey) !== undefined) {
           void queryClient.invalidateQueries({ queryKey: meKey })
         }
       },

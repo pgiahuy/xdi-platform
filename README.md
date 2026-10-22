@@ -21,8 +21,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Mở http://localhost:8000. Giao diện chưa có màn đăng nhập ([#48](https://github.com/pgiahuy/xdi-platform/issues/48)):
-khi chưa đăng nhập, trang báo chưa đăng nhập kèm phiên bản máy chủ và nhà cung cấp LLM đang dùng. API nằm dưới `/api`,
+Mở http://localhost:8000. Lần đầu giao diện hiện màn thiết lập: nhập mã thiết lập in trong log của backend
+(`docker compose logs backend | grep setup_code`) để tạo tài khoản quản trị và workspace đầu tiên. API nằm dưới `/api`,
 ví dụ `curl localhost:8000/api/health` trả `{"status":"ok"}`.
 
 `LLM_PROVIDER` chọn mô hình ngôn ngữ: `mock` (mặc định, không cần khóa API), `gemini` (cần khóa), `ollama` (cần một máy

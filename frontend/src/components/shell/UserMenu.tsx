@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/shell/UserMenu.tsx - nút tài khoản ở góc phải thanh trên: tên, email, đăng xuất.
+/* components/shell/UserMenu.tsx - nút tài khoản ở góc phải thanh trên: tên, email, trang tài khoản, đăng xuất.
 Trên điện thoại chỉ còn ô chữ viết tắt, nên nút có aria-label đủ tên người dùng. */
 
 import { useState } from 'react'
@@ -14,15 +14,18 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { initials } from './labels'
 import { menuItemFocus } from './menuItemFocus'
-import type { SignedInUser } from './types'
+import type { LinkComponent, SignedInUser } from './types'
 
 type Props = {
   user: SignedInUser
+  /** Trang tài khoản (đổi mật khẩu). */
+  accountHref: string
+  link: LinkComponent
   onLogout: () => void
   logoutPending: boolean
 }
 
-export function UserMenu({ user, onLogout, logoutPending }: Props) {
+export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPending }: Props) {
   const name = user.name || user.email
   const [open, setOpen] = useState(false)
 
@@ -53,6 +56,9 @@ export function UserMenu({ user, onLogout, logoutPending }: Props) {
           {user.isSystemAdmin && <span className="mt-1 text-xs text-muted-foreground">Quản trị hệ thống</span>}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild className={menuItemFocus}>
+          <Link href={accountHref}>Tài khoản và mật khẩu</Link>
+        </DropdownMenuItem>
         <DropdownMenuItem className={menuItemFocus} disabled={logoutPending} onSelect={onLogout}>
           {logoutPending ? 'Đang đăng xuất...' : 'Đăng xuất'}
         </DropdownMenuItem>
