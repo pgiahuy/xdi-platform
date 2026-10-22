@@ -31,3 +31,32 @@ export type UnderstandingView = {
   timeRange: string | null
   assumptions: ChoiceView[]
 }
+
+/** Cách đọc ô của một cột, như ValueKind của hợp đồng: number là số JavaScript giữ đúng; decimal là chuỗi chữ số
+ * (BIGINT, DECIMAL...) để không làm tròn; date, timestamp là chuỗi ISO 8601. */
+export type CellKind = 'text' | 'number' | 'decimal' | 'boolean' | 'date' | 'timestamp' | 'other'
+
+export type Cell = number | string | boolean | null
+
+export type ResultColumnView = {
+  name: string
+  kind: CellKind
+}
+
+/** Các dòng backend đã gửi (tối đa 1000) và tổng số dòng của câu SQL. */
+export type ResultView = {
+  columns: ResultColumnView[]
+  rows: Cell[][]
+  totalRows: number
+  /** Gửi ít dòng hơn totalRows. */
+  truncated: boolean
+  /** totalRows chạm trần số dòng của guard: kết quả đầy đủ có thể còn nhiều hơn, nên ghi "ít nhất". */
+  limitReached: boolean
+}
+
+/** Gợi ý biểu đồ của backend: x và y là tên cột trong ResultView.columns. */
+export type ChartView = {
+  kind: 'bar' | 'line'
+  x: string
+  y: string[]
+}

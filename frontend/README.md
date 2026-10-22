@@ -1,7 +1,7 @@
 # frontend
 
-Giao diện của xdi-platform: React, Vite, TypeScript, Tailwind, shadcn/ui, React Router, TanStack Query. Build ra file
-tĩnh trong `dist/`; backend phục vụ các file này cùng địa chỉ với API.
+Giao diện của xdi-platform: React, Vite, TypeScript, Tailwind, shadcn/ui, React Router, TanStack Query, Recharts.
+Build ra file tĩnh trong `dist/`; backend phục vụ các file này cùng địa chỉ với API.
 
 ```bash
 npm install

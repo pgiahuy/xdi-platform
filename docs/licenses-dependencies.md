@@ -3,7 +3,7 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-377 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 506 gói npm
+377 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 543 gói npm
 (từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 27.
 
 ## Không thuộc nhóm cho phép thông dụng
@@ -552,6 +552,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @redocly/ajv | 8.11.2 | MIT | có |
 | @redocly/config | 0.22.0 | MIT | có |
 | @redocly/openapi-core | 1.34.21 | MIT | có |
+| @reduxjs/toolkit | 2.13.0 | MIT |  |
 | @remix-run/route-pattern | 0.22.1 | MIT |  |
 | @rolldown/binding-android-arm-eabi | 1.2.14 | MIT | có |
 | @rolldown/binding-android-arm64 | 1.2.14 | MIT | có |
@@ -572,6 +573,8 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @sec-ant/readable-stream | 0.4.1 | MIT | có |
 | @shadcn/registry | 0.2.0 | MIT | có |
 | @sindresorhus/merge-streams | 4.0.0 | MIT | có |
+| @standard-schema/spec | 1.1.0 | MIT |  |
+| @standard-schema/utils | 0.3.0 | MIT |  |
 | @tailwindcss/node | 4.3.3 | MIT | có |
 | @tailwindcss/oxide | 4.3.3 | MIT | có |
 | @tailwindcss/oxide-android-arm64 | 4.3.3 | MIT | có |
@@ -590,9 +593,19 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @tanstack/query-core | 5.104.5 | MIT |  |
 | @tanstack/react-query | 5.104.5 | MIT |  |
 | @ts-morph/common | 0.27.0 | MIT | có |
+| @types/d3-array | 3.2.2 | MIT |  |
+| @types/d3-color | 3.1.3 | MIT |  |
+| @types/d3-ease | 3.0.2 | MIT |  |
+| @types/d3-interpolate | 3.0.4 | MIT |  |
+| @types/d3-path | 3.1.1 | MIT |  |
+| @types/d3-scale | 4.0.9 | MIT |  |
+| @types/d3-shape | 3.2.0 | MIT |  |
+| @types/d3-time | 3.0.4 | MIT |  |
+| @types/d3-timer | 3.0.2 | MIT |  |
 | @types/node | 24.19.2 | MIT | có |
 | @types/react | 19.3.0 | MIT |  |
 | @types/react-dom | 19.3.0 | MIT |  |
+| @types/use-sync-external-store | 0.0.6 | MIT |  |
 | @types/validate-npm-package-name | 4.0.2 | MIT | có |
 | @vitejs/plugin-react | 6.1.2 | MIT | có |
 | accepts | 2.0.0 | MIT | có |
@@ -649,8 +662,20 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | cross-spawn | 7.0.6 | MIT | có |
 | cssesc | 3.0.0 | MIT | có |
 | csstype | 3.2.3 | MIT |  |
+| d3-array | 3.2.4 | ISC |  |
+| d3-color | 3.1.0 | ISC |  |
+| d3-ease | 3.0.1 | BSD-3-Clause |  |
+| d3-format | 3.1.2 | ISC |  |
+| d3-interpolate | 3.0.1 | ISC |  |
+| d3-path | 3.1.0 | ISC |  |
+| d3-scale | 4.0.2 | ISC |  |
+| d3-shape | 3.2.0 | ISC |  |
+| d3-time | 3.1.0 | ISC |  |
+| d3-time-format | 4.1.0 | ISC |  |
+| d3-timer | 3.0.1 | ISC |  |
 | debounce-fn | 4.0.0 | MIT | có |
 | debug | 4.4.3 | MIT | có |
+| decimal.js-light | 2.5.1 | MIT |  |
 | dedent | 1.7.2 | MIT | có |
 | deepmerge | 4.3.1 | MIT | có |
 | default-browser | 5.5.1 | MIT | có |
@@ -674,10 +699,12 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | es-define-property | 1.0.1 | MIT | có |
 | es-errors | 1.3.0 | MIT | có |
 | es-object-atoms | 1.1.2 | MIT | có |
+| es-toolkit | 1.52.0 | MIT |  |
 | escalade | 3.2.0 | MIT | có |
 | escape-html | 1.0.3 | MIT | có |
 | esprima | 4.0.1 | BSD-2-Clause | có |
 | etag | 1.8.1 | MIT | có |
+| eventemitter3 | 5.0.4 | MIT |  |
 | eventsource | 3.0.7 | MIT | có |
 | eventsource-parser | 3.1.1 | MIT | có |
 | execa | 5.1.1 | MIT | có |
@@ -719,8 +746,10 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | human-signals | 8.0.1 | Apache-2.0 | có |
 | iconv-lite | 0.7.3 | MIT | có |
 | ignore | 5.3.2 | MIT | có |
+| immer | 11.2.9 | MIT |  |
 | index-to-position | 1.2.0 | MIT | có |
 | inherits | 2.0.4 | ISC | có |
+| internmap | 2.0.3 | ISC |  |
 | ip-address | 10.7.4 | MIT | có |
 | ipaddr.js | 1.9.1 | MIT | có |
 | is-docker | 2.2.1 | MIT | có |
@@ -848,12 +877,18 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | raw-body | 3.0.2 | MIT | có |
 | react | 19.3.1 | MIT |  |
 | react-dom | 19.3.1 | MIT |  |
+| react-is | 19.3.1 | MIT |  |
+| react-redux | 9.3.0 | MIT |  |
 | react-remove-scroll | 2.7.2 | MIT |  |
 | react-remove-scroll-bar | 2.3.8 | MIT |  |
 | react-router | 8.5.0 | MIT |  |
 | react-style-singleton | 2.2.3 | MIT |  |
 | recast | 0.23.21 | MIT | có |
+| recharts | 3.10.1 | MIT |  |
+| redux | 5.0.1 | MIT |  |
+| redux-thunk | 3.1.0 | MIT |  |
 | require-from-string | 2.0.2 | MIT | có |
+| reselect | 5.2.0 | MIT |  |
 | restore-cursor | 5.1.0 | MIT | có |
 | reusify | 1.1.0 | MIT | có |
 | rolldown | 1.2.14 | MIT | có |
@@ -895,7 +930,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | systeminformation | 5.33.16 | MIT | có |
 | tailwindcss | 4.3.3 | MIT | có |
 | tapable | 2.3.3 | MIT | có |
-| tiny-invariant | 1.3.3 | MIT | có |
+| tiny-invariant | 1.3.3 | MIT |  |
 | tinyglobby | 0.2.17 | MIT | có |
 | to-regex-range | 5.0.1 | MIT | có |
 | toidentifier | 1.0.1 | MIT | có |
@@ -915,9 +950,11 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | uri-js-replace | 1.0.1 | MIT | có |
 | use-callback-ref | 1.3.3 | MIT |  |
 | use-sidecar | 1.1.3 | MIT |  |
+| use-sync-external-store | 1.7.0 | MIT |  |
 | util-deprecate | 1.0.2 | MIT | có |
 | validate-npm-package-name | 7.0.2 | ISC | có |
 | vary | 1.1.2 | MIT | có |
+| victory-vendor | 37.3.6 | MIT AND ISC |  |
 | vite | 8.3.4 | MIT | có |
 | which | 2.0.2 | ISC | có |
 | which | 4.0.0 | ISC | có |
