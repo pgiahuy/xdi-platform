@@ -37,8 +37,9 @@ Workflow `release.yml` chạy khi có tag `v*`:
 - Tạo GitHub Release đính kèm hai file trên.
 
 Chạy thử trên máy trước khi tag: `make release-artifacts VERSION=x.y.z`, kết quả ở thư mục `release/`. PR đổi quy
-trình phát hành (workflow, `scripts/`, Makefile) tự chạy workflow ở chế độ thử: build binary và tarball, không build image (job
-docker của CI đã build), không phát hành.
+trình phát hành (workflow hoặc `scripts/`) tự chạy workflow ở chế độ thử: build binary và tarball, không build image,
+không phát hành. Trước khi tag, chạy workflow "Docker image" (tab Actions, Run workflow) để chắc image còn build được:
+CI không build image trên mỗi PR.
 
 ## Sau khi phát hành
 

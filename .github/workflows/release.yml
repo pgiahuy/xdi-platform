@@ -1,6 +1,8 @@
 # release.yml - phát hành khi đẩy tag v*: binary Linux, tarball mã nguồn, image trên GHCR, GitHub Release.
 # Phần đóng gói nằm trong `make release-artifacts`, chạy được trên máy y như ở đây.
-# Trên PR đổi chính quy trình phát hành, workflow chạy thử: build binary và tarball, không build image, không phát hành.
+# Trên PR đổi chính quy trình phát hành (workflow này, scripts/), workflow chạy thử: build binary và tarball, không build
+# image, không phát hành. PR chỉ đổi Makefile không chạy thử, để tiết kiệm phút Actions; lỗi ở target release-artifacts
+# khi đó lộ ra lúc đẩy tag, hoặc chạy make release-artifacts trên máy.
 name: Release
 
 on:
@@ -10,7 +12,6 @@ on:
     paths:
       - '.github/workflows/release.yml'
       - 'scripts/**'
-      - 'Makefile'
 
 permissions:
   contents: read
