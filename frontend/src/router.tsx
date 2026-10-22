@@ -3,13 +3,12 @@
 trong khung chung WorkspaceLayout; thêm trang trong workspace là thêm một route con ở đây và một dòng ở
 pages/workspaceNav.ts. Màn đăng nhập và thiết lập nằm ngoài khung, đường dẫn ở pages/authNav.ts.
 Đăng nhập, thiết lập và tài khoản tải riêng khi mở (lazy): người đã đăng nhập hiếm khi cần, nên không đóng vào gói
-chính. Mọi route nằm dưới một route gốc có errorElement, để lỗi ở bất kỳ trang nào cũng hiện câu tiếng Việt. */
+chính. Trang Dữ liệu cũng tải riêng vì kéo theo phần nạp file. Mọi route nằm dưới một route gốc có errorElement, để lỗi ở bất kỳ trang nào cũng hiện câu tiếng Việt. */
 
 import { createBrowserRouter } from 'react-router'
 import { StatusScreen } from '@/components/StatusScreen'
 import { AskPage } from '@/pages/AskPage'
 import { loginRoute, setupRoute } from '@/pages/authNav'
-import { DatasetsPage } from '@/pages/DatasetsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { RootPage } from '@/pages/RootPage'
 import { RouteErrorPage } from '@/pages/RouteErrorPage'
@@ -37,7 +36,11 @@ export const router = createBrowserRouter([
         element: <WorkspaceLayout />,
         children: [
           { index: true, element: <AskPage /> },
-          { path: 'datasets', element: <DatasetsPage /> },
+          // Trang Dữ liệu kéo theo phần nạp file và chọn sheet Excel: tải riêng khi mở, như các màn đăng nhập.
+          {
+            path: 'datasets',
+            lazy: async () => ({ Component: (await import('@/pages/DatasetsPage')).DatasetsPage }),
+          },
           {
             path: accountPath,
             lazy: async () => ({ Component: (await import('@/pages/AccountPage')).AccountPage }),
