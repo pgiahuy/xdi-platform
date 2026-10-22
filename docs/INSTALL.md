@@ -44,11 +44,14 @@ Lần chạy đầu, khi chưa có tài khoản nào, backend in một mã thi�
 docker compose logs backend | grep setup_code
 ```
 
-Màn hình thiết lập trên giao diện đang làm. Trong lúc chờ, tạo tài khoản bằng lệnh (thay mã, email, mật khẩu, tên
-workspace). Lệnh ghi cookie đăng nhập vào `cookie.txt`; file này là chìa khóa phiên của bạn, xóa sau khi dùng xong:
+Mở http://localhost:8000: lần đầu giao diện hiện màn **Thiết lập lần đầu**. Nhập mã thiết lập (gõ chữ thường hay thừa
+khoảng trắng vẫn nhận), email, mật khẩu từ 8 đến 128 ký tự và tên workspace đầu tiên. Xong thì giao diện vào thẳng
+workspace vừa tạo.
+
+Máy chủ không có trình duyệt thì tạo bằng lệnh (thay mã, email, mật khẩu, tên workspace):
 
 ```bash
-curl -c cookie.txt http://localhost:8000/api/auth/setup \
+curl http://localhost:8000/api/auth/setup \
   -H 'content-type: application/json' \
   -d '{"setup_code":"ABCD-EFGH-JKMN","email":"ban@example.com","password":"mat khau it nhat 8 ky tu","workspace_name":"Cửa hàng"}'
 ```
@@ -58,10 +61,14 @@ lập chỉ dùng được một lần. Khởi động lại backend mà vẫn c
 
 ### Nạp dữ liệu
 
-Giao diện nạp file đang làm. Qua API, dùng cookie vừa nhận (`<slug>` là slug của workspace, có trong kết quả lệnh trên,
-ví dụ `cua-hang`):
+Giao diện nạp file đang làm. Qua API: đăng nhập bằng lệnh để lấy cookie phiên vào `cookie.txt` (file này là chìa khóa
+phiên của bạn, xóa sau khi dùng xong), rồi nạp file. `<slug>` là slug của workspace, có trong kết quả lệnh đăng nhập,
+ví dụ `cua-hang`:
 
 ```bash
+curl -c cookie.txt http://localhost:8000/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"ban@example.com","password":"mat khau it nhat 8 ky tu"}'
 curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets \
   -F name='Bán hàng' -F file=@thang1.csv -F file=@thang2.csv
 ```

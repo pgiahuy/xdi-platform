@@ -4,10 +4,10 @@ workspace, hoặc mở workspace không có quyền. Luôn có nút đăng xuấ
 đăng nhập nhầm tài khoản; không có hai thứ này thì người dùng kẹt ở màn này. */
 
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router'
 import { useLogout, type User } from '@/api/auth'
 import { StatusScreen } from '@/components/StatusScreen'
 import { Button } from '@/components/ui/button'
+import { signOutTo } from './authNav'
 
 type Props = {
   user: User
@@ -17,9 +17,11 @@ type Props = {
 }
 
 export function SignedInScreen({ user, title, description, action }: Props) {
-  const logout = useLogout()
-  const navigate = useNavigate()
-  const handleLogout = () => logout.mutate(undefined, { onSuccess: () => navigate('/', { replace: true }) })
+  const logout = useLogout(signOutTo)
+  // Không disabled nút lúc chờ, chặn bấm trùng ở đây: disabled làm focus rơi khỏi nút.
+  const handleLogout = () => {
+    if (!logout.isPending) logout.mutate()
+  }
 
   return (
     <StatusScreen
@@ -28,7 +30,7 @@ export function SignedInScreen({ user, title, description, action }: Props) {
       action={
         <div className="flex flex-wrap gap-2">
           {action}
-          <Button variant="ghost" onClick={handleLogout} disabled={logout.isPending}>
+          <Button variant="ghost" onClick={handleLogout} aria-disabled={logout.isPending}>
             {logout.isPending ? 'Đang đăng xuất...' : 'Đăng xuất'}
           </Button>
         </div>

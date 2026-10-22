@@ -4,25 +4,25 @@ workspace người đó thuộc về, rồi dựng AppShell; trang con hiện �
 Workspace nằm trong đường dẫn, không lưu trong phiên (#42): mỗi tab trình duyệt làm việc ở workspace riêng. */
 
 import { useEffect } from 'react'
-import { Link, matchPath, Outlet, useLocation, useMatches, useNavigate, useParams } from 'react-router'
+import { Link, matchPath, Outlet, useLocation, useMatches, useParams } from 'react-router'
 import { useLogout, useMe, type Membership } from '@/api/auth'
 import { isUnauthorized } from '@/api/queryClient'
 import { useVersion } from '@/api/system'
 import { AppShell } from '@/components/shell/AppShell'
 import type { WorkspaceOption } from '@/components/shell/types'
 import { Button } from '@/components/ui/button'
+import { signOutTo } from './authNav'
 import { RouterLink } from './RouterLink'
 import { SessionStatus } from './SessionStatus'
 import { SignedInScreen } from './SignedInScreen'
-import { workspaceHref, workspaceNav } from './workspaceNav'
+import { accountPath, workspaceHref, workspaceNav } from './workspaceNav'
 
 export function WorkspaceLayout() {
   const { ws } = useParams()
   const { pathname } = useLocation()
-  const navigate = useNavigate()
   const me = useMe()
   const version = useVersion()
-  const logout = useLogout()
+  const logout = useLogout(signOutTo)
   const matches = useMatches()
 
   // Thông báo đăng xuất lỗi thuộc về lúc bấm; chuyển trang thì bỏ, không để nó nằm lại mãi dưới thanh trên.
@@ -76,7 +76,7 @@ export function WorkspaceLayout() {
     href: workspaceHref(m.slug, activeEntry?.path ?? ''),
   })
 
-  const handleLogout = () => logout.mutate(undefined, { onSuccess: () => navigate('/', { replace: true }) })
+  const handleLogout = () => logout.mutate()
 
   // Route con tự đặt tiêu đề qua handle (ví dụ trang không tồn tại); không có thì lấy tên mục điều hướng đang mở.
   const routeTitle = matches
@@ -92,6 +92,7 @@ export function WorkspaceLayout() {
       currentWorkspace={{ ...toOption(current), href: base }}
       workspaces={me.data.workspaces.map(toOption)}
       user={{ name: user.display_name, email: user.email, isSystemAdmin: user.is_system_admin }}
+      accountHref={workspaceHref(current.slug, accountPath)}
       onLogout={handleLogout}
       logoutPending={logout.isPending}
       notice={logout.error ? `Đăng xuất không được: ${logout.error.message}` : undefined}

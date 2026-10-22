@@ -10,6 +10,9 @@ export type WorkspaceNavEntry = {
 
 export const workspaceRoute = '/w/:ws'
 
+/** Trang tài khoản trong workspace; mở từ menu tài khoản, không nằm trên thanh bên. */
+export const accountPath = 'account'
+
 export const workspaceNav: WorkspaceNavEntry[] = [
   { path: '', label: 'Hỏi dữ liệu' },
   { path: 'datasets', label: 'Dữ liệu' },
