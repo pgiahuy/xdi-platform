@@ -11,7 +11,7 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 
 | Nhóm | Số lượng | Giấy phép | Đánh giá |
 |---|---|---|---|
-| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 377 | MIT, Apache-2.0, ISC, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
+| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 385 | MIT, Apache-2.0, ISC, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
 | Gói npm | 543 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak, 0BSD, CC0-1.0, CC-BY-4.0 (dữ liệu `caniuse-lite`) | Cho phép, dùng chung được |
 | Gói npm `lightningcss` | 2 phiên bản, mỗi phiên bản kèm bản build cho từng nền tảng | MPL-2.0 | Xem bên dưới |
 | Font Geist (`@fontsource-variable/geist`) | 1 | OFL-1.1 | Xem bên dưới |

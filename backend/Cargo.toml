@@ -38,6 +38,7 @@ utoipa-swagger-ui = { version = "10.0.2", features = ["axum", "vendored"] }
 # không kéo aws-lc, bộ mã hóa mặc định của reqwest 0.13, thêm một thư viện C lớn phải biên dịch.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json"] }
 rustls ={ version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+sqlparser = { version = "0.63", features = ["visitor"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

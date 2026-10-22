@@ -3,7 +3,7 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-377 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 543 gói npm
+385 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 543 gói npm
 (từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 27.
 
 ## Không thuộc nhóm cho phép thông dụng
@@ -47,6 +47,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | aho-corasick | 1.1.5 | Unlicense OR MIT |
 | allocator-api2 | 0.2.21 | MIT OR Apache-2.0 |
 | android_system_properties | 0.1.6 | MIT OR Apache-2.0 |
+| ar_archive_writer | 0.5.3 | Apache-2.0 WITH LLVM-exception |
 | argon2 | 0.6.0 | MIT OR Apache-2.0 |
 | arrow | 58.4.0 | Apache-2.0 |
 | arrow-arith | 58.4.0 | Apache-2.0 |
@@ -218,6 +219,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | num-integer | 0.1.47 | MIT OR Apache-2.0 |
 | num-iter | 0.1.46 | MIT OR Apache-2.0 |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
+| object | 0.39.1 | Apache-2.0 OR MIT |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
 | openssl-probe | 0.2.1 | MIT OR Apache-2.0 |
 | parking | 2.2.1 | Apache-2.0 OR MIT |
@@ -237,6 +239,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | powerfmt | 0.2.1 | MIT OR Apache-2.0 |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
+| psm | 0.1.32 | MIT OR Apache-2.0 |
 | quick-xml | 0.42.0 | MIT |
 | quote | 1.0.47 | MIT OR Apache-2.0 |
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
@@ -244,6 +247,8 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | rand | 0.8.8 | MIT OR Apache-2.0 |
 | rand_chacha | 0.3.1 | MIT OR Apache-2.0 |
 | rand_core | 0.6.4 | MIT OR Apache-2.0 |
+| recursive | 0.1.1 | MIT |
+| recursive-proc-macro-impl | 0.1.1 | MIT |
 | redox_syscall | 0.5.18 | MIT |
 | redox_syscall | 0.9.5 | MIT |
 | regex | 1.13.1 | MIT OR Apache-2.0 |
@@ -291,6 +296,8 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | socket2 | 0.6.5 | MIT OR Apache-2.0 |
 | spin | 0.9.9 | MIT |
 | spki | 0.7.3 | Apache-2.0 OR MIT |
+| sqlparser | 0.63.0 | Apache-2.0 |
+| sqlparser_derive | 0.6.0 | Apache-2.0 |
 | sqlx | 0.8.6 | MIT OR Apache-2.0 |
 | sqlx-core | 0.8.6 | MIT OR Apache-2.0 |
 | sqlx-macros | 0.8.6 | MIT OR Apache-2.0 |
@@ -299,6 +306,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | sqlx-postgres | 0.8.6 | MIT OR Apache-2.0 |
 | sqlx-sqlite | 0.8.6 | MIT OR Apache-2.0 |
 | stable_deref_trait | 1.2.1 | MIT OR Apache-2.0 |
+| stacker | 0.1.25 | MIT OR Apache-2.0 |
 | stringprep | 0.1.5 | MIT OR Apache-2.0 |
 | strum | 0.27.2 | MIT |
 | strum_macros | 0.27.2 | MIT |
