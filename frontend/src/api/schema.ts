@@ -368,7 +368,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ask a question about a dataset (not implemented yet) */
+        /**
+         * Ask a question about a dataset (not implemented yet: returns 501)
+         * @description One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. Error codes are for invalid requests, access, and the language model service.
+         */
         post: operations["ask"];
         delete?: never;
         options?: never;
@@ -446,22 +449,167 @@ export interface components {
             role: string;
         };
         AskRequest: {
+            /**
+             * @description Choices for the question, empty the first time. To change an assumption or answer a clarification, send the
+             *     same question with `choices` of the previous answer, the changed entry replaced or added. A question whose text
+             *     was edited is a new question: send `choices` empty. The backend does not compare with earlier questions; it
+             *     applies the choices it recognizes for this question and ignores the others with a warning
+             *     `choice_not_applied`. Choices not listed use their default.
+             */
+            choices?: components["schemas"]["ChosenOption"][];
             question: string;
+        };
+        /** @description Answer to one question, with the evidence behind it. See `AskStatus` for which fields are set. */
+        AskResponse: {
+            chart: components["schemas"]["ChartSuggestion"] | null;
+            /**
+             * @description Every choice this answer used, defaults included, in the shape of `AskRequest.choices`. To ask again with one
+             *     choice changed, send this list with that entry replaced; for `needs_choice`, send it plus a pick for each
+             *     clarification. Choices the backend did not recognize are not in it.
+             */
+            choices: components["schemas"]["ChosenOption"][];
+            /** @description Questions back to the user, only for `needs_choice`. Every entry has `selected` null. */
+            clarifications: components["schemas"]["Choice"][];
+            explanation: components["schemas"]["Explanation"] | null;
+            /**
+             * @description Text for the end user (Vietnamese): the reason for `rejected` and `failed`, the prompt for `needs_choice`;
+             *     null for `answered`.
+             */
+            message: string | null;
+            /** @description Language model configured for the question, for example `gemini-2.5-flash` or `mock`. */
+            model: string;
+            /**
+             * Format: uuid
+             * @description Id of the question in the history (`queries`); null for `needs_choice`.
+             */
+            query_id: string | null;
+            result: components["schemas"]["ResultTable"] | null;
+            /** @description SQL written by the model, on logical table names. After a fix round, the fixed SQL. */
+            sql_generated: string | null;
+            /**
+             * @description SQL that ran: the generated SQL after the guard added row-level filters and a row limit. Still on logical table
+             *     names, no file paths.
+             */
+            sql_guarded: string | null;
+            status: components["schemas"]["AskStatus"];
+            /**
+             * @description What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a
+             *     `repair`.
+             */
+            steps: components["schemas"]["AskStep"][];
+            understanding: components["schemas"]["Understanding"] | null;
+            /**
+             * Format: uuid
+             * @description Dataset version the question ran on.
+             */
+            version_id: string;
+            /** @description Notes shown next to the result; they never hide it. */
+            warnings: components["schemas"]["Warning"][];
+        };
+        /**
+         * @description Outcome of the question, and which fields of `AskResponse` are set:
+         *     - `answered`: the SQL ran. Set: `query_id`, `sql_generated`, `sql_guarded`, `understanding`, `result`; `chart`
+         *       when a chart fits; `explanation` for a "why" question (when the breakdown cannot be made, a warning
+         *       `explanation_unavailable` says why).
+         *     - `needs_choice`: the question can be read several ways; pick one option of each entry in `clarifications` and ask
+         *       again. This can happen before the model is called (a word matches several columns) or after (the two slices of
+         *       a "why" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.
+         *       Not recorded in the history, so `query_id` is null.
+         *     - `rejected`: the guard refused the SQL, the generated one or the one fixed in the `repair` round. Set: `message`
+         *       (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false.
+         *     - `failed`: the SQL failed on the analytics engine and the one fix round did not help, either because the fixed
+         *       SQL failed too or because the model failed during the fix. Set: `message`, `query_id`, `sql_generated`,
+         *       `sql_guarded`; the `run` or `repair` step that stopped it has `ok` false.
+         *
+         *     The status names the step that stopped the question: the guard gives `rejected`, the engine or the fix round gives
+         *     `failed`. A model error before any SQL exists is not a status: the request gets 502 or 503.
+         * @enum {string}
+         */
+        AskStatus: "answered" | "needs_choice" | "rejected" | "failed";
+        AskStep: {
+            /** @description Text for the end user (Vietnamese), for example the guard's reason or the engine error. */
+            detail: string | null;
+            /** Format: int64 */
+            duration_ms: number;
+            name: components["schemas"]["StepName"];
+            /**
+             * @description False for a step that failed. A failed step does not always stop the question: a failed `run` can be followed by
+             *     `repair`, a failed `narrate` by a template summary. `AskStatus` tells whether the question stopped.
+             */
+            ok: boolean;
         };
         AssignAdminRequest: {
             /** @description Email of an active account; it becomes `admin` of the workspace. */
             email: string;
         };
+        /** @description One cell: a JSON number, string or boolean; read it with the `kind` of its column. */
+        CellValue: number | string | boolean;
         ChangePasswordRequest: {
             current_password: string;
             /** @description 8 to 128 characters. */
             new_password: string;
+        };
+        /**
+         * @description `bar` for one dimension and one measure, `line` when the x axis is time.
+         * @enum {string}
+         */
+        ChartKind: "bar" | "line";
+        /** @description Suggested chart; null in `AskResponse` when the result is better shown as a table only. */
+        ChartSuggestion: {
+            kind: components["schemas"]["ChartKind"];
+            /** @description Column on the x axis: a dimension for `bar`, time for `line`. A name from `result.columns`. */
+            x: string;
+            /** @description Columns drawn as series, names from `result.columns`. */
+            y: string[];
+        };
+        /**
+         * @description A point where the question can be read several ways. To change it, ask the same question again with
+         *     `AskResponse.choices`, the entry for this `id` replaced.
+         */
+        Choice: {
+            /**
+             * @description Id set by the backend; send it back unchanged. Stable for the same question on the same dataset version: made
+             *     from the kind of choice and what it is about (a word and its candidate columns, the period to compare with),
+             *     never from the text of the SQL, so a pick still applies when the model writes different SQL.
+             */
+            id: string;
+            /** @description Text for the end user (Vietnamese): what can be read several ways, for example which column a word means. */
+            label: string;
+            options: components["schemas"]["ChoiceOption"][];
+            /** @description Id of the option in use; null when the user has to pick (`needs_choice`). */
+            selected: string | null;
+        };
+        ChoiceOption: {
+            /** @description Opaque id set by the backend; send it back unchanged. */
+            id: string;
+            /** @description Text for the end user (Vietnamese). */
+            label: string;
+        };
+        /**
+         * @description The pick for one `Choice`. A `choice_id` or `option_id` the backend does not recognize (for example a choice that
+         *     no longer applies) is ignored, left out of `AskResponse.choices`, and reported with a warning `choice_not_applied`:
+         *     an assumption falls back to its default, a clarification is asked again.
+         */
+        ChosenOption: {
+            /** @description `Choice.id` from an earlier answer. */
+            choice_id: string;
+            /** @description One of the `ChoiceOption.id` of that choice. */
+            option_id: string;
         };
         Column: {
             /** @description DuckDB type, for example `BIGINT`, `DOUBLE`, `VARCHAR`, `DATE`. */
             data_type: string;
             name: string;
         };
+        /**
+         * @description What a result column is:
+         *     - `dimension`: a grouping key that is not time, for example a market.
+         *     - `time`: a grouping key on time, for example a quarter.
+         *     - `measure`: an aggregate, for example a sum; its cells can be drilled into.
+         *     - `other`: anything else, for example a column of a query without aggregates.
+         * @enum {string}
+         */
+        ColumnRole: "dimension" | "time" | "measure" | "other";
         CreateUserRequest: {
             display_name?: string;
             email: string;
@@ -500,6 +648,17 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
+        /** @description Contribution of every group of one dimension; the contributions add up to `change`. */
+        DimensionBreakdown: {
+            /** @description Dimension column, as named in the dataset (not a name from `result.columns`). */
+            column: string;
+            /** @description Every group of the column, largest contribution (by absolute value) first. */
+            groups: components["schemas"]["GroupContribution"][];
+            /** @description How to read the group values, like the `kind` of a result column. */
+            kind: components["schemas"]["ValueKind"];
+            /** @description SQL that computed the groups of both slices, after the guard. */
+            sql: string;
+        };
         /** @description Error body returned by every endpoint on failure. */
         ErrorBody: {
             code: components["schemas"]["ErrorCode"];
@@ -511,6 +670,47 @@ export interface components {
          * @enum {string}
          */
         ErrorCode: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "too_large" | "internal" | "not_implemented" | "upstream" | "unavailable";
+        /**
+         * @description Breakdown of a change between two slices (two periods or two groups); null in `AskResponse` unless an answered
+         *     "why" question has one. Numbers are exact strings of decimal digits.
+         */
+        Explanation: {
+            /** @description Slice compared against. */
+            base: components["schemas"]["ExplanationSlice"];
+            /** @description `compare.value - base.value`. */
+            change: string;
+            /** @description Slice being explained. */
+            compare: components["schemas"]["ExplanationSlice"];
+            /** @description One breakdown per dimension, the dimension that explains the change best first. */
+            dimensions: components["schemas"]["DimensionBreakdown"][];
+            /** @description Measure that changed, text for the end user (Vietnamese). */
+            measure: string;
+            /** @description Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown. */
+            summary: string;
+            /**
+             * @description False when the model's text failed the number check, or the model was not reached, and `summary` is a template
+             *     sentence written by the backend.
+             */
+            summary_by_model: boolean;
+            volume_price: components["schemas"]["VolumePrice"] | null;
+        };
+        /** @description One of the two slices. */
+        ExplanationSlice: {
+            /** @description SQL condition that selects the rows of the slice, on logical names. */
+            filter: string;
+            /** @description Text for the end user (Vietnamese) naming the slice, for example a quarter. */
+            label: string;
+            /** @description Value of the measure on the slice. */
+            value: string;
+        };
+        /** @description One group of a dimension. `value` is null for the group of rows where the dimension column is null. */
+        GroupContribution: {
+            base_value: string;
+            compare_value: string;
+            /** @description `compare_value - base_value` of this group. */
+            contribution: string;
+            value: components["schemas"]["CellValue"] | null;
+        };
         HealthResponse: {
             /** @description Always `ok` when the server answers. */
             status: string;
@@ -555,6 +755,34 @@ export interface components {
             /** @description Shown once to hand to the user; not stored anywhere in plain text. */
             temporary_password: string;
         };
+        ResultColumn: {
+            kind: components["schemas"]["ValueKind"];
+            /**
+             * @description Column name as the SQL returns it, made unique: from left to right, a name already used gets the smallest
+             *     suffix `_2`, `_3`, ... that no column has, so `a, a, a_2` becomes `a, a_3, a_2`.
+             */
+            name: string;
+            role: components["schemas"]["ColumnRole"];
+        };
+        /** @description Rows of the result; null in `AskResponse` unless the status is `answered`. At most 1000 rows are sent. */
+        ResultTable: {
+            columns: components["schemas"]["ResultColumn"][];
+            /**
+             * @description True when `total_rows` equals the guard's row cap (whether the guard added the LIMIT or lowered one the SQL
+             *     had): the full result may have more rows, so show
+             *     `total_rows` as "at least".
+             */
+            limit_reached: boolean;
+            /** @description One array per row, cells in the order of `columns`; null is a SQL NULL. */
+            rows: (components["schemas"]["CellValue"] | null)[][];
+            /**
+             * Format: int64
+             * @description Number of rows `sql_guarded` returned. This is the full result unless `limit_reached`.
+             */
+            total_rows: number;
+            /** @description True when `rows` holds fewer rows than `total_rows`. */
+            truncated: boolean;
+        };
         SetRoleRequest: {
             /** @description `admin` or `member`. */
             role: string;
@@ -586,6 +814,45 @@ export interface components {
             /** @description Hidden in Excel. Hidden sheets are skipped when no sheet is chosen. */
             hidden: boolean;
             name: string;
+        };
+        /**
+         * @description Step of the backend:
+         *     - `context`: read the dataset profile and build the prompt.
+         *     - `llm`: the language model writes SQL.
+         *     - `guard`: check the SQL, add row-level filters and a row limit.
+         *     - `run`: run the SQL on the analytics engine.
+         *     - `repair`: the language model fixes SQL that failed to run (at most once).
+         *     - `explain`: compute the breakdown of a "why" question (code, no model).
+         *     - `narrate`: the language model writes the summary of the breakdown.
+         *     - `record`: save the question in the history.
+         * @enum {string}
+         */
+        StepName: "context" | "llm" | "guard" | "run" | "repair" | "explain" | "narrate" | "record";
+        /**
+         * @description The "understood as" card, built from `sql_guarded`: what is measured, filtered, grouped, sorted, over which
+         *     period, and the assumptions made. Null in `AskResponse` unless the status is `answered`. `limit` is null when only
+         *     the guard's row cap applies; `time_range` is null when the SQL has no time filter.
+         */
+        Understanding: {
+            /** @description Assumptions the user can change, including clarifications answered earlier; every entry has `selected` set. */
+            assumptions: components["schemas"]["Choice"][];
+            /**
+             * @description Filters of the question, then the row-level filters the guard added for the user's data role (the label says
+             *     which).
+             */
+            filters: components["schemas"]["UnderstoodItem"][];
+            group_by: components["schemas"]["UnderstoodItem"][];
+            limit: components["schemas"]["UnderstoodItem"] | null;
+            measures: components["schemas"]["UnderstoodItem"][];
+            order_by: components["schemas"]["UnderstoodItem"][];
+            time_range: components["schemas"]["UnderstoodItem"] | null;
+        };
+        /** @description One thing the question was understood to mean. */
+        UnderstoodItem: {
+            /** @description Text for the end user (Vietnamese) naming the measure, filter, grouping, order or period. */
+            label: string;
+            /** @description Fragment of `sql_guarded` this item comes from. */
+            sql: string;
         };
         /** @description Multipart form for uploading a dataset. Total size is limited by MAX_UPLOAD_MB (413 above it). */
         UploadDatasetRequest: {
@@ -630,12 +897,67 @@ export interface components {
             is_active: boolean;
             is_system_admin: boolean;
         };
+        /**
+         * @description How to read the cells of a column, decided by the column type. Any cell may also be null (SQL NULL).
+         *     - `text`: JSON string.
+         *     - `number`: JSON number, for types a JavaScript number holds exactly: integers up to 32 bits, FLOAT, DOUBLE. NaN
+         *       and infinity are sent as null.
+         *     - `decimal`: JSON string of decimal digits, integer or not, for example "5000" or "-1234.50", for BIGINT
+         *       (COUNT returns one), HUGEINT, unsigned 64 and 128 bit integers and DECIMAL, which a JavaScript number would
+         *       round. Convert with `Number()` only to draw a chart or to sort; comparing the strings sorts "10" before "9".
+         *     - `boolean`: JSON boolean.
+         *     - `date`: JSON string `YYYY-MM-DD`.
+         *     - `timestamp`: JSON string in ISO 8601, `YYYY-MM-DDTHH:MM:SS[.ffffff]` for TIMESTAMP (no time zone, as stored),
+         *       ending in `Z` for TIMESTAMPTZ (converted to UTC).
+         *     - `other`: JSON string as the analytics engine prints the value: TIME, INTERVAL, lists, structs and other types.
+         * @enum {string}
+         */
+        ValueKind: "text" | "number" | "decimal" | "boolean" | "date" | "timestamp" | "other";
         VersionResponse: {
             /** @description Language model provider in use, for example `mock` or `gemini-2.5-flash`. */
             llm: string;
             name: string;
             version: string;
         };
+        /**
+         * @description Change split into a volume effect and a price effect, for a measure that is volume times price (for example
+         *     orders times average order value); null in `Explanation` for other measures.
+         */
+        VolumePrice: {
+            /** @description Measure divided by volume, rounded to a fixed number of decimals; the only rounded numbers here. */
+            base_price: string;
+            base_volume: string;
+            compare_price: string;
+            compare_volume: string;
+            /** @description Value of the measure if the volume had stayed at `base_volume`: `base_volume * compare_price`. */
+            if_volume_unchanged: string;
+            /** @description `change - volume_effect`, so that the two effects add up to `change` exactly. */
+            price_effect: string;
+            /** @description Text for the end user (Vietnamese) naming the price, for example the average order value. */
+            price_label: string;
+            /** @description SQL that computed the volume and the measure of both slices, after the guard. */
+            sql: string;
+            /** @description `(compare_volume - base_volume) * (base_price + compare_price) / 2`, exact from the rounded prices. */
+            volume_effect: string;
+            /** @description Text for the end user (Vietnamese) naming the volume, for example the number of orders. */
+            volume_label: string;
+        };
+        Warning: {
+            code: components["schemas"]["WarningCode"];
+            /** @description Text for the end user (Vietnamese). */
+            message: string;
+        };
+        /**
+         * @description Kind of note:
+         *     - `empty_result`: no rows.
+         *     - `all_null`: a result column holds only nulls.
+         *     - `filter_value_not_found`: the SQL filters on a value that does not occur in the column.
+         *     - `unusual_magnitude`: a value is far outside what the data makes likely, for example a ratio above 100%.
+         *     - `explanation_unavailable`: a "why" question was answered without a breakdown; the message says why.
+         *     - `choice_not_applied`: a choice sent with the question was not recognized and the default was used.
+         * @enum {string}
+         */
+        WarningCode: "empty_result" | "all_null" | "filter_value_not_found" | "unusual_magnitude" | "explanation_unavailable" | "choice_not_applied";
         /** @description A workspace as the system administrator sees it: name and members, none of its data. */
         WorkspaceOverview: {
             /** Format: date-time */
@@ -1567,6 +1889,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Answer, or why there is none */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponse"];
+                };
+            };
             /** @description Internal error; details are in the server log, not in the response */
             500: {
                 headers: {
@@ -1585,7 +1916,25 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description 400 invalid JSON body, 401, 404 not a member */
+            /** @description The language model service failed or did not answer before any SQL was written */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The language model is not configured on the server */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 empty question or invalid JSON body, 401, 404 not a member or unknown dataset */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

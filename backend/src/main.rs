@@ -21,6 +21,12 @@ fn main() {
         print!("{}", api::build_openapi_json());
         return;
     }
+    // Response mẫu của ask cho giao diện (make openapi ghi ra frontend/src/api/examples/ask.json), cũng không cần
+    // database.
+    if args == ["ask-examples"] {
+        print!("{}", service::ask_examples::build_examples_json());
+        return;
+    }
 
     // Tiến trình con đọc file Excel: rẽ ra trước khi dựng runtime tokio. Runtime nhiều luồng giữ sẵn hàng GB vùng nhớ
     // ảo (mỗi luồng một arena của glibc), tính vào trần RAM của tiến trình con và làm file hợp lệ cũng bị từ chối

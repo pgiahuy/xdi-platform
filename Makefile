@@ -87,10 +87,12 @@ restore: ## Khôi phục, THAY dữ liệu hiện có: make restore FROM=~/xdi-b
 		sh -c 'find /data -mindepth 1 -delete && tar xzf - -C /data && chown -R 10001 /data' < "$(FROM)/data.tgz"
 	$(COMPOSE) up -d
 
-openapi: ## Sinh openapi.json từ code backend rồi sinh kiểu TypeScript frontend/src/api/schema.ts; commit cả hai
-	@# Lệnh openapi của backend không kết nối database, chạy được khi chưa có Postgres. Ghi ra file tạm rồi mới đổi tên:
-	@# shell mở và cắt rỗng file đích trước khi cargo chạy, nên code lỗi biên dịch sẽ để lại openapi.json rỗng.
+openapi: ## Sinh openapi.json, response mẫu của ask và kiểu TypeScript frontend/src/api/schema.ts từ code; commit cả ba
+	@# Lệnh openapi và ask-examples của backend không kết nối database, chạy được khi chưa có Postgres. Ghi ra file tạm
+	@# rồi mới đổi tên: shell mở và cắt rỗng file đích trước khi cargo chạy, nên code lỗi biên dịch sẽ để lại file rỗng.
 	cd backend && cargo run --quiet -- openapi > ../openapi.json.tmp && mv ../openapi.json.tmp ../openapi.json
+	cd backend && cargo run --quiet -- ask-examples > ../frontend/src/api/examples/ask.json.tmp && \
+		mv ../frontend/src/api/examples/ask.json.tmp ../frontend/src/api/examples/ask.json
 	cd frontend && npm run --silent api:types
 
 licenses: ## Sinh docs/licenses-dependencies.md từ Cargo.lock và package-lock.json

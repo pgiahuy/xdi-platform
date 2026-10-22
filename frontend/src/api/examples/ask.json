@@ -1,0 +1,579 @@
+{
+  "failed": {
+    "chart": null,
+    "choices": [
+      {
+        "choice_id": "region_column",
+        "option_id": "market"
+      },
+      {
+        "choice_id": "revenue_measure",
+        "option_id": "order_item_total"
+      }
+    ],
+    "clarifications": [],
+    "explanation": null,
+    "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
+    "model": "gemini-2.5-flash",
+    "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
+    "result": null,
+    "sql_generated": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day",
+    "sql_guarded": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day LIMIT 100000",
+    "status": "failed",
+    "steps": [
+      {
+        "detail": null,
+        "duration_ms": 16,
+        "name": "context",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 1210,
+        "name": "llm",
+        "ok": true
+      },
+      {
+        "detail": "Thêm LIMIT 100000",
+        "duration_ms": 3,
+        "name": "guard",
+        "ok": true
+      },
+      {
+        "detail": "Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y\"",
+        "duration_ms": 9,
+        "name": "run",
+        "ok": false
+      },
+      {
+        "detail": "Mô hình sửa SQL theo lỗi của lần chạy đầu",
+        "duration_ms": 1150,
+        "name": "repair",
+        "ok": true
+      },
+      {
+        "detail": "Thêm LIMIT 100000",
+        "duration_ms": 3,
+        "name": "guard",
+        "ok": true
+      },
+      {
+        "detail": "Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\"",
+        "duration_ms": 8,
+        "name": "run",
+        "ok": false
+      },
+      {
+        "detail": null,
+        "duration_ms": 6,
+        "name": "record",
+        "ok": true
+      }
+    ],
+    "understanding": null,
+    "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+    "warnings": []
+  },
+  "needs_choice": {
+    "chart": null,
+    "choices": [],
+    "clarifications": [
+      {
+        "id": "region_column",
+        "label": "\"Khu vực\" là cột nào?",
+        "options": [
+          {
+            "id": "order_region",
+            "label": "Order Region, ví dụ Western Europe"
+          },
+          {
+            "id": "market",
+            "label": "Market, ví dụ Europe"
+          }
+        ],
+        "selected": null
+      }
+    ],
+    "explanation": null,
+    "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
+    "model": "gemini-2.5-flash",
+    "query_id": null,
+    "result": null,
+    "sql_generated": null,
+    "sql_guarded": null,
+    "status": "needs_choice",
+    "steps": [
+      {
+        "detail": "\"khu vực\" khớp hai cột: Order Region, Market",
+        "duration_ms": 12,
+        "name": "context",
+        "ok": true
+      }
+    ],
+    "understanding": null,
+    "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+    "warnings": []
+  },
+  "rejected": {
+    "chart": null,
+    "choices": [],
+    "clarifications": [],
+    "explanation": null,
+    "message": "Câu SQL bị từ chối: Chỉ chạy được câu SELECT đọc dữ liệu.",
+    "model": "gemini-2.5-flash",
+    "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
+    "result": null,
+    "sql_generated": "DELETE FROM dataco WHERE \"Order Status\" = 'CANCELED'",
+    "sql_guarded": null,
+    "status": "rejected",
+    "steps": [
+      {
+        "detail": null,
+        "duration_ms": 14,
+        "name": "context",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 980,
+        "name": "llm",
+        "ok": true
+      },
+      {
+        "detail": "Chỉ chạy được câu SELECT đọc dữ liệu",
+        "duration_ms": 2,
+        "name": "guard",
+        "ok": false
+      },
+      {
+        "detail": null,
+        "duration_ms": 5,
+        "name": "record",
+        "ok": true
+      }
+    ],
+    "understanding": null,
+    "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+    "warnings": []
+  },
+  "simple": {
+    "chart": {
+      "kind": "bar",
+      "x": "market",
+      "y": [
+        "revenue"
+      ]
+    },
+    "choices": [
+      {
+        "choice_id": "region_column",
+        "option_id": "market"
+      },
+      {
+        "choice_id": "revenue_measure",
+        "option_id": "order_item_total"
+      }
+    ],
+    "clarifications": [],
+    "explanation": null,
+    "message": null,
+    "model": "gemini-2.5-flash",
+    "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
+    "result": {
+      "columns": [
+        {
+          "kind": "text",
+          "name": "market",
+          "role": "dimension"
+        },
+        {
+          "kind": "number",
+          "name": "revenue",
+          "role": "measure"
+        }
+      ],
+      "limit_reached": false,
+      "rows": [
+        [
+          "Europe",
+          10845230.42
+        ],
+        [
+          "LATAM",
+          10276850.17
+        ],
+        [
+          "Pacific Asia",
+          8124900.8
+        ],
+        [
+          "USCA",
+          5070310.55
+        ],
+        [
+          "Africa",
+          2340560.12
+        ]
+      ],
+      "total_rows": 5,
+      "truncated": false
+    },
+    "sql_generated": "SELECT \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Market\" ORDER BY revenue DESC",
+    "sql_guarded": "SELECT \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Market\" ORDER BY revenue DESC LIMIT 100000",
+    "status": "answered",
+    "steps": [
+      {
+        "detail": null,
+        "duration_ms": 15,
+        "name": "context",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 1120,
+        "name": "llm",
+        "ok": true
+      },
+      {
+        "detail": "Thêm LIMIT 100000",
+        "duration_ms": 3,
+        "name": "guard",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 38,
+        "name": "run",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 6,
+        "name": "record",
+        "ok": true
+      }
+    ],
+    "understanding": {
+      "assumptions": [
+        {
+          "id": "region_column",
+          "label": "\"Khu vực\" là cột nào?",
+          "options": [
+            {
+              "id": "order_region",
+              "label": "Order Region, ví dụ Western Europe"
+            },
+            {
+              "id": "market",
+              "label": "Market, ví dụ Europe"
+            }
+          ],
+          "selected": "market"
+        },
+        {
+          "id": "revenue_measure",
+          "label": "Doanh thu tính theo",
+          "options": [
+            {
+              "id": "order_item_total",
+              "label": "Order Item Total, sau giảm giá"
+            },
+            {
+              "id": "sales",
+              "label": "Sales, trước giảm giá"
+            }
+          ],
+          "selected": "order_item_total"
+        }
+      ],
+      "filters": [],
+      "group_by": [
+        {
+          "label": "Thị trường (Market)",
+          "sql": "\"Market\""
+        }
+      ],
+      "limit": null,
+      "measures": [
+        {
+          "label": "Doanh thu: tổng Order Item Total",
+          "sql": "SUM(\"Order Item Total\")"
+        }
+      ],
+      "order_by": [
+        {
+          "label": "Doanh thu, giảm dần",
+          "sql": "revenue DESC"
+        }
+      ],
+      "time_range": null
+    },
+    "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+    "warnings": []
+  },
+  "why": {
+    "chart": {
+      "kind": "line",
+      "x": "quarter",
+      "y": [
+        "revenue"
+      ]
+    },
+    "choices": [
+      {
+        "choice_id": "revenue_measure",
+        "option_id": "order_item_total"
+      },
+      {
+        "choice_id": "base_period",
+        "option_id": "previous_quarter"
+      }
+    ],
+    "clarifications": [],
+    "explanation": {
+      "base": {
+        "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01'",
+        "label": "Quý 2/2017",
+        "value": "9402500.00"
+      },
+      "change": "-1283400.00",
+      "compare": {
+        "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01'",
+        "label": "Quý 3/2017",
+        "value": "8119100.00"
+      },
+      "dimensions": [
+        {
+          "column": "Market",
+          "groups": [
+            {
+              "base_value": "2850120.40",
+              "compare_value": "2210340.15",
+              "contribution": "-639780.25",
+              "value": "Europe"
+            },
+            {
+              "base_value": "2640300.10",
+              "compare_value": "2301250.60",
+              "contribution": "-339049.50",
+              "value": "LATAM"
+            },
+            {
+              "base_value": "2105430.25",
+              "compare_value": "1960120.00",
+              "contribution": "-145310.25",
+              "value": "Pacific Asia"
+            },
+            {
+              "base_value": "1210500.00",
+              "compare_value": "1090230.00",
+              "contribution": "-120270.00",
+              "value": "USCA"
+            },
+            {
+              "base_value": "596149.25",
+              "compare_value": "557159.25",
+              "contribution": "-38990.00",
+              "value": "Africa"
+            }
+          ],
+          "kind": "text",
+          "sql": "SELECT \"Market\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Market\" LIMIT 100000"
+        },
+        {
+          "column": "Customer Segment",
+          "groups": [
+            {
+              "base_value": "4880200.15",
+              "compare_value": "4150100.50",
+              "contribution": "-730099.65",
+              "value": "Consumer"
+            },
+            {
+              "base_value": "2850000.10",
+              "compare_value": "2480300.25",
+              "contribution": "-369699.85",
+              "value": "Corporate"
+            },
+            {
+              "base_value": "1672299.75",
+              "compare_value": "1488699.25",
+              "contribution": "-183600.50",
+              "value": "Home Office"
+            }
+          ],
+          "kind": "text",
+          "sql": "SELECT \"Customer Segment\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Customer Segment\" LIMIT 100000"
+        }
+      ],
+      "measure": "Doanh thu",
+      "summary": "Doanh thu quý 3/2017 giảm 1283400.00 so với quý 2/2017, từ 9402500.00 xuống 8119100.00. Thị trường Europe giảm nhiều nhất (-639780.25), sau đó là LATAM (-339049.50). Phần lớn mức giảm do số đơn ít đi, từ 5000 xuống 4400 đơn (-1117725.00); giá trị đơn trung bình giảm từ 1880.50 xuống 1845.25 (-165675.00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9226250.00.",
+      "summary_by_model": true,
+      "volume_price": {
+        "base_price": "1880.50",
+        "base_volume": "5000",
+        "compare_price": "1845.25",
+        "compare_volume": "4400",
+        "if_volume_unchanged": "9226250.00",
+        "price_effect": "-165675.00",
+        "price_label": "Giá trị đơn trung bình",
+        "sql": "SELECT COUNT(DISTINCT CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN \"Order Id\" END) AS base_volume, COUNT(DISTINCT CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN \"Order Id\" END) AS compare_volume, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' LIMIT 100000",
+        "volume_effect": "-1117725.00",
+        "volume_label": "Số đơn"
+      }
+    },
+    "message": null,
+    "model": "gemini-2.5-flash",
+    "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
+    "result": {
+      "columns": [
+        {
+          "kind": "timestamp",
+          "name": "quarter",
+          "role": "time"
+        },
+        {
+          "kind": "number",
+          "name": "revenue",
+          "role": "measure"
+        },
+        {
+          "kind": "decimal",
+          "name": "orders",
+          "role": "measure"
+        }
+      ],
+      "limit_reached": false,
+      "rows": [
+        [
+          "2017-04-01T00:00:00",
+          9402500.0,
+          "5000"
+        ],
+        [
+          "2017-07-01T00:00:00",
+          8119100.0,
+          "4400"
+        ]
+      ],
+      "total_rows": 2,
+      "truncated": false
+    },
+    "sql_generated": "SELECT date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, SUM(\"Order Item Total\") AS revenue, COUNT(DISTINCT \"Order Id\") AS orders FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY quarter ORDER BY quarter",
+    "sql_guarded": "SELECT date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, SUM(\"Order Item Total\") AS revenue, COUNT(DISTINCT \"Order Id\") AS orders FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY quarter ORDER BY quarter LIMIT 100000",
+    "status": "answered",
+    "steps": [
+      {
+        "detail": null,
+        "duration_ms": 21,
+        "name": "context",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 1380,
+        "name": "llm",
+        "ok": true
+      },
+      {
+        "detail": "Thêm LIMIT 100000",
+        "duration_ms": 4,
+        "name": "guard",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 57,
+        "name": "run",
+        "ok": true
+      },
+      {
+        "detail": "Phân rã theo 2 chiều: Market, Customer Segment",
+        "duration_ms": 64,
+        "name": "explain",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 1840,
+        "name": "narrate",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 7,
+        "name": "record",
+        "ok": true
+      }
+    ],
+    "understanding": {
+      "assumptions": [
+        {
+          "id": "revenue_measure",
+          "label": "Doanh thu tính theo",
+          "options": [
+            {
+              "id": "order_item_total",
+              "label": "Order Item Total, sau giảm giá"
+            },
+            {
+              "id": "sales",
+              "label": "Sales, trước giảm giá"
+            }
+          ],
+          "selected": "order_item_total"
+        },
+        {
+          "id": "base_period",
+          "label": "So sánh với",
+          "options": [
+            {
+              "id": "previous_quarter",
+              "label": "Quý liền trước (quý 2/2017)"
+            },
+            {
+              "id": "same_quarter_last_year",
+              "label": "Cùng kỳ năm trước (quý 3/2016)"
+            }
+          ],
+          "selected": "previous_quarter"
+        }
+      ],
+      "filters": [],
+      "group_by": [
+        {
+          "label": "Quý của ngày đặt hàng",
+          "sql": "date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M'))"
+        }
+      ],
+      "limit": null,
+      "measures": [
+        {
+          "label": "Doanh thu: tổng Order Item Total",
+          "sql": "SUM(\"Order Item Total\")"
+        },
+        {
+          "label": "Số đơn: số Order Id khác nhau",
+          "sql": "COUNT(DISTINCT \"Order Id\")"
+        }
+      ],
+      "order_by": [
+        {
+          "label": "Quý, tăng dần",
+          "sql": "quarter"
+        }
+      ],
+      "time_range": {
+        "label": "Quý 3/2017 so với quý 2/2017",
+        "sql": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01'"
+      }
+    },
+    "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+    "warnings": [
+      {
+        "code": "unusual_magnitude",
+        "message": "Số đơn quý 3/2017 thấp hơn mọi quý trước đó trong dữ liệu; nên kiểm dữ liệu quý này đã nạp đủ chưa."
+      }
+    ]
+  }
+}

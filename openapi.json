@@ -1119,7 +1119,8 @@
         "tags": [
           "query"
         ],
-        "summary": "Ask a question about a dataset (not implemented yet)",
+        "summary": "Ask a question about a dataset (not implemented yet: returns 501)",
+        "description": "One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. Error codes are for invalid requests, access, and the language model service.",
         "operationId": "ask",
         "parameters": [
           {
@@ -1152,8 +1153,612 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "Answer, or why there is none",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                },
+                "examples": {
+                  "failed": {
+                    "summary": "SQL failed, also after one fix round",
+                    "value": {
+                      "chart": null,
+                      "choices": [
+                        {
+                          "choice_id": "region_column",
+                          "option_id": "market"
+                        },
+                        {
+                          "choice_id": "revenue_measure",
+                          "option_id": "order_item_total"
+                        }
+                      ],
+                      "clarifications": [],
+                      "explanation": null,
+                      "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
+                      "model": "gemini-2.5-flash",
+                      "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
+                      "result": null,
+                      "sql_generated": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day",
+                      "sql_guarded": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day LIMIT 100000",
+                      "status": "failed",
+                      "steps": [
+                        {
+                          "detail": null,
+                          "duration_ms": 16,
+                          "name": "context",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 1210,
+                          "name": "llm",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Thêm LIMIT 100000",
+                          "duration_ms": 3,
+                          "name": "guard",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y\"",
+                          "duration_ms": 9,
+                          "name": "run",
+                          "ok": false
+                        },
+                        {
+                          "detail": "Mô hình sửa SQL theo lỗi của lần chạy đầu",
+                          "duration_ms": 1150,
+                          "name": "repair",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Thêm LIMIT 100000",
+                          "duration_ms": 3,
+                          "name": "guard",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\"",
+                          "duration_ms": 8,
+                          "name": "run",
+                          "ok": false
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 6,
+                          "name": "record",
+                          "ok": true
+                        }
+                      ],
+                      "understanding": null,
+                      "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+                      "warnings": []
+                    }
+                  },
+                  "needs_choice": {
+                    "summary": "Ambiguous question",
+                    "value": {
+                      "chart": null,
+                      "choices": [],
+                      "clarifications": [
+                        {
+                          "id": "region_column",
+                          "label": "\"Khu vực\" là cột nào?",
+                          "options": [
+                            {
+                              "id": "order_region",
+                              "label": "Order Region, ví dụ Western Europe"
+                            },
+                            {
+                              "id": "market",
+                              "label": "Market, ví dụ Europe"
+                            }
+                          ],
+                          "selected": null
+                        }
+                      ],
+                      "explanation": null,
+                      "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
+                      "model": "gemini-2.5-flash",
+                      "query_id": null,
+                      "result": null,
+                      "sql_generated": null,
+                      "sql_guarded": null,
+                      "status": "needs_choice",
+                      "steps": [
+                        {
+                          "detail": "\"khu vực\" khớp hai cột: Order Region, Market",
+                          "duration_ms": 12,
+                          "name": "context",
+                          "ok": true
+                        }
+                      ],
+                      "understanding": null,
+                      "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+                      "warnings": []
+                    }
+                  },
+                  "rejected": {
+                    "summary": "SQL refused by the guard",
+                    "value": {
+                      "chart": null,
+                      "choices": [],
+                      "clarifications": [],
+                      "explanation": null,
+                      "message": "Câu SQL bị từ chối: Chỉ chạy được câu SELECT đọc dữ liệu.",
+                      "model": "gemini-2.5-flash",
+                      "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
+                      "result": null,
+                      "sql_generated": "DELETE FROM dataco WHERE \"Order Status\" = 'CANCELED'",
+                      "sql_guarded": null,
+                      "status": "rejected",
+                      "steps": [
+                        {
+                          "detail": null,
+                          "duration_ms": 14,
+                          "name": "context",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 980,
+                          "name": "llm",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Chỉ chạy được câu SELECT đọc dữ liệu",
+                          "duration_ms": 2,
+                          "name": "guard",
+                          "ok": false
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 5,
+                          "name": "record",
+                          "ok": true
+                        }
+                      ],
+                      "understanding": null,
+                      "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+                      "warnings": []
+                    }
+                  },
+                  "simple": {
+                    "summary": "One dimension, one measure",
+                    "value": {
+                      "chart": {
+                        "kind": "bar",
+                        "x": "market",
+                        "y": [
+                          "revenue"
+                        ]
+                      },
+                      "choices": [
+                        {
+                          "choice_id": "region_column",
+                          "option_id": "market"
+                        },
+                        {
+                          "choice_id": "revenue_measure",
+                          "option_id": "order_item_total"
+                        }
+                      ],
+                      "clarifications": [],
+                      "explanation": null,
+                      "message": null,
+                      "model": "gemini-2.5-flash",
+                      "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
+                      "result": {
+                        "columns": [
+                          {
+                            "kind": "text",
+                            "name": "market",
+                            "role": "dimension"
+                          },
+                          {
+                            "kind": "number",
+                            "name": "revenue",
+                            "role": "measure"
+                          }
+                        ],
+                        "limit_reached": false,
+                        "rows": [
+                          [
+                            "Europe",
+                            10845230.42
+                          ],
+                          [
+                            "LATAM",
+                            10276850.17
+                          ],
+                          [
+                            "Pacific Asia",
+                            8124900.8
+                          ],
+                          [
+                            "USCA",
+                            5070310.55
+                          ],
+                          [
+                            "Africa",
+                            2340560.12
+                          ]
+                        ],
+                        "total_rows": 5,
+                        "truncated": false
+                      },
+                      "sql_generated": "SELECT \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Market\" ORDER BY revenue DESC",
+                      "sql_guarded": "SELECT \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Market\" ORDER BY revenue DESC LIMIT 100000",
+                      "status": "answered",
+                      "steps": [
+                        {
+                          "detail": null,
+                          "duration_ms": 15,
+                          "name": "context",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 1120,
+                          "name": "llm",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Thêm LIMIT 100000",
+                          "duration_ms": 3,
+                          "name": "guard",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 38,
+                          "name": "run",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 6,
+                          "name": "record",
+                          "ok": true
+                        }
+                      ],
+                      "understanding": {
+                        "assumptions": [
+                          {
+                            "id": "region_column",
+                            "label": "\"Khu vực\" là cột nào?",
+                            "options": [
+                              {
+                                "id": "order_region",
+                                "label": "Order Region, ví dụ Western Europe"
+                              },
+                              {
+                                "id": "market",
+                                "label": "Market, ví dụ Europe"
+                              }
+                            ],
+                            "selected": "market"
+                          },
+                          {
+                            "id": "revenue_measure",
+                            "label": "Doanh thu tính theo",
+                            "options": [
+                              {
+                                "id": "order_item_total",
+                                "label": "Order Item Total, sau giảm giá"
+                              },
+                              {
+                                "id": "sales",
+                                "label": "Sales, trước giảm giá"
+                              }
+                            ],
+                            "selected": "order_item_total"
+                          }
+                        ],
+                        "filters": [],
+                        "group_by": [
+                          {
+                            "label": "Thị trường (Market)",
+                            "sql": "\"Market\""
+                          }
+                        ],
+                        "limit": null,
+                        "measures": [
+                          {
+                            "label": "Doanh thu: tổng Order Item Total",
+                            "sql": "SUM(\"Order Item Total\")"
+                          }
+                        ],
+                        "order_by": [
+                          {
+                            "label": "Doanh thu, giảm dần",
+                            "sql": "revenue DESC"
+                          }
+                        ],
+                        "time_range": null
+                      },
+                      "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+                      "warnings": []
+                    }
+                  },
+                  "why": {
+                    "summary": "Why question with a breakdown",
+                    "value": {
+                      "chart": {
+                        "kind": "line",
+                        "x": "quarter",
+                        "y": [
+                          "revenue"
+                        ]
+                      },
+                      "choices": [
+                        {
+                          "choice_id": "revenue_measure",
+                          "option_id": "order_item_total"
+                        },
+                        {
+                          "choice_id": "base_period",
+                          "option_id": "previous_quarter"
+                        }
+                      ],
+                      "clarifications": [],
+                      "explanation": {
+                        "base": {
+                          "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01'",
+                          "label": "Quý 2/2017",
+                          "value": "9402500.00"
+                        },
+                        "change": "-1283400.00",
+                        "compare": {
+                          "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01'",
+                          "label": "Quý 3/2017",
+                          "value": "8119100.00"
+                        },
+                        "dimensions": [
+                          {
+                            "column": "Market",
+                            "groups": [
+                              {
+                                "base_value": "2850120.40",
+                                "compare_value": "2210340.15",
+                                "contribution": "-639780.25",
+                                "value": "Europe"
+                              },
+                              {
+                                "base_value": "2640300.10",
+                                "compare_value": "2301250.60",
+                                "contribution": "-339049.50",
+                                "value": "LATAM"
+                              },
+                              {
+                                "base_value": "2105430.25",
+                                "compare_value": "1960120.00",
+                                "contribution": "-145310.25",
+                                "value": "Pacific Asia"
+                              },
+                              {
+                                "base_value": "1210500.00",
+                                "compare_value": "1090230.00",
+                                "contribution": "-120270.00",
+                                "value": "USCA"
+                              },
+                              {
+                                "base_value": "596149.25",
+                                "compare_value": "557159.25",
+                                "contribution": "-38990.00",
+                                "value": "Africa"
+                              }
+                            ],
+                            "kind": "text",
+                            "sql": "SELECT \"Market\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Market\" LIMIT 100000"
+                          },
+                          {
+                            "column": "Customer Segment",
+                            "groups": [
+                              {
+                                "base_value": "4880200.15",
+                                "compare_value": "4150100.50",
+                                "contribution": "-730099.65",
+                                "value": "Consumer"
+                              },
+                              {
+                                "base_value": "2850000.10",
+                                "compare_value": "2480300.25",
+                                "contribution": "-369699.85",
+                                "value": "Corporate"
+                              },
+                              {
+                                "base_value": "1672299.75",
+                                "compare_value": "1488699.25",
+                                "contribution": "-183600.50",
+                                "value": "Home Office"
+                              }
+                            ],
+                            "kind": "text",
+                            "sql": "SELECT \"Customer Segment\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Customer Segment\" LIMIT 100000"
+                          }
+                        ],
+                        "measure": "Doanh thu",
+                        "summary": "Doanh thu quý 3/2017 giảm 1283400.00 so với quý 2/2017, từ 9402500.00 xuống 8119100.00. Thị trường Europe giảm nhiều nhất (-639780.25), sau đó là LATAM (-339049.50). Phần lớn mức giảm do số đơn ít đi, từ 5000 xuống 4400 đơn (-1117725.00); giá trị đơn trung bình giảm từ 1880.50 xuống 1845.25 (-165675.00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9226250.00.",
+                        "summary_by_model": true,
+                        "volume_price": {
+                          "base_price": "1880.50",
+                          "base_volume": "5000",
+                          "compare_price": "1845.25",
+                          "compare_volume": "4400",
+                          "if_volume_unchanged": "9226250.00",
+                          "price_effect": "-165675.00",
+                          "price_label": "Giá trị đơn trung bình",
+                          "sql": "SELECT COUNT(DISTINCT CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN \"Order Id\" END) AS base_volume, COUNT(DISTINCT CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN \"Order Id\" END) AS compare_volume, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' LIMIT 100000",
+                          "volume_effect": "-1117725.00",
+                          "volume_label": "Số đơn"
+                        }
+                      },
+                      "message": null,
+                      "model": "gemini-2.5-flash",
+                      "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
+                      "result": {
+                        "columns": [
+                          {
+                            "kind": "timestamp",
+                            "name": "quarter",
+                            "role": "time"
+                          },
+                          {
+                            "kind": "number",
+                            "name": "revenue",
+                            "role": "measure"
+                          },
+                          {
+                            "kind": "decimal",
+                            "name": "orders",
+                            "role": "measure"
+                          }
+                        ],
+                        "limit_reached": false,
+                        "rows": [
+                          [
+                            "2017-04-01T00:00:00",
+                            9402500.0,
+                            "5000"
+                          ],
+                          [
+                            "2017-07-01T00:00:00",
+                            8119100.0,
+                            "4400"
+                          ]
+                        ],
+                        "total_rows": 2,
+                        "truncated": false
+                      },
+                      "sql_generated": "SELECT date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, SUM(\"Order Item Total\") AS revenue, COUNT(DISTINCT \"Order Id\") AS orders FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY quarter ORDER BY quarter",
+                      "sql_guarded": "SELECT date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, SUM(\"Order Item Total\") AS revenue, COUNT(DISTINCT \"Order Id\") AS orders FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY quarter ORDER BY quarter LIMIT 100000",
+                      "status": "answered",
+                      "steps": [
+                        {
+                          "detail": null,
+                          "duration_ms": 21,
+                          "name": "context",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 1380,
+                          "name": "llm",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Thêm LIMIT 100000",
+                          "duration_ms": 4,
+                          "name": "guard",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 57,
+                          "name": "run",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Phân rã theo 2 chiều: Market, Customer Segment",
+                          "duration_ms": 64,
+                          "name": "explain",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 1840,
+                          "name": "narrate",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 7,
+                          "name": "record",
+                          "ok": true
+                        }
+                      ],
+                      "understanding": {
+                        "assumptions": [
+                          {
+                            "id": "revenue_measure",
+                            "label": "Doanh thu tính theo",
+                            "options": [
+                              {
+                                "id": "order_item_total",
+                                "label": "Order Item Total, sau giảm giá"
+                              },
+                              {
+                                "id": "sales",
+                                "label": "Sales, trước giảm giá"
+                              }
+                            ],
+                            "selected": "order_item_total"
+                          },
+                          {
+                            "id": "base_period",
+                            "label": "So sánh với",
+                            "options": [
+                              {
+                                "id": "previous_quarter",
+                                "label": "Quý liền trước (quý 2/2017)"
+                              },
+                              {
+                                "id": "same_quarter_last_year",
+                                "label": "Cùng kỳ năm trước (quý 3/2016)"
+                              }
+                            ],
+                            "selected": "previous_quarter"
+                          }
+                        ],
+                        "filters": [],
+                        "group_by": [
+                          {
+                            "label": "Quý của ngày đặt hàng",
+                            "sql": "date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M'))"
+                          }
+                        ],
+                        "limit": null,
+                        "measures": [
+                          {
+                            "label": "Doanh thu: tổng Order Item Total",
+                            "sql": "SUM(\"Order Item Total\")"
+                          },
+                          {
+                            "label": "Số đơn: số Order Id khác nhau",
+                            "sql": "COUNT(DISTINCT \"Order Id\")"
+                          }
+                        ],
+                        "order_by": [
+                          {
+                            "label": "Quý, tăng dần",
+                            "sql": "quarter"
+                          }
+                        ],
+                        "time_range": {
+                          "label": "Quý 3/2017 so với quý 2/2017",
+                          "sql": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01'"
+                        }
+                      },
+                      "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
+                      "warnings": [
+                        {
+                          "code": "unusual_magnitude",
+                          "message": "Số đơn quý 3/2017 thấp hơn mọi quý trước đó trong dữ liệu; nên kiểm dữ liệu quý này đã nạp đủ chưa."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
           "4XX": {
-            "description": "400 invalid JSON body, 401, 404 not a member",
+            "description": "400 empty question or invalid JSON body, 401, 404 not a member or unknown dataset",
             "content": {
               "application/json": {
                 "schema": {
@@ -1174,6 +1779,26 @@
           },
           "501": {
             "description": "Not implemented yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The language model service failed or did not answer before any SQL was written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The language model is not configured on the server",
             "content": {
               "application/json": {
                 "schema": {
@@ -1500,8 +2125,187 @@
           "question"
         ],
         "properties": {
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChosenOption"
+            },
+            "description": "Choices for the question, empty the first time. To change an assumption or answer a clarification, send the\nsame question with `choices` of the previous answer, the changed entry replaced or added. A question whose text\nwas edited is a new question: send `choices` empty. The backend does not compare with earlier questions; it\napplies the choices it recognizes for this question and ignores the others with a warning\n`choice_not_applied`. Choices not listed use their default."
+          },
           "question": {
             "type": "string"
+          }
+        }
+      },
+      "AskResponse": {
+        "type": "object",
+        "description": "Answer to one question, with the evidence behind it. See `AskStatus` for which fields are set.",
+        "required": [
+          "status",
+          "message",
+          "query_id",
+          "version_id",
+          "model",
+          "choices",
+          "sql_generated",
+          "sql_guarded",
+          "understanding",
+          "result",
+          "chart",
+          "warnings",
+          "explanation",
+          "clarifications",
+          "steps"
+        ],
+        "properties": {
+          "chart": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ChartSuggestion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChosenOption"
+            },
+            "description": "Every choice this answer used, defaults included, in the shape of `AskRequest.choices`. To ask again with one\nchoice changed, send this list with that entry replaced; for `needs_choice`, send it plus a pick for each\nclarification. Choices the backend did not recognize are not in it."
+          },
+          "clarifications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "description": "Questions back to the user, only for `needs_choice`. Every entry has `selected` null."
+          },
+          "explanation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Explanation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Text for the end user (Vietnamese): the reason for `rejected` and `failed`, the prompt for `needs_choice`;\nnull for `answered`."
+          },
+          "model": {
+            "type": "string",
+            "description": "Language model configured for the question, for example `gemini-2.5-flash` or `mock`."
+          },
+          "query_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Id of the question in the history (`queries`); null for `needs_choice`."
+          },
+          "result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ResultTable"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sql_generated": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SQL written by the model, on logical table names. After a fix round, the fixed SQL."
+          },
+          "sql_guarded": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SQL that ran: the generated SQL after the guard added row-level filters and a row limit. Still on logical table\nnames, no file paths."
+          },
+          "status": {
+            "$ref": "#/components/schemas/AskStatus"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AskStep"
+            },
+            "description": "What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a\n`repair`."
+          },
+          "understanding": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Understanding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Dataset version the question ran on."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "description": "Notes shown next to the result; they never hide it."
+          }
+        }
+      },
+      "AskStatus": {
+        "type": "string",
+        "description": "Outcome of the question, and which fields of `AskResponse` are set:\n- `answered`: the SQL ran. Set: `query_id`, `sql_generated`, `sql_guarded`, `understanding`, `result`; `chart`\n  when a chart fits; `explanation` for a \"why\" question (when the breakdown cannot be made, a warning\n  `explanation_unavailable` says why).\n- `needs_choice`: the question can be read several ways; pick one option of each entry in `clarifications` and ask\n  again. This can happen before the model is called (a word matches several columns) or after (the two slices of\n  a \"why\" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.\n  Not recorded in the history, so `query_id` is null.\n- `rejected`: the guard refused the SQL, the generated one or the one fixed in the `repair` round. Set: `message`\n  (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false.\n- `failed`: the SQL failed on the analytics engine and the one fix round did not help, either because the fixed\n  SQL failed too or because the model failed during the fix. Set: `message`, `query_id`, `sql_generated`,\n  `sql_guarded`; the `run` or `repair` step that stopped it has `ok` false.\n\nThe status names the step that stopped the question: the guard gives `rejected`, the engine or the fix round gives\n`failed`. A model error before any SQL exists is not a status: the request gets 502 or 503.",
+        "enum": [
+          "answered",
+          "needs_choice",
+          "rejected",
+          "failed"
+        ]
+      },
+      "AskStep": {
+        "type": "object",
+        "required": [
+          "name",
+          "duration_ms",
+          "ok",
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Text for the end user (Vietnamese), for example the guard's reason or the engine error."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "name": {
+            "$ref": "#/components/schemas/StepName"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "False for a step that failed. A failed step does not always stop the question: a failed `run` can be followed by\n`repair`, a failed `narrate` by a template summary. `AskStatus` tells whether the question stopped."
           }
         }
       },
@@ -1517,6 +2321,21 @@
           }
         }
       },
+      "CellValue": {
+        "oneOf": [
+          {
+            "type": "number",
+            "format": "double"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "boolean"
+          }
+        ],
+        "description": "One cell: a JSON number, string or boolean; read it with the `kind` of its column."
+      },
       "ChangePasswordRequest": {
         "type": "object",
         "required": [
@@ -1530,6 +2349,107 @@
           "new_password": {
             "type": "string",
             "description": "8 to 128 characters."
+          }
+        }
+      },
+      "ChartKind": {
+        "type": "string",
+        "description": "`bar` for one dimension and one measure, `line` when the x axis is time.",
+        "enum": [
+          "bar",
+          "line"
+        ]
+      },
+      "ChartSuggestion": {
+        "type": "object",
+        "description": "Suggested chart; null in `AskResponse` when the result is better shown as a table only.",
+        "required": [
+          "kind",
+          "x",
+          "y"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ChartKind"
+          },
+          "x": {
+            "type": "string",
+            "description": "Column on the x axis: a dimension for `bar`, time for `line`. A name from `result.columns`."
+          },
+          "y": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Columns drawn as series, names from `result.columns`."
+          }
+        }
+      },
+      "Choice": {
+        "type": "object",
+        "description": "A point where the question can be read several ways. To change it, ask the same question again with\n`AskResponse.choices`, the entry for this `id` replaced.",
+        "required": [
+          "id",
+          "label",
+          "selected",
+          "options"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id set by the backend; send it back unchanged. Stable for the same question on the same dataset version: made\nfrom the kind of choice and what it is about (a word and its candidate columns, the period to compare with),\nnever from the text of the SQL, so a pick still applies when the model writes different SQL."
+          },
+          "label": {
+            "type": "string",
+            "description": "Text for the end user (Vietnamese): what can be read several ways, for example which column a word means."
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChoiceOption"
+            }
+          },
+          "selected": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id of the option in use; null when the user has to pick (`needs_choice`)."
+          }
+        }
+      },
+      "ChoiceOption": {
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque id set by the backend; send it back unchanged."
+          },
+          "label": {
+            "type": "string",
+            "description": "Text for the end user (Vietnamese)."
+          }
+        }
+      },
+      "ChosenOption": {
+        "type": "object",
+        "description": "The pick for one `Choice`. A `choice_id` or `option_id` the backend does not recognize (for example a choice that\nno longer applies) is ignored, left out of `AskResponse.choices`, and reported with a warning `choice_not_applied`:\nan assumption falls back to its default, a clarification is asked again.",
+        "required": [
+          "choice_id",
+          "option_id"
+        ],
+        "properties": {
+          "choice_id": {
+            "type": "string",
+            "description": "`Choice.id` from an earlier answer."
+          },
+          "option_id": {
+            "type": "string",
+            "description": "One of the `ChoiceOption.id` of that choice."
           }
         }
       },
@@ -1548,6 +2468,16 @@
             "type": "string"
           }
         }
+      },
+      "ColumnRole": {
+        "type": "string",
+        "description": "What a result column is:\n- `dimension`: a grouping key that is not time, for example a market.\n- `time`: a grouping key on time, for example a quarter.\n- `measure`: an aggregate, for example a sum; its cells can be drilled into.\n- `other`: anything else, for example a column of a query without aggregates.",
+        "enum": [
+          "dimension",
+          "time",
+          "measure",
+          "other"
+        ]
       },
       "CreateUserRequest": {
         "type": "object",
@@ -1678,6 +2608,37 @@
           }
         }
       },
+      "DimensionBreakdown": {
+        "type": "object",
+        "description": "Contribution of every group of one dimension; the contributions add up to `change`.",
+        "required": [
+          "column",
+          "kind",
+          "sql",
+          "groups"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Dimension column, as named in the dataset (not a name from `result.columns`)."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupContribution"
+            },
+            "description": "Every group of the column, largest contribution (by absolute value) first."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ValueKind",
+            "description": "How to read the group values, like the `kind` of a result column."
+          },
+          "sql": {
+            "type": "string",
+            "description": "SQL that computed the groups of both slices, after the guard."
+          }
+        }
+      },
       "ErrorBody": {
         "type": "object",
         "description": "Error body returned by every endpoint on failure.",
@@ -1709,6 +2670,119 @@
           "upstream",
           "unavailable"
         ]
+      },
+      "Explanation": {
+        "type": "object",
+        "description": "Breakdown of a change between two slices (two periods or two groups); null in `AskResponse` unless an answered\n\"why\" question has one. Numbers are exact strings of decimal digits.",
+        "required": [
+          "measure",
+          "base",
+          "compare",
+          "change",
+          "dimensions",
+          "volume_price",
+          "summary",
+          "summary_by_model"
+        ],
+        "properties": {
+          "base": {
+            "$ref": "#/components/schemas/ExplanationSlice",
+            "description": "Slice compared against."
+          },
+          "change": {
+            "type": "string",
+            "description": "`compare.value - base.value`."
+          },
+          "compare": {
+            "$ref": "#/components/schemas/ExplanationSlice",
+            "description": "Slice being explained."
+          },
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DimensionBreakdown"
+            },
+            "description": "One breakdown per dimension, the dimension that explains the change best first."
+          },
+          "measure": {
+            "type": "string",
+            "description": "Measure that changed, text for the end user (Vietnamese)."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown."
+          },
+          "summary_by_model": {
+            "type": "boolean",
+            "description": "False when the model's text failed the number check, or the model was not reached, and `summary` is a template\nsentence written by the backend."
+          },
+          "volume_price": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/VolumePrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ExplanationSlice": {
+        "type": "object",
+        "description": "One of the two slices.",
+        "required": [
+          "label",
+          "filter",
+          "value"
+        ],
+        "properties": {
+          "filter": {
+            "type": "string",
+            "description": "SQL condition that selects the rows of the slice, on logical names."
+          },
+          "label": {
+            "type": "string",
+            "description": "Text for the end user (Vietnamese) naming the slice, for example a quarter."
+          },
+          "value": {
+            "type": "string",
+            "description": "Value of the measure on the slice."
+          }
+        }
+      },
+      "GroupContribution": {
+        "type": "object",
+        "description": "One group of a dimension. `value` is null for the group of rows where the dimension column is null.",
+        "required": [
+          "value",
+          "base_value",
+          "compare_value",
+          "contribution"
+        ],
+        "properties": {
+          "base_value": {
+            "type": "string"
+          },
+          "compare_value": {
+            "type": "string"
+          },
+          "contribution": {
+            "type": "string",
+            "description": "`compare_value - base_value` of this group."
+          },
+          "value": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CellValue",
+                "description": "Value of the dimension column for this group; null for rows where it is null."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
       },
       "HealthResponse": {
         "type": "object",
@@ -1835,6 +2909,76 @@
           }
         }
       },
+      "ResultColumn": {
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "role"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ValueKind"
+          },
+          "name": {
+            "type": "string",
+            "description": "Column name as the SQL returns it, made unique: from left to right, a name already used gets the smallest\nsuffix `_2`, `_3`, ... that no column has, so `a, a, a_2` becomes `a, a_3, a_2`."
+          },
+          "role": {
+            "$ref": "#/components/schemas/ColumnRole"
+          }
+        }
+      },
+      "ResultTable": {
+        "type": "object",
+        "description": "Rows of the result; null in `AskResponse` unless the status is `answered`. At most 1000 rows are sent.",
+        "required": [
+          "columns",
+          "rows",
+          "total_rows",
+          "truncated",
+          "limit_reached"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResultColumn"
+            }
+          },
+          "limit_reached": {
+            "type": "boolean",
+            "description": "True when `total_rows` equals the guard's row cap (whether the guard added the LIMIT or lowered one the SQL\nhad): the full result may have more rows, so show\n`total_rows` as \"at least\"."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CellValue"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "One array per row, cells in the order of `columns`; null is a SQL NULL."
+          },
+          "total_rows": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of rows `sql_guarded` returned. This is the full result unless `limit_reached`.",
+            "minimum": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when `rows` holds fewer rows than `total_rows`."
+          }
+        }
+      },
       "SetRoleRequest": {
         "type": "object",
         "required": [
@@ -1916,6 +3060,107 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "StepName": {
+        "type": "string",
+        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown.\n- `record`: save the question in the history.",
+        "enum": [
+          "context",
+          "llm",
+          "guard",
+          "run",
+          "repair",
+          "explain",
+          "narrate",
+          "record"
+        ]
+      },
+      "Understanding": {
+        "type": "object",
+        "description": "The \"understood as\" card, built from `sql_guarded`: what is measured, filtered, grouped, sorted, over which\nperiod, and the assumptions made. Null in `AskResponse` unless the status is `answered`. `limit` is null when only\nthe guard's row cap applies; `time_range` is null when the SQL has no time filter.",
+        "required": [
+          "measures",
+          "filters",
+          "group_by",
+          "order_by",
+          "limit",
+          "time_range",
+          "assumptions"
+        ],
+        "properties": {
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "description": "Assumptions the user can change, including clarifications answered earlier; every entry has `selected` set."
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodItem"
+            },
+            "description": "Filters of the question, then the row-level filters the guard added for the user's data role (the label says\nwhich)."
+          },
+          "group_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodItem"
+            }
+          },
+          "limit": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UnderstoodItem",
+                "description": "Row limit the question asked for, for example the top 3; null when only the guard's limit applies."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "measures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodItem"
+            }
+          },
+          "order_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnderstoodItem"
+            }
+          },
+          "time_range": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UnderstoodItem",
+                "description": "Period the question covers; null when the SQL has no time filter."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "UnderstoodItem": {
+        "type": "object",
+        "description": "One thing the question was understood to mean.",
+        "required": [
+          "label",
+          "sql"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Text for the end user (Vietnamese) naming the measure, filter, grouping, order or period."
+          },
+          "sql": {
+            "type": "string",
+            "description": "Fragment of `sql_guarded` this item comes from."
           }
         }
       },
@@ -2046,6 +3291,19 @@
           }
         }
       },
+      "ValueKind": {
+        "type": "string",
+        "description": "How to read the cells of a column, decided by the column type. Any cell may also be null (SQL NULL).\n- `text`: JSON string.\n- `number`: JSON number, for types a JavaScript number holds exactly: integers up to 32 bits, FLOAT, DOUBLE. NaN\n  and infinity are sent as null.\n- `decimal`: JSON string of decimal digits, integer or not, for example \"5000\" or \"-1234.50\", for BIGINT\n  (COUNT returns one), HUGEINT, unsigned 64 and 128 bit integers and DECIMAL, which a JavaScript number would\n  round. Convert with `Number()` only to draw a chart or to sort; comparing the strings sorts \"10\" before \"9\".\n- `boolean`: JSON boolean.\n- `date`: JSON string `YYYY-MM-DD`.\n- `timestamp`: JSON string in ISO 8601, `YYYY-MM-DDTHH:MM:SS[.ffffff]` for TIMESTAMP (no time zone, as stored),\n  ending in `Z` for TIMESTAMPTZ (converted to UTC).\n- `other`: JSON string as the analytics engine prints the value: TIME, INTERVAL, lists, structs and other types.",
+        "enum": [
+          "text",
+          "number",
+          "decimal",
+          "boolean",
+          "date",
+          "timestamp",
+          "other"
+        ]
+      },
       "VersionResponse": {
         "type": "object",
         "required": [
@@ -2065,6 +3323,89 @@
             "type": "string"
           }
         }
+      },
+      "VolumePrice": {
+        "type": "object",
+        "description": "Change split into a volume effect and a price effect, for a measure that is volume times price (for example\norders times average order value); null in `Explanation` for other measures.",
+        "required": [
+          "volume_label",
+          "price_label",
+          "sql",
+          "base_volume",
+          "compare_volume",
+          "base_price",
+          "compare_price",
+          "volume_effect",
+          "price_effect",
+          "if_volume_unchanged"
+        ],
+        "properties": {
+          "base_price": {
+            "type": "string",
+            "description": "Measure divided by volume, rounded to a fixed number of decimals; the only rounded numbers here."
+          },
+          "base_volume": {
+            "type": "string"
+          },
+          "compare_price": {
+            "type": "string"
+          },
+          "compare_volume": {
+            "type": "string"
+          },
+          "if_volume_unchanged": {
+            "type": "string",
+            "description": "Value of the measure if the volume had stayed at `base_volume`: `base_volume * compare_price`."
+          },
+          "price_effect": {
+            "type": "string",
+            "description": "`change - volume_effect`, so that the two effects add up to `change` exactly."
+          },
+          "price_label": {
+            "type": "string",
+            "description": "Text for the end user (Vietnamese) naming the price, for example the average order value."
+          },
+          "sql": {
+            "type": "string",
+            "description": "SQL that computed the volume and the measure of both slices, after the guard."
+          },
+          "volume_effect": {
+            "type": "string",
+            "description": "`(compare_volume - base_volume) * (base_price + compare_price) / 2`, exact from the rounded prices."
+          },
+          "volume_label": {
+            "type": "string",
+            "description": "Text for the end user (Vietnamese) naming the volume, for example the number of orders."
+          }
+        }
+      },
+      "Warning": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/WarningCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "Text for the end user (Vietnamese)."
+          }
+        }
+      },
+      "WarningCode": {
+        "type": "string",
+        "description": "Kind of note:\n- `empty_result`: no rows.\n- `all_null`: a result column holds only nulls.\n- `filter_value_not_found`: the SQL filters on a value that does not occur in the column.\n- `unusual_magnitude`: a value is far outside what the data makes likely, for example a ratio above 100%.\n- `explanation_unavailable`: a \"why\" question was answered without a breakdown; the message says why.\n- `choice_not_applied`: a choice sent with the question was not recognized and the default was used.",
+        "enum": [
+          "empty_result",
+          "all_null",
+          "filter_value_not_found",
+          "unusual_magnitude",
+          "explanation_unavailable",
+          "choice_not_applied"
+        ]
       },
       "WorkspaceOverview": {
         "type": "object",
