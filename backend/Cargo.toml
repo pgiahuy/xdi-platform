@@ -21,6 +21,7 @@ tower-http = { version = "0.7", features = ["fs"] }
 argon2 = "0.6.0"
 sha2 = "0.10"
 deunicode = "1.6.2"
+encoding_rs = "0.8.42"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 getrandom = "0.4"
 time = { version = "0.3", default-features = false }

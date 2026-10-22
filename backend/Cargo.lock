@@ -3262,6 +3262,7 @@ dependencies = [
  "chrono",
  "deunicode",
  "duckdb",
+ "encoding_rs",
  "getrandom 0.4.3",
  "http-body-util",
  "rlimit",

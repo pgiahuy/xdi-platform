@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 use duckdb::Connection;
 
+use super::csv_encoding::{self, Utf8Copy};
 use crate::error::AppError;
 
 /// Cột thêm vào mỗi dòng, ghi tên file gốc của dòng đó. Truy dòng nguồn dùng cột này để chỉ ra dòng đến từ file nào.
@@ -99,7 +100,7 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
         if size == 0 {
             return Err(AppError::BadRequest(format!("File {} rỗng", file.name)));
         }
-        let (reader, columns) = open_reader(&conn, file)?;
+        let (reader, columns, utf8_copy) = open_reader(&conn, file)?;
         let names: BTreeSet<String> = columns.iter().map(|c| c.name.clone()).collect();
         if names.iter().any(|n| n.eq_ignore_ascii_case(SOURCE_COLUMN)) {
             return Err(AppError::BadRequest(format!(
@@ -113,24 +114,28 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
                 check_same_columns(file.format, first_name, first_names, &file.name, &names)?
             }
         }
-        readers.push(reader);
+        readers.push((reader, utf8_copy));
     }
 
-    for (i, (file, reader)) in files.iter().zip(&readers).enumerate() {
+    // utf8_copy được chuyển vào vòng lặp (zip(readers), không phải &readers) nên bản UTF-8 của mỗi file bị xóa ngay khi
+    // file đó ghi xong Parquet, không đợi tới hết lần nạp.
+    for (i, (file, (reader, utf8_copy))) in files.iter().zip(readers).enumerate() {
         let target = out_dir.join(format!("part-{:04}.parquet", i + 1));
         let target_text = path_text(&target)?;
-        match copy_to_parquet(&conn, file, reader, &target_text) {
+        match copy_to_parquet(&conn, file, &reader, &target_text) {
             Ok(()) => {}
             // Bước đọc cột chỉ xem phần đầu file. Byte không phải UTF-8 nằm sâu trong file CSV thì tới đây mới lộ ra;
-            // đọc lại cả file theo latin-1.
-            Err(e) if file.format == FileFormat::Csv && is_unicode_error(&e) => {
+            // đổi cả file sang UTF-8 rồi đọc lại. Bản UTF-8 bị xóa khi ra khỏi nhánh này.
+            Err(e) if file.format == FileFormat::Csv && is_invalid_unicode(&e.to_string()) => {
                 let _ = std::fs::remove_file(&target);
-                let latin1 = csv_reader(&file.path, true)?;
-                copy_to_parquet(&conn, file, &latin1, &target_text)
+                let copy = csv_encoding::build_utf8_copy(&file.path, &file.name)?;
+                let converted = csv_reader(copy.path())?;
+                copy_to_parquet(&conn, file, &converted, &target_text)
                     .map_err(|e| user_file_error(&file.label(), "đổi sang Parquet", e))?;
             }
             Err(e) => return Err(user_file_error(&file.label(), "đổi sang Parquet", e)),
         }
+        drop(utf8_copy);
     }
 
     // Đọc lại cả thư mục như bảng gộp: DuckDB gộp theo tên cột và nâng kiểu (BIGINT với DOUBLE thành DOUBLE). Kiểu
@@ -189,39 +194,44 @@ fn copy_to_parquet(
     ))
 }
 
-fn csv_reader(path: &Path, latin1: bool) -> Result<String, AppError> {
+fn csv_reader(path: &Path) -> Result<String, AppError> {
     let path = sql_string(&path_text(path)?);
-    Ok(if latin1 {
-        format!("read_csv({path}, header = true, encoding = 'latin-1')")
-    } else {
-        format!("read_csv({path}, header = true)")
-    })
+    Ok(format!("read_csv({path}, header = true)"))
 }
 
-fn is_unicode_error(e: &duckdb::Error) -> bool {
-    e.to_string().to_lowercase().contains("unicode")
+/// DuckDB báo file không phải UTF-8. So cả cụm chứ không chỉ chữ "unicode": thông báo lỗi CSV của DuckDB chép nguyên
+/// dòng lỗi và đường dẫn file, chữ "unicode" nằm trong dữ liệu sẽ làm lỗi khác (như thừa cột) đi nhầm sang bước đổi mã.
+fn is_invalid_unicode(message: &str) -> bool {
+    message
+        .to_lowercase()
+        .contains("invalid unicode (byte sequence mismatch)")
 }
 
-/// Biểu thức đọc một file và danh sách cột của nó. CSV thử UTF-8 trước; DuckDB báo lỗi mã hóa thì thử latin-1, dạng
-/// thường gặp ở file xuất từ phần mềm cũ.
-fn open_reader(conn: &Connection, file: &InputFile) -> Result<(String, Vec<Column>), AppError> {
+/// Biểu thức đọc một file, danh sách cột của nó, và bản UTF-8 nếu đã phải đổi mã (biểu thức đọc trỏ vào bản này, nên
+/// phải giữ nó tới khi ghi Parquet xong). CSV thử UTF-8 trước; DuckDB báo lỗi mã hóa thì đổi file sang UTF-8
+/// (engine/csv_encoding.rs), dạng thường gặp ở file xuất từ phần mềm cũ, rồi đọc file đã đổi.
+fn open_reader(
+    conn: &Connection,
+    file: &InputFile,
+) -> Result<(String, Vec<Column>, Option<Utf8Copy>), AppError> {
     let path = sql_string(&path_text(&file.path)?);
     match file.format {
         FileFormat::Parquet => {
             let reader = format!("read_parquet({path})");
             let columns = describe(conn, &reader)
                 .map_err(|e| user_file_error(&file.label(), "đọc Parquet", e))?;
-            Ok((reader, columns))
+            Ok((reader, columns, None))
         }
         FileFormat::Csv => {
-            let utf8 = csv_reader(&file.path, false)?;
-            let (reader, columns) = match describe(conn, &utf8) {
-                Ok(columns) => (utf8, columns),
-                Err(e) if is_unicode_error(&e) => {
-                    let latin1 = csv_reader(&file.path, true)?;
-                    let columns = describe(conn, &latin1)
+            let utf8 = csv_reader(&file.path)?;
+            let (reader, columns, utf8_copy) = match describe(conn, &utf8) {
+                Ok(columns) => (utf8, columns, None),
+                Err(e) if is_invalid_unicode(&e.to_string()) => {
+                    let copy = csv_encoding::build_utf8_copy(&file.path, &file.name)?;
+                    let converted = csv_reader(copy.path())?;
+                    let columns = describe(conn, &converted)
                         .map_err(|e| user_file_error(&file.label(), "đọc CSV", e))?;
-                    (latin1, columns)
+                    (converted, columns, Some(copy))
                 }
                 Err(e) => return Err(user_file_error(&file.label(), "đọc CSV", e)),
             };
@@ -235,7 +245,7 @@ fn open_reader(conn: &Connection, file: &InputFile) -> Result<(String, Vec<Colum
                     )));
                 }
             }
-            Ok((reader, columns))
+            Ok((reader, columns, utf8_copy))
         }
         // CSV do chính backend ghi: biết chắc UTF-8, dấu phẩy, nháy kép, nên không để DuckDB đoán. sample_size = -1
         // cho DuckDB xem hết file trước khi chọn kiểu cột: cột như mã hàng có số ở đầu và chữ ở dòng thứ trăm nghìn
@@ -256,7 +266,7 @@ fn open_reader(conn: &Connection, file: &InputFile) -> Result<(String, Vec<Colum
             );
             let columns =
                 describe(conn, &reader).map_err(|e| user_file_error(&file.label(), "đọc", e))?;
-            Ok((reader, columns))
+            Ok((reader, columns, None))
         }
     }
 }
@@ -444,6 +454,78 @@ mod tests {
         assert_eq!(query_strings(&tmp.out(), "name FROM {t}"), ["Café"]);
     }
 
+    /// File xuất từ phần mềm Windows cũ: 0x92, 0x8a, 0x8e là ’, Š, Ž trong windows-1252, không có ký tự in được
+    /// trong latin-1 (DataCo có đúng các byte này).
+    #[test]
+    fn windows_1252_csv_is_read() {
+        let tmp = TempDir::new();
+        let file = tmp.csv(
+            "legacy.csv",
+            b"city,amount\nCox\x92s Bazar,1\n\x8aiauliai,2\n\x8eilina,3\n",
+        );
+        let result = materialize(&[file], &tmp.out()).unwrap();
+        assert_eq!(result.row_count, 3);
+        assert_eq!(
+            query_strings(&tmp.out(), "city FROM {t} ORDER BY amount"),
+            ["Cox\u{2019}s Bazar", "\u{160}iauliai", "\u{17d}ilina"]
+        );
+        // Bản UTF-8 đã bị xóa sau khi ghi Parquet, chỉ còn file gốc.
+        assert_eq!(std::fs::read_dir(tmp.0.join("in")).unwrap().count(), 1);
+    }
+
+    /// File UTF-8 tiếng Việt có một byte hỏng: báo lỗi kèm số dòng, không đọc lại theo windows-1252 (sẽ làm sai mọi chữ
+    /// có dấu). Byte hỏng ở đầu file lộ ra lúc đọc cột; ở sau 30.000 dòng thì lộ ra lúc ghi Parquet.
+    #[test]
+    fn utf8_csv_with_a_broken_byte_is_rejected() {
+        let tmp = TempDir::new();
+        let file = tmp.csv(
+            "vn.csv",
+            b"city,amount\nH\xc3\xa0 N\xe1\xbb\x99i,1\nCox\x92s,2\n",
+        );
+        let err = materialize(&[file], &tmp.out()).unwrap_err();
+        assert!(
+            matches!(&err, AppError::BadRequest(m) if m.contains("vn.csv") && m.contains("dòng 3")),
+            "{err:?}"
+        );
+
+        let mut bytes = "city,amount\nHà Nội,1\n".as_bytes().to_vec();
+        for i in 0..30_000 {
+            bytes.extend_from_slice(format!("row{i},1\n").as_bytes());
+        }
+        bytes.extend_from_slice(b"Cox\x92s,5\n");
+        let file = tmp.csv("big.csv", &bytes);
+        let err = materialize(&[file], &tmp.out()).unwrap_err();
+        assert!(
+            matches!(&err, AppError::BadRequest(m) if m.contains("big.csv") && m.contains("dòng 30003")),
+            "{err:?}"
+        );
+    }
+
+    /// Chữ "unicode" trong dữ liệu không làm lỗi khác bị coi là lỗi mã hóa.
+    #[test]
+    fn only_duckdb_encoding_errors_count_as_invalid_unicode() {
+        assert!(is_invalid_unicode(
+            "Invalid Input Error: CSV Error on Line: 2\nOriginal Line: city,amount\nInvalid unicode (byte sequence mismatch) detected. This file is not utf-8 encoded."
+        ));
+        assert!(!is_invalid_unicode(
+            "Invalid Input Error: CSV Error on Line: 30001\nOriginal Line: unicode,1,2,3\nExpected Number of Columns: 2 Found: 4"
+        ));
+    }
+
+    /// File đã là UTF-8 thì đọc thẳng, không sinh bản đổi mã.
+    #[test]
+    fn utf8_csv_is_read_without_conversion() {
+        let tmp = TempDir::new();
+        let file = tmp.csv("utf8.csv", "city,amount\nŠiauliai,1\nHà Nội,2\n".as_bytes());
+        materialize(&[file], &tmp.out()).unwrap();
+        assert_eq!(
+            query_strings(&tmp.out(), "city FROM {t} ORDER BY amount"),
+            ["Šiauliai", "Hà Nội"]
+        );
+        let in_dir: Vec<_> = std::fs::read_dir(tmp.0.join("in")).unwrap().collect();
+        assert_eq!(in_dir.len(), 1);
+    }
+
     #[test]
     fn parquet_input_is_accepted() {
         let tmp = TempDir::new();
@@ -530,7 +612,8 @@ mod tests {
         assert_eq!(FileFormat::from_file_name("x.xls"), None);
     }
 
-    /// Byte latin-1 nằm sau phần DuckDB đọc thử (khoảng 20.000 dòng đầu): bước ghi gặp lỗi mã hóa và đọc lại theo latin-1.
+    /// Byte latin-1 nằm sau phần DuckDB đọc thử (khoảng 20.000 dòng đầu): bước ghi gặp lỗi mã hóa, đổi file sang UTF-8
+    /// rồi đọc lại.
     #[test]
     fn latin1_byte_deep_in_a_large_csv_is_read() {
         let tmp = TempDir::new();
@@ -545,6 +628,24 @@ mod tests {
         assert_eq!(
             query_strings(&tmp.out(), "name FROM {t} WHERE amount = 5"),
             ["Café"]
+        );
+    }
+
+    /// Như trên với byte 0x92 của windows-1252, byte mà DuckDB đọc theo latin-1 từ chối.
+    #[test]
+    fn windows_1252_byte_deep_in_a_large_csv_is_read() {
+        let tmp = TempDir::new();
+        let mut bytes = b"name,amount\n".to_vec();
+        for i in 0..30_000 {
+            bytes.extend_from_slice(format!("row{i},1\n").as_bytes());
+        }
+        bytes.extend_from_slice(b"Cox\x92s Bazar,5\n");
+        let file = tmp.csv("big.csv", &bytes);
+        let result = materialize(&[file], &tmp.out()).unwrap();
+        assert_eq!(result.row_count, 30_001);
+        assert_eq!(
+            query_strings(&tmp.out(), "name FROM {t} WHERE amount = 5"),
+            ["Cox\u{2019}s Bazar"]
         );
     }
 
