@@ -6,6 +6,8 @@ router.tsx và một dòng ở workspaceNav. */
 export type WorkspaceNavEntry = {
   path: string
   label: string
+  /** Chỉ hiện với quản trị hệ thống. Ẩn mục chỉ để gọn; quyền vẫn do backend kiểm. */
+  systemAdminOnly?: boolean
 }
 
 export const workspaceRoute = '/w/:ws'
@@ -14,11 +16,18 @@ export const workspaceRoute = '/w/:ws'
 export const accountPath = 'account'
 
 export const membersPath = 'members'
+export const adminAccountsPath = 'admin/accounts'
+export const adminWorkspacesPath = 'admin/workspaces'
 
 export const workspaceNav: WorkspaceNavEntry[] = [
   { path: '', label: 'Hỏi dữ liệu' },
   { path: 'datasets', label: 'Dữ liệu' },
   { path: membersPath, label: 'Thành viên' },
+  // Trang quản trị hệ thống không thuộc riêng workspace nào, nhưng nằm trong khung workspace để dùng chung thanh bên và
+  // thanh trên. Đổi workspace thì vẫn ở trang này, nội dung không đổi. Tên mục khác "Tài khoản và mật khẩu" trong menu
+  // tài khoản (trang của chính mình), để không nhầm hai trang.
+  { path: adminAccountsPath, label: 'Quản lý tài khoản', systemAdminOnly: true },
+  { path: adminWorkspacesPath, label: 'Mọi workspace', systemAdminOnly: true },
 ]
 
 /** Đường dẫn tới một trang của workspace; path rỗng là trang đầu. Mọi chỗ dựng link tới workspace đi qua hàm này. */

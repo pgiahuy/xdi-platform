@@ -2,9 +2,9 @@
 /* router.tsx - bảng đường dẫn của giao diện. Trang làm việc nằm dưới workspaceRoute (/w/:ws, slug của workspace), hiện
 trong khung chung WorkspaceLayout; thêm trang trong workspace là thêm một route con ở đây và một dòng ở
 pages/workspaceNav.ts. Màn đăng nhập và thiết lập nằm ngoài khung, đường dẫn ở pages/authNav.ts.
-Đăng nhập, thiết lập, tài khoản, thành viên và trang Dữ liệu tải riêng khi mở (lazy): ít khi cần so với hỏi, hoặc
-kéo theo phần nạp file, nên không đóng vào gói chính. Mọi route nằm dưới một route gốc có errorElement, để lỗi ở bất
-kỳ trang nào cũng hiện câu tiếng Việt. */
+Đăng nhập, thiết lập, tài khoản, thành viên, các trang quản trị và trang Dữ liệu tải riêng khi mở (lazy): ít khi
+cần so với hỏi, hoặc kéo theo phần nạp file, nên không đóng vào gói chính. Mọi route nằm dưới một route gốc có
+errorElement, để lỗi ở bất kỳ trang nào cũng hiện câu tiếng Việt. */
 
 import { createBrowserRouter } from 'react-router'
 import { StatusScreen } from '@/components/StatusScreen'
@@ -14,7 +14,13 @@ import { NotFoundPage } from '@/pages/NotFoundPage'
 import { RootPage } from '@/pages/RootPage'
 import { RouteErrorPage } from '@/pages/RouteErrorPage'
 import { WorkspaceLayout } from '@/pages/WorkspaceLayout'
-import { accountPath, membersPath, workspaceRoute } from '@/pages/workspaceNav'
+import {
+  accountPath,
+  adminAccountsPath,
+  adminWorkspacesPath,
+  membersPath,
+  workspaceRoute,
+} from '@/pages/workspaceNav'
 import { WorkspaceNotFoundPage } from '@/pages/WorkspaceNotFoundPage'
 
 export const router = createBrowserRouter([
@@ -45,6 +51,17 @@ export const router = createBrowserRouter([
           {
             path: membersPath,
             lazy: async () => ({ Component: (await import('@/pages/MembersPage')).MembersPage }),
+          },
+          {
+            path: adminAccountsPath,
+            lazy: async () => ({ Component: (await import('@/pages/AdminAccountsPage')).AdminAccountsPage }),
+            // Mục thanh bên chỉ hiện với quản trị hệ thống; ai mở thẳng đường dẫn vẫn cần tiêu đề trang.
+            handle: { title: 'Quản lý tài khoản' },
+          },
+          {
+            path: adminWorkspacesPath,
+            lazy: async () => ({ Component: (await import('@/pages/AdminWorkspacesPage')).AdminWorkspacesPage }),
+            handle: { title: 'Mọi workspace' },
           },
           {
             path: accountPath,

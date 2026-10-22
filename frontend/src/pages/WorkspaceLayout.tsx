@@ -59,13 +59,14 @@ export function WorkspaceLayout() {
   }
 
   const base = workspaceHref(current.slug, '')
-  const navItems = workspaceNav.map((entry) => {
+  const visibleNav = workspaceNav.filter((entry) => !entry.systemAdminOnly || me.data.user.is_system_admin)
+  const navItems = visibleNav.map((entry) => {
     const href = workspaceHref(current.slug, entry.path)
     // Trang đầu chỉ sáng khi đúng là trang đầu; mục khác sáng cả ở trang con, ví dụ datasets/<id>.
     const active = matchPath({ path: href, end: entry.path === '' }, pathname) !== null
     return { href, label: entry.label, active }
   })
-  const activeEntry = workspaceNav.find((_, i) => navItems[i].active)
+  const activeEntry = visibleNav.find((_, i) => navItems[i].active)
 
   // Đổi workspace thì giữ mục đang xem (Dữ liệu sang Dữ liệu), nhưng bỏ phần sau đó: id dataset của workspace này
   // không có ở workspace kia.
