@@ -108,7 +108,9 @@ Image Postgres là `pgvector/pgvector`, có sẵn `unaccent`, `pg_trgm`, `vector
 
 Một bản cài phục vụ một tổ chức. Workspace là phòng ban trong tổ chức đó, mỗi workspace có dataset, chỉ số và vai
 riêng, vì các phòng thường tính chỉ số khác nhau: phòng kinh doanh tính doanh thu gộp theo ngày đặt, phòng tài chính
-tính doanh thu ròng theo ngày giao. Cài xong có sẵn một workspace mặc định.
+tính doanh thu ròng theo ngày giao. Lần thiết lập đầu tạo luôn workspace đầu tiên, người thiết lập là admin của nó.
+Không có workspace chung mà mọi tài khoản tự thuộc vào: tài khoản tạo sau chỉ vào được workspace khi được admin thêm,
+hoặc tự tạo workspace riêng.
 
 Ba tầng tách riêng:
 
