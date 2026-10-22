@@ -66,7 +66,8 @@ curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets \
   -F name='Bán hàng' -F file=@thang1.csv -F file=@thang2.csv
 ```
 
-Nhận CSV (UTF-8 hoặc latin-1) và Parquet, một hoặc nhiều file. Nhiều file cùng cột gộp thành một bảng. Tổng dung lượng
+Nhận CSV (UTF-8, hoặc windows-1252 và latin-1 như file xuất từ phần mềm cũ) và Parquet, một hoặc nhiều file. File UTF-8
+có byte hỏng bị từ chối kèm số dòng: lưu lại dạng UTF-8 rồi nạp lại. Nhiều file cùng cột gộp thành một bảng. Tổng dung lượng
 một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200).
 
 File Excel (.xlsx) nạp từng file một. Xem tên sheet và cột, rồi chọn sheet cần nạp (lặp `-F sheet=` để gộp nhiều sheet

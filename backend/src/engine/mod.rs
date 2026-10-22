@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/mod.rs - tầng hạ tầng: Postgres (store), DuckDB (analytics), guard SQL, nhà cung cấp LLM.
-Chỉ service gọi vào đây. */
+Chỉ service gọi vào đây; csv_encoding (đổi CSV không phải UTF-8 sang UTF-8) chỉ analytics gọi. */
 
 pub mod analytics;
+mod csv_encoding;
 pub mod excel;
 pub mod excel_worker;
 pub mod guard;

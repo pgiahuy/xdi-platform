@@ -15,7 +15,9 @@ Thư mục tạm xóa khi Staging ra khỏi phạm vi, kể cả khi lỗi; back
 (#79).
 
 Thao tác file (tạo, đổi tên, xóa thư mục) dùng std::fs đồng bộ: đều là thao tác ngắn trên metadata; riêng xóa thư mục
-tạm có thể chạm file tới MAX_UPLOAD_MB, chấp nhận ở quy mô một bản cài. */
+tạm có thể chạm file tới MAX_UPLOAD_MB, chấp nhận ở quy mô một bản cài. Lúc nạp, thư mục tạm chứa file gửi lên, Parquet
+đang ghi, và với CSV không phải UTF-8 thêm bản UTF-8 của mọi file cần đổi mã cùng lúc (mỗi bản lớn tới ba lần file
+gốc; bản của file nào xóa ngay khi file đó ghi xong Parquet; xem engine/csv_encoding.rs). */
 
 use std::path::{Path, PathBuf};
 
