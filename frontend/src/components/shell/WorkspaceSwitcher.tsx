@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { roleLabel } from './labels'
+import { menuItemFocus } from './menuItemFocus'
 import type { LinkComponent, WorkspaceOption } from './types'
 
 type Props = {
@@ -50,7 +51,7 @@ export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate 
         {workspaces.map((ws) => {
           const selected = ws.slug === current.slug
           return (
-            <DropdownMenuItem key={ws.slug} asChild>
+            <DropdownMenuItem key={ws.slug} asChild className={menuItemFocus}>
               <Link href={ws.href} aria-current={selected ? 'page' : undefined} onClick={onNavigate}>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate" title={ws.name}>

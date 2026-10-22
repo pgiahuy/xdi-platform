@@ -66,7 +66,9 @@
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    /* Viền focus: shadcn để oklch(0.708 0 0), chỉ đạt khoảng 2,6:1 trên nền trắng, dưới mức 3:1 của WCAG 2.2 mục
+       1.4.11. oklch(0.439 0 0) đạt 7,8:1 trên nền trắng, 7,5:1 trên nền thanh bên, đo trên trang đã render (#88). */
+    --ring: oklch(0.439 0 0);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -80,7 +82,7 @@
     --sidebar-accent: oklch(0.97 0 0);
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar-ring: oklch(0.439 0 0);
 }
 
 .dark {
@@ -119,7 +121,9 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* Viền mặc định cho phần tử không có lớp ring riêng (ví dụ link bỏ qua điều hướng). shadcn để outline-ring/50:
+       nửa độ đậm chỉ còn khoảng 2,4:1 kể cả với màu ring ở trên, nên dùng đủ độ đậm. */
+    @apply border-border outline-ring;
     }
   body {
     @apply bg-background text-foreground;

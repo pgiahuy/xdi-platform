@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { initials } from './labels'
+import { menuItemFocus } from './menuItemFocus'
 import type { SignedInUser } from './types'
 
 type Props = {
@@ -52,7 +53,7 @@ export function UserMenu({ user, onLogout, logoutPending }: Props) {
           {user.isSystemAdmin && <span className="mt-1 text-xs text-muted-foreground">Quản trị hệ thống</span>}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={logoutPending} onSelect={onLogout}>
+        <DropdownMenuItem className={menuItemFocus} disabled={logoutPending} onSelect={onLogout}>
           {logoutPending ? 'Đang đăng xuất...' : 'Đăng xuất'}
         </DropdownMenuItem>
       </DropdownMenuContent>
