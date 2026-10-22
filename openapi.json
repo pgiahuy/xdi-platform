@@ -1705,7 +1705,9 @@
           "not_found",
           "too_large",
           "internal",
-          "not_implemented"
+          "not_implemented",
+          "upstream",
+          "unavailable"
         ]
       },
       "HealthResponse": {

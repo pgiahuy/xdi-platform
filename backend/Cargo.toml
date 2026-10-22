@@ -34,11 +34,17 @@ rlimit = "0.11"
 utoipa = { version = "6.0.0", features = ["chrono", "uuid"] }
 utoipa-axum = "0.3.0"
 utoipa-swagger-ui = { version = "10.0.2", features = ["axum", "vendored"] }
+# Gọi Gemini và Ollama (engine/llm/http.rs). TLS bằng rustls với bộ mã hóa ring: không cần OpenSSL của hệ thống, và
+# không kéo aws-lc, bộ mã hóa mặc định của reqwest 0.13, thêm một thư viện C lớn phải biên dịch.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json"] }
+rustls ={ version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 rust_xlsxwriter = "0.101"
+# Đưa log của reqwest và hyper (crate log) vào bộ đệm của test kiểm khóa API không lọt vào log.
+tracing-log = "0.2"
 
 # DuckDB biên dịch từ mã C++ kèm trong crate. Bản debug kèm thông tin debug của C++ nặng hơn 2 GB mỗi lần build, làm
 # đầy đĩa của runner CI; thông tin đó không giúp debug code của dự án, nên tắt riêng cho crate này.

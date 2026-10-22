@@ -29,7 +29,7 @@ Tùy biến `LLM_PROVIDER`:
 |---|---|
 | `mock` (mặc định) | Không gửi đi đâu |
 | `ollama` | Tới máy chạy Ollama ở `OLLAMA_URL`. Ollama chạy trong mạng của bạn thì dữ liệu không ra ngoài |
-| `gemini` | Tới API của Google, theo điều khoản của Google |
+| `gemini` | Tới API của Google, theo [điều khoản Gemini API](https://ai.google.dev/gemini-api/terms). Với gói miễn phí (khóa thuộc dự án Google Cloud chưa gắn tài khoản thanh toán), điều khoản cho phép Google dùng nội dung gửi lên và câu trả lời để cải thiện sản phẩm, có thể có người đọc. Gói trả phí không dùng cho việc đó, nhưng Google vẫn lưu một thời gian để phát hiện vi phạm. Dữ liệu nhạy cảm thì dùng Ollama |
 
 Nội dung gửi (thiết kế):
 
