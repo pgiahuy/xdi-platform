@@ -24,7 +24,7 @@ pub fn routes(dir: &Path) -> Router<AppState> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use std::path::{Path, PathBuf};
 
     use axum::{body::Body, http::Request, http::StatusCode, Router};
@@ -36,10 +36,10 @@ mod tests {
 
     /// Thư mục giả lập frontend/dist: index.html và một file trong assets/. Tự xóa khi biến ra khỏi phạm vi (Drop),
     /// kể cả khi test dừng giữa chừng vì assert thất bại.
-    struct FakeDist(PathBuf);
+    pub struct FakeDist(pub PathBuf);
 
     impl FakeDist {
-        fn new() -> Self {
+        pub fn new() -> Self {
             let dir = std::env::temp_dir().join(format!("xdi-web-test-{}", uuid::Uuid::new_v4()));
             std::fs::create_dir_all(dir.join("assets")).unwrap();
             std::fs::write(dir.join("index.html"), "<!doctype html><p>test ui</p>").unwrap();

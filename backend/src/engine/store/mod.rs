@@ -46,11 +46,16 @@ pub struct Store {
 }
 
 impl Store {
-    /// Mở kết nối thật, báo lỗi ngay nếu Postgres không với tới được.
-    pub async fn connect(database_url: &str, max_connections: u32) -> Result<Self, AppError> {
+    /// Mở kết nối thật, báo lỗi ngay nếu Postgres không với tới được. acquire_timeout: thời gian tối đa một request chờ
+    /// lấy được kết nối (kể cả lần kết nối đầu); quá thì request nhận lỗi thay vì treo.
+    pub async fn connect(
+        database_url: &str,
+        max_connections: u32,
+        acquire_timeout: Duration,
+    ) -> Result<Self, AppError> {
         let pool = PgPoolOptions::new()
             .max_connections(max_connections)
-            .acquire_timeout(Duration::from_secs(5))
+            .acquire_timeout(acquire_timeout)
             .connect(database_url)
             .await
             .map_err(|e| AppError::Internal(format!("connect to postgres: {e}")))?;

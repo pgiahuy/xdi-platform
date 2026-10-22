@@ -184,61 +184,170 @@ giao diện đã build (`STATIC_DIR`). Gói binary trong mỗi bản phát hành
 
 ## 3. Đưa lên Internet
 
-Cách dưới chạy Caddy trên cùng máy chủ, tự xin và gia hạn chứng chỉ HTTPS. Cần: một máy chủ Linux có Docker, một tên
-miền đã trỏ (bản ghi A hoặc AAAA) về địa chỉ IP của máy chủ, cổng 80 và 443 mở ra Internet và chưa có chương trình
-khác dùng (nginx, apache).
+Cần:
 
-1. Clone và tạo `.env` như mục 1, nhưng **trước khi chạy lần đầu**, cho backend và Postgres chỉ nghe trên chính máy
-   chủ. Thêm vào `.env`:
+- Một máy chủ Linux có Docker như mục 1.
+- Một tên miền hoặc subdomain riêng (ví dụ `du-lieu.example.com`) đã trỏ về địa chỉ IP của máy chủ (bản ghi A hoặc
+  AAAA). Chạy dưới đường dẫn con của một trang khác (`example.com/xdi/`) chưa hỗ trợ: giao diện và API dùng đường dẫn
+  tính từ gốc tên miền (`/api`, `/assets`).
+- Cổng 80 và 443 mở ra Internet, cho reverse proxy (Caddy hoặc nginx, bên dưới) nhận HTTPS.
+
+### Cấu hình bản chạy thật
+
+1. Clone và tạo `.env` như mục 1, nhưng **trước khi chạy lần đầu**, thêm ba dòng vào `.env` (thay tên miền; mật khẩu
+   Postgres sinh ngẫu nhiên):
 
    ```bash
-   BACKEND_BIND=127.0.0.1
-   POSTGRES_PORT=127.0.0.1:5433
+   cat >> .env <<EOF
+   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+   POSTGRES_PASSWORD=$(openssl rand -hex 24)
+   PUBLIC_URL=https://du-lieu.example.com
+   EOF
    ```
 
-   Không có hai dòng này, cổng 8000 (HTTP thường, chưa mã hóa) và Postgres (mật khẩu mặc định) mở ra Internet. Tường lửa
-   như ufw không chặn được, vì Docker tự mở cổng của container qua iptables. Đã chạy rồi mới thêm thì chạy lại
-   `docker compose up -d` để áp cấu hình. Kiểm: `ss -ltnp | grep -E ':8000|:5433'` chỉ thấy `127.0.0.1`.
+   Dòng `COMPOSE_FILE` làm mọi lệnh `docker compose` (và `make backup`, `make restore`) dùng thêm
+   `docker-compose.prod.yml`. File đó chỉ ghi phần khác với bản chạy trên máy:
+
+   - Postgres không mở cổng ra máy host, chỉ backend nối tới được. Docker tự mở cổng của container qua iptables, tường
+     lửa như ufw không chặn được, nên cách chắc chắn là không mở.
+   - Backend chỉ nghe trên `127.0.0.1:8000`; reverse proxy trên cùng máy nhận HTTPS rồi chuyển vào.
+   - Thiếu `POSTGRES_PASSWORD` hoặc `PUBLIC_URL` thì `docker compose` dừng và báo thiếu biến nào, không chạy với mật
+     khẩu mẫu.
+   - `PUBLIC_URL` bắt đầu bằng `https://` thì cookie đăng nhập có cờ `Secure`: trình duyệt không gửi nó qua HTTP thường.
+   - Hai container tự chạy lại khi máy chủ khởi động lại.
+
+   Chọn cách đè thêm một file thay vì một file compose đầy đủ thứ hai, vì người cài chỉ thêm một dòng vào `.env` mà
+   không phải nhớ `-f` ở mỗi lệnh, và hai file không lệch nhau khi file gốc đổi. Cần Docker Compose 2.24.4 trở lên
+   (`docker compose version`), bản đầu tiên có thẻ `!override` mà file này dùng (theo
+   https://docs.docker.com/reference/compose-file/merge/).
+
+   Tự đặt mật khẩu thì chỉ dùng chữ và số (lệnh `openssl` trên cho ra đúng như vậy): mật khẩu nằm trong chuỗi kết nối
+   của backend, ký tự như `@`, `:`, `/` làm hỏng chuỗi đó.
 
 2. Chạy và tạo tài khoản quản trị như mục 1 (lệnh `curl` gọi `http://localhost:8000` vẫn chạy trên máy chủ).
 
-3. Cài Caddy theo https://caddyserver.com/docs/install. Thay nội dung `/etc/caddy/Caddyfile` (gói cài sẵn đã tạo
-   file này) bằng:
+   Kiểm Postgres không mở cổng ra máy host, nhất là khi không chắc phiên bản Compose:
 
-   ```
-   du-lieu.example.com {
-       reverse_proxy localhost:8000
-   }
+   ```bash
+   docker compose ps                         # cột PORTS của postgres chỉ có 5432/tcp, không có 0.0.0.0:...->5432
+   ss -ltnp | grep -E ':8000|:5433'          # chỉ thấy 127.0.0.1:8000, không thấy 5433
    ```
 
-   Rồi `sudo systemctl reload caddy`. Mở https://du-lieu.example.com.
+   Log của backend không có dòng `sample Postgres password` (`docker compose logs backend | grep -i password`).
 
-Đang làm cho bản chạy thật ([#55](https://github.com/pgiahuy/xdi-platform/issues/55)): cookie đăng nhập có cờ `Secure`
-khi chạy sau HTTPS, compose riêng cho bản chạy thật với mật khẩu Postgres không mặc định, `make backup`.
+3. Cài một reverse proxy theo một trong hai mẫu dưới.
+
+**Đã chạy bằng mật khẩu mẫu rồi mới chuyển sang cấu hình này.** `POSTGRES_PASSWORD` chỉ có tác dụng khi Postgres tạo
+volume lần đầu, nên phải đổi mật khẩu trong database trước, khi chưa sửa `.env`:
+
+```bash
+docker compose exec postgres psql -U xdi -d xdi -c "ALTER USER xdi PASSWORD 'mat-khau-moi'"
+```
+
+Rồi thêm ba dòng trên vào `.env` (cùng mật khẩu đó) và chạy `docker compose up -d`. Backend còn dùng mật khẩu mẫu thì
+mỗi lần khởi động in cảnh báo `DATABASE_URL uses the sample Postgres password` ra log.
+
+### Caddy
+
+Caddy tự xin và gia hạn chứng chỉ HTTPS, không giới hạn dung lượng file gửi lên hay thời gian chờ backend. Cài theo
+https://caddyserver.com/docs/install, rồi thay nội dung `/etc/caddy/Caddyfile` (gói cài sẵn đã tạo file này) bằng:
+
+```
+du-lieu.example.com {
+    reverse_proxy localhost:8000
+    header Strict-Transport-Security "max-age=31536000"
+}
+```
+
+Rồi `sudo systemctl reload caddy`. Mở https://du-lieu.example.com.
+
+### nginx
+
+Máy chủ đã có nginx thì dùng nó thay Caddy. Chứng chỉ lấy bằng certbot (https://certbot.eff.org), mẫu dưới giả sử
+certbot đã ghi chứng chỉ vào `/etc/letsencrypt/live/du-lieu.example.com/`. Ghi vào
+`/etc/nginx/conf.d/xdi.conf`, thay tên miền:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name du-lieu.example.com;
+    ssl_certificate     /etc/letsencrypt/live/du-lieu.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/du-lieu.example.com/privkey.pem;
+
+    # MAX_UPLOAD_MB cộng 1 (mặc định 200 + 1). Mặc định nginx chỉ nhận 1m, file lớn hơn bị trả 413.
+    client_max_body_size 201m;
+    # Backend chỉ trả lời khi đã đọc và chuyển xong file. Một file Excel được đọc tới 360 giây và mỗi lúc chỉ đọc
+    # một file, file thứ hai phải chờ file trước. Mặc định nginx chờ 60 giây rồi trả 504.
+    proxy_read_timeout 900s;
+    # Chuyển file sang backend ngay khi nhận, không ghi tạm ra đĩa của nginx trước.
+    proxy_request_buffering off;
+
+    # HSTS: proxy gửi, vì chỉ proxy biết chắc trình duyệt đang vào bằng HTTPS. Backend tự gửi các header bảo mật khác.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    server_name du-lieu.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+Rồi `sudo nginx -t && sudo systemctl reload nginx`. Đổi `MAX_UPLOAD_MB` trong `.env` thì đổi `client_max_body_size`
+theo.
+
+### Header bảo mật
+
+Backend tự gửi `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` và
+`Referrer-Policy: same-origin` cho cả giao diện và API, chạy qua proxy nào cũng vậy. `Strict-Transport-Security`
+(HSTS) để proxy gửi như hai mẫu trên. HSTS làm trình duyệt chỉ vào tên miền này bằng HTTPS trong một năm: chỉ bật khi
+tên miền đó sẽ luôn có HTTPS.
 
 ## 4. Sao lưu và khôi phục
 
-Sao lưu cả hai phần: database và thư mục file Parquet. Chạy trong thư mục chứa `docker-compose.yml`. Hai file sao lưu
-có dữ liệu và chuỗi băm mật khẩu: cất ở chỗ an toàn, ngoài thư mục repo.
+Bản sao lưu gồm hai phần: database (`db.dump`) và thư mục file Parquet (`data.tgz`). Chạy trong thư mục chứa
+`docker-compose.yml`:
 
 ```bash
-docker compose exec -T postgres pg_dump -U xdi -Fc xdi > ~/xdi-db.dump
-docker compose exec -T backend tar czf - -C /data . > ~/xdi-data.tgz
+make backup                                     # ghi vào ~/xdi-backups/<ngày-giờ>/
+make backup BACKUP_DIR=/mnt/backup/xdi          # chỗ khác
 ```
 
-Khôi phục vào một bản cài mới: chỉ bật Postgres, khôi phục, rồi mới bật backend. Nếu bật backend trước, nó tạo schema
-trống và in một mã thiết lập thừa.
+Bản sao lưu có dữ liệu và chuỗi băm mật khẩu: lệnh tạo thư mục chỉ chủ sở hữu đọc được, mặc định nằm ngoài thư mục
+repo. Chép nó sang một máy hoặc ổ đĩa khác, vì hỏng máy chủ thì mất cả bản sao lưu nằm trên đó.
+
+Sao lưu chạy được khi backend vẫn chạy, nhưng database và file được chụp ở hai thời điểm liền nhau. Ai đó nạp file, xóa
+dataset hay xóa workspace đúng lúc đó thì hai phần có thể không khớp, ví dụ database còn một workspace mà file của nó đã
+bị xóa. Nên sao lưu lúc ít người dùng; cần chắc chắn thì dừng backend trong lúc sao lưu:
 
 ```bash
-docker compose up -d postgres
-docker compose exec -T postgres pg_restore -U xdi -d xdi < ~/xdi-db.dump
-docker compose run --rm --no-deps -T --user root backend \
-  sh -c 'tar xzf - -C /data && chown -R 10001 /data' < ~/xdi-data.tgz
-docker compose up -d
+docker compose stop backend && make backup && docker compose up -d
 ```
 
-`10001` là user không phải root mà backend chạy trong container. Khi khởi động, backend áp thêm các migration mới hơn
-bản sao lưu (nếu có).
+Khôi phục, trên bản cài đang chạy hoặc một bản cài mới (đã clone và tạo `.env` như mục 1 hoặc mục 3, chưa cần chạy):
+
+```bash
+make restore FROM=~/xdi-backups/20261022-101500
+```
+
+Lệnh này **thay toàn bộ** dữ liệu hiện có bằng bản sao lưu. Trước hết nó đọc hết `db.dump` và `data.tgz`; file nào
+thiếu, hỏng hay bị cắt cụt (chép dở, ổ đầy) thì dừng và báo, chưa dừng hay xóa gì. Hai file đọc được thì nó dừng
+backend, xóa và tạo lại database từ `db.dump`, xóa và giải nén lại thư mục dữ liệu từ `data.tgz`, rồi chạy lại cả hệ
+thống. Tài khoản, mật khẩu đăng nhập, workspace và dataset trở về như lúc sao lưu; mật khẩu Postgres thì giữ của bản cài
+hiện tại.
+
+Khôi phục vào bản cài cùng phiên bản với lúc sao lưu, hoặc mới hơn. Bản cài mới hơn thì backend tự áp thêm các migration
+còn thiếu khi khởi động. Bản cài cũ hơn thì backend không khởi động được, vì database có migration mà code cũ không
+biết: cập nhật bản cài (`git pull`) trước khi khôi phục.
+
+Không dùng Makefile thì chạy tay đúng các lệnh trong target `backup` và `restore` của `Makefile`.
 
 ## 5. Quản trị
 

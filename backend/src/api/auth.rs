@@ -2,7 +2,8 @@
 /* api/auth.rs - thiết lập lần đầu, đăng nhập, đăng xuất, người dùng hiện tại. Logic ở service/accounts.rs.
 
 Mã phiên đi trong cookie httpOnly: JavaScript của trang không đọc được, nên một lỗi XSS không lấy cắp được phiên.
-SameSite=Lax chặn trang khác gửi request POST kèm cookie này. Cờ Secure bật khi chạy sau HTTPS (#55). */
+SameSite=Lax chặn trang khác gửi request POST kèm cookie này. Cờ Secure bật khi PUBLIC_URL bắt đầu bằng https://
+(Config::secure_cookies). */
 
 use axum::{extract::State, http::StatusCode, Json};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
@@ -114,7 +115,7 @@ async fn setup(
     };
     let (user, session) = accounts::setup(&state, input).await?;
     let body = me_response(&state, user).await?;
-    Ok((jar.add(session_cookie(session)), body))
+    Ok((jar.add(session_cookie(&state, session)), body))
 }
 
 #[utoipa::path(
@@ -138,7 +139,7 @@ async fn login(
 ) -> Result<(CookieJar, Json<MeResponse>), AppError> {
     let (user, session) = accounts::login(&state, &req.email, req.password).await?;
     let body = me_response(&state, user).await?;
-    Ok((jar.add(session_cookie(session)), body))
+    Ok((jar.add(session_cookie(&state, session)), body))
 }
 
 // Xóa phiên ở database rồi xóa cookie. Gọi khi chưa đăng nhập cũng trả thành công.
@@ -159,7 +160,10 @@ async fn logout(
     if let Some(cookie) = jar.get(SESSION_COOKIE) {
         accounts::logout(&state, cookie.value()).await?;
     }
-    let removal = Cookie::build(SESSION_COOKIE).path("/");
+    // Cookie xóa mang cùng thuộc tính với cookie lúc đặt, để trình duyệt chắc chắn thay đúng cookie đó.
+    let removal = Cookie::build(SESSION_COOKIE)
+        .path("/")
+        .secure(state.config.secure_cookies());
     Ok((jar.remove(removal), StatusCode::NO_CONTENT))
 }
 
@@ -242,10 +246,11 @@ async fn me_response(state: &AppState, user: User) -> Result<Json<MeResponse>, A
     Ok(Json(MeResponse { user, workspaces }))
 }
 
-fn session_cookie(session: String) -> Cookie<'static> {
+fn session_cookie(state: &AppState, session: String) -> Cookie<'static> {
     Cookie::build((SESSION_COOKIE, session))
         .http_only(true)
         .same_site(SameSite::Lax)
+        .secure(state.config.secure_cookies())
         .path("/")
         .max_age(time::Duration::days(SESSION_DAYS))
         .build()
@@ -353,6 +358,49 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         let (status, _, _) = call(&app, "GET", "/api/auth/me", session.as_deref(), None).await;
         assert_eq!(status, StatusCode::OK);
+
+        db.drop().await;
+    }
+
+    /// Set-Cookie của request đăng nhập, nguyên văn.
+    async fn login_set_cookie(app: &axum::Router) -> String {
+        use tower::ServiceExt;
+        let body = json!({"email": "admin@example.com", "password": "a long password"});
+        let req = axum::http::Request::post("/api/auth/login")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body.to_string()))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        res.headers()["set-cookie"].to_str().unwrap().to_string()
+    }
+
+    /// Cookie phiên có cờ Secure khi PUBLIC_URL là https://, không có khi chạy HTTP trên máy.
+    #[tokio::test]
+    async fn session_cookie_is_secure_behind_https() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let local = app(db.store.clone(), Some(CODE));
+        let (status, _, _) = call(
+            &local,
+            "POST",
+            "/api/auth/setup",
+            None,
+            Some(setup_body(CODE)),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let cookie = login_set_cookie(&local).await;
+        assert!(!cookie.contains("Secure"), "got {cookie}");
+
+        let public = crate::api::test_support::app_with(db.store.clone(), None, |c| {
+            c.public_url = "https://du-lieu.example.com".to_string();
+        });
+        let cookie = login_set_cookie(&public).await;
+        assert!(cookie.contains("; Secure"), "got {cookie}");
+        assert!(cookie.contains("HttpOnly"), "got {cookie}");
 
         db.drop().await;
     }

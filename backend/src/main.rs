@@ -63,9 +63,13 @@ async fn run(args: Vec<String>) {
     let addr = format!("0.0.0.0:{}", config.port);
 
     // Migration chạy trước khi nhận request, để mọi request đều thấy schema đúng.
-    let store = engine::store::Store::connect(&config.database_url, config.db_max_connections)
-        .await
-        .expect("cannot connect to postgres, check DATABASE_URL");
+    let store = engine::store::Store::connect(
+        &config.database_url,
+        config.db_max_connections,
+        config.db_acquire_timeout,
+    )
+    .await
+    .expect("cannot connect to postgres, check DATABASE_URL");
     store
         .migrate()
         .await
@@ -77,6 +81,8 @@ async fn run(args: Vec<String>) {
         let state = state::AppState::new(config, store);
         std::process::exit(cli::run(&state, &args).await);
     }
+
+    config.log_warnings();
 
     // Chưa có tài khoản nào: in mã thiết lập ra log. Chỉ người đọc được log của máy chủ mới tạo được tài khoản quản trị
     // đầu tiên, nên người ngoài không chiếm được bản cài vừa đưa lên mạng.

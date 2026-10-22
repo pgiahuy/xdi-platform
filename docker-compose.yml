@@ -1,12 +1,14 @@
 # docker-compose.yml - hai dịch vụ: postgres, backend. Backend phục vụ cả API (/api) và giao diện, một cổng.
 # Mặc định chạy không cần khóa ngoài: LLM_PROVIDER=mock. Đổi trong .env.
+# Bản chạy thật đè thêm docker-compose.prod.yml (docs/INSTALL.md mục 3).
 
 services:
   postgres:
     image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: xdi
-      POSTGRES_PASSWORD: xdi
+      # Mật khẩu mẫu, chỉ để chạy trên máy. Bản chạy thật bắt buộc đặt POSTGRES_PASSWORD (docker-compose.prod.yml).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xdi}
       POSTGRES_DB: xdi
     ports:
       # Cổng host mặc định 5433 để không đụng Postgres cài sẵn trên máy dev.
@@ -26,7 +28,10 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       BACKEND_PORT: ${BACKEND_PORT:-8000}
-      DATABASE_URL: postgres://xdi:xdi@postgres:5432/xdi
+      DATABASE_URL: postgres://xdi:${POSTGRES_PASSWORD:-xdi}@postgres:5432/xdi
+      DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-10}
+      DB_ACQUIRE_TIMEOUT_SECS: ${DB_ACQUIRE_TIMEOUT_SECS:-5}
+      PUBLIC_URL: ${PUBLIC_URL:-}
       DATA_DIR: /data
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
       RUST_LOG: ${RUST_LOG:-info}
