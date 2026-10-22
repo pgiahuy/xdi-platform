@@ -33,6 +33,14 @@ jobs:
       DATABASE_URL: postgres://xdi:xdi@localhost:5432/xdi
     steps:
       - uses: actions/checkout@v4
+      # Thư mục target (bản clippy và bản test, DuckDB biên dịch từ C++) cộng cache khôi phục từ main đã làm đầy đĩa
+      # runner (còn 99 MB, "No space left on device" khi ghi libduckdb.a). Xóa các bộ công cụ có sẵn trên image mà
+      # project không dùng (.NET, Android, Haskell, CodeQL) để lấy lại khoảng 20 GB.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
