@@ -303,6 +303,7 @@ Cập nhật khi có thay đổi.
 | Vai `admin` và `member` (mục 4b): quản lý thành viên, luật còn ít nhất một admin, quản trị hệ thống xem mọi workspace và chỉ định admin | Có |
 | Khung giao diện React và Vite; bố cục chung: thanh bên, đổi workspace, hiện vai trong workspace đang mở, tài khoản và đăng xuất, dùng được ở bề ngang điện thoại; trang làm việc dưới `/w/<workspace>` | Có |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
+| Chạy thật: `docker-compose.prod.yml` (Postgres không mở cổng, mật khẩu bắt buộc, backend nghe `127.0.0.1`), cookie `Secure` theo `PUBLIC_URL`, header bảo mật trên mọi response (`api/security_headers.rs`), `make backup`, `make restore`, mẫu Caddy và nginx | Có; role Postgres riêng không phải superuser cho RLS chưa có |
 | Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; giao diện có màn thiết lập lần đầu, đăng nhập, đổi mật khẩu, quản lý tài khoản của quản trị hệ thống |
 | DuckDB nhúng: đổi CSV (UTF-8; file không phải UTF-8 đổi sang UTF-8 theo windows-1252, gồm cả latin-1, trừ file UTF-8 có byte hỏng thì báo lỗi kèm số dòng; `engine/csv_encoding.rs`) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`); sheet Excel đổi sang CSV bằng `calamine` (`engine/excel.rs`) | Có |
 | Guard, giải thích, các trang nghiệp vụ | Chưa có |

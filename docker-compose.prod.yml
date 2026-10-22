@@ -1,0 +1,24 @@
+# docker-compose.prod.yml - phần khác của bản chạy thật, đè lên docker-compose.yml. Bật bằng một dòng trong .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+# Khi đó mọi lệnh docker compose, make backup và make restore đều dùng cả hai file, không phải nhớ thêm -f. File này
+# chỉ ghi phần khác, nên không lệch dần so với file gốc. Hướng dẫn ở docs/INSTALL.md mục 3.
+# Cần Docker Compose từ 2.24.4, bản đầu tiên có thẻ !override (https://docs.docker.com/reference/compose-file/merge/).
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, see docs/INSTALL.md section 3}
+    # Không mở cổng Postgres ra máy host: chỉ backend trong mạng riêng của compose nối tới. Docker tự mở cổng qua
+    # iptables, tường lửa như ufw không chặn được, nên cách chắc chắn là không mở.
+    ports: !reset []
+    restart: unless-stopped
+
+  backend:
+    environment:
+      DATABASE_URL: postgres://xdi:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/xdi
+      # Bắt đầu bằng https:// thì cookie phiên có cờ Secure.
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env, for example https://du-lieu.example.com}
+    # Chỉ nghe trên chính máy chủ; reverse proxy (Caddy, nginx) trên cùng máy nhận HTTPS rồi chuyển vào đây.
+    ports: !override
+      - "127.0.0.1:${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
+    restart: unless-stopped

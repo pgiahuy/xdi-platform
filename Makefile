@@ -4,8 +4,10 @@
 SHELL := /bin/sh
 PREFIX ?= /usr/local
 COMPOSE ?= docker compose
+# Nơi make backup ghi bản sao lưu. Mặc định ngoài thư mục repo: bản sao lưu có dữ liệu và chuỗi băm mật khẩu.
+BACKUP_DIR ?= $(HOME)/xdi-backups
 
-.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs openapi licenses hooks install uninstall release-artifacts clean
+.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -42,6 +44,48 @@ down: ## Dừng và giữ dữ liệu
 
 logs: ## Xem log
 	$(COMPOSE) logs -f
+
+# Sao lưu database trước, file dữ liệu sau, khi backend vẫn chạy. Hai bước không chụp cùng một thời điểm: ai đó nạp
+# file, xóa dataset hay xóa workspace giữa pg_dump và tar thì database và file trong bản sao lưu có thể không khớp (ví
+# dụ database còn workspace mà file của nó đã bị xóa). Cần chắc chắn thì dừng backend trước khi sao lưu
+# (docker compose stop backend, xong thì docker compose up -d); không thì sao lưu lúc ít người dùng.
+# Ghi vào thư mục .partial rồi mới đổi tên, để lỗi giữa chừng không để lại một bản trông như hoàn chỉnh. Đọc /data bằng
+# run (container tạm) thay vì exec, để sao lưu được cả khi backend đang dừng hoặc khởi động lỗi. staging/ là file đang
+# nạp dở, backend tự xóa khi khởi động.
+backup: ## Sao lưu database và file dữ liệu vào ~/xdi-backups/<ngày-giờ>/ (đổi chỗ bằng BACKUP_DIR=...)
+	@set -e; umask 077; \
+	dir="$(BACKUP_DIR)/$$(date +%Y%m%d-%H%M%S)"; \
+	test ! -e "$$dir" || { echo "$$dir already exists, run make backup again in a second" >&2; exit 1; }; \
+	mkdir -p "$$dir.partial"; \
+	$(COMPOSE) exec -T postgres pg_dump -U xdi -Fc xdi > "$$dir.partial/db.dump"; \
+	$(COMPOSE) run --rm --no-deps -T backend tar czf - -C /data --exclude=./staging . > "$$dir.partial/data.tgz"; \
+	mv "$$dir.partial" "$$dir"; \
+	echo "backup written to $$dir"
+
+# Thay toàn bộ dữ liệu hiện có bằng bản sao lưu. Trước khi dừng hay xóa gì, đọc hết cả hai file để chắc chúng không
+# hỏng: file chép dở hay bị cắt cụt (ổ đầy) mà phát hiện sau khi đã xóa thì mất cả dữ liệu đang có. pg_restore -f
+# /dev/null đọc toàn bộ db.dump mà không ghi vào database (pg_restore -l chỉ đọc mục lục, không bắt được file cắt cụt);
+# gzip -t và tar -tzf đọc toàn bộ data.tgz.
+# Sau đó dừng backend để không request nào ghi chen vào; xóa hẳn database rồi tạo lại thay vì pg_restore --clean, vì
+# bảng của migration mới hơn bản sao lưu sẽ không bị --clean xóa và làm migration chạy lại bị lỗi. Khi khởi động lại,
+# backend áp thêm các migration mới hơn bản sao lưu (nếu có).
+restore: ## Khôi phục, THAY dữ liệu hiện có: make restore FROM=~/xdi-backups/<ngày-giờ>
+	@test -n "$(FROM)" || { echo "FROM is required, for example make restore FROM=$(BACKUP_DIR)/20261022-101500" >&2; exit 1; }
+	@test -f "$(FROM)/db.dump" && test -f "$(FROM)/data.tgz" || { echo "$(FROM) must contain db.dump and data.tgz" >&2; exit 1; }
+	$(COMPOSE) up -d --wait postgres
+	@$(COMPOSE) exec -T postgres pg_restore -f /dev/null < "$(FROM)/db.dump" || \
+		{ echo "$(FROM)/db.dump is damaged or incomplete; nothing was changed" >&2; exit 1; }
+	@gzip -t "$(FROM)/data.tgz" && tar -tzf "$(FROM)/data.tgz" > /dev/null || \
+		{ echo "$(FROM)/data.tgz is damaged or incomplete; nothing was changed" >&2; exit 1; }
+	@echo "backup files are readable, restoring"
+	$(COMPOSE) stop backend
+	$(COMPOSE) exec -T postgres dropdb -U xdi --if-exists --force xdi
+	$(COMPOSE) exec -T postgres createdb -U xdi xdi
+	$(COMPOSE) exec -T postgres pg_restore -U xdi -d xdi --exit-on-error < "$(FROM)/db.dump"
+	@# 10001 là user không phải root mà backend chạy trong container (backend/Dockerfile).
+	$(COMPOSE) run --rm --no-deps -T --user root backend \
+		sh -c 'find /data -mindepth 1 -delete && tar xzf - -C /data && chown -R 10001 /data' < "$(FROM)/data.tgz"
+	$(COMPOSE) up -d
 
 openapi: ## Sinh openapi.json từ code backend rồi sinh kiểu TypeScript frontend/src/api/schema.ts; commit cả hai
 	@# Lệnh openapi của backend không kết nối database, chạy được khi chưa có Postgres. Ghi ra file tạm rồi mới đổi tên:

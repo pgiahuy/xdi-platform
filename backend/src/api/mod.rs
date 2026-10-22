@@ -10,7 +10,9 @@ Route API đăng ký qua OpenApiRouter (utoipa_axum): cùng một chỗ dựng c
 ở /api/openapi.json, Swagger UI ở /api/docs, thông báo giấy phép của Swagger UI ở /api/docs/licenses.txt.
 Ngoại lệ của quy tắc 404 JSON: đường dẫn không có dưới /api/docs/ (ví dụ /api/docs/nope) trả 404 body rỗng, vì route
 /api/docs/{*rest} của Swagger UI bắt trước fallback của nest. Frontend không gọi các đường này; bọc lại service của
-Swagger UI chỉ để đổi body 404 thì không đáng. */
+Swagger UI chỉ để đổi body 404 thì không đáng.
+
+Mọi response, cả giao diện và trang 404, đi qua security_headers.rs để nhận header bảo mật. */
 
 mod admin;
 mod auth;
@@ -22,6 +24,7 @@ mod openapi;
 mod query;
 #[cfg(test)]
 mod roles_tests;
+mod security_headers;
 mod system;
 #[cfg(test)]
 mod test_support;
@@ -30,6 +33,7 @@ mod workspaces;
 
 use axum::{
     http::header,
+    middleware,
     routing::{any, get},
     Router,
 };
@@ -104,7 +108,11 @@ pub fn router(state: AppState) -> Router {
         Some(dir) => app.merge(web::routes(&dir)),
         None => app,
     };
-    app.with_state(state)
+    // Gắn sau cùng để bọc mọi route đã có, kể cả fallback trả giao diện và 404: layer chỉ bọc các route thêm trước nó.
+    app.layer(middleware::from_fn(
+        security_headers::apply_security_headers,
+    ))
+    .with_state(state)
 }
 
 async fn api_not_found() -> AppError {

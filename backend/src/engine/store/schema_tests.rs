@@ -11,7 +11,9 @@ async fn migrations_apply_and_rerun() {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
-    let store = Store::connect(&url, 5).await.expect("connect");
+    let store = Store::connect(&url, 5, Duration::from_secs(5))
+        .await
+        .expect("connect");
     store.migrate().await.expect("first run");
     store.migrate().await.expect("second run");
 
@@ -45,7 +47,9 @@ async fn every_business_table_has_workspace_id() {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
-    let store = Store::connect(&url, 5).await.expect("connect");
+    let store = Store::connect(&url, 5, Duration::from_secs(5))
+        .await
+        .expect("connect");
     store.migrate().await.expect("migrate");
     // Ngoại lệ có chủ đích: workspaces là chính nó; users và sessions thuộc về người dùng, dùng chung mọi workspace.
     let missing: Vec<String> = sqlx::query_scalar(
@@ -70,7 +74,9 @@ async fn cross_workspace_reference_is_rejected() {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
-    let store = Store::connect(&url, 5).await.expect("connect");
+    let store = Store::connect(&url, 5, Duration::from_secs(5))
+        .await
+        .expect("connect");
     store.migrate().await.expect("migrate");
 
     // Mọi thứ trong một transaction rồi rollback, để test không để lại dữ liệu và chạy song song được.
@@ -172,7 +178,9 @@ async fn delete_rules_keep_data_consistent() {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
-    let store = Store::connect(&url, 5).await.expect("connect");
+    let store = Store::connect(&url, 5, Duration::from_secs(5))
+        .await
+        .expect("connect");
     store.migrate().await.expect("migrate");
 
     // Phiên bản hiện hành không xóa được; phiên bản khác thì được.
@@ -244,7 +252,9 @@ async fn query_version_must_belong_to_its_dataset() {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
-    let store = Store::connect(&url, 5).await.expect("connect");
+    let store = Store::connect(&url, 5, Duration::from_secs(5))
+        .await
+        .expect("connect");
     store.migrate().await.expect("migrate");
     let mut tx = store.pool.begin().await.expect("begin");
     let (ws, _, _, v2) = seed(&mut tx).await;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/store/test_support.rs - phần dùng chung cho test cần Postgres thật. */
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
@@ -21,7 +21,9 @@ pub fn database_url() -> Option<String> {
 /// Store đã migrate, hoặc None nếu không có Postgres (test tự bỏ qua).
 pub async fn store() -> Option<Store> {
     let url = database_url()?;
-    let store = Store::connect(&url, 5).await.expect("connect");
+    let store = Store::connect(&url, 5, Duration::from_secs(5))
+        .await
+        .expect("connect");
     store.migrate().await.expect("migrate");
     Some(store)
 }
@@ -62,7 +64,9 @@ pub struct TestDb {
 
 pub async fn fresh_database() -> Option<TestDb> {
     let url = database_url()?;
-    let admin = Store::connect(&url, 2).await.expect("connect");
+    let admin = Store::connect(&url, 2, Duration::from_secs(5))
+        .await
+        .expect("connect");
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -99,7 +103,7 @@ pub async fn fresh_database() -> Option<TestDb> {
         .unwrap_or(&url)
         .rsplit_once('/')
         .expect("database url has a path");
-    let store = Store::connect(&format!("{base}/{name}"), 5)
+    let store = Store::connect(&format!("{base}/{name}"), 5, Duration::from_secs(5))
         .await
         .expect("connect test database");
     store.migrate().await.expect("migrate test database");
