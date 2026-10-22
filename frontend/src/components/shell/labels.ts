@@ -9,6 +9,9 @@ const roleLabels: Record<string, string> = {
   member: 'Thành viên',
 }
 
+/** Các vai trong workspace, theo thứ tự hiện trong ô chọn vai. */
+export const workspaceRoles = Object.keys(roleLabels)
+
 export function roleLabel(role: string): string {
   return roleLabels[role] ?? role
 }

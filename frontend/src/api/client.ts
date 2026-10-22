@@ -23,6 +23,14 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return request<T>('POST', path, body)
 }
 
+export function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>('PATCH', path, body)
+}
+
+export function apiDelete<T>(path: string): Promise<T> {
+  return request<T>('DELETE', path)
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -39,9 +47,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!res.ok) {
     throw errorFromBody(res.status, await res.json().catch(() => null))
   }
-  // 204 không có body (ví dụ đăng xuất); gọi res.json() sẽ ném lỗi. Hook gọi endpoint kiểu này khai báo T là void.
-  if (res.status === 204) return undefined as T
-  return (await res.json()) as T
+  // Một số endpoint trả thành công mà không có body: 204 (đăng xuất) và 201 (thêm thành viên). Gọi res.json() với body
+  // rỗng sẽ ném lỗi, nên đọc chữ trước. Hook gọi endpoint kiểu này khai báo T là void.
+  const text = await res.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }
 
 export type UploadOptions = {
