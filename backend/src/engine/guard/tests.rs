@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-/* engine/guard/tests.rs - test guard SQL: câu nào được qua, câu nào bị chặn, câu được sửa thành gì. Mỗi ca chặn trong
-issue #30 có test riêng. Hầu hết không chạm cơ sở dữ liệu; riêng test cuối chạy câu đã kiểm trên DuckDB thật để chắc
-bản cho DuckDB chạy được. */
+/* engine/guard/tests.rs - test guard SQL: câu nào qua, câu nào bị chặn, câu được sửa thành gì. Test cuối chạy trên
+DuckDB thật vì so chuỗi không chứng minh được DuckDB chạy được bản đã đổi. Nhiều test so nguyên chuỗi sqlparser in ra,
+nên nâng phiên bản sqlparser có thể phải sửa chuỗi mong đợi. */
 
 use std::path::PathBuf;
 
 use super::{build_guarded_sql, AllowedTable, GuardedSql};
+use crate::engine::analytics::parquet_glob;
 use crate::error::AppError;
 
 const MAX_ROWS: u64 = 100;
@@ -42,6 +43,12 @@ fn tables_in(dir: &str) -> Vec<AllowedTable> {
 
 fn guard(sql: &str) -> Result<GuardedSql, AppError> {
     build_guarded_sql(sql, &tables_in("/data"), MAX_ROWS)
+}
+
+/// Phần read_parquet mà guard thay vào cho một bảng trong tables_in("/data"). Tính bằng parquet_glob thay vì viết
+/// tay: Windows nối đường dẫn bằng dấu \, nên chuỗi viết tay "/data/sales/*.parquet" chỉ khớp trên Linux.
+fn expected_read_parquet(table: &str) -> String {
+    parquet_glob(&PathBuf::from("/data").join(table)).unwrap()
 }
 
 fn assert_accepted(sql: &str) -> GuardedSql {
@@ -107,6 +114,17 @@ fn accepts_trailing_semicolon() {
     assert_accepted("SELECT 1;");
 }
 
+/// Guard đọc cây cú pháp nên SQL viết trong chuỗi chỉ là một giá trị để so, không phải câu lệnh.
+#[test]
+fn accepts_sql_text_inside_a_string_value() {
+    let guarded =
+        assert_accepted("SELECT region FROM sales WHERE region = '; DROP TABLE sales; --'");
+    assert_eq!(
+        guarded.shown,
+        "SELECT region FROM sales WHERE region = '; DROP TABLE sales; --' LIMIT 100"
+    );
+}
+
 // Đọc câu và chỉ nhận một câu SELECT
 
 #[test]
@@ -127,6 +145,24 @@ fn rejects_empty_sql() {
 fn rejects_more_than_one_statement() {
     assert_rejected("SELECT 1; DROP TABLE sales");
     assert_rejected("SELECT 1; SELECT 2");
+}
+
+/// Chú thích bị bỏ khi đọc: câu lệnh giấu trong chú thích không chạy, và không còn trong bản hiện cho người dùng.
+#[test]
+fn comments_cannot_hide_a_second_statement() {
+    for sql in [
+        "SELECT region FROM sales -- ; DROP TABLE sales",
+        "SELECT region FROM sales /* ; DROP TABLE sales */",
+    ] {
+        assert_eq!(
+            assert_accepted(sql).shown,
+            "SELECT region FROM sales LIMIT 100"
+        );
+    }
+    assert_rejected("SELECT region FROM sales; -- note\nDROP TABLE sales");
+    assert_rejected("SELECT region FROM sales /* note */; DROP TABLE sales");
+    // Chú thích chen giữa một từ khóa cắt nó thành hai từ lạ, không ghép lại thành SELECT.
+    assert_rejected("SEL/**/ECT region FROM sales");
 }
 
 #[test]
@@ -165,6 +201,34 @@ fn rejects_install_and_load_extension() {
 }
 
 #[test]
+fn rejects_statements_that_describe_the_database() {
+    for sql in [
+        "DESCRIBE sales",
+        "SHOW TABLES",
+        "SUMMARIZE sales",
+        "EXPLAIN SELECT region FROM sales",
+    ] {
+        assert_rejected(sql);
+    }
+}
+
+#[test]
+fn rejects_statements_that_change_settings_or_databases() {
+    for sql in [
+        "SET threads = 1",
+        "RESET threads",
+        "CALL duckdb_settings()",
+        "USE other",
+        "DETACH other",
+        "CREATE SECRET (TYPE s3, KEY_ID 'key', SECRET 'secret')",
+        "EXPORT DATABASE 'out'",
+        "CHECKPOINT",
+    ] {
+        assert_rejected(sql);
+    }
+}
+
+#[test]
 fn rejects_write_hidden_inside_select() {
     assert_rejected("WITH t AS (DELETE FROM sales RETURNING *) SELECT * FROM t");
     assert_rejected("SELECT * INTO copy FROM sales");
@@ -189,6 +253,74 @@ fn rejects_glob() {
     assert_rejected("SELECT * FROM glob('/data/*')");
 }
 
+/// Mọi hàm đặt ở chỗ bảng đều bị chặn, kể cả read_parquet: LLM tự viết đường dẫn thì đọc được file của dataset hay
+/// workspace khác. Chỉ guard được đổi bảng logic sang file.
+#[test]
+fn rejects_any_function_used_as_a_table() {
+    for sql in [
+        "SELECT * FROM read_parquet('/data/sales/*.parquet')",
+        "SELECT * FROM parquet_scan('x.parquet')",
+        "SELECT * FROM read_json_auto('x.json')",
+        "SELECT * FROM generate_series(1, 10)",
+        "SELECT * FROM range(10)",
+        "SELECT region FROM sales JOIN read_csv('x.csv') r ON true",
+    ] {
+        assert_rejected(sql);
+    }
+}
+
+#[test]
+fn rejects_system_catalogs() {
+    for sql in [
+        "SELECT * FROM duckdb_tables()",
+        "SELECT * FROM duckdb_settings()",
+        "SELECT * FROM duckdb_tables",
+        "SELECT * FROM pg_catalog.pg_tables",
+        "SELECT * FROM sqlite_master",
+    ] {
+        assert_rejected(sql);
+    }
+}
+
+/// UNION ghép kết quả từ hai nơi; vế sau cũng phải là bảng được phép.
+#[test]
+fn rejects_union_with_a_source_outside_the_list() {
+    for sql in [
+        "SELECT region FROM sales UNION ALL SELECT * FROM orders",
+        "SELECT region FROM sales UNION ALL SELECT * FROM read_csv('x.csv')",
+        "SELECT region FROM sales UNION ALL SELECT table_name FROM information_schema.tables",
+        "SELECT region FROM sales UNION ALL SELECT * FROM 'secret.csv'",
+    ] {
+        assert_rejected(sql);
+    }
+}
+
+/// Chữ Kirin "а" (U+0430) và "ѕ" (U+0455) trông như chữ Latin. Tên phải khớp đúng từng ký tự, nên bảng giả bị từ chối.
+#[test]
+fn rejects_table_name_with_lookalike_unicode_letters() {
+    for sql in [
+        "SELECT region FROM s\u{0430}les",
+        "SELECT region FROM \u{0455}ales",
+        "SELECT region FROM \"s\u{0430}les\"",
+    ] {
+        let reason = assert_rejected(sql);
+        assert!(reason.contains("sales"), "{reason}");
+    }
+}
+
+/// Bí danh trùng tên bảng khác chỉ đổi tên gọi, không đổi nơi đọc: `customers AS sales` vẫn đọc file của customers, và
+/// cột riêng của sales không dùng được qua bí danh đó.
+#[test]
+fn alias_named_like_another_table_still_reads_its_own_table() {
+    let guarded = assert_accepted("SELECT sales.segment FROM customers AS sales");
+    let customers = expected_read_parquet("customers");
+    assert_eq!(
+        guarded.runnable,
+        format!("SELECT sales.segment FROM {customers} AS sales LIMIT 100")
+    );
+    assert_rejected("SELECT sales.amount FROM customers AS sales");
+}
+
 #[test]
 fn rejects_information_schema() {
     assert_rejected("SELECT * FROM information_schema.tables");
@@ -208,6 +340,9 @@ fn rejects_unknown_table_and_lists_allowed_ones() {
         reason.contains("sales") && reason.contains("customers"),
         "{reason}"
     );
+    // Cột của bảng sai tên cũng là tên lạ, nhưng lý do phải chỉ vào bảng, chỗ LLM cần sửa.
+    let reason = assert_rejected("SELECT region FROM orders");
+    assert!(reason.contains("Không có bảng orders"), "{reason}");
 }
 
 #[test]
@@ -242,6 +377,23 @@ fn rejects_functions_outside_the_allowed_list() {
         "SELECT getenv('HOME')",
         "SELECT region FROM sales WHERE region = read_text('x')",
         "SELECT main.sum(amount) FROM sales",
+        "SELECT \"getenv\"('HOME')",
+        "SELECT COLUMNS('.*') FROM sales",
+    ] {
+        assert_rejected(sql);
+    }
+}
+
+/// Hàm lạ bị bắt ở mọi chỗ có biểu thức, không chỉ trong danh sách cột của SELECT.
+#[test]
+fn rejects_functions_hidden_anywhere_in_the_query() {
+    for sql in [
+        "SELECT region FROM sales ORDER BY getenv('HOME')",
+        "SELECT region FROM sales GROUP BY region HAVING SUM(amount) > length(read_text('x'))",
+        "SELECT CASE WHEN amount > 0 THEN getenv('HOME') END FROM sales",
+        "SELECT SUM(amount) FILTER (WHERE getenv('HOME') = '') FROM sales",
+        "SELECT SUM(amount) OVER (PARTITION BY getenv('HOME')) FROM sales",
+        "SELECT c.segment FROM sales s JOIN customers c ON current_setting('x') = c.segment",
     ] {
         assert_rejected(sql);
     }
@@ -254,6 +406,13 @@ fn rejects_unknown_column() {
     let reason = assert_rejected("SELECT profit FROM sales");
     assert!(reason.contains("profit"), "{reason}");
     assert_rejected("SELECT s.profit FROM sales s");
+}
+
+#[test]
+fn rejects_column_name_with_lookalike_unicode_letters() {
+    // "і" ở đây là chữ Ukraina U+0456, không phải chữ i Latin.
+    let reason = assert_rejected("SELECT reg\u{0456}on FROM sales");
+    assert!(reason.contains("reg\u{0456}on"), "{reason}");
 }
 
 #[test]
@@ -311,10 +470,10 @@ fn rejects_fetch_first() {
 #[test]
 fn runnable_reads_parquet_and_keeps_table_name_as_alias() {
     let guarded = assert_accepted("SELECT sales.region FROM sales");
+    let sales = expected_read_parquet("sales");
     assert_eq!(
         guarded.runnable,
-        "SELECT sales.region FROM read_parquet('/data/sales/*.parquet', union_by_name = true) AS sales \
-         LIMIT 100"
+        format!("SELECT sales.region FROM {sales} AS sales LIMIT 100")
     );
     assert!(!guarded.shown.contains("/data"), "{}", guarded.shown);
 }
@@ -322,19 +481,23 @@ fn runnable_reads_parquet_and_keeps_table_name_as_alias() {
 #[test]
 fn runnable_keeps_existing_alias() {
     let guarded = assert_accepted("SELECT s.region FROM sales AS s");
+    let sales = expected_read_parquet("sales");
     assert_eq!(
         guarded.runnable,
-        "SELECT s.region FROM read_parquet('/data/sales/*.parquet', union_by_name = true) AS s LIMIT 100"
+        format!("SELECT s.region FROM {sales} AS s LIMIT 100")
     );
 }
 
 #[test]
 fn runnable_renames_with_tables() {
     let guarded = assert_accepted("WITH t AS (SELECT region FROM sales) SELECT t.region FROM t");
+    let sales = expected_read_parquet("sales");
     assert_eq!(
         guarded.runnable,
-        "WITH guard_cte_1 AS (SELECT region FROM read_parquet('/data/sales/*.parquet', union_by_name = true) \
-         AS sales) SELECT t.region FROM guard_cte_1 AS t LIMIT 100"
+        format!(
+            "WITH guard_cte_1 AS (SELECT region FROM {sales} AS sales) \
+             SELECT t.region FROM guard_cte_1 AS t LIMIT 100"
+        )
     );
 }
 
