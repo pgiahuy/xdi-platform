@@ -57,7 +57,7 @@ function MembersContent({ ws }: { ws: string }) {
     return { message: error.message, field: emailProblem ? 'email' : undefined }
   }, [addMember.error])
 
-  // WorkspaceLayout đã kiểm người dùng thuộc workspace này trước khi hiện trang, nên hai giá trị dưới đây luôn có.
+  // AppLayout đã kiểm người dùng thuộc workspace này trước khi hiện trang, nên hai giá trị dưới đây luôn có.
   const current = me.data?.workspaces.find((m) => m.slug === ws)
   if (!me.data || !current) return null
   const userId = me.data.user.id

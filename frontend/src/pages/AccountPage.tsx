@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-/* pages/AccountPage.tsx - trang tài khoản trong khung workspace (/w/<workspace>/account): thông tin đăng nhập và đổi
-mật khẩu. Tài khoản không thuộc workspace nào, nhưng đặt trong khung để không mất thanh bên khi đổi mật khẩu. */
+/* pages/AccountPage.tsx - trang tài khoản: thông tin đăng nhập và đổi mật khẩu. Tài khoản không thuộc workspace nào,
+nhưng trong workspace trang mở ở /w/<workspace>/account, trong khung workspace, để không mất thanh bên khi đổi mật khẩu.
+Ở ngoài workspace (trang quản trị, hoặc người chưa thuộc workspace nào) cùng trang mở ở /account. */
 
 import { useMemo, useState } from 'react'
 import { passwordLength, useChangePassword, useMe } from '@/api/auth'
@@ -21,7 +22,7 @@ export function AccountPage() {
     return { message: change.error.message, field: wrongCurrent ? 'currentPassword' : undefined }
   }, [change.error])
 
-  // WorkspaceLayout chỉ hiện trang con khi đã có người dùng, nên ở đây me.data luôn có.
+  // AppLayout chỉ hiện trang con khi đã có người dùng, nên ở đây me.data luôn có.
   const user = me.data?.user
 
   return (

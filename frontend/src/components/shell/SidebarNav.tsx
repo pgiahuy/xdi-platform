@@ -13,6 +13,8 @@ type Props = {
 }
 
 export function SidebarNav({ items, link: Link, onNavigate }: Props) {
+  // Vùng điều hướng rỗng vẫn được trình đọc màn hình liệt kê như một landmark; không có mục thì không vẽ.
+  if (items.length === 0) return null
   return (
     <nav aria-label="Điều hướng chính" className="flex flex-col gap-0.5">
       {items.map((item) => (

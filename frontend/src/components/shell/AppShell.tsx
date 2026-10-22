@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/shell/AppShell.tsx - bố cục chung của mọi trang trong một workspace: thanh bên, thanh trên, vùng nội dung.
+/* components/shell/AppShell.tsx - bố cục chung của mọi trang sau khi đăng nhập: thanh bên, thanh trên, vùng nội dung.
+Trang trong workspace truyền workspace đang mở; trang ngoài workspace (quản trị hệ thống, tài khoản) thì không.
 Từ 1024px trở lên thanh bên đứng cố định bên trái. Hẹp hơn thì thanh bên ẩn vào ngăn kéo mở từ nút menu trên thanh
 trên; cùng một nội dung thanh bên dùng cho cả hai chỗ, nên thêm mục điều hướng chỉ sửa một nơi.
 Tiêu đề trang là h1 trên thanh trên; nội dung trang bắt đầu từ h2. */
@@ -21,7 +22,8 @@ const WIDE_LAYOUT_QUERY = '(min-width: 1024px)'
 type Props = {
   title: string
   navItems: NavItem[]
-  currentWorkspace: WorkspaceOption
+  /** Không có khi trang không thuộc workspace nào. */
+  currentWorkspace?: WorkspaceOption
   workspaces: WorkspaceOption[]
   user: SignedInUser
   accountHref: string
@@ -53,7 +55,9 @@ export function AppShell(props: Props) {
   return (
     <div className="min-h-svh bg-background lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
       {/* Mỗi tab một workspace (đường dẫn /w/<workspace>), nên tên tab ghi cả trang và workspace. */}
-      <title>{title === currentWorkspace.name ? title : `${title} - ${currentWorkspace.name}`}</title>
+      <title>
+        {!currentWorkspace || title === currentWorkspace.name ? title : `${title} - ${currentWorkspace.name}`}
+      </title>
       <a
         href="#main"
         className="sr-only rounded-md bg-background px-3 py-2 text-sm shadow-md focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
@@ -98,13 +102,15 @@ export function AppShell(props: Props) {
             <h1 className="truncate text-base font-semibold">{title}</h1>
             {/* Dưới lg thanh bên ẩn trong ngăn kéo; vẫn phải thấy mình đang ở workspace nào, với vai gì, trước khi
                 làm việc ghi dữ liệu như nạp file. */}
-            <p className="flex min-w-0 text-xs text-muted-foreground lg:hidden">
-              {/* Tên dài thì chỉ cắt tên; vai luôn đọc được. */}
-              <span className="truncate" title={currentWorkspace.name}>
-                {currentWorkspace.name}
-              </span>
-              <span className="shrink-0">, {roleLabel(currentWorkspace.role)}</span>
-            </p>
+            {currentWorkspace && (
+              <p className="flex min-w-0 text-xs text-muted-foreground lg:hidden">
+                {/* Tên dài thì chỉ cắt tên; vai luôn đọc được. */}
+                <span className="truncate" title={currentWorkspace.name}>
+                  {currentWorkspace.name}
+                </span>
+                <span className="shrink-0">, {roleLabel(currentWorkspace.role)}</span>
+              </p>
+            )}
           </div>
 
           <div className="ml-auto">

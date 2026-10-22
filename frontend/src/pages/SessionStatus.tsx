@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/SessionStatus.tsx - màn hiện khi chưa lấy được người dùng hiện tại: đang tải, lỗi; chưa đăng nhập thì chuyển
-sang màn đăng nhập, nhớ trang đang mở để quay lại. RootPage và WorkspaceLayout cùng dùng, để hai nơi xử lý giống nhau.
+sang màn đăng nhập, nhớ trang đang mở để quay lại. RootPage và AppLayout cùng dùng, để hai nơi xử lý giống nhau.
 Phiên bản máy chủ hiện ở chân màn lỗi, để người cài kiểm được backend có đang chạy không. */
 
 import { Navigate, useLocation } from 'react-router'
