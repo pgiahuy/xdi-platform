@@ -27,4 +27,8 @@ src/router.tsx    bảng đường dẫn; trang trong workspace nằm dưới /w
                   đăng nhập (/login) và thiết lập lần đầu (/setup) nằm ngoài khung, đường dẫn ở pages/authNav.ts
 ```
 
+Trang hỏi dữ liệu khi chạy `npm run dev` có công tắc "Dữ liệu mẫu": trả lời bằng các response mẫu trong
+`src/api/examples/ask.json` thay vì gọi backend, để làm giao diện khi luồng hỏi chưa chạy hoặc không có mô hình ngôn ngữ.
+Bản build không có công tắc này và không chứa file mẫu.
+
 Quy tắc chung của dự án ở [AGENTS.md](../AGENTS.md).
