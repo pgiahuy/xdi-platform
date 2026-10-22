@@ -3,15 +3,17 @@
 Mọi route nằm dưới /workspaces/{ws}/ và nhận Member (extract.rs): chưa đăng nhập 401, không thuộc workspace 404.
 
 Nạp file: multipart/form-data, các trường
-- file: một hoặc nhiều file CSV hoặc Parquet (lặp lại trường file),
+- file: một hoặc nhiều file CSV hoặc Parquet (lặp lại trường file), hoặc một file Excel .xlsx,
 - name: tên dataset mới (không bắt buộc, mặc định lấy tên file đầu),
-- dataset_id: có thì thêm phiên bản cho dataset này thay vì tạo dataset mới.
+- dataset_id: có thì thêm phiên bản cho dataset này thay vì tạo dataset mới,
+- sheet: sheet cần nạp của file Excel (lặp lại để chọn nhiều sheet cùng cột; file chỉ một sheet thì bỏ trống được).
+Liệt kê sheet: gửi một file Excel (trường file) tới /datasets/sheets, nhận tên sheet, cột, số dòng; file không lưu lại.
 File ghi thẳng xuống đĩa từng đoạn trong lúc nhận, không giữ cả file trong bộ nhớ; SHA-256 tính cùng lúc. */
 
 use axum::{
     extract::{multipart::MultipartError, DefaultBodyLimit, Multipart, State},
     http::StatusCode,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use sha2::{Digest, Sha256};
@@ -20,6 +22,7 @@ use tokio::io::AsyncWriteExt;
 use super::extract::PathParams;
 use crate::auth::Member;
 use crate::engine::store::Dataset;
+use crate::service::excel::{self, SheetSummary};
 use crate::service::ingest::{self, StagedFile, Staging, Upload, UploadResult};
 use crate::{error::AppError, state::AppState};
 
@@ -41,6 +44,10 @@ pub fn routes(max_upload_bytes: u64) -> Router<AppState> {
                 .post(create)
                 .layer(DefaultBodyLimit::max(body_limit)),
         )
+        .route(
+            "/workspaces/{ws}/datasets/sheets",
+            post(sheets).layer(DefaultBodyLimit::max(body_limit)),
+        )
         .route("/workspaces/{ws}/datasets/{id}", get(detail))
 }
 
@@ -58,6 +65,32 @@ async fn create(
 ) -> Result<(StatusCode, Json<UploadResult>), AppError> {
     // Kiểm vai trước khi nhận file: member không phải chờ gửi xong cả tệp mới biết mình không có quyền.
     member.require_admin()?;
+    let (staging, upload) = receive(&state, multipart).await?;
+    let result = ingest::upload(&state, &member, staging, upload).await?;
+    let status = if result.created {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(result)))
+}
+
+/// Liệt kê sheet của một file Excel để người dùng chọn trước khi nạp. File không được lưu lại.
+async fn sheets(
+    State(state): State<AppState>,
+    member: Member,
+    multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
+) -> Result<Json<Vec<SheetSummary>>, AppError> {
+    member.require_admin()?;
+    let (staging, upload) = receive(&state, multipart).await?;
+    Ok(Json(excel::list_sheets(&state, staging, upload).await?))
+}
+
+/// Nhận multipart: ghi từng file xuống thư mục tạm, đọc các trường chữ, đếm tổng dung lượng.
+async fn receive(
+    state: &AppState,
+    multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
+) -> Result<(Staging, Upload), AppError> {
     let mut multipart = multipart.map_err(|_| {
         AppError::BadRequest("Cần gửi file dạng multipart/form-data, trường file".to_string())
     })?;
@@ -66,6 +99,7 @@ async fn create(
         name: None,
         dataset_id: None,
         files: Vec::new(),
+        sheets: Vec::new(),
     };
     let limit = state.config.max_upload_bytes;
     let mut received: u64 = 0;
@@ -115,7 +149,7 @@ async fn create(
                     .collect();
                 upload.files.push(StagedFile { path, name, sha256 });
             }
-            "name" | "dataset_id" => {
+            "name" | "dataset_id" | "sheet" => {
                 // Trường chữ cũng đếm vào giới hạn, để không ai gửi một "tên" dài hàng GB.
                 let mut bytes = Vec::new();
                 while let Some(chunk) = field.chunk().await.map_err(multipart_error)? {
@@ -126,10 +160,10 @@ async fn create(
                 let text = String::from_utf8(bytes).map_err(|_| {
                     AppError::BadRequest(format!("Trường {field_name} không phải chữ UTF-8"))
                 })?;
-                if field_name == "name" {
-                    upload.name = Some(text);
-                } else {
-                    upload.dataset_id = Some(text);
+                match field_name.as_str() {
+                    "name" => upload.name = Some(text),
+                    "dataset_id" => upload.dataset_id = Some(text),
+                    _ => upload.sheets.push(text),
                 }
             }
             // Trường lạ: bỏ qua nhưng vẫn đọc hết, vẫn đếm dung lượng.
@@ -142,13 +176,7 @@ async fn create(
         }
     }
 
-    let result = ingest::upload(&state, &member, staging, upload).await?;
-    let status = if result.created {
-        StatusCode::CREATED
-    } else {
-        StatusCode::OK
-    };
-    Ok((status, Json(result)))
+    Ok((staging, upload))
 }
 
 async fn detail(

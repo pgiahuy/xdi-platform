@@ -131,6 +131,16 @@ async fn member_reads_and_admin_manages() {
     // Member không nạp file, không quản lý workspace hay thành viên.
     let (status, body) = upload_csv(&app, &minh).await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    let (content_type, body) = multipart(&[], &[("a.xlsx", b"x".as_slice())]);
+    let (status, body) = send_raw(
+        &app,
+        &format!("{SHOP}/datasets/sheets"),
+        &minh,
+        &content_type,
+        body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
     let lan_path = format!("{members}/{lan_id}");
     let forbidden = [
         ("PATCH", SHOP.to_string(), Some(json!({"name": "Đổi tên"}))),

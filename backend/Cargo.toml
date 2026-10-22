@@ -25,10 +25,16 @@ axum-extra = { version = "0.12.6", features = ["cookie"] }
 getrandom = "0.4"
 time = { version = "0.3", default-features = false }
 duckdb = { version = "1.10506", features = ["bundled", "parquet"] }
+calamine = { version = "0.37", features = ["dates"] }
+# Chỉ để đọc kích thước giải nén trong file xlsx trước khi calamine mở nó; cùng bản và feature calamine dùng.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# Trần RAM và thời gian CPU cho tiến trình con đọc file Excel (engine/excel_worker.rs).
+rlimit = "0.11"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+rust_xlsxwriter = "0.101"
 
 # DuckDB biên dịch từ mã C++ kèm trong crate. Bản debug kèm thông tin debug của C++ nặng hơn 2 GB mỗi lần build, làm
 # đầy đĩa của runner CI; thông tin đó không giúp debug code của dự án, nên tắt riêng cho crate này.

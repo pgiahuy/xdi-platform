@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* main.rs - điểm vào: đọc cấu hình, dựng AppState, gắn router của tầng api, lắng nghe.
+/* main.rs - điểm vào: đọc cấu hình, dựng AppState, gắn router của tầng api, lắng nghe. Có tham số thì chạy lệnh quản
+trị (cli.rs), hoặc tiến trình con đọc file Excel (engine/excel_worker.rs).
 Phụ thuộc đi một chiều: api gọi service, service gọi engine và auth. Xem docs/ARCHITECTURE.md mục 3. */
 
 mod api;
@@ -11,11 +12,34 @@ mod error;
 mod service;
 mod state;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    // Tiến trình con đọc file Excel: rẽ ra trước khi dựng runtime tokio. Runtime nhiều luồng giữ sẵn hàng GB vùng nhớ
+    // ảo (mỗi luồng một arena của glibc), tính vào trần RAM của tiến trình con và làm file hợp lệ cũng bị từ chối
+    // trên máy nhiều nhân. Tiến trình con chỉ cần một luồng, log theo RUST_LOG như server.
+    if args.first().map(String::as_str) == Some(engine::excel_worker::WORKER_ARG) {
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+            )
+            .with_writer(std::io::stderr)
+            .init();
+        std::process::exit(engine::excel_worker::serve());
+    }
+
+    // Tương đương #[tokio::main], viết tay để nhánh trên chạy được mà không có runtime.
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("cannot start tokio runtime")
+        .block_on(run(args));
+}
+
+async fn run(args: Vec<String>) {
     // Có tham số là chạy lệnh quản trị (cli.rs): kết quả in ra stdout, nên log chỉ hiện từ mức cảnh báo, để không lẫn
     // vào kết quả (compose đặt RUST_LOG=info cho server). Log luôn ghi ra stderr.
-    let args: Vec<String> = std::env::args().skip(1).collect();
     let filter = if args.is_empty() {
         // Không đặt RUST_LOG thì in mức info: lần chạy đầu phải thấy được mã thiết lập và dòng "backend listening".
         tracing_subscriber::EnvFilter::try_from_default_env()

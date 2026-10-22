@@ -9,6 +9,8 @@ trang HTML thay vì lỗi và khó biết vì sao. Giao diện chỉ được ph
 mod admin;
 mod auth;
 mod datasets;
+#[cfg(test)]
+mod excel_tests;
 mod extract;
 mod query;
 #[cfg(test)]
@@ -84,6 +86,7 @@ mod tests {
             ("GET", "/api/workspaces"),
             ("GET", "/api/workspaces/any/datasets"),
             ("POST", "/api/workspaces/any/datasets"),
+            ("POST", "/api/workspaces/any/datasets/sheets"),
             ("GET", "/api/workspaces/any/datasets/x"),
             ("POST", "/api/workspaces/any/datasets/x/drill"),
             ("GET", "/api/auth/me"),

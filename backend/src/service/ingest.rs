@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ingest.rs - nạp dữ liệu: đổi file người dùng gửi lên thành một phiên bản dataset. Lập hồ sơ cột (#22) và
-nguồn database (sau này) là bước riêng. Xem docs/ARCHITECTURE.md mục 5 và 7.
+nguồn database (sau này) là bước riêng. Xem docs/ARCHITECTURE.md mục 5 và 7. Phần riêng của file Excel (chọn sheet,
+đổi sheet sang CSV) ở service/excel.rs.
 
 Các bước, sắp để lỗi ở bước đầu không để lại gì:
 1. Tầng api đã ghi file gửi lên vào thư mục tạm (Staging) và tính SHA-256 từng file.
@@ -25,6 +26,7 @@ use uuid::Uuid;
 use crate::auth::Member;
 use crate::engine::analytics::{self, Column, FileFormat, InputFile};
 use crate::engine::store::{Dataset, DatasetVersion, NewVersion, SourceKind};
+use crate::service::excel;
 use crate::{error::AppError, state::AppState};
 
 /// Thư mục tạm cho một lần nạp, dưới <DATA_DIR>/staging/. Tự xóa khi ra khỏi phạm vi (Drop), nên lỗi giữa chừng
@@ -38,6 +40,7 @@ impl Staging {
         let dir = data_dir.join("staging").join(Uuid::new_v4().to_string());
         std::fs::create_dir_all(dir.join("upload"))
             .and_then(|_| std::fs::create_dir_all(dir.join("parquet")))
+            .and_then(|_| std::fs::create_dir_all(dir.join("sheets")))
             .map_err(|e| {
                 AppError::Internal(format!("create staging dir {}: {e}", dir.display()))
             })?;
@@ -51,6 +54,11 @@ impl Staging {
 
     fn parquet_dir(&self) -> PathBuf {
         self.dir.join("parquet")
+    }
+
+    /// Chỗ ghi CSV đổi từ các sheet Excel.
+    fn sheets_dir(&self) -> PathBuf {
+        self.dir.join("sheets")
     }
 }
 
@@ -86,6 +94,8 @@ pub struct Upload {
     /// Có thì thêm phiên bản cho dataset này, không thì tạo dataset mới.
     pub dataset_id: Option<String>,
     pub files: Vec<StagedFile>,
+    /// Sheet cần nạp khi file là Excel; rỗng thì file phải chỉ có một sheet.
+    pub sheets: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -125,7 +135,17 @@ pub async fn upload(
     let ws = &member.workspace;
     let format = common_format(&upload.files)?;
     reject_repeated_files(&upload.files)?;
-    let content_hash = content_hash(&upload.files);
+    // Chọn sheet trước khi tính hash: cùng một file Excel mà khác sheet là hai bộ dữ liệu khác nhau.
+    let sheets = if format == FileFormat::Xlsx {
+        excel::choose_sheets(state, &upload).await?
+    } else if !upload.sheets.is_empty() {
+        return Err(AppError::BadRequest(
+            "Trường sheet chỉ dùng khi nạp file Excel".to_string(),
+        ));
+    } else {
+        Vec::new()
+    };
+    let content_hash = content_hash(&upload.files, &sheets);
 
     // Bước 2: chống trùng. Có dataset_id thì chỉ so trong dataset đó; không thì so cả workspace.
     let existing_dataset = match &upload.dataset_id {
@@ -166,16 +186,23 @@ pub async fn upload(
         });
     }
 
-    // Bước 3: Parquet trong thư mục tạm.
-    let inputs: Vec<InputFile> = upload
-        .files
-        .iter()
-        .map(|f| InputFile {
-            path: f.path.clone(),
-            name: f.name.clone(),
-            format,
-        })
-        .collect();
+    // Bước 3: Parquet trong thư mục tạm. File Excel: mỗi sheet đã chọn đổi sang CSV trước (trong tiến trình con, xem
+    // service/excel.rs), rồi đi như CSV.
+    let inputs: Vec<InputFile> = match format {
+        FileFormat::Xlsx => {
+            excel::sheet_inputs(state, &upload.files[0], &sheets, &staging.sheets_dir()).await?
+        }
+        _ => upload
+            .files
+            .iter()
+            .map(|f| InputFile {
+                path: f.path.clone(),
+                name: f.name.clone(),
+                format,
+                timestamp_columns: Vec::new(),
+            })
+            .collect(),
+    };
     let parquet_dir = staging.parquet_dir();
     let materialized =
         tokio::task::spawn_blocking(move || analytics::materialize(&inputs, &parquet_dir))
@@ -320,7 +347,7 @@ fn common_format(files: &[StagedFile]) -> Result<FileFormat, AppError> {
     let format_of = |f: &StagedFile| {
         FileFormat::from_file_name(&f.name).ok_or_else(|| {
             AppError::BadRequest(format!(
-                "File {} không phải CSV hay Parquet (đuôi .csv hoặc .parquet)",
+                "File {} không phải CSV, Parquet hay Excel (đuôi .csv, .parquet hoặc .xlsx)",
                 f.name
             ))
         })
@@ -329,7 +356,7 @@ fn common_format(files: &[StagedFile]) -> Result<FileFormat, AppError> {
     for f in &files[1..] {
         if format_of(f)? != format {
             return Err(AppError::BadRequest(
-                "Các file nạp cùng lúc phải cùng định dạng: toàn CSV hoặc toàn Parquet".to_string(),
+                "Các file nạp cùng lúc phải cùng định dạng: toàn CSV hoặc toàn Parquet; file Excel nạp riêng".to_string(),
             ));
         }
     }
@@ -337,10 +364,22 @@ fn common_format(files: &[StagedFile]) -> Result<FileFormat, AppError> {
 }
 
 /// Băm của cả bộ file: băm danh sách băm từng file đã sắp xếp, nên thứ tự chọn file không làm đổi kết quả.
-fn content_hash(files: &[StagedFile]) -> String {
-    let mut hashes: Vec<&str> = files.iter().map(|f| f.sha256.as_str()).collect();
-    hashes.sort_unstable();
-    Sha256::digest(hashes.join("\n").as_bytes())
+/// Tăng khi đổi cách engine/excel.rs đổi sheet thành dữ liệu (xem content_hash).
+const EXCEL_READER_VERSION: u32 = 1;
+
+fn content_hash(files: &[StagedFile], sheets: &[String]) -> String {
+    let mut parts: Vec<String> = files.iter().map(|f| f.sha256.clone()).collect();
+    parts.sort_unstable();
+    // Sheet đã chọn của file Excel, kèm phiên bản cách đọc Excel: đổi cách đọc (ví dụ cách ghi ô ngày giờ) thì tăng
+    // EXCEL_READER_VERSION, để nạp lại file cũ ra phiên bản mới thay vì bị coi là trùng. Không có sheet (CSV, Parquet)
+    // thì hash giữ như cũ, khớp các phiên bản đã nạp.
+    if !sheets.is_empty() {
+        let mut sheet_parts: Vec<String> = sheets.iter().map(|s| format!("sheet:{s}")).collect();
+        sheet_parts.sort_unstable();
+        parts.extend(sheet_parts);
+        parts.push(format!("excel-reader:{EXCEL_READER_VERSION}"));
+    }
+    Sha256::digest(parts.join("\n").as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
@@ -415,6 +454,7 @@ fn source_kind(format: FileFormat) -> SourceKind {
     match format {
         FileFormat::Csv => SourceKind::Csv,
         FileFormat::Parquet => SourceKind::Parquet,
+        FileFormat::Xlsx => SourceKind::Xlsx,
     }
 }
 
@@ -461,13 +501,23 @@ mod tests {
             name: "x.csv".to_string(),
             sha256: h.to_string(),
         };
+        let sheets = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
         assert_eq!(
-            content_hash(&[file("a"), file("b")]),
-            content_hash(&[file("b"), file("a")])
+            content_hash(&[file("a"), file("b")], &[]),
+            content_hash(&[file("b"), file("a")], &[])
         );
         assert_ne!(
-            content_hash(&[file("a")]),
-            content_hash(&[file("a"), file("b")])
+            content_hash(&[file("a")], &[]),
+            content_hash(&[file("a"), file("b")], &[])
+        );
+        // Cùng file Excel: thứ tự chọn sheet không quan trọng, chọn sheet khác thì khác.
+        assert_eq!(
+            content_hash(&[file("a")], &sheets(&["S1", "S2"])),
+            content_hash(&[file("a")], &sheets(&["S2", "S1"]))
+        );
+        assert_ne!(
+            content_hash(&[file("a")], &sheets(&["S1"])),
+            content_hash(&[file("a")], &sheets(&["S1", "S2"]))
         );
     }
 }

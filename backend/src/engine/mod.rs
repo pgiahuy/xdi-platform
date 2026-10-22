@@ -3,6 +3,8 @@
 Chỉ service gọi vào đây. */
 
 pub mod analytics;
+pub mod excel;
+pub mod excel_worker;
 pub mod guard;
 pub mod llm;
 pub mod store;

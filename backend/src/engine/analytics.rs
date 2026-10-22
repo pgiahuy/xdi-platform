@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/analytics.rs - DuckDB nhúng trong tiến trình backend: đọc CSV, Parquet; đổi file người dùng nạp lên thành
-Parquet. Chạy SQL đã qua guard thêm ở issue chạy truy vấn. Không có container riêng, không giữ dữ liệu bền: mỗi lần
+Parquet. Sheet Excel đã được engine/excel.rs đổi sang CSV trước khi tới đây. Chạy SQL đã qua guard thêm ở issue chạy truy vấn. Không có container riêng, không giữ dữ liệu bền: mỗi lần
 dùng mở một kết nối DuckDB trong bộ nhớ, đọc và ghi file trên đĩa.
 
 DuckDB là thư viện đồng bộ và tốn CPU, nên các hàm ở đây là hàm thường (không async); service gọi chúng trong
@@ -23,6 +23,8 @@ pub const SOURCE_COLUMN: &str = "_source_file";
 pub enum FileFormat {
     Csv,
     Parquet,
+    /// Một sheet Excel. Trong InputFile, path là file CSV do engine/excel.rs ghi từ sheet đó, không phải file .xlsx.
+    Xlsx,
 }
 
 impl FileFormat {
@@ -33,6 +35,8 @@ impl FileFormat {
             Some(FileFormat::Csv)
         } else if lower.ends_with(".parquet") {
             Some(FileFormat::Parquet)
+        } else if lower.ends_with(".xlsx") {
+            Some(FileFormat::Xlsx)
         } else {
             None
         }
@@ -43,9 +47,21 @@ impl FileFormat {
 pub struct InputFile {
     /// Đường dẫn trên máy chủ (do backend đặt, không phải tên người dùng gửi).
     pub path: PathBuf,
-    /// Tên file người dùng gửi, ghi vào SOURCE_COLUMN và vào thông báo lỗi.
+    /// Tên file người dùng gửi (với Xlsx: tên sheet), ghi vào SOURCE_COLUMN và vào thông báo lỗi.
     pub name: String,
     pub format: FileFormat,
+    /// Chỉ dùng với Xlsx: cột báo DuckDB đọc là TIMESTAMP (xem engine/excel.rs, SheetCsv). Rỗng với CSV, Parquet.
+    pub timestamp_columns: Vec<String>,
+}
+
+impl InputFile {
+    /// "file a.csv" hay "sheet Năm 2024", để thông báo lỗi gọi đúng thứ người dùng đã chọn.
+    fn label(&self) -> String {
+        match self.format {
+            FileFormat::Xlsx => format!("sheet {}", self.name),
+            _ => format!("file {}", self.name),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -87,14 +103,14 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
         let names: BTreeSet<String> = columns.iter().map(|c| c.name.clone()).collect();
         if names.iter().any(|n| n.eq_ignore_ascii_case(SOURCE_COLUMN)) {
             return Err(AppError::BadRequest(format!(
-                "File {} có cột tên {SOURCE_COLUMN}, trùng tên cột hệ thống dùng để ghi file nguồn; đổi tên cột rồi nạp lại",
-                file.name
+                "Cột {SOURCE_COLUMN} trong {} trùng tên cột hệ thống dùng để ghi nguồn của từng dòng; đổi tên cột rồi nạp lại",
+                file.label()
             )));
         }
         match &first {
             None => first = Some((file.name.clone(), names)),
             Some((first_name, first_names)) => {
-                check_same_columns(first_name, first_names, &file.name, &names)?
+                check_same_columns(file.format, first_name, first_names, &file.name, &names)?
             }
         }
         readers.push(reader);
@@ -111,9 +127,9 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
                 let _ = std::fs::remove_file(&target);
                 let latin1 = csv_reader(&file.path, true)?;
                 copy_to_parquet(&conn, file, &latin1, &target_text)
-                    .map_err(|e| user_file_error(&file.name, "đổi sang Parquet", e))?;
+                    .map_err(|e| user_file_error(&file.label(), "đổi sang Parquet", e))?;
             }
-            Err(e) => return Err(user_file_error(&file.name, "đổi sang Parquet", e)),
+            Err(e) => return Err(user_file_error(&file.label(), "đổi sang Parquet", e)),
         }
     }
 
@@ -194,7 +210,7 @@ fn open_reader(conn: &Connection, file: &InputFile) -> Result<(String, Vec<Colum
         FileFormat::Parquet => {
             let reader = format!("read_parquet({path})");
             let columns = describe(conn, &reader)
-                .map_err(|e| user_file_error(&file.name, "đọc Parquet", e))?;
+                .map_err(|e| user_file_error(&file.label(), "đọc Parquet", e))?;
             Ok((reader, columns))
         }
         FileFormat::Csv => {
@@ -204,10 +220,10 @@ fn open_reader(conn: &Connection, file: &InputFile) -> Result<(String, Vec<Colum
                 Err(e) if is_unicode_error(&e) => {
                     let latin1 = csv_reader(&file.path, true)?;
                     let columns = describe(conn, &latin1)
-                        .map_err(|e| user_file_error(&file.name, "đọc CSV", e))?;
+                        .map_err(|e| user_file_error(&file.label(), "đọc CSV", e))?;
                     (latin1, columns)
                 }
-                Err(e) => return Err(user_file_error(&file.name, "đọc CSV", e)),
+                Err(e) => return Err(user_file_error(&file.label(), "đọc CSV", e)),
             };
             // Dòng thiếu hay thừa cột làm DuckDB bỏ cuộc tách cột: cả dòng thành một cột, tên cột là nguyên dòng tiêu
             // đề ("region,amount"). Không chặn thì một bảng sai được lưu mà không ai biết.
@@ -219,6 +235,27 @@ fn open_reader(conn: &Connection, file: &InputFile) -> Result<(String, Vec<Colum
                     )));
                 }
             }
+            Ok((reader, columns))
+        }
+        // CSV do chính backend ghi: biết chắc UTF-8, dấu phẩy, nháy kép, nên không để DuckDB đoán. sample_size = -1
+        // cho DuckDB xem hết file trước khi chọn kiểu cột: cột như mã hàng có số ở đầu và chữ ở dòng thứ trăm nghìn
+        // (85123A) mà chỉ xem phần đầu thì chọn kiểu số rồi lỗi khi gặp chữ.
+        FileFormat::Xlsx => {
+            let types = if file.timestamp_columns.is_empty() {
+                String::new()
+            } else {
+                let pairs: Vec<String> = file
+                    .timestamp_columns
+                    .iter()
+                    .map(|name| format!("{}: 'TIMESTAMP'", sql_string(name)))
+                    .collect();
+                format!(", types = {{{}}}", pairs.join(", "))
+            };
+            let reader = format!(
+                "read_csv({path}, header = true, delim = ',', quote = '\"', escape = '\"', sample_size = -1{types})"
+            );
+            let columns =
+                describe(conn, &reader).map_err(|e| user_file_error(&file.label(), "đọc", e))?;
             Ok((reader, columns))
         }
     }
@@ -236,6 +273,7 @@ fn describe(conn: &Connection, from: &str) -> Result<Vec<Column>, duckdb::Error>
 }
 
 fn check_same_columns(
+    format: FileFormat,
     first_name: &str,
     first: &BTreeSet<String>,
     name: &str,
@@ -253,22 +291,28 @@ fn check_same_columns(
     if !extra.is_empty() {
         parts.push(format!("thừa cột {}", extra.join(", ")));
     }
-    Err(AppError::BadRequest(format!(
-        "File {name} không cùng cột với file {first_name}: {}. Các file nạp cùng lúc phải có cùng tên cột (phân biệt chữ hoa, chữ thường)",
-        parts.join("; ")
-    )))
+    let parts = parts.join("; ");
+    // Sheet Excel khác cột thì nạp riêng từng lần, mỗi lần thành một dataset.
+    Err(AppError::BadRequest(match format {
+        FileFormat::Xlsx => format!(
+            "Sheet {name} không cùng cột với sheet {first_name}: {parts}. Các sheet nạp cùng lúc phải có cùng tên cột; sheet khác cột thì nạp riêng từng sheet"
+        ),
+        _ => format!(
+            "File {name} không cùng cột với file {first_name}: {parts}. Các file nạp cùng lúc phải có cùng tên cột (phân biệt chữ hoa, chữ thường)"
+        ),
+    }))
 }
 
-/// Lỗi khi DuckDB đọc file người dùng: chi tiết vào log, người dùng nhận thông báo kèm tên file.
+/// Lỗi khi DuckDB đọc file người dùng: chi tiết vào log, người dùng nhận thông báo kèm tên file hay sheet (label).
 /// Lỗi IO (đầy ổ đĩa, mất quyền ghi) là lỗi máy chủ, không phải lỗi của file người dùng.
-fn user_file_error(file_name: &str, step: &str, e: duckdb::Error) -> AppError {
+fn user_file_error(label: &str, step: &str, e: duckdb::Error) -> AppError {
     let text = e.to_string();
     if text.contains("IO Error") {
-        return AppError::Internal(format!("{step} {file_name}: {text}"));
+        return AppError::Internal(format!("{step} {label}: {text}"));
     }
-    tracing::info!(file = file_name, step, error = %text, "duckdb rejected user file");
+    tracing::info!(file = label, step, error = %text, "duckdb rejected user file");
     AppError::BadRequest(format!(
-        "Không {step} được file {file_name}: file hỏng hoặc không đúng định dạng"
+        "Không {step} được {label}: dữ liệu hỏng hoặc không đúng định dạng"
     ))
 }
 
@@ -305,6 +349,7 @@ mod tests {
                 path,
                 name: name.to_string(),
                 format: FileFormat::Csv,
+                timestamp_columns: Vec::new(),
             }
         }
 
@@ -413,6 +458,7 @@ mod tests {
             path: source,
             name: "data.parquet".to_string(),
             format: FileFormat::Parquet,
+            timestamp_columns: Vec::new(),
         };
         let result = materialize(&[file], &tmp.out()).unwrap();
         assert_eq!(result.row_count, 1);
@@ -477,7 +523,11 @@ mod tests {
             FileFormat::from_file_name("x.parquet"),
             Some(FileFormat::Parquet)
         );
-        assert_eq!(FileFormat::from_file_name("x.xlsx"), None);
+        assert_eq!(
+            FileFormat::from_file_name("Book.XLSX"),
+            Some(FileFormat::Xlsx)
+        );
+        assert_eq!(FileFormat::from_file_name("x.xls"), None);
     }
 
     /// Byte latin-1 nằm sau phần DuckDB đọc thử (khoảng 20.000 dòng đầu): bước ghi gặp lỗi mã hóa và đọc lại theo latin-1.

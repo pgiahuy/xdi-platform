@@ -3,7 +3,7 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-329 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 485 gói npm
+342 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 485 gói npm
 (từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 26.
 
 ## Không thuộc nhóm cho phép thông dụng
@@ -60,6 +60,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | arrow-string | 58.4.0 | Apache-2.0 |
 | async-trait | 0.1.92 | MIT OR Apache-2.0 |
 | atoi | 2.0.0 | MIT |
+| atoi_simd | 0.18.1 | MIT OR Apache-2.0 |
 | atomic-waker | 1.1.2 | Apache-2.0 OR MIT |
 | autocfg | 1.5.1 | Apache-2.0 OR MIT |
 | axum | 0.8.9 | MIT |
@@ -75,17 +76,20 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | byteorder | 1.5.0 | Unlicense OR MIT |
 | bytes | 1.12.1 | MIT |
+| calamine | 0.37.0 | MIT |
 | cast | 0.3.0 | MIT OR Apache-2.0 |
 | cc | 1.9.0 | MIT OR Apache-2.0 |
 | cfg_aliases | 0.2.2 | MIT |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
 | chrono | 0.4.45 | MIT OR Apache-2.0 |
 | cmov | 0.5.4 | Apache-2.0 OR MIT |
+| codepage | 0.1.3 | Apache-2.0 OR MIT |
 | comfy-table | 7.1.4 | MIT |
 | const-oid | 0.9.6 | Apache-2.0 OR MIT |
 | const-random | 0.1.18 | MIT OR Apache-2.0 |
 | const-random-macro | 0.1.16 | MIT OR Apache-2.0 |
 | cookie | 0.18.2 | MIT OR Apache-2.0 |
+| core_detect | 1.0.0 | MIT OR Apache-2.0 |
 | core-foundation-sys | 0.8.7 | MIT OR Apache-2.0 |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
@@ -100,6 +104,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 |
 | crypto-common | 0.2.2 | MIT OR Apache-2.0 |
 | ctutils | 0.4.3 | Apache-2.0 OR MIT |
+| debug_unsafe | 0.1.4 | MIT OR Apache-2.0 |
 | der | 0.7.10 | Apache-2.0 OR MIT |
 | deranged | 0.5.9 | MIT OR Apache-2.0 |
 | deunicode | 1.6.2 | BSD-3-Clause |
@@ -109,12 +114,14 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | dotenvy | 0.15.7 | MIT |
 | duckdb | 1.10506.1 | MIT |
 | either | 1.19.0 | MIT OR Apache-2.0 |
+| encoding_rs | 0.8.42 | (Apache-2.0 OR MIT) AND BSD-3-Clause |
 | equivalent | 1.0.3 | Apache-2.0 OR MIT |
 | errno | 0.3.14 | MIT OR Apache-2.0 |
 | etcetera | 0.8.0 | MIT OR Apache-2.0 |
 | event-listener | 5.4.2 | Apache-2.0 OR MIT |
 | fallible-iterator | 0.3.0 | MIT OR Apache-2.0 |
 | fallible-streaming-iterator | 0.1.9 | MIT OR Apache-2.0 |
+| fast-float2 | 0.2.4 | MIT OR Apache-2.0 |
 | filetime | 0.2.29 | MIT OR Apache-2.0 |
 | find-msvc-tools | 0.1.15 | MIT OR Apache-2.0 |
 | flate2 | 1.1.10 | MIT OR Apache-2.0 |
@@ -191,6 +198,8 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | mime_guess | 2.0.5 | MIT |
 | miniz_oxide | 0.9.1 | MIT OR Zlib OR Apache-2.0 |
 | mio | 1.2.4 | MIT |
+| multer | 3.1.0 | MIT |
+| multiversion_no_op | 1.0.0 | Apache-2.0 OR MIT |
 | nix | 0.31.3 | MIT |
 | nu-ansi-term | 0.50.3 | MIT |
 | num-bigint | 0.4.8 | MIT OR Apache-2.0 |
@@ -217,6 +226,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | powerfmt | 0.2.1 | MIT OR Apache-2.0 |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
+| quick-xml | 0.42.0 | MIT |
 | quote | 1.0.47 | MIT OR Apache-2.0 |
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
 | r-efi | 6.0.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
@@ -229,7 +239,9 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | regex-automata | 0.4.18 | MIT OR Apache-2.0 |
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 |
 | ring | 0.17.14 | Apache-2.0 AND ISC |
+| rlimit | 0.11.0 | MIT |
 | rsa | 0.9.10 | MIT OR Apache-2.0 |
+| rust_xlsxwriter | 0.101.0 | MIT OR Apache-2.0 |
 | rustix | 0.38.44 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | rustix | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |
@@ -251,6 +263,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 |
 | signature | 2.2.0 | Apache-2.0 OR MIT |
 | simd-adler32 | 0.3.10 | MIT |
+| simdutf8 | 0.1.5 | MIT OR Apache-2.0 |
 | slab | 0.4.12 | MIT |
 | smallvec | 1.16.3 | MIT OR Apache-2.0 |
 | socket2 | 0.6.5 | MIT OR Apache-2.0 |

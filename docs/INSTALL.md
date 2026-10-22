@@ -69,6 +69,15 @@ curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets \
 Nhận CSV (UTF-8 hoặc latin-1) và Parquet, một hoặc nhiều file. Nhiều file cùng cột gộp thành một bảng. Tổng dung lượng
 một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200).
 
+File Excel (.xlsx) nạp từng file một. Xem tên sheet và cột, rồi chọn sheet cần nạp (lặp `-F sheet=` để gộp nhiều sheet
+cùng cột thành một bảng; file chỉ có một sheet thì không cần chọn):
+
+```bash
+curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets/sheets -F file=@ban_hang.xlsx
+curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets \
+  -F name='Bán hàng' -F sheet='Năm 2023' -F sheet='Năm 2024' -F file=@ban_hang.xlsx
+```
+
 ### Cấu hình
 
 Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đầy đủ ở [.env.example](https://github.com/pgiahuy/xdi-platform/blob/main/.env.example)):

@@ -4,6 +4,8 @@ Không biến toàn cục: mọi thứ handler cần đều lấy từ đây. Du
 
 use std::sync::{Arc, Mutex};
 
+use tokio::sync::Semaphore;
+
 use crate::config::Config;
 use crate::engine::llm::{self, LlmProvider};
 use crate::engine::store::Store;
@@ -17,6 +19,9 @@ pub struct AppState {
     /// Mã thiết lập lần đầu: có khi lúc khởi động chưa có tài khoản nào, về None khi đã tạo tài khoản quản trị.
     /// Mutex chuẩn là đủ vì không giữ khóa qua await.
     pub setup_code: Arc<Mutex<Option<String>>>,
+    /// Chỉ một tiến trình con đọc file Excel chạy mỗi lúc (engine/excel_worker.rs): mỗi tiến trình được dùng tới 2 GB
+    /// RAM, không để nhiều request cộng dồn. Request sau chờ request trước xong.
+    pub excel_jobs: Arc<Semaphore>,
 }
 
 impl AppState {
@@ -27,6 +32,7 @@ impl AppState {
             llm,
             store,
             setup_code: Arc::new(Mutex::new(None)),
+            excel_jobs: Arc::new(Semaphore::new(1)),
         }
     }
 }
