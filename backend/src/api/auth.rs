@@ -4,74 +4,102 @@
 Mã phiên đi trong cookie httpOnly: JavaScript của trang không đọc được, nên một lỗi XSS không lấy cắp được phiên.
 SameSite=Lax chặn trang khác gửi request POST kèm cookie này. Cờ Secure bật khi chạy sau HTTPS (#55). */
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::{get, post},
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-use super::extract::JsonBody;
+use super::extract::{CurrentUser, JsonBody};
 use crate::engine::store::{Membership, User};
+use crate::error::ErrorBody;
 use crate::service::accounts::{self, SetupInput, SESSION_DAYS};
 use crate::service::users;
 use crate::{error::AppError, state::AppState};
 
 pub const SESSION_COOKIE: &str = "xdi_session";
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/auth/setup", get(setup_status).post(setup))
-        .route("/auth/login", post(login))
-        .route("/auth/logout", post(logout))
-        .route("/auth/me", get(me))
-        .route("/auth/password", post(change_password))
-        .route("/auth/demo-login", post(demo_login))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(setup_status, setup))
+        .routes(routes!(login))
+        .routes(routes!(logout))
+        .routes(routes!(me))
+        .routes(routes!(change_password))
+        .routes(routes!(demo_login))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct SetupStatusResponse {
+    /// True while the installation has no account yet: show the first-run setup screen instead of sign-in.
     needed: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct SetupRequest {
+    /// Code printed in the backend log at startup; case and surrounding spaces are ignored.
     setup_code: String,
     email: String,
     #[serde(default)]
     display_name: String,
+    /// 8 to 128 characters.
     password: String,
+    /// Name of the first workspace; empty gives a default name.
     #[serde(default)]
     workspace_name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct LoginRequest {
     email: String,
     password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct ChangePasswordRequest {
     current_password: String,
+    /// 8 to 128 characters.
     new_password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct MeResponse {
     user: User,
+    /// Workspaces the user belongs to, with their role in each, sorted by name.
     workspaces: Vec<Membership>,
 }
 
-/// Giao diện gọi khi mở trang: needed = true thì hiện màn tạo tài khoản quản trị thay cho màn đăng nhập.
+// Giao diện gọi khi mở trang: needed = true thì hiện màn tạo tài khoản quản trị thay cho màn đăng nhập.
+#[utoipa::path(
+    get,
+    path = "/auth/setup",
+    tag = "auth",
+    operation_id = "setupStatus",
+    summary = "Whether the first-run administrator setup is still needed",
+    security(()),
+    responses((status = 200, body = SetupStatusResponse, description = "OK"))
+)]
 async fn setup_status(State(state): State<AppState>) -> Json<SetupStatusResponse> {
     Json(SetupStatusResponse {
         needed: accounts::setup_needed(&state),
     })
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/setup",
+    tag = "auth",
+    operation_id = "setup",
+    summary = "Create the first administrator account and workspace, then sign in",
+    description = "Only works while no account exists and with the setup code from the backend log. Sets the \
+                   session cookie.",
+    security(()),
+    request_body = SetupRequest,
+    responses(
+        (status = 200, body = MeResponse, description = "Signed in as the new administrator"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid input, 403 wrong code or already set up")
+    )
+)]
 async fn setup(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -89,6 +117,20 @@ async fn setup(
     Ok((jar.add(session_cookie(session)), body))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/login",
+    tag = "auth",
+    operation_id = "login",
+    summary = "Sign in with email and password",
+    description = "Sets the session cookie. A wrong email and a wrong password give the same 401 message.",
+    security(()),
+    request_body = LoginRequest,
+    responses(
+        (status = 200, body = MeResponse, description = "Signed in"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid input, 401 wrong email or password")
+    )
+)]
 async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -99,7 +141,17 @@ async fn login(
     Ok((jar.add(session_cookie(session)), body))
 }
 
-/// Xóa phiên ở database rồi xóa cookie. Gọi khi chưa đăng nhập cũng trả thành công.
+// Xóa phiên ở database rồi xóa cookie. Gọi khi chưa đăng nhập cũng trả thành công.
+#[utoipa::path(
+    post,
+    path = "/auth/logout",
+    tag = "auth",
+    operation_id = "logout",
+    summary = "Sign out: delete the session and clear the cookie",
+    description = "Succeeds even when not signed in.",
+    security(()),
+    responses((status = 204, description = "Signed out"))
+)]
 async fn logout(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -111,19 +163,46 @@ async fn logout(
     Ok((jar.remove(removal), StatusCode::NO_CONTENT))
 }
 
+#[utoipa::path(
+    get,
+    path = "/auth/me",
+    tag = "auth",
+    operation_id = "me",
+    summary = "The signed-in user and their workspaces",
+    responses(
+        (status = 200, body = MeResponse, description = "OK"),
+        (status = 401, body = ErrorBody, description = "Not signed in or session expired")
+    )
+)]
 async fn me(State(state): State<AppState>, jar: CookieJar) -> Result<Json<MeResponse>, AppError> {
     let user = session_user(&state, &jar).await?;
     me_response(&state, user).await
 }
 
-/// Đổi mật khẩu của chính mình. Phiên đang dùng giữ lại, các phiên khác bị đăng xuất.
+// Đổi mật khẩu của chính mình. Phiên đang dùng giữ lại, các phiên khác bị đăng xuất.
+#[utoipa::path(
+    post,
+    path = "/auth/password",
+    tag = "auth",
+    operation_id = "changePassword",
+    summary = "Change your own password",
+    description = "The current session stays signed in; every other session of the account is signed out.",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 204, description = "Password changed"),
+        (status = "4XX", body = ErrorBody, description = "400 wrong current password or invalid new password, \
+                                                         401 not signed in")
+    )
+)]
+// CurrentUser đứng trước JsonBody: chưa đăng nhập thì trả 401 trước khi đọc body, như mọi endpoint cần đăng nhập khác
+// (đặc tả ghi thao tác này cần cookie phiên; test every_session_operation_requires_login kiểm điều đó).
 async fn change_password(
     State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
     jar: CookieJar,
     JsonBody(req): JsonBody<ChangePasswordRequest>,
 ) -> Result<StatusCode, AppError> {
-    let user = session_user(&state, &jar).await?;
-    // session_user đã kiểm có cookie, nên ở đây luôn có giá trị.
+    // CurrentUser đã kiểm có cookie phiên hợp lệ, nên ở đây luôn có giá trị.
     let session = jar
         .get(SESSION_COOKIE)
         .map(|c| c.value().to_string())
@@ -139,6 +218,15 @@ async fn change_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/demo-login",
+    tag = "auth",
+    operation_id = "demoLogin",
+    summary = "Sign in to the public demo with a role (not implemented yet)",
+    security(()),
+    responses((status = 501, body = ErrorBody, description = "Not implemented yet"))
+)]
 async fn demo_login() -> Result<(), AppError> {
     Err(AppError::NotImplemented("đăng nhập demo theo vai"))
 }

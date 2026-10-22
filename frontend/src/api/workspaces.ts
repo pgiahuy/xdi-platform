@@ -1,23 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/workspaces.ts - hook cho thành viên của một workspace và đổi tên, xóa workspace (backend/src/api/workspaces.rs).
 Quyền do backend kiểm (docs/ARCHITECTURE.md mục 4b); giao diện chỉ ẩn nút người dùng không bấm được, lỗi từ backend
-vẫn hiện nguyên lời. Kiểu dữ liệu viết tay theo backend; sẽ sinh từ openapi.json khi có (#53). */
+vẫn hiện nguyên lời. Kiểu dữ liệu lấy từ schema.ts, sinh từ openapi.json; tên ở đây chỉ là bí danh để trang import
+gọn. */
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPatch, apiPost } from './client'
 import { meKey, type Me } from './auth'
+import type { components } from './schema'
 
-export type MemberRow = {
-  user_id: string
-  email: string
-  display_name: string
-  role: string
-}
-
-export type AddMemberRequest = {
-  email: string
-  role: string
-}
+type Schemas = components['schemas']
+export type MemberRow = Schemas['MemberRow']
+export type AddMemberRequest = Schemas['AddMemberRequest']
 
 function membersKey(slug: string) {
   return ['workspaces', slug, 'members']
@@ -58,7 +52,7 @@ export function useSetMemberRole(slug: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
-      apiPatch<void>(`${workspacePath(slug)}/members/${userId}`, { role }),
+      apiPatch<void>(`${workspacePath(slug)}/members/${userId}`, { role } satisfies Schemas['SetRoleRequest']),
     onSuccess: () => refreshMembers(queryClient, slug),
   })
 }
@@ -75,7 +69,9 @@ export function useRemoveMember(slug: string) {
 export function useRenameWorkspace(slug: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (name: string) => apiPatch<void>(workspacePath(slug), { name }),
+    // Đổi tên dùng cùng body với tạo workspace (CreateWorkspaceRequest ở backend).
+    mutationFn: (name: string) =>
+      apiPatch<void>(workspacePath(slug), { name } satisfies Schemas['CreateWorkspaceRequest']),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: meKey }),
   })
 }

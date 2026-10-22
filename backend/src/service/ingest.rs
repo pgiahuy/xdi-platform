@@ -100,13 +100,15 @@ pub struct Upload {
     pub sheets: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct UploadResult {
-    /// false: bộ file trùng một phiên bản đã có, không tạo gì mới.
+    // false: bộ file trùng một phiên bản đã có, không tạo gì mới.
+    /// False when the files match an existing version: nothing new was created.
     pub created: bool,
     pub dataset: Dataset,
     pub version: DatasetVersion,
-    /// Cột của bảng vừa tạo; rỗng khi created = false (hồ sơ cột đầy đủ ở #22).
+    // Cột của bảng vừa tạo; rỗng khi created = false (hồ sơ cột đầy đủ ở #22).
+    /// Columns of the new table; empty when `created` is false.
     pub columns: Vec<Column>,
 }
 

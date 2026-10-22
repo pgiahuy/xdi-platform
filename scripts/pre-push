@@ -3,9 +3,9 @@
 # Bỏ qua một lần (không khuyến khích): git push --no-verify
 set -e
 make check-fast
-# Chỉ kiểm giao diện khi nhánh có đổi frontend/ hoặc Makefile (nơi định nghĩa check-frontend) so với main, giống bộ
-# lọc của CI. git diff --quiet trả 1 khi có khác biệt; nếu chưa có origin/main (chưa fetch) thì lệnh lỗi và vẫn kiểm,
-# để không bỏ sót.
-if ! git diff --quiet origin/main...HEAD -- frontend Makefile; then
+# Chỉ kiểm giao diện khi nhánh có đổi frontend/, openapi.json (kiểu frontend sinh từ file này) hoặc Makefile (nơi định
+# nghĩa check-frontend) so với main, giống bộ lọc của CI. check-fast đã kiểm openapi.json khớp code backend. git diff
+# --quiet trả 1 khi có khác biệt; nếu chưa có origin/main (chưa fetch) thì lệnh lỗi và vẫn kiểm, để không bỏ sót.
+if ! git diff --quiet origin/main...HEAD -- frontend openapi.json Makefile; then
   make check-frontend
 fi

@@ -20,17 +20,20 @@ use super::{db_error, Store};
 use crate::auth::{Role, WorkspaceId};
 use crate::error::AppError;
 
-/// Một thành viên, như admin của workspace nhìn thấy.
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+// Một thành viên, như admin của workspace nhìn thấy.
+/// A member of a workspace.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct MemberRow {
     pub user_id: Uuid,
     pub email: String,
     pub display_name: String,
+    /// `admin` or `member`.
     pub role: String,
 }
 
-/// Một workspace như quản trị hệ thống nhìn thấy: tên và thành viên, không có dữ liệu bên trong.
-#[derive(Debug, Clone, Serialize)]
+// Một workspace như quản trị hệ thống nhìn thấy: tên và thành viên, không có dữ liệu bên trong.
+/// A workspace as the system administrator sees it: name and members, none of its data.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct WorkspaceOverview {
     pub workspace_id: Uuid,
     pub name: String,

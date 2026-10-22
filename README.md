@@ -23,7 +23,8 @@ docker compose up --build
 
 Mở http://localhost:8000. Lần đầu giao diện hiện màn thiết lập: nhập mã thiết lập in trong log của backend
 (`docker compose logs backend | grep setup_code`) để tạo tài khoản quản trị và workspace đầu tiên. API nằm dưới `/api`,
-ví dụ `curl localhost:8000/api/health` trả `{"status":"ok"}`.
+ví dụ `curl localhost:8000/api/health` trả `{"status":"ok"}`. Đặc tả OpenAPI ở `/api/openapi.json`, xem và gọi thử trên
+trình duyệt ở http://localhost:8000/api/docs.
 
 `LLM_PROVIDER` chọn mô hình ngôn ngữ: `mock` (mặc định, không cần khóa API), `gemini` (cần khóa), `ollama` (cần một máy
 chạy Ollama).

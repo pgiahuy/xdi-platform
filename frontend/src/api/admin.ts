@@ -1,35 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/admin.ts - hook cho quản trị hệ thống: tài khoản và danh sách mọi workspace (backend/src/api/admin.rs).
-Người không phải quản trị hệ thống gọi vào nhận 403 kèm lời từ backend. Kiểu dữ liệu viết tay theo backend; sẽ sinh từ
-openapi.json khi có (#53). */
+Người không phải quản trị hệ thống gọi vào nhận 403 kèm lời từ backend. Kiểu dữ liệu lấy từ schema.ts, sinh từ
+openapi.json; tên ở đây chỉ là bí danh để trang import gọn. */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from './client'
 import { meKey, type User } from './auth'
-import type { MemberRow } from './workspaces'
+import type { components } from './schema'
 
-export type UserSummary = {
-  id: string
-  email: string
-  display_name: string
-  is_system_admin: boolean
-  is_active: boolean
-  created_at: string
-}
-
-export type CreateUserRequest = {
-  email: string
-  display_name: string
-  password: string
-}
-
-export type WorkspaceOverview = {
-  workspace_id: string
-  name: string
-  slug: string
-  created_at: string
-  members: MemberRow[]
-}
+type Schemas = components['schemas']
+export type UserSummary = Schemas['UserSummary']
+export type CreateUserRequest = Schemas['CreateUserRequest']
+export type WorkspaceOverview = Schemas['WorkspaceOverview']
 
 const usersKey = ['admin', 'users']
 const overviewKey = ['admin', 'workspaces']
@@ -65,7 +47,7 @@ export function useSetUserActive() {
 export function useResetPassword() {
   return useMutation({
     mutationFn: (userId: string) =>
-      apiPost<{ temporary_password: string }>(`/admin/users/${userId}/reset-password`),
+      apiPost<Schemas['ResetPasswordResponse']>(`/admin/users/${userId}/reset-password`),
     // Mặc định TanStack giữ kết quả mutation 5 phút sau khi trang rời đi; 0 thì bỏ ngay.
     gcTime: 0,
   })
@@ -80,7 +62,7 @@ export function useAssignWorkspaceAdmin() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ workspaceId, email }: { workspaceId: string; email: string }) =>
-      apiPost<void>(`/admin/workspaces/${workspaceId}/admins`, { email }),
+      apiPost<void>(`/admin/workspaces/${workspaceId}/admins`, { email } satisfies Schemas['AssignAdminRequest']),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: overviewKey })
       // Quản trị tự chỉ định mình thì workspace đó hiện ngay trong danh sách đổi workspace.

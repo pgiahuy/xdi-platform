@@ -245,8 +245,29 @@ REST và JSON. API dữ liệu nằm dưới workspace trong đường dẫn: `/
 việc độc lập, tab này không đổi workspace của tab kia. Mỗi request kiểm phiên (chưa đăng nhập: 401) và kiểm người dùng
 thuộc workspace đó (không thuộc hoặc không có workspace: cùng một lỗi 404, không dò được tên workspace).
 
-OpenAPI sinh từ code bằng `utoipa`, phục vụ ở `/api/openapi.json` và Swagger UI ở `/api/docs`. Frontend sinh
-kiểu TypeScript từ spec. `openapi.json` commit vào repo, CI so lại để hai bên không lệch. Tài liệu API đang viết ([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
+OpenAPI 3.1 sinh từ code bằng `utoipa`: mỗi handler khai báo đường dẫn, tham số, request và response bằng
+`#[utoipa::path]`, struct request và response derive `ToSchema`. Router đăng ký handler qua `OpenApiRouter` của
+`utoipa-axum` (`api/mod.rs`), nên route có trong router thì có trong đặc tả; phần chung (tên API, địa chỉ gốc `/api`,
+cookie phiên, kiểu lỗi `{code, message}`) ở `api/openapi.rs`. Mô tả trong đặc tả viết tiếng Anh, vì người đọc là người
+dùng API.
+
+Đặc tả phục vụ ở `/api/openapi.json`, Swagger UI ở `/api/docs`; cả hai không cần đăng nhập, gọi thử endpoint thì cần
+cookie phiên như giao diện. Swagger UI kèm sẵn trong binary (feature `vendored` của `utoipa-swagger-ui`), build không
+tải gì từ Internet; thông báo giấy phép của nó ở `/api/docs/licenses.txt` (LICENSES.md). Công khai đặc tả không lộ gì mới:
+mọi đường dẫn đã có trong file JavaScript của giao diện, vốn tải được khi chưa đăng nhập, và đặc tả không chứa bí mật.
+Swagger UI chạy cùng địa chỉ với cookie phiên (httpOnly, SameSite=Lax), nên một lỗi XSS của Swagger UI sẽ gọi được API
+bằng quyền người đang mở trang; chấp nhận ở giai đoạn này. Tham số `?url=` của Swagger UI bị bỏ qua (cấu hình cố định),
+nên không nạp được đặc tả từ nơi khác.
+
+Hợp đồng nằm trong repo:
+
+| File | Sinh từ | Kiểm lệch |
+|---|---|---|
+| `openapi.json` (gốc repo) | `xdi-backend openapi`, không cần database | Test `openapi_json_is_up_to_date` trong `make check-fast` (CI job backend, hook pre-push) |
+| `frontend/src/api/schema.ts` | `openapi.json`, bằng `openapi-typescript` (`frontend/scripts/api-types.mjs`) | `npm run api:check` trong `make check-frontend` (CI job frontend) |
+
+Đổi API: sửa handler hoặc struct, chạy `make openapi`, commit cả hai file. Hook trong `frontend/src/api` lấy kiểu từ
+`schema.ts`, không khai lại. Tài liệu API viết tay đang làm ([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
 
 ## 9. Hướng phát triển
 
@@ -272,6 +293,7 @@ Cập nhật khi có thay đổi.
 |---|---|
 | Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
 | `/api/health`, `/api/version`; mọi API dưới `/api`, đường dẫn API sai trả 404 JSON | Có |
+| OpenAPI (mục 8): đặc tả sinh từ code ở `/api/openapi.json`, Swagger UI ở `/api/docs`, `openapi.json` và kiểu TypeScript `frontend/src/api/schema.ts` trong repo, test và CI báo khi lệch code | Có; endpoint hỏi (#33) thêm vào khi làm |
 | Trait `LlmProvider` và ba cài đặt; `complete` nhận loại việc, câu hỏi gốc và prompt | Mock trả lời 10 câu mẫu trên DataCo (bảng logic `dataco`) và hồ sơ viết sẵn của `dataco` (`engine/llm/mock_answers.json`); Gemini và Ollama chưa gọi thật |
 | Nạp dataset: `POST /api/workspaces/{slug}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet, hoặc một file Excel kèm sheet đã chọn), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB`; liệt kê sheet của file Excel ở `POST .../datasets/sheets` | Có; sheet Excel khác cột nạp riêng từng lần; chưa có hồ sơ cột (#22) |
 | Route ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501 |

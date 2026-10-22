@@ -2,39 +2,63 @@
 /* api/admin.rs - quản lý tài khoản cho quản trị hệ thống: liệt kê, tạo, khóa, mở, đặt lại mật khẩu.
 Logic và kiểm quyền ở service/users.rs; handler chỉ lấy người đang đăng nhập rồi chuyển tiếp. */
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::{get, post},
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 use super::extract::{CurrentUser, JsonBody, PathParams};
 use crate::engine::store::{User, UserSummary, WorkspaceOverview};
+use crate::error::ErrorBody;
 use crate::service::{users, workspaces};
 use crate::{error::AppError, state::AppState};
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/admin/users", get(list).post(create))
-        .route("/admin/users/{id}/deactivate", post(deactivate))
-        .route("/admin/users/{id}/activate", post(activate))
-        .route("/admin/users/{id}/reset-password", post(reset_password))
-        .route("/admin/workspaces", get(workspaces_overview))
-        .route(
-            "/admin/workspaces/{id}/admins",
-            post(assign_workspace_admin),
-        )
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(list, create))
+        .routes(routes!(deactivate))
+        .routes(routes!(activate))
+        .routes(routes!(reset_password))
+        .routes(routes!(workspaces_overview))
+        .routes(routes!(assign_workspace_admin))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct AssignAdminRequest {
+    /// Email of an active account; it becomes `admin` of the workspace.
     email: String,
 }
 
-/// Mọi workspace và thành viên, không có dữ liệu bên trong.
+#[derive(Deserialize, ToSchema)]
+struct CreateUserRequest {
+    email: String,
+    #[serde(default)]
+    display_name: String,
+    /// 8 to 128 characters.
+    password: String,
+}
+
+#[derive(Serialize, ToSchema)]
+struct ResetPasswordResponse {
+    // Hiện cho quản trị một lần để chuyển cho người dùng; không lưu ở đâu dạng chữ.
+    /// Shown once to hand to the user; not stored anywhere in plain text.
+    temporary_password: String,
+}
+
+// Mọi workspace và thành viên, không có dữ liệu bên trong.
+#[utoipa::path(
+    get,
+    path = "/admin/workspaces",
+    tag = "admin",
+    operation_id = "listAllWorkspaces",
+    summary = "Every workspace with its members (system administrator only)",
+    description = "Names and members only, none of the workspace data.",
+    responses(
+        (status = 200, body = Vec<WorkspaceOverview>, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "401 not signed in, 403 not a system administrator")
+    )
+)]
 async fn workspaces_overview(
     State(state): State<AppState>,
     CurrentUser(actor): CurrentUser,
@@ -42,7 +66,22 @@ async fn workspaces_overview(
     Ok(Json(workspaces::overview(&state, &actor).await?))
 }
 
-/// Chỉ định admin cho workspace (ví dụ khi admin cuối không còn). Mỗi lần được ghi log.
+// Chỉ định admin cho workspace (ví dụ khi admin cuối không còn). Mỗi lần được ghi log.
+#[utoipa::path(
+    post,
+    path = "/admin/workspaces/{id}/admins",
+    tag = "admin",
+    operation_id = "assignWorkspaceAdmin",
+    summary = "Make an account admin of any workspace (system administrator only)",
+    description = "For a workspace that lost its last admin. Each assignment is written to the server log.",
+    params(("id" = String, Path, description = "Workspace id (UUID)")),
+    request_body = AssignAdminRequest,
+    responses(
+        (status = 204, description = "Assigned"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid id or email, 401, 403, 404 unknown workspace \
+                                                         or account")
+    )
+)]
 async fn assign_workspace_admin(
     State(state): State<AppState>,
     CurrentUser(actor): CurrentUser,
@@ -55,20 +94,17 @@ async fn assign_workspace_admin(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
-struct CreateUserRequest {
-    email: String,
-    #[serde(default)]
-    display_name: String,
-    password: String,
-}
-
-#[derive(Serialize)]
-struct ResetPasswordResponse {
-    /// Hiện cho quản trị một lần để chuyển cho người dùng; không lưu ở đâu dạng chữ.
-    temporary_password: String,
-}
-
+#[utoipa::path(
+    get,
+    path = "/admin/users",
+    tag = "admin",
+    operation_id = "listUsers",
+    summary = "Every account (system administrator only)",
+    responses(
+        (status = 200, body = Vec<UserSummary>, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "401 not signed in, 403 not a system administrator")
+    )
+)]
 async fn list(
     State(state): State<AppState>,
     CurrentUser(actor): CurrentUser,
@@ -76,6 +112,19 @@ async fn list(
     Ok(Json(users::list(&state, &actor).await?))
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/users",
+    tag = "admin",
+    operation_id = "createUser",
+    summary = "Create an account (system administrator only)",
+    description = "The new account belongs to no workspace until a workspace admin adds it.",
+    request_body = CreateUserRequest,
+    responses(
+        (status = 201, body = User, description = "Created"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid input or email taken, 401, 403")
+    )
+)]
 async fn create(
     State(state): State<AppState>,
     CurrentUser(actor): CurrentUser,
@@ -85,6 +134,19 @@ async fn create(
     Ok((StatusCode::CREATED, Json(user)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/users/{id}/deactivate",
+    tag = "admin",
+    operation_id = "deactivateUser",
+    summary = "Deactivate an account and sign it out everywhere (system administrator only)",
+    params(("id" = String, Path, description = "Account id (UUID)")),
+    responses(
+        (status = 204, description = "Deactivated"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid id, own account or last system \
+                                                         administrator, 401, 403, 404")
+    )
+)]
 async fn deactivate(
     State(state): State<AppState>,
     CurrentUser(actor): CurrentUser,
@@ -94,6 +156,18 @@ async fn deactivate(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/users/{id}/activate",
+    tag = "admin",
+    operation_id = "activateUser",
+    summary = "Reactivate an account (system administrator only)",
+    params(("id" = String, Path, description = "Account id (UUID)")),
+    responses(
+        (status = 204, description = "Activated"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid id, 401, 403, 404")
+    )
+)]
 async fn activate(
     State(state): State<AppState>,
     CurrentUser(actor): CurrentUser,
@@ -103,6 +177,18 @@ async fn activate(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/users/{id}/reset-password",
+    tag = "admin",
+    operation_id = "resetUserPassword",
+    summary = "Set a temporary password and sign the account out everywhere (system administrator only)",
+    params(("id" = String, Path, description = "Account id (UUID)")),
+    responses(
+        (status = 200, body = ResetPasswordResponse, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid id, 401, 403, 404")
+    )
+)]
 async fn reset_password(
     State(state): State<AppState>,
     CurrentUser(actor): CurrentUser,

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint --deny-warnings",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api:types": "node scripts/api-types.mjs",
+    "api:check": "node scripts/api-types.mjs --check"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -27,11 +29,17 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "openapi-typescript": "7.13.0",
     "oxlint": "^1.88.0",
     "shadcn": "^4.22.1",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "vite": "^8.3.4"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "overrides": {
+    "openapi-typescript": {
+      "typescript": "$typescript"
+    }
+  }
 }

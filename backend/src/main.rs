@@ -15,6 +15,13 @@ mod state;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    // In đặc tả OpenAPI (make openapi ghi nó ra openapi.json): rẽ ra trước khi đọc cấu hình hay kết nối database, để
+    // sinh được trên máy chưa có Postgres, như trong CI.
+    if args == ["openapi"] {
+        print!("{}", api::build_openapi_json());
+        return;
+    }
+
     // Tiến trình con đọc file Excel: rẽ ra trước khi dựng runtime tokio. Runtime nhiều luồng giữ sẵn hàng GB vùng nhớ
     // ảo (mỗi luồng một arena của glibc), tính vào trần RAM của tiến trình con và làm file hợp lệ cũng bị từ chối
     // trên máy nhiều nhân. Tiến trình con chỉ cần một luồng, log theo RUST_LOG như server.

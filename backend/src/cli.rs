@@ -11,7 +11,8 @@ use crate::state::AppState;
 const USAGE: &str = "usage:
   xdi-backend                                 start the server
   xdi-backend reset-password --email <email>  print a temporary password and sign the account out everywhere
-  xdi-backend list-admins                     list system administrators";
+  xdi-backend list-admins                     list system administrators
+  xdi-backend openapi                         print the OpenAPI spec (JSON) to stdout, without a database";
 
 /// Chạy lệnh và trả mã thoát cho tiến trình. Kết quả in ra stdout, lỗi ra stderr.
 pub async fn run(state: &AppState, args: &[String]) -> i32 {

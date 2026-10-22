@@ -25,9 +25,33 @@ pub enum AppError {
     Internal(String),
 }
 
-#[derive(Serialize)]
-struct ErrorBody {
-    code: &'static str,
+// Mã lỗi khai thành enum để đặc tả OpenAPI liệt kê đủ giá trị, và kiểu TypeScript sinh ra là một tập chữ cụ thể
+// thay cho string. serde đổi tên sang snake_case, nên JSON trả ra không đổi.
+/// Stable machine-readable error code; one per HTTP status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorCode {
+    /// 400
+    BadRequest,
+    /// 401
+    Unauthorized,
+    /// 403
+    Forbidden,
+    /// 404
+    NotFound,
+    /// 413
+    TooLarge,
+    /// 500
+    Internal,
+    /// 501
+    NotImplemented,
+}
+
+/// Error body returned by every endpoint on failure.
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ErrorBody {
+    code: ErrorCode,
+    /// Human-readable explanation in Vietnamese, meant to be shown to the end user as is.
     message: String,
 }
 
@@ -37,42 +61,42 @@ impl AppError {
             AppError::NotImplemented(feature) => (
                 StatusCode::NOT_IMPLEMENTED,
                 ErrorBody {
-                    code: "not_implemented",
+                    code: ErrorCode::NotImplemented,
                     message: format!("Chưa cài đặt: {feature}"),
                 },
             ),
             AppError::BadRequest(msg) => (
                 StatusCode::BAD_REQUEST,
                 ErrorBody {
-                    code: "bad_request",
+                    code: ErrorCode::BadRequest,
                     message: msg.clone(),
                 },
             ),
             AppError::Unauthorized(msg) => (
                 StatusCode::UNAUTHORIZED,
                 ErrorBody {
-                    code: "unauthorized",
+                    code: ErrorCode::Unauthorized,
                     message: msg.clone(),
                 },
             ),
             AppError::Forbidden(msg) => (
                 StatusCode::FORBIDDEN,
                 ErrorBody {
-                    code: "forbidden",
+                    code: ErrorCode::Forbidden,
                     message: msg.clone(),
                 },
             ),
             AppError::TooLarge(msg) => (
                 StatusCode::PAYLOAD_TOO_LARGE,
                 ErrorBody {
-                    code: "too_large",
+                    code: ErrorCode::TooLarge,
                     message: msg.clone(),
                 },
             ),
             AppError::NotFound(msg) => (
                 StatusCode::NOT_FOUND,
                 ErrorBody {
-                    code: "not_found",
+                    code: ErrorCode::NotFound,
                     message: msg.clone(),
                 },
             ),
@@ -82,7 +106,7 @@ impl AppError {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     ErrorBody {
-                        code: "internal",
+                        code: ErrorCode::Internal,
                         message: "Lỗi nội bộ, xem log của backend".to_string(),
                     },
                 )
@@ -106,7 +130,7 @@ mod tests {
     fn not_implemented_maps_to_501() {
         let (status, body) = AppError::NotImplemented("ask").status_and_body();
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
-        assert_eq!(body.code, "not_implemented");
+        assert_eq!(body.code, ErrorCode::NotImplemented);
     }
 
     #[test]
@@ -114,10 +138,13 @@ mod tests {
         let (status, body) = AppError::Unauthorized("x".into()).status_and_body();
         assert_eq!(
             (status, body.code),
-            (StatusCode::UNAUTHORIZED, "unauthorized")
+            (StatusCode::UNAUTHORIZED, ErrorCode::Unauthorized)
         );
         let (status, body) = AppError::Forbidden("x".into()).status_and_body();
-        assert_eq!((status, body.code), (StatusCode::FORBIDDEN, "forbidden"));
+        assert_eq!(
+            (status, body.code),
+            (StatusCode::FORBIDDEN, ErrorCode::Forbidden)
+        );
     }
 
     #[test]
