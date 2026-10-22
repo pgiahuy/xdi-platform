@@ -38,8 +38,10 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_TIMEOUT_SECS: ${GEMINI_TIMEOUT_SECS:-60}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:7b}
+      OLLAMA_TIMEOUT_SECS: ${OLLAMA_TIMEOUT_SECS:-300}
     ports:
       - "${BACKEND_BIND:+${BACKEND_BIND}:}${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
     # Cho backend gọi Ollama chạy trên máy host, kể cả trên Linux.

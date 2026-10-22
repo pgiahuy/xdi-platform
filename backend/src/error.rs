@@ -23,6 +23,12 @@ pub enum AppError {
     TooLarge(String),
     NotFound(String),
     Internal(String),
+    /// Dịch vụ phía sau backend (mô hình ngôn ngữ) lỗi, quá tải, không trả lời hoặc trả dữ liệu sai (502). Lời báo
+    /// trả nguyên văn như BadRequest, vì người dùng cần biết phải chờ hay báo quản trị sửa gì.
+    Upstream(String),
+    /// Chức năng chưa dùng được vì máy chủ thiếu cấu hình, ví dụ chưa đặt khóa API (503). Không phải lỗi của request:
+    /// gửi lại y nguyên sẽ được khi quản trị sửa cấu hình. Không dùng Internal vì lời báo sẽ bị thay bằng câu chung.
+    Unavailable(String),
 }
 
 // Mã lỗi khai thành enum để đặc tả OpenAPI liệt kê đủ giá trị, và kiểu TypeScript sinh ra là một tập chữ cụ thể
@@ -45,6 +51,10 @@ pub enum ErrorCode {
     Internal,
     /// 501
     NotImplemented,
+    /// 502
+    Upstream,
+    /// 503
+    Unavailable,
 }
 
 /// Error body returned by every endpoint on failure.
@@ -100,6 +110,20 @@ impl AppError {
                     message: msg.clone(),
                 },
             ),
+            AppError::Upstream(msg) => (
+                StatusCode::BAD_GATEWAY,
+                ErrorBody {
+                    code: ErrorCode::Upstream,
+                    message: msg.clone(),
+                },
+            ),
+            AppError::Unavailable(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                ErrorBody {
+                    code: ErrorCode::Unavailable,
+                    message: msg.clone(),
+                },
+            ),
             AppError::Internal(msg) => {
                 // Ghi chi tiết vào log, không trả chi tiết nội bộ cho client.
                 tracing::error!(error = %msg, "internal error");
@@ -144,6 +168,28 @@ mod tests {
         assert_eq!(
             (status, body.code),
             (StatusCode::FORBIDDEN, ErrorCode::Forbidden)
+        );
+    }
+
+    #[test]
+    fn upstream_and_unavailable_keep_their_message() {
+        let (status, body) = AppError::Upstream("Gemini quá tải".into()).status_and_body();
+        assert_eq!(
+            (status, body.code, body.message.as_str()),
+            (
+                StatusCode::BAD_GATEWAY,
+                ErrorCode::Upstream,
+                "Gemini quá tải"
+            )
+        );
+        let (status, body) = AppError::Unavailable("Thiếu khóa".into()).status_and_body();
+        assert_eq!(
+            (status, body.code, body.message.as_str()),
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                ErrorCode::Unavailable,
+                "Thiếu khóa"
+            )
         );
     }
 

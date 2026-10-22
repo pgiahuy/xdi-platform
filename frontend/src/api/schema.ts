@@ -510,7 +510,7 @@ export interface components {
          * @description Stable machine-readable error code; one per HTTP status.
          * @enum {string}
          */
-        ErrorCode: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "too_large" | "internal" | "not_implemented";
+        ErrorCode: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "too_large" | "internal" | "not_implemented" | "upstream" | "unavailable";
         HealthResponse: {
             /** @description Always `ok` when the server answers. */
             status: string;

@@ -108,6 +108,17 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
 | `RUST_LOG` | `info` | Mức log |
 
+Mô hình ngôn ngữ:
+
+- `gemini`: khóa lấy ở Google AI Studio, đặt vào `GEMINI_API_KEY`. Thiếu khóa thì backend vẫn chạy, ghi cảnh báo vào
+  log lúc khởi động, và câu hỏi nhận lỗi nhắc đặt khóa. Khóa chỉ gửi tới Google trong header, không ghi vào log.
+- `ollama`: cần Ollama đang chạy và mô hình đã tải (`ollama pull qwen2.5-coder:7b`, đổi mô hình bằng `OLLAMA_MODEL`).
+  Chạy compose mà để trống `OLLAMA_URL` thì backend gọi `http://host.docker.internal:11434`, tức Ollama trên máy host.
+  Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới được: chạy Ollama với
+  `OLLAMA_HOST=0.0.0.0`, và chặn cổng 11434 từ bên ngoài bằng tường lửa vì Ollama không có đăng nhập.
+- Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,
+  vì mô hình chạy bằng CPU chậm hơn nhiều).
+
 Dữ liệu nằm trong hai volume Docker: `xdi-platform_pgdata` (Postgres) và `xdi-platform_xdidata` (file Parquet). Tiền
 tố là tên project của compose: mặc định là tên thư mục chứa `docker-compose.yml`, đổi được bằng `COMPOSE_PROJECT_NAME`
 trong `.env`. Image backend cũng mang tên đó, ví dụ `xdi-platform-backend`.

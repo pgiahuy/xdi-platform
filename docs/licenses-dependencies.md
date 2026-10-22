@@ -3,8 +3,8 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-348 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 506 gói npm
-(từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 26.
+377 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 506 gói npm
+(từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 27.
 
 ## Không thuộc nhóm cho phép thông dụng
 
@@ -35,6 +35,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | lightningcss-win32-arm64-msvc | 1.33.0 | MPL-2.0 | có |
 | lightningcss-win32-x64-msvc | 1.32.0 | MPL-2.0 | có |
 | lightningcss-win32-x64-msvc | 1.33.0 | MPL-2.0 | có |
+| webpki-root-certs | 1.0.10 | CDLA-Permissive-2.0 |  |
 | webpki-roots | 1.0.10 | CDLA-Permissive-2.0 |  |
 
 ## Rust
@@ -84,12 +85,14 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | chrono | 0.4.45 | MIT OR Apache-2.0 |
 | cmov | 0.5.4 | Apache-2.0 OR MIT |
 | codepage | 0.1.3 | Apache-2.0 OR MIT |
+| combine | 4.6.9 | MIT |
 | comfy-table | 7.1.4 | MIT |
 | const-oid | 0.9.6 | Apache-2.0 OR MIT |
 | const-random | 0.1.18 | MIT OR Apache-2.0 |
 | const-random-macro | 0.1.16 | MIT OR Apache-2.0 |
 | cookie | 0.18.2 | MIT OR Apache-2.0 |
 | core_detect | 1.0.0 | MIT OR Apache-2.0 |
+| core-foundation | 0.10.1 | MIT OR Apache-2.0 |
 | core-foundation-sys | 0.8.7 | MIT OR Apache-2.0 |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
@@ -157,6 +160,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | httpdate | 1.0.3 | MIT OR Apache-2.0 |
 | hybrid-array | 0.4.15 | MIT OR Apache-2.0 |
 | hyper | 1.12.0 | MIT |
+| hyper-rustls | 0.27.10 | Apache-2.0 OR ISC OR MIT |
 | hyper-util | 0.1.21 | MIT |
 | iana-time-zone | 0.1.65 | MIT OR Apache-2.0 |
 | iana-time-zone-haiku | 0.1.2 | MIT OR Apache-2.0 |
@@ -170,7 +174,12 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | idna | 1.1.0 | MIT OR Apache-2.0 |
 | idna_adapter | 1.2.2 | Apache-2.0 OR MIT |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT |
+| ipnet | 2.12.2 | MIT OR Apache-2.0 |
 | itoa | 1.0.18 | MIT OR Apache-2.0 |
+| jni | 0.22.4 | MIT OR Apache-2.0 |
+| jni-macros | 0.22.4 | MIT OR Apache-2.0 |
+| jni-sys | 0.4.1 | MIT OR Apache-2.0 |
+| jni-sys-macros | 0.4.1 | MIT OR Apache-2.0 |
 | jobserver | 0.1.35 | MIT OR Apache-2.0 |
 | js-sys | 0.3.106 | MIT OR Apache-2.0 |
 | lazy_static | 1.5.1 | MIT OR Apache-2.0 |
@@ -210,6 +219,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | num-iter | 0.1.46 | MIT OR Apache-2.0 |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
+| openssl-probe | 0.2.1 | MIT OR Apache-2.0 |
 | parking | 2.2.1 | Apache-2.0 OR MIT |
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
@@ -239,18 +249,28 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | regex | 1.13.1 | MIT OR Apache-2.0 |
 | regex-automata | 0.4.18 | MIT OR Apache-2.0 |
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 |
+| reqwest | 0.13.5 | MIT OR Apache-2.0 |
 | ring | 0.17.14 | Apache-2.0 AND ISC |
 | rlimit | 0.11.0 | MIT |
 | rsa | 0.9.10 | MIT OR Apache-2.0 |
 | rust_xlsxwriter | 0.101.0 | MIT OR Apache-2.0 |
+| rustc_version | 0.4.1 | MIT OR Apache-2.0 |
 | rustix | 0.38.44 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | rustix | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |
+| rustls-native-certs | 0.8.5 | Apache-2.0 OR ISC OR MIT |
 | rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 |
+| rustls-platform-verifier | 0.7.1 | MIT OR Apache-2.0 |
+| rustls-platform-verifier-android | 0.2.0 | MIT OR Apache-2.0 |
 | rustls-webpki | 0.103.16 | ISC |
 | rustversion | 1.0.23 | MIT OR Apache-2.0 |
 | ryu | 1.0.23 | Apache-2.0 OR BSL-1.0 |
+| same-file | 1.0.6 | Unlicense OR MIT |
+| schannel | 0.1.30 | MIT |
 | scopeguard | 1.2.0 | MIT OR Apache-2.0 |
+| security-framework | 3.7.0 | MIT OR Apache-2.0 |
+| security-framework-sys | 2.17.0 | MIT OR Apache-2.0 |
+| semver | 1.0.28 | MIT OR Apache-2.0 |
 | serde | 1.0.229 | MIT OR Apache-2.0 |
 | serde_core | 1.0.229 | MIT OR Apache-2.0 |
 | serde_derive | 1.0.229 | MIT OR Apache-2.0 |
@@ -263,6 +283,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | shlex | 2.0.1 | MIT OR Apache-2.0 |
 | signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 |
 | signature | 2.2.0 | Apache-2.0 OR MIT |
+| simd_cesu8 | 1.2.0 | Apache-2.0 OR MIT |
 | simd-adler32 | 0.3.10 | MIT |
 | simdutf8 | 0.1.5 | MIT OR Apache-2.0 |
 | slab | 0.4.12 | MIT |
@@ -298,9 +319,11 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | tinyvec | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
 | tokio | 1.54.0 | MIT |
 | tokio-macros | 2.7.2 | MIT |
+| tokio-rustls | 0.26.6 | MIT OR Apache-2.0 |
 | tokio-stream | 0.1.19 | MIT |
 | tokio-util | 0.7.20 | MIT |
 | tower | 0.5.3 | MIT |
+| tower-http | 0.6.11 | MIT |
 | tower-http | 0.7.1 | MIT |
 | tower-layer | 0.3.3 | MIT |
 | tower-service | 0.3.3 | MIT |
@@ -309,6 +332,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | tracing-core | 0.1.36 | MIT |
 | tracing-log | 0.2.0 | MIT |
 | tracing-subscriber | 0.3.23 | MIT |
+| try-lock | 0.2.5 | MIT |
 | typed-path | 0.12.4 | MIT OR Apache-2.0 |
 | typenum | 1.20.1 | MIT OR Apache-2.0 |
 | unicase | 2.10.0 | MIT OR Apache-2.0 |
@@ -333,17 +357,23 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | valuable | 0.1.1 | MIT |
 | vcpkg | 0.2.15 | MIT OR Apache-2.0 |
 | version_check | 0.9.5 | MIT OR Apache-2.0 |
+| walkdir | 2.5.0 | Unlicense OR MIT |
+| want | 0.3.2 | MIT |
 | wasi | 0.11.1+wasi-snapshot-preview1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | wasip2 | 1.0.4+wasi-0.2.12 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | wasite | 0.1.0 | Apache-2.0 OR BSL-1.0 OR MIT |
 | wasm-bindgen | 0.2.129 | MIT OR Apache-2.0 |
+| wasm-bindgen-futures | 0.4.79 | MIT OR Apache-2.0 |
 | wasm-bindgen-macro | 0.2.129 | MIT OR Apache-2.0 |
 | wasm-bindgen-macro-support | 0.2.129 | MIT OR Apache-2.0 |
 | wasm-bindgen-shared | 0.2.129 | MIT OR Apache-2.0 |
+| web-sys | 0.3.106 | MIT OR Apache-2.0 |
+| webpki-root-certs | 1.0.10 | CDLA-Permissive-2.0 |
 | webpki-roots | 1.0.10 | CDLA-Permissive-2.0 |
 | whoami | 1.6.1 | Apache-2.0 OR BSL-1.0 OR MIT |
 | winapi | 0.3.9 | MIT OR Apache-2.0 |
 | winapi-i686-pc-windows-gnu | 0.4.0 | MIT OR Apache-2.0 |
+| winapi-util | 0.1.11 | Unlicense OR MIT |
 | winapi-x86_64-pc-windows-gnu | 0.4.0 | MIT OR Apache-2.0 |
 | windows_aarch64_gnullvm | 0.48.5 | MIT OR Apache-2.0 |
 | windows_aarch64_gnullvm | 0.52.6 | MIT OR Apache-2.0 |

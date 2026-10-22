@@ -11,7 +11,7 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 
 | Nhóm | Số lượng | Giấy phép | Đánh giá |
 |---|---|---|---|
-| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 342 | MIT, Apache-2.0, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
+| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 377 | MIT, Apache-2.0, ISC, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
 | Gói npm | 485 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak, 0BSD, CC0-1.0, CC-BY-4.0 (dữ liệu `caniuse-lite`) | Cho phép, dùng chung được |
 | Gói npm `lightningcss` | 2 phiên bản, mỗi phiên bản kèm bản build cho từng nền tảng | MPL-2.0 | Xem bên dưới |
 | Font Geist (`@fontsource-variable/geist`) | 1 | OFL-1.1 | Xem bên dưới |
@@ -27,6 +27,10 @@ MIT, BSD, Apache-2.0, Boost, zlib; zstd cho chọn thêm GPL, dự án dùng the
 `webpki-roots` (CDLA-Permissive-2.0, danh sách chứng chỉ gốc) chỉ là phụ thuộc lúc build của `libduckdb-sys`, cho nhánh
 tải thư viện DuckDB dựng sẵn; dự án biên dịch DuckDB từ mã nguồn kèm trong crate nên nhánh đó không chạy, và crate
 này không có trong binary.
+
+`webpki-root-certs` (cũng CDLA-Permissive-2.0) là phụ thuộc của `rustls-platform-verifier` chỉ khi build cho
+WebAssembly; trên Linux, client HTTP gọi mô hình ngôn ngữ (`reqwest` với `rustls`) đọc chứng chỉ gốc của hệ thống, nên
+crate này không có trong binary. Bộ mã hóa của `rustls` là `ring` (Apache-2.0 AND ISC); không dùng OpenSSL.
 
 Swagger UI 5.32.6 (Apache-2.0, của SmartBear) được đóng vào binary backend để phục vụ trang `/api/docs`: crate
 `utoipa-swagger-ui-vendored` kèm sẵn file zip của Swagger UI, `utoipa-swagger-ui` giải nén thư mục `dist` lúc build và
