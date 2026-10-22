@@ -111,9 +111,13 @@ mod tests {
 
     /// Chú thích /// trên struct và handler API thành mô tả trong đặc tả. Chữ có dấu tiếng Việt lọt vào đặc tả nghĩa là
     /// có chú thích cho đội viết bằng ///; make openapi vẫn khớp nên test lệch ở trên không bắt được.
+    /// Bỏ qua example: response mẫu chứa chữ cho người dùng cuối (message, nhãn), vốn là tiếng Việt (AGENTS.md mục 1).
     #[test]
     fn no_vietnamese_in_spec() {
-        let json = crate::api::build_openapi_json();
+        let mut spec: serde_json::Value =
+            serde_json::from_str(&crate::api::build_openapi_json()).expect("parse spec");
+        remove_examples(&mut spec);
+        let json = spec.to_string();
         // Chữ cái riêng của tiếng Việt: đ, ă, ơ, ư và nguyên âm mang dấu (dải Latin Extended Additional,
         // U+1EA0..U+1EF9).
         let vietnamese = |c: char| "đĐăĂơƠưƯ".contains(c) || ('\u{1EA0}'..='\u{1EF9}').contains(&c);
@@ -123,5 +127,18 @@ mod tests {
             "Vietnamese text in the OpenAPI spec ({found}): use // for team comments on API structs and handlers, \
              /// only for English API descriptions"
         );
+    }
+
+    // Không schema nào có trường tên example hay examples, nên xóa theo tên khóa ở mọi tầng không xóa nhầm mô tả.
+    fn remove_examples(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                map.remove("example");
+                map.remove("examples");
+                map.values_mut().for_each(remove_examples);
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(remove_examples),
+            _ => {}
+        }
     }
 }

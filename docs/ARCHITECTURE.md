@@ -9,7 +9,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
                  React, Vite, Tailwind, shadcn/ui, Recharts
             Bố cục 3 pane: dữ liệu | hỏi, bảng, biểu đồ | bằng chứng
                                       |
-                              REST JSON, SSE cho ask
+                                  REST JSON
                      kiểu TypeScript sinh từ openapi.json
                                       |
 =================================== docker compose =============================
@@ -65,10 +65,13 @@ không cần CORS và cookie đăng nhập đơn giản. DuckDB là thư viện 
 6. analytics  resolve tên logic -> Parquet, chạy SQL, trả dòng và thời gian           (DuckDB)
 7. explain    nếu là câu "tại sao": phân rã chênh lệch theo chiều, LLM chỉ diễn giải số
 8. store      ghi queries: câu hỏi, SQL thô, SQL sau guard, thời gian, version_id
-9. api        trả gói: SQL thô, SQL sau guard, dòng, gợi ý biểu đồ, phân rã, timeline từng bước
+9. api        trả gói: SQL thô, SQL sau guard, thẻ "Đã hiểu là", dòng, gợi ý biểu đồ, cảnh báo, phân rã, timeline
 ```
 
-Mô hình ngôn ngữ chỉ tham gia ở bước 4 và bước 7. Nó không nhận các dòng dữ liệu, chỉ nhận siêu dữ liệu của cột và vài
+Gói trả về là một response JSON, hình dạng ở mục 8.
+
+Mô hình ngôn ngữ chỉ làm ba việc: viết SQL (bước 4), sửa SQL đúng một lần khi chạy lỗi (bước 6), và viết lời cho bảng
+phân rã mà code đã tính (bước 7). Nó không nhận các dòng dữ liệu, chỉ nhận siêu dữ liệu của cột và vài
 giá trị mẫu của cột phân loại, và không biết gì về phân quyền. Mọi bước đều được ghi lại và trả về cho giao diện hiển thị.
 
 ## 3. Ba tầng, phụ thuộc một chiều
@@ -265,9 +268,44 @@ Hợp đồng nằm trong repo:
 |---|---|---|
 | `openapi.json` (gốc repo) | `xdi-backend openapi`, không cần database | Test `openapi_json_is_up_to_date` trong `make check-fast` (CI job backend, hook pre-push) |
 | `frontend/src/api/schema.ts` | `openapi.json`, bằng `openapi-typescript` (`frontend/scripts/api-types.mjs`) | `npm run api:check` trong `make check-frontend` (CI job frontend) |
+| `frontend/src/api/examples/ask.json` | `xdi-backend ask-examples` (`service/ask_examples.rs`), không cần database | Test `ask_examples_json_is_up_to_date` trong `make check-fast` |
 
-Đổi API: sửa handler hoặc struct, chạy `make openapi`, commit cả hai file. Hook trong `frontend/src/api` lấy kiểu từ
+Đổi API: sửa handler hoặc struct, chạy `make openapi`, commit cả ba file. Hook trong `frontend/src/api` lấy kiểu từ
 `schema.ts`, không khai lại. Tài liệu API viết tay đang làm ([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
+
+### Hỏi dữ liệu
+
+`POST /api/workspaces/{slug}/datasets/{id}/ask` nhận `{question, choices}` và trả một `AskResponse`, JSON một lần,
+không SSE: giao diện gọi bằng `useMutation` và chờ đủ gói. Kiểu nằm ở `service/ask_contract.rs` chứ không ở `api/`, vì
+service dựng response mà không được gọi ngược lên api; nghĩa từng trường ghi trong đặc tả. Route trả 501 tới khi luồng
+hỏi chạy ([#33](https://github.com/pgiahuy/xdi-platform/issues/33)), nhưng đặc tả đã khai response 200.
+
+| Điểm | Chọn | Vì sao |
+|---|---|---|
+| Câu không trả lời được | Vẫn 200, `status` trong body: `answered`, `needs_choice` (câu mơ hồ), `rejected` (guard từ chối), `failed` (SQL chạy lỗi cả sau vòng sửa, hoặc mô hình lỗi trong vòng sửa), kèm `message` tiếng Việt. Mã lỗi chỉ cho request sai (400), quyền (401, 404), dịch vụ mô hình lỗi (502) hay chưa cấu hình (503) khi chưa có SQL nào | Các trường hợp này là kết quả bình thường, phải hiện cùng bằng chứng: SQL bị từ chối, các bước, lựa chọn; `ErrorBody` chỉ có `code` và `message`. `useMutation` coi mã lỗi là lỗi, giao diện sẽ phải gỡ dữ liệu ra khỏi lỗi. Câu bị từ chối và câu lỗi vẫn ghi vào `queries` (status `rejected`, `error`) nên có `query_id`. Câu mơ hồ không ghi; nó có thể đến trước khi gọi mô hình (một từ khớp nhiều cột) hoặc sau (câu "tại sao" không xác định được hai lát cắt, [#38](https://github.com/pgiahuy/xdi-platform/issues/38)) |
+| Giá trị ô | Mỗi cột có `kind`, ô là giá trị JSON theo `kind`, quyết định theo kiểu cột chứ không theo từng giá trị. Số nguyên tới 32 bit, FLOAT, DOUBLE: số JSON (NaN, vô cực thành null). BIGINT, HUGEINT, DECIMAL: chuỗi chữ số thập phân. Ngày `YYYY-MM-DD`, giờ ISO 8601 (TIMESTAMPTZ đổi sang UTC, có `Z`). NULL: null | Số JavaScript chỉ giữ đúng số nguyên tới 2^53 và làm tròn số thập phân, mà con số là bằng chứng. Cùng một cột luôn một dạng, giao diện đọc theo `kind` thay vì đoán từng ô. `COUNT` trả BIGINT nên số đếm cũng là chuỗi; vẽ biểu đồ hay sắp xếp thì đổi bằng `Number()` |
+| Cột | Tên cột trong `result.columns` là duy nhất: DuckDB trả tên trùng nguyên văn, nên backend đổi từ trái sang phải, tên đã dùng nhận hậu tố `_2`, `_3`... nhỏ nhất mà không cột nào có (`a, a, a_2` thành `a, a_3, a_2`), bằng `build_unique_names` trong `service/ask_contract.rs`, drill dùng lại đúng hàm này; `chart`, tiêu đề CSV và khóa truy dòng nguồn trỏ cột bằng tên. Mỗi cột có `role`: `dimension`, `time`, `measure`, `other`, lấy từ cây cú pháp | Tên đọc được hơn chỉ số và đủ khi đã duy nhất. `role` cho giao diện biết ô nào bấm được (độ đo) và khóa của dòng (các cột `dimension`, `time`) |
+| Số dòng | `rows` là mảng theo thứ tự cột, tối đa 1000 dòng đầu. `total_rows` là số dòng SQL sau guard trả về; `truncated` khi gửi ít hơn `total_rows`; `limit_reached` khi `total_rows` chạm trần số dòng của guard, dù guard thêm LIMIT hay hạ LIMIT có sẵn (kết quả đầy đủ có thể còn nữa) | Mảng gọn hơn object theo tên cột. 1000 dòng đủ cho bảng và biểu đồ của kết quả đã gộp. Giao diện của v0.1.0 phân trang trong các dòng đã gửi; khi `truncated` ghi rõ "1000 trên N dòng", khi `limit_reached` ghi "ít nhất N dòng" để không nói sai tổng. Tải CSV lấy đúng các dòng đã gửi, kèm ghi chú khi bị cắt. Tải đủ mọi dòng (endpoint riêng theo `query_id`, chạy lại SQL sau guard trên phiên bản đã lưu) làm sau. Trần của guard do #33 chọn và hiện ngay trong SQL |
+| Thẻ "Đã hiểu là" | `understanding`: `measures`, `filters`, `group_by`, `order_by`, `limit`, `time_range`, mỗi mục có nhãn và đoạn SQL nó lấy ra; `filters` gồm cả điều kiện phân quyền guard thêm vào, nhãn nói rõ; `assumptions` là danh sách `Choice` đã chọn | [#35](https://github.com/pgiahuy/xdi-platform/issues/35) sinh từ cây cú pháp và kiểm từng mục khớp câu đã chạy; [#50](https://github.com/pgiahuy/xdi-platform/issues/50) vẽ chip từ `Choice`. Người dùng biết mình chỉ thấy một phần dữ liệu |
+| Đổi giả định, trả lời câu hỏi lại | Response nào cũng có `choices`: mọi lựa chọn đã áp dụng, kể cả mặc định và câu hỏi lại đã trả lời, cùng dạng `[{choice_id, option_id}]` của request. Hỏi lại thì gửi cùng câu hỏi kèm `choices` của response gần nhất, thay hoặc thêm mục vừa chọn. Người dùng sửa chữ câu hỏi thì đó là câu mới, giao diện gửi `choices` rỗng. Câu mơ hồ trả `clarifications`, cùng kiểu `Choice` nhưng chưa chọn. Id của lựa chọn ổn định cho cùng câu hỏi trên cùng phiên bản dữ liệu: đặt từ loại lựa chọn và đối tượng của nó (một từ và các cột ứng viên, kỳ để so sánh), như `region_column`, `base_period` trong mẫu, không đặt từ chữ của SQL. Id không nhận ra thì bỏ qua, không có trong `choices` trả về, kèm cảnh báo `choice_not_applied`: giả định dùng mặc định, câu hỏi lại thì được hỏi lại. Nếu `needs_choice` quay lại đúng câu vừa trả lời kèm cảnh báo đó, giao diện hiện `message` thay vì hỏi lại y nguyên | Backend không giữ trạng thái giữa hai lần hỏi, và giao diện chỉ cần response gần nhất: thiếu một lựa chọn đã trả lời thì backend sẽ hỏi lại chỗ đó mãi. Id sinh từ SQL sẽ đổi khi mô hình viết SQL khác ở lần hỏi sau, và câu "tại sao" hỏi lại sau khi gọi mô hình sẽ lặp mãi. Bỏ qua thay vì 400 vì một giả định có thể thật sự không còn khi SQL đổi; trả 400 thì người dùng kẹt. Câu đã sửa mà giữ lựa chọn cũ thì lựa chọn hoặc áp dụng ngầm, hoặc sinh cảnh báo khó hiểu |
+| Phân rã | `explanation`, chỉ có ở câu "tại sao": hai lát cắt (`base`, `compare`, mỗi lát có nhãn, điều kiện SQL, giá trị), chênh lệch, mỗi chiều một bảng đóng góp của từng nhóm kèm SQL đã chạy sau guard (chiều giải thích tốt nhất trước), tách lượng và giá kèm SQL, đoạn tóm tắt và cờ `summary_by_model`. Không phân rã được thì cảnh báo `explanation_unavailable` nói lý do. Số là chuỗi chữ số thập phân; độ đo đổi sang DECIMAL ở từng dòng nguồn trước khi cộng, không làm tròn từng nhóm. Phần lượng và giá có một phép chia (giá = độ đo / lượng): giá làm tròn tới số chữ số cố định (#40 chọn) và là chỗ làm tròn duy nhất, `volume_effect` tính đúng từ giá đã làm tròn, `price_effect = change - volume_effect` nhận phần lệch do làm tròn. Bảng kết quả cộng theo kiểu cột (DOUBLE là số thực), nên giá trị hai lát cắt có thể lệch ô của bảng ở chữ số cuối; con số của phân rã lấy từ `explanation` | Mọi con số kiểm được trên giao diện bằng SQL đứng sau nó ([#52](https://github.com/pgiahuy/xdi-platform/issues/52)). Phép cộng trên DECIMAL là đúng, nên tổng đóng góp bằng đúng chênh lệch ([#39](https://github.com/pgiahuy/xdi-platform/issues/39), [#40](https://github.com/pgiahuy/xdi-platform/issues/40)) và [#41](https://github.com/pgiahuy/xdi-platform/issues/41) so số trong lời với đúng các chuỗi này |
+| Biểu đồ | `chart`: `bar` hoặc `line`, cột trục x và các cột vẽ; null thì chỉ hiện bảng | Luật ở mục 6 |
+| Các bước | `steps`: tên bước, thời gian (ms), thành công hay không, chi tiết. `explain` (code tính phân rã) tách khỏi `narrate` (mô hình viết lời); `repair` là lần mô hình sửa SQL. Bước lỗi không nhất thiết dừng câu hỏi (`run` lỗi có thể theo sau là `repair`, `narrate` lỗi thì dùng câu khuôn); `status` cho biết câu hỏi có dừng không, và gọi theo bước đã dừng nó: guard thì `rejected`, chạy hay vòng sửa thì `failed` | Pane bằng chứng hiện timeline, thấy được mô hình chỉ tham gia ở đâu; giao diện tự đặt nhãn cho từng tên bước |
+
+Truy dòng nguồn ([#34](https://github.com/pgiahuy/xdi-platform/issues/34)) chưa có hình dạng, nhưng quy ước khóa chốt
+ở đây để giao diện dựng nút bấm: request gửi `query_id` cùng khóa của chỗ được bấm, không bao giờ gửi SQL. Bấm một ô
+của bảng: giá trị các cột `dimension` và `time` của dòng đó, theo tên trong `result.columns`. Bấm một dòng phân rã:
+lát cắt (`base` hay `compare`), cột (tên trong dataset, không phải tên trong `result.columns`) và giá trị của nhóm.
+Hai loại tên này khác nhau, request của drill giữ chúng ở hai trường riêng. Backend dựng điều kiện lọc từ SQL sau guard và điều kiện hai lát cắt đã lưu cùng
+dòng `queries` (#33 hoặc #38 thêm chỗ lưu hai lát cắt), chạy trên `version_id` của câu hỏi, rồi qua guard như mọi SQL
+khác. Client không đưa được SQL vào, và nạp phiên bản mới không làm drill ra số của phiên bản khác.
+
+`service/ask_examples.rs` dựng năm response mẫu trên bảng `dataco`: câu "tại sao" có phân rã (`why`), câu một chiều
+một độ đo (`simple`), câu mơ hồ (`needs_choice`), câu bị guard từ chối (`rejected`), câu chạy lỗi cả sau vòng sửa
+(`failed`). Mẫu là example của response 200 trong đặc tả, và nằm ở `frontend/src/api/examples/ask.json` để giao diện
+dựng màn hỏi và pane bằng chứng trước khi có #33. Test kiểm file khớp code và mẫu khớp schema trong đặc tả, vì
+TypeScript không kiểm được file JSON theo enum. Số trong mẫu, kể cả thời gian các bước, là số minh họa, không phải số
+tính hay đo trên dữ liệu thật.
 
 ## 9. Hướng phát triển
 
@@ -293,10 +331,10 @@ Cập nhật khi có thay đổi.
 |---|---|
 | Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
 | `/api/health`, `/api/version`; mọi API dưới `/api`, đường dẫn API sai trả 404 JSON | Có |
-| OpenAPI (mục 8): đặc tả sinh từ code ở `/api/openapi.json`, Swagger UI ở `/api/docs`, `openapi.json` và kiểu TypeScript `frontend/src/api/schema.ts` trong repo, test và CI báo khi lệch code | Có; endpoint hỏi (#33) thêm vào khi làm |
+| OpenAPI (mục 8): đặc tả sinh từ code ở `/api/openapi.json`, Swagger UI ở `/api/docs`, `openapi.json` và kiểu TypeScript `frontend/src/api/schema.ts` trong repo, test và CI báo khi lệch code | Có |
 | Trait `LlmProvider` và ba cài đặt; `complete` nhận loại việc, câu hỏi gốc và prompt | Mock trả lời 10 câu mẫu trên DataCo (bảng logic `dataco`) và hồ sơ viết sẵn của `dataco` (`engine/llm/mock_answers.json`); Gemini (`generateContent`) và Ollama (`/api/generate`) gọi qua HTTP, có timeout theo cấu hình, không theo chuyển hướng; lỗi trả lời hướng dẫn tiếng Việt với mã 502 (`upstream`, dịch vụ mô hình lỗi) hoặc 503 (`unavailable`, máy chủ thiếu cấu hình); khóa Gemini không vào log; chưa thử với dịch vụ thật, chưa có chỗ nào gọi `complete` (prompt #29, endpoint hỏi #33) |
 | Nạp dataset: `POST /api/workspaces/{slug}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet, hoặc một file Excel kèm sheet đã chọn), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB`; liệt kê sheet của file Excel ở `POST .../datasets/sheets` | Có; sheet Excel khác cột nạp riêng từng lần; chưa có hồ sơ cột (#22) |
-| Route ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501 |
+| Route ask, drill | Có route dưới `/api/workspaces/{slug}/`, kiểm đăng nhập và thành viên, trả 501; hợp đồng request và response của ask (mục 8) có trong đặc tả, kèm response mẫu cho giao diện |
 | Schema Postgres (migration `0001_init.sql`), kết nối và tự migrate lúc khởi động | Có |
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có; liệt kê và xem dataset đã dùng |
 | Workspace: liệt kê, tạo mới (người tạo là admin), đổi tên, xóa; mọi API dữ liệu kiểm thành viên; `WorkspaceId` chỉ tạo từ dòng memberships của người đăng nhập | Có |

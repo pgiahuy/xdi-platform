@@ -34,7 +34,8 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 
 - Chỉ sửa tệp thuộc phần của người đang nhờ. Cần sửa tệp của người khác thì dừng lại và báo.
 - Hợp đồng chung: `openapi.json` (API backend và frontend), schema Postgres trong `backend/migrations/`, kiểu dữ liệu
-  trong `backend/src/api/`. Đổi phải báo cả đội trong PR.
+  trong `backend/src/api/` và kiểu response của hỏi dữ liệu trong `backend/src/service/ask_contract.rs`. Đổi phải báo
+  cả đội trong PR.
 
 ## 3. Code
 

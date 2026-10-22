@@ -4,6 +4,13 @@ Gọi engine và auth; không bao giờ gọi ngược lên api. */
 
 pub mod accounts;
 pub mod ask;
+// Hợp đồng khai đủ kiểu ô, vai trò cột và loại cảnh báo trước khi luồng hỏi (#33, #35, #36) dựng chúng; mẫu chỉ dùng
+// một phần. Tạm cho phép "chưa dùng" ở module này; gỡ khi luồng hỏi chạy để clippy bắt lại.
+#[allow(dead_code)]
+pub mod ask_contract;
+pub mod ask_examples;
+#[cfg(test)]
+mod ask_examples_tests;
 pub mod excel;
 pub mod explain;
 pub mod ingest;
