@@ -1,53 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/datasets.ts - hook cho dataset của một workspace: liệt kê, nạp file, liệt kê sheet của file Excel
-(backend/src/api/datasets.rs). Kiểu dữ liệu viết tay theo backend; sẽ sinh từ openapi.json khi có (#53). */
+(backend/src/api/datasets.rs). Kiểu dữ liệu lấy từ schema.ts, sinh từ openapi.json; tên ở đây chỉ là bí danh để trang
+import gọn. */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiUpload, type UploadOptions } from './client'
+import type { components } from './schema'
 
-export type Dataset = {
-  id: string
-  name: string
-  /** Tên bảng dùng trong SQL, backend đặt từ tên dataset. */
-  logical_table: string
-  domain: string | null
-  current_version_id: string | null
-  created_at: string
-}
-
-export type DatasetVersion = {
-  id: string
-  dataset_id: string
-  version: number
-  source_kind: string
-  row_count: number | null
-  created_at: string
-}
-
-export type Column = {
-  name: string
-  /** Kiểu theo DuckDB, ví dụ BIGINT, VARCHAR, DATE. */
-  data_type: string
-}
-
-export type UploadResult = {
-  /** false: bộ file trùng một phiên bản đã có, backend không tạo gì mới. */
-  created: boolean
-  dataset: Dataset
-  version: DatasetVersion
-  /** Rỗng khi created là false. */
-  columns: Column[]
-}
-
+type Schemas = components['schemas']
+export type Dataset = Schemas['Dataset']
+export type DatasetVersion = Schemas['DatasetVersion']
+export type Column = Schemas['Column']
+/** Kết quả nạp; created là false khi bộ file trùng một phiên bản đã có, backend không tạo gì mới. */
+export type UploadResult = Schemas['UploadResult']
 /** Một sheet của file Excel, để người dùng chọn trước khi nạp. */
-export type SheetSummary = {
-  name: string
-  hidden: boolean
-  /** Tên cột đã chuẩn hóa như khi nạp; rỗng nếu sheet không có dữ liệu. */
-  columns: string[]
-  /** Số dòng theo vùng dữ liệu file Excel tự ghi; có thể tính cả dòng trống, 0 khi file không ghi. */
-  approx_rows: number
-}
+export type SheetSummary = Schemas['SheetSummary']
 
 export type UploadRequest = {
   files: File[]

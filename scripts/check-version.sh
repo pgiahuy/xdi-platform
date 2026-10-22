@@ -22,4 +22,14 @@ if [ -f frontend/package.json ]; then
     fail=1
   fi
 fi
+# Đặc tả OpenAPI lấy số phiên bản từ Cargo.toml lúc sinh; quên chạy make openapi sau khi đổi số thì openapi.json còn
+# số cũ. Dòng đầu có dạng "version": "x.y.z" là info.version (các khóa "version" khác trong file là object, không là
+# chuỗi).
+if [ -f openapi.json ]; then
+  openapi_version=$(sed -n 's/^    "version": "\(.*\)"$/\1/p' openapi.json | head -n 1)
+  if [ "$openapi_version" != "$want" ]; then
+    echo "openapi.json has $openapi_version, expected $want: run make openapi" >&2
+    fail=1
+  fi
+fi
 exit $fail

@@ -65,10 +65,11 @@ impl InputFile {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, utoipa::ToSchema)]
 pub struct Column {
     pub name: String,
-    /// Kiểu theo DuckDB, ví dụ BIGINT, DOUBLE, VARCHAR, DATE.
+    // Kiểu theo DuckDB, ví dụ BIGINT, DOUBLE, VARCHAR, DATE.
+    /// DuckDB type, for example `BIGINT`, `DOUBLE`, `VARCHAR`, `DATE`.
     pub data_type: String,
 }
 

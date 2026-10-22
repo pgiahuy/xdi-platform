@@ -16,7 +16,8 @@ Xem bản build qua backend, giống khi chạy thật: `npm run build`, rồi �
 Cấu trúc và quy tắc:
 
 ```
-src/api/          gọi backend: client.ts và các hook TanStack Query, một file cho một nhóm endpoint
+src/api/          gọi backend: client.ts và các hook TanStack Query, một file cho một nhóm endpoint; schema.ts là kiểu
+                  API sinh từ ../openapi.json (make openapi), không sửa tay
 src/components/   component hiển thị, chỉ nhận dữ liệu qua props; ui/ là component sinh từ shadcn/ui,
                   shell/ là bố cục chung (thanh bên, thanh trên, đổi workspace, tài khoản)
 src/pages/        trang: nơi duy nhất nối hook với component và dùng router; WorkspaceLayout dựng bố cục chung

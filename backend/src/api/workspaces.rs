@@ -3,48 +3,58 @@
 xóa hoặc tự rời. Logic và kiểm vai ở service/workspaces.rs.
 API dữ liệu nằm dưới /api/workspaces/{ws}/ (datasets.rs, query.rs) và đi qua kiểm thành viên ở extract.rs. */
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::{get, patch},
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 use super::extract::{CurrentUser, JsonBody, PathParams};
 use crate::auth::Member;
 use crate::engine::store::{MemberRow, Membership};
+use crate::error::ErrorBody;
 use crate::service::workspaces;
 use crate::{error::AppError, state::AppState};
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/workspaces", get(list).post(create))
-        .route("/workspaces/{ws}", patch(rename).delete(delete))
-        .route("/workspaces/{ws}/members", get(members).post(add_member))
-        .route(
-            "/workspaces/{ws}/members/{user_id}",
-            patch(set_role).delete(remove_member),
-        )
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(list, create))
+        .routes(routes!(rename, delete))
+        .routes(routes!(members, add_member))
+        .routes(routes!(set_role, remove_member))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct CreateWorkspaceRequest {
+    /// 1 to 100 characters. The slug is derived from it.
     name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct AddMemberRequest {
+    /// Email of an active account.
     email: String,
+    /// `admin` or `member`.
     role: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct SetRoleRequest {
+    /// `admin` or `member`.
     role: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/workspaces",
+    tag = "workspaces",
+    operation_id = "listWorkspaces",
+    summary = "Workspaces of the signed-in user, with their role in each",
+    responses(
+        (status = 200, body = Vec<Membership>, description = "OK"),
+        (status = 401, body = ErrorBody, description = "Not signed in")
+    )
+)]
 async fn list(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -52,6 +62,18 @@ async fn list(
     Ok(Json(workspaces::list(&state, &user).await?))
 }
 
+#[utoipa::path(
+    post,
+    path = "/workspaces",
+    tag = "workspaces",
+    operation_id = "createWorkspace",
+    summary = "Create a workspace; the creator becomes its admin",
+    request_body = CreateWorkspaceRequest,
+    responses(
+        (status = 201, body = Membership, description = "Created"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid name, 401 not signed in")
+    )
+)]
 async fn create(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -61,6 +83,19 @@ async fn create(
     Ok((StatusCode::CREATED, Json(membership)))
 }
 
+#[utoipa::path(
+    patch,
+    path = "/workspaces/{ws}",
+    tag = "workspaces",
+    operation_id = "renameWorkspace",
+    summary = "Rename the workspace (admin only); the slug does not change",
+    params(("ws" = String, Path, description = "Workspace slug")),
+    request_body = CreateWorkspaceRequest,
+    responses(
+        (status = 204, description = "Renamed"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid name, 401, 403 not admin, 404 not a member")
+    )
+)]
 async fn rename(
     State(state): State<AppState>,
     member: Member,
@@ -70,11 +105,35 @@ async fn rename(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/workspaces/{ws}",
+    tag = "workspaces",
+    operation_id = "deleteWorkspace",
+    summary = "Delete the workspace with all its datasets and files (admin only)",
+    params(("ws" = String, Path, description = "Workspace slug")),
+    responses(
+        (status = 204, description = "Deleted"),
+        (status = "4XX", body = ErrorBody, description = "401, 403 not admin, 404 not a member")
+    )
+)]
 async fn delete(State(state): State<AppState>, member: Member) -> Result<StatusCode, AppError> {
     workspaces::delete(&state, &member).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    get,
+    path = "/workspaces/{ws}/members",
+    tag = "workspaces",
+    operation_id = "listMembers",
+    summary = "Members of the workspace",
+    params(("ws" = String, Path, description = "Workspace slug")),
+    responses(
+        (status = 200, body = Vec<MemberRow>, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "401, 404 not a member")
+    )
+)]
 async fn members(
     State(state): State<AppState>,
     member: Member,
@@ -82,6 +141,20 @@ async fn members(
     Ok(Json(workspaces::members(&state, &member).await?))
 }
 
+#[utoipa::path(
+    post,
+    path = "/workspaces/{ws}/members",
+    tag = "workspaces",
+    operation_id = "addMember",
+    summary = "Add an existing account to the workspace by email (admin only)",
+    params(("ws" = String, Path, description = "Workspace slug")),
+    request_body = AddMemberRequest,
+    responses(
+        (status = 201, description = "Added"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid role or already a member, 401, 403 not admin, \
+                                                         404 not a member or no active account with this email")
+    )
+)]
 async fn add_member(
     State(state): State<AppState>,
     member: Member,
@@ -91,6 +164,23 @@ async fn add_member(
     Ok(StatusCode::CREATED)
 }
 
+#[utoipa::path(
+    patch,
+    path = "/workspaces/{ws}/members/{user_id}",
+    tag = "workspaces",
+    operation_id = "setMemberRole",
+    summary = "Change a member's role (admin only)",
+    description = "The workspace always keeps at least one admin.",
+    params(
+        ("ws" = String, Path, description = "Workspace slug"),
+        ("user_id" = Uuid, Path, description = "Account id of the member")
+    ),
+    request_body = SetRoleRequest,
+    responses(
+        (status = 204, description = "Changed"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid role or last admin, 401, 403 not admin, 404")
+    )
+)]
 async fn set_role(
     State(state): State<AppState>,
     member: Member,
@@ -101,6 +191,22 @@ async fn set_role(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/workspaces/{ws}/members/{user_id}",
+    tag = "workspaces",
+    operation_id = "removeMember",
+    summary = "Remove a member (admin), or leave the workspace (yourself)",
+    description = "The workspace always keeps at least one admin.",
+    params(
+        ("ws" = String, Path, description = "Workspace slug"),
+        ("user_id" = Uuid, Path, description = "Account id of the member")
+    ),
+    responses(
+        (status = 204, description = "Removed"),
+        (status = "4XX", body = ErrorBody, description = "400 last admin, 401, 403 not admin, 404")
+    )
+)]
 async fn remove_member(
     State(state): State<AppState>,
     member: Member,

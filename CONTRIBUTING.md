@@ -51,7 +51,8 @@ DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi make test
 - Một PR một việc. Nên dưới khoảng 500 dòng mã thay đổi, không tính file sinh tự động, test và dữ liệu. Lớn hơn thì
   tách theo lớp: lõi, giao diện, dữ liệu.
 - Nếu thay đổi nhìn thấy được với người dùng, thêm một dòng vào mục `Unreleased` của `CHANGELOG.md` trong cùng PR.
-- Nếu đổi API, chạy `make openapi` và commit `openapi.json` cùng kiểu TypeScript sinh ra.
+- Nếu đổi API, chạy `make openapi` và commit `openapi.json` cùng kiểu TypeScript sinh ra (`frontend/src/api/schema.ts`).
+  Quên thì `make check-fast` và CI báo lỗi. Cách làm ở [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) mục 8.
 - CI phải xanh. Merge bằng Squash and merge, nhánh tự xóa.
 
 ## Code

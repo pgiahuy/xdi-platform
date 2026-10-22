@@ -13,15 +13,17 @@ File ghi thẳng xuống đĩa từng đoạn trong lúc nhận, không giữ c�
 use axum::{
     extract::{multipart::MultipartError, DefaultBodyLimit, Multipart, State},
     http::StatusCode,
-    routing::{get, post},
-    Json, Router,
+    Json,
 };
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use super::extract::PathParams;
 use crate::auth::Member;
 use crate::engine::store::Dataset;
+use crate::error::ErrorBody;
 use crate::service::excel::{self, SheetSummary};
 use crate::service::ingest::{self, StagedFile, Staging, Upload, UploadResult};
 use crate::{error::AppError, state::AppState};
@@ -32,25 +34,59 @@ const MAX_FIELDS: usize = 1000;
 const MAX_FILE_NAME: usize = 255;
 
 /// max_upload_bytes: MAX_UPLOAD_MB. Giới hạn body cả request đặt rộng hơn một chút để chứa phần đầu và ranh giới của
-/// multipart; nội dung các trường thì handler đếm chính xác và trả 413 JSON.
-pub fn routes(max_upload_bytes: u64) -> Router<AppState> {
+/// multipart; nội dung các trường thì handler đếm chính xác và trả 413 JSON. Giới hạn đặt cho cả nhóm route này (layer
+/// của OpenApiRouter áp cho mọi route đã thêm); hai route GET không có body nên không bị ảnh hưởng.
+pub fn routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
     let body_limit = usize::try_from(max_upload_bytes)
         .unwrap_or(usize::MAX)
         .saturating_add(1024 * 1024);
-    Router::new()
-        .route(
-            "/workspaces/{ws}/datasets",
-            get(list)
-                .post(create)
-                .layer(DefaultBodyLimit::max(body_limit)),
-        )
-        .route(
-            "/workspaces/{ws}/datasets/sheets",
-            post(sheets).layer(DefaultBodyLimit::max(body_limit)),
-        )
-        .route("/workspaces/{ws}/datasets/{id}", get(detail))
+    OpenApiRouter::new()
+        .routes(routes!(list, create))
+        .routes(routes!(sheets))
+        .routes(routes!(detail))
+        .layer(DefaultBodyLimit::max(body_limit))
 }
 
+// Hai struct dưới chỉ để mô tả form multipart trong đặc tả OpenAPI; handler đọc từng trường bằng Multipart (receive),
+// không dựng struct này, nên tắt cảnh báo trường không được đọc.
+/// Multipart form for uploading a dataset. Total size is limited by MAX_UPLOAD_MB (413 above it).
+#[derive(ToSchema)]
+#[allow(dead_code)]
+struct UploadDatasetRequest {
+    /// One or more CSV or Parquet files (repeat the field), or one Excel `.xlsx` file. Files with the same columns are
+    /// stacked into one table.
+    #[schema(value_type = Vec<String>, format = Binary)]
+    file: Vec<Vec<u8>>,
+    /// Name of the new dataset; defaults to the first file name.
+    name: Option<String>,
+    /// Add a new version to this dataset instead of creating a new one.
+    dataset_id: Option<String>,
+    /// Sheet of the Excel file to upload; repeat to stack several sheets with the same columns. Not needed when the
+    /// file has one sheet.
+    sheet: Option<Vec<String>>,
+}
+
+/// Multipart form for listing the sheets of an Excel file. The file is not stored.
+#[derive(ToSchema)]
+#[allow(dead_code)]
+struct ListSheetsRequest {
+    /// One Excel `.xlsx` file.
+    #[schema(value_type = String, format = Binary)]
+    file: Vec<u8>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/workspaces/{ws}/datasets",
+    tag = "datasets",
+    operation_id = "listDatasets",
+    summary = "Datasets of the workspace",
+    params(("ws" = String, Path, description = "Workspace slug")),
+    responses(
+        (status = 200, body = Vec<Dataset>, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "401, 404 not a member")
+    )
+)]
 async fn list(
     State(state): State<AppState>,
     member: Member,
@@ -58,6 +94,23 @@ async fn list(
     Ok(Json(ingest::list_datasets(&state, &member).await?))
 }
 
+#[utoipa::path(
+    post,
+    path = "/workspaces/{ws}/datasets",
+    tag = "datasets",
+    operation_id = "uploadDataset",
+    summary = "Upload files as a new dataset or a new version of one (admin only)",
+    description = "Each upload is a version. Uploading exactly the files of an existing version creates nothing and \
+                   returns 200 with `created` false.",
+    params(("ws" = String, Path, description = "Workspace slug")),
+    request_body(content = UploadDatasetRequest, content_type = "multipart/form-data"),
+    responses(
+        (status = 201, body = UploadResult, description = "New dataset or version created"),
+        (status = 200, body = UploadResult, description = "Same files as an existing version: nothing created"),
+        (status = "4XX", body = ErrorBody, description = "400 unreadable or mismatched files, 401, 403 not admin, \
+                                                         404 not a member or unknown dataset_id, 413 too large")
+    )
+)]
 async fn create(
     State(state): State<AppState>,
     member: Member,
@@ -75,7 +128,22 @@ async fn create(
     Ok((status, Json(result)))
 }
 
-/// Liệt kê sheet của một file Excel để người dùng chọn trước khi nạp. File không được lưu lại.
+// Liệt kê sheet của một file Excel để người dùng chọn trước khi nạp. File không được lưu lại.
+#[utoipa::path(
+    post,
+    path = "/workspaces/{ws}/datasets/sheets",
+    tag = "datasets",
+    operation_id = "listExcelSheets",
+    summary = "Sheets of an Excel file, to choose which to upload (admin only)",
+    description = "The file is read and discarded.",
+    params(("ws" = String, Path, description = "Workspace slug")),
+    request_body(content = ListSheetsRequest, content_type = "multipart/form-data"),
+    responses(
+        (status = 200, body = Vec<SheetSummary>, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "400 not a readable Excel file, 401, 403 not admin, \
+                                                         404 not a member, 413 too large")
+    )
+)]
 async fn sheets(
     State(state): State<AppState>,
     member: Member,
@@ -179,6 +247,21 @@ async fn receive(
     Ok((staging, upload))
 }
 
+#[utoipa::path(
+    get,
+    path = "/workspaces/{ws}/datasets/{id}",
+    tag = "datasets",
+    operation_id = "getDataset",
+    summary = "One dataset of the workspace",
+    params(
+        ("ws" = String, Path, description = "Workspace slug"),
+        ("id" = String, Path, description = "Dataset id (UUID)")
+    ),
+    responses(
+        (status = 200, body = Dataset, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "401, 404 not a member or no such dataset")
+    )
+)]
 async fn detail(
     State(state): State<AppState>,
     member: Member,

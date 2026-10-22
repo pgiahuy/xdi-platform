@@ -18,7 +18,7 @@ const USER_COLUMNS_U: &str = "u.id, u.email, u.display_name, u.is_system_admin";
 // Số bất kỳ, chỉ cần không trùng khóa tư vấn khác của ứng dụng. Xem create_first_admin.
 const SETUP_LOCK: i64 = 0x7864_6901;
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
@@ -45,12 +45,15 @@ impl std::fmt::Debug for Credentials {
     }
 }
 
-/// Một workspace người dùng thuộc về, kèm vai của họ ở đó.
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+// Một workspace người dùng thuộc về, kèm vai của họ ở đó.
+/// A workspace the user belongs to, with their role in it.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Membership {
     pub workspace_id: Uuid,
     pub name: String,
+    /// Used in URLs: `/workspaces/{slug}/...`.
     pub slug: String,
+    /// `admin` or `member`.
     pub role: String,
 }
 

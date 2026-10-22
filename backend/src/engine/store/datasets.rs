@@ -46,24 +46,32 @@ impl ProfileStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+// Trường Option luôn có trong JSON (giá trị null khi trống), nên đánh dấu required trong đặc tả: thiếu dấu này thì
+// utoipa coi là trường tùy chọn, kiểu TypeScript sinh ra thành `domain?: ...` và frontend phải xử lý cả hai trường hợp.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Dataset {
     pub id: Uuid,
     pub name: String,
+    /// Table name used in SQL, derived from the dataset name.
     pub logical_table: String,
+    #[schema(required)]
     pub domain: Option<String>,
+    #[schema(required)]
     pub current_version_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct DatasetVersion {
     pub id: Uuid,
     pub dataset_id: Uuid,
     pub version: i32,
     pub source_kind: String,
+    #[schema(required)]
     pub file_hash: Option<String>,
+    #[schema(required)]
     pub parquet_path: Option<String>,
+    #[schema(required)]
     pub row_count: Option<i64>,
     pub profile_status: String,
     pub created_at: DateTime<Utc>,

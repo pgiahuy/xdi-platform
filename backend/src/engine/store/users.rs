@@ -12,8 +12,9 @@ use crate::error::AppError;
 // Khác SETUP_LOCK trong accounts.rs. Xem deactivate_user.
 const ADMIN_LOCK: i64 = 0x7864_6902;
 
-/// Một dòng trong danh sách tài khoản cho quản trị hệ thống. Không có chuỗi băm mật khẩu.
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+// Một dòng trong danh sách tài khoản cho quản trị hệ thống. Không có chuỗi băm mật khẩu.
+/// An account in the system administrator's list.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct UserSummary {
     pub id: Uuid,
     pub email: String,

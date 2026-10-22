@@ -3,7 +3,7 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-342 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 485 gói npm
+348 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 506 gói npm
 (từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 26.
 
 ## Không thuộc nhóm cho phép thông dụng
@@ -214,6 +214,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
 | password-hash | 0.6.1 | MIT OR Apache-2.0 |
+| pastey | 0.2.3 | MIT OR Apache-2.0 |
 | pem-rfc7468 | 0.7.0 | Apache-2.0 OR MIT |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
 | phc | 0.6.1 | Apache-2.0 OR MIT |
@@ -323,6 +324,11 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | url | 2.5.8 | MIT OR Apache-2.0 |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT |
 | utf8-zero | 0.8.1 | MIT OR Apache-2.0 |
+| utoipa | 6.0.0 | MIT OR Apache-2.0 |
+| utoipa-axum | 0.3.0 | MIT OR Apache-2.0 |
+| utoipa-gen | 6.0.1 | MIT OR Apache-2.0 |
+| utoipa-swagger-ui | 10.0.2 | MIT OR Apache-2.0 |
+| utoipa-swagger-ui-vendored | 0.2.0 | MIT OR Apache-2.0 |
 | uuid | 1.28.0 | Apache-2.0 OR MIT |
 | valuable | 0.1.1 | MIT |
 | vcpkg | 0.2.15 | MIT OR Apache-2.0 |
@@ -513,6 +519,9 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @radix-ui/react-use-size | 1.1.5 | MIT |  |
 | @radix-ui/react-visually-hidden | 1.2.13 | MIT |  |
 | @radix-ui/rect | 1.1.3 | MIT |  |
+| @redocly/ajv | 8.11.2 | MIT | có |
+| @redocly/config | 0.22.0 | MIT | có |
+| @redocly/openapi-core | 1.34.21 | MIT | có |
 | @remix-run/route-pattern | 0.22.1 | MIT |  |
 | @rolldown/binding-android-arm-eabi | 1.2.14 | MIT | có |
 | @rolldown/binding-android-arm64 | 1.2.14 | MIT | có |
@@ -557,6 +566,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @types/validate-npm-package-name | 4.0.2 | MIT | có |
 | @vitejs/plugin-react | 6.1.2 | MIT | có |
 | accepts | 2.0.0 | MIT | có |
+| agent-base | 7.1.4 | MIT | có |
 | ajv | 8.20.0 | MIT | có |
 | ajv-formats | 2.1.1 | MIT | có |
 | ajv-formats | 3.0.1 | MIT | có |
@@ -564,12 +574,15 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | ansi-regex | 5.0.1 | MIT | có |
 | ansi-regex | 6.4.0 | MIT | có |
 | ansi-regex | 6.4.0 | MIT | có |
+| argparse | 2.0.1 | Python-2.0 | có |
 | aria-hidden | 1.2.6 | MIT |  |
 | ast-types | 0.16.3 | MIT | có |
 | atomically | 1.7.0 | MIT | có |
+| balanced-match | 1.0.2 | MIT | có |
 | balanced-match | 4.0.4 | MIT | có |
 | baseline-browser-mapping | 2.11.30 | Apache-2.0 | có |
 | body-parser | 2.3.0 | MIT | có |
+| brace-expansion | 2.1.7 | MIT | có |
 | brace-expansion | 5.0.12 | MIT | có |
 | braces | 3.0.3 | MIT | có |
 | browserslist | 4.29.4 | MIT | có |
@@ -579,6 +592,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | call-bound | 1.0.4 | MIT | có |
 | caniuse-lite | 1.0.30001817 | CC-BY-4.0 | có |
 | chalk | 5.6.2 | MIT | có |
+| change-case | 5.4.4 | MIT | có |
 | class-variance-authority | 0.7.1 | Apache-2.0 |  |
 | cli-cursor | 5.0.0 | MIT | có |
 | cli-spinners | 2.9.2 | MIT | có |
@@ -587,6 +601,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | cn | 0.2.6 | MIT | có |
 | cn | 0.5.0 | MIT |  |
 | code-block-writer | 13.0.3 | MIT | có |
+| colorette | 1.4.0 | MIT | có |
 | commander | 11.1.0 | MIT | có |
 | commander | 14.0.3 | MIT | có |
 | conf | 10.2.0 | MIT | có |
@@ -669,10 +684,12 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | hasown | 2.0.4 | MIT | có |
 | hono | 4.13.13 | MIT | có |
 | http-errors | 2.0.1 | MIT | có |
+| https-proxy-agent | 7.0.6 | MIT | có |
 | human-signals | 2.1.0 | Apache-2.0 | có |
 | human-signals | 8.0.1 | Apache-2.0 | có |
 | iconv-lite | 0.7.3 | MIT | có |
 | ignore | 5.3.2 | MIT | có |
+| index-to-position | 1.2.0 | MIT | có |
 | inherits | 2.0.4 | ISC | có |
 | ip-address | 10.7.4 | MIT | có |
 | ipaddr.js | 1.9.1 | MIT | có |
@@ -699,7 +716,9 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | isexe | 3.1.5 | BlueOak-1.0.0 | có |
 | jiti | 2.7.0 | MIT | có |
 | jose | 6.2.13 | MIT | có |
+| js-levenshtein | 1.1.6 | MIT | có |
 | js-tokens | 4.0.0 | MIT | có |
+| js-yaml | 4.3.2 | MIT | có |
 | jsesc | 3.1.0 | MIT | có |
 | json-schema-traverse | 1.0.0 | MIT | có |
 | json-schema-typed | 7.0.3 | BSD-2-Clause | có |
@@ -749,6 +768,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | mimic-fn | 3.1.0 | MIT | có |
 | mimic-function | 5.0.1 | MIT | có |
 | minimatch | 10.2.6 | BlueOak-1.0.0 | có |
+| minimatch | 5.1.9 | ISC | có |
 | minimist | 1.2.8 | MIT | có |
 | ms | 2.1.3 | MIT | có |
 | nanoid | 3.3.20 | MIT | có |
@@ -765,11 +785,13 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | onetime | 7.0.0 | MIT | có |
 | open | 11.0.4 | MIT | có |
 | open | 8.4.2 | MIT | có |
+| openapi-typescript | 7.13.0 | MIT | có |
 | ora | 8.2.0 | MIT | có |
 | oxlint | 1.89.0 | MIT | có |
 | p-limit | 2.3.0 | MIT | có |
 | p-locate | 3.0.0 | MIT | có |
 | p-try | 2.2.0 | MIT | có |
+| parse-json | 8.3.0 | MIT | có |
 | parse-ms | 4.0.0 | MIT | có |
 | parseurl | 1.3.3 | MIT | có |
 | path-browserify | 1.0.1 | MIT | có |
@@ -782,6 +804,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | picomatch | 4.0.7 | MIT | có |
 | pkce-challenge | 5.0.1 | MIT | có |
 | pkg-up | 3.1.0 | MIT | có |
+| pluralize | 8.0.0 | MIT | có |
 | postcss | 8.5.31 | MIT | có |
 | postcss-selector-parser | 7.1.7 | MIT | có |
 | powershell-utils | 0.2.1 | MIT | có |
@@ -838,6 +861,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | strip-bom | 3.0.0 | MIT | có |
 | strip-final-newline | 2.0.0 | MIT | có |
 | strip-final-newline | 4.0.0 | MIT | có |
+| supports-color | 10.2.2 | MIT | có |
 | systeminformation | 5.33.16 | MIT | có |
 | tailwindcss | 4.3.3 | MIT | có |
 | tapable | 2.3.3 | MIT | có |
@@ -858,6 +882,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | universalify | 2.0.1 | MIT | có |
 | unpipe | 1.0.0 | MIT | có |
 | update-browserslist-db | 1.3.4 | MIT | có |
+| uri-js-replace | 1.0.1 | MIT | có |
 | use-callback-ref | 1.3.3 | MIT |  |
 | use-sidecar | 1.1.3 | MIT |  |
 | util-deprecate | 1.0.2 | MIT | có |
@@ -869,6 +894,8 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | wrappy | 1.0.2 | ISC | có |
 | wsl-utils | 1.0.1 | MIT | có |
 | yallist | 3.1.1 | ISC | có |
+| yaml-ast-parser | 0.0.43 | Apache-2.0 | có |
+| yargs-parser | 21.1.1 | ISC | có |
 | yocto-spinner | 1.2.2 | MIT | có |
 | yoctocolors | 2.2.0 | MIT | có |
 | zod | 4.6.7 | MIT | có |

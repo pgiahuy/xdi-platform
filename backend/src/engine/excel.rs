@@ -60,16 +60,21 @@ pub struct Limits {
     pub csv: u64,
 }
 
-/// Một sheet như người dùng thấy lúc chọn sheet để nạp.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// Một sheet như người dùng thấy lúc chọn sheet để nạp.
+/// A sheet of an Excel file, as shown when choosing sheets to upload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SheetSummary {
     pub name: String,
-    /// Sheet bị ẩn trong Excel. Không chọn sheet thì sheet ẩn không được tính.
+    // Sheet bị ẩn trong Excel. Không chọn sheet thì sheet ẩn không được tính.
+    /// Hidden in Excel. Hidden sheets are skipped when no sheet is chosen.
     pub hidden: bool,
-    /// Tên cột theo dòng tiêu đề, đã chuẩn hóa như khi nạp; rỗng nếu sheet không có dữ liệu.
+    // Tên cột theo dòng tiêu đề, đã chuẩn hóa như khi nạp; rỗng nếu sheet không có dữ liệu.
+    /// Column names from the header row, normalised as on upload; empty if the sheet has no data.
     pub columns: Vec<String>,
-    /// Số dòng dưới dòng tiêu đề, theo vùng dữ liệu file Excel tự ghi (thẻ dimension). Là số ước lượng: có thể tính cả
-    /// dòng trống; 0 nếu file không ghi. Số dòng thật có sau khi nạp.
+    // Số dòng dưới dòng tiêu đề, theo vùng dữ liệu file Excel tự ghi (thẻ dimension). Là số ước lượng: có thể tính cả
+    // dòng trống; 0 nếu file không ghi. Số dòng thật có sau khi nạp.
+    /// Rows below the header, from the data range the file records. An estimate: may include empty rows, 0 when the
+    /// file does not record it.
     pub approx_rows: u64,
 }
 

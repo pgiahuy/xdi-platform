@@ -1,56 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/auth.ts - hook cho thiết lập lần đầu, đăng nhập, đăng xuất, đổi mật khẩu và người dùng hiện tại
-(backend/src/api/auth.rs). Kiểu dữ liệu viết tay theo request và response của backend; sẽ sinh từ openapi.json khi có
-(#53). Lỗi từ backend đã là câu tiếng Việt cho người dùng (ApiError.message), trang hiện thẳng. */
+(backend/src/api/auth.rs). Kiểu request và response lấy từ schema.ts, sinh từ openapi.json; tên ở đây chỉ là bí danh
+để trang import gọn. Lỗi từ backend đã là câu tiếng Việt cho người dùng (ApiError.message), trang hiện thẳng. */
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { ApiError, apiGet, apiPost } from './client'
+import type { components } from './schema'
 
-export type User = {
-  id: string
-  email: string
-  display_name: string
-  is_system_admin: boolean
-}
-
+type Schemas = components['schemas']
+export type User = Schemas['User']
 /** Một workspace người dùng thuộc về, kèm vai của họ trong workspace đó. */
-export type Membership = {
-  workspace_id: string
-  name: string
-  slug: string
-  role: string
-}
-
-export type Me = {
-  user: User
-  workspaces: Membership[]
-}
+export type Membership = Schemas['Membership']
+export type Me = Schemas['MeResponse']
+export type SetupRequest = Schemas['SetupRequest']
+export type LoginRequest = Schemas['LoginRequest']
+export type ChangePasswordRequest = Schemas['ChangePasswordRequest']
 
 export const meKey = ['me']
 const setupKey = ['auth', 'setup']
 
 /** Độ dài mật khẩu backend chấp nhận (MIN_LENGTH, MAX_LENGTH trong backend/src/auth/password.rs, đếm theo ký tự
- * Unicode). Giao diện dùng để nhắc trước và kiểm trước khi gửi; backend vẫn kiểm lại. Đổi ở backend thì đổi cả ở đây,
- * cho tới khi có openapi.json (#53). */
+ * Unicode). Giao diện dùng để nhắc trước và kiểm trước khi gửi; backend vẫn kiểm lại. schema.ts chỉ mang kiểu, không
+ * mang giá trị dùng lúc chạy, nên hai số này ghi tay: đổi ở backend thì đổi cả ở đây. */
 export const passwordLength = { min: 8, max: 128 }
-
-export type SetupRequest = {
-  setup_code: string
-  email: string
-  display_name: string
-  password: string
-  workspace_name: string
-}
-
-export type LoginRequest = {
-  email: string
-  password: string
-}
-
-export type ChangePasswordRequest = {
-  current_password: string
-  new_password: string
-}
 
 /** Người đang đăng nhập và các workspace của họ. Chưa đăng nhập thì lỗi ApiError status 401. */
 export function useMe() {
@@ -65,7 +37,7 @@ export function useMe() {
 
 /** needed = true khi bản cài chưa có tài khoản nào: giao diện hiện màn tạo tài khoản quản trị thay cho đăng nhập. */
 export function useSetupStatus() {
-  return useQuery({ queryKey: setupKey, queryFn: () => apiGet<{ needed: boolean }>('/auth/setup') })
+  return useQuery({ queryKey: setupKey, queryFn: () => apiGet<Schemas['SetupStatusResponse']>('/auth/setup') })
 }
 
 /** Tạo tài khoản quản trị kèm workspace đầu tiên; backend đăng nhập luôn và trả người dùng như /auth/me. */

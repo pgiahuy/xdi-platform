@@ -28,8 +28,8 @@ check-fast: ## fmt, clippy, test backend; không build docker và frontend
 	cd backend && cargo clippy --all-targets -- -D warnings
 	cd backend && cargo test
 
-check-frontend: ## Frontend: cài đúng theo package-lock, lint, kiểm kiểu, build
-	cd frontend && npm ci && npm run lint && npm run build
+check-frontend: ## Frontend: cài đúng theo package-lock, lint, schema.ts khớp openapi.json, kiểm kiểu, build
+	cd frontend && npm ci && npm run lint && npm run api:check && npm run build
 
 check: check-fast check-frontend ## check-fast, check-frontend và build docker
 	$(COMPOSE) build
@@ -43,13 +43,16 @@ down: ## Dừng và giữ dữ liệu
 logs: ## Xem log
 	$(COMPOSE) logs -f
 
-openapi: ## Sinh openapi.json từ backend (chưa có, thêm khi có utoipa)
-	@echo "chưa có: thêm khi backend có utoipa"
+openapi: ## Sinh openapi.json từ code backend rồi sinh kiểu TypeScript frontend/src/api/schema.ts; commit cả hai
+	@# Lệnh openapi của backend không kết nối database, chạy được khi chưa có Postgres. Ghi ra file tạm rồi mới đổi tên:
+	@# shell mở và cắt rỗng file đích trước khi cargo chạy, nên code lỗi biên dịch sẽ để lại openapi.json rỗng.
+	cd backend && cargo run --quiet -- openapi > ../openapi.json.tmp && mv ../openapi.json.tmp ../openapi.json
+	cd frontend && npm run --silent api:types
 
 licenses: ## Sinh docs/licenses-dependencies.md từ Cargo.lock và package-lock.json
 	node scripts/licenses.mjs
 
-hooks: ## Cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/ hoặc Makefile
+hooks: ## Cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/, openapi.json hoặc Makefile
 	@# git rev-parse tìm đúng thư mục hook, kể cả khi đang ở một git worktree (.git là file, không phải thư mục).
 	install -m 755 scripts/pre-push "$$(git rev-parse --git-path hooks)/pre-push"
 	@echo "đã cài hook pre-push; chạy lại make hooks khi scripts/pre-push thay đổi"
@@ -75,7 +78,8 @@ release-artifacts: ## Đóng gói phát hành: make release-artifacts VERSION=x.
 	@scripts/release-notes.sh $(VERSION) > /dev/null || test "$(DRY_RUN)" = 1
 	cd backend && cargo build --release --locked
 	rm -rf release && mkdir -p release/xdi-backend-$(VERSION)-linux-x86_64
-	cp backend/target/release/xdi-backend LICENSE README.md docs/LICENSES.md docs/licenses-dependencies.md release/xdi-backend-$(VERSION)-linux-x86_64/
+	cp backend/target/release/xdi-backend LICENSE README.md docs/LICENSES.md docs/licenses-dependencies.md \
+		backend/third-party/swagger-ui-5.32.6-licenses.txt release/xdi-backend-$(VERSION)-linux-x86_64/
 	tar -C release -czf release/xdi-backend-$(VERSION)-linux-x86_64.tar.gz xdi-backend-$(VERSION)-linux-x86_64
 	rm -rf release/xdi-backend-$(VERSION)-linux-x86_64
 	git archive --format=tar.gz --prefix=xdi-platform-$(VERSION)/ -o release/xdi-platform-$(VERSION).tar.gz HEAD

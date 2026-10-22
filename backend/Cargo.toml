@@ -31,6 +31,9 @@ calamine = { version = "0.37", features = ["dates"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 # Trần RAM và thời gian CPU cho tiến trình con đọc file Excel (engine/excel_worker.rs).
 rlimit = "0.11"
+utoipa = { version = "6.0.0", features = ["chrono", "uuid"] }
+utoipa-axum = "0.3.0"
+utoipa-swagger-ui = { version = "10.0.2", features = ["axum", "vendored"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

@@ -28,9 +28,24 @@ MIT, BSD, Apache-2.0, Boost, zlib; zstd cho chọn thêm GPL, dự án dùng the
 tải thư viện DuckDB dựng sẵn; dự án biên dịch DuckDB từ mã nguồn kèm trong crate nên nhánh đó không chạy, và crate
 này không có trong binary.
 
+Swagger UI 5.32.6 (Apache-2.0, của SmartBear) được đóng vào binary backend để phục vụ trang `/api/docs`: crate
+`utoipa-swagger-ui-vendored` kèm sẵn file zip của Swagger UI, `utoipa-swagger-ui` giải nén thư mục `dist` lúc build và
+nhúng các file JavaScript, CSS vào binary. Không tải gì từ Internet lúc build hay lúc chạy. Các file này trùng từng byte
+với gói npm `swagger-ui-dist@5.32.6` (đã so md5).
+
+Phần nhúng không có file giấy phép nào: thiếu `NOTICE` của Swagger UI, và thiếu các file `*.LICENSE.txt` mà file
+JavaScript gói sẵn trỏ tới. Các file đó liệt kê thông báo bản quyền của thư viện gói bên trong: phần lớn MIT (React,
+js-yaml và các thư viện khác), ieee754 theo BSD-3-Clause, DOMPurify cho chọn Apache-2.0 hoặc MPL-2.0 (dự án dùng theo
+Apache-2.0, văn bản đã có trong file dưới đây). Vì vậy dự án chép nguyên văn chúng từ
+`swagger-ui-dist@5.32.6` vào `backend/third-party/swagger-ui-5.32.6-licenses.txt`, kèm văn bản MIT, và văn bản
+BSD-3-Clause của ieee754 (lấy từ gói npm `ieee754@1.2.1`) cho các thông báo chỉ ghi tên giấy phép. File này được nhúng
+vào binary và phục vụ ở `/api/docs/licenses.txt`, nên đi cùng Swagger UI tới mọi bản phân phối; gói binary trong
+Release cũng kèm file này. Nâng `utoipa-swagger-ui-vendored` lên bản Swagger UI khác thì làm lại file này theo bản đó.
+
 Công cụ chỉ chạy lúc build, không có trong image hay gói phát hành: image `rust:1.96-bookworm` và `node:24-bookworm-slim`
-(giai đoạn build của Dockerfile), `cargo-chef` (MIT OR Apache-2.0), Vite, TypeScript, oxlint, Tailwind. Giấy phép của
-các gói npm trong số này có trong danh sách đầy đủ.
+(giai đoạn build của Dockerfile), `cargo-chef` (MIT OR Apache-2.0), Vite, TypeScript, oxlint, Tailwind,
+`openapi-typescript` (MIT, sinh `frontend/src/api/schema.ts` từ `openapi.json`). Giấy phép của các gói npm trong số này
+có trong danh sách đầy đủ.
 
 ## Trường hợp cần ghi rõ
 
@@ -51,8 +66,8 @@ Thông báo bản quyền: Copyright (c) 2023 shadcn. Văn bản MIT ở cuối 
 | Bản phân phối | Kèm theo |
 |---|---|
 | Giao diện đã build (`frontend/dist`, trong image) | `licenses.md`: giấy phép của mọi gói JavaScript đã đóng vào bundle, do Vite sinh lúc build, phục vụ ở `/licenses.md`; văn bản OFL của font |
-| Image Docker | Như trên, cộng binary backend. Image nền `debian:bookworm-slim` mang giấy phép của từng gói Debian; phần mềm chỉ chạy trên đó, không sửa hay liên kết tĩnh |
-| Gói binary trong Release | `LICENSE`, `LICENSES.md`, `licenses-dependencies.md` |
+| Image Docker | Như trên, cộng binary backend; binary phục vụ thông báo giấy phép của Swagger UI ở `/api/docs/licenses.txt`. Image nền `debian:bookworm-slim` mang giấy phép của từng gói Debian; phần mềm chỉ chạy trên đó, không sửa hay liên kết tĩnh |
+| Gói binary trong Release | `LICENSE`, `LICENSES.md`, `licenses-dependencies.md`, `swagger-ui-5.32.6-licenses.txt` |
 | Tarball mã nguồn | Toàn bộ repo, gồm các file trên |
 
 ## Dịch vụ và phần mềm chạy bên cạnh

@@ -9,6 +9,9 @@ release/
 # Rust
 backend/target/
 
+# File tạm của make openapi khi đặc tả sinh lỗi giữa chừng
+openapi.json.tmp
+
 # Node
 frontend/node_modules/
 frontend/dist/

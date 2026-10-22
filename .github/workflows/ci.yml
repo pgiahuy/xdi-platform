@@ -55,6 +55,8 @@ jobs:
           filters: |
             frontend:
               - 'frontend/**'
+              # Đổi API thì openapi.json đổi; check-frontend kiểm schema.ts sinh từ nó còn khớp không.
+              - 'openapi.json'
               - 'Makefile'
               - '.github/workflows/ci.yml'
       - if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
