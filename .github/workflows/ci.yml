@@ -1,5 +1,8 @@
-# ci.yml - chạy trên mỗi PR và push lên main. Job backend và frontend chỉ gọi Makefile; job frontend và docker có
-# thêm bước lọc theo file thay đổi và cache, vì hai việc đó chỉ có nghĩa trên CI.
+# ci.yml - chạy trên mỗi PR và push lên main. Job backend và frontend chỉ gọi Makefile. Cả ba job luôn chạy để check
+# luôn có kết quả (ruleset yêu cầu), nhưng chỉ làm việc nặng khi file liên quan đổi: repo riêng tư có hạn mức phút
+# Actions mỗi tháng. Trên PR, job làm việc khi PR đổi phần của nó. Khi push lên main, PR đã xanh trước khi merge, nên
+# job chỉ chạy lại khi đổi thứ quyết định cache (Cargo.lock, package-lock), để cache trên main mới cho các PR sau
+# dùng lại. Build image Docker không chạy ở đây, xem job docker.
 name: CI
 
 on:
@@ -31,26 +34,53 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://xdi:xdi@localhost:5432/xdi
+    # paths-filter đọc danh sách file của PR qua API nên cần quyền đọc pull request.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              # Test so openapi.json và response mẫu của ask với code.
+              - 'openapi.json'
+              - 'frontend/src/api/examples/**'
+              - 'Makefile'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            deps:
+              - 'backend/Cargo.toml'
+              - 'backend/Cargo.lock'
+              - '.github/workflows/ci.yml'
+      - id: work
+        name: Decide whether to build
+        run: echo "run=${{ (github.event_name == 'pull_request' && steps.changes.outputs.backend == 'true') || (github.event_name == 'push' && steps.changes.outputs.deps == 'true') }}" >> "$GITHUB_OUTPUT"
       # Thư mục target (bản clippy và bản test, DuckDB biên dịch từ C++) cộng cache khôi phục từ main đã làm đầy đĩa
       # runner (còn 99 MB, "No space left on device" khi ghi libduckdb.a). Xóa các bộ công cụ có sẵn trên image mà
       # project không dùng (.NET, Android, Haskell, CodeQL) để lấy lại khoảng 20 GB.
-      - name: Free disk space
+      - if: steps.work.outputs.run == 'true'
+        name: Free disk space
         run: |
           df -h /
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
-      - uses: dtolnay/rust-toolchain@stable
+      - if: steps.work.outputs.run == 'true'
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - if: steps.work.outputs.run == 'true'
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
-      - run: make check-fast
+      - if: steps.work.outputs.run == 'true'
+        run: make check-fast
 
   frontend:
-    # Như job docker: luôn chạy để check "frontend" luôn có kết quả, nhưng chỉ cài Node và build khi PR đổi frontend/.
+    # Luôn chạy để check "frontend" có kết quả; chỉ cài Node và build khi đổi frontend/ (trên PR hay khi push lên main).
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -67,50 +97,23 @@ jobs:
               - 'openapi.json'
               - 'Makefile'
               - '.github/workflows/ci.yml'
-      - if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
+      - if: steps.changes.outputs.frontend == 'true'
         uses: actions/setup-node@v4
         with:
           # Vite 8 cần Node 20.19 hoặc 22.12 trở lên.
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - if: steps.changes.outputs.frontend == 'true' || github.event_name == 'push'
+      - if: steps.changes.outputs.frontend == 'true'
         run: make check-frontend
 
   docker:
-    # Job luôn chạy để check "docker" luôn có kết quả (ruleset yêu cầu check này).
-    # Trên PR chỉ build image khi đổi file quyết định cách build: code đã được job backend và frontend biên dịch, build
-    # lại trong Docker chỉ thêm vài phút chờ. Push lên main luôn build, để bắt lỗi còn sót và giữ cache mới.
+    # Giữ job này vì ruleset yêu cầu check "docker", nhưng không build image ở đây nữa: build image tốn nhiều phút
+    # Actions nhất (DuckDB biên dịch từ C++), trong khi code đã được job backend và frontend biên dịch. Build image chạy
+    # tay bằng workflow docker-image.yml (tab Actions, Run workflow), nên chạy trước khi tag; Release cũng build image
+    # thật khi đẩy tag v*.
     runs-on: ubuntu-latest
-    # paths-filter đọc danh sách file của PR qua API nên cần quyền đọc pull request.
-    permissions:
-      contents: read
-      pull-requests: read
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            image:
-              - 'backend/Dockerfile'
-              - 'backend/Cargo.toml'
-              - 'backend/Cargo.lock'
-              - 'frontend/package.json'
-              - 'frontend/package-lock.json'
-              - 'docker-compose*.yml'
-              - '.dockerignore'
-              - '.github/workflows/ci.yml'
       - name: Validate compose file
         run: docker compose config -q
-      - if: steps.changes.outputs.image == 'true' || github.event_name == 'push'
-        uses: docker/setup-buildx-action@v3
-      - if: steps.changes.outputs.image == 'true' || github.event_name == 'push'
-        name: Build backend image with layer cache
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: backend/Dockerfile
-          push: false
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
