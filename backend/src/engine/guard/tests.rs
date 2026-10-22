@@ -295,6 +295,25 @@ fn rejects_union_with_a_source_outside_the_list() {
     }
 }
 
+/// Chuỗi UNION 20.000 vế từng làm tràn stack khi duyệt cây và hủy cả tiến trình. Giờ bị từ chối trước khi đọc.
+#[test]
+fn rejects_sql_over_the_size_limit() {
+    let sql = vec!["SELECT region FROM sales"; 20_000].join(" UNION ALL ");
+    let reason = assert_rejected(&sql);
+    assert!(reason.contains("quá dài"), "{reason}");
+}
+
+/// Câu dài sát giới hạn, toàn vế UNION ngắn nhất guard nhận, vẫn qua được mà không tràn stack của luồng test (2 MB,
+/// bằng stack mặc định của luồng tokio).
+#[test]
+fn sql_just_under_the_size_limit_does_not_overflow() {
+    let part = "SELECT region FROM sales";
+    let count = super::MAX_SQL_BYTES / (part.len() + " UNION ALL ".len());
+    let sql = vec![part; count].join(" UNION ALL ");
+    assert!(sql.len() <= super::MAX_SQL_BYTES);
+    assert_accepted(&sql);
+}
+
 /// Chữ Kirin "а" (U+0430) và "ѕ" (U+0455) trông như chữ Latin. Tên phải khớp đúng từng ký tự, nên bảng giả bị từ chối.
 #[test]
 fn rejects_table_name_with_lookalike_unicode_letters() {

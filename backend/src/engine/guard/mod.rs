@@ -60,7 +60,19 @@ pub fn build_guarded_sql(
 
 // Bước 1: chỉ nhận một câu SELECT chỉ đọc.
 
+/// Độ dài tối đa của câu SQL nhận vào, tính bằng byte. Chuỗi UNION rất dài (khoảng 20.000 vế, 700 KB) đọc được thành
+/// cây, nhưng duyệt và in lại cây thì tràn stack: tiến trình bị hủy, mọi người đang dùng mất kết nối, không chỉ request
+/// đó. Câu do mô hình viết thường chỉ vài KB; 32 KB vẫn rộng, và dưới mức đã thử chạy được trên stack 2 MB của luồng.
+const MAX_SQL_BYTES: usize = 32 * 1024;
+
 fn parse_single_select(sql: &str) -> Result<Query, AppError> {
+    if sql.len() > MAX_SQL_BYTES {
+        return Err(rejected(format!(
+            "Câu SQL quá dài ({} KB), tối đa {} KB",
+            sql.len() / 1024,
+            MAX_SQL_BYTES / 1024
+        )));
+    }
     let mut statements = Parser::parse_sql(&DuckDbDialect {}, sql)
         .map_err(|e| rejected(format!("Không đọc được câu SQL: {e}")))?;
     if statements.is_empty() {
