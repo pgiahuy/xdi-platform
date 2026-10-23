@@ -50,6 +50,7 @@ impl Dataset {
             name: name.to_string(),
             columns: columns.iter().map(|c| c.to_string()).collect(),
             parquet_dir: dir,
+            row_filters: vec![],
         }];
         Dataset { root, tables }
     }
@@ -879,6 +880,7 @@ fn dataco_table(answers: &[serde_json::Value]) -> Vec<AllowedTable> {
             .map(|c| c["name"].as_str().unwrap().to_string())
             .collect(),
         parquet_dir: PathBuf::from("/data/dataco"),
+        row_filters: vec![],
     }]
 }
 

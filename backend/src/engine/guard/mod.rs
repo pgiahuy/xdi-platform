@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-/* engine/guard/mod.rs - kiểm SQL do LLM sinh trước khi chạy, theo bốn bước trong build_guarded_sql: chỉ nhận một câu
+/* engine/guard/mod.rs - kiểm SQL do LLM sinh trước khi chạy, theo năm bước trong build_guarded_sql: chỉ nhận một câu
 SELECT chỉ đọc; kiểm tên bảng, hàm, cột (luật kích thước của vài hàm ở guard/sizes.rs), số tầng câu lồng nhau
-(guard/depth.rs), số mảnh ghép chuỗi (guard/pieces.rs), độ dài chuỗi hằng và số cột (guard/width.rs); thêm LIMIT;
-đổi bảng logic sang file Parquet. Test ở guard/tests.rs.
+(guard/depth.rs), số mảnh ghép chuỗi (guard/pieces.rs), độ dài chuỗi hằng và số cột (guard/width.rs); lọc dòng theo
+vai dữ liệu của người hỏi; thêm LIMIT; đổi bảng logic sang file Parquet. Test ở guard/tests.rs.
 
 Kiểm trên cây cú pháp vì dò chữ "DROP" thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Hạn chế: cây do
 sqlparser dựng, không phải DuckDB, nên cú pháp hiếm có thể bị hai bên hiểu khác nhau.
 
 Lý do từ chối được gửi lại cho LLM tự sửa, nên phải chỉ đúng chỗ sai. Chỉ lý do sai tên bảng hay cột
 (GuardError::UnknownName) và câu có thể dựng giá trị quá lớn (GuardError::Oversized) được service gửi lại; lý do khác
-dừng câu hỏi ngay. Guard nhận hồ sơ bảng từ service thay vì
-tự đọc Postgres, để test không cần cơ sở dữ liệu. */
+dừng câu hỏi ngay. Guard nhận hồ sơ bảng và chính sách lọc dòng từ service thay vì tự đọc Postgres, để test không cần
+cơ sở dữ liệu. */
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
@@ -18,8 +18,9 @@ use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use sqlparser::ast::{
-    AccessExpr, Expr, Function, Ident, LimitClause, ObjectName, Query, Select, SelectItem, SetExpr,
-    Statement, TableAlias, TableFactor, Value, Visit, VisitMut, Visitor, VisitorMut,
+    AccessExpr, BinaryOperator, Expr, Function, Ident, LimitClause, ObjectName, Query, Select,
+    SelectItem, SetExpr, Statement, TableAlias, TableFactor, Value, Visit, VisitMut, Visitor,
+    VisitorMut,
 };
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
@@ -34,6 +35,15 @@ pub struct AllowedTable {
     /// Lấy từ bảng columns.
     pub columns: Vec<String>,
     pub parquet_dir: PathBuf,
+    /// Lấy từ rls_policies theo data_role của người hỏi. Rỗng thì không lọc: service quyết định ai được thấy hết.
+    pub row_filters: Vec<RowFilter>,
+}
+
+/// Một dòng của rls_policies: chỉ thấy dòng có `column` nằm trong `allowed_values`. Dòng có `column` rỗng (NULL) cũng
+/// bị ẩn, vì NULL không khớp IN.
+pub struct RowFilter {
+    pub column: String,
+    pub allowed_values: Vec<String>,
 }
 
 /// Hai bản của cùng một câu, vì bản chạy chứa đường dẫn file trên máy chủ, không được lộ ra cho người dùng.
@@ -76,8 +86,11 @@ pub fn build_guarded_sql(
     depth::check_query_depth(&query).map_err(GuardError::Oversized)?;
     pieces::check_concat_pieces(&query).map_err(GuardError::Oversized)?;
     width::check_query_width(&query, tables).map_err(GuardError::Oversized)?;
-    // Chỗ cho #31 tiêm điều kiện phân quyền. Sau check_names để mọi bảng gặp được đều có trong danh sách; trước
-    // build_runnable vì sau đó `sales s` thành `read_parquet(...) AS s`, mất tên bảng. `shown` sẽ chứa cả điều kiện.
+    // Sau check_names để mọi chỗ đọc dữ liệu đã chắc là bảng trong danh sách; trước build_runnable vì sau đó `sales s`
+    // thành `read_parquet(...) AS s`, mất tên bảng. `shown` chứa cả điều kiện để người hỏi thấy phạm vi dữ liệu của mình.
+    // Sau các luật kích thước: hộp lọc thêm một tầng câu nhưng chỉ là SELECT * kèm WHERE, không ghép thêm giá trị, nên
+    // không đếm vào số tầng; đếm thì câu 4 tầng hợp lệ của người bị lọc thành 5 tầng và bị từ chối.
+    apply_row_filters(&mut query, tables).map_err(GuardError::Internal)?;
     let limit_note = apply_row_limit(&mut query, max_rows)?;
     let shown = query.to_string();
     let runnable = build_runnable(query, tables, &cte_names)
@@ -445,7 +458,118 @@ impl Visitor for ExprChecker<'_> {
     }
 }
 
-// Bước 3: giới hạn số dòng.
+// Bước 3: lọc dòng theo vai dữ liệu (data_role) của người hỏi.
+//
+// Bọc chỗ đọc bảng thành câu con: `sales s` thành `(SELECT * FROM sales WHERE "region" IN ('South')) s`. Không thêm
+// điều kiện vào WHERE của câu LLM viết vì điều kiện trong câu con chạy trước mọi JOIN, WHERE, OR của câu ngoài: viết
+// khéo cỡ nào cũng không gỡ được nó. Chỉ cần bọc chỗ đọc bảng vì bước 2 đã từ chối mọi nguồn khác: hàm đọc file, bảng
+// hệ thống, tên kèm schema, bảng tạm trùng tên bảng dữ liệu.
+
+fn apply_row_filters(query: &mut Query, tables: &[AllowedTable]) -> Result<(), AppError> {
+    if let ControlFlow::Break(error) = VisitMut::visit(query, &mut RowFilterInjector { tables }) {
+        return Err(error);
+    }
+    Ok(())
+}
+
+struct RowFilterInjector<'a> {
+    tables: &'a [AllowedTable],
+}
+
+impl VisitorMut for RowFilterInjector<'_> {
+    type Break = AppError;
+
+    // Bọc ở post_visit vì Visitor đi vào bên trong một nút sau pre_visit: bọc ở pre_visit thì nó đi tiếp vào câu con
+    // vừa tạo, gặp lại `sales` và bọc mãi không dừng.
+    fn post_visit_table_factor(&mut self, factor: &mut TableFactor) -> ControlFlow<AppError> {
+        let TableFactor::Table { name, alias, .. } = factor else {
+            return ControlFlow::Continue(());
+        };
+        let Some(ident) = single_ident(name).cloned() else {
+            return ControlFlow::Continue(());
+        };
+        // Bảng tạm (WITH) không có trong danh sách nên không bọc; bảng dữ liệu bên trong nó được bọc ở chỗ đọc.
+        let Some(table) = find_table(self.tables, &name_key(&ident)) else {
+            return ControlFlow::Continue(());
+        };
+        let Some(condition) = build_row_condition(&table.row_filters) else {
+            return ControlFlow::Continue(());
+        };
+        // Bí danh chuyển ra ngoài câu con để `s.region` hay `sales.region` của câu vẫn trỏ đúng bảng.
+        let outer_alias = alias.take().unwrap_or(TableAlias {
+            explicit: true,
+            name: ident,
+            columns: vec![],
+            at: None,
+        });
+        match build_filtered_read(factor.clone(), condition) {
+            Ok(subquery) => {
+                *factor = TableFactor::Derived {
+                    lateral: false,
+                    subquery: Box::new(subquery),
+                    alias: Some(outer_alias),
+                    sample: None,
+                };
+                ControlFlow::Continue(())
+            }
+            // Không dựng được câu con thì dừng cả câu, không để câu chạy mà thiếu điều kiện lọc.
+            Err(error) => ControlFlow::Break(error),
+        }
+    }
+}
+
+/// None khi bảng không có chính sách nào. Nhiều chính sách trên một bảng (mỗi cột một dòng) thì dòng phải qua tất cả.
+fn build_row_condition(filters: &[RowFilter]) -> Option<Expr> {
+    filters
+        .iter()
+        .map(build_column_condition)
+        .reduce(|left, right| Expr::BinaryOp {
+            left: Box::new(left),
+            op: BinaryOperator::And,
+            right: Box::new(right),
+        })
+}
+
+fn build_column_condition(filter: &RowFilter) -> Expr {
+    // Danh sách rỗng nghĩa là không được thấy dòng nào; `IN ()` là lỗi cú pháp nên viết thẳng FALSE.
+    if filter.allowed_values.is_empty() {
+        return Expr::value(Value::Boolean(false));
+    }
+    let allowed_values = filter
+        .allowed_values
+        .iter()
+        .map(|value| Expr::value(Value::SingleQuotedString(value.clone())))
+        .collect();
+    Expr::InList {
+        // Nháy kép vì tên cột lấy từ file nạp vào, có thể có dấu cách hay chữ hoa như "Order Item Total".
+        expr: Box::new(Expr::Identifier(Ident::with_quote('"', &filter.column))),
+        list: allowed_values,
+        negated: false,
+    }
+}
+
+/// Lấy khung `SELECT * FROM t` rồi gắn bảng và điều kiện vào cây, không ghép chuỗi SQL: giá trị như "O'Brien" nằm
+/// trong cây dạng chuỗi, sqlparser tự thoát dấu nháy khi in.
+fn build_filtered_read(table: TableFactor, condition: Expr) -> Result<Query, AppError> {
+    let template = "SELECT * FROM t";
+    let statement = Parser::parse_sql(&DuckDbDialect {}, template)
+        .ok()
+        .and_then(|mut statements| statements.pop());
+    if let Some(Statement::Query(mut query)) = statement {
+        if let SetExpr::Select(select) = query.body.as_mut() {
+            if let Some(from) = select.from.first_mut() {
+                from.relation = table;
+                select.selection = Some(condition);
+                return Ok(*query);
+            }
+        }
+    }
+    Err(AppError::Internal(format!(
+        "cannot build row filter from {template}"
+    )))
+}
+
+// Bước 4: giới hạn số dòng.
 
 /// Chỉ giới hạn số dòng trả về; thời gian chạy và bộ nhớ của câu giới hạn lúc chạy, ở engine/query.rs. Trả ghi chú
 /// cho GuardedSql::limit_note.
@@ -494,7 +618,7 @@ fn is_number_at_most(expr: &Expr, max: u64) -> bool {
     }
 }
 
-// Bước 4: tạo bản cho DuckDB chạy: bảng logic thành read_parquet(...), bảng tạm (WITH) thành guard_cte_N. Làm sau bước
+// Bước 5: tạo bản cho DuckDB chạy: bảng logic thành read_parquet(...), bảng tạm (WITH) thành guard_cte_N. Làm sau bước
 // 2 vì read_parquet do guard thay vào là đúng loại hàm bước 2 chặn.
 //
 // Đổi tên bảng tạm vì bước 2 nhận tên bảng tạm ở mọi chỗ, không theo phạm vi: bảng tạm tên "x.csv" gọi ở ngoài chỗ

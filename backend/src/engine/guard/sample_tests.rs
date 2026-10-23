@@ -68,6 +68,7 @@ fn tables() -> Vec<AllowedTable> {
         name: "dataco".to_string(),
         columns: COLS.iter().map(|c| c.to_string()).collect(),
         parquet_dir: PathBuf::from("/data/dataco"),
+        row_filters: vec![],
     }]
 }
 
