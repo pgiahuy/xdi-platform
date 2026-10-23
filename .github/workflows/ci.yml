@@ -27,8 +27,10 @@ jobs:
           POSTGRES_DB: xdi
         ports:
           - 5432:5432
+        # --health-cmd luôn chạy qua sh; exec để sh nhường chỗ cho pg_isready, không để pg_isready mồ côi dưới
+        # postgres khi healthcheck quá timeout (giải thích ở docker-compose.yml).
         options: >-
-          --health-cmd "pg_isready -U xdi -d xdi"
+          --health-cmd "exec pg_isready -U xdi -d xdi"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10

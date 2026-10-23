@@ -5,6 +5,10 @@
 services:
   postgres:
     image: pgvector/pgvector:pg17
+    # Tiến trình init nhỏ của Docker làm PID 1 thay cho postgres. Trong container, tiến trình mồ côi (ví dụ lệnh còn
+    # chạy sau khi `docker exec` hay healthcheck bị cắt) được gán cho PID 1. Nếu PID 1 là postgres thì tiến trình lạ
+    # đó thoát mã khác 0 và 1 bị coi là tiến trình con sập: Postgres cắt mọi kết nối và khởi động lại.
+    init: true
     environment:
       POSTGRES_USER: xdi
       # Mật khẩu mẫu, chỉ để chạy trên máy. Bản chạy thật bắt buộc đặt POSTGRES_PASSWORD (docker-compose.prod.yml).
@@ -16,7 +20,9 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U xdi -d xdi"]
+      # Gọi thẳng, không qua sh: sh của image fork pg_isready, healthcheck quá timeout thì Docker chỉ giết sh, còn
+      # pg_isready mồ côi rồi thoát mã 2 khi Postgres chậm trả lời (đĩa nghẽn).
+      test: ["CMD", "pg_isready", "-U", "xdi", "-d", "xdi"]
       interval: 5s
       timeout: 3s
       retries: 10
