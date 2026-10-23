@@ -21,7 +21,11 @@ Máy build image cần RAM trống khoảng 1 GiB cho mỗi nhân CPU, vì cargo
 6 GB đĩa trống (cache build 4,8 GB theo `docker buildx du`, image backend 215 MB và image Postgres 640 MB theo
 `docker images`). Đo trên máy 16 nhân, 30 GiB RAM, build không dùng cache trong một builder buildx riêng, đọc bộ nhớ
 (không tính page cache) của container builder: build lần đầu mất 8 phút, các tiến trình build dùng tới 12,6 GiB RAM.
-Máy ít RAM hơn thì build theo cách giới hạn số nhân ở mục 6, nếu không máy có thể đứng giữa chừng.
+Máy ít RAM hơn thì giới hạn số tiến trình biên dịch bằng `CARGO_BUILD_JOBS` trong `.env`, đặt bằng khoảng số GiB RAM
+còn trống, nếu không máy có thể đứng giữa chừng (cách đặt ở mục 6). Đo cùng cách trên máy đó với `CARGO_BUILD_JOBS=4`
+(`docker compose build --no-cache` qua một builder buildx riêng không giới hạn nhân): build mất 18 phút, dùng tới
+4,2 GiB RAM; đếm tiến trình trong container builder mỗi 2 giây, không lần nào thấy quá 4 tiến trình biên dịch Rust
+và C++ chạy cùng lúc.
 
 ```bash
 git clone https://github.com/pgiahuy/xdi-platform.git
@@ -107,6 +111,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `LLM_PROVIDER` | `mock` | `mock` không gọi ra ngoài; `gemini` cần `GEMINI_API_KEY`; `ollama` cần máy chạy Ollama ở `OLLAMA_URL` |
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
 | `RUST_LOG` | `info` | Mức log |
+| `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
 
 Mô hình ngôn ngữ:
 
@@ -379,8 +384,20 @@ Build từ mã nguồn (mục 2) thì chạy cùng lệnh với cùng `DATABASE_
 ## 6. Lỗi hay gặp
 
 **Build Docker làm máy đứng, chậm hẳn, hoặc tiến trình biên dịch bị dừng vì hết RAM.** Mặc định cargo biên dịch song
-song trên mọi nhân CPU, mỗi nhân cần khoảng 1 GiB RAM khi biên dịch DuckDB. Build bằng một builder chỉ dùng `N` nhân,
-`N` bằng khoảng số GiB RAM còn trống và không quá số nhân của máy (`nproc`), rồi chạy không build lại:
+song trên mọi nhân CPU, mỗi tiến trình cần khoảng 1 GiB RAM khi biên dịch DuckDB. Đặt số tiến trình bằng khoảng số
+GiB RAM còn trống (`free -g`, cột `available`) vào dòng `CARGO_BUILD_JOBS=` của `.env`, ví dụ `CARGO_BUILD_JOBS=4`
+(`.env` chép từ bản cũ của `.env.example` chưa có dòng này thì thêm vào), rồi build như thường:
+
+```bash
+docker compose up -d --build
+```
+
+Biến này giới hạn cả phần C++ của DuckDB. Kết quả đo ở mục 1. Giữ dòng đó trong `.env` thì các lần cập nhật sau
+(`git pull && docker compose up -d --build`) cũng theo giới hạn.
+
+Phương án phụ, khi đã đặt `CARGO_BUILD_JOBS` mà máy vẫn đứng: `CARGO_BUILD_JOBS` chỉ giới hạn cargo, còn các bước
+khác của build (cài gói npm, build giao diện) chạy cùng lúc vẫn dùng mọi nhân. Builder buildx riêng giới hạn mọi bước
+trong `N` nhân (`N` không quá `nproc`), rồi chạy không build lại:
 
 ```bash
 N=4   # số nhân dùng để build

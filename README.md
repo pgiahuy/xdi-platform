@@ -21,8 +21,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Build lần đầu biên dịch backend Rust kèm DuckDB, cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy ít RAM thì build theo
-cách giới hạn số nhân ở mục Lỗi hay gặp của [docs/INSTALL.md](docs/INSTALL.md).
+Build lần đầu biên dịch backend Rust kèm DuckDB, cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy ít RAM thì đặt
+`CARGO_BUILD_JOBS` trong `.env` để giới hạn số tiến trình biên dịch, xem mục Lỗi hay gặp của
+[docs/INSTALL.md](docs/INSTALL.md).
 
 Mở http://localhost:8000. Lần đầu giao diện hiện màn thiết lập: nhập mã thiết lập in trong log của backend
 (`docker compose logs backend | grep setup_code`) để tạo tài khoản quản trị và workspace đầu tiên. API nằm dưới `/api`,

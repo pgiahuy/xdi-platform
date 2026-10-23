@@ -11,6 +11,12 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM rust:1.96-bookworm AS chef
+# Số tiến trình biên dịch song song, mỗi tiến trình cần khoảng 1 GiB RAM (docs/INSTALL.md mục 1). ARG có mặt như biến
+# môi trường trong các lệnh RUN sau nó, và cargo đọc biến này. "default" là giá trị cargo hiểu là mọi nhân; chuỗi rỗng
+# thì cargo báo lỗi, nên docker-compose.yml truyền "default" khi .env để trống. Khai báo trong stage chef, không đặt
+# trước FROM đầu tiên: ARG toàn cục không vào stage nào nếu stage đó không khai báo lại, còn ARG của chef thì planner và
+# builder (FROM chef) tự kế thừa. Đặt trước cargo install để cả bước cài cargo-chef cũng theo giới hạn.
+ARG CARGO_BUILD_JOBS=default
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
@@ -19,6 +25,8 @@ COPY backend/ ./
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
+# CARGO_BUILD_JOBS kế thừa từ chef, nên cargo chef cook (biên dịch DuckDB) và cargo build theo giới hạn. Phần C++ của
+# DuckDB biên dịch bằng crate cc, xin lượt chạy từ jobserver của cargo nên cũng không vượt số tiến trình này.
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY backend/ ./
