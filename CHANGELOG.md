@@ -12,7 +12,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Backend phục vụ giao diện cùng cổng với API; `docker compose up` rồi mở http://localhost:8000.
 - Hướng dẫn cài đặt `docs/INSTALL.md`: Docker, build từ nguồn, đưa lên Internet với Caddy và HTTPS, sao lưu và khôi phục, lỗi hay gặp; RAM và dung lượng đĩa cần khi build image (đo trên máy thật), cách build giới hạn số nhân CPU cho máy ít RAM.
 - Tài liệu giấy phép thành phần (`docs/LICENSES.md`, `make licenses`) và quyền riêng tư (`docs/PRIVACY.md`); giao diện kèm giấy phép các gói đã đóng ở `/licenses.md`.
-- Quy trình phát hành: binary Linux, tarball mã nguồn, image trên GitHub Container Registry; `make install` và `make uninstall`.
+- Quy trình phát hành: binary Linux, tarball mã nguồn, image trên GitHub Container Registry; `make install` (lấy binary theo `CARGO_TARGET_DIR` nếu biến này được đặt) và `make uninstall`.
 - Tài khoản: lần chạy đầu in mã thiết lập ra log, dùng mã để tạo tài khoản quản trị kèm workspace đầu tiên; đăng nhập, đăng xuất, đổi mật khẩu qua API.
 - Nạp dữ liệu: một hoặc nhiều file CSV (UTF-8, hoặc windows-1252 và latin-1 như file xuất từ phần mềm cũ; file UTF-8 có byte hỏng thì báo dòng lỗi) hoặc Parquet; nhiều file cùng cột gộp thành một bảng, có cột `_source_file` ghi file gốc; mỗi lần nạp là một phiên bản, nạp lại đúng bộ file cũ thì bỏ qua; giới hạn dung lượng `MAX_UPLOAD_MB` (mặc định 200).
 - Nạp file Excel (.xlsx): xem danh sách sheet kèm cột, chọn một hoặc nhiều sheet; các sheet cùng cột gộp thành một bảng, cột `_source_file` ghi tên sheet; sheet khác cột nạp riêng thành dataset riêng.

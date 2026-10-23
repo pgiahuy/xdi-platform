@@ -23,6 +23,8 @@ data/*
 !data/download.sh
 !data/samples/
 data/samples/*.parquet
+# Dữ liệu người dùng nạp khi chạy make dev (DATA_DIR mặc định ./data, tính từ backend/)
+backend/data/
 
 # Hệ điều hành và trình soạn thảo
 .DS_Store
