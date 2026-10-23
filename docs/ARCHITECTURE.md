@@ -26,7 +26,7 @@ Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạn
    |  engine/    store/        sqlx  ----------------> POSTGRES           |
    |             analytics.rs  [DuckDB nhúng, chạy trong tiến trình này,  |
    |                            không container] -----> volume Parquet    |
-   |             guard.rs      sqlparser, whitelist bảng và cột, tiêm RLS |
+   |             guard/        sqlparser, whitelist bảng và cột, tiêm RLS |
    |             llm/          trait LlmProvider ----> gemini | ollama | mock
    |  auth/      mật khẩu argon2, mã phiên, vai, demo-login, OAuth tùy chọn|
    +----------------------------------------------------------------------+
@@ -84,7 +84,7 @@ backend/src/
   api/               tầng HTTP: handler, request/response struct, lỗi -> status
   service/           tầng nghiệp vụ: ingest.rs, excel.rs, ask.rs, explain.rs; không biết gì về HTTP
   engine/            tầng hạ tầng: analytics.rs (DuckDB), excel.rs (đọc xlsx), store/ (Postgres, chia theo bảng),
-                     guard.rs, llm/
+                     guard/ (guard SQL, GUARD.md), llm/
   auth/              mật khẩu, mã phiên, role, demo-login
   error.rs           một enum lỗi chung
 ```
@@ -271,7 +271,7 @@ Hợp đồng nằm trong repo:
 | `frontend/src/api/examples/ask.json` | `xdi-backend ask-examples` (`service/ask_examples.rs`), không cần database | Test `ask_examples_json_is_up_to_date` trong `make check-fast` |
 
 Đổi API: sửa handler hoặc struct, chạy `make openapi`, commit cả ba file. Hook trong `frontend/src/api` lấy kiểu từ
-`schema.ts`, không khai lại. Tài liệu API viết tay đang làm ([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
+`schema.ts`, không khai lại. Khái niệm chung (phiên, workspace, vai) và bảng mã lỗi: [API.md](API.md).
 
 ### Hỏi dữ liệu
 
@@ -345,4 +345,5 @@ Cập nhật khi có thay đổi.
 | Chạy thật: `docker-compose.prod.yml` (Postgres không mở cổng, mật khẩu bắt buộc, backend nghe `127.0.0.1`), cookie `Secure` theo `PUBLIC_URL`, header bảo mật trên mọi response (`api/security_headers.rs`), `make backup`, `make restore`, mẫu Caddy và nginx | Có; role Postgres riêng không phải superuser cho RLS chưa có |
 | Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; giao diện có màn thiết lập lần đầu, đăng nhập, đổi mật khẩu, quản lý tài khoản của quản trị hệ thống |
 | DuckDB nhúng: đổi CSV (UTF-8; file không phải UTF-8 đổi sang UTF-8 theo windows-1252, gồm cả latin-1, trừ file UTF-8 có byte hỏng thì báo lỗi kèm số dòng; `engine/csv_encoding.rs`) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`); sheet Excel đổi sang CSV bằng `calamine` (`engine/excel.rs`) | Có |
-| Guard, giải thích, các trang nghiệp vụ | Chưa có |
+| Guard SQL (`engine/guard/`, [GUARD.md](GUARD.md)): một câu `SELECT` chỉ đọc, danh sách bảng, hàm, cột được phép, giới hạn dòng, bản `shown` và bản `runnable` đọc Parquet | Có, kèm test; chưa endpoint nào gọi (#33), chưa tiêm phân quyền (#31) |
+| Giải thích, các trang nghiệp vụ | Chưa có |

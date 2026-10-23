@@ -85,7 +85,7 @@ curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets \
 
 Nhận CSV (UTF-8, hoặc windows-1252 và latin-1 như file xuất từ phần mềm cũ) và Parquet, một hoặc nhiều file. File UTF-8
 có byte hỏng bị từ chối kèm số dòng: lưu lại dạng UTF-8 rồi nạp lại. Nhiều file cùng cột gộp thành một bảng. Tổng dung lượng
-một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200).
+một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200). Định dạng, giới hạn, phiên bản và tên cột: [Dữ liệu](DATA.md).
 
 File Excel (.xlsx) nạp từng file một. Xem tên sheet và cột, rồi chọn sheet cần nạp (lặp `-F sheet=` để gộp nhiều sheet
 cùng cột thành một bảng; file chỉ có một sheet thì không cần chọn):

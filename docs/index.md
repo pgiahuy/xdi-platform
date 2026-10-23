@@ -24,9 +24,9 @@ Mở http://localhost:8000; lần đầu, nhập mã thiết lập in trong log 
 - [Phát hành](RELEASING.md): quy trình ra phiên bản mới.
 - [Giấy phép](LICENSES.md): giấy phép của các thành phần bên thứ ba.
 - [Dữ liệu và quyền riêng tư](PRIVACY.md): dữ liệu nằm ở đâu, gửi gì cho mô hình ngôn ngữ, cách xóa.
-
-Đang viết: API, guard SQL và dữ liệu
-([#56](https://github.com/pgiahuy/xdi-platform/issues/56)).
+- [API](API.md): đặc tả OpenAPI, đăng nhập bằng cookie, workspace và vai, mã lỗi.
+- [Guard SQL](GUARD.md): câu SQL nào được chạy, câu nào bị từ chối, các ca đã có test.
+- [Dữ liệu](DATA.md): định dạng file nhận, giới hạn, phiên bản, tên bảng và tên cột.
 
 ## Tham gia
 
