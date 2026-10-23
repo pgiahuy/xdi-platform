@@ -56,6 +56,8 @@ Makefile     lối vào duy nhất cho build, test, chạy; CI gọi đúng các
 ```
 
 Kiến trúc, luồng một câu hỏi, hướng phát triển: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+API, mã lỗi: [docs/API.md](docs/API.md). Guard SQL: [docs/GUARD.md](docs/GUARD.md). Định dạng dữ liệu nhận,
+phiên bản, tên cột: [docs/DATA.md](docs/DATA.md).
 
 ## Tham gia
 
