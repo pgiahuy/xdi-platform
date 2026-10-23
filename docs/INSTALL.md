@@ -172,7 +172,7 @@ BACKEND_URL=http://localhost:8001 make dev-frontend   # giao diện dev gọi /a
 ```
 
 Lần chạy đầu mã thiết lập in ra terminal, tạo tài khoản như mục 1. File dữ liệu nằm ở `backend/data` (`DATA_DIR`
-mặc định `./data`, tính từ thư mục `backend`).
+mặc định `./data`, tính từ thư mục `backend`); git bỏ qua thư mục này nên dữ liệu nạp thử không lẫn vào commit.
 
 Đã chạy bản Docker ở mục 1 trong cùng thư mục thì `make dev` dùng lại Postgres của bản đó: tài khoản đã có nên không
 in mã thiết lập, còn file dữ liệu thì không chung (bản Docker giữ trong volume, bản dev ở `backend/data`). Backend
@@ -189,6 +189,8 @@ Cài binary vào hệ thống (mặc định `/usr/local/bin`, đổi bằng `PR
 make install PREFIX=$HOME/.local
 make uninstall PREFIX=$HOME/.local
 ```
+
+`make install` build bản release rồi chép binary từ `backend/target`, hoặc từ `CARGO_TARGET_DIR` nếu biến này được đặt.
 
 Binary cần một Postgres (`DATABASE_URL`), thư mục dữ liệu ghi được (`DATA_DIR`) và, nếu muốn có giao diện, thư mục
 giao diện đã build (`STATIC_DIR`). Gói binary trong mỗi bản phát hành trên GitHub chỉ có backend.

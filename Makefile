@@ -6,6 +6,11 @@ PREFIX ?= /usr/local
 COMPOSE ?= docker compose
 # Nơi make backup ghi bản sao lưu. Mặc định ngoài thư mục repo: bản sao lưu có dữ liệu và chuỗi băm mật khẩu.
 BACKUP_DIR ?= $(HOME)/xdi-backups
+# Binary do make build tạo ra. Cargo ghi vào CARGO_TARGET_DIR nếu biến này được đặt (thường gặp khi nhiều bản clone
+# dùng chung một thư mục build), không thì vào backend/target; ghi cứng backend/target thì make install báo không có
+# file. Đường dẫn tương đối trong CARGO_TARGET_DIR được cargo tính từ thư mục chạy lệnh, ở đây là backend/.
+CARGO_TARGET := $(if $(filter /%,$(CARGO_TARGET_DIR)),$(CARGO_TARGET_DIR),backend/$(or $(CARGO_TARGET_DIR),target))
+BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
 
 .PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean
 
@@ -106,7 +111,7 @@ hooks: ## Cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi
 install: build ## Cài binary backend vào $(PREFIX)/bin (mặc định /usr/local; đổi bằng PREFIX=...)
 	@test -n "$(PREFIX)" || { echo "PREFIX is empty" >&2; exit 1; }
 	install -d "$(DESTDIR)$(PREFIX)/bin"
-	install -m 755 backend/target/release/xdi-backend "$(DESTDIR)$(PREFIX)/bin/xdi-backend"
+	install -m 755 "$(BACKEND_BIN)" "$(DESTDIR)$(PREFIX)/bin/xdi-backend"
 
 uninstall: ## Gỡ binary đã cài bằng make install
 	@# PREFIX= rỗng sẽ biến lệnh dưới thành rm -f /bin/xdi-backend.
@@ -124,7 +129,7 @@ release-artifacts: ## Đóng gói phát hành: make release-artifacts VERSION=x.
 	@scripts/release-notes.sh $(VERSION) > /dev/null || test "$(DRY_RUN)" = 1
 	cd backend && cargo build --release --locked
 	rm -rf release && mkdir -p release/xdi-backend-$(VERSION)-linux-x86_64
-	cp backend/target/release/xdi-backend LICENSE README.md docs/LICENSES.md docs/licenses-dependencies.md \
+	cp "$(BACKEND_BIN)" LICENSE README.md docs/LICENSES.md docs/licenses-dependencies.md \
 		backend/third-party/swagger-ui-5.32.6-licenses.txt release/xdi-backend-$(VERSION)-linux-x86_64/
 	tar -C release -czf release/xdi-backend-$(VERSION)-linux-x86_64.tar.gz xdi-backend-$(VERSION)-linux-x86_64
 	rm -rf release/xdi-backend-$(VERSION)-linux-x86_64
