@@ -71,25 +71,38 @@ pub(super) fn build_user_error(text: &str) -> String {
     without_kind.to_string()
 }
 
-/// Lấy câu SQL trong câu trả lời: mô hình hay bọc SQL trong khối ```sql ... ``` (sql viết hoa thường tùy mô hình). Đọc
-/// chữ thừa trước và sau khối là việc của #29 (build_sql_from_reply); khi có hàm đó thì dùng chung.
+/// Lấy câu SQL trong câu trả lời: mô hình hay bọc SQL trong khối ```...```, có nhãn ngôn ngữ tùy mô hình (```sql,
+/// ```SQL, ```duckdb, ```postgresql) hoặc không nhãn. Đọc chữ thừa trước và sau khối là việc của #29
+/// (build_sql_from_reply); khi có hàm đó thì dùng chung.
 pub(super) fn read_sql_reply(reply: &str) -> String {
     let text = reply.trim();
     let Some(start) = text.find("```") else {
         return text.to_string();
     };
-    let body = &text[start + 3..];
-    // Chỉ bỏ "sql" khi theo sau là khoảng trắng: "```select ..." là SQL không có tên ngôn ngữ.
-    let body = match body.get(..3) {
-        Some(tag)
-            if tag.eq_ignore_ascii_case("sql") && body[3..].starts_with(char::is_whitespace) =>
-        {
-            &body[3..]
-        }
-        _ => body,
-    };
+    let body = strip_block_label(&text[start + 3..]);
     let end = body.find("```").unwrap_or(body.len());
     body[..end].trim().to_string()
+}
+
+/// Bỏ nhãn ngôn ngữ ở đầu khối: một từ gồm chữ, số, `_`, `+`, `-`, `.`, theo sau là khoảng trắng hay xuống dòng. Từ mở
+/// đầu câu SQL ("```select 1```", "```WITH t AS ...") không phải nhãn.
+fn strip_block_label(body: &str) -> &str {
+    const SQL_STARTS: [&str; 5] = ["select", "with", "from", "values", "table"];
+    let word_end = body.find(char::is_whitespace).unwrap_or(body.len());
+    let word = &body[..word_end];
+    let is_label = !word.is_empty()
+        && word_end < body.len()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '+' | '-' | '.'))
+        && !SQL_STARTS
+            .iter()
+            .any(|start| word.eq_ignore_ascii_case(start));
+    if is_label {
+        &body[word_end..]
+    } else {
+        body
+    }
 }
 
 /// Lời cho người dùng từ lỗi của mô hình: các loại lỗi của LlmProvider đã viết lời tiếng Việt (engine/llm/mod.rs). Lỗi

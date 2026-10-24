@@ -918,7 +918,8 @@ export interface components {
          *
          *     A `date` or `timestamp` with a year after 9999 or before 1 AD uses the ISO 8601 expanded form: `+10000-01-01`;
          *     year 1 BC is `0000`, 2 BC is `-0001`. Infinite dates and times are sent as null. A result column of type TIME_NS,
-         *     TIME WITH TIME ZONE, BIT or BIGNUM is not read: the `run` step fails and the fix round casts it to text.
+         *     TIME WITH TIME ZONE, BIT, BIGNUM, VARIANT, GEOMETRY or a type the backend does not recognize is not read: the `run`
+         *     step fails and the fix round casts it to text.
          * @enum {string}
          */
         ValueKind: "text" | "number" | "decimal" | "boolean" | "date" | "timestamp" | "other";

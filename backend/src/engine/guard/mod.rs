@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/guard/mod.rs - kiểm SQL do LLM sinh trước khi chạy, theo bốn bước trong build_guarded_sql: chỉ nhận một câu
-SELECT chỉ đọc; kiểm tên bảng, hàm, cột (luật kích thước của vài hàm ở guard/sizes.rs); thêm LIMIT; đổi bảng logic
-sang file Parquet. Test ở guard/tests.rs.
+SELECT chỉ đọc; kiểm tên bảng, hàm, cột (luật kích thước của vài hàm ở guard/sizes.rs) và số tầng câu lồng nhau
+(guard/depth.rs); thêm LIMIT; đổi bảng logic sang file Parquet. Test ở guard/tests.rs.
 
 Kiểm trên cây cú pháp vì dò chữ "DROP" thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Hạn chế: cây do
 sqlparser dựng, không phải DuckDB, nên cú pháp hiếm có thể bị hai bên hiểu khác nhau.
 
 Lý do từ chối được gửi lại cho LLM tự sửa, nên phải chỉ đúng chỗ sai. Chỉ lý do sai tên bảng hay cột
-(GuardError::UnknownName) được service gửi lại; lý do khác dừng câu hỏi ngay. Guard nhận hồ sơ bảng từ service thay vì
+(GuardError::UnknownName) và câu có thể dựng giá trị quá lớn (GuardError::Oversized) được service gửi lại; lý do khác
+dừng câu hỏi ngay. Guard nhận hồ sơ bảng từ service thay vì
 tự đọc Postgres, để test không cần cơ sở dữ liệu. */
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -51,6 +52,9 @@ pub enum GuardError {
     /// Câu dùng bảng, bí danh hay cột không có trong hồ sơ. Mô hình hay viết sai tên kiểu này và sửa được khi đọc lý do
     /// (lý do sai bảng kèm danh sách bảng dùng được), nên service cho vào vòng sửa.
     UnknownName(String),
+    /// Câu có thể dựng giá trị quá lớn: hàm có tham số kích thước vượt luật của guard/sizes.rs, hay lồng quá số tầng
+    /// của guard/depth.rs. Mô hình viết lại được câu gọn hơn cho cùng câu hỏi, nên service cho vào vòng sửa.
+    Oversized(String),
     /// Câu bị chặn vì lý do khác: không đọc được, không phải một câu SELECT chỉ đọc, hàm không cho dùng, quá dài. Sửa
     /// tên không làm câu qua được, nên service dừng câu hỏi ngay.
     Rejected(String),
@@ -67,6 +71,7 @@ pub fn build_guarded_sql(
 ) -> Result<GuardedSql, GuardError> {
     let mut query = parse_single_select(sql)?;
     let cte_names = check_names(&query, tables)?;
+    depth::check_query_depth(&query).map_err(GuardError::Oversized)?;
     // Chỗ cho #31 tiêm điều kiện phân quyền. Sau check_names để mọi bảng gặp được đều có trong danh sách; trước
     // build_runnable vì sau đó `sales s` thành `read_parquet(...) AS s`, mất tên bảng. `shown` sẽ chứa cả điều kiện.
     let limit_note = apply_row_limit(&mut query, max_rows)?;
@@ -373,7 +378,7 @@ impl ExprChecker<'_> {
         };
         match sizes::check_function_size(&name, function) {
             Ok(()) => ControlFlow::Continue(()),
-            Err(reason) => ControlFlow::Break(rejected(reason)),
+            Err(reason) => ControlFlow::Break(GuardError::Oversized(reason)),
         }
     }
 
@@ -587,6 +592,7 @@ fn unknown_name(reason: String) -> GuardError {
     GuardError::UnknownName(reason)
 }
 
+mod depth;
 mod sizes;
 #[cfg(test)]
 mod tests;

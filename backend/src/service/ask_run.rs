@@ -4,9 +4,10 @@ mô hình viết, chạy trên DuckDB (engine/query.rs), đổi kết quả sang
 lần khi lỗi sửa được. service/ask.rs (#33) gọi run_with_repair sau bước llm rồi dựng AskResponse từ RunOutcome; nhận
 mô hình và đầu vào của guard qua tham số nên test chạy được với mô hình giả, không cần Postgres.
 
-Vào vòng sửa: DuckDB báo lỗi, hoặc guard từ chối vì bảng hay cột không có trong hồ sơ (GuardError::UnknownName). Không
-sửa: guard từ chối vì lý do khác (câu ghi, hàm bị cấm), câu chạy quá giờ hay quá bộ nhớ. Cả hai loại lỗi chung một
-vòng sửa, tối đa một vòng. Lời báo lỗi gửi mô hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ
+Vào vòng sửa: DuckDB báo lỗi, hoặc guard từ chối vì bảng hay cột không có trong hồ sơ (GuardError::UnknownName) hay vì
+câu có thể dựng giá trị quá lớn (GuardError::Oversized: tham số kích thước, số tầng câu lồng nhau). Không sửa: guard
+từ chối vì lý do khác (câu ghi, hàm bị cấm), câu chạy quá giờ hay quá bộ nhớ. Lỗi guard và lỗi DuckDB chung một vòng
+sửa, tối đa một vòng. Lời báo lỗi gửi mô hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ
 (ask_repair.rs, cùng prompt sửa). Test ở ask_run_tests.rs. */
 
 use std::sync::Arc;
@@ -153,7 +154,7 @@ async fn attempt(
             return run_guarded(input, guarded.shown, guarded.runnable, steps).await;
         }
         Err(GuardError::Internal(e)) => return Err(e),
-        Err(GuardError::UnknownName(reason)) => (reason, true),
+        Err(GuardError::UnknownName(reason) | GuardError::Oversized(reason)) => (reason, true),
         Err(GuardError::Rejected(reason)) => (reason, false),
     };
     steps.push(build_step(StepName::Guard, started, false, Some(&reason)));

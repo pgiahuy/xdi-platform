@@ -7,8 +7,9 @@ gọi run_query trong spawn_blocking, đổi dòng sang ResultTable của hợp 
 cả TIMESTAMP lẫn TIMESTAMPTZ, và cột toàn null vẫn phải gửi đúng một dạng ô.
 
 Giới hạn thời gian và bộ nhớ ở đây không chặn được mọi câu: DuckDB tính biểu thức hằng ngay lúc chuẩn bị câu, khi
-interrupt chưa có tác dụng, và chuỗi rất dài không tính vào memory_limit. Guard chặn các hàm dựng chuỗi dài từ tham số
-(guard/sizes.rs); ghép chuỗi qua nhiều tầng câu con thì chưa chặn được (docs/GUARD.md, mục Hạn chế đã biết). */
+interrupt chưa có tác dụng và ngoài memory_limit (chuỗi tạo lúc chạy thì vẫn trong trần, vượt là OutOfMemory), và một
+lời gọi hàm dựng chuỗi rất dài không dừng được giữa chừng. Guard thu hẹp phần này bằng luật kích thước hàm
+(guard/sizes.rs) và số tầng câu (guard/depth.rs); bảo đảm thật cần tiến trình con (#119, docs/GUARD.md). */
 
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -22,9 +23,9 @@ use duckdb::Connection;
 use super::analytics;
 use crate::error::AppError;
 
-/// Trần bộ nhớ DuckDB quản lý cho một câu (bảng băm, sắp xếp, bộ đệm đọc file); chuỗi không tính vào đây. Mỗi câu mở
-/// một DuckDB riêng trong bộ nhớ, nên đây là trần của từng câu; số câu chạy cùng lúc do service giới hạn
-/// (AppState::query_jobs).
+/// Trần bộ nhớ DuckDB quản lý cho một câu (bảng băm, sắp xếp, bộ đệm đọc file, chuỗi tạo lúc chạy); biểu thức hằng tính
+/// lúc chuẩn bị câu thì không tính vào đây. Mỗi câu mở một DuckDB riêng trong bộ nhớ, nên đây là trần của từng câu; số
+/// câu chạy cùng lúc do service giới hạn (AppState::query_jobs).
 const MEMORY_LIMIT: &str = "1GB";
 
 /// Sau khi hết giờ, gọi interrupt lại sau mỗi khoảng này tới khi câu dừng (xem run_query).

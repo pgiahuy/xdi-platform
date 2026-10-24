@@ -241,19 +241,28 @@ async fn corrupt_parquet_file_is_a_server_error() {
 }
 
 #[test]
-fn sql_is_read_from_code_blocks_in_any_case() {
+fn sql_is_read_from_code_blocks_with_any_label() {
     for reply in [
         "SELECT 1",
         "```sql\nSELECT 1\n```",
         "```SQL\nSELECT 1\n```",
         "```Sql SELECT 1```",
+        "```duckdb\nSELECT 1\n```",
+        "```postgresql\nSELECT 1\n```",
+        "```c++\nSELECT 1\n```",
         "```\nSELECT 1\n```",
+        "```SELECT 1```",
         "  ```sql\n  SELECT 1  \n```  ",
     ] {
         assert_eq!(read_sql_reply(reply), "SELECT 1", "{reply:?}");
     }
-    // "select" ngay sau ``` là SQL, không phải tên ngôn ngữ.
+    // Từ mở đầu câu SQL ngay sau ``` là SQL, không phải nhãn.
     assert_eq!(read_sql_reply("```select 1```"), "select 1");
+    assert_eq!(
+        read_sql_reply("```WITH t AS (SELECT 1) SELECT * FROM t```"),
+        "WITH t AS (SELECT 1) SELECT * FROM t"
+    );
+    assert_eq!(read_sql_reply("```(SELECT 1)```"), "(SELECT 1)");
 }
 
 #[test]
@@ -268,6 +277,28 @@ fn user_errors_drop_the_duckdb_error_kind() {
         build_user_error("Không có cột x trong các bảng đang dùng"),
         "Không có cột x trong các bảng đang dùng"
     );
+}
+
+/// Guard từ chối vì câu có thể dựng giá trị quá lớn (số tầng, tham số kích thước): cũng vào vòng sửa.
+#[tokio::test]
+async fn oversized_sql_is_fixed_once() {
+    for sql in [
+        "SELECT v FROM (SELECT v FROM (SELECT region AS v FROM sales) a) b",
+        "SELECT regexp_replace(region, 'x*', ' ', 'g') AS r FROM sales",
+    ] {
+        let llm = ScriptedLlm::new(vec![Ok(GOOD_SQL.to_string())]);
+        let outcome = run_scripted(&llm, sql).await;
+        assert_eq!(outcome.status, AskStatus::Answered, "{sql}: {outcome:?}");
+        assert_eq!(
+            steps(&outcome),
+            [
+                (StepName::Guard, false),
+                (StepName::Repair, true),
+                (StepName::Guard, true),
+                (StepName::Run, true),
+            ]
+        );
+    }
 }
 
 /// Guard từ chối vì cột không có trong hồ sơ: lý do của guard gửi cho mô hình sửa.
@@ -564,4 +595,57 @@ fn duplicate_column_names_are_made_unique() {
     let table = build_result_table(output, MAX_ROWS);
     let names: Vec<&str> = table.columns.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(names, ["a", "a_3", "a_2"]);
+}
+
+// Câu mẫu qua guard
+
+/// Bảng dataco với các cột trong hồ sơ viết sẵn của mock.
+fn dataco_table(answers: &[serde_json::Value]) -> Vec<AllowedTable> {
+    let profile = answers
+        .iter()
+        .find(|e| e["task"] == "profile" && e["question"] == "dataco")
+        .unwrap();
+    let columns = profile["answer"]["columns"].as_array().unwrap();
+    vec![AllowedTable {
+        name: "dataco".to_string(),
+        columns: columns
+            .iter()
+            .map(|c| c["name"].as_str().unwrap().to_string())
+            .collect(),
+        parquet_dir: PathBuf::from("/data/dataco"),
+    }]
+}
+
+/// Luật của guard (số tầng câu, kích thước hàm) không chặn các câu mẫu: câu SQL và câu sửa của mock, các câu SQL trong
+/// response mẫu (ask_examples.rs) trừ câu DELETE của mẫu rejected.
+#[test]
+fn sample_sql_passes_the_guard() {
+    use super::ask_examples::{build_failed_example, build_simple_example, build_why_example};
+    use crate::engine::guard::build_guarded_sql;
+
+    let answers: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("../engine/llm/mock_answers.json")).unwrap();
+    let tables = dataco_table(&answers);
+    let mut samples: Vec<String> = answers
+        .iter()
+        .filter(|e| e["task"] == "sql" || e["task"] == "repair")
+        .map(|e| e["answer"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(samples.len(), 12);
+    for example in [
+        build_simple_example(),
+        build_why_example(),
+        build_failed_example(),
+    ] {
+        samples.extend(example.sql_generated.clone());
+        if let Some(explanation) = &example.explanation {
+            samples.extend(explanation.dimensions.iter().map(|d| d.sql.clone()));
+            samples.extend(explanation.volume_price.iter().map(|v| v.sql.clone()));
+        }
+    }
+    for sql in &samples {
+        if let Err(e) = build_guarded_sql(sql, &tables, MAX_ROWS) {
+            panic!("guard rejected sample {sql:?}: {e:?}");
+        }
+    }
 }

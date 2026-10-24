@@ -73,6 +73,14 @@ fn assert_unknown_name(sql: &str) -> String {
     }
 }
 
+/// Câu có thể dựng giá trị quá lớn: service nhờ mô hình viết lại gọn hơn.
+fn assert_oversized(sql: &str) -> String {
+    match guard(sql) {
+        Err(GuardError::Oversized(reason)) => reason,
+        other => panic!("guard should reject {sql:?} as Oversized, got {other:?}"),
+    }
+}
+
 /// Loại từ chối mà sửa tên không giúp gì: service dừng câu hỏi, không nhờ mô hình sửa.
 fn assert_rejected_for_other_reason(sql: &str) {
     match guard(sql) {
@@ -489,9 +497,8 @@ fn rejects_padding_to_huge_lengths() {
         "SELECT lpad(region, (SELECT 5), 'y') FROM sales",
         "SELECT region FROM sales WHERE lpad(region, 99999999, ' ') = 'x'",
     ] {
-        let reason = assert_rejected(sql);
+        let reason = assert_oversized(sql);
         assert!(reason.contains("10000"), "{sql}: {reason}");
-        assert_rejected_for_other_reason(sql);
     }
 }
 
@@ -502,10 +509,24 @@ fn rejects_replacements_that_grow_the_text() {
         "SELECT replace(replace('y', 'y', 'yyyyyyyyyy'), 'y', 'yyyyyyyyyy')",
         "SELECT replace(region, 'a', region) FROM sales",
         "SELECT replace(region, region, 'x') FROM sales",
+        // Cùng một ký tự nhưng 4 byte thay 1 byte: lồng nhau thì gấp 4 mỗi lần.
+        "SELECT replace(replace(region, 'a', '😀'), 'a', '😀') FROM sales",
+        // Mẫu khớp được chuỗi rỗng: khớp ở mọi vị trí giữa hai ký tự.
         "SELECT regexp_replace(region, '', 'x', 'g') FROM sales",
+        "SELECT regexp_replace(region, 'x*', ' ', 'g') FROM sales",
+        "SELECT regexp_replace(region, 'a?', '-', 'g') FROM sales",
+        "SELECT regexp_replace(region, 'a|', '-', 'g') FROM sales",
+        "SELECT regexp_replace(region, '^', '-', 'g') FROM sales",
+        "SELECT regexp_replace(region, '\\b', '-', 'g') FROM sales",
+        "SELECT regexp_replace(region, '()', '-', 'g') FROM sales",
+        "SELECT regexp_replace(region, '\\Q\\E', '-', 'g') FROM sales",
+        // Chuỗi thay dài hơn một byte, kể cả nhắc lại nhóm.
         "SELECT regexp_replace(region, '(a)', '\\1\\1', 'g') FROM sales",
+        "SELECT regexp_replace(region, '\\s+', '  ', 'g') FROM sales",
+        "SELECT regexp_replace(region, '\\s+', '😀', 'g') FROM sales",
+        "SELECT regexp_replace(region, region, ' ', 'g') FROM sales",
     ] {
-        assert_rejected_for_other_reason(sql);
+        assert_oversized(sql);
     }
 }
 
@@ -517,8 +538,48 @@ fn accepts_size_functions_used_for_cleaning() {
         "SELECT replace(region, ',', '') FROM sales",
         "SELECT replace(region, 'South', 'Nam') FROM sales",
         "SELECT regexp_replace(region, '[0-9]+', '', 'g') FROM sales",
+        "SELECT regexp_replace(region, '[0-9]*', '', 'g') FROM sales",
+        // Gộp khoảng trắng: mỗi lần khớp chiếm ít nhất một byte, thay bằng một byte.
+        "SELECT regexp_replace(region, '\\s+', ' ', 'g') FROM sales",
+        "SELECT regexp_replace(regexp_replace(region, '[^a-z]', '-', 'g'), '-+', '-', 'g') FROM sales",
     ] {
         assert_accepted(sql);
+    }
+}
+
+// Số tầng câu lồng nhau (guard/depth.rs)
+
+#[test]
+fn accepts_one_level_of_subquery_or_with() {
+    for sql in [
+        "SELECT region FROM sales",
+        "SELECT r, total FROM (SELECT region AS r, SUM(amount) AS total FROM sales GROUP BY region) t",
+        "WITH t AS (SELECT region, amount FROM sales) SELECT region, SUM(amount) AS total FROM t GROUP BY region",
+        "SELECT region FROM sales WHERE customer_id IN (SELECT customer_id FROM customers)",
+        "SELECT region, (SELECT COUNT(*) FROM customers) AS n FROM sales",
+        "SELECT region FROM sales UNION ALL SELECT segment FROM customers",
+        "SELECT s.region FROM sales s JOIN (SELECT customer_id FROM customers) c ON s.customer_id = c.customer_id",
+    ] {
+        assert_accepted(sql);
+    }
+}
+
+/// Mọi kiểu lồng đều tính: câu con trong FROM, WHERE, SELECT, bảng tạm, và bảng tạm đọc từ bảng tạm khác dù không
+/// viết lồng. Từ chối thuộc loại vào vòng sửa.
+#[test]
+fn rejects_queries_nested_deeper_than_two_levels() {
+    for sql in [
+        "SELECT v FROM (SELECT v FROM (SELECT region AS v FROM sales) a) b",
+        "SELECT region FROM sales WHERE region IN (SELECT region FROM (SELECT region FROM sales) t)",
+        "SELECT (SELECT MAX(n) FROM (SELECT amount AS n FROM sales) t) AS m",
+        "WITH t AS (SELECT * FROM (SELECT region FROM sales) x) SELECT * FROM t",
+        "WITH a AS (SELECT region AS v FROM sales), b AS (SELECT v FROM a) SELECT v FROM b",
+        "WITH a AS (SELECT region AS v FROM sales) SELECT v FROM (SELECT v FROM a) t",
+        // Chuỗi nhân đôi qua từng tầng, dạng đã đo ở guard/depth.rs.
+        "SELECT length(v) FROM (SELECT v || v AS v FROM (SELECT 'yyyy' AS v) a) b",
+    ] {
+        let reason = assert_oversized(sql);
+        assert!(reason.contains("tối đa 2"), "{sql}: {reason}");
     }
 }
 
@@ -604,23 +665,22 @@ fn runnable_renames_with_tables() {
 }
 
 /// Câu gọi bảng tạm ở ngoài chỗ nó được định nghĩa. Nếu tên giữ nguyên, DuckDB sẽ tìm file "secret.csv"; sau khi
-/// đổi tên, chỗ gọi đó trỏ tới guard_cte_1 vốn không tồn tại ở ngoài, nên DuckDB chỉ báo lỗi.
+/// đổi tên, chỗ gọi đó trỏ tới guard_cte_1 vốn không tồn tại ở ngoài, nên DuckDB chỉ báo lỗi. Bảng tạm nằm trong câu
+/// con thì câu sâu 3 tầng và giờ bị từ chối trước (depth.rs); test gọi thẳng bước đổi tên để lớp chặn này vẫn được kiểm
+/// nếu sau này nâng trần số tầng.
 #[test]
 fn runnable_does_not_leave_with_names_that_look_like_files() {
-    let guarded = assert_accepted(
-        "SELECT * FROM (WITH \"secret.csv\" AS (SELECT region FROM sales) SELECT region FROM \"secret.csv\") x, \
-         \"secret.csv\"",
-    );
-    assert!(
-        !guarded.runnable.contains("FROM \"secret.csv\""),
-        "{}",
-        guarded.runnable
-    );
-    assert!(
-        !guarded.runnable.contains(", \"secret.csv\""),
-        "{}",
-        guarded.runnable
-    );
+    let sql = "SELECT * FROM (WITH \"secret.csv\" AS (SELECT region FROM sales) SELECT region FROM \"secret.csv\") x, \
+               \"secret.csv\"";
+    assert_oversized(sql);
+    let tables = tables_in("/data");
+    let query = super::parse_single_select(sql).unwrap();
+    let cte_names = super::check_names(&query, &tables).unwrap();
+    let runnable = super::build_runnable(query, &tables, &cte_names)
+        .unwrap()
+        .to_string();
+    assert!(!runnable.contains("FROM \"secret.csv\""), "{runnable}");
+    assert!(!runnable.contains(", \"secret.csv\""), "{runnable}");
 }
 
 #[test]
