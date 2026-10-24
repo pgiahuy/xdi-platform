@@ -96,6 +96,7 @@ mod tests {
                     parquet_path: "/data/x.parquet",
                     row_count: 1,
                 },
+                &[],
             )
             .await
             .unwrap();

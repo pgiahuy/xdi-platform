@@ -105,8 +105,19 @@ async fn run(args: Vec<String>) {
 
     service::ingest::clear_staging(&config.data_dir);
 
+    // Phiên bản nạp trước khi có hồ sơ cột: lấy danh sách trước khi nhận request (phiên bản nạp sau đó có hồ sơ ngay
+    // lúc nạp), rồi lập hồ sơ nền để không chặn khởi động. Không đọc được danh sách thì chỉ cảnh báo.
+    let pending = auth::pending_profiles(&store).await.unwrap_or_else(|e| {
+        tracing::warn!(error = ?e, "cannot list dataset versions waiting for a column profile");
+        Vec::new()
+    });
+
     let state = state::AppState::new(config, store);
     *state.setup_code.lock().expect("setup code lock") = setup_code;
+    tokio::spawn(service::profile::profile_pending_versions(
+        state.clone(),
+        pending,
+    ));
     let app = api::router(state);
 
     tracing::info!(%addr, "backend listening");

@@ -6,9 +6,11 @@ Postgres. Câu SQL viết dạng chuỗi với sqlx::query_as, không dùng macr
 thư mục .sqlx/ và sqlx-cli; đổi lại, mọi câu SQL được kiểm bằng test chạy trên Postgres thật trong CI.
 
 Mọi hàm chạm bảng nghiệp vụ nhận &WorkspaceId và lọc theo nó. Ngoại lệ có chủ đích: tạo và tìm workspace (workspaces.rs),
-vì lúc đó chưa có workspace để lọc; và tài khoản, phiên (accounts.rs), vì chúng dùng chung cho mọi workspace. */
+vì lúc đó chưa có workspace để lọc; tài khoản, phiên (accounts.rs), vì chúng dùng chung cho mọi workspace; và danh sách
+phiên bản chờ lập hồ sơ lúc khởi động (datasets.rs, list_pending_versions). */
 
 mod accounts;
+mod columns;
 mod members;
 mod users;
 // Khung: các hàm truy vấn dưới đây được gọi từ issue nạp dữ liệu (#20), endpoint hỏi (#33) và chế độ xác thực (#42).
@@ -25,8 +27,11 @@ pub mod test_support;
 mod workspaces;
 
 pub use accounts::{Membership, NewAdmin, User};
+pub use columns::{NewColumn, NewColumnValue, ProfileRole};
 #[allow(unused_imports)]
-pub use datasets::{Dataset, DatasetVersion, NewVersion, ProfileStatus, SourceKind};
+pub use datasets::{
+    Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SourceKind,
+};
 pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, QueryStatus};

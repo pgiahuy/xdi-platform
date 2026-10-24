@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
+use super::columns::{insert_columns, NewColumn};
 use super::{db_error, is_foreign_key_violation, Store};
 use crate::{auth::WorkspaceId, error::AppError};
 
@@ -36,7 +37,7 @@ pub enum ProfileStatus {
 }
 
 impl ProfileStatus {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             ProfileStatus::Pending => "pending",
             ProfileStatus::Structure => "structure",
@@ -83,6 +84,15 @@ pub struct NewVersion<'a> {
     pub file_hash: &'a str,
     pub parquet_path: &'a str,
     pub row_count: i64,
+}
+
+/// Phiên bản chưa lập hồ sơ cột, ở bất kỳ workspace nào (xem list_pending_versions).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct PendingVersion {
+    pub workspace_id: Uuid,
+    pub id: Uuid,
+    pub parquet_path: Option<String>,
+    pub row_count: Option<i64>,
 }
 
 const DATASET_COLUMNS: &str = "id, name, logical_table, domain, current_version_id, created_at";
@@ -208,31 +218,116 @@ impl Store {
             .map_err(|e| db_error("find version", e))
     }
 
-    /// Tạo phiên bản số kế tiếp. Số được tính trong cùng câu lệnh; hai lần nạp cùng lúc mà trùng số thì một lần lỗi
-    /// nhờ ràng buộc UNIQUE (dataset_id, version), không bao giờ ra hai phiên bản cùng số.
+    /// Tạo phiên bản số kế tiếp cùng hồ sơ cột của nó, trong một giao dịch: hồ sơ ghi lỗi (giá trị Postgres từ chối,
+    /// mất kết nối giữa chừng) thì phiên bản cũng không còn, nên nạp lại cùng bộ file không vấp phải một phiên bản trùng
+    /// hash mà thiếu hồ sơ. columns rỗng thì phiên bản ở pending (chưa có hồ sơ), có cột thì ở structure.
+    /// Số phiên bản được tính trong cùng câu lệnh; hai lần nạp cùng lúc mà trùng số thì một lần lỗi nhờ ràng buộc
+    /// UNIQUE (dataset_id, version), không bao giờ ra hai phiên bản cùng số.
     pub async fn create_version(
         &self,
         ws: &WorkspaceId,
         dataset_id: Uuid,
         new: &NewVersion<'_>,
+        columns: &[NewColumn],
     ) -> Result<DatasetVersion, AppError> {
+        let status = if columns.is_empty() {
+            ProfileStatus::Pending
+        } else {
+            ProfileStatus::Structure
+        };
         let sql = format!(
             "INSERT INTO dataset_versions
-                 (workspace_id, dataset_id, version, source_kind, file_hash, parquet_path, row_count)
-             SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5, $6
+                 (workspace_id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status)
+             SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5, $6, $7
              FROM dataset_versions WHERE workspace_id = $1 AND dataset_id = $2
              RETURNING {VERSION_COLUMNS}"
         );
-        sqlx::query_as(&sql)
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| db_error("begin create version", e))?;
+        let version: DatasetVersion = sqlx::query_as(&sql)
             .bind(ws.as_uuid())
             .bind(dataset_id)
             .bind(new.source_kind.as_str())
             .bind(new.file_hash)
             .bind(new.parquet_path)
             .bind(new.row_count)
-            .fetch_one(&self.pool)
+            .bind(status.as_str())
+            .fetch_one(&mut *tx)
             .await
-            .map_err(|e| db_error("create version", e))
+            .map_err(|e| db_error("create version", e))?;
+        // Lỗi ở đây trả về trước commit: tx bị hủy thì sqlx rollback, xóa luôn dòng phiên bản vừa thêm.
+        insert_columns(&mut tx, ws, version.id, columns).await?;
+        tx.commit()
+            .await
+            .map_err(|e| db_error("commit create version", e))?;
+        Ok(version)
+    }
+
+    /// Xóa một dataset chưa có phiên bản nào, kèm nguồn của nó, khi lần nạp tạo ra dataset đó thất bại trước khi có
+    /// phiên bản. Dataset đã có phiên bản thì giữ nguyên, kể cả phiên bản một lần nạp khác thêm vào cùng lúc (danh sách
+    /// dataset hiện cả dataset chưa có phiên bản, nên người khác có thể nạp vào nó theo id).
+    ///
+    /// Ba câu riêng trong một giao dịch, không gộp thành một DELETE ... WHERE NOT EXISTS: câu gộp chờ lần nạp kia commit
+    /// rồi vẫn xét NOT EXISTS trên ảnh chụp cũ, xóa dataset và CASCADE xóa luôn phiên bản vừa commit. Ở đây, SELECT ...
+    /// FOR UPDATE khóa dòng dataset trước. Khóa này xung đột với khóa mà khóa ngoại của dataset_versions lấy khi chèn
+    /// phiên bản, nên một bên phải chờ bên kia: lần nạp kia đang chèn thì câu này chờ nó commit, và câu kiểm phiên bản
+    /// sau đó (READ COMMITTED, ảnh chụp mới cho mỗi câu) thấy phiên bản đã commit; câu này khóa trước thì lần nạp kia
+    /// chờ, rồi vấp khóa ngoại khi dataset đã bị xóa. Test: deleting_a_dataset_waits_for_a_concurrent_version.
+    pub async fn delete_dataset_without_versions(
+        &self,
+        ws: &WorkspaceId,
+        dataset_id: Uuid,
+    ) -> Result<(), AppError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| db_error("begin delete dataset", e))?;
+        let source: Option<Uuid> = sqlx::query_scalar(
+            "SELECT source_id FROM datasets WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+        )
+        .bind(ws.as_uuid())
+        .bind(dataset_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| db_error("lock dataset", e))?;
+        let Some(source) = source else {
+            return Ok(());
+        };
+        let has_versions: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM dataset_versions WHERE workspace_id = $1 AND dataset_id = $2)",
+        )
+        .bind(ws.as_uuid())
+        .bind(dataset_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| db_error("check dataset versions", e))?;
+        // Ra khỏi hàm mà chưa commit thì sqlx rollback, nhả khóa.
+        if has_versions {
+            return Ok(());
+        }
+        sqlx::query("DELETE FROM datasets WHERE workspace_id = $1 AND id = $2")
+            .bind(ws.as_uuid())
+            .bind(dataset_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("delete dataset", e))?;
+        // Nguồn kiểu file tạo riêng cho từng dataset; khóa ngoại RESTRICT nên phải xóa sau dataset.
+        sqlx::query(
+            "DELETE FROM sources s WHERE s.workspace_id = $1 AND s.id = $2
+               AND NOT EXISTS (SELECT 1 FROM datasets d WHERE d.source_id = s.id)",
+        )
+        .bind(ws.as_uuid())
+        .bind(source)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| db_error("delete source", e))?;
+        tx.commit()
+            .await
+            .map_err(|e| db_error("commit delete dataset", e))
     }
 
     /// Đặt phiên bản hiện hành. Phiên bản phải thuộc đúng dataset này: khóa ngoại trong database chặn nếu sai, và lỗi
@@ -283,6 +378,20 @@ impl Store {
             .map_err(|e| db_error("get current version", e))
     }
 
+    /// Phiên bản còn profile_status = pending ở mọi workspace, cũ nhất trước. Ngoại lệ có chủ đích của quy tắc lọc theo
+    /// WorkspaceId (xem store/mod.rs): việc nền lúc khởi động lập hồ sơ cho phiên bản nạp trước khi có bước hồ sơ, và
+    /// lúc đó chưa có workspace nào để lọc. Chỉ auth::pending_profiles gọi, để dựng WorkspaceId từ chính các dòng này.
+    pub async fn list_pending_versions(&self) -> Result<Vec<PendingVersion>, AppError> {
+        sqlx::query_as(
+            "SELECT workspace_id, id, parquet_path, row_count FROM dataset_versions
+             WHERE profile_status = $1 ORDER BY created_at",
+        )
+        .bind(ProfileStatus::Pending.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| db_error("list pending versions", e))
+    }
+
     /// Ghi tiến độ lập hồ sơ của một phiên bản: pending, rồi structure khi xong lớp cấu trúc, semantic khi xong lớp
     /// ngữ nghĩa, hoặc failed.
     pub async fn set_profile_status(
@@ -309,7 +418,7 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_support::{drop_workspace, store, temp_workspace};
+    use super::super::test_support::{drop_workspace, fetch_count, store, temp_workspace};
     use super::*;
 
     fn new_version(hash: &str) -> NewVersion<'_> {
@@ -342,7 +451,7 @@ mod tests {
         assert!(store.get_dataset(&a, ds.id).await.unwrap().is_some());
         // Không đặt được phiên bản hiện hành cho dataset của workspace khác.
         let v = store
-            .create_version(&a, ds.id, &new_version("h1"))
+            .create_version(&a, ds.id, &new_version("h1"), &[])
             .await
             .unwrap();
         let err = store
@@ -372,11 +481,11 @@ mod tests {
             .unwrap();
 
         let v1 = store
-            .create_version(&ws, ds.id, &new_version("h1"))
+            .create_version(&ws, ds.id, &new_version("h1"), &[])
             .await
             .unwrap();
         let v2 = store
-            .create_version(&ws, ds.id, &new_version("h2"))
+            .create_version(&ws, ds.id, &new_version("h2"), &[])
             .await
             .unwrap();
         assert_eq!((v1.version, v2.version), (1, 2));
@@ -447,7 +556,7 @@ mod tests {
                     parquet_path: "/data/x.parquet",
                     row_count: 1,
                 };
-                store.create_version(&ws, ds.id, &new).await
+                store.create_version(&ws, ds.id, &new, &[]).await
             }));
         }
         let mut numbers = Vec::new();
@@ -469,6 +578,55 @@ mod tests {
             numbers.len(),
             "duplicate version numbers: {numbers:?}"
         );
+
+        drop_workspace(&store, ws).await;
+    }
+
+    /// Lần nạp B đang chèn phiên bản (giao dịch chưa commit) vào dataset D thì lệnh xóa D của lần nạp A chờ, rồi thấy
+    /// phiên bản của B và giữ D. Trước khi có FOR UPDATE, A xóa D và CASCADE xóa luôn phiên bản của B.
+    #[tokio::test]
+    async fn deleting_a_dataset_waits_for_a_concurrent_version() {
+        let Some(store) = store().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let ws = temp_workspace(&store).await;
+        let src = store.create_local_source(&ws).await.unwrap();
+        let ds = store
+            .create_dataset(&ws, src, "Sales", "sales", None)
+            .await
+            .unwrap();
+
+        let mut b = store.pool.begin().await.unwrap();
+        sqlx::query(
+            "INSERT INTO dataset_versions (workspace_id, dataset_id, version, source_kind) VALUES ($1, $2, 1, 'csv')",
+        )
+        .bind(ws.as_uuid())
+        .bind(ds.id)
+        .execute(&mut *b)
+        .await
+        .unwrap();
+        let a = {
+            let store = store.clone();
+            tokio::spawn(async move { store.delete_dataset_without_versions(&ws, ds.id).await })
+        };
+        // Cho A kịp tới chỗ chờ khóa. A chưa tới mà B đã commit thì A vẫn thấy phiên bản: test không sai theo hướng
+        // ngược lại, chỉ mất tác dụng.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert!(!a.is_finished(), "delete must wait for the version insert");
+        b.commit().await.unwrap();
+        a.await.unwrap().unwrap();
+
+        assert!(store.get_dataset(&ws, ds.id).await.unwrap().is_some());
+        let versions = fetch_count(
+            &store,
+            &format!(
+                "SELECT count(*) FROM dataset_versions WHERE dataset_id = '{}'",
+                ds.id
+            ),
+        )
+        .await;
+        assert_eq!(versions, 1);
 
         drop_workspace(&store, ws).await;
     }

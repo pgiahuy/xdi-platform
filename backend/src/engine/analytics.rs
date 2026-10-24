@@ -170,8 +170,8 @@ pub fn parquet_glob(dir: &Path) -> Result<String, AppError> {
 }
 
 /// Kết nối DuckDB trong bộ nhớ. Tắt tự cài và tự nạp extension: Parquet đã biên dịch sẵn vào binary, nên không có lý do
-/// gì để DuckDB tải code từ Internet lúc chạy (máy chủ không có mạng cũng chạy được).
-fn open() -> Result<Connection, AppError> {
+/// gì để DuckDB tải code từ Internet lúc chạy (máy chủ không có mạng cũng chạy được). Hồ sơ cột (profile.rs) dùng chung.
+pub(super) fn open() -> Result<Connection, AppError> {
     let conn = Connection::open_in_memory()
         .map_err(|e| AppError::Internal(format!("open duckdb: {e}")))?;
     conn.execute_batch(
@@ -272,7 +272,7 @@ fn open_reader(
     }
 }
 
-fn describe(conn: &Connection, from: &str) -> Result<Vec<Column>, duckdb::Error> {
+pub(super) fn describe(conn: &Connection, from: &str) -> Result<Vec<Column>, duckdb::Error> {
     let mut stmt = conn.prepare(&format!("DESCRIBE SELECT * FROM {from}"))?;
     let rows = stmt.query_map([], |row| {
         Ok(Column {
@@ -328,7 +328,7 @@ fn user_file_error(label: &str, step: &str, e: duckdb::Error) -> AppError {
 }
 
 /// Chuỗi SQL: bọc nháy đơn, nhân đôi nháy đơn bên trong. Tên file người dùng đi vào SQL qua hàm này.
-fn sql_string(s: &str) -> String {
+pub(super) fn sql_string(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }
 

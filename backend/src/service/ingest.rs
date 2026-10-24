@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ingest.rs - nạp dữ liệu: đổi file người dùng gửi lên thành một phiên bản dataset. Lập hồ sơ cột (#22) và
-nguồn database (sau này) là bước riêng. Xem docs/ARCHITECTURE.md mục 5 và 7. Phần riêng của file Excel (chọn sheet,
-đổi sheet sang CSV) ở service/excel.rs.
+/* service/ingest.rs - nạp dữ liệu: đổi file người dùng gửi lên thành một phiên bản dataset, kèm hồ sơ cột lớp cấu trúc
+(service/profile.rs). Nguồn database (sau này) là bước riêng. Xem docs/ARCHITECTURE.md mục 5 và 7. Phần riêng của file
+Excel (chọn sheet, đổi sheet sang CSV) ở service/excel.rs.
 
 Các bước, sắp để lỗi ở bước đầu không để lại gì:
 1. Tầng api đã ghi file gửi lên vào thư mục tạm (Staging) và tính SHA-256 từng file.
-2. Bộ file trùng một phiên bản đã có thì trả phiên bản đó, không làm gì thêm.
-3. DuckDB đổi file sang Parquet trong thư mục tạm (spawn_blocking: DuckDB đồng bộ và tốn CPU).
-4. Ghi dataset (nếu mới) và phiên bản vào Postgres.
+2. Bộ file trùng một phiên bản đã có thì trả phiên bản đó, không làm gì thêm (không lập lại hồ sơ).
+3. DuckDB đổi file sang Parquet trong thư mục tạm, rồi đo từng cột để lập hồ sơ (spawn_blocking: DuckDB đồng bộ và tốn
+   CPU).
+4. Ghi dataset (nếu mới), rồi phiên bản cùng hồ sơ cột trong một giao dịch (profile_status là structure ngay). Giao dịch
+   lỗi thì xóa dataset vừa tạo, nên nạp lại cùng bộ file không vấp phiên bản trùng hash mà thiếu hồ sơ.
 5. Chuyển thư mục Parquet về chỗ cuối <DATA_DIR>/<workspace>/<dataset>/<thư mục phiên bản>, rồi mới đặt phiên bản
-   hiện hành, để phiên bản hiện hành luôn có file.
+   hiện hành, để phiên bản hiện hành luôn có file và có hồ sơ.
 Thư mục tạm xóa khi Staging ra khỏi phạm vi, kể cả khi lỗi; backend chết giữa chừng thì lần khởi động sau xóa
 (clear_staging). Bước 4 và 5 chưa nằm trong một giao dịch: lỗi giữa hai bước có thể để lại dòng thừa trong Postgres
 (#79).
@@ -19,16 +21,17 @@ tạm có thể chạm file tới MAX_UPLOAD_MB, chấp nhận ở quy mô một
 đang ghi, và với CSV không phải UTF-8 thêm bản UTF-8 của mọi file cần đổi mã cùng lúc (mỗi bản lớn tới ba lần file
 gốc; bản của file nào xóa ngay khi file đó ghi xong Parquet; xem engine/csv_encoding.rs). */
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::auth::Member;
+use crate::auth::{Member, WorkspaceId};
 use crate::engine::analytics::{self, Column, FileFormat, InputFile};
-use crate::engine::store::{Dataset, DatasetVersion, NewVersion, SourceKind};
-use crate::service::excel;
+use crate::engine::store::{Dataset, DatasetVersion, NewColumn, NewVersion, SourceKind};
+use crate::service::{excel, profile};
 use crate::{error::AppError, state::AppState};
 
 /// Thư mục tạm cho một lần nạp, dưới <DATA_DIR>/staging/. Tự xóa khi ra khỏi phạm vi (Drop), nên lỗi giữa chừng
@@ -107,7 +110,8 @@ pub struct UploadResult {
     pub created: bool,
     pub dataset: Dataset,
     pub version: DatasetVersion,
-    // Cột của bảng vừa tạo; rỗng khi created = false (hồ sơ cột đầy đủ ở #22).
+    // Cột của bảng vừa tạo; rỗng khi created = false. Hồ sơ cột đầy đủ (vai trò, số đo) nằm ở bảng columns, chưa có API
+    // đọc.
     /// Columns of the new table; empty when `created` is false.
     pub columns: Vec<Column>,
 }
@@ -212,9 +216,21 @@ pub async fn upload(
         tokio::task::spawn_blocking(move || analytics::materialize(&inputs, &parquet_dir))
             .await
             .map_err(|e| AppError::Internal(format!("materialize task: {e}")))??;
+    // Đo cột ngay trên Parquet trong thư mục tạm, trước khi ghi gì vào Postgres: lỗi ở đây không để lại dòng nào.
+    let previous_formats = match &existing_dataset {
+        Some(d) => profile::previous_time_formats(state, ws, d.id).await?,
+        None => HashMap::new(),
+    };
+    let columns = profile::build_profile(
+        staging.parquet_dir(),
+        materialized.row_count,
+        previous_formats,
+    )
+    .await?;
 
     // Bước 4: dataset (nếu mới) và phiên bản. Đường dẫn lưu trong database là tương đối với DATA_DIR, để đổi chỗ thư
     // mục dữ liệu không phải sửa database.
+    let is_new_dataset = existing_dataset.is_none();
     let dataset = match existing_dataset {
         Some(d) => d,
         None => {
@@ -234,36 +250,27 @@ pub async fn upload(
         parquet_path: &relative,
         row_count: materialized.row_count,
     };
-    let mut attempts = 0;
-    let version = loop {
-        match state
+    let created = create_version_retrying(state, ws, dataset.id, &new_version, &columns).await;
+    // Phiên bản và hồ sơ không ghi được thì dataset vừa tạo cho lần nạp này không có phiên bản nào: xóa nó, để danh
+    // sách dataset không có dòng rỗng và nạp lại cùng file tạo lại từ đầu. File Parquet còn trong thư mục tạm, tự xóa.
+    if created.is_err() && is_new_dataset {
+        if let Err(e) = state
             .store
-            .create_version(ws, dataset.id, &new_version)
+            .delete_dataset_without_versions(ws, dataset.id)
             .await
         {
-            Ok(version) => break version,
-            Err(e) => {
-                // Cùng bộ file nạp song song vào cùng dataset: bên ghi sau vấp UNIQUE (dataset_id, file_hash). Có phiên
-                // bản cùng nội dung rồi thì trả nó, như nạp lại tuần tự.
-                if let Some(version) = state
-                    .store
-                    .find_version_by_hash(ws, dataset.id, &content_hash)
-                    .await?
-                {
-                    return Ok(UploadResult {
-                        created: false,
-                        dataset,
-                        version,
-                        columns: Vec::new(),
-                    });
-                }
-                // Khác nội dung nạp song song: hai lần cùng tính ra một số phiên bản (MAX + 1) và một bên vấp UNIQUE
-                // (dataset_id, version). Thử lại thì số kế tiếp đã khác. Lỗi khác cũng chỉ thử lại vài lần rồi báo.
-                attempts += 1;
-                if attempts >= 5 {
-                    return Err(e);
-                }
-            }
+            tracing::warn!(dataset_id = %dataset.id, error = ?e, "cannot remove dataset of a failed upload");
+        }
+    }
+    let version = match created? {
+        Created::New(version) => version,
+        Created::Duplicate(version) => {
+            return Ok(UploadResult {
+                created: false,
+                dataset,
+                version,
+                columns: Vec::new(),
+            })
         }
     };
 
@@ -303,6 +310,49 @@ pub async fn upload(
         version,
         columns: materialized.columns,
     })
+}
+
+/// Kết quả create_version_retrying: phiên bản mới, hoặc phiên bản cùng nội dung mà một lần nạp song song vừa tạo.
+enum Created {
+    New(DatasetVersion),
+    Duplicate(DatasetVersion),
+}
+
+/// Tạo phiên bản kèm hồ sơ cột (một giao dịch, xem Store::create_version), thử lại khi vấp lần nạp song song.
+async fn create_version_retrying(
+    state: &AppState,
+    ws: &WorkspaceId,
+    dataset_id: Uuid,
+    new_version: &NewVersion<'_>,
+    columns: &[NewColumn],
+) -> Result<Created, AppError> {
+    let mut attempts = 0;
+    loop {
+        match state
+            .store
+            .create_version(ws, dataset_id, new_version, columns)
+            .await
+        {
+            Ok(version) => return Ok(Created::New(version)),
+            Err(e) => {
+                // Cùng bộ file nạp song song vào cùng dataset: bên ghi sau vấp UNIQUE (dataset_id, file_hash). Có phiên
+                // bản cùng nội dung rồi thì trả nó, như nạp lại tuần tự.
+                if let Some(version) = state
+                    .store
+                    .find_version_by_hash(ws, dataset_id, new_version.file_hash)
+                    .await?
+                {
+                    return Ok(Created::Duplicate(version));
+                }
+                // Khác nội dung nạp song song: hai lần cùng tính ra một số phiên bản (MAX + 1) và một bên vấp UNIQUE
+                // (dataset_id, version). Thử lại thì số kế tiếp đã khác. Lỗi khác cũng chỉ thử lại vài lần rồi báo.
+                attempts += 1;
+                if attempts >= 5 {
+                    return Err(e);
+                }
+            }
+        }
+    }
 }
 
 /// Xóa thư mục Parquet của một phiên bản, rồi các thư mục cha (dataset, workspace) nếu chúng đã trống. remove_dir chỉ

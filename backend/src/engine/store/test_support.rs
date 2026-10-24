@@ -132,3 +132,11 @@ pub async fn exec(store: &Store, sql: &str) {
         .await
         .expect("exec test sql");
 }
+
+/// Đọc một số từ câu SQL thô (thường là đếm dòng), để test kiểm những gì API chưa trả ra.
+pub async fn fetch_count(store: &Store, sql: &str) -> i64 {
+    sqlx::query_scalar(sql)
+        .fetch_one(&store.pool)
+        .await
+        .expect("fetch test count")
+}

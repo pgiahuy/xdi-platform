@@ -14,5 +14,6 @@ mod ask_examples_tests;
 pub mod excel;
 pub mod explain;
 pub mod ingest;
+pub mod profile;
 pub mod users;
 pub mod workspaces;

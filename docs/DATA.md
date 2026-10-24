@@ -121,8 +121,8 @@ vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset
 - File Parquet nằm ở `<DATA_DIR>/<id workspace>/<id dataset>/<thư mục phiên bản>/`; database lưu đường dẫn tương đối
   với `DATA_DIR`. Trong lúc nạp, file nằm ở thư mục tạm `<DATA_DIR>/staging/`, xóa khi xong hay khi lỗi; backend dừng
   giữa chừng thì lần khởi động sau xóa.
-- Phiên bản lưu số dòng (`row_count`) và trạng thái hồ sơ `profile_status`, hiện luôn là `pending` vì chưa lập hồ sơ
-  cột.
+- Phiên bản lưu số dòng (`row_count`) và trạng thái hồ sơ `profile_status`: `structure` khi đã có hồ sơ cột (mục
+  dưới), `pending` khi chưa.
 
 ## Tên bảng và tên cột
 
@@ -141,13 +141,56 @@ trong workspace thì thêm `_2`, `_3`. Ví dụ "Bán hàng 2024" thành `ban_ha
   thêm `_2`, `_3`. Tên ở danh sách sheet trùng với tên cột sau khi nạp.
 
 Kết quả nạp (`UploadResult.columns`) trả tên và kiểu DuckDB của từng cột (`BIGINT`, `DOUBLE`, `VARCHAR`, `DATE`...),
-gồm cả `_source_file`. Danh sách này chưa được lưu vào Postgres.
+gồm cả `_source_file`. Hồ sơ đầy đủ của từng cột lưu ở bảng `columns` (mục dưới), chưa có API đọc.
+
+## Hồ sơ cột
+
+Mỗi phiên bản có hồ sơ cột lớp cấu trúc, do code tính trên Parquet, không gọi mô hình ngôn ngữ (chạy như nhau với
+`LLM_PROVIDER=mock`). Phiên bản và hồ sơ ghi trong một giao dịch, xong trước khi route nạp trả 201, với `profile_status`
+là `structure`; ghi lỗi thì không còn phiên bản nào (dataset vừa tạo cho lần nạp đó cũng bị xóa), nạp lại được như lần
+đầu. Nạp trùng không lập lại hồ sơ. Phiên bản nạp trước khi có bước này (`profile_status` còn `pending`) được lập hồ sơ
+nền mỗi lần backend khởi động; lỗi ở một phiên bản chỉ ghi log: lỗi do dữ liệu (Parquet hỏng, tên cột không lưu được)
+đặt `failed`, lỗi có thể tự hết (thiếu thư mục Parquet, Postgres lỗi) giữ `pending` để lần khởi động sau thử lại.
+
+Mỗi cột, kể cả `_source_file`, là một dòng `columns`: kiểu DuckDB, số ô trống (`null_count`), số giá trị khác nhau đếm
+chính xác (`distinct_count`), giá trị nhỏ nhất và lớn nhất dạng chữ, vai trò, và `time_format` với cột ngày dạng chữ.
+Cột có từ 1 tới 200 giá trị khác nhau có thêm mỗi giá trị một dòng `column_values` kèm số dòng mang giá trị đó
+(`frequency`). Postgres không lưu được ký tự NUL (mã 0) và từ chối giá trị quá dài trong chỉ mục, nên cột có giá trị
+dài quá 1000 byte hoặc có ký tự NUL thì không ghi `column_values`; min, max bỏ ký tự NUL. Tên cột dài quá 1000 byte hoặc
+có ký tự NUL thì lần nạp bị từ chối (400).
+
+**Cột ngày dạng chữ.** Lúc đọc CSV (sheet Excel cũng được đổi sang CSV trước), DuckDB tự nhận một số dạng ngày và đổi
+cột thành `DATE` hay `TIMESTAMP`. Dạng nào được nhận còn tùy cả file, nên cột ngày vẫn có thể là `VARCHAR`; DataCo ghi
+`1/31/2018 22:56` và hai cột ngày của nó là `VARCHAR`. Với cột `VARCHAR`, hồ sơ thử một danh sách ngắn định dạng
+`strptime` (`%Y-%m-%d`, `%d/%m/%Y`, `%m/%d/%Y`, có hoặc không kèm giờ). Một định dạng chỉ được tính khi đọc được mọi ô
+không trống với năm từ 1900 tới 2100 (`1/2/3` hay `12/3/45` không phải ngày). Định dạng chọn được ghi vào `time_format`,
+còn min và max là thời điểm đã đọc theo định dạng đó (`2015-01-01 00:00:00`). Giá trị đọc được cả ngày/tháng lẫn
+tháng/ngày (mọi ngày đều không quá 12) thì giữ định dạng của cột cùng tên ở phiên bản hiện hành của dataset nếu định
+dạng đó vẫn đọc được, không thì theo ngày/tháng; backend ghi log mỗi lần phải chọn như vậy. Kiểu cột trong Parquet không
+đổi: SQL dùng `strptime("cột", '<time_format>')`.
+
+**Vai trò cột** thử từng luật theo thứ tự, luật đầu tiên khớp thắng. Luật chỉ nhìn kiểu và số đo, không nhìn tên cột:
+
+| Thứ tự | Điều kiện | Vai trò |
+|---|---|---|
+| 1 | Cột toàn ô trống, hoặc là `_source_file` | `ignore` |
+| 2 | Kiểu `DATE`, `TIMESTAMP`, `TIMESTAMP WITH TIME ZONE`, hoặc cột chữ có `time_format` | `time` |
+| 3 | Bảng hơn 2 dòng; số nguyên, không ô trống, mỗi dòng một giá trị khác nhau | `key` |
+| 4 | Bảng hơn 2 dòng; số (nguyên, thực, `DECIMAL`) có tối đa 2 giá trị khác nhau, như cột cờ 0/1 | `dimension` |
+| 5 | Số còn lại | `measure` |
+| 6 | `BOOLEAN`, hoặc chữ có tối đa 200 giá trị khác nhau và có `column_values` | `dimension` |
+| 7 | Còn lại: chữ nhiều giá trị, chữ ít giá trị mà không ghi được `column_values`, `TIME`, `UUID`, `INTERVAL`, `JSON`, `BLOB`, kiểu lồng nhau | `text` |
+
+Bảng một hai dòng thì cột số nào cũng mỗi dòng một giá trị và có tối đa 2 giá trị, nên luật 3 và 4 không áp dụng.
+
+Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order City` (3597 thành phố) là `text`,
+`Order Item Id` là `key`, hai cột `... (DateOrders)` là `time`. Số nguyên lặp lại như `Order Id` hay `Customer Id` ra
+`measure` theo luật; sửa vai trò thuộc hồ sơ ngữ nghĩa ([#23](https://github.com/pgiahuy/xdi-platform/issues/23)) hoặc
+màn sửa hồ sơ của admin, chưa có.
 
 ## Chưa có
 
-- Hồ sơ cột lớp cấu trúc: vai trò cột (chiều, độ đo, thời gian), min, max, số ô trống, giá trị mẫu, lưu vào bảng
-  `columns` và `column_values` ([#22](https://github.com/pgiahuy/xdi-platform/issues/22)). Hai bảng đã có trong schema
-  nhưng lúc nạp chưa ghi gì.
+- API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm).
 - Hồ sơ lớp ngữ nghĩa: mô tả cột, bí danh cột và bí danh giá trị (ví dụ "miền Nam" cho `South`)
   ([#23](https://github.com/pgiahuy/xdi-platform/issues/23)).
 - So hồ sơ giữa hai phiên bản (cột mất, thêm, đổi kiểu) trước khi chuyển phiên bản hiện hành, như thiết kế ở

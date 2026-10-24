@@ -309,7 +309,7 @@ mod tests {
     use serde_json::{json, Value};
 
     use crate::api::test_support::{app_with, call, multipart, send_raw, CODE};
-    use crate::engine::store::test_support::fresh_database;
+    use crate::engine::store::test_support::{fetch_count, fresh_database};
 
     const URL: &str = "/api/workspaces/cua-hang/datasets";
 
@@ -406,6 +406,24 @@ mod tests {
             .map(|c| c["name"].as_str().unwrap())
             .collect();
         assert_eq!(columns, ["region", "amount", "_source_file"]);
+        // Hồ sơ cột có trước khi trả 201: đủ ba cột, cột ít giá trị có tần suất (region 2, amount 3, _source_file 2).
+        assert_eq!(body["version"]["profile_status"], "structure");
+        let version_id = body["version"]["id"].as_str().unwrap().to_string();
+        let count = |table: &str| {
+            let sql = match table {
+                "columns" => {
+                    format!("SELECT count(*) FROM columns WHERE version_id = '{version_id}'")
+                }
+                _ => format!(
+                    "SELECT count(*) FROM column_values v JOIN columns c ON c.id = v.column_id \
+                     WHERE c.version_id = '{version_id}'"
+                ),
+            };
+            let store = db.store.clone();
+            async move { fetch_count(&store, &sql).await }
+        };
+        assert_eq!(count("columns").await, 3);
+        assert_eq!(count("column_values").await, 7);
         let dataset_id = body["dataset"]["id"].as_str().unwrap().to_string();
         assert_eq!(parquet_files(&data.0), 2);
         assert!(staging_is_empty(&data.0));
