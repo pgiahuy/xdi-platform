@@ -12,7 +12,11 @@ pub mod ask_examples;
 #[cfg(test)]
 mod ask_examples_tests;
 pub mod excel;
+// Phần toán của câu "tại sao" có trước SQL và luồng hỏi; nối vào ở #38/#39. Gỡ allow khi đó để clippy bắt lại mã thừa.
+#[allow(dead_code)]
 pub mod explain;
+#[cfg(test)]
+mod explain_tests;
 pub mod ingest;
 pub mod profile;
 pub mod users;

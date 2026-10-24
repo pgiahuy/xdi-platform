@@ -11,7 +11,7 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 
 | Nhóm | Số lượng | Giấy phép | Đánh giá |
 |---|---|---|---|
-| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 385 | MIT, Apache-2.0, ISC, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
+| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 397 | MIT, Apache-2.0, ISC, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
 | Gói npm | 543 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak, 0BSD, CC0-1.0, CC-BY-4.0 (dữ liệu `caniuse-lite`) | Cho phép, dùng chung được |
 | Gói npm `lightningcss` | 2 phiên bản, mỗi phiên bản kèm bản build cho từng nền tảng | MPL-2.0 | Xem bên dưới |
 | Font Geist (`@fontsource-variable/geist`) | 1 | OFL-1.1 | Xem bên dưới |
@@ -31,6 +31,10 @@ này không có trong binary.
 `webpki-root-certs` (cũng CDLA-Permissive-2.0) là phụ thuộc của `rustls-platform-verifier` chỉ khi build cho
 WebAssembly; trên Linux, client HTTP gọi mô hình ngôn ngữ (`reqwest` với `rustls`) đọc chứng chỉ gốc của hệ thống, nên
 crate này không có trong binary. Bộ mã hóa của `rustls` là `ring` (Apache-2.0 AND ISC); không dùng OpenSSL.
+
+`rust_decimal` (MIT, số thập phân chính xác cho phân rã câu "tại sao") dùng với feature `std`, chỉ kéo thêm `arrayvec`
+và `num-traits`. `Cargo.lock` ghi cả các phụ thuộc tùy chọn của nó (`borsh`, `rand` 0.9, `proc-macro-crate`,
+`toml_edit` và vài crate khác, đều cho phép); các feature đó tắt nên chúng không được biên dịch, không có trong binary.
 
 Swagger UI 5.32.6 (Apache-2.0, của SmartBear) được đóng vào binary backend để phục vụ trang `/api/docs`: crate
 `utoipa-swagger-ui-vendored` kèm sẵn file zip của Swagger UI, `utoipa-swagger-ui` giải nén thư mục `dist` lúc build và
