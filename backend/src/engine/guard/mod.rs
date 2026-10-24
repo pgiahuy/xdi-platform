@@ -18,8 +18,8 @@ use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use sqlparser::ast::{
-    Expr, Function, Ident, LimitClause, ObjectName, Query, Select, SelectItem, SetExpr, Statement,
-    TableAlias, TableFactor, Value, Visit, VisitMut, Visitor, VisitorMut,
+    AccessExpr, Expr, Function, Ident, LimitClause, ObjectName, Query, Select, SelectItem, SetExpr,
+    Statement, TableAlias, TableFactor, Value, Visit, VisitMut, Visitor, VisitorMut,
 };
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
@@ -75,7 +75,7 @@ pub fn build_guarded_sql(
     let cte_names = check_names(&query, tables)?;
     depth::check_query_depth(&query).map_err(GuardError::Oversized)?;
     pieces::check_concat_pieces(&query).map_err(GuardError::Oversized)?;
-    width::check_query_width(&query).map_err(GuardError::Oversized)?;
+    width::check_query_width(&query, tables).map_err(GuardError::Oversized)?;
     // Chỗ cho #31 tiêm điều kiện phân quyền. Sau check_names để mọi bảng gặp được đều có trong danh sách; trước
     // build_runnable vì sau đó `sales s` thành `read_parquet(...) AS s`, mất tên bảng. `shown` sẽ chứa cả điều kiện.
     let limit_note = apply_row_limit(&mut query, max_rows)?;
@@ -372,14 +372,19 @@ struct ExprChecker<'a> {
 }
 
 impl ExprChecker<'_> {
-    /// `main.sum` bị từ chối dù sum có trong danh sách: danh sách chỉ ghi tên trơn, không xét schema nào chứa gì.
+    /// Tên nhiều phần mà phần cuối là hàm được phép (`x.lpad(3, '0')`, `main.sum(a)`): DuckDB đọc dạng này là gọi hàm
+    /// trên x như phương thức, x thành tham số đầu, nên các luật đếm tham số ở sizes.rs và pieces.rs đếm thiếu. Từ chối
+    /// loại vào vòng sửa, lý do chỉ cách viết lại dạng hàm thường.
     fn check_function(&self, function: &Function) -> ControlFlow<GuardError> {
-        let name = single_ident(&function.name)
-            .map(name_key)
-            .filter(|name| ALLOWED_FUNCTIONS.contains(&name.as_str()));
-        let Some(name) = name else {
+        let last = function.name.0.last().and_then(|part| part.as_ident());
+        let allowed = |ident: &Ident| ALLOWED_FUNCTIONS.contains(&name_key(ident).as_str());
+        let Some(name) = single_ident(&function.name).filter(|ident| allowed(ident)) else {
+            if function.name.0.len() > 1 && last.is_some_and(allowed) {
+                return ControlFlow::Break(method_call(&function.name.to_string()));
+            }
             return ControlFlow::Break(rejected(format!("Không cho dùng hàm {}", function.name)));
         };
+        let name = name_key(name);
         match sizes::check_function_size(&name, function) {
             Ok(()) => ControlFlow::Continue(()),
             Err(reason) => ControlFlow::Break(GuardError::Oversized(reason)),
@@ -418,6 +423,15 @@ impl Visitor for ExprChecker<'_> {
     fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<GuardError> {
         match expr {
             Expr::Function(function) => self.check_function(function),
+            // `(a).concat(b)`, `'ab'.concat(...)`: như tên nhiều phần ở check_function, biểu thức trước dấu chấm là
+            // tham số đầu mà các luật đếm không thấy.
+            Expr::CompoundFieldAccess { access_chain, .. }
+                if access_chain
+                    .iter()
+                    .any(|access| matches!(access, AccessExpr::Dot(Expr::Function(_)))) =>
+            {
+                ControlFlow::Break(method_call(&expr.to_string()))
+            }
             Expr::Identifier(column) => self.check_column(column),
             Expr::CompoundIdentifier(parts) => self.check_qualified_column(expr, parts),
             _ => ControlFlow::Continue(()),
@@ -592,12 +606,25 @@ fn rejected(reason: impl Into<String>) -> GuardError {
     GuardError::Rejected(reason.into())
 }
 
+/// written có thể là cả một biểu thức dài; lời báo chỉ chép phần đầu.
+fn method_call(written: &str) -> GuardError {
+    let mut shown: String = written.chars().take(80).collect();
+    if shown.len() < written.len() {
+        shown.push_str("...");
+    }
+    GuardError::Oversized(format!(
+        "Không gọi hàm dạng phương thức ({shown}): viết dạng hàm thường, ví dụ concat(a, b) thay cho a.concat(b)"
+    ))
+}
+
 fn unknown_name(reason: String) -> GuardError {
     GuardError::UnknownName(reason)
 }
 
 mod depth;
 mod pieces;
+#[cfg(test)]
+mod sample_tests;
 mod sizes;
 #[cfg(test)]
 mod tests;

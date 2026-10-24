@@ -16,13 +16,13 @@ Trạng thái: guard đã có và có test, nhưng chưa endpoint nào gọi nó
 |---|---|
 | Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản); `max_rows` |
 | Ra khi nhận | `GuardedSql` gồm hai bản của cùng một câu: `shown` và `runnable` (mục Bước 4) |
-| Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy |
+| Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Oversized` khi câu có thể dựng giá trị quá lớn (luật kích thước, số tầng, mảnh ghép, độ rộng ở bước 2), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy |
 
 Guard không đọc Postgres hay DuckDB: service đưa danh sách bảng vào, nên test chạy không cần database. Lý do từ chối
 viết để mô hình đọc và sửa ở vòng sau, nên nói rõ tên bảng, hàm hay cột bị từ chối. Trong luồng hỏi
-(`service/ask_run.rs`), chỉ `UnknownName` được gửi lại cho mô hình sửa một lần: mô hình hay viết sai tên, và sửa được
-khi biết tên đúng. Câu bị từ chối vì lý do khác (câu ghi, hàm không cho dùng, nhiều câu) dừng ngay: sửa tên không làm
-nó qua được.
+(`service/ask_run.rs`), `UnknownName` và `Oversized` được gửi lại cho mô hình sửa một lần: mô hình hay viết sai tên và
+sửa được khi biết tên đúng, còn câu quá lớn thì viết lại gọn hơn được cho cùng câu hỏi. Câu bị từ chối vì lý do khác
+(câu ghi, hàm không cho dùng, nhiều câu) dừng ngay: viết lại không làm nó qua được.
 
 Guard kiểm trên cây cú pháp, không dò chữ: dò chữ `DROP` thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Cây
 do crate `sqlparser` (0.63, cách đọc của DuckDB) dựng. Cả `shown` và `runnable` đều in lại từ cây đã kiểm, không dùng
@@ -79,7 +79,11 @@ dựng chuỗi rất dài lúc chạy cũng không dừng được giữa chừn
 `SELECT length(lpad('x', 300000000, 'y'))` chạy 32 giây với giới hạn 1 giây; độ dài lấy từ cột chạy 87 giây và dùng
 1,2 GB RAM với trần 1 GB. Độ dài so theo byte: thay `'a'` bằng `'😀'` giữ số ký tự nhưng gấp 4 số byte.
 
-- `lpad`, `rpad`: độ dài phải là số viết thẳng, tối đa 1000.
+- `lpad`, `rpad`: độ dài phải là số viết thẳng, tối đa 250. Hai hàm đếm ký tự, mà một ký tự UTF-8 dài tới 4 byte
+  (`lpad('😀', 1000, '😀')` ra 4000 byte), nên 250 ký tự giữ kết quả trong 1000 byte như chuỗi hằng.
+- Gọi hàm dạng phương thức (`x.lpad(3, '0')`, `(a).concat(b)`, `main.sum(a)`) bị từ chối: biểu thức trước dấu chấm
+  là tham số đầu mà các luật ở đây không thấy (`(a).concat(a)` nhân đôi chuỗi mà chỉ đếm một mảnh). Lý do gợi ý viết
+  dạng hàm thường.
 - `strftime`: dạng `strftime(ngày giờ, định dạng)`, định dạng viết thẳng, tối đa 100 byte, vì mỗi mã hai byte in ra
   nhiều byte (`%c` thành cả ngày giờ).
 - `replace`: chuỗi tìm và chuỗi thay viết thẳng, chuỗi thay không dài hơn chuỗi tìm (bỏ ký tự, đổi dấu phân cách).
@@ -89,40 +93,54 @@ dựng chuỗi rất dài lúc chạy cũng không dừng được giữa chừn
   `{`, `|`, `\Q` và có ít nhất một phần chiếm ký tự.
 
 **Số tầng, mảnh ghép, độ rộng.** Ngoài từng hàm, câu còn dựng được giá trị lớn bằng cách ghép giá trị của tầng dưới
-nhiều lần qua các tầng câu con, hay chép một giá trị lớn ra nhiều cột. Bốn luật trên cả câu:
+nhiều lần qua các tầng câu con, hay chép một giá trị lớn ra nhiều cột, nhiều dòng. Các luật trên cả câu:
 
-- Tối đa 4 tầng câu (`engine/guard/depth.rs`): câu con ở `FROM`, `WHERE`, danh sách cột và bảng tạm `WITH` đều tính;
-  bảng tạm đọc từ bảng tạm khác tính như câu con lồng trong nó.
+- Tối đa 4 tầng câu (`engine/guard/depth.rs`): câu con ở mọi chỗ (`FROM`, `WHERE`, danh sách cột, `ORDER BY`,
+  `JOIN ... ON`) và bảng tạm `WITH` đều tính; bảng tạm đọc từ bảng tạm khác tính như câu con lồng trong nó. Bảng tạm
+  cùng tên trong một `WITH` lồng chỉ che bảng tạm ngoài bên trong câu đó, không làm số tầng ít đi.
 - Tối đa 20 mảnh ghép trong cả câu (`engine/guard/pieces.rs`): toán hạng của `||` (`a || b || c` là 3), tham số của
   `concat`, `concat_ws` (dấu ngăn là biểu thức thì tính cả các lần nó được chèn vào), phần tử của danh sách, struct,
-  map viết thẳng.
+  map viết thẳng. Dùng lại bí danh đặt trước đó trong cùng danh sách cột (`a0 || a0 AS a1, a1 || a1 AS a2`) cộng số
+  mảnh của bí danh vào chỗ dùng. Tuple và mảng ở vế phải của `IN`, `= ANY(...)`, `= ALL(...)` chỉ để so sánh, không
+  tính.
 - Chuỗi hằng tối đa 1000 byte, ở mọi chỗ trong câu (`engine/guard/width.rs`).
-- Mỗi danh sách cột của SELECT tối đa 200 mục, `*` tính là một (`engine/guard/width.rs`).
+- Mỗi danh sách cột của SELECT tối đa 200 mục (`engine/guard/width.rs`). `*` và `t.*` là một mục khi `FROM` có một
+  nguồn. Khi có nhiều nguồn, `*` tính theo số cột thật trong hồ sơ của bảng dữ liệu, và bị từ chối nếu có bảng tạm hay
+  câu con (không biết số cột): `SELECT * FROM w a1, w a2, ...` nhân số cột theo số lần JOIN.
+- Mỗi `FROM` tối đa 4 nguồn, tính cả `JOIN`, bảng tạm, câu con (`engine/guard/width.rs`).
 
-Với 20 mảnh, tích các hệ số nhân qua 3 tầng ghép lớn nhất khi chia đều (7, 7, 6), tức 294 lần chuỗi nguồn dài nhất;
-chuỗi nguồn dài nhất cỡ 1000 byte (chuỗi hằng, `lpad`, `strftime`). Đo qua guard rồi chạy bằng `run_query` trên máy
-phát triển, giới hạn 1 giây, mỗi ca một tiến trình có `ulimit -v` 4 GB, đọc VmHWM (RSS đỉnh):
+Trường hợp xấu nhất về độ dài một giá trị: 20 mảnh chia đều qua 4 tầng (ghép 5 chuỗi hằng ở tầng trong cùng, rồi 5 lần
+mỗi tầng), tức 625 lần chuỗi hằng 1000 byte. Khi tầng ngoài dùng để chép ra 200 cột thì còn 3 tầng ghép (7, 7, 6), tức
+294 lần mỗi cột. Trần 4 tầng giữ vì 6 tầng đã đo vượt mức khoảng 300 MB: chép 200 cột 486 MB, `UNION ALL` 74 nhánh
+2,4 GB. Đo qua guard rồi chạy bằng `run_query` trên máy phát triển, giới hạn 1 giây, mỗi ca một tiến
+trình có `ulimit -v` 4 GB, đọc VmHWM (RSS đỉnh):
 
-| Ca (đều qua guard) | Câu | RSS đỉnh | Kết quả |
+| Ca (đều qua guard, 4 tầng) | Câu | RSS đỉnh | Kết quả |
 |---|---|---|---|
+| ghép 5 chuỗi hằng 1000 byte, rồi 5, 5, 5 lần, một cột | 5,2 KB | 67 MB | chuỗi 625 KB |
 | 20 mảnh chia 7/7/6, một cột, chuỗi 1000 byte | 1,2 KB | 66 MB | chuỗi 294 KB |
-| 20 mảnh chia 10/10, chép ra 200 cột | 3,2 KB | 135 MB | 200 chuỗi 100 KB |
-| như trên, 200 cột `lower(v)` | 4,6 KB | 138 MB | xong |
-| 4 mảnh chia 2/2, chép 200 cột | 3,2 KB | 72 MB | xong |
+| ghép 7 chuỗi hằng, rồi 7, 6 lần, chép ra 200 cột | 9,2 KB | 268 MB | 200 chuỗi 294 KB |
+| 20 mảnh chia 10/10, chép ra 200 cột | 3,2 KB | 136 MB | 200 chuỗi 100 KB |
+| như trên, 200 cột `lower(v)` | 4,6 KB | 134 MB | xong |
 | 0 mảnh, chép 200 cột | 3,1 KB | 69 MB | xong |
+| nguồn là `lpad` 250 ký tự 4 byte, 10/10 mảnh, 200 cột | 2,3 KB | 134 MB | xong |
 | nguồn là `strftime` định dạng 100 byte, 10/10 mảnh, 200 cột | 2,4 KB | 134 MB | xong |
-| `UNION ALL` 74 nhánh, mỗi nhánh 200 cột của giá trị 10/10 mảnh | 32,5 KB | 124 MB | dừng vì quá giờ |
+| `*` qua 4 nguồn là bảng dữ liệu, 20 dòng mỗi bảng | 48 byte | 73 MB | 100 000 dòng |
+| `UNION ALL` 74 nhánh, mỗi nhánh 200 cột của giá trị 10/10 mảnh | 32,5 KB | 1,94 GB | xong sau 1,76 giây |
 | chuỗi 1000 byte trên 50 000 dòng của bảng | 1 KB | 127 MB | xong |
-| `string_agg` chuỗi 1000 byte trên 50 000 dòng | 1,1 KB | 229 MB | chuỗi 50 MB |
-| chuỗi 1000 byte, 50 000 dòng, 200 cột | 1,4 KB | 886 MB | dừng vì quá giờ |
-| 500 dòng, 100 cột, giá trị 2/2 mảnh | 1,3 KB | 1,06 GB | xong sau 1,36 giây |
-| 5000 dòng, 200 cột, giá trị 10/10 mảnh | 1,6 KB | 98 MB | dừng vì quá giờ |
+| `string_agg` chuỗi 1000 byte trên 50 000 dòng | 1,1 KB | 227 MB | chuỗi 50 MB |
+| chuỗi 1000 byte, 50 000 dòng, 200 cột | 1,4 KB | 1,7 GB | dừng vì quá giờ |
+| 500 dòng, 100 cột, giá trị 2/2 mảnh | 1,3 KB | 1,03 GB | xong |
+| 5000 dòng, 200 cột, giá trị 10/10 mảnh | 1,6 KB | 1,9 GB | OutOfMemory |
 
-Trước khi có hai luật độ rộng, cùng cách đo: chép giá trị 16 KB ra 8000 cột, không ghép gì, đã lên 690 MB; 20 mảnh
-với 600 cột lên 2,5 GB. Các ca không phụ thuộc dữ liệu giờ dưới 140 MB. Các ca nhân theo số dòng của bảng vẫn lên tới
-khoảng 1 GB: DuckDB dừng được chúng (quá giờ, OutOfMemory) nhưng phần đổi kết quả sang Arrow và sang giá trị của
-backend nằm ngoài trần bộ nhớ của DuckDB, và đọc kết quả đã tính xong không bị giới hạn thời gian (ca 500 dòng xong sau
-1,36 giây với giới hạn 1 giây). Phần này để tiến trình con, xem mục Hạn chế đã biết.
+Các ca cho một dòng kết quả giờ dưới 270 MB. Trước các luật độ rộng, chép giá trị 16 KB ra 8000 cột, không ghép gì, đã
+lên 690 MB; trước luật dạng phương thức, câu nhân đôi chuỗi bằng `(a).concat(a)` mỗi bước vẫn qua guard.
+Các ca nhân theo số dòng vẫn lên tới khoảng 2 GB, kể cả không đọc bảng nào (`UNION ALL` nhiều nhánh của cùng một giá
+trị): mỗi dòng chép lại giá trị, phần đổi kết quả sang Arrow và sang giá trị của backend nằm ngoài trần bộ nhớ của
+DuckDB, và đọc kết quả đã tính xong không bị giới hạn thời gian. Phần này để tiến trình con, xem mục Hạn chế đã biết.
+
+Lần đo trước ghi ca `UNION ALL` 74 nhánh là 124 MB, dừng vì quá giờ; đo lại cùng câu ra 1,94 GB, xong sau 1,76 giây.
+Thời điểm DuckDB kiểm cờ dừng thay đổi giữa các lần chạy, nên số của các ca nhân theo số dòng dao động.
 
 Từ chối theo các luật kích thước, số tầng, mảnh ghép, độ rộng (`GuardError::Oversized`) được gửi lại cho mô hình viết
 lại gọn hơn, như sai tên bảng, cột.
@@ -178,7 +196,8 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
 | Bảng | `read_csv`, `glob`, `read_parquet`, `parquet_scan`, `read_json_auto`, `generate_series`, `range` ở chỗ bảng, kể cả trong `JOIN`, truy vấn con và `WITH`; bảng hệ thống (`duckdb_tables`, `duckdb_settings`, `pg_catalog.pg_tables`, `sqlite_master`, `information_schema`); vế `UNION` đọc nguồn ngoài danh sách; tên file trong nháy đơn và nháy kép; bảng lạ (lý do liệt kê bảng dùng được); tên kèm schema; chữ Unicode giống chữ Latin; bí danh trùng tên bảng khác; `WITH RECURSIVE`; bảng tạm trùng tên bảng dữ liệu |
 | Độ dài | Chuỗi 20 000 vế `UNION ALL` bị từ chối trước khi đọc; câu sát 32 KB vẫn qua mà không tràn stack 2 MB của luồng test |
 | Hàm | `current_setting`, `getenv` (cả trong nháy kép), `read_text`, `main.sum`, `COLUMNS`; hàm lạ trong `ORDER BY`, `HAVING`, `CASE`, `FILTER`, `OVER`, `JOIN ... ON`; `lpad`, `rpad` với độ dài hằng lớn, biểu thức, tên cột, câu con; `replace` làm chuỗi dài ra, tính theo byte (cả lồng nhau); `regexp_replace` với mẫu khớp được chuỗi rỗng hay chuỗi thay dài hơn một byte; `strftime` với định dạng từ cột, đảo thứ tự tham số hay dài hơn 100 byte; các cách dùng để làm sạch chuỗi (cả gộp khoảng trắng) vẫn qua |
-| Số tầng, mảnh, độ rộng | 4 tầng nhận, 5 tầng từ chối ở mọi chỗ (`FROM`, `WHERE`, cột, `WITH`, bảng tạm đọc bảng tạm); bảng tạm kèm câu con kiểu mô hình hay viết vẫn qua; 20 mảnh nhận, 21 từ chối (`||`, `concat`, `concat_ws`, cộng qua các tầng, danh sách và struct viết thẳng); chuỗi hằng 1000 byte nhận, 1001 từ chối (tính theo byte, ở `IN`, đối số hàm); 200 cột nhận, 201 từ chối, `*` là một mục; câu mẫu của mock và của `ask_examples.rs` vẫn qua |
+| Số tầng, mảnh, độ rộng | 4 tầng nhận, 5 tầng từ chối ở mọi chỗ (`FROM`, `WHERE`, cột, `WITH`, bảng tạm đọc bảng tạm); bảng tạm cùng tên trong `WITH` lồng không che số tầng; bảng tạm kèm câu con kiểu mô hình hay viết vẫn qua; 20 mảnh nhận, 21 từ chối (`||`, `concat`, `concat_ws`, cộng qua các tầng, danh sách và struct viết thẳng, bí danh dùng lại); tuple, mảng trong `IN`, `ANY`, `ALL` không tính; gọi hàm dạng phương thức bị từ chối; chuỗi hằng 1000 byte nhận, 1001 từ chối (tính theo byte, ở `IN`, đối số hàm); 200 cột nhận, 201 từ chối; `*` trên nhiều nguồn tính theo số cột thật, từ chối khi có bảng tạm; 4 nguồn trong `FROM` nhận, 5 từ chối; câu mẫu của mock và của `ask_examples.rs` vẫn qua |
+| Câu mẫu (`sample_tests.rs`) | 31 câu phân tích dạng mô hình hay viết, 25 qua; 6 bị từ chối có chủ ý: 3 câu 5 tầng (vào vòng sửa), `strftime` đảo thứ tự tham số, hàm `list_contains` ngoài danh sách, nhãn 1200 byte. 17 câu tìm cách lách: các câu nhân giá trị bị chặn, các câu vô hại qua |
 | Cột | Cột không có (cả dạng `s.profit`); chữ Unicode giống chữ Latin; bí danh bảng không có; tên ba phần |
 | Số dòng | Thêm `LIMIT` (cả khi chỉ có `OFFSET`); hạ `LIMIT 5000`; giữ `LIMIT 10 OFFSET 5`; thay `LIMIT (SELECT 5000)`; giới hạn cả `UNION`; từ chối `FETCH FIRST`; ghi chú `limit_note` ("Thêm LIMIT 100", "Hạ LIMIT xuống 100") |
 | Bản chạy | Bảng logic thành `read_parquet` và giữ tên làm bí danh; giữ bí danh có sẵn; đổi tên bảng tạm; bảng tạm tên giống file không còn trong bản chạy; `shown` không chứa đường dẫn; một câu có `WITH` và `JOIN` chạy trên DuckDB thật với file Parquet và ra đúng kết quả |
@@ -194,9 +213,9 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
   chạy, ở `engine/query.rs`: câu dừng ở lần DuckDB kiểm cờ dừng, chuỗi tạo lúc chạy nằm trong trần (vượt thì báo
   OutOfMemory). Phần không bị giới hạn là biểu thức hằng DuckDB tính lúc chuẩn bị câu, và một lời gọi hàm dựng chuỗi
   rất dài thì không dừng được giữa chừng. Bước 2 thu hẹp phần này bằng luật kích thước hàm, số tầng, mảnh ghép, độ
-  rộng: các ca không phụ thuộc dữ liệu đã đo qua guard đều dưới 140 MB (bảng ở bước 2). Còn lại: câu nhân theo số dòng
-  của bảng lên tới khoảng 1 GB, vì phần đổi kết quả sang Arrow và sang giá trị của backend nằm ngoài trần của DuckDB,
-  và đọc kết quả đã tính xong không bị giới hạn thời gian. Đó là số đo trên các dạng câu đã thử, không phải bảo đảm;
+  rộng: các ca cho một dòng kết quả đã đo qua guard đều dưới 270 MB (bảng ở bước 2). Còn lại: câu nhân theo số dòng
+  (dòng của bảng, hay `UNION ALL` nhiều nhánh của cùng một giá trị) lên tới khoảng 2 GB, vì phần đổi kết quả sang Arrow
+  và sang giá trị của backend nằm ngoài trần của DuckDB, và đọc kết quả đã tính xong không bị giới hạn thời gian. Đó là số đo trên các dạng câu đã thử, không phải bảo đảm;
   bảo đảm thật cần chạy câu trong tiến trình con có trần RAM và thời gian của hệ điều hành, như bộ đọc Excel
   (`engine/excel_worker.rs`). Refs [#119](https://github.com/pgiahuy/xdi-platform/issues/119).
 - Chưa tiêm điều kiện phân quyền theo dòng ([#31](https://github.com/pgiahuy/xdi-platform/issues/31)). Chỗ tiêm đã

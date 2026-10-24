@@ -5,10 +5,11 @@ tạm đọc từ bảng tạm khác. build_guarded_sql (mod.rs) gọi check_que
 Vì sao: mỗi tầng ghép được giá trị của tầng dưới nhiều lần (`concat(v, v, ...)`, `v || v`), nên độ dài chuỗi nhân lên
 theo từng tầng, và DuckDB tính các chuỗi hằng như vậy lúc chuẩn bị câu, khi giới hạn thời gian chưa có tác dụng. Đo qua
 guard khi chỉ có luật này (chạy bằng run_query, giới hạn 1 giây): 3 tầng với câu 11,6 KB đã cho chuỗi 625 MB, RSS đỉnh
-674 MB. Trần 4 tầng đủ cho câu hỏi thật (bảng tạm kèm câu con) chỉ an toàn cùng ba luật khác: tối đa 20 mảnh ghép
-(guard/pieces.rs), chuỗi hằng tối đa 1000 byte và 200 cột mỗi SELECT (guard/width.rs); bảng số đo của cả bốn luật ở
-docs/GUARD.md, mục Số tầng, mảnh ghép, độ rộng. Câu sâu hơn bị từ chối với lý do để mô hình viết lại gọn hơn trong vòng
-sửa (GuardError::Oversized). */
+674 MB. Trần 4 tầng chỉ an toàn cùng các luật khác: tối đa 20 mảnh ghép (guard/pieces.rs), chuỗi hằng tối đa 1000
+byte, 200 cột mỗi SELECT, 4 nguồn mỗi FROM (guard/width.rs). Có đủ các luật đó, đo chép 200 cột: 4 tầng 268 MB, 6 tầng
+486 MB; UNION ALL 74 nhánh ở 6 tầng 2,4 GB. Nên giữ 4: câu 5 tầng (4 bảng tạm nối nhau rồi câu chính) bị
+từ chối với lý do để mô hình viết lại gọn hơn trong vòng sửa (GuardError::Oversized). Bảng số đo ở docs/GUARD.md, mục
+Số tầng, mảnh ghép, độ rộng. */
 
 use std::collections::HashMap;
 use std::ops::ControlFlow;
@@ -38,21 +39,37 @@ pub(super) fn check_query_depth(query: &Query) -> Result<(), String> {
 /// thân bảng tạm đó, vì chuỗi `WITH a AS (...), b AS (SELECT ... FROM a)` lồng nhau như câu con mà không viết lồng.
 #[derive(Default)]
 struct DepthCounter {
-    /// Một mục cho mỗi câu đang duyệt dở: số tầng lớn nhất của các câu con đã gặp bên trong nó.
-    open: Vec<usize>,
+    /// Một mục cho mỗi câu đang duyệt dở, từ ngoài vào trong.
+    open: Vec<OpenQuery>,
     /// Thân các bảng tạm đã gặp, theo địa chỉ trong cây, kèm tên viết thường. Chỉ so địa chỉ, không đọc qua con trỏ.
     cte_bodies: Vec<(*const Query, String)>,
-    /// Số tầng của thân từng bảng tạm đã duyệt xong.
-    cte_depths: HashMap<String, usize>,
     /// Số tầng của câu ngoài cùng, có khi câu đó duyệt xong.
     deepest: usize,
+}
+
+#[derive(Default)]
+struct OpenQuery {
+    /// Số tầng lớn nhất của các câu con đã gặp bên trong câu này.
+    inner: usize,
+    /// Số tầng của các bảng tạm câu này định nghĩa (WITH của chính nó). Giữ theo từng câu chứ không chung cho cả cây:
+    /// bảng tạm cùng tên trong một WITH lồng bên trong chỉ che bảng tạm ngoài ở trong câu đó, không ghi đè số tầng của
+    /// bảng tạm ngoài (ghi đè thì một câu 7 tầng thật đếm ra ít hơn).
+    ctes: HashMap<String, usize>,
 }
 
 impl DepthCounter {
     fn add_inner(&mut self, depth: usize) {
         if let Some(current) = self.open.last_mut() {
-            *current = (*current).max(depth);
+            current.inner = current.inner.max(depth);
         }
+    }
+
+    /// Bảng tạm gần nhất cùng tên, tìm từ câu trong cùng ra ngoài như phạm vi tên của SQL.
+    fn cte_depth(&self, name: &str) -> Option<usize> {
+        self.open
+            .iter()
+            .rev()
+            .find_map(|query| query.ctes.get(name).copied())
     }
 }
 
@@ -65,16 +82,17 @@ impl Visitor for DepthCounter {
             let body: *const Query = &*cte.query;
             self.cte_bodies.push((body, name_key(&cte.alias.name)));
         }
-        self.open.push(0);
+        self.open.push(OpenQuery::default());
         ControlFlow::Continue(())
     }
 
     fn post_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
-        let depth = self.open.pop().unwrap_or(0) + 1;
+        let depth = self.open.pop().map_or(0, |done| done.inner) + 1;
         let address: *const Query = query;
+        // Thân bảng tạm là câu con trực tiếp của câu định nghĩa nó, nên câu đó đang ở đỉnh `open`.
         let cte = self.cte_bodies.iter().find(|(body, _)| *body == address);
-        if let Some((_, name)) = cte {
-            self.cte_depths.insert(name.clone(), depth);
+        if let (Some((_, name)), Some(owner)) = (cte, self.open.last_mut()) {
+            owner.ctes.insert(name.clone(), depth);
         }
         if self.open.is_empty() {
             self.deepest = depth;
@@ -86,8 +104,8 @@ impl Visitor for DepthCounter {
 
     fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
         if let TableFactor::Table { name, .. } = factor {
-            let depth = single_ident(name).and_then(|ident| self.cte_depths.get(&name_key(ident)));
-            if let Some(&depth) = depth {
+            let depth = single_ident(name).and_then(|ident| self.cte_depth(&name_key(ident)));
+            if let Some(depth) = depth {
                 self.add_inner(depth);
             }
         }

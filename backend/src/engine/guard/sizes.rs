@@ -13,13 +13,16 @@ với trần 1 GB.
 Độ dài so theo byte, không theo ký tự: thay 'a' bằng '😀' giữ số ký tự nhưng gấp 4 số byte, lồng nhau thì gấp 4 mỗi lần.
 Câu vi phạm luật bị từ chối với lý do để mô hình viết lại (GuardError::Oversized, vào vòng sửa).
 
-Trần của lpad, rpad và strftime bằng cỡ trần chuỗi hằng (guard/width.rs): ba hàm này là cách dựng một chuỗi dài từ câu
-ngắn mà không viết chuỗi hằng. Ghép chuỗi qua nhiều tầng câu con thì guard/depth.rs và guard/pieces.rs giới hạn. */
+Trần của lpad, rpad và strftime giữ kết quả trong cỡ trần chuỗi hằng (1000 byte, guard/width.rs): ba hàm này là cách
+dựng một chuỗi dài từ câu ngắn mà không viết chuỗi hằng. Ghép chuỗi qua nhiều tầng câu con thì guard/depth.rs và
+guard/pieces.rs giới hạn. */
 
 use sqlparser::ast::{Expr, Function, FunctionArg, FunctionArgExpr, FunctionArguments, Value};
 
-/// Độ dài tối đa của chuỗi lpad, rpad dựng ra: đủ để căn lề mã số hay ngày tháng; bằng trần chuỗi hằng (width.rs).
-pub const MAX_PAD_LENGTH: u64 = 1_000;
+/// Độ dài tối đa của chuỗi lpad, rpad dựng ra, tính bằng ký tự như hai hàm này đếm: đủ để căn lề mã số hay ngày tháng.
+/// Một ký tự UTF-8 dài tới 4 byte (`lpad('😀', 1000, '😀')` ra 4000 byte), nên 250 ký tự là tối đa 1000 byte, bằng
+/// trần chuỗi hằng (width.rs).
+pub const MAX_PAD_LENGTH: u64 = 250;
 
 /// Độ dài tối đa của chuỗi định dạng strftime, tính bằng byte: đủ cho mọi định dạng ngày giờ thường dùng. Mỗi mã hai
 /// byte in ra không quá vài chục byte, nên kết quả vẫn cỡ trần chuỗi hằng.
@@ -42,7 +45,7 @@ fn check_pad(name: &str, function: &Function) -> Result<(), String> {
     match length {
         Some(length) if length <= MAX_PAD_LENGTH => Ok(()),
         _ => Err(format!(
-            "Hàm {name} chỉ nhận độ dài là một số viết thẳng, tối đa {MAX_PAD_LENGTH}"
+            "Hàm {name} chỉ nhận độ dài là một số viết thẳng, tối đa {MAX_PAD_LENGTH} ký tự"
         )),
     }
 }

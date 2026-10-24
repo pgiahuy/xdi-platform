@@ -418,7 +418,6 @@ fn rejects_functions_outside_the_allowed_list() {
         "SELECT current_setting('home_directory')",
         "SELECT getenv('HOME')",
         "SELECT region FROM sales WHERE region = read_text('x')",
-        "SELECT main.sum(amount) FROM sales",
         "SELECT \"getenv\"('HOME')",
         "SELECT COLUMNS('.*') FROM sales",
     ] {
@@ -491,16 +490,18 @@ fn rejects_padding_to_huge_lengths() {
     for sql in [
         "SELECT length(lpad('x', 1900000000, 'y'))",
         "SELECT length(RPAD('x', 1900000000, 'y'))",
-        "SELECT lpad(region, 1001, 'y') FROM sales",
+        "SELECT lpad(region, 251, 'y') FROM sales",
+        // Đếm ký tự: 250 ký tự 4 byte đã là 1000 byte.
+        "SELECT lpad('😀', 1000, '😀')",
         "SELECT lpad(region, 1000 * 1000, 'y') FROM sales",
         "SELECT lpad(region, amount, 'y') FROM sales",
         "SELECT lpad(region, (SELECT 5), 'y') FROM sales",
         "SELECT region FROM sales WHERE lpad(region, 99999999, ' ') = 'x'",
     ] {
         let reason = assert_oversized(sql);
-        assert!(reason.contains("1000"), "{sql}: {reason}");
+        assert!(reason.contains("250"), "{sql}: {reason}");
     }
-    assert_accepted("SELECT lpad(region, 1000, ' ') FROM sales");
+    assert_accepted("SELECT lpad(region, 250, ' ') FROM sales");
 }
 
 /// strftime in mỗi mã hai byte thành nhiều byte: định dạng phải viết thẳng, tối đa 100 byte.
@@ -556,7 +557,7 @@ fn rejects_replacements_that_grow_the_text() {
 fn accepts_size_functions_used_for_cleaning() {
     for sql in [
         "SELECT lpad(CAST(customer_id AS VARCHAR), 8, '0') FROM sales",
-        "SELECT rpad(region, 1000, ' ') FROM sales",
+        "SELECT rpad(region, 250, ' ') FROM sales",
         "SELECT replace(region, ',', '') FROM sales",
         "SELECT replace(region, 'South', 'Nam') FROM sales",
         "SELECT regexp_replace(region, '[0-9]+', '', 'g') FROM sales",
@@ -619,7 +620,78 @@ fn rejects_five_levels() {
     }
 }
 
+/// Bảng tạm cùng tên trong một WITH lồng chỉ che bảng tạm ngoài trong câu đó: số tầng của bảng tạm ngoài giữ nguyên.
+/// Câu dưới thật sự 5 tầng (c1, c2, c3, c4, câu chính); nếu bảng tạm c2 bên trong r2 ghi đè số tầng của c2 ngoài thì
+/// câu đếm ra 4 và lọt.
+#[test]
+fn nested_with_does_not_hide_depth_of_outer_tables() {
+    let sql = "WITH c1 AS (SELECT region AS v FROM sales), c2 AS (SELECT v FROM c1), \
+               r2 AS (WITH c2 AS (SELECT region AS v FROM sales) SELECT v FROM c2), \
+               c3 AS (SELECT v FROM c2), c4 AS (SELECT v FROM c3) SELECT v FROM c4";
+    let reason = assert_oversized(sql);
+    assert!(reason.contains("5 tầng"), "{reason}");
+    // Bên trong r2, c2 là bảng tạm trong (1 tầng), nên r2 chỉ 2 tầng.
+    assert_accepted(
+        "WITH c1 AS (SELECT region AS v FROM sales), c2 AS (SELECT v FROM c1), c3 AS (SELECT v FROM c2), \
+         r2 AS (WITH c2 AS (SELECT region AS v FROM sales) SELECT v FROM c2) SELECT v FROM r2",
+    );
+}
+
 // Số mảnh ghép (guard/pieces.rs)
+
+/// Gọi hàm dạng phương thức: biểu thức trước dấu chấm là tham số đầu mà luật đếm không thấy (`(a).concat(a)` nhân đôi
+/// chuỗi mà chỉ đếm một mảnh). Từ chối loại vào vòng sửa.
+#[test]
+fn method_call_syntax_is_rejected() {
+    for sql in [
+        "SELECT (region).concat(region) FROM sales",
+        "SELECT ('ab').concat('cd', 'ef') AS x",
+        "SELECT (region).concat_ws(region, region) FROM sales",
+        "SELECT region.lower() FROM sales",
+        "SELECT region.lpad(3, '0') FROM sales",
+        "SELECT main.sum(amount) FROM sales",
+    ] {
+        let reason = assert_oversized(sql);
+        assert!(reason.contains("dạng phương thức"), "{sql}: {reason}");
+    }
+    // Truy cập trường, phần tử không phải gọi hàm.
+    assert_accepted("SELECT lower(region) FROM sales");
+}
+
+/// Bí danh dùng lại trong cùng danh sách cột chép cả giá trị: mỗi chỗ dùng cộng số mảnh của bí danh.
+#[test]
+fn reused_column_aliases_count_their_pieces() {
+    let sql =
+        "SELECT 'ab' AS a0, a0 || a0 || a0 AS a1, a1 || a1 || a1 AS a2, a2 || a2 || a2 AS a3, \
+               a3 || a3 || a3 AS a4, length(a4) AS n";
+    assert_oversized(sql);
+    // Dùng lại bí danh không ghép, hay ghép ít, vẫn qua.
+    assert_accepted("SELECT region AS r, lower(r) AS lr, r || '-' || lr AS label FROM sales");
+}
+
+/// Tuple và mảng ở vế phải của IN, ANY, ALL chỉ để so sánh, không ghép thành chuỗi.
+#[test]
+fn compared_tuples_and_arrays_are_not_pieces() {
+    let pairs: Vec<String> = (0..15).map(|i| format!("('M{i}', 'R{i}')")).collect();
+    assert_accepted(&format!(
+        "SELECT region FROM sales WHERE (region, order_date) IN ({})",
+        pairs.join(", ")
+    ));
+    let values: Vec<String> = (0..30).map(|i| format!("'C{i}'")).collect();
+    assert_accepted(&format!(
+        "SELECT region FROM sales WHERE region = ANY(ARRAY[{}])",
+        values.join(", ")
+    ));
+    assert_accepted(&format!(
+        "SELECT region FROM sales WHERE region <> ALL(ARRAY[{}])",
+        values.join(", ")
+    ));
+    // Mảng không đứng ở chỗ so sánh vẫn đếm.
+    assert_oversized(&format!(
+        "SELECT CAST([{}] AS VARCHAR) FROM sales",
+        values.join(", ")
+    ));
+}
 
 #[test]
 fn concat_pieces_are_limited_to_twenty() {
@@ -670,7 +742,53 @@ fn concat_pieces_are_limited_to_twenty() {
     ));
 }
 
-// Độ dài chuỗi hằng và số cột (guard/width.rs)
+// Độ dài chuỗi hằng, số cột, số nguồn (guard/width.rs)
+
+/// `*` trên nhiều nguồn nối cột của mọi nguồn: tính theo số cột thật, từ chối khi có bảng tạm, câu con.
+#[test]
+fn star_over_several_sources_counts_real_columns() {
+    // Bảng dữ liệu: biết số cột từ hồ sơ (sales 5 cột, customers 2 cột).
+    assert_accepted("SELECT * FROM sales s JOIN customers c ON s.customer_id = c.customer_id");
+    assert_accepted(
+        "SELECT s.*, c.segment FROM sales s JOIN customers c ON s.customer_id = c.customer_id",
+    );
+    // Một nguồn: `*` là một mục, kể cả bảng tạm.
+    assert_accepted("WITH w AS (SELECT region, amount FROM sales) SELECT * FROM w");
+    // JOIN bảng tạm với chính nó: số cột nhân theo số lần JOIN, mà bảng tạm không biết số cột.
+    let cols: Vec<String> = (1..=200).map(|i| format!("v AS c{i}")).collect();
+    let star_join = |n: usize| {
+        let sources: Vec<String> = (1..=n).map(|i| format!("w a{i}")).collect();
+        format!(
+            "WITH w AS (SELECT {} FROM (SELECT region AS v FROM sales) t) SELECT * FROM {}",
+            cols.join(", "),
+            sources.join(", ")
+        )
+    };
+    for n in [2, 4] {
+        let reason = assert_oversized(&star_join(n));
+        assert!(reason.contains("liệt kê các cột"), "{reason}");
+    }
+    assert_oversized(&star_join(100));
+    assert_oversized("WITH w AS (SELECT region FROM sales) SELECT a.* FROM w a, w b");
+}
+
+#[test]
+fn from_has_at_most_four_sources() {
+    let from = |n: usize| {
+        (1..=n)
+            .map(|i| format!("sales s{i}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    assert_accepted(&format!("SELECT s1.region FROM {}", from(4)));
+    let reason = assert_oversized(&format!("SELECT s1.region FROM {}", from(5)));
+    assert!(reason.contains("tối đa 4"), "{reason}");
+    // JOIN, JOIN trong ngoặc cũng tính.
+    assert_oversized(
+        "SELECT a.region FROM sales a JOIN sales b ON a.region = b.region JOIN (sales c JOIN sales d ON c.region = d.region) \
+         ON a.region = c.region JOIN customers e ON a.customer_id = e.customer_id",
+    );
+}
 
 #[test]
 fn string_literals_are_limited_to_1000_bytes() {
@@ -793,7 +911,7 @@ fn runnable_renames_with_tables() {
 #[test]
 fn runnable_does_not_leave_with_names_that_look_like_files() {
     let guarded = assert_accepted(
-        "SELECT * FROM (WITH \"secret.csv\" AS (SELECT region FROM sales) SELECT region FROM \"secret.csv\") x, \
+        "SELECT x.region FROM (WITH \"secret.csv\" AS (SELECT region FROM sales) SELECT region FROM \"secret.csv\") x, \
          \"secret.csv\"",
     );
     assert!(
