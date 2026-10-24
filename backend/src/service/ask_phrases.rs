@@ -1,45 +1,55 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask_phrases.rs - tách câu hỏi thành các cụm 1 đến 5 từ liền nhau, để service/ask_context.rs tìm cột và giá
-trị mà câu hỏi nhắc tới. Mỗi cụm giữ hai dạng: chữ thường như người hỏi gõ, để khớp có dấu đúng nguyên văn xếp trên khớp
-sau khi bỏ dấu; và dạng đã bỏ dấu, để so với tên cột, bí danh và để đặt id lựa chọn.
+trị mà câu hỏi nhắc tới. Mỗi cụm giữ chữ thường như người hỏi gõ (chuẩn hóa NFC) và dạng đã bỏ dấu.
 
-Bỏ dấu làm mất phân biệt "năm" (thời gian) với "Nam" (miền Nam, Việt Nam): không chặn thì "doanh thu năm 2017" thành
-lọc theo miền Nam. Vì vậy từ chỉ thời gian, số, từ nối phổ biến (STOP_WORDS) không bao giờ tự thành cụm tìm giá trị, và
-cụm có một từ như vậy chỉ nhận khớp bằng nhau, không nhận khớp gần: "miền Nam" vẫn ra South qua bí danh, còn "thu năm"
-không khớp gần với "Nam". */
+So có dấu hay không dấu theo cách người hỏi gõ (service/ask_match.rs): cụm có dấu chỉ khớp chữ có đúng dấu đó, cụm
+không dấu thì so sau khi bỏ dấu. Bỏ dấu làm mất phân biệt "năm" (thời gian) với "Nam" (miền Nam, Việt Nam), nên:
+- Từ chỉ thời gian, số, từ nối (STOP_WORDS) không tự thành cụm, và cụm có một từ như vậy chỉ nhận khớp bằng nhau.
+- Câu có dấu ở bất kỳ đâu thì so từ với STOP_WORDS có dấu: người gõ có dấu viết "năm" cho thời gian, nên "nam" của
+  họ là Nam. Câu không dấu thì so sau bỏ dấu, "nam" là từ dừng vì không biết người hỏi muốn chữ nào.
+Vì vậy "doanh thu từng miền năm 2017" không ra miền Nam ("miền năm" khác "miền Nam" ở dấu), còn "miền Nam" và
+"mien nam" vẫn ra South qua bí danh. */
+
+use unicode_normalization::UnicodeNormalization;
 
 /// Một cụm dài tối đa ngần này từ (một từ ở đây là một âm tiết, phần giữa hai dấu cách). Đề xuất ban đầu là 3, nhưng
 /// bí danh tiếng Việt hay dài 4, 5 âm tiết ("trạng thái giao hàng", "châu Á Thái Bình Dương" trong hồ sơ mẫu của
 /// DataCo), và cụm 3 âm tiết không bao giờ bằng chúng.
 pub const PHRASE_MAX_WORDS: usize = 5;
 
-/// Cụm dài hơn ngần này từ chỉ nhận khớp bằng nhau. Khớp bằng nhau rẻ (một phép join trên chuỗi đã bỏ dấu), khớp gần
-/// thì mỗi cụm phải so với từng bí danh (Store::find_values), nên giữ số cụm khớp gần như đề xuất ban đầu (1 đến 3 từ):
-/// gõ sai trong một bí danh 4, 5 âm tiết thì không khớp.
+/// Cụm dài hơn ngần này từ chỉ nhận khớp bằng nhau: khớp bằng nhau rẻ (một phép join), khớp gần thì phải so với từng
+/// giá trị và bí danh, nên giữ cụm khớp gần ở 1 đến 3 từ như đề xuất ban đầu. Gõ sai trong bí danh 4, 5 âm tiết thì
+/// không khớp.
 const FUZZY_MAX_WORDS: usize = 3;
 
-/// Chỉ xét ngần này từ đầu của câu hỏi. Số cụm tăng theo số từ, và mỗi cụm khớp gần phải so với các bí danh của phiên
-/// bản (Store::find_values); 40 từ đủ cho một câu hỏi, câu dài hơn (dán cả đoạn văn) vẫn chạy mà không làm truy vấn
-/// chậm theo.
+/// Chỉ xét ngần này từ đầu của câu hỏi, để số cụm có trần (khoảng 5 lần số từ). Từ quá dài thì xem WORD_MAX_CHARS;
+/// số cụm gửi Postgres còn có trần riêng ở service/ask_context.rs.
 pub const QUESTION_MAX_WORDS: usize = 40;
 
-/// Cụm một từ ngắn hơn ngần này ký tự (sau bỏ dấu) không thành cụm: "au", "o" khớp gần với quá nhiều thứ.
+/// Từ dài hơn ngần này ký tự không dùng để tìm, và không cụm nào chứa nó. Giá trị của cột chiều hầu như không có từ
+/// dài như vậy, còn một từ dài (dán một chuỗi 100 000 ký tự) làm mỗi phép so trigram chậm theo độ dài: với bản đầu
+/// của truy vấn, trên 20 000 giá trị, một từ 100 000 ký tự mất 100 giây.
+const WORD_MAX_CHARS: usize = 40;
+
+/// Từ ngắn hơn ngần này ký tự (sau bỏ dấu), hoặc có chữ số mà không toàn chữ số ("b2b", "5g"): đứng một mình thì chỉ
+/// khớp đúng nguyên văn ("Nữ", "B2B"), không khớp sau bỏ dấu hay khớp gần, vì "nu" hay "au" bằng quá nhiều thứ khi
+/// bỏ dấu.
 const SHORT_WORD_CHARS: usize = 3;
 
-/// Từ chỉ thời gian, số đếm, từ nối, từ so sánh, viết đã bỏ dấu. Chúng có trong câu hỏi nào cũng được mà không trỏ
-/// tới giá trị nào; một số trùng chữ với giá trị sau khi bỏ dấu ("nam", "hai" như Hải Phòng), nên chỉ khớp bằng nhau
-/// trong cụm dài hơn. Không có "so" (số, như "doanh số"): một mình nó đã ngắn hơn SHORT_WORD_CHARS.
+/// Từ chỉ thời gian, số đếm, từ nối, từ hỏi, từ so sánh, viết có dấu. Chúng có trong câu hỏi nào cũng được mà không
+/// trỏ tới giá trị nào. Không có "số" (như "doanh số"); "từng", "mọi" có vì "theo từng châu" là gom nhóm, không lọc.
 const STOP_WORDS: &[&str] = &[
     // Thời gian.
-    "nam", "thang", "quy", "ngay", "tuan", "gio", "phut", "giay", "hom", "nay", "qua", "truoc",
-    "sau", "dau", "cuoi", "ky", "luc", "khi", "nua", "hien", "tai", // Số đếm.
-    "mot", "hai", "ba", "bon", "tu", "lam", "bay", "tam", "chin", "muoi", "tram", "nghin", "ngan",
-    "trieu", "ty", // Từ nối, từ hỏi.
-    "va", "voi", "cua", "theo", "o", "trong", "ngoai", "cho", "cac", "nhung", "moi", "la", "co",
-    "khong", "nao", "bao", "nhieu", "den", "toi", "hay", "hoac", "thi", "duoc", "bi", "nhu", "ve",
-    "tren", "duoi", "giua", "ra", "vao", "boi", "ma", "do", "kia", "gi", "sao", "ai", "dang", "da",
-    "se", "can", "xem", "liet", "ke", "biet", // So sánh, tổng hợp.
-    "hon", "nhat", "cao", "thap", "lon", "nho", "tang", "giam", "top", "tong",
+    "năm", "tháng", "quý", "ngày", "tuần", "giờ", "phút", "giây", "hôm", "nay", "qua", "trước",
+    "sau", "đầu", "cuối", "kỳ", "lúc", "khi", "nửa", "hiện", "tại", // Số đếm.
+    "một", "hai", "ba", "bốn", "tư", "lăm", "sáu", "bảy", "tám", "chín", "mười", "mươi", "trăm",
+    "nghìn", "ngàn", "triệu", "tỷ", "tỉ", // Từ nối, từ hỏi.
+    "và", "với", "của", "theo", "ở", "trong", "ngoài", "cho", "các", "những", "mỗi", "mọi", "từng",
+    "cả", "là", "có", "không", "nào", "bao", "nhiêu", "từ", "đến", "tới", "hay", "hoặc", "thì",
+    "được", "bị", "như", "về", "trên", "dưới", "giữa", "ra", "vào", "bởi", "mà", "đó", "kia", "gì",
+    "sao", "ai", "đang", "đã", "sẽ", "cần", "xem", "liệt", "kê", "biết",
+    // So sánh, tổng hợp.
+    "hơn", "nhất", "cao", "thấp", "lớn", "nhỏ", "tăng", "giảm", "top", "tổng",
     // Tiếng Anh.
     "the", "of", "and", "or", "by", "in", "on", "for", "to", "per", "vs", "is", "are", "an", "from",
     "with", "at", "what", "how", "which", "many", "much", "total", "sum", "count",
@@ -48,7 +58,7 @@ const STOP_WORDS: &[&str] = &[
 /// Một cụm từ liền nhau của câu hỏi.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phrase {
-    /// Chữ thường, còn dấu, các từ cách nhau một dấu cách.
+    /// Chữ thường, còn dấu, NFC, các từ cách nhau một dấu cách.
     pub text: String,
     /// Như text, đã bỏ dấu.
     pub folded: String,
@@ -56,9 +66,12 @@ pub struct Phrase {
     pub start: usize,
     /// Số từ.
     pub len: usize,
-    /// Cụm dài hơn FUZZY_MAX_WORDS, hoặc có từ trong STOP_WORDS, từ một chữ cái, từ có chữ số: chỉ nhận khớp bằng
-    /// nhau.
+    /// Người hỏi gõ có dấu (text khác folded): chỉ so với chữ có đúng dấu.
+    pub accented: bool,
+    /// Chỉ nhận khớp bằng nhau: cụm dài hơn FUZZY_MAX_WORDS, hoặc có từ dừng, từ một chữ cái, từ có chữ số.
     pub exact_only: bool,
+    /// Chỉ nhận khớp đúng nguyên văn, kể cả dấu: cụm một từ ngắn hoặc có chữ số (xem SHORT_WORD_CHARS).
+    pub text_only: bool,
 }
 
 impl Phrase {
@@ -68,47 +81,104 @@ impl Phrase {
     }
 }
 
-/// Mọi cụm dùng được để tìm cột và giá trị, cụm dài trước, cùng độ dài thì theo thứ tự trong câu. Bỏ cụm toàn từ
-/// trong STOP_WORDS hay số ("năm 2017"), và cụm một từ ngắn.
+/// Loại của một từ trong câu hỏi.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WordKind {
+    Plain,
+    /// Từ trong STOP_WORDS, hoặc toàn chữ số.
+    Stop,
+    /// Ngắn hơn SHORT_WORD_CHARS hoặc có chữ số.
+    Short,
+    /// Dài hơn WORD_MAX_CHARS: không cụm nào chứa nó.
+    TooLong,
+}
+
+/// Mọi cụm dùng được để tìm cột và giá trị, cụm dài trước, cùng độ dài thì theo thứ tự trong câu. Bỏ cụm toàn từ dừng
+/// hay số ("năm 2017") và cụm một từ dừng.
 pub fn build_phrases(question: &str) -> Vec<Phrase> {
     let words: Vec<String> = build_words(question)
         .into_iter()
         .take(QUESTION_MAX_WORDS)
         .collect();
     let folded: Vec<String> = words.iter().map(|w| fold(w)).collect();
-    let plain: Vec<bool> = folded.iter().map(|w| !is_stop_or_number(w)).collect();
+    let question_accented = words.iter().zip(&folded).any(|(w, f)| w != f);
+    let kinds: Vec<WordKind> = words
+        .iter()
+        .zip(&folded)
+        .map(|(w, f)| build_word_kind(w, f, question_accented))
+        .collect();
 
     let mut phrases = Vec::new();
     for len in (1..=PHRASE_MAX_WORDS).rev() {
         for start in 0..words.len().saturating_sub(len - 1) {
             let range = start..start + len;
-            if !plain[range.clone()].iter().any(|p| *p) {
+            let kinds = &kinds[range.clone()];
+            if kinds.contains(&WordKind::TooLong) || kinds.iter().all(|k| *k == WordKind::Stop) {
                 continue;
             }
-            if len == 1 && folded[start].chars().count() < SHORT_WORD_CHARS {
-                continue;
-            }
+            let text = words[range.clone()].join(" ");
+            let folded = folded[range].join(" ");
+            let has_letter_word = words[start..start + len]
+                .iter()
+                .any(|w| w.chars().count() == 1);
+            let has_digit = words[start..start + len]
+                .iter()
+                .any(|w| w.chars().any(|c| c.is_ascii_digit()));
+            let text_only = len == 1 && kinds[0] == WordKind::Short;
             phrases.push(Phrase {
-                text: words[range.clone()].join(" "),
-                folded: folded[range.clone()].join(" "),
+                accented: text != folded,
+                exact_only: text_only
+                    || len > FUZZY_MAX_WORDS
+                    || kinds.contains(&WordKind::Stop)
+                    || has_letter_word
+                    || has_digit,
+                text_only,
+                text,
+                folded,
                 start,
                 len,
-                exact_only: len > FUZZY_MAX_WORDS || !plain[range].iter().all(|p| *p),
             });
         }
     }
     phrases
 }
 
-/// Các từ của một đoạn chữ, viết thường, còn dấu. Từ là dãy chữ cái và chữ số liền nhau; mọi ký tự khác (dấu cách,
-/// dấu câu, gạch nối) là chỗ ngăn từ. Tên cột và bí danh cũng tách bằng hàm này trước khi so với cụm, để
-/// "Days for shipping (real)" và "days for shipping real" là một.
+fn build_word_kind(word: &str, folded: &str, question_accented: bool) -> WordKind {
+    if word.chars().count() > WORD_MAX_CHARS {
+        return WordKind::TooLong;
+    }
+    let is_stop = if question_accented {
+        STOP_WORDS.contains(&word)
+    } else {
+        STOP_WORDS.iter().any(|s| fold(s) == folded)
+    };
+    if is_stop || word.chars().all(|c| c.is_ascii_digit()) {
+        WordKind::Stop
+    } else if folded.chars().count() < SHORT_WORD_CHARS || word.chars().any(|c| c.is_ascii_digit())
+    {
+        WordKind::Short
+    } else {
+        WordKind::Plain
+    }
+}
+
+/// Các từ của một đoạn chữ, viết thường, còn dấu, chuẩn hóa NFC. Từ là dãy chữ cái và chữ số liền nhau; mọi ký tự khác
+/// (dấu cách, dấu câu, gạch nối) là chỗ ngăn từ. Tên cột, bí danh và giá trị cũng qua hàm này (build_key) trước khi so
+/// với cụm, để "Days for shipping (real)" và "days for shipping real" là một, và chữ gõ dạng tổ hợp (chữ cái rồi dấu,
+/// như một số máy Mac) bằng chữ dựng sẵn.
 pub fn build_words(text: &str) -> Vec<String> {
-    text.to_lowercase()
+    let composed: String = text.nfc().collect();
+    composed
+        .to_lowercase()
         .split(|c: char| !is_word_char(c))
         .filter(|w| !w.is_empty())
         .map(str::to_string)
         .collect()
+}
+
+/// Một đoạn chữ ở dạng so được với Phrase::text: các từ của build_words nối bằng một dấu cách.
+pub fn build_key(text: &str) -> String {
+    build_words(text).join(" ")
 }
 
 /// Bỏ dấu và viết thường. deunicode cho cùng kết quả với immutable_unaccent của Postgres trên chữ tiếng Việt ("đ"
@@ -116,21 +186,12 @@ pub fn build_words(text: &str) -> Vec<String> {
 pub fn fold(text: &str) -> String {
     let ascii = deunicode::deunicode(text).to_lowercase();
     // deunicode có thể đổi một ký tự thành nhiều từ ("北京" thành "Bei Jing "), nên tách lại từ cho gọn.
-    build_words(&ascii).join(" ")
+    build_key(&ascii)
 }
 
-// Dấu thanh gõ dạng tổ hợp (chữ cái rồi dấu, U+0300 đến U+036F, như bàn phím một số máy Mac) không phải chữ cái
-// theo is_alphanumeric; không giữ thì "Miền" gõ kiểu đó bị cắt làm hai từ.
+// Dấu tổ hợp còn lại sau NFC (không ghép được vào chữ trước nó) vẫn thuộc từ, không cắt từ làm hai.
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || ('\u{300}'..='\u{36f}').contains(&c)
-}
-
-// Từ một chữ cái tính như từ trong STOP_WORDS: nó chỉ góp hai trigram, khớp gần không phân biệt được nó với từ ngắn
-// khác, nên "châu Á" sẽ khớp gần "châu Âu" (similarity 0.67) dù là hai châu khác nhau.
-fn is_stop_or_number(folded_word: &str) -> bool {
-    folded_word.chars().count() < 2
-        || folded_word.chars().any(|c| c.is_ascii_digit())
-        || STOP_WORDS.contains(&folded_word)
 }
 
 #[cfg(test)]
@@ -144,23 +205,34 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn phrases_are_lowercase_with_accents_and_folded() {
-        let phrases = build_phrases("MIỀN NAM");
-        assert_eq!(phrases[0].text, "miền nam");
-        assert_eq!(phrases[0].folded, "mien nam");
-        // "nam" là từ chỉ thời gian khi bỏ dấu, nên "miền nam" chỉ nhận khớp bằng nhau, và "nam" không thành cụm.
-        assert!(phrases[0].exact_only);
-        assert_eq!(texts("MIỀN NAM"), ["miền nam", "miền"]);
-        // Dấu gõ dạng tổ hợp vẫn là một từ.
-        assert_eq!(build_phrases("Mie\u{302}\u{300}n")[0].folded, "mien");
+    fn find<'a>(phrases: &'a [Phrase], text: &str) -> &'a Phrase {
+        phrases
+            .iter()
+            .find(|p| p.text == text)
+            .unwrap_or_else(|| panic!("no phrase {text}"))
     }
 
     #[test]
-    fn time_words_numbers_and_short_words_are_not_phrases_alone() {
-        let all = texts("Doanh thu năm 2017");
+    fn phrases_keep_accents_as_typed() {
+        let phrases = build_phrases("MIỀN NAM");
+        assert_eq!(phrases[0].text, "miền nam");
+        assert_eq!(phrases[0].folded, "mien nam");
+        assert!(phrases[0].accented);
+        // Câu có dấu: "nam" không phải "năm", nên là từ thường và "miền nam" nhận cả khớp gần.
+        assert!(!phrases[0].exact_only);
+        assert_eq!(texts("MIỀN NAM"), ["miền nam", "miền", "nam"]);
+        // Câu không dấu: "nam" có thể là "năm", là từ dừng.
+        let plain = build_phrases("mien nam");
+        assert!(!plain[0].accented && plain[0].exact_only);
+        assert_eq!(texts("mien nam"), ["mien nam", "mien"]);
+        // Gõ dạng tổ hợp thành cùng chữ với dạng dựng sẵn.
+        assert_eq!(build_phrases("Mie\u{302}\u{300}n Nam")[0].text, "miền nam");
+    }
+
+    #[test]
+    fn time_words_numbers_and_connectors_are_not_phrases_alone() {
         assert_eq!(
-            all,
+            texts("Doanh thu năm 2017"),
             [
                 "doanh thu năm 2017",
                 "doanh thu năm",
@@ -171,32 +243,44 @@ mod tests {
                 "thu"
             ]
         );
-        let phrases = build_phrases("doanh thu nam 2017");
-        assert!(!phrases
+        let phrases = build_phrases("doanh thu từng miền năm 2017");
+        assert!(find(&phrases, "miền năm").exact_only);
+        assert!(!phrases.iter().any(|p| p.text == "năm" || p.text == "từng"));
+        let plain = build_phrases("doanh thu nam 2017");
+        assert!(!plain
             .iter()
             .any(|p| p.text == "nam" || p.text == "nam 2017"));
-        let thu_nam = phrases.iter().find(|p| p.text == "thu nam").unwrap();
-        assert!(thu_nam.exact_only);
-        assert!(
-            !phrases
-                .iter()
-                .find(|p| p.text == "doanh thu")
-                .unwrap()
-                .exact_only
-        );
-        for word in ["tháng 5", "quý 3", "ngày", "và", "của"] {
-            assert!(texts(word).is_empty(), "{word}");
+        assert!(find(&plain, "thu nam").exact_only);
+        assert!(!find(&plain, "doanh thu").exact_only);
+        for words in ["tháng 5", "quý 3", "ngày", "và", "của", "2017", "theo từng"] {
+            assert!(texts(words).is_empty(), "{words}");
         }
-        // "âu" một mình quá ngắn; "châu Âu" là một cụm.
-        assert_eq!(texts("châu Âu"), ["châu âu", "châu"]);
-        // Từ một chữ cái: cụm chứa nó chỉ nhận khớp bằng nhau.
+        // Từ một chữ cái: cụm chứa nó chỉ nhận khớp bằng nhau; đứng một mình thì chỉ khớp đúng nguyên văn.
         let asia = build_phrases("châu Á");
         assert_eq!(asia[0].text, "châu á");
         assert!(asia[0].exact_only);
+        assert_eq!(texts("châu Á"), ["châu á", "châu", "á"]);
+        assert!(find(&asia, "á").text_only);
     }
 
     #[test]
-    fn punctuation_splits_words_and_long_questions_are_capped() {
+    fn short_words_and_codes_only_match_as_typed() {
+        for (question, word) in [
+            ("khách nữ", "nữ"),
+            ("doanh thu B2B", "b2b"),
+            ("thuê bao 5G", "5g"),
+        ] {
+            let phrases = build_phrases(question);
+            let phrase = find(&phrases, word);
+            assert!(phrase.text_only && phrase.exact_only, "{question}");
+        }
+        // "mới" không phải "mỗi" khi câu có dấu.
+        let phrases = build_phrases("đơn mới");
+        assert!(!find(&phrases, "mới").text_only);
+    }
+
+    #[test]
+    fn long_words_and_long_questions_are_capped() {
         assert!(build_phrases("?!... ,;").is_empty());
         assert!(build_phrases("").is_empty());
         assert_eq!(texts("Europe/LATAM"), ["europe latam", "europe", "latam"]);
@@ -205,10 +289,12 @@ mod tests {
         assert!(phrases
             .iter()
             .all(|p| p.start + p.len <= QUESTION_MAX_WORDS));
-        // Mỗi độ dài n từ 1 tới 5 có QUESTION_MAX_WORDS - n + 1 cụm.
+        // Mỗi độ dài n từ 1 tới 5 có QUESTION_MAX_WORDS - n + 1 cụm; cụm 4, 5 từ chỉ nhận khớp bằng nhau.
         assert_eq!(phrases.len(), 5 * QUESTION_MAX_WORDS - 10);
-        // Cụm 4, 5 từ chỉ nhận khớp bằng nhau.
         assert!(phrases.iter().all(|p| p.exact_only == (p.len > 3)));
+        // Một từ rất dài không vào cụm nào, các từ khác vẫn dùng được.
+        let huge = format!("doanh thu {} europe", "x".repeat(100_000));
+        assert_eq!(texts(&huge), ["doanh thu", "doanh", "thu", "europe"]);
     }
 
     #[test]
@@ -219,5 +305,6 @@ mod tests {
         );
         assert_eq!(fold("Đơn  hàng"), "don hang");
         assert_eq!(fold("北京"), "bei jing");
+        assert_eq!(build_key("Mie\u{302}\u{300}n Tây"), "miền tây");
     }
 }

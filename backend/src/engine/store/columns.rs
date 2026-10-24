@@ -4,10 +4,12 @@ Lớp cấu trúc (kiểu, số ô trống, min, max, vai trò, tần suất gi�
 mô tả và bí danh (#23) sửa sau. Như mọi hàm của store, câu SQL lọc theo workspace_id lấy từ WorkspaceId: đọc hồ sơ của
 phiên bản thuộc workspace khác ra rỗng. */
 
+use std::time::Duration;
+
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use super::{db_error, ProfileStatus, Store};
+use super::{db_error, is_query_canceled, ProfileStatus, Store};
 use crate::{auth::WorkspaceId, error::AppError};
 
 /// Vai trò của một cột trong dataset, khớp CHECK của columns.role (0001_init.sql). Luật chọn ở service/profile.rs.
@@ -88,8 +90,8 @@ pub struct ColumnValue {
     pub frequency: Option<i64>,
 }
 
-/// Một giá trị trong column_values khớp một cụm của câu hỏi (find_values). Điểm cuối cùng do service/ask_context.rs
-/// tính từ same_folded và similarity, vì so chữ thường còn dấu làm ở Rust (xem find_values).
+/// Một giá trị trong column_values khớp thô một cụm của câu hỏi (find_values): bằng nhau sau bỏ dấu, hoặc khớp gần
+/// cùng số từ. Điểm cuối cùng, và việc so có dấu, do service/ask_match.rs làm.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ValueHit {
     /// Cụm của câu hỏi, đúng chuỗi người gọi truyền vào.
@@ -100,80 +102,59 @@ pub struct ValueHit {
     pub matched_text: String,
     /// Bằng nhau sau khi bỏ dấu, chữ thường, bỏ dấu câu.
     pub same_folded: bool,
-    /// similarity của pg_trgm trên hai chuỗi đã bỏ dấu, từ 0 đến 1.
-    pub similarity: f32,
 }
 
 /// Số dòng tối đa find_values trả về. Chặn trên cho câu hỏi dài khớp nhiều giá trị; service chỉ giữ vài giá trị mỗi
-/// cụm, nên cắt ở đây không làm mất khớp tốt (câu SQL xếp khớp tốt nhất trước).
+/// cụm, nên cắt ở đây không làm mất khớp tốt (câu SQL xếp khớp bằng nhau trước).
 const FIND_VALUES_MAX_ROWS: i64 = 500;
 
 // Câu SQL của find_values. Tham số: $1 workspace, $2 phiên bản, $3 cụm chỉ khớp bằng nhau, $4 cụm nhận khớp gần,
-// $5 vai trò dimension, $6 ngưỡng similarity, $7 số dòng tối đa.
+// $5 vai trò dimension, $6 ngưỡng similarity của bước lọc thô, $7 số dòng tối đa.
 //
 // Bỏ dấu cả hai phía bằng cùng một biểu thức: immutable_unaccent, lower, rồi đổi mỗi dãy ký tự không phải chữ hay số
-// thành một dấu cách, để "Miền Nam", "mien nam" và "MIỀN-NAM" thành một chuỗi. So chữ thường còn dấu thì Rust làm
-// (service/ask_context.rs): lower() của Postgres theo locale của database, với locale C nó không đổi được chữ hoa có
-// dấu. Bỏ dấu trước rồi mới lower thì chữ đã là ASCII, locale nào cũng như nhau.
+// thành một dấu cách, để "Miền Nam", "mien nam" và "MIỀN-NAM" thành một chuỗi. Bỏ dấu trước rồi mới lower thì chữ đã
+// là ASCII, locale nào cũng như nhau. So có dấu thì service/ask_match.rs làm ở Rust, vì lower() và cách pg_trgm tách
+// từ theo locale của database.
 //
-// Ba nhánh, vì gộp làm một (bằng nhau OR similarity) thì Postgres tính similarity cho mọi cặp cụm và giá trị, kể cả
-// cụm chỉ nhận khớp bằng nhau.
+// Lọc theo phiên bản trước (target: giá trị và bí danh của các cột chiều không nhạy cảm của phiên bản này, bỏ dấu một
+// lần), rồi mới so: dữ liệu của workspace và phiên bản khác không làm truy vấn chậm theo. Không dùng chỉ mục
+// column_values_trgm_idx: chỉ mục phủ mọi workspace, và với nhiều dữ liệu của workspace khác thì planner bỏ nó.
+// Hai nhánh, vì gộp làm một (bằng nhau OR similarity) thì Postgres tính similarity cho cả cụm chỉ nhận khớp bằng nhau:
 // - Bằng nhau: hash join trên chuỗi đã bỏ dấu.
-// - Gần nhau trên giá trị: dò chỉ mục column_values_trgm_idx bằng toán tử %, rồi giữ cặp có similarity từ $6. % lọc
-//   theo pg_trgm.similarity_threshold (mặc định 0.3, thấp hơn $6) nên chỉ là bước lọc thô; đặt tham số đó cao hơn $6
-//   thì mất khớp. similarity trên lower(immutable_unaccent()) bằng similarity trên chuỗi đã đổi dấu câu, vì pg_trgm
-//   tự tách từ ở ký tự không phải chữ hay số.
-// - Gần nhau trên bí danh: bí danh không có chỉ mục, nên so từng cặp cụm và bí danh của riêng phiên bản này.
-// Cặp đã bằng nhau không lặp lại ở hai nhánh sau.
+// - Khớp gần: chỉ giữa cụm và chuỗi cùng số từ (hash join trên số từ, xem ask_match.rs vì sao), rồi similarity từ $6.
 //
-// Đã đo (Postgres 17 của docker compose trên máy phát triển, \timing của psql, trung bình 5 lần, câu 40 âm tiết ra 100
-// cụm chỉ khớp bằng nhau và 32 cụm khớp gần, giá trị sinh ngẫu nhiên): 600 giá trị đều có một bí danh, khoảng 105 ms;
-// 20 000 giá trị (100 cột chiều, mỗi cột 200 giá trị), 500 giá trị có bí danh, khoảng 110 ms; 20 000 giá trị đều có
-// bí danh, khoảng 1,8 giây, gần hết ở nhánh bí danh. Bản gộp làm một, với 113 cụm khớp gần, mất hơn 40 giây trên 20 000
-// giá trị. Khi lớp ngữ nghĩa (#23) ghi bí danh cho mọi giá trị của dataset lớn, cần thêm chỉ mục cho bí danh.
+// Số đo ở chú thích của find_values.
 const FIND_VALUES_SQL: &str = "
 WITH phrase AS MATERIALIZED (
-    SELECT p.text, p.fuzzy,
-           btrim(regexp_replace(lower(immutable_unaccent(p.text)), '[^[:alnum:]]+', ' ', 'g')) AS folded
+    SELECT p.text, p.fuzzy, f.folded, cardinality(string_to_array(f.folded, ' ')) AS words
     FROM (SELECT text, false AS fuzzy FROM UNNEST($3::text[]) AS e(text)
           UNION ALL
           SELECT text, true FROM UNNEST($4::text[]) AS f(text)) AS p
-),
-version_column AS MATERIALIZED (
-    SELECT id, name FROM columns
-    WHERE workspace_id = $1 AND version_id = $2 AND role = $5 AND NOT is_sensitive
+    CROSS JOIN LATERAL (
+        SELECT btrim(regexp_replace(lower(immutable_unaccent(p.text)), '[^[:alnum:]]+', ' ', 'g')) AS folded
+    ) AS f
 ),
 target AS MATERIALIZED (
-    SELECT c.name AS column_name, v.value, t.text AS matched_text, t.is_alias,
-           btrim(regexp_replace(lower(immutable_unaccent(t.text)), '[^[:alnum:]]+', ' ', 'g')) AS folded
-    FROM version_column c
-    JOIN column_values v ON v.workspace_id = $1 AND v.column_id = c.id
-    CROSS JOIN LATERAL (SELECT v.value, false UNION ALL SELECT a, true FROM UNNEST(v.aliases) AS a)
-        AS t(text, is_alias)
-),
-alias_target AS MATERIALIZED (
-    SELECT * FROM target WHERE is_alias
+    SELECT c.name AS column_name, v.value, t.text AS matched_text, f.folded,
+           cardinality(string_to_array(f.folded, ' ')) AS words
+    FROM columns c
+    JOIN column_values v ON v.workspace_id = c.workspace_id AND v.column_id = c.id
+    CROSS JOIN LATERAL UNNEST(array_prepend(v.value, v.aliases)) AS t(text)
+    CROSS JOIN LATERAL (
+        SELECT btrim(regexp_replace(lower(immutable_unaccent(t.text)), '[^[:alnum:]]+', ' ', 'g')) AS folded
+    ) AS f
+    WHERE c.workspace_id = $1 AND c.version_id = $2 AND c.role = $5 AND NOT c.is_sensitive
 ),
 hit AS (
-    SELECT phrase.text AS phrase, target.column_name, target.value, target.matched_text,
-           true AS same_folded, 1::real AS similarity
+    SELECT phrase.text AS phrase, target.column_name, target.value, target.matched_text, true AS same_folded
     FROM phrase JOIN target ON target.folded = phrase.folded
     UNION ALL
-    SELECT phrase.text, c.name, v.value, v.value, false,
-           similarity(phrase.folded, lower(immutable_unaccent(v.value)))
-    FROM phrase
-    JOIN column_values v ON lower(immutable_unaccent(v.value)) % phrase.folded
-    JOIN version_column c ON c.id = v.column_id
-    WHERE phrase.fuzzy AND v.workspace_id = $1
-      AND btrim(regexp_replace(lower(immutable_unaccent(v.value)), '[^[:alnum:]]+', ' ', 'g')) <> phrase.folded
-    UNION ALL
-    SELECT phrase.text, a.column_name, a.value, a.matched_text, false, similarity(phrase.folded, a.folded)
-    FROM phrase JOIN alias_target a ON a.folded % phrase.folded
-    WHERE phrase.fuzzy AND a.folded <> phrase.folded
+    SELECT phrase.text, target.column_name, target.value, target.matched_text, false
+    FROM phrase JOIN target ON target.words = phrase.words
+    WHERE phrase.fuzzy AND target.folded <> phrase.folded AND similarity(phrase.folded, target.folded) >= $6
 )
-SELECT phrase, column_name, value, matched_text, same_folded, similarity FROM hit
-WHERE same_folded OR similarity >= $6
-ORDER BY same_folded DESC, similarity DESC, column_name, value
+SELECT phrase, column_name, value, matched_text, same_folded FROM hit
+ORDER BY same_folded DESC, column_name, value
 LIMIT $7";
 
 impl Store {
@@ -235,9 +216,18 @@ impl Store {
         .map_err(|e| db_error("list columns", e))
     }
 
-    /// Giá trị của các cột chiều (role dimension, không nhạy cảm) của một phiên bản khớp các cụm của câu hỏi, so trên
-    /// giá trị và từng bí danh của nó. exact: cụm chỉ nhận khớp bằng nhau; fuzzy: cụm nhận cả khớp gần, similarity từ
-    /// min_similarity. Rỗng khi phiên bản thuộc workspace khác. Câu SQL và lý do: FIND_VALUES_SQL.
+    /// Giá trị của các cột chiều (role dimension, không nhạy cảm) của một phiên bản khớp thô các cụm của câu hỏi, so
+    /// trên giá trị và từng bí danh của nó. exact: cụm chỉ nhận khớp bằng nhau; fuzzy: cụm nhận cả khớp gần cùng số
+    /// từ, similarity sau bỏ dấu từ min_similarity. Rỗng khi phiên bản thuộc workspace khác. Câu SQL: FIND_VALUES_SQL.
+    ///
+    /// Chạy quá timeout thì trả rỗng và ghi log, không trả lỗi: thiếu giá trị đã ánh xạ thì câu hỏi vẫn trả lời được
+    /// (mô hình thấy giá trị mẫu), còn lỗi thì chặn cả câu hỏi.
+    ///
+    /// Đã đo (Postgres 17 của docker compose trên máy phát triển, \timing của psql, 5 lần; giá trị 1 đến 3 âm tiết sinh
+    /// ngẫu nhiên, mỗi giá trị 2 bí danh; câu 40 từ không từ dừng, 40 cụm khớp gần và 150 cụm khớp bằng nhau như
+    /// service/ask_context.rs gửi): 600 giá trị khoảng 25 ms; 20 000 giá trị (100 cột chiều, mỗi cột 200 giá trị)
+    /// khoảng 470 ms, trong đó bỏ dấu 60 000 chuỗi khoảng 240 ms; không đổi khi bảng có thêm 1 triệu dòng của
+    /// workspace khác. Cùng câu mà gửi cả 117 cụm khớp gần thì khoảng 2,3 giây, vì vậy có trần số cụm.
     pub async fn find_values(
         &self,
         ws: &WorkspaceId,
@@ -245,8 +235,21 @@ impl Store {
         exact: &[String],
         fuzzy: &[String],
         min_similarity: f32,
+        timeout: Duration,
     ) -> Result<Vec<ValueHit>, AppError> {
-        sqlx::query_as(FIND_VALUES_SQL)
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| db_error("begin find values", e))?;
+        // set_config(..., true) như SET LOCAL: chỉ có hiệu lực tới hết giao dịch này, không lan sang kết nối khác
+        // của pool.
+        sqlx::query("SELECT set_config('statement_timeout', $1, true)")
+            .bind(format!("{}ms", timeout.as_millis()))
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("set find values timeout", e))?;
+        let found = sqlx::query_as(FIND_VALUES_SQL)
             .bind(ws.as_uuid())
             .bind(version_id)
             .bind(exact)
@@ -254,12 +257,48 @@ impl Store {
             .bind(ProfileRole::Dimension.as_str())
             .bind(min_similarity)
             .bind(FIND_VALUES_MAX_ROWS)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| db_error("find values", e))
+            .fetch_all(&mut *tx)
+            .await;
+        // Chỉ đọc, nên kết thúc giao dịch bằng rollback (khi tx bị hủy) cũng như commit.
+        match found {
+            Ok(hits) => Ok(hits),
+            Err(e) if is_query_canceled(&e) => {
+                tracing::warn!(%version_id, timeout_ms = timeout.as_millis() as u64,
+                    "value search timed out; answering without mapped values");
+                Ok(Vec::new())
+            }
+            Err(e) => Err(db_error("find values", e)),
+        }
+    }
+
+    /// Tối đa per_column giá trị nhiều dòng nhất của mỗi cột cho trước, theo cột rồi tần suất giảm dần. Id cột của
+    /// workspace khác bị bỏ qua.
+    pub async fn list_sample_values(
+        &self,
+        ws: &WorkspaceId,
+        column_ids: &[Uuid],
+        per_column: i64,
+    ) -> Result<Vec<ColumnValue>, AppError> {
+        sqlx::query_as(
+            "SELECT column_id, value, frequency FROM (
+                 SELECT column_id, value, frequency,
+                        row_number() OVER (PARTITION BY column_id ORDER BY frequency DESC, value) AS rank
+                 FROM column_values WHERE workspace_id = $1 AND column_id = ANY($2)
+             ) AS ranked
+             WHERE rank <= $3
+             ORDER BY column_id, rank",
+        )
+        .bind(ws.as_uuid())
+        .bind(column_ids)
+        .bind(per_column)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| db_error("list sample values", e))
     }
 
     /// Giá trị của các cột cho trước, mỗi cột giá trị nhiều dòng nhất trước. Id cột của workspace khác bị bỏ qua.
+    // Chưa ai gọi ngoài test: kiểm form câu "tại sao" (#38) cần đủ danh sách. Gỡ allow khi có người gọi.
+    #[allow(dead_code)]
     pub async fn list_column_values(
         &self,
         ws: &WorkspaceId,

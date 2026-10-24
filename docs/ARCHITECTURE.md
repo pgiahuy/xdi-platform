@@ -210,8 +210,8 @@ Mô tả và bí danh do mô hình ngôn ngữ viết một lần lúc nạp. L�
 
 | Tầng | Nguồn | Cách lấy |
 |---|---|---|
-| Schema context | `columns` | Câu hỏi tách thành cụm 1 đến 5 âm tiết; cụm bằng tên hay bí danh cột (sau khi bỏ dấu) chọn cột đó. Dataset tới 60 cột thì đưa cả schema, nhiều hơn thì cột khớp một cụm cộng cột thời gian. Một cụm khớp nhiều cột với điểm chênh dưới 0.1 thì hỏi lại (id lựa chọn `column:<cụm đã bỏ dấu>`); chênh nhiều hơn thì chọn cột điểm cao và ghi thành giả định |
-| Value mapping | `column_values` | Giá trị và bí danh của cột chiều không nhạy cảm: bằng nhau sau khi `unaccent` bỏ dấu, hoặc `similarity` của `pg_trgm` từ 0.5 (chịu lỗi gõ, chỉ cụm tới 3 âm tiết); khớp đúng dấu xếp trên khớp sau bỏ dấu. Từ chỉ thời gian, số, từ nối không tự thành cụm, cụm chứa chúng chỉ nhận khớp bằng nhau, để "năm 2017" không thành miền Nam |
+| Schema context | `columns` | Câu hỏi tách thành cụm 1 đến 5 âm tiết; cụm bằng tên hay bí danh cột chọn cột đó, so có dấu nếu người hỏi gõ có dấu, sau khi bỏ dấu nếu gõ không dấu. Dataset tới 60 cột thì đưa cả schema, nhiều hơn thì cột khớp một cụm cộng cột thời gian. Một cụm khớp nhiều cột với điểm chênh dưới 0.1 thì hỏi lại (id lựa chọn `column:<cụm đã bỏ dấu>`); chênh nhiều hơn thì chọn cột điểm cao và ghi thành giả định |
+| Value mapping | `column_values` | Giá trị và bí danh của cột chiều không nhạy cảm, bằng nhau hoặc khớp gần, theo cách người hỏi gõ: cụm có dấu so có dấu, cụm không dấu so sau khi `unaccent` bỏ dấu. Khớp gần (`similarity` kiểu `pg_trgm`, từ 0.5 cho một âm tiết, 0.4 cho nhiều âm tiết) chỉ giữa chuỗi cùng số âm tiết, từng âm tiết sai không quá một chữ, cụm tới 3 âm tiết. Từ chỉ thời gian, số, từ nối không tự thành cụm, cụm chứa chúng chỉ khớp bằng nhau; "năm" gõ có dấu không bao giờ thành "Nam". Cụm "tên cột + giá trị" ("miền nam") tìm giá trị trong đúng cột đó. Tìm quá 2 giây thì đi tiếp không có giá trị |
 | Few-shot | `queries` đã đánh dấu đúng | Từ khóa trùng |
 
 Cột `embedding` có sẵn trên ba bảng; trait sẽ có thêm `embed`. Khi so chuỗi không đủ (cách diễn đạt không lường trước,

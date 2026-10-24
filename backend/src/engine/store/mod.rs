@@ -101,3 +101,8 @@ fn db_error(context: &str, e: sqlx::Error) -> AppError {
 fn is_foreign_key_violation(e: &sqlx::Error) -> bool {
     matches!(e, sqlx::Error::Database(db) if db.code().as_deref() == Some("23503"))
 }
+
+/// Câu lệnh bị Postgres hủy (mã 57014), ví dụ vì quá statement_timeout.
+fn is_query_canceled(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(db) if db.code().as_deref() == Some("57014"))
+}

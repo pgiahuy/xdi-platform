@@ -3,47 +3,67 @@
 đúng phiên bản được hỏi (engine/store/columns.rs, do service/profile.rs và #23 ghi). Prompt sinh SQL (#29) ghép
 AskContext vào prompt; endpoint hỏi (#33) gọi build_ask_context, đổi `ambiguous` thành câu hỏi lại (`needs_choice`) và
 `picks` có cột khác thành giả định (#35). Không có dòng dữ liệu nào ở đây: chỉ tên cột, mô tả, bí danh và giá trị của
-cột chiều, cột nhạy cảm thì không kèm giá trị nào.
+cột chiều (column_values), cột nhạy cảm thì không kèm giá trị nào. Rủi ro còn lại: bảng nhỏ có cột chữ ít giá trị như
+tên người, địa chỉ thì cột đó là cột chiều, giá trị của nó vào ngữ cảnh cho tới khi admin hay #23 đánh dấu nhạy cảm.
 
 Các bước, mỗi bước một hàm:
 - Tách câu hỏi thành cụm (service/ask_phrases.rs).
-- Postgres tìm giá trị khớp từng cụm (Store::find_values): bằng nhau sau khi bỏ dấu, hoặc gần nhau theo similarity.
-- Từng cụm: so với tên và bí danh cột, gộp với giá trị đã tìm, ra các cột ứng viên kèm điểm (service/ask_match.rs). Xét cụm khớp bằng nhau
-  trước, rồi cụm dài trước; cụm đè lên chữ của một cụm đã khớp thì bỏ qua ("doanh thu" khớp rồi thì không tìm "doanh"
-  nữa).
+- Postgres tìm giá trị khớp thô từng cụm (Store::find_values): bằng nhau sau khi bỏ dấu, hoặc gần nhau cùng số từ.
+- Từng cụm: so với tên và bí danh cột, chấm điểm giá trị đã tìm theo cách người hỏi gõ (có dấu hay không), ra các cột
+  ứng viên kèm điểm (service/ask_match.rs). Cụm đè lên chữ của một cụm đã xét thì bỏ qua ("doanh thu" khớp rồi thì
+  không tìm "doanh" nữa); thứ tự xét ở build_scored_phrases.
 - Một cột ứng viên: dùng cột đó. Nhiều cột: điểm cao nhất hơn cột sau từ CLOSE_SCORE trở lên thì chọn nó và ghi lại
   để hiện giả định; gần nhau hơn thì câu hỏi mơ hồ, trừ khi người hỏi đã chọn.
 - Dataset tới FULL_SCHEMA_MAX_COLUMNS cột thì gửi cả schema; nhiều hơn thì chỉ cột khớp một cụm và cột thời gian. */
 
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 use super::ask_contract::ChosenOption;
 use super::ask_match::{
-    build_column_text, build_phrase_values, build_scored_phrases, is_partial_match,
+    build_column_text, build_column_value_pairs, build_phrase_values, build_scored_phrases,
+    is_partial_match, ColumnValuePair,
 };
 use super::ask_phrases::{build_phrases, Phrase};
 use crate::auth::WorkspaceId;
-use crate::engine::store::{ColumnValue, DatasetVersion, ProfileColumn, ProfileStatus, ValueHit};
+use crate::engine::store::{
+    ColumnValue, DatasetVersion, ProfileColumn, ProfileRole, ProfileStatus, ValueHit,
+};
 use crate::{error::AppError, state::AppState};
 
 /// Dataset tới ngần này cột thì gửi cả schema: DataCo có 53 cột, gửi hết vẫn gọn, và mô hình thấy cả những cột câu
 /// hỏi không gọi đúng tên. Nhiều hơn thì chỉ gửi cột khớp một cụm, cộng cột thời gian.
 pub const FULL_SCHEMA_MAX_COLUMNS: usize = 60;
 
-/// Ngưỡng khớp gần của giá trị: similarity của pg_trgm trên hai chuỗi đã bỏ dấu. Chọn bằng thử trên giá trị kiểu
-/// DataCo (test ở ask_context_tests.rs): gõ sai một chữ "mien nma" với "miền Nam" được đúng 0.5; "châu Phi" với
-/// "châu Âu" được 0.455, "europe" với "Southern Europe" 0.438, đều dưới ngưỡng. Không dùng word_similarity như đề
-/// xuất ban đầu: nó tìm cụm bên trong chuỗi dài, nên một từ nằm trong giá trị nhiều từ được 1.0 ("europe" với
-/// "Southern Europe", "châu" với mọi "châu ..."), "châu Phi" với "châu Âu" được 0.556 và "thu nam" với "Việt Nam" 0.5,
-/// vượt ngưỡng. Cụm 1 đến 5 từ đã đóng vai đoạn con của câu hỏi, nên so cả chuỗi là đủ.
+/// Ngưỡng khớp gần của giá trị một từ: similarity kiểu pg_trgm (ask_match.rs). "europ" với "Europe" được 0.625. Không
+/// dùng word_similarity như đề xuất ban đầu: nó tìm cụm bên trong chuỗi dài, nên "châu Phi" với "châu Âu" được 0.556
+/// và "europe" với "Southern Europe" được 1.0. similarity cũng chưa đủ khi một âm tiết so với giá trị hai âm tiết
+/// ("châu" với "châu Âu" 0.714), nên khớp gần chỉ giữa chuỗi cùng số từ, và từng âm tiết phải gần nhau.
 pub const VALUE_MIN_SIMILARITY: f32 = 0.5;
+
+/// Ngưỡng khớp gần của giá trị nhiều từ. Thấp hơn VALUE_MIN_SIMILARITY vì điều kiện từng âm tiết đã chặn các cặp khác
+/// hẳn một âm tiết ("châu Mỹ" với "châu Âu" được 0.5); thử trên mọi ca của ask_context_tests.rs, 0.4 không sinh khớp
+/// sai nào, và nhận thêm lỗi đảo chữ như "mỹ latnih" (0.43 với "Mỹ Latinh"). Gõ sai một chữ "mien nma" với "miền Nam"
+/// được 0.5. Postgres lọc thô theo ngưỡng này trên chuỗi bỏ dấu, vì điểm cuối không bao giờ cao hơn điểm bỏ dấu.
+pub const VALUE_MIN_SIMILARITY_WORDS: f32 = 0.4;
+
+/// Thời gian tối đa của một lần tìm giá trị. Quá thì câu hỏi đi tiếp không có giá trị đã ánh xạ (Store::find_values).
+const VALUE_SEARCH_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Số cụm khớp gần tối đa gửi Postgres, cụm ngắn trước. Mỗi cụm khớp gần phải so với mọi giá trị cùng số từ của phiên
+/// bản; câu 40 từ có tới 117 cụm như vậy. Cụm vượt trần vẫn được tìm khớp bằng nhau.
+const FUZZY_PHRASES_MAX: usize = 40;
+
+/// Số cụm khớp bằng nhau tối đa gửi Postgres. Khớp bằng nhau rẻ (hash join); trần chỉ để chặn trên, câu 40 từ có
+/// khoảng 190 cụm.
+const EXACT_PHRASES_MAX: usize = 250;
 
 /// Hai cột có điểm chênh dưới ngần này là gần nhau: câu hỏi mơ hồ. Chênh từ đây trở lên thì chọn cột điểm cao.
 pub const CLOSE_SCORE: f32 = 0.1;
 
-/// Số giá trị mẫu tối đa của một cột đưa vào ngữ cảnh, giá trị nhiều dòng nhất trước. Đủ để mô hình biết cách viết
-/// giá trị (hoa thường, viết tắt); danh sách đủ nằm trong column_values.
-const SAMPLE_VALUES_MAX: usize = 10;
+/// Số giá trị mẫu tối đa của một cột chiều đưa vào ngữ cảnh, giá trị nhiều dòng nhất trước. Đủ để mô hình biết cách
+/// viết giá trị (hoa thường, viết tắt); danh sách đủ nằm trong column_values.
+const SAMPLE_VALUES_MAX: i64 = 10;
 
 /// Một cột như prompt cần.
 #[derive(Debug, Clone, PartialEq)]
@@ -56,7 +76,7 @@ pub struct ColumnProfile {
     pub time_format: Option<String>,
     pub description: Option<String>,
     pub aliases: Vec<String>,
-    /// Giá trị nhiều dòng nhất trước; rỗng với cột nhạy cảm và cột nhiều giá trị.
+    /// Giá trị nhiều dòng nhất trước; chỉ có ở cột chiều không nhạy cảm.
     pub sample_values: Vec<String>,
     pub is_sensitive: bool,
     /// Có cụm của câu hỏi khớp tên, bí danh, mô tả hoặc một giá trị của cột. Prompt quá dài thì bỏ cột không khớp
@@ -99,6 +119,8 @@ pub struct ColumnPick {
     pub chosen_by_user: bool,
 }
 
+/// Lựa chọn người hỏi gửi mà không có trong `picks` với `chosen_by_user` (cột không còn là ứng viên, cụm không còn
+/// trong câu) là lựa chọn không áp dụng; #33 báo cảnh báo `choice_not_applied` cho chúng.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AskContext {
     /// Theo thứ tự cột của bảng.
@@ -130,29 +152,37 @@ pub async fn build_ask_context(
     if columns.is_empty() {
         return Err(profile_not_ready());
     }
-    let open_ids: Vec<_> = columns
+    let sample_ids: Vec<_> = columns
         .iter()
-        .filter(|c| !c.is_sensitive)
+        .filter(|c| c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive)
         .map(|c| c.id)
         .collect();
-    let values = state.store.list_column_values(ws, &open_ids).await?;
+    let samples = state
+        .store
+        .list_sample_values(ws, &sample_ids, SAMPLE_VALUES_MAX)
+        .await?;
+    let profiles = build_profiles(columns, &samples);
 
     let phrases = build_phrases(question);
-    let (exact, fuzzy) = build_value_queries(&phrases);
-    let hits = if phrases.is_empty() {
+    let texts: Vec<_> = profiles.iter().map(build_column_text).collect();
+    let pairs = build_column_value_pairs(&phrases, &texts);
+    let (exact, fuzzy) = build_value_queries(&phrases, &pairs);
+    let hits = if exact.is_empty() && fuzzy.is_empty() {
         Vec::new()
     } else {
         state
             .store
-            .find_values(ws, version.id, &exact, &fuzzy, VALUE_MIN_SIMILARITY)
+            .find_values(
+                ws,
+                version.id,
+                &exact,
+                &fuzzy,
+                VALUE_MIN_SIMILARITY_WORDS,
+                VALUE_SEARCH_TIMEOUT,
+            )
             .await?
     };
-    Ok(build_context(
-        &phrases,
-        build_profiles(columns, &values),
-        &hits,
-        choices,
-    ))
+    Ok(build_context(&phrases, profiles, &hits, choices))
 }
 
 fn check_profile_ready(version: &DatasetVersion) -> Result<(), AppError> {
@@ -171,33 +201,43 @@ fn profile_not_ready() -> AppError {
     AppError::BadRequest("Dataset chưa lập hồ sơ xong, thử lại sau ít phút".to_string())
 }
 
-/// Hai danh sách cụm cho find_values, mỗi chữ một lần: cụm chỉ nhận khớp bằng nhau, và cụm nhận cả khớp gần.
-fn build_value_queries(phrases: &[Phrase]) -> (Vec<String>, Vec<String>) {
-    let mut seen = HashSet::new();
-    let mut exact = Vec::new();
-    let mut fuzzy = Vec::new();
-    for phrase in phrases {
-        if !seen.insert(phrase.text.as_str()) {
-            continue;
-        }
-        if phrase.exact_only {
-            exact.push(phrase.text.clone());
-        } else {
+/// Hai danh sách chữ cho find_values, mỗi chữ một lần: chỉ tìm khớp bằng nhau (cụm exact_only, phần giá trị của cặp
+/// cột và giá trị, cụm khớp gần vượt FUZZY_PHRASES_MAX), và tìm cả khớp gần (cụm ngắn trước, tới FUZZY_PHRASES_MAX).
+pub fn build_value_queries(
+    phrases: &[Phrase],
+    pairs: &[ColumnValuePair],
+) -> (Vec<String>, Vec<String>) {
+    let mut fuzzy_phrases: Vec<&Phrase> = phrases.iter().filter(|p| !p.exact_only).collect();
+    fuzzy_phrases.sort_by_key(|p| (p.len, p.start));
+    let mut fuzzy: Vec<String> = Vec::new();
+    for phrase in fuzzy_phrases {
+        if fuzzy.len() < FUZZY_PHRASES_MAX && !fuzzy.contains(&phrase.text) {
             fuzzy.push(phrase.text.clone());
+        }
+    }
+    let wanted = phrases
+        .iter()
+        .map(|p| &p.text)
+        .chain(pairs.iter().map(|p| &p.tail));
+    let mut seen: HashSet<&String> = fuzzy.iter().collect();
+    let mut exact = Vec::new();
+    for text in wanted {
+        if exact.len() < EXACT_PHRASES_MAX && seen.insert(text) {
+            exact.push(text.clone());
         }
     }
     (exact, fuzzy)
 }
 
-/// Hồ sơ từng cột kèm giá trị mẫu. values đã xếp theo cột, giá trị nhiều dòng nhất trước (list_column_values) và
-/// không có giá trị của cột nhạy cảm.
-fn build_profiles(columns: Vec<ProfileColumn>, values: &[ColumnValue]) -> Vec<ColumnProfile> {
-    let mut samples: HashMap<_, Vec<String>> = HashMap::new();
-    for v in values {
-        let list = samples.entry(v.column_id).or_default();
-        if list.len() < SAMPLE_VALUES_MAX {
-            list.push(v.value.clone());
-        }
+/// Hồ sơ từng cột kèm giá trị mẫu. samples chỉ có giá trị của cột chiều không nhạy cảm (list_sample_values), theo
+/// cột, giá trị nhiều dòng nhất trước.
+fn build_profiles(columns: Vec<ProfileColumn>, samples: &[ColumnValue]) -> Vec<ColumnProfile> {
+    let mut by_column: HashMap<_, Vec<String>> = HashMap::new();
+    for v in samples {
+        by_column
+            .entry(v.column_id)
+            .or_default()
+            .push(v.value.clone());
     }
     columns
         .into_iter()
@@ -205,7 +245,7 @@ fn build_profiles(columns: Vec<ProfileColumn>, values: &[ColumnValue]) -> Vec<Co
             sample_values: if c.is_sensitive {
                 Vec::new()
             } else {
-                samples.remove(&c.id).unwrap_or_default()
+                by_column.remove(&c.id).unwrap_or_default()
             },
             name: c.name,
             data_type: c.data_type,
