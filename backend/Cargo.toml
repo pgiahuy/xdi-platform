@@ -39,6 +39,9 @@ utoipa-swagger-ui = { version = "10.0.2", features = ["axum", "vendored"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json"] }
 rustls ={ version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 sqlparser = { version = "0.63", features = ["visitor"] }
+# Số thập phân chính xác cho phân rã câu "tại sao" (service/explain.rs): cộng trừ không qua f64. Tắt mặc định để không
+# kéo serde cho Decimal; số ra JSON là chuỗi do code dựng.
+rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

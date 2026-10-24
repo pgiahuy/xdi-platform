@@ -3,7 +3,7 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-385 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 543 gói npm
+397 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 543 gói npm
 (từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 27.
 
 ## Không thuộc nhóm cho phép thông dụng
@@ -49,6 +49,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | android_system_properties | 0.1.6 | MIT OR Apache-2.0 |
 | ar_archive_writer | 0.5.3 | Apache-2.0 WITH LLVM-exception |
 | argon2 | 0.6.0 | MIT OR Apache-2.0 |
+| arrayvec | 0.7.8 | MIT OR Apache-2.0 |
 | arrow | 58.4.0 | Apache-2.0 |
 | arrow-arith | 58.4.0 | Apache-2.0 |
 | arrow-array | 58.4.0 | Apache-2.0 AND MIT |
@@ -75,6 +76,8 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | blake2 | 0.11.0 | MIT OR Apache-2.0 |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 |
 | block-buffer | 0.12.1 | MIT OR Apache-2.0 |
+| borsh | 1.8.1 | MIT OR Apache-2.0 |
+| borsh-derive | 1.8.1 | Apache-2.0 |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | byteorder | 1.5.0 | Unlicense OR MIT |
 | bytes | 1.12.1 | MIT |
@@ -238,6 +241,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | potential_utf | 0.1.6 | Unicode-3.0 |
 | powerfmt | 0.2.1 | MIT OR Apache-2.0 |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
+| proc-macro-crate | 3.5.0 | MIT OR Apache-2.0 |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
 | psm | 0.1.32 | MIT OR Apache-2.0 |
 | quick-xml | 0.42.0 | MIT |
@@ -245,8 +249,11 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
 | r-efi | 6.0.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
 | rand | 0.8.8 | MIT OR Apache-2.0 |
+| rand | 0.9.5 | MIT OR Apache-2.0 |
 | rand_chacha | 0.3.1 | MIT OR Apache-2.0 |
+| rand_chacha | 0.9.0 | MIT OR Apache-2.0 |
 | rand_core | 0.6.4 | MIT OR Apache-2.0 |
+| rand_core | 0.9.5 | MIT OR Apache-2.0 |
 | recursive | 0.1.1 | MIT |
 | recursive-proc-macro-impl | 0.1.1 | MIT |
 | redox_syscall | 0.5.18 | MIT |
@@ -258,6 +265,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | ring | 0.17.14 | Apache-2.0 AND ISC |
 | rlimit | 0.11.0 | MIT |
 | rsa | 0.9.10 | MIT OR Apache-2.0 |
+| rust_decimal | 1.43.0 | MIT |
 | rust_xlsxwriter | 0.101.0 | MIT OR Apache-2.0 |
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 |
 | rustix | 0.38.44 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
@@ -330,6 +338,9 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | tokio-rustls | 0.26.6 | MIT OR Apache-2.0 |
 | tokio-stream | 0.1.19 | MIT |
 | tokio-util | 0.7.20 | MIT |
+| toml_datetime | 1.1.2+spec-1.1.0 | MIT OR Apache-2.0 |
+| toml_edit | 0.25.17+spec-1.1.0 | MIT OR Apache-2.0 |
+| toml_parser | 1.1.5+spec-1.1.0 | MIT OR Apache-2.0 |
 | tower | 0.5.3 | MIT |
 | tower-http | 0.6.11 | MIT |
 | tower-http | 0.7.1 | MIT |
@@ -410,6 +421,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | windows-sys | 0.61.2 | MIT OR Apache-2.0 |
 | windows-targets | 0.48.5 | MIT OR Apache-2.0 |
 | windows-targets | 0.52.6 | MIT OR Apache-2.0 |
+| winnow | 1.0.4 | MIT |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | writeable | 0.6.4 | Unicode-3.0 |
 | xattr | 1.6.1 | MIT OR Apache-2.0 |
