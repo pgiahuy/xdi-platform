@@ -1,29 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask_match.rs - chấm điểm khớp giữa một cụm của câu hỏi (service/ask_phrases.rs) với tên, bí danh, mô tả của
-cột và với giá trị Postgres đã tìm (Store::find_values). service/ask_context.rs dùng điểm này để chọn cột, hỏi lại
-khi mơ hồ và chọn giá trị đưa vào ngữ cảnh. Hàm thuần, không đọc database.
+cột và với giá trị của phiên bản (service/ask_values.rs). service/ask_context.rs dùng điểm này để chọn cột, hỏi lại khi
+mơ hồ và chọn giá trị đưa vào ngữ cảnh. Hàm thuần, không đọc database.
 
-Postgres chỉ lọc thô (bằng nhau sau bỏ dấu, hoặc similarity sau bỏ dấu cùng số từ); điểm cuối tính ở đây:
-- Cụm gõ có dấu chỉ khớp chữ có đúng dấu đó (khớp gần thì lấy điểm thấp hơn của so có dấu và so bỏ dấu); cụm không
-  dấu so sau bỏ dấu. So có dấu làm ở Rust vì lower() và cách pg_trgm tách từ theo locale của database.
-- Khớp gần chỉ giữa hai chuỗi cùng số từ: gõ sai hiếm khi làm đổi số âm tiết, còn một âm tiết so với giá trị hai âm
-  tiết chứa nó thì similarity thường vượt ngưỡng ("châu" với "châu Âu" 0.714), biến từ chung chung thành bộ lọc.
-  Từng âm tiết cũng phải gần nhau (is_close_by_syllable). */
+Luật, ưu tiên đúng hơn bắt được nhiều (thà bỏ sót còn hơn khớp nhầm):
+- So có dấu chỉ khi cả cụm lẫn chữ đích đều có dấu ("miền năm" khác "miền Nam"); một bên không dấu thì so sau bỏ dấu
+  ("Hà Nội" bằng "Ha Noi", "khu vực" bằng cột khu_vuc), vì bên không dấu không mang thông tin dấu để phân biệt.
+- Khớp gần chỉ giữa hai chuỗi cùng số từ, similarity kiểu pg_trgm từ ngưỡng, và từng âm tiết khác nhau chỉ sai một chữ
+  (is_close_by_syllable). Một âm tiết so với giá trị hai âm tiết chứa nó thì similarity thường vượt ngưỡng ("châu" với
+  "châu Âu" 0.714), và similarity không tách được gõ sai với từ khác ("mien nma" với "mien nam", "chau my" với "chau
+  au" cùng 0.5).
+- Giá trị một âm tiết tiếng Việt chỉ khớp qua "tên cột + giá trị" (ValueTarget::standalone, ColumnValuePair). */
 
 use std::collections::{HashMap, HashSet};
+
+use uuid::Uuid;
 
 use super::ask_context::{
     ColumnProfile, ValueMatch, CLOSE_SCORE, VALUE_MIN_SIMILARITY, VALUE_MIN_SIMILARITY_WORDS,
 };
 use super::ask_phrases::{build_key, fold, Phrase};
-use crate::engine::store::ValueHit;
+use super::ask_values::{build_similarity, build_trigrams, ValueIndex, ValueTarget};
 
 /// Số giá trị tối đa giữ cho một cụm.
 const VALUES_PER_PHRASE: usize = 5;
 
 // Điểm của một khớp, từ 0 tới 1. Ba bậc cách nhau quá CLOSE_SCORE, nên khớp ở bậc trên luôn thắng khớp ở bậc dưới:
-// chữ thường bằng nhau đúng nguyên văn, rồi bằng nhau sau khi bỏ dấu (chỉ khi người hỏi gõ không dấu), rồi khớp gần
-// (tối đa 0.7, kể cả khi similarity là 1 vì chỉ đảo thứ tự từ).
+// chữ thường bằng nhau đúng nguyên văn, rồi bằng nhau sau khi bỏ dấu (khi một bên không dấu), rồi khớp gần (tối đa
+// 0.7, kể cả khi similarity là 1 vì chỉ đảo thứ tự từ).
 const SCORE_SAME_TEXT: f32 = 1.0;
 const SCORE_SAME_FOLDED: f32 = 0.85;
 const SCORE_FUZZY_MAX: f32 = 0.7;
@@ -32,65 +36,52 @@ const SCORE_FUZZY_MAX: f32 = 0.7;
 /// khớp bằng nhau, để "southen europe" (0.722 với "Southern Europe") không bị "europe" (Market = Europe) giữ chỗ.
 const STRONG_SIMILARITY: f32 = 0.7;
 
-/// Tên, bí danh, mô tả của một cột, viết sẵn ở dạng so được với cụm (build_key) và dạng đã bỏ dấu.
+/// Một chuỗi (tên cột, bí danh, mô tả) ở dạng so được với cụm.
+struct TextForm {
+    key: String,
+    folded: String,
+    accented: bool,
+}
+
+fn build_form(text: &str) -> TextForm {
+    let key = build_key(text);
+    let folded = fold(text);
+    TextForm {
+        accented: key != folded,
+        key,
+        folded,
+    }
+}
+
+/// Tên, bí danh, mô tả của một cột, viết sẵn ở dạng so được với cụm.
 pub struct ColumnText {
     /// Tên và từng bí danh.
-    names: Vec<String>,
-    folded_names: Vec<String>,
-    description: String,
-    folded_description: String,
+    names: Vec<TextForm>,
+    description: TextForm,
 }
 
 pub fn build_column_text(column: &ColumnProfile) -> ColumnText {
-    let names: Vec<String> = std::iter::once(&column.name)
-        .chain(&column.aliases)
-        .map(|n| build_key(n))
-        .collect();
-    let description = build_key(column.description.as_deref().unwrap_or(""));
     ColumnText {
-        folded_names: names.iter().map(|n| fold(n)).collect(),
-        names,
-        folded_description: fold(&description),
-        description,
+        names: std::iter::once(&column.name)
+            .chain(&column.aliases)
+            .map(|n| build_form(n))
+            .collect(),
+        description: build_form(column.description.as_deref().unwrap_or("")),
     }
 }
 
-/// similarity của pg_trgm tính ở Rust, trên chuỗi đã qua build_key (hoặc fold): mỗi từ thêm hai dấu cách đầu, một
-/// dấu cách cuối, lấy mọi đoạn 3 ký tự; điểm là số đoạn chung chia số đoạn của cả hai.
+/// similarity của pg_trgm trên hai chuỗi đã qua build_key hoặc fold.
 pub fn trigram_similarity(a: &str, b: &str) -> f32 {
-    let (left, right) = (build_trigrams(a), build_trigrams(b));
-    let common = left.intersection(&right).count();
-    let total = left.len() + right.len() - common;
-    if total == 0 {
-        return 0.0;
-    }
-    common as f32 / total as f32
-}
-
-fn build_trigrams(text: &str) -> HashSet<[char; 3]> {
-    let mut trigrams = HashSet::new();
-    for word in text.split(' ').filter(|w| !w.is_empty()) {
-        let padded: Vec<char> = "  ".chars().chain(word.chars()).chain([' ']).collect();
-        for window in padded.windows(3) {
-            trigrams.insert([window[0], window[1], window[2]]);
-        }
-    }
-    trigrams
+    build_similarity(&build_trigrams(a), &build_trigrams(b))
 }
 
 /// Hai chuỗi cùng số từ giống nhau theo từng âm tiết (so âm tiết thứ i với âm tiết thứ i): âm tiết khác nhau chỉ được
-/// sai một chữ (thêm, bớt, đổi một chữ, hoặc đảo hai chữ liền nhau), trừ một âm tiết khác hẳn khi ít nhất hai âm tiết
-/// khác giống hệt. similarity không tách được gõ sai với từ khác: "mien nma" với "mien nam" và "chau my" với "chau
-/// au" cùng được 0.5. Ngoại lệ hai âm tiết giống hệt để "hàng tiêu chuẩn" (trong "giao hàng tiêu chuẩn") vẫn khớp
-/// "giao tiêu chuẩn".
+/// sai một chữ (thêm, bớt, đổi một chữ, hoặc đảo hai chữ liền nhau). Âm tiết khác hẳn thường chính là chỗ phân biệt hai
+/// giá trị anh em ("Bắc Trung Bộ" với "Nam Trung Bộ", "thời trang nữ" với "Thời trang nam"), nên không có ngoại lệ.
 fn is_close_by_syllable(a: &str, b: &str) -> bool {
-    let pairs: Vec<(&str, &str)> = a.split(' ').zip(b.split(' ')).collect();
-    let same = pairs.iter().filter(|(x, y)| x == y).count();
-    let far = pairs
-        .iter()
-        .filter(|(x, y)| build_edit_distance(x, y) > 1)
-        .count();
-    far == 0 || (far == 1 && same >= 2)
+    a.split(' ')
+        .zip(b.split(' '))
+        .all(|(x, y)| build_edit_distance(x, y) <= 1)
 }
 
 /// Số phép sửa một chữ (thêm, bớt, đổi, đảo hai chữ liền nhau) để biến a thành b, tính theo ký tự.
@@ -118,82 +109,137 @@ fn build_edit_distance(a: &str, b: &str) -> usize {
     d[a.len()][b.len()]
 }
 
-fn word_count(text: &str) -> usize {
-    text.split(' ').filter(|w| !w.is_empty()).count()
+/// Một phía của phép so bằng nhau: chữ so được (build_key), dạng bỏ dấu, có dấu hay không.
+#[derive(Clone, Copy)]
+struct Side<'a> {
+    key: &'a str,
+    folded: &'a str,
+    accented: bool,
 }
 
-/// Điểm khi chuỗi (tên cột, bí danh) bằng cụm: đúng nguyên văn, hoặc bằng sau bỏ dấu khi người hỏi gõ không dấu.
-/// Cụm chỉ khớp đúng nguyên văn (từ ngắn) thì không nhận dạng bỏ dấu.
-fn build_equal_score(
-    text: &str,
-    folded: &str,
-    accented: bool,
-    text_only: bool,
-    names: &[String],
-    folded_names: &[String],
-) -> Option<f32> {
-    if names.iter().any(|n| n == text) {
+/// Điểm khi hai chuỗi bằng nhau: cả hai có dấu thì phải bằng đúng nguyên văn; một bên không dấu thì bằng sau bỏ dấu
+/// (đúng nguyên văn vẫn được điểm cao nhất). text_only (từ ngắn của câu hỏi): chỉ nhận đúng nguyên văn.
+fn build_equal_score(question: Side, target: Side, text_only: bool) -> Option<f32> {
+    if question.key == target.key {
         Some(SCORE_SAME_TEXT)
-    } else if !accented && !text_only && folded_names.iter().any(|n| n == folded) {
+    } else if question.accented && target.accented {
+        None
+    } else if !text_only && question.folded == target.folded {
         Some(SCORE_SAME_FOLDED)
     } else {
         None
     }
 }
 
-fn build_column_score(phrase: &Phrase, text: &ColumnText) -> Option<f32> {
-    build_equal_score(
-        &phrase.text,
-        &phrase.folded,
-        phrase.accented,
-        phrase.text_only,
-        &text.names,
-        &text.folded_names,
-    )
+fn phrase_side(phrase: &Phrase) -> Side<'_> {
+    Side {
+        key: &phrase.text,
+        folded: &phrase.folded,
+        accented: phrase.accented,
+    }
 }
 
-/// Điểm của một giá trị Postgres đã tìm cho cụm, kèm similarity; None khi giá trị không khớp theo luật ở đầu file.
-fn build_value_score(phrase: &Phrase, hit: &ValueHit) -> Option<(f32, f32)> {
-    let key = build_key(&hit.matched_text);
-    if key == phrase.text {
-        return Some((SCORE_SAME_TEXT, 1.0));
+fn target_side(target: &ValueTarget) -> Side<'_> {
+    Side {
+        key: &target.key,
+        folded: &target.folded,
+        accented: target.accented,
     }
-    if phrase.text_only {
-        return None;
+}
+
+fn form_side(form: &TextForm) -> Side<'_> {
+    Side {
+        key: &form.key,
+        folded: &form.folded,
+        accented: form.accented,
     }
-    if !phrase.accented && hit.same_folded {
-        return Some((SCORE_SAME_FOLDED, 1.0));
-    }
-    if phrase.exact_only {
-        return None;
-    }
-    let folded_key = fold(&key);
-    if word_count(&phrase.folded) != word_count(&folded_key) {
-        return None;
-    }
-    let folded_similarity = trigram_similarity(&phrase.folded, &folded_key);
-    // Cụm có dấu lấy số nhỏ hơn của hai cách so: so có dấu chỉ được khắt khe hơn so bỏ dấu. Tập trigram có dấu đôi khi
-    // gộp hai đoạn trùng làm điểm cao lên: "châu mỹ" với "châu âu" được 0.5 có dấu, 0.455 bỏ dấu.
-    let (similarity, syllables_close) = if phrase.accented {
-        (
-            folded_similarity.min(trigram_similarity(&phrase.text, &key)),
-            is_close_by_syllable(&phrase.text, &key),
-        )
-    } else {
-        (
-            folded_similarity,
-            is_close_by_syllable(&phrase.folded, &folded_key),
-        )
-    };
-    if !syllables_close {
-        return None;
-    }
+}
+
+fn build_column_score(phrase: &Phrase, text: &ColumnText) -> Option<f32> {
+    text.names
+        .iter()
+        .filter_map(|n| build_equal_score(phrase_side(phrase), form_side(n), phrase.text_only))
+        .reduce(f32::max)
+}
+
+/// Một giá trị khớp một cụm, kèm điểm và similarity (1 với khớp bằng nhau).
+pub struct ValueHit<'a> {
+    pub target: &'a ValueTarget,
+    pub score: f32,
+    pub similarity: f32,
+}
+
+/// Điểm của khớp gần giữa cụm và giá trị cùng số từ; None khi không khớp theo luật ở đầu file.
+fn build_fuzzy_score(
+    phrase: &Phrase,
+    trigrams: &[u64],
+    target: &ValueTarget,
+) -> Option<(f32, f32)> {
     let threshold = if phrase.len == 1 {
         VALUE_MIN_SIMILARITY
     } else {
         VALUE_MIN_SIMILARITY_WORDS
     };
-    (similarity >= threshold).then_some((SCORE_FUZZY_MAX * similarity, similarity))
+    let folded_similarity = build_similarity(trigrams, &target.trigrams);
+    if folded_similarity < threshold {
+        return None;
+    }
+    // Cả hai có dấu: lấy số nhỏ hơn của so có dấu và so bỏ dấu, để so có dấu không bao giờ dễ hơn so bỏ dấu, và so
+    // từng âm tiết trên chữ có dấu ("tây nguyen" với "Tây Nguyên": âm tiết "nguyen" sai một dấu).
+    let (similarity, close) = if phrase.accented && target.accented {
+        (
+            folded_similarity.min(trigram_similarity(&phrase.text, &target.key)),
+            is_close_by_syllable(&phrase.text, &target.key),
+        )
+    } else {
+        (
+            folded_similarity,
+            is_close_by_syllable(&phrase.folded, &target.folded),
+        )
+    };
+    (close && similarity >= threshold).then_some((SCORE_FUZZY_MAX * similarity, similarity))
+}
+
+/// Giá trị khớp trực tiếp một cụm: bằng nhau, hoặc khớp gần khi cụm được tìm gần (fuzzy). open: cột được tìm giá trị
+/// (cột chiều không nhạy cảm, theo hồ sơ hiện tại).
+fn build_direct_hits<'a>(
+    phrase: &Phrase,
+    index: &'a ValueIndex,
+    open: &HashSet<Uuid>,
+    fuzzy: bool,
+) -> Vec<ValueHit<'a>> {
+    let usable = |t: &ValueTarget| open.contains(&t.column_id) && (t.words != 1 || t.standalone);
+    let mut hits: Vec<ValueHit> = index
+        .equal_folded(&phrase.folded)
+        .filter(|t| usable(t))
+        .filter_map(|t| {
+            let score = build_equal_score(phrase_side(phrase), target_side(t), phrase.text_only)?;
+            Some(ValueHit {
+                target: t,
+                score,
+                similarity: 1.0,
+            })
+        })
+        .collect();
+    if fuzzy && !phrase.exact_only {
+        let trigrams = build_trigrams(&phrase.folded);
+        for t in index.with_words(phrase.len) {
+            // Chuỗi đã khớp bằng nhau thì thôi. Chuỗi bằng sau bỏ dấu mà khác dấu (cả hai có dấu, "tây nguyen" với
+            // "Tây Nguyên") vẫn được khớp gần, theo luật từng âm tiết.
+            let matched = hits.iter().any(|h| std::ptr::eq(h.target, t));
+            if matched || !usable(t) {
+                continue;
+            }
+            if let Some((score, similarity)) = build_fuzzy_score(phrase, &trigrams, t) {
+                hits.push(ValueHit {
+                    target: t,
+                    score,
+                    similarity,
+                });
+            }
+        }
+    }
+    hits
 }
 
 /// Cụm là một đoạn từ liền nhau của tên hay bí danh ("region" trong Order Region), hoặc của mô tả với cụm từ hai từ
@@ -203,24 +249,26 @@ pub fn is_partial_match(phrase: &Phrase, text: &ColumnText) -> bool {
     if phrase.exact_only {
         return false;
     }
-    let (needle, names, description) = if phrase.accented {
-        (&phrase.text, &text.names, &text.description)
-    } else {
-        (&phrase.folded, &text.folded_names, &text.folded_description)
+    let inside = |form: &TextForm| {
+        let (needle, haystack) = if phrase.accented && form.accented {
+            (&phrase.text, &form.key)
+        } else {
+            (&phrase.folded, &form.folded)
+        };
+        format!(" {haystack} ").contains(&format!(" {needle} "))
     };
-    let inside = |haystack: &str| format!(" {haystack} ").contains(&format!(" {needle} "));
-    names.iter().any(|n| inside(n)) || (phrase.len > 1 && inside(description))
+    text.names.iter().any(inside) || (phrase.len > 1 && inside(&text.description))
 }
 
 /// Một cụm mở đầu bằng tên hay bí danh của một cột, phần còn lại có thể là một giá trị của cột đó: "miền nam" là cột
-/// "miền" với giá trị "Nam". Phần còn lại cần được tìm như một cụm chỉ khớp bằng nhau, kể cả khi nó là từ dừng.
+/// "miền" với giá trị "Nam", "giới tính nữ" là cột "giới tính" với giá trị "Nữ". Đây là cách duy nhất một giá trị một
+/// âm tiết tiếng Việt khớp được.
 pub struct ColumnValuePair {
     /// Vị trí của cụm trong danh sách phrases.
     pub phrase: usize,
     /// Chỉ số cột trong columns.
     pub column: usize,
-    /// Phần còn lại: chữ thường còn dấu, và đã bỏ dấu.
-    pub tail: String,
+    tail: String,
     tail_folded: String,
 }
 
@@ -236,18 +284,17 @@ pub fn build_column_value_pairs(phrases: &[Phrase], texts: &[ColumnText]) -> Vec
         for split in 1..words.len() {
             let head = words[..split].join(" ");
             let head_folded = folded[..split].join(" ");
+            let head_side = Side {
+                key: &head,
+                folded: &head_folded,
+                accented: head != head_folded,
+            };
             for (column, text) in texts.iter().enumerate() {
-                let accented = head != head_folded;
-                if build_equal_score(
-                    &head,
-                    &head_folded,
-                    accented,
-                    false,
-                    &text.names,
-                    &text.folded_names,
-                )
-                .is_some()
-                {
+                let is_column = text
+                    .names
+                    .iter()
+                    .any(|n| build_equal_score(head_side, form_side(n), false).is_some());
+                if is_column {
                     pairs.push(ColumnValuePair {
                         phrase: index,
                         column,
@@ -261,27 +308,36 @@ pub fn build_column_value_pairs(phrases: &[Phrase], texts: &[ColumnText]) -> Vec
     pairs
 }
 
-/// Điểm của giá trị khớp phần còn lại của một cặp cột và giá trị: chỉ khớp bằng nhau, theo cách gõ của phần đó.
-fn build_tail_score(pair: &ColumnValuePair, hit: &ValueHit) -> Option<f32> {
-    if build_key(&hit.matched_text) == pair.tail {
-        Some(SCORE_SAME_TEXT)
-    } else if pair.tail == pair.tail_folded && hit.same_folded {
-        Some(SCORE_SAME_FOLDED)
-    } else {
-        None
-    }
+/// Giá trị khớp phần còn lại của một cặp cột và giá trị: chỉ khớp bằng nhau, trong đúng cột đó.
+fn build_pair_hits<'a>(
+    pair: &ColumnValuePair,
+    column: &str,
+    index: &'a ValueIndex,
+    open: &HashSet<Uuid>,
+) -> Vec<ValueHit<'a>> {
+    let tail = Side {
+        key: &pair.tail,
+        folded: &pair.tail_folded,
+        accented: pair.tail != pair.tail_folded,
+    };
+    index
+        .equal_folded(&pair.tail_folded)
+        .filter(|t| t.column_name == column && open.contains(&t.column_id))
+        .filter_map(|t| {
+            let score = build_equal_score(tail, target_side(t), false)?;
+            Some(ValueHit {
+                target: t,
+                score,
+                similarity: 1.0,
+            })
+        })
+        .collect()
 }
 
-pub struct ScoredHit<'a> {
-    hit: &'a ValueHit,
-    score: f32,
-    similarity: f32,
-}
-
-/// Một cụm cùng giá trị đã tìm và cột ứng viên của nó.
+/// Một cụm cùng giá trị đã chấm điểm và cột ứng viên của nó.
 pub struct ScoredPhrase<'a> {
     pub phrase: &'a Phrase,
-    pub hits: Vec<ScoredHit<'a>>,
+    pub hits: Vec<ValueHit<'a>>,
     pub candidates: Vec<(usize, f32)>,
 }
 
@@ -304,7 +360,7 @@ fn build_candidates(
     phrase: &Phrase,
     columns: &[ColumnProfile],
     texts: &[ColumnText],
-    hits: &[ScoredHit],
+    hits: &[ValueHit],
 ) -> Vec<(usize, f32)> {
     let mut best: HashMap<usize, f32> = HashMap::new();
     for (i, text) in texts.iter().enumerate() {
@@ -313,7 +369,7 @@ fn build_candidates(
         }
     }
     for h in hits {
-        let Some(i) = columns.iter().position(|c| c.name == h.hit.column_name) else {
+        let Some(i) = columns.iter().position(|c| c.name == h.target.column_name) else {
             continue;
         };
         let entry = best.entry(i).or_insert(h.score);
@@ -330,58 +386,30 @@ fn build_candidates(
     candidates
 }
 
-/// Giá trị đã chấm điểm của một cụm: giá trị Postgres tìm cho chính cụm, cộng giá trị của các cặp cột và giá trị
-/// nằm trong cụm.
-fn build_scored_hits<'a>(
-    index: usize,
-    phrase: &Phrase,
-    columns: &[ColumnProfile],
-    hits: &'a [ValueHit],
-    pairs: &[ColumnValuePair],
-) -> Vec<ScoredHit<'a>> {
-    let mut scored: Vec<ScoredHit> = hits
-        .iter()
-        .filter(|h| h.phrase == phrase.text)
-        .filter_map(|h| {
-            let (score, similarity) = build_value_score(phrase, h)?;
-            Some(ScoredHit {
-                hit: h,
-                score,
-                similarity,
-            })
-        })
-        .collect();
-    for pair in pairs.iter().filter(|p| p.phrase == index) {
-        let column = &columns[pair.column].name;
-        for h in hits
-            .iter()
-            .filter(|h| h.phrase == pair.tail && &h.column_name == column)
-        {
-            if let Some(score) = build_tail_score(pair, h) {
-                scored.push(ScoredHit {
-                    hit: h,
-                    score,
-                    similarity: 1.0,
-                });
-            }
-        }
-    }
-    scored
-}
-
-/// Mỗi cụm kèm giá trị đã chấm điểm và các cột ứng viên, theo thứ tự xét.
+/// Mỗi cụm kèm giá trị đã chấm điểm và các cột ứng viên, theo thứ tự xét. fuzzy: chữ của các cụm được tìm khớp gần.
 pub fn build_scored_phrases<'a>(
     phrases: &'a [Phrase],
     columns: &[ColumnProfile],
     texts: &[ColumnText],
-    hits: &'a [ValueHit],
+    index: &'a ValueIndex,
+    open: &HashSet<Uuid>,
+    fuzzy: &HashSet<&str>,
 ) -> Vec<ScoredPhrase<'a>> {
     let pairs = build_column_value_pairs(phrases, texts);
     let mut scored: Vec<ScoredPhrase> = phrases
         .iter()
         .enumerate()
-        .map(|(index, phrase)| {
-            let hits = build_scored_hits(index, phrase, columns, hits, &pairs);
+        .map(|(i, phrase)| {
+            let mut hits =
+                build_direct_hits(phrase, index, open, fuzzy.contains(phrase.text.as_str()));
+            for pair in pairs.iter().filter(|p| p.phrase == i) {
+                hits.extend(build_pair_hits(
+                    pair,
+                    &columns[pair.column].name,
+                    index,
+                    open,
+                ));
+            }
             let candidates = build_candidates(phrase, columns, texts, &hits);
             ScoredPhrase {
                 phrase,
@@ -392,8 +420,7 @@ pub fn build_scored_phrases<'a>(
         .collect();
     // Khớp chắc (bằng nhau, hoặc khớp gần từ STRONG_SIMILARITY) trước, cụm dài trước: "trạng thái giao hàng" trước
     // "giao hàng", "southen europe" trước "europe". Còn lại (khớp gần yếu) xếp theo điểm trước rồi mới tới độ dài: cụm
-    // dài khớp gần kém hơn không được giữ chỗ của cụm ngắn khớp tốt hơn ("giao hàng tiêu" với "giao hạng hai" chặn
-    // "hàng tiêu chuẩn" với "giao tiêu chuẩn").
+    // dài khớp gần kém hơn không được giữ chỗ của cụm ngắn khớp tốt hơn.
     scored.sort_by(|a, b| {
         let (strong_a, strong_b) = (a.is_strong(), b.is_strong());
         let by_len = b.phrase.len.cmp(&a.phrase.len);
@@ -415,12 +442,12 @@ pub fn build_scored_phrases<'a>(
 /// khớp đúng không kéo theo các khớp gần kém hơn.
 pub fn build_phrase_values(
     phrase: &Phrase,
-    hits: &[ScoredHit],
+    hits: &[ValueHit],
     columns: &[&str],
 ) -> Vec<ValueMatch> {
-    let mut kept: Vec<&ScoredHit> = hits
+    let mut kept: Vec<&ValueHit> = hits
         .iter()
-        .filter(|h| columns.contains(&h.hit.column_name.as_str()))
+        .filter(|h| columns.contains(&h.target.column_name.as_str()))
         .collect();
     kept.sort_by(|a, b| b.score.total_cmp(&a.score));
     let Some(best) = kept.first().map(|h| h.score) else {
@@ -429,16 +456,17 @@ pub fn build_phrase_values(
     let mut values: Vec<ValueMatch> = Vec::new();
     for h in kept.into_iter().filter(|h| best - h.score < CLOSE_SCORE) {
         // Giá trị khớp qua nhiều bí danh chỉ ghi một lần, với khớp tốt nhất (đã xếp trước).
+        let t = h.target;
         if values
             .iter()
-            .any(|v| v.column == h.hit.column_name && v.value == h.hit.value)
+            .any(|v| v.column == t.column_name && v.value == t.value)
         {
             continue;
         }
         values.push(ValueMatch {
-            column: h.hit.column_name.clone(),
-            value: h.hit.value.clone(),
-            matched_text: h.hit.matched_text.clone(),
+            column: t.column_name.clone(),
+            value: t.value.clone(),
+            matched_text: t.matched_text.clone(),
             phrase: phrase.text.clone(),
             score: h.score,
         });
@@ -453,7 +481,7 @@ pub fn build_phrase_values(
 mod tests {
     use super::*;
 
-    /// Cùng số với similarity của pg_trgm đo trên Postgres (số đo ở chú thích của VALUE_MIN_SIMILARITY và các test của ask_context_tests.rs).
+    /// Cùng số với similarity() của pg_trgm đo trên Postgres 17.
     #[test]
     fn trigram_similarity_matches_pg_trgm() {
         let close = |a: &str, b: &str, expected: f32| {
@@ -464,8 +492,11 @@ mod tests {
         close("chau", "chau au", 0.714);
         close("europe", "southern europe", 0.438);
         close("chau phi", "chau au", 0.455);
+        close("chau my", "chau au", 0.5);
         close("europ", "europe", 0.625);
         close("doanh thu", "viet nam", 0.0);
+        close("từng châu", "châu âu", 0.417);
+        close("tung chau", "chau au", 0.417);
         assert_eq!(trigram_similarity("", ""), 0.0);
     }
 
@@ -478,7 +509,9 @@ mod tests {
         assert!(is_close_by_syllable("southen europe", "southern europe"));
         assert!(!is_close_by_syllable("châu mỹ", "châu âu"));
         assert!(!is_close_by_syllable("tung chau", "chau au"));
-        assert!(is_close_by_syllable("hàng tiêu chuẩn", "giao tiêu chuẩn"));
-        assert!(!is_close_by_syllable("giao hàng tiêu", "giao tiêu chuẩn"));
+        // Không ngoại lệ cho âm tiết khác hẳn: giá trị anh em không khớp nhau.
+        assert!(!is_close_by_syllable("bắc trung bộ", "nam trung bộ"));
+        assert!(!is_close_by_syllable("thoi trang nu", "thoi trang nam"));
+        assert!(!is_close_by_syllable("hàng tiêu chuẩn", "giao tiêu chuẩn"));
     }
 }

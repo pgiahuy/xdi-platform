@@ -90,72 +90,14 @@ pub struct ColumnValue {
     pub frequency: Option<i64>,
 }
 
-/// Một giá trị trong column_values khớp thô một cụm của câu hỏi (find_values): bằng nhau sau bỏ dấu, hoặc khớp gần
-/// cùng số từ. Điểm cuối cùng, và việc so có dấu, do service/ask_match.rs làm.
+/// Một giá trị của một cột chiều không nhạy cảm, kèm bí danh: thứ service/ask_values.rs so với câu hỏi.
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct ValueHit {
-    /// Cụm của câu hỏi, đúng chuỗi người gọi truyền vào.
-    pub phrase: String,
+pub struct ValueRow {
+    pub column_id: Uuid,
     pub column_name: String,
     pub value: String,
-    /// Chữ đã khớp: chính giá trị hoặc một bí danh của nó.
-    pub matched_text: String,
-    /// Bằng nhau sau khi bỏ dấu, chữ thường, bỏ dấu câu.
-    pub same_folded: bool,
+    pub aliases: Vec<String>,
 }
-
-/// Số dòng tối đa find_values trả về. Chặn trên cho câu hỏi dài khớp nhiều giá trị; service chỉ giữ vài giá trị mỗi
-/// cụm, nên cắt ở đây không làm mất khớp tốt (câu SQL xếp khớp bằng nhau trước).
-const FIND_VALUES_MAX_ROWS: i64 = 500;
-
-// Câu SQL của find_values. Tham số: $1 workspace, $2 phiên bản, $3 cụm chỉ khớp bằng nhau, $4 cụm nhận khớp gần,
-// $5 vai trò dimension, $6 ngưỡng similarity của bước lọc thô, $7 số dòng tối đa.
-//
-// Bỏ dấu cả hai phía bằng cùng một biểu thức: immutable_unaccent, lower, rồi đổi mỗi dãy ký tự không phải chữ hay số
-// thành một dấu cách, để "Miền Nam", "mien nam" và "MIỀN-NAM" thành một chuỗi. Bỏ dấu trước rồi mới lower thì chữ đã
-// là ASCII, locale nào cũng như nhau. So có dấu thì service/ask_match.rs làm ở Rust, vì lower() và cách pg_trgm tách
-// từ theo locale của database.
-//
-// Lọc theo phiên bản trước (target: giá trị và bí danh của các cột chiều không nhạy cảm của phiên bản này, bỏ dấu một
-// lần), rồi mới so: dữ liệu của workspace và phiên bản khác không làm truy vấn chậm theo. Không dùng chỉ mục
-// column_values_trgm_idx: chỉ mục phủ mọi workspace, và với nhiều dữ liệu của workspace khác thì planner bỏ nó.
-// Hai nhánh, vì gộp làm một (bằng nhau OR similarity) thì Postgres tính similarity cho cả cụm chỉ nhận khớp bằng nhau:
-// - Bằng nhau: hash join trên chuỗi đã bỏ dấu.
-// - Khớp gần: chỉ giữa cụm và chuỗi cùng số từ (hash join trên số từ, xem ask_match.rs vì sao), rồi similarity từ $6.
-//
-// Số đo ở chú thích của find_values.
-const FIND_VALUES_SQL: &str = "
-WITH phrase AS MATERIALIZED (
-    SELECT p.text, p.fuzzy, f.folded, cardinality(string_to_array(f.folded, ' ')) AS words
-    FROM (SELECT text, false AS fuzzy FROM UNNEST($3::text[]) AS e(text)
-          UNION ALL
-          SELECT text, true FROM UNNEST($4::text[]) AS f(text)) AS p
-    CROSS JOIN LATERAL (
-        SELECT btrim(regexp_replace(lower(immutable_unaccent(p.text)), '[^[:alnum:]]+', ' ', 'g')) AS folded
-    ) AS f
-),
-target AS MATERIALIZED (
-    SELECT c.name AS column_name, v.value, t.text AS matched_text, f.folded,
-           cardinality(string_to_array(f.folded, ' ')) AS words
-    FROM columns c
-    JOIN column_values v ON v.workspace_id = c.workspace_id AND v.column_id = c.id
-    CROSS JOIN LATERAL UNNEST(array_prepend(v.value, v.aliases)) AS t(text)
-    CROSS JOIN LATERAL (
-        SELECT btrim(regexp_replace(lower(immutable_unaccent(t.text)), '[^[:alnum:]]+', ' ', 'g')) AS folded
-    ) AS f
-    WHERE c.workspace_id = $1 AND c.version_id = $2 AND c.role = $5 AND NOT c.is_sensitive
-),
-hit AS (
-    SELECT phrase.text AS phrase, target.column_name, target.value, target.matched_text, true AS same_folded
-    FROM phrase JOIN target ON target.folded = phrase.folded
-    UNION ALL
-    SELECT phrase.text, target.column_name, target.value, target.matched_text, false
-    FROM phrase JOIN target ON target.words = phrase.words
-    WHERE phrase.fuzzy AND target.folded <> phrase.folded AND similarity(phrase.folded, target.folded) >= $6
-)
-SELECT phrase, column_name, value, matched_text, same_folded FROM hit
-ORDER BY same_folded DESC, column_name, value
-LIMIT $7";
 
 impl Store {
     /// Ghi hồ sơ cột cho một phiên bản đã có mà còn pending (việc nền lúc khởi động; lúc nạp thì create_version ghi hồ
@@ -216,58 +158,49 @@ impl Store {
         .map_err(|e| db_error("list columns", e))
     }
 
-    /// Giá trị của các cột chiều (role dimension, không nhạy cảm) của một phiên bản khớp thô các cụm của câu hỏi, so
-    /// trên giá trị và từng bí danh của nó. exact: cụm chỉ nhận khớp bằng nhau; fuzzy: cụm nhận cả khớp gần cùng số
-    /// từ, similarity sau bỏ dấu từ min_similarity. Rỗng khi phiên bản thuộc workspace khác. Câu SQL: FIND_VALUES_SQL.
+    /// Mọi giá trị và bí danh của các cột chiều (role dimension) không nhạy cảm của một phiên bản, để so với câu hỏi
+    /// trong bộ nhớ (service/ask_values.rs giữ sẵn theo phiên bản). Rỗng khi phiên bản thuộc workspace khác.
     ///
-    /// Chạy quá timeout thì trả rỗng và ghi log, không trả lỗi: thiếu giá trị đã ánh xạ thì câu hỏi vẫn trả lời được
-    /// (mô hình thấy giá trị mẫu), còn lỗi thì chặn cả câu hỏi.
-    ///
-    /// Đã đo (Postgres 17 của docker compose trên máy phát triển, \timing của psql, 5 lần; giá trị 1 đến 3 âm tiết sinh
-    /// ngẫu nhiên, mỗi giá trị 2 bí danh; câu 40 từ không từ dừng, 40 cụm khớp gần và 150 cụm khớp bằng nhau như
-    /// service/ask_context.rs gửi): 600 giá trị khoảng 25 ms; 20 000 giá trị (100 cột chiều, mỗi cột 200 giá trị)
-    /// khoảng 470 ms, trong đó bỏ dấu 60 000 chuỗi khoảng 240 ms; không đổi khi bảng có thêm 1 triệu dòng của
-    /// workspace khác. Cùng câu mà gửi cả 117 cụm khớp gần thì khoảng 2,3 giây, vì vậy có trần số cụm.
-    pub async fn find_values(
+    /// Trả None khi chạy quá timeout (ghi log), không trả lỗi: thiếu giá trị đã ánh xạ thì câu hỏi vẫn trả lời được (mô
+    /// hình thấy giá trị mẫu), còn lỗi thì chặn cả câu hỏi.
+    pub async fn list_value_rows(
         &self,
         ws: &WorkspaceId,
         version_id: Uuid,
-        exact: &[String],
-        fuzzy: &[String],
-        min_similarity: f32,
         timeout: Duration,
-    ) -> Result<Vec<ValueHit>, AppError> {
+    ) -> Result<Option<Vec<ValueRow>>, AppError> {
         let mut tx = self
             .pool
             .begin()
             .await
-            .map_err(|e| db_error("begin find values", e))?;
+            .map_err(|e| db_error("begin list value rows", e))?;
         // set_config(..., true) như SET LOCAL: chỉ có hiệu lực tới hết giao dịch này, không lan sang kết nối khác
-        // của pool.
+        // của pool. Giao dịch chỉ đọc, nên kết thúc bằng rollback (khi tx bị hủy) cũng như commit.
         sqlx::query("SELECT set_config('statement_timeout', $1, true)")
-            .bind(format!("{}ms", timeout.as_millis()))
+            .bind(format!("{}ms", timeout.as_millis().max(1)))
             .execute(&mut *tx)
             .await
-            .map_err(|e| db_error("set find values timeout", e))?;
-        let found = sqlx::query_as(FIND_VALUES_SQL)
-            .bind(ws.as_uuid())
-            .bind(version_id)
-            .bind(exact)
-            .bind(fuzzy)
-            .bind(ProfileRole::Dimension.as_str())
-            .bind(min_similarity)
-            .bind(FIND_VALUES_MAX_ROWS)
-            .fetch_all(&mut *tx)
-            .await;
-        // Chỉ đọc, nên kết thúc giao dịch bằng rollback (khi tx bị hủy) cũng như commit.
-        match found {
-            Ok(hits) => Ok(hits),
+            .map_err(|e| db_error("set list value rows timeout", e))?;
+        let rows = sqlx::query_as(
+            "SELECT c.id AS column_id, c.name AS column_name, v.value, v.aliases
+             FROM columns c
+             JOIN column_values v ON v.workspace_id = c.workspace_id AND v.column_id = c.id
+             WHERE c.workspace_id = $1 AND c.version_id = $2 AND c.role = $3 AND NOT c.is_sensitive
+             ORDER BY c.position, v.frequency DESC, v.value",
+        )
+        .bind(ws.as_uuid())
+        .bind(version_id)
+        .bind(ProfileRole::Dimension.as_str())
+        .fetch_all(&mut *tx)
+        .await;
+        match rows {
+            Ok(rows) => Ok(Some(rows)),
             Err(e) if is_query_canceled(&e) => {
                 tracing::warn!(%version_id, timeout_ms = timeout.as_millis() as u64,
-                    "value search timed out; answering without mapped values");
-                Ok(Vec::new())
+                    "loading column values timed out; answering without mapped values");
+                Ok(None)
             }
-            Err(e) => Err(db_error("find values", e)),
+            Err(e) => Err(db_error("list value rows", e)),
         }
     }
 

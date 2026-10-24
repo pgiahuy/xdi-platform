@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask_phrases.rs - tách câu hỏi thành các cụm 1 đến 5 từ liền nhau, để service/ask_context.rs tìm cột và giá
-trị mà câu hỏi nhắc tới. Mỗi cụm giữ chữ thường như người hỏi gõ (chuẩn hóa NFC) và dạng đã bỏ dấu.
+trị mà câu hỏi nhắc tới. Mỗi cụm giữ chữ thường như người hỏi gõ (NFC, dấu thanh đặt một chỗ cố định, xem
+build_tone_placed) và dạng đã bỏ dấu.
 
-So có dấu hay không dấu theo cách người hỏi gõ (service/ask_match.rs): cụm có dấu chỉ khớp chữ có đúng dấu đó, cụm
-không dấu thì so sau khi bỏ dấu. Bỏ dấu làm mất phân biệt "năm" (thời gian) với "Nam" (miền Nam, Việt Nam), nên:
+So có dấu chỉ khi cả cụm lẫn chữ đích đều có dấu; một bên không dấu thì so sau bỏ dấu (service/ask_match.rs). Bỏ dấu
+làm mất phân biệt "năm" (thời gian) với "Nam" (miền Nam, Việt Nam), nên:
 - Từ chỉ thời gian, số, từ nối (STOP_WORDS) không tự thành cụm, và cụm có một từ như vậy chỉ nhận khớp bằng nhau.
 - Câu có dấu ở bất kỳ đâu thì so từ với STOP_WORDS có dấu: người gõ có dấu viết "năm" cho thời gian, nên "nam" của
   họ là Nam. Câu không dấu thì so sau bỏ dấu, "nam" là từ dừng vì không biết người hỏi muốn chữ nào.
@@ -17,13 +18,13 @@ use unicode_normalization::UnicodeNormalization;
 /// DataCo), và cụm 3 âm tiết không bao giờ bằng chúng.
 pub const PHRASE_MAX_WORDS: usize = 5;
 
-/// Cụm dài hơn ngần này từ chỉ nhận khớp bằng nhau: khớp bằng nhau rẻ (một phép join), khớp gần thì phải so với từng
-/// giá trị và bí danh, nên giữ cụm khớp gần ở 1 đến 3 từ như đề xuất ban đầu. Gõ sai trong bí danh 4, 5 âm tiết thì
-/// không khớp.
+/// Cụm dài hơn ngần này từ chỉ nhận khớp bằng nhau: khớp bằng nhau rẻ (tra bảng băm), khớp gần thì phải so với từng
+/// giá trị và bí danh cùng số từ, nên giữ cụm khớp gần ở 1 đến 3 từ như đề xuất ban đầu. Gõ sai trong bí danh 4, 5 âm
+/// tiết thì không khớp.
 const FUZZY_MAX_WORDS: usize = 3;
 
 /// Chỉ xét ngần này từ đầu của câu hỏi, để số cụm có trần (khoảng 5 lần số từ). Từ quá dài thì xem WORD_MAX_CHARS;
-/// số cụm gửi Postgres còn có trần riêng ở service/ask_context.rs.
+/// số cụm khớp gần còn có trần riêng ở service/ask_context.rs.
 pub const QUESTION_MAX_WORDS: usize = 40;
 
 /// Từ dài hơn ngần này ký tự không dùng để tìm, và không cụm nào chứa nó. Giá trị của cột chiều hầu như không có từ
@@ -32,16 +33,19 @@ pub const QUESTION_MAX_WORDS: usize = 40;
 const WORD_MAX_CHARS: usize = 40;
 
 /// Từ ngắn hơn ngần này ký tự (sau bỏ dấu), hoặc có chữ số mà không toàn chữ số ("b2b", "5g"): đứng một mình thì chỉ
-/// khớp đúng nguyên văn ("Nữ", "B2B"), không khớp sau bỏ dấu hay khớp gần, vì "nu" hay "au" bằng quá nhiều thứ khi
-/// bỏ dấu.
+/// khớp đúng nguyên văn ("B2B"), không khớp sau bỏ dấu hay khớp gần, vì "nu" hay "au" bằng quá nhiều thứ khi bỏ dấu.
+/// Giá trị một âm tiết tiếng Việt ("Nữ", "Nam") thì chỉ khớp qua "tên cột + giá trị" (service/ask_values.rs).
 const SHORT_WORD_CHARS: usize = 3;
 
 /// Từ chỉ thời gian, số đếm, từ nối, từ hỏi, từ so sánh, viết có dấu. Chúng có trong câu hỏi nào cũng được mà không
 /// trỏ tới giá trị nào. Không có "số" (như "doanh số"); "từng", "mọi" có vì "theo từng châu" là gom nhóm, không lọc.
+/// Không có "giờ", "phút", "giây": hiếm khi có trong câu hỏi kinh doanh, mà gõ không dấu thì trùng "giỏ", "giày".
+/// Các từ còn lại vẫn có thể trùng một từ thường khi gõ không dấu ("hai" với "Hải", "dau" với "dầu", "tai" với
+/// "tài"): khi đó cụm chỉ gồm những từ như vậy bị bỏ, cụm có thêm từ khác vẫn khớp bằng nhau.
 const STOP_WORDS: &[&str] = &[
     // Thời gian.
-    "năm", "tháng", "quý", "ngày", "tuần", "giờ", "phút", "giây", "hôm", "nay", "qua", "trước",
-    "sau", "đầu", "cuối", "kỳ", "lúc", "khi", "nửa", "hiện", "tại", // Số đếm.
+    "năm", "tháng", "quý", "ngày", "tuần", "hôm", "nay", "qua", "trước", "sau", "đầu", "cuối", "kỳ",
+    "lúc", "khi", "nửa", "hiện", "tại", // Số đếm.
     "một", "hai", "ba", "bốn", "tư", "lăm", "sáu", "bảy", "tám", "chín", "mười", "mươi", "trăm",
     "nghìn", "ngàn", "triệu", "tỷ", "tỉ", // Từ nối, từ hỏi.
     "và", "với", "của", "theo", "ở", "trong", "ngoài", "cho", "các", "những", "mỗi", "mọi", "từng",
@@ -68,7 +72,8 @@ pub struct Phrase {
     pub len: usize,
     /// Người hỏi gõ có dấu (text khác folded): chỉ so với chữ có đúng dấu.
     pub accented: bool,
-    /// Chỉ nhận khớp bằng nhau: cụm dài hơn FUZZY_MAX_WORDS, hoặc có từ dừng, từ một chữ cái, từ có chữ số.
+    /// Chỉ nhận khớp bằng nhau: cụm dài hơn FUZZY_MAX_WORDS, hoặc có từ dừng, từ một chữ cái, từ có chữ số. Vì vậy gõ
+    /// sai trong cụm có từ dừng không được nhận: câu không dấu "mie nam" ("nam" có thể là "năm") ra rỗng.
     pub exact_only: bool,
     /// Chỉ nhận khớp đúng nguyên văn, kể cả dấu: cụm một từ ngắn hoặc có chữ số (xem SHORT_WORD_CHARS).
     pub text_only: bool,
@@ -172,8 +177,69 @@ pub fn build_words(text: &str) -> Vec<String> {
         .to_lowercase()
         .split(|c: char| !is_word_char(c))
         .filter(|w| !w.is_empty())
-        .map(str::to_string)
+        .map(build_tone_placed)
         .collect()
+}
+
+/// Năm dấu thanh của tiếng Việt, dạng tổ hợp: huyền, sắc, ngã, hỏi, nặng.
+const TONE_MARKS: [char; 5] = ['\u{300}', '\u{301}', '\u{303}', '\u{309}', '\u{323}'];
+
+/// Một âm tiết với dấu thanh đặt ở một chỗ cố định. Chữ Việt có hai kiểu đặt dấu cùng tồn tại trong dữ liệu và cách
+/// gõ ("hoà" và "hòa", "thuỷ" và "thủy"); sau NFC đó là hai chuỗi khác nhau. Bỏ dấu thanh ra rồi đặt lại theo một luật
+/// thì hai kiểu thành một, mà "năm" vẫn khác "nam". Luật (kiểu mới): nguyên âm có mũ, móc, trăng (â ă ê ô ơ ư) nhận dấu,
+/// có hai thì nguyên âm sau ("người"); không có thì một nguyên âm nhận dấu; vần đóng (có phụ âm cuối) thì nguyên âm cuối;
+/// vần mở hai nguyên âm thì nguyên âm đầu, trừ "oa", "oe", "uy" thì nguyên âm sau; vần mở ba nguyên âm thì nguyên âm
+/// giữa. "qu", "gi" đứng trước nguyên âm khác không tính là nguyên âm. Luật chỉ cần cho cùng kết quả ở hai phía, nên
+/// với chữ không phải tiếng Việt ("méxico") chỗ đặt có thể khác chính tả, mà vẫn so đúng.
+fn build_tone_placed(word: &str) -> String {
+    let decomposed: Vec<char> = word.nfd().collect();
+    let Some(tone) = decomposed.iter().copied().find(|c| TONE_MARKS.contains(c)) else {
+        return word.to_string();
+    };
+    let base: Vec<char> = decomposed
+        .iter()
+        .filter(|c| !TONE_MARKS.contains(c))
+        .collect::<String>()
+        .nfc()
+        .collect();
+    let Some(position) = build_tone_position(&base) else {
+        return word.to_string();
+    };
+    let mut placed: String = base[..=position].iter().collect();
+    placed.push(tone);
+    placed.extend(&base[position + 1..]);
+    placed.nfc().collect()
+}
+
+/// Chỗ đặt dấu thanh trong một âm tiết đã bỏ dấu thanh (xem build_tone_placed); None khi không có nguyên âm.
+fn build_tone_position(base: &[char]) -> Option<usize> {
+    let is_vowel = |c: char| "aăâeêioôơuưy".contains(c);
+    let mut vowels: Vec<usize> = (0..base.len()).filter(|&i| is_vowel(base[i])).collect();
+    let glide = base.len() > 1 && matches!((base[0], base[1]), ('q', 'u') | ('g', 'i'));
+    if glide && vowels.len() > 1 && vowels[0] == 1 {
+        vowels.remove(0);
+    }
+    if let Some(&marked) = vowels.iter().rev().find(|&&i| "ăâêôơư".contains(base[i])) {
+        return Some(marked);
+    }
+    let (&first, &last) = (vowels.first()?, vowels.last()?);
+    if vowels.len() == 1 || last + 1 < base.len() {
+        return Some(last);
+    }
+    if vowels.len() == 2 {
+        let pair: String = [base[first], base[last]].iter().collect();
+        return Some(if matches!(pair.as_str(), "oa" | "oe" | "uy") {
+            last
+        } else {
+            first
+        });
+    }
+    Some(vowels[1])
+}
+
+/// Chữ có dấu (kể cả "đ"): khác dạng đã bỏ dấu.
+pub fn has_accent(text: &str) -> bool {
+    build_key(text) != fold(text)
 }
 
 /// Một đoạn chữ ở dạng so được với Phrase::text: các từ của build_words nối bằng một dấu cách.
@@ -181,8 +247,8 @@ pub fn build_key(text: &str) -> String {
     build_words(text).join(" ")
 }
 
-/// Bỏ dấu và viết thường. deunicode cho cùng kết quả với immutable_unaccent của Postgres trên chữ tiếng Việt ("đ"
-/// thành "d"); với chữ không phải Latin hai bên có thể khác nhau, chỉ làm mất khớp chứ không sinh khớp sai.
+/// Bỏ dấu và viết thường bằng deunicode ("đ" thành "d"). Cả câu hỏi lẫn giá trị đều bỏ dấu bằng hàm này, nên hai phía
+/// luôn như nhau.
 pub fn fold(text: &str) -> String {
     let ascii = deunicode::deunicode(text).to_lowercase();
     // deunicode có thể đổi một ký tự thành nhiều từ ("北京" thành "Bei Jing "), nên tách lại từ cho gọn.
@@ -295,6 +361,37 @@ mod tests {
         // Một từ rất dài không vào cụm nào, các từ khác vẫn dùng được.
         let huge = format!("doanh thu {} europe", "x".repeat(100_000));
         assert_eq!(texts(&huge), ["doanh thu", "doanh", "thu", "europe"]);
+    }
+
+    #[test]
+    fn tone_marks_are_placed_one_way() {
+        for (old, new) in [
+            ("Hoà Bình", "Hòa Bình"),
+            ("Khánh Hoà", "Khánh Hòa"),
+            ("Thanh Hoá", "Thanh Hóa"),
+            ("thuỷ sản", "thủy sản"),
+            ("hoá chất", "hóa chất"),
+            ("khoẻ", "khỏe"),
+        ] {
+            assert_eq!(build_key(old), build_key(new), "{old}");
+        }
+        // Dấu thanh vẫn phân biệt từ; chữ đúng chính tả không đổi.
+        assert_ne!(build_key("năm"), build_key("nam"));
+        for word in [
+            "người",
+            "trường",
+            "quý",
+            "giày",
+            "ngoài",
+            "khuỷu",
+            "mỹ",
+            "nữ",
+            "hoàng",
+        ] {
+            assert_eq!(build_key(word), word);
+        }
+        assert!(has_accent("Hà Nội") && has_accent("đi"));
+        assert!(!has_accent("Ha Noi") && !has_accent("khu_vuc"));
     }
 
     #[test]

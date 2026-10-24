@@ -17,7 +17,7 @@ pub mod ask_contract;
 pub mod ask_examples;
 #[cfg(test)]
 mod ask_examples_tests;
-// Hai phần của ngữ cảnh câu hỏi (ask_context), cùng lý do cho phép "chưa dùng".
+// Các phần của ngữ cảnh câu hỏi (ask_context), cùng lý do cho phép "chưa dùng".
 #[allow(dead_code)]
 pub mod ask_match;
 #[allow(dead_code)]
@@ -33,6 +33,8 @@ pub mod ask_result;
 pub mod ask_run;
 #[cfg(test)]
 mod ask_run_tests;
+#[allow(dead_code)]
+pub mod ask_values;
 pub mod excel;
 // Phần toán của câu "tại sao" có trước SQL và luồng hỏi; nối vào ở #38/#39. Gỡ allow khi đó để clippy bắt lại mã thừa.
 #[allow(dead_code)]
