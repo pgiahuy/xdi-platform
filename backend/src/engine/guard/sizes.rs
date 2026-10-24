@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/guard/sizes.rs - luật riêng cho các hàm trong danh sách được phép mà tham số quyết định kích thước kết quả:
 lpad, rpad dựng chuỗi dài đúng bằng tham số độ dài; replace, regexp_replace làm chuỗi dài ra sau mỗi lần thay, và lồng
-nhau thì dài ra theo cấp số nhân. ExprChecker (mod.rs) gọi check_function_size sau khi tên hàm đã có trong danh sách.
+nhau thì dài ra theo cấp số nhân; strftime in mỗi mã định dạng hai byte thành nhiều byte (`%c` thành cả ngày giờ).
+ExprChecker (mod.rs) gọi check_function_size sau khi tên hàm đã có trong danh sách.
 
 Chặn ở guard vì giới hạn lúc chạy (engine/query.rs) không đỡ được các hàm này: DuckDB tính biểu thức hằng ngay lúc
 chuẩn bị câu, khi interrupt chưa có tác dụng và ngoài trần memory_limit; một lời gọi hàm dựng chuỗi rất dài lúc chạy
@@ -12,12 +13,17 @@ với trần 1 GB.
 Độ dài so theo byte, không theo ký tự: thay 'a' bằng '😀' giữ số ký tự nhưng gấp 4 số byte, lồng nhau thì gấp 4 mỗi lần.
 Câu vi phạm luật bị từ chối với lý do để mô hình viết lại (GuardError::Oversized, vào vòng sửa).
 
-Ghép chuỗi (`||`, concat) qua nhiều tầng câu con thì guard/depth.rs giới hạn bằng số tầng. */
+Trần của lpad, rpad và strftime bằng cỡ trần chuỗi hằng (guard/width.rs): ba hàm này là cách dựng một chuỗi dài từ câu
+ngắn mà không viết chuỗi hằng. Ghép chuỗi qua nhiều tầng câu con thì guard/depth.rs và guard/pieces.rs giới hạn. */
 
 use sqlparser::ast::{Expr, Function, FunctionArg, FunctionArgExpr, FunctionArguments, Value};
 
-/// Độ dài tối đa của chuỗi lpad, rpad dựng ra: đủ để căn lề mã số hay ngày tháng, nhỏ tới mức tính tức thì.
-pub const MAX_PAD_LENGTH: u64 = 10_000;
+/// Độ dài tối đa của chuỗi lpad, rpad dựng ra: đủ để căn lề mã số hay ngày tháng; bằng trần chuỗi hằng (width.rs).
+pub const MAX_PAD_LENGTH: u64 = 1_000;
+
+/// Độ dài tối đa của chuỗi định dạng strftime, tính bằng byte: đủ cho mọi định dạng ngày giờ thường dùng. Mỗi mã hai
+/// byte in ra không quá vài chục byte, nên kết quả vẫn cỡ trần chuỗi hằng.
+pub const MAX_TIME_FORMAT_BYTES: usize = 100;
 
 /// Err là lý do từ chối (tiếng Việt). name đã viết thường.
 pub(super) fn check_function_size(name: &str, function: &Function) -> Result<(), String> {
@@ -25,6 +31,7 @@ pub(super) fn check_function_size(name: &str, function: &Function) -> Result<(),
         "lpad" | "rpad" => check_pad(name, function),
         "replace" => check_replace(function),
         "regexp_replace" => check_regexp_replace(function),
+        "strftime" => check_time_format(function),
         _ => Ok(()),
     }
 }
@@ -36,6 +43,22 @@ fn check_pad(name: &str, function: &Function) -> Result<(), String> {
         Some(length) if length <= MAX_PAD_LENGTH => Ok(()),
         _ => Err(format!(
             "Hàm {name} chỉ nhận độ dài là một số viết thẳng, tối đa {MAX_PAD_LENGTH}"
+        )),
+    }
+}
+
+/// Định dạng phải viết thẳng ở tham số thứ hai, như chữ ký strftime(ngày giờ, định dạng) của DuckDB: định dạng lấy từ
+/// cột hay biểu thức thì không biết trước độ dài kết quả.
+fn check_time_format(function: &Function) -> Result<(), String> {
+    let format = plain_args(function).and_then(|args| match args.as_slice() {
+        [_, format] => text(format),
+        _ => None,
+    });
+    match format {
+        Some(format) if format.len() <= MAX_TIME_FORMAT_BYTES => Ok(()),
+        _ => Err(format!(
+            "Hàm strftime chỉ nhận strftime(ngày giờ, định dạng) với định dạng viết thẳng, tối đa \
+             {MAX_TIME_FORMAT_BYTES} byte"
         )),
     }
 }
@@ -105,7 +128,7 @@ fn never_matches_empty(pattern: &str) -> bool {
 
 /// Các tham số khi hàm gọi dạng thường `f(a, b, c)`; None khi có tham số đặt tên hay mệnh đề trong ngoặc, để luật ở
 /// trên từ chối thay vì đoán.
-fn plain_args(function: &Function) -> Option<Vec<&Expr>> {
+pub(super) fn plain_args(function: &Function) -> Option<Vec<&Expr>> {
     let FunctionArguments::List(list) = &function.args else {
         return None;
     };
@@ -131,7 +154,7 @@ fn number(expr: &Expr) -> Option<u64> {
     }
 }
 
-fn text(expr: &Expr) -> Option<&str> {
+pub(super) fn text(expr: &Expr) -> Option<&str> {
     match expr {
         Expr::Value(v) => match &v.value {
             Value::SingleQuotedString(s) => Some(s.as_str()),

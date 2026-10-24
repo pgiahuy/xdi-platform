@@ -282,8 +282,11 @@ fn user_errors_drop_the_duckdb_error_kind() {
 /// Guard từ chối vì câu có thể dựng giá trị quá lớn (số tầng, tham số kích thước): cũng vào vòng sửa.
 #[tokio::test]
 async fn oversized_sql_is_fixed_once() {
+    let five_levels = "SELECT v FROM (SELECT v FROM (SELECT v FROM (SELECT v FROM (SELECT region AS v FROM sales) a) b) c) d";
+    let many_pieces = format!("SELECT {} AS v FROM sales", vec!["region"; 21].join(" || "));
     for sql in [
-        "SELECT v FROM (SELECT v FROM (SELECT region AS v FROM sales) a) b",
+        five_levels,
+        many_pieces.as_str(),
         "SELECT regexp_replace(region, 'x*', ' ', 'g') AS r FROM sales",
     ] {
         let llm = ScriptedLlm::new(vec![Ok(GOOD_SQL.to_string())]);

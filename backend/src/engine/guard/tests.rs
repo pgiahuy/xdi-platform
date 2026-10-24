@@ -491,14 +491,36 @@ fn rejects_padding_to_huge_lengths() {
     for sql in [
         "SELECT length(lpad('x', 1900000000, 'y'))",
         "SELECT length(RPAD('x', 1900000000, 'y'))",
-        "SELECT lpad(region, 10001, 'y') FROM sales",
+        "SELECT lpad(region, 1001, 'y') FROM sales",
         "SELECT lpad(region, 1000 * 1000, 'y') FROM sales",
         "SELECT lpad(region, amount, 'y') FROM sales",
         "SELECT lpad(region, (SELECT 5), 'y') FROM sales",
         "SELECT region FROM sales WHERE lpad(region, 99999999, ' ') = 'x'",
     ] {
         let reason = assert_oversized(sql);
-        assert!(reason.contains("10000"), "{sql}: {reason}");
+        assert!(reason.contains("1000"), "{sql}: {reason}");
+    }
+    assert_accepted("SELECT lpad(region, 1000, ' ') FROM sales");
+}
+
+/// strftime in mỗi mã hai byte thành nhiều byte: định dạng phải viết thẳng, tối đa 100 byte.
+#[test]
+fn strftime_needs_a_short_written_format() {
+    let format = |bytes: usize| {
+        format!(
+            "SELECT strftime(order_date, '{}') FROM sales",
+            "%c".repeat(bytes / 2)
+        )
+    };
+    assert_accepted(&format(100));
+    assert_accepted("SELECT strftime(order_date, '%Y-%m') AS month FROM sales");
+    for sql in [
+        format(102),
+        "SELECT strftime(order_date, region) FROM sales".to_string(),
+        "SELECT strftime('%Y', order_date) FROM sales".to_string(),
+        "SELECT strftime(order_date, '%Y' || region) FROM sales".to_string(),
+    ] {
+        assert_oversized(&sql);
     }
 }
 
@@ -534,7 +556,7 @@ fn rejects_replacements_that_grow_the_text() {
 fn accepts_size_functions_used_for_cleaning() {
     for sql in [
         "SELECT lpad(CAST(customer_id AS VARCHAR), 8, '0') FROM sales",
-        "SELECT rpad(region, 10000, ' ') FROM sales",
+        "SELECT rpad(region, 1000, ' ') FROM sales",
         "SELECT replace(region, ',', '') FROM sales",
         "SELECT replace(region, 'South', 'Nam') FROM sales",
         "SELECT regexp_replace(region, '[0-9]+', '', 'g') FROM sales",
@@ -549,16 +571,30 @@ fn accepts_size_functions_used_for_cleaning() {
 
 // Số tầng câu lồng nhau (guard/depth.rs)
 
+/// Câu có `levels` tầng: mỗi tầng là một câu con ở FROM của tầng ngoài.
+fn nested(levels: usize) -> String {
+    let mut sql = "SELECT region AS v FROM sales".to_string();
+    for i in 1..levels {
+        sql = format!("SELECT v FROM ({sql}) t{i}");
+    }
+    sql
+}
+
 #[test]
-fn accepts_one_level_of_subquery_or_with() {
+fn accepts_up_to_four_levels() {
+    assert_accepted(&nested(4));
     for sql in [
         "SELECT region FROM sales",
         "SELECT r, total FROM (SELECT region AS r, SUM(amount) AS total FROM sales GROUP BY region) t",
-        "WITH t AS (SELECT region, amount FROM sales) SELECT region, SUM(amount) AS total FROM t GROUP BY region",
-        "SELECT region FROM sales WHERE customer_id IN (SELECT customer_id FROM customers)",
         "SELECT region, (SELECT COUNT(*) FROM customers) AS n FROM sales",
         "SELECT region FROM sales UNION ALL SELECT segment FROM customers",
-        "SELECT s.region FROM sales s JOIN (SELECT customer_id FROM customers) c ON s.customer_id = c.customer_id",
+        // Bảng tạm kèm câu con, dạng mô hình hay viết: 3 tầng.
+        "WITH monthly AS (SELECT date_trunc('month', order_date) AS m, SUM(amount) AS revenue FROM sales \
+         WHERE customer_id IN (SELECT customer_id FROM customers WHERE segment = 'Retail') GROUP BY m) \
+         SELECT m, revenue, revenue - LAG(revenue) OVER (ORDER BY m) AS change FROM monthly ORDER BY m",
+        // Hai bảng tạm nối nhau, rồi câu con trên bảng tạm sau: 4 tầng.
+        "WITH a AS (SELECT region, amount FROM sales), b AS (SELECT region, SUM(amount) AS total FROM a GROUP BY region) \
+         SELECT region, total FROM (SELECT region, total, rank() OVER (ORDER BY total DESC) AS r FROM b) x WHERE r <= 3",
     ] {
         assert_accepted(sql);
     }
@@ -567,20 +603,108 @@ fn accepts_one_level_of_subquery_or_with() {
 /// Mọi kiểu lồng đều tính: câu con trong FROM, WHERE, SELECT, bảng tạm, và bảng tạm đọc từ bảng tạm khác dù không
 /// viết lồng. Từ chối thuộc loại vào vòng sửa.
 #[test]
-fn rejects_queries_nested_deeper_than_two_levels() {
-    for sql in [
-        "SELECT v FROM (SELECT v FROM (SELECT region AS v FROM sales) a) b",
-        "SELECT region FROM sales WHERE region IN (SELECT region FROM (SELECT region FROM sales) t)",
-        "SELECT (SELECT MAX(n) FROM (SELECT amount AS n FROM sales) t) AS m",
-        "WITH t AS (SELECT * FROM (SELECT region FROM sales) x) SELECT * FROM t",
-        "WITH a AS (SELECT region AS v FROM sales), b AS (SELECT v FROM a) SELECT v FROM b",
-        "WITH a AS (SELECT region AS v FROM sales) SELECT v FROM (SELECT v FROM a) t",
-        // Chuỗi nhân đôi qua từng tầng, dạng đã đo ở guard/depth.rs.
-        "SELECT length(v) FROM (SELECT v || v AS v FROM (SELECT 'yyyy' AS v) a) b",
-    ] {
-        let reason = assert_oversized(sql);
-        assert!(reason.contains("tối đa 2"), "{sql}: {reason}");
+fn rejects_five_levels() {
+    let five = [
+        nested(5),
+        format!("SELECT region FROM sales WHERE region IN ({})", nested(4)),
+        format!("SELECT ({}) AS m", nested(4).replacen("SELECT v", "SELECT MAX(v)", 1)),
+        format!("WITH t AS ({}) SELECT * FROM t", nested(4)),
+        "WITH a AS (SELECT region AS v FROM sales), b AS (SELECT v FROM a), c AS (SELECT v FROM b), \
+         d AS (SELECT v FROM c) SELECT v FROM d"
+            .to_string(),
+    ];
+    for sql in five {
+        let reason = assert_oversized(&sql);
+        assert!(reason.contains("tối đa 4"), "{sql}: {reason}");
     }
+}
+
+// Số mảnh ghép (guard/pieces.rs)
+
+#[test]
+fn concat_pieces_are_limited_to_twenty() {
+    let pipes = |n: usize| format!("SELECT {} AS v FROM sales", vec!["region"; n].join(" || "));
+    let concat = |n: usize| {
+        format!(
+            "SELECT concat({}) AS v FROM sales",
+            vec!["region"; n].join(", ")
+        )
+    };
+    assert_accepted(&pipes(20));
+    assert_accepted(&concat(20));
+    assert_oversized(&pipes(21));
+    assert_oversized(&concat(21));
+    // Đếm trên cả câu, cộng qua các cột và các tầng.
+    assert_accepted(&format!(
+        "SELECT {} || v FROM ({}) t",
+        ["v"; 9].join(" || "),
+        pipes(10)
+    ));
+    assert_oversized(&format!(
+        "SELECT {} || v FROM ({}) t",
+        ["v"; 10].join(" || "),
+        pipes(10)
+    ));
+    // concat_ws: dấu ngăn viết thẳng không tính; dấu ngăn là biểu thức thì được ghép vào giữa mỗi cặp.
+    let ws = |sep: &str, n: usize| {
+        format!(
+            "SELECT concat_ws({sep}, {}) FROM sales",
+            vec!["region"; n].join(", ")
+        )
+    };
+    assert_accepted(&ws("', '", 20));
+    assert_oversized(&ws("', '", 21));
+    assert_accepted(&ws("region", 10));
+    assert_oversized(&ws("region", 11));
+    // Phần tử danh sách và struct viết thẳng cũng là mảnh: đổi sang VARCHAR là ghép.
+    assert_oversized(&format!(
+        "SELECT CAST([{}] AS VARCHAR) FROM sales",
+        vec!["region"; 21].join(", ")
+    ));
+    assert_oversized(&format!(
+        "SELECT CAST({{{}}} AS VARCHAR) FROM sales",
+        (0..21)
+            .map(|i| format!("'k{i}': region"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
+}
+
+// Độ dài chuỗi hằng và số cột (guard/width.rs)
+
+#[test]
+fn string_literals_are_limited_to_1000_bytes() {
+    let literal = |bytes: usize| {
+        format!(
+            "SELECT region FROM sales WHERE region = '{}'",
+            "y".repeat(bytes)
+        )
+    };
+    assert_accepted(&literal(1000));
+    let reason = assert_oversized(&literal(1001));
+    assert!(reason.contains("1001"), "{reason}");
+    // Tính bằng byte: 334 chữ "ộ" (3 byte mỗi chữ) là 1002 byte.
+    assert_oversized(&format!("SELECT '{}' AS v", "ộ".repeat(334)));
+    // Mọi chỗ có chuỗi: IN (...), DATE '...', đối số hàm.
+    assert_oversized(&format!(
+        "SELECT region FROM sales WHERE region IN ('a', '{}')",
+        "y".repeat(1001)
+    ));
+    assert_oversized(&format!("SELECT lower('{}') AS v", "y".repeat(1001)));
+}
+
+#[test]
+fn select_lists_are_limited_to_200_items() {
+    let columns = |n: usize| format!("SELECT {} FROM sales", vec!["region"; n].join(", "));
+    assert_accepted(&columns(200));
+    let reason = assert_oversized(&columns(201));
+    assert!(reason.contains("201"), "{reason}");
+    // Mỗi SELECT tính riêng, kể cả câu con; * là một mục.
+    assert_oversized(&format!("SELECT * FROM ({}) t", columns(201)));
+    assert_accepted(&format!(
+        "SELECT *, {} FROM sales",
+        vec!["region"; 199].join(", ")
+    ));
 }
 
 // Giới hạn dòng
@@ -665,22 +789,23 @@ fn runnable_renames_with_tables() {
 }
 
 /// Câu gọi bảng tạm ở ngoài chỗ nó được định nghĩa. Nếu tên giữ nguyên, DuckDB sẽ tìm file "secret.csv"; sau khi
-/// đổi tên, chỗ gọi đó trỏ tới guard_cte_1 vốn không tồn tại ở ngoài, nên DuckDB chỉ báo lỗi. Bảng tạm nằm trong câu
-/// con thì câu sâu 3 tầng và giờ bị từ chối trước (depth.rs); test gọi thẳng bước đổi tên để lớp chặn này vẫn được kiểm
-/// nếu sau này nâng trần số tầng.
+/// đổi tên, chỗ gọi đó trỏ tới guard_cte_1 vốn không tồn tại ở ngoài, nên DuckDB chỉ báo lỗi.
 #[test]
 fn runnable_does_not_leave_with_names_that_look_like_files() {
-    let sql = "SELECT * FROM (WITH \"secret.csv\" AS (SELECT region FROM sales) SELECT region FROM \"secret.csv\") x, \
-               \"secret.csv\"";
-    assert_oversized(sql);
-    let tables = tables_in("/data");
-    let query = super::parse_single_select(sql).unwrap();
-    let cte_names = super::check_names(&query, &tables).unwrap();
-    let runnable = super::build_runnable(query, &tables, &cte_names)
-        .unwrap()
-        .to_string();
-    assert!(!runnable.contains("FROM \"secret.csv\""), "{runnable}");
-    assert!(!runnable.contains(", \"secret.csv\""), "{runnable}");
+    let guarded = assert_accepted(
+        "SELECT * FROM (WITH \"secret.csv\" AS (SELECT region FROM sales) SELECT region FROM \"secret.csv\") x, \
+         \"secret.csv\"",
+    );
+    assert!(
+        !guarded.runnable.contains("FROM \"secret.csv\""),
+        "{}",
+        guarded.runnable
+    );
+    assert!(
+        !guarded.runnable.contains(", \"secret.csv\""),
+        "{}",
+        guarded.runnable
+    );
 }
 
 #[test]

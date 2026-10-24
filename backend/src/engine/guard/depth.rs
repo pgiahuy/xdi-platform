@@ -4,13 +4,11 @@ tạm đọc từ bảng tạm khác. build_guarded_sql (mod.rs) gọi check_que
 
 Vì sao: mỗi tầng ghép được giá trị của tầng dưới nhiều lần (`concat(v, v, ...)`, `v || v`), nên độ dài chuỗi nhân lên
 theo từng tầng, và DuckDB tính các chuỗi hằng như vậy lúc chuẩn bị câu, khi giới hạn thời gian chưa có tác dụng. Đo qua
-guard rồi chạy bằng run_query trên máy phát triển (giới hạn 1 giây, mỗi ca một tiến trình, đọc VmHWM):
-- 2 tầng, câu 32 736 byte (chuỗi hằng 16 000 ký tự ở tầng trong, tầng ngoài ghép 5 562 lần): chuỗi 89 MB, RSS đỉnh
-  150 MB, 0,36 giây. Chia ra 12 cột thì mỗi cột 7,2 MB, RSS đỉnh 76 MB.
-- 3 tầng, câu chỉ 11 578 byte (chuỗi 10 000 ký tự, mỗi tầng ghép 250 lần): chuỗi 625 MB, RSS đỉnh 674 MB, 1,42 giây.
-  Câu dài hơn thì lớn thêm theo cấp số nhân.
-Nên trần là 2 tầng: câu chính và một tầng câu con hay bảng tạm. Câu hỏi phân tích thường đủ với vậy; câu sâu hơn bị từ
-chối với lý do để mô hình viết lại gọn hơn trong vòng sửa (GuardError::Oversized). */
+guard khi chỉ có luật này (chạy bằng run_query, giới hạn 1 giây): 3 tầng với câu 11,6 KB đã cho chuỗi 625 MB, RSS đỉnh
+674 MB. Trần 4 tầng đủ cho câu hỏi thật (bảng tạm kèm câu con) chỉ an toàn cùng ba luật khác: tối đa 20 mảnh ghép
+(guard/pieces.rs), chuỗi hằng tối đa 1000 byte và 200 cột mỗi SELECT (guard/width.rs); bảng số đo của cả bốn luật ở
+docs/GUARD.md, mục Số tầng, mảnh ghép, độ rộng. Câu sâu hơn bị từ chối với lý do để mô hình viết lại gọn hơn trong vòng
+sửa (GuardError::Oversized). */
 
 use std::collections::HashMap;
 use std::ops::ControlFlow;
@@ -20,7 +18,7 @@ use sqlparser::ast::{Query, TableFactor, Visit, Visitor};
 use super::{name_key, single_ident};
 
 /// Số tầng câu tối đa, tính cả câu ngoài cùng.
-pub const MAX_QUERY_DEPTH: usize = 2;
+pub const MAX_QUERY_DEPTH: usize = 4;
 
 /// Err là lý do từ chối (tiếng Việt).
 pub(super) fn check_query_depth(query: &Query) -> Result<(), String> {

@@ -9,7 +9,9 @@ cả TIMESTAMP lẫn TIMESTAMPTZ, và cột toàn null vẫn phải gửi đúng
 Giới hạn thời gian và bộ nhớ ở đây không chặn được mọi câu: DuckDB tính biểu thức hằng ngay lúc chuẩn bị câu, khi
 interrupt chưa có tác dụng và ngoài memory_limit (chuỗi tạo lúc chạy thì vẫn trong trần, vượt là OutOfMemory), và một
 lời gọi hàm dựng chuỗi rất dài không dừng được giữa chừng. Guard thu hẹp phần này bằng luật kích thước hàm
-(guard/sizes.rs) và số tầng câu (guard/depth.rs); bảo đảm thật cần tiến trình con (#119, docs/GUARD.md). */
+(guard/sizes.rs), số tầng câu (guard/depth.rs), số mảnh ghép (guard/pieces.rs), độ dài chuỗi hằng và số cột
+(guard/width.rs); câu nhân theo số dòng của bảng thì chưa, và việc đổi kết quả sang Arrow, sang Value nằm ngoài trần của
+DuckDB; bảo đảm thật cần tiến trình con (#119, docs/GUARD.md). */
 
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::mpsc::{self, RecvTimeoutError};

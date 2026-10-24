@@ -5,9 +5,9 @@ lần khi lỗi sửa được. service/ask.rs (#33) gọi run_with_repair sau b
 mô hình và đầu vào của guard qua tham số nên test chạy được với mô hình giả, không cần Postgres.
 
 Vào vòng sửa: DuckDB báo lỗi, hoặc guard từ chối vì bảng hay cột không có trong hồ sơ (GuardError::UnknownName) hay vì
-câu có thể dựng giá trị quá lớn (GuardError::Oversized: tham số kích thước, số tầng câu lồng nhau). Không sửa: guard
-từ chối vì lý do khác (câu ghi, hàm bị cấm), câu chạy quá giờ hay quá bộ nhớ. Lỗi guard và lỗi DuckDB chung một vòng
-sửa, tối đa một vòng. Lời báo lỗi gửi mô hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ
+câu có thể dựng giá trị quá lớn (GuardError::Oversized: tham số kích thước, số tầng, mảnh ghép, độ rộng). Không sửa:
+guard từ chối vì lý do khác (câu ghi, hàm bị cấm), câu chạy quá giờ hay quá bộ nhớ. Lỗi guard và lỗi DuckDB chung một
+vòng sửa, tối đa một vòng. Lời báo lỗi gửi mô hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ
 (ask_repair.rs, cùng prompt sửa). Test ở ask_run_tests.rs. */
 
 use std::sync::Arc;
