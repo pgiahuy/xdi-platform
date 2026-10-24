@@ -11,7 +11,7 @@ pub mod token;
 
 use uuid::Uuid;
 
-use crate::engine::store::{Membership, Store, User};
+use crate::engine::store::{Membership, PendingVersion, Store, User};
 use crate::error::AppError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,7 +81,8 @@ impl Member {
 }
 
 /// Kiểm người dùng có thuộc workspace slug không, và nếu có thì trả Member. Đây là cách duy nhất ngoài test để có
-/// WorkspaceId: hàm tự đọc dòng memberships cho đúng user, nên không ai dựng được WorkspaceId từ một UUID tùy ý.
+/// WorkspaceId cho một request (cách còn lại là pending_profiles, cho việc nền lúc khởi động): hàm tự đọc dòng
+/// memberships cho đúng user, nên không ai dựng được WorkspaceId từ một UUID tùy ý.
 /// Không có workspace và không phải thành viên trả cùng một lỗi 404, để người ngoài không dò được tên workspace.
 pub async fn member_of(store: &Store, user: User, slug: &str) -> Result<Member, AppError> {
     let membership = store
@@ -89,6 +90,19 @@ pub async fn member_of(store: &Store, user: User, slug: &str) -> Result<Member, 
         .await?
         .ok_or_else(workspace_not_found)?;
     Ok(member_from(user, membership))
+}
+
+/// Phiên bản dataset còn chờ lập hồ sơ ở mọi workspace, kèm WorkspaceId của từng phiên bản. Dùng cho việc nền lúc
+/// khởi động (service/profile.rs), không gắn với người dùng nào. Như member_of, WorkspaceId dựng từ dòng
+/// dataset_versions mà chính hàm này đọc, không từ dữ liệu người gọi đưa vào.
+pub async fn pending_profiles(
+    store: &Store,
+) -> Result<Vec<(WorkspaceId, PendingVersion)>, AppError> {
+    let versions = store.list_pending_versions().await?;
+    Ok(versions
+        .into_iter()
+        .map(|v| (WorkspaceId(v.workspace_id), v))
+        .collect())
 }
 
 pub fn workspace_not_found() -> AppError {

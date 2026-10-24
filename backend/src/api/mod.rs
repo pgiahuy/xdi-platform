@@ -21,6 +21,8 @@ mod datasets;
 mod excel_tests;
 mod extract;
 mod openapi;
+#[cfg(test)]
+mod profile_tests;
 mod query;
 #[cfg(test)]
 mod roles_tests;
