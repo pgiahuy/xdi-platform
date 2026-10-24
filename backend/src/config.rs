@@ -34,6 +34,10 @@ pub struct Config {
     /// Như gemini_timeout, nhưng mặc định dài hơn nhiều: mô hình chạy bằng CPU của máy thường chậm hơn Gemini nhiều
     /// lần, và lần gọi đầu còn phải nạp mô hình vào RAM.
     pub ollama_timeout: Duration,
+    /// Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB (QUERY_TIMEOUT_SECS); quá thì câu bị dừng.
+    // Endpoint hỏi (#33) đọc trường này khi gọi service/ask_run.rs; gỡ allow khi đó.
+    #[allow(dead_code)]
+    pub query_timeout: Duration,
     /// Thư mục giao diện đã build (frontend/dist). Không đặt thì backend chỉ phục vụ API.
     pub static_dir: Option<PathBuf>,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
@@ -69,6 +73,7 @@ impl Config {
             ollama_url: var_or("OLLAMA_URL", "http://localhost:11434"),
             ollama_model: var_or("OLLAMA_MODEL", "qwen2.5-coder:7b"),
             ollama_timeout: timeout_secs("OLLAMA_TIMEOUT_SECS", 300),
+            query_timeout: timeout_secs("QUERY_TIMEOUT_SECS", 30),
             static_dir: env::var("STATIC_DIR")
                 .ok()
                 .filter(|v| !v.is_empty())

@@ -16,10 +16,13 @@ Trạng thái: guard đã có và có test, nhưng chưa endpoint nào gọi nó
 |---|---|
 | Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản); `max_rows` |
 | Ra khi nhận | `GuardedSql` gồm hai bản của cùng một câu: `shown` và `runnable` (mục Bước 4) |
-| Ra khi từ chối | `AppError::BadRequest` kèm lý do tiếng Việt chỉ đúng chỗ sai, ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers" |
+| Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy |
 
 Guard không đọc Postgres hay DuckDB: service đưa danh sách bảng vào, nên test chạy không cần database. Lý do từ chối
-viết để mô hình đọc và sửa ở vòng sau, nên nói rõ tên bảng, hàm hay cột bị từ chối.
+viết để mô hình đọc và sửa ở vòng sau, nên nói rõ tên bảng, hàm hay cột bị từ chối. Trong luồng hỏi
+(`service/ask_run.rs`), chỉ `UnknownName` được gửi lại cho mô hình sửa một lần: mô hình hay viết sai tên, và sửa được
+khi biết tên đúng. Câu bị từ chối vì lý do khác (câu ghi, hàm không cho dùng, nhiều câu) dừng ngay: sửa tên không làm
+nó qua được.
 
 Guard kiểm trên cây cú pháp, không dò chữ: dò chữ `DROP` thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Cây
 do crate `sqlparser` (0.63, cách đọc của DuckDB) dựng. Cả `shown` và `runnable` đều in lại từ cây đã kiểm, không dùng
@@ -132,9 +135,11 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
   guard và chỉ bị DuckDB báo lỗi lúc chạy. Kiểm cột để mô hình sửa tên cột không có, không phải để chặn dữ liệu; chặn
   dữ liệu là việc của danh sách bảng và hàm.
 - Trường của cột kiểu struct (`cot.truong`) bị từ chối, vì guard hiểu `cot` là tên bảng.
-- Chỉ giới hạn số dòng trả về, không giới hạn thời gian chạy hay bộ nhớ của câu.
+- Guard chỉ giới hạn số dòng trả về. Thời gian chạy (`QUERY_TIMEOUT_SECS`) và bộ nhớ (1 GB mỗi câu) giới hạn lúc
+  chạy, ở `engine/query.rs`.
 - Chưa tiêm điều kiện phân quyền theo dòng ([#31](https://github.com/pgiahuy/xdi-platform/issues/31)). Chỗ tiêm đã
   định: sau bước 2 (mọi bảng đã được kiểm), trước bước 4 (còn tên bảng logic); `shown` sẽ chứa cả điều kiện đó.
 - Chưa có nơi gọi ([#33](https://github.com/pgiahuy/xdi-platform/issues/33)): danh sách cột của `AllowedTable` sẽ lấy
-  từ hồ sơ cột, phần này chưa làm (xem [Dữ liệu](DATA.md), mục Chưa có). Trong luồng hỏi, câu bị guard từ chối sẽ trả
-  200 với `status: rejected` ([Kiến trúc](ARCHITECTURE.md), mục 8), không trả lỗi 400 như hàm guard.
+  từ hồ sơ cột, phần này chưa làm (xem [Dữ liệu](DATA.md), mục Chưa có). Trong luồng hỏi, câu bị guard từ chối (sau
+  vòng sửa, nếu lý do là sai tên) sẽ trả 200 với `status: rejected` ([Kiến trúc](ARCHITECTURE.md), mục 8), không trả
+  lỗi 400.

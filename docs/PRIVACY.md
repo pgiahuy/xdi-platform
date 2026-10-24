@@ -37,7 +37,7 @@ Nội dung gửi (thiết kế):
 |---|---|---|
 | Nạp dữ liệu, viết mô tả cột | Tên cột, kiểu, min, max, vài giá trị mẫu của mỗi cột, giá trị phân loại của cột ít giá trị | Các dòng dữ liệu |
 | Hỏi | Câu hỏi; các cột liên quan kèm mô tả, bí danh; giá trị phân loại khớp với câu hỏi; vài câu hỏi đã trả lời đúng trước đó trong cùng workspace | Dữ liệu của workspace khác |
-| SQL chạy lỗi, sửa một lần | SQL vừa sinh và thông báo lỗi | |
+| SQL chạy lỗi hoặc dùng bảng, cột không có, sửa một lần | Prompt của lần hỏi, SQL vừa sinh và thông báo lỗi của DuckDB hay lý do guard từ chối. Thông báo của DuckDB có thể chép một giá trị của dữ liệu, ví dụ chuỗi ngày không đọc được | Đường dẫn file trên máy chủ |
 | Diễn giải câu "tại sao" | Bảng phân rã đã tính: nhóm và phần đóng góp của từng nhóm | Các dòng dữ liệu gốc |
 
 Lưu ý: giá trị mẫu và giá trị phân loại là dữ liệu thật của bạn, ví dụ tên khu vực hay tên sản phẩm. Nếu dữ liệu nhạy

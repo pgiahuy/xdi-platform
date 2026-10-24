@@ -27,14 +27,18 @@ use uuid::Uuid;
 ///   again. This can happen before the model is called (a word matches several columns) or after (the two slices of
 ///   a "why" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.
 ///   Not recorded in the history, so `query_id` is null.
-/// - `rejected`: the guard refused the SQL, the generated one or the one fixed in the `repair` round. Set: `message`
-///   (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false.
-/// - `failed`: the SQL failed on the analytics engine and the one fix round did not help, either because the fixed
-///   SQL failed too or because the model failed during the fix. Set: `message`, `query_id`, `sql_generated`,
-///   `sql_guarded`; the `run` or `repair` step that stopped it has `ok` false.
+/// - `rejected`: the guard refused the SQL: the generated one for a reason a fix cannot change (for example it is not
+///   a read-only SELECT, or it calls a function that is not allowed), or the one fixed in the `repair` round. Set:
+///   `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false.
+/// - `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or
+///   because the model failed during the fix; or the SQL ran past the time or memory limit, which gets no fix round.
+///   Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or
+///   `repair` step that stopped it has `ok` false.
 ///
-/// The status names the step that stopped the question: the guard gives `rejected`, the engine or the fix round gives
-/// `failed`. A model error before any SQL exists is not a status: the request gets 502 or 503.
+/// A fix round starts when the analytics engine fails on the SQL, or when the guard refuses it because a table or
+/// column does not exist; there is at most one round per question. The status names the step that stopped the
+/// question: the guard gives `rejected`, the engine or the fix round gives `failed`. A model error before any SQL
+/// exists is not a status: the request gets 502 or 503.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AskStatus {
@@ -411,7 +415,8 @@ pub struct VolumePrice {
 /// - `llm`: the language model writes SQL.
 /// - `guard`: check the SQL, add row-level filters and a row limit.
 /// - `run`: run the SQL on the analytics engine.
-/// - `repair`: the language model fixes SQL that failed to run (at most once).
+/// - `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column
+///   does not exist (at most once).
 /// - `explain`: compute the breakdown of a "why" question (code, no model).
 /// - `narrate`: the language model writes the summary of the breakdown.
 /// - `record`: save the question in the history.
@@ -432,8 +437,8 @@ pub enum StepName {
 pub struct AskStep {
     pub name: StepName,
     pub duration_ms: u64,
-    /// False for a step that failed. A failed step does not always stop the question: a failed `run` can be followed by
-    /// `repair`, a failed `narrate` by a template summary. `AskStatus` tells whether the question stopped.
+    /// False for a step that failed. A failed step does not always stop the question: a failed `run` or `guard` can be
+    /// followed by `repair`, a failed `narrate` by a template summary. `AskStatus` tells whether the question stopped.
     pub ok: bool,
     /// Text for the end user (Vietnamese), for example the guard's reason or the engine error.
     #[schema(required)]

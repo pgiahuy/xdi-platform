@@ -8,7 +8,9 @@ dataco. File nhúng vào binary lúc biên dịch: image Docker chỉ chép back
 không kèm thư mục data/, nên đọc file lúc chạy sẽ không có file để đọc.
 Các câu giả định cột ngày "order date (DateOrders)" là chữ dạng "1/31/2018 22:56" (DuckDB đọc CSV của DataCo ra
 VARCHAR) nên tự parse bằng strptime; hồ sơ (#22) hay bước seed (#25) đổi cột này sang kiểu ngày thì phải sửa các câu.
-Tỷ lệ và số đếm về đơn tính theo đơn hàng (đếm "Order Id" phân biệt), không theo dòng: một đơn có nhiều dòng. */
+Tỷ lệ và số đếm về đơn tính theo đơn hàng (đếm "Order Id" phân biệt), không theo dòng: một đơn có nhiều dòng.
+Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/năm nên DuckDB báo lỗi, và có câu sửa (task repair)
+đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask_run.rs) mà không cần mô hình thật. */
 
 use std::collections::HashMap;
 
@@ -114,11 +116,9 @@ mod tests {
     #[test]
     fn answers_file_is_valid() {
         let answers = parse_answers(ANSWERS_JSON).unwrap();
-        let sql_count = answers
-            .keys()
-            .filter(|(task, _)| *task == LlmTask::Sql)
-            .count();
-        assert_eq!(sql_count, 10);
+        let count = |wanted: LlmTask| answers.keys().filter(|(task, _)| *task == wanted).count();
+        assert_eq!(count(LlmTask::Sql), 11);
+        assert_eq!(count(LlmTask::Repair), 1);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];
         let profile: serde_json::Value = serde_json::from_str(profile).unwrap();
         assert!(profile["columns"].is_array());
@@ -168,7 +168,10 @@ mod tests {
             .iter()
             .map(|c| c["name"].as_str().unwrap())
             .collect();
-        for entry in entries.iter().filter(|e| e.task == LlmTask::Sql) {
+        let sql_entries = entries
+            .iter()
+            .filter(|e| matches!(e.task, LlmTask::Sql | LlmTask::Repair));
+        for entry in sql_entries {
             let sql = entry.answer.as_str().unwrap();
             // Tách theo dấu nháy kép: phần ở vị trí lẻ là phần nằm trong nháy.
             for quoted in sql.split('"').skip(1).step_by(2) {
@@ -196,6 +199,24 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(sql, expected);
+    }
+
+    /// Câu mẫu của vòng sửa: câu sinh lần đầu đọc sai định dạng ngày, câu sửa đọc đúng.
+    #[tokio::test]
+    async fn repair_question_returns_the_fixed_sql() {
+        let question = "Doanh thu theo ngày giao hàng";
+        let mock = Mock::new();
+        let first = mock.complete(&sql_request(question)).await.unwrap();
+        let fixed = mock
+            .complete(&LlmRequest {
+                task: LlmTask::Repair,
+                question,
+                prompt: "",
+            })
+            .await
+            .unwrap();
+        assert!(first.contains("'%d/%m/%Y %H:%M'"), "{first}");
+        assert!(fixed.contains("'%m/%d/%Y %H:%M'"), "{fixed}");
     }
 
     #[tokio::test]

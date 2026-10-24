@@ -5,9 +5,8 @@ nên nâng phiên bản sqlparser có thể phải sửa chuỗi mong đợi. */
 
 use std::path::PathBuf;
 
-use super::{build_guarded_sql, AllowedTable, GuardedSql};
+use super::{build_guarded_sql, AllowedTable, GuardError, GuardedSql};
 use crate::engine::analytics::parquet_glob;
-use crate::error::AppError;
 
 const MAX_ROWS: u64 = 100;
 
@@ -41,7 +40,7 @@ fn tables_in(dir: &str) -> Vec<AllowedTable> {
     ]
 }
 
-fn guard(sql: &str) -> Result<GuardedSql, AppError> {
+fn guard(sql: &str) -> Result<GuardedSql, GuardError> {
     build_guarded_sql(sql, &tables_in("/data"), MAX_ROWS)
 }
 
@@ -58,11 +57,27 @@ fn assert_accepted(sql: &str) -> GuardedSql {
     }
 }
 
-/// Trả lý do từ chối để test kiểm được lý do có nói đúng chỗ sai không.
+/// Trả lý do từ chối để test kiểm được lý do có nói đúng chỗ sai không. Nhận cả hai loại từ chối.
 fn assert_rejected(sql: &str) -> String {
     match guard(sql) {
-        Err(AppError::BadRequest(reason)) => reason,
-        other => panic!("guard should reject {sql:?} as BadRequest, got {other:?}"),
+        Err(GuardError::Rejected(reason) | GuardError::UnknownName(reason)) => reason,
+        other => panic!("guard should reject {sql:?}, got {other:?}"),
+    }
+}
+
+/// Như assert_rejected, nhưng phải là loại sai tên bảng hay cột, loại service gửi lại cho mô hình sửa.
+fn assert_unknown_name(sql: &str) -> String {
+    match guard(sql) {
+        Err(GuardError::UnknownName(reason)) => reason,
+        other => panic!("guard should reject {sql:?} as UnknownName, got {other:?}"),
+    }
+}
+
+/// Loại từ chối mà sửa tên không giúp gì: service dừng câu hỏi, không nhờ mô hình sửa.
+fn assert_rejected_for_other_reason(sql: &str) {
+    match guard(sql) {
+        Err(GuardError::Rejected(_)) => {}
+        other => panic!("guard should reject {sql:?} as Rejected, got {other:?}"),
     }
 }
 
@@ -354,13 +369,13 @@ fn rejects_file_path_written_as_table_name() {
 
 #[test]
 fn rejects_unknown_table_and_lists_allowed_ones() {
-    let reason = assert_rejected("SELECT * FROM orders");
+    let reason = assert_unknown_name("SELECT * FROM orders");
     assert!(
         reason.contains("sales") && reason.contains("customers"),
         "{reason}"
     );
     // Cột của bảng sai tên cũng là tên lạ, nhưng lý do phải chỉ vào bảng, chỗ LLM cần sửa.
-    let reason = assert_rejected("SELECT region FROM orders");
+    let reason = assert_unknown_name("SELECT region FROM orders");
     assert!(reason.contains("Không có bảng orders"), "{reason}");
 }
 
@@ -422,9 +437,9 @@ fn rejects_functions_hidden_anywhere_in_the_query() {
 
 #[test]
 fn rejects_unknown_column() {
-    let reason = assert_rejected("SELECT profit FROM sales");
+    let reason = assert_unknown_name("SELECT profit FROM sales");
     assert!(reason.contains("profit"), "{reason}");
-    assert_rejected("SELECT s.profit FROM sales s");
+    assert_unknown_name("SELECT s.profit FROM sales s");
 }
 
 #[test]
@@ -436,7 +451,23 @@ fn rejects_column_name_with_lookalike_unicode_letters() {
 
 #[test]
 fn rejects_column_of_unknown_table_alias() {
-    assert_rejected("SELECT x.region FROM sales s");
+    assert_unknown_name("SELECT x.region FROM sales s");
+}
+
+/// Chỉ sai tên bảng hay cột được gửi lại cho mô hình sửa; câu ghi, hàm bị cấm, nhiều câu thì dừng ngay.
+#[test]
+fn only_unknown_names_are_fixable() {
+    for sql in [
+        "DELETE FROM sales",
+        "SELECT getenv('HOME')",
+        "SELECT 1; SELECT 2",
+        "SELEC region FROM sales",
+        "SELECT * FROM read_csv('x.csv')",
+        "WITH RECURSIVE t AS (SELECT 1) SELECT * FROM t",
+        "SELECT region FROM sales FETCH FIRST 5 ROWS ONLY",
+    ] {
+        assert_rejected_for_other_reason(sql);
+    }
 }
 
 #[test]
