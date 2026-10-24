@@ -110,7 +110,8 @@ fn build_number(value: &Value) -> Option<f64> {
         Value::UTinyInt(n) => f64::from(*n),
         Value::USmallInt(n) => f64::from(*n),
         Value::UInt(n) => f64::from(*n),
-        Value::Float(n) => f64::from(*n),
+        // f64::from(0.1f32) là 0.10000000149011612; đi qua chữ ngắn nhất của f32 ("0.1") để gửi đúng số người ta thấy.
+        Value::Float(n) => n.to_string().parse().unwrap_or(f64::from(*n)),
         Value::Double(n) => *n,
         _ => return None,
     };
@@ -129,7 +130,9 @@ fn build_decimal_text(value: &Value) -> Option<String> {
     }
 }
 
-/// DuckDB giữ DATE là số ngày kể từ 1970-01-01.
+/// DuckDB giữ DATE là số ngày kể từ 1970-01-01. Năm ngoài 0000 tới 9999 theo dạng mở rộng của ISO 8601 (chrono in
+/// vậy), như chú thích của ValueKind: "+10000-01-01", "0000-12-31" là năm 1 trước Công nguyên. DuckDB tự in thì khác
+/// ("10000-01-01", "0001-12-31 (BC)").
 pub(super) fn build_date_text(days: i32) -> Option<String> {
     let midnight = DateTime::from_timestamp(i64::from(days) * 86_400, 0)?;
     Some(midnight.format("%Y-%m-%d").to_string())

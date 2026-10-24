@@ -14,7 +14,7 @@ use tokio::sync::Semaphore;
 
 use super::ask_contract::{AskStatus, StepName, ValueKind};
 use super::ask_other_text::build_other_text;
-use super::ask_repair::build_safe_error;
+use super::ask_repair::{build_safe_error, build_user_error, read_sql_reply};
 use super::ask_result::{build_result_table, SENT_ROWS};
 use super::ask_run::{run_with_repair, RunInput, RunOutcome};
 use crate::engine::analytics::parquet_glob;
@@ -108,6 +108,15 @@ impl LlmProvider for ScriptedLlm {
 }
 
 async fn run(llm: &dyn LlmProvider, data: &Dataset, sql: &str, timeout: Duration) -> RunOutcome {
+    try_run(llm, data, sql, timeout).await.unwrap()
+}
+
+async fn try_run(
+    llm: &dyn LlmProvider,
+    data: &Dataset,
+    sql: &str,
+    timeout: Duration,
+) -> Result<RunOutcome, AppError> {
     let jobs = Arc::new(Semaphore::new(2));
     let input = RunInput {
         question: "Doanh thu theo khu vực",
@@ -118,7 +127,7 @@ async fn run(llm: &dyn LlmProvider, data: &Dataset, sql: &str, timeout: Duration
         timeout,
         jobs: &jobs,
     };
-    run_with_repair(llm, input).await.unwrap()
+    run_with_repair(llm, input).await
 }
 
 async fn run_scripted(llm: &ScriptedLlm, sql: &str) -> RunOutcome {
@@ -149,6 +158,11 @@ async fn good_sql_runs_without_the_model() {
     assert!(!result.truncated && !result.limit_reached);
     assert!(outcome.sql_guarded.unwrap().ends_with("LIMIT 100000"));
     assert!(outcome.message.is_none());
+    // Chi tiết bước guard như mẫu ở ask_examples.rs.
+    assert_eq!(
+        outcome.steps[0].detail.as_deref(),
+        Some("Thêm LIMIT 100000")
+    );
 }
 
 #[tokio::test]
@@ -197,12 +211,63 @@ async fn second_failure_stops_the_question() {
     );
     assert_eq!(outcome.sql_generated, still_bad);
     assert!(outcome.sql_guarded.unwrap().starts_with(still_bad));
+    // Lời cho người dùng bỏ loại lỗi tiếng Anh của DuckDB ("Conversion Error: "), như mẫu failed.
     let message = outcome.message.unwrap();
     assert!(
-        message.contains("kể cả sau khi mô hình sửa một lần") && message.contains("DOUBLE"),
+        message.starts_with(
+            "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not convert string"
+        ) && message.contains("DOUBLE"),
         "{message}"
     );
+    let run_detail = outcome.steps[1].detail.as_deref().unwrap();
+    assert!(
+        run_detail.starts_with("Could not convert string 'South'"),
+        "{run_detail}"
+    );
+    // Mô hình vẫn nhận cả loại lỗi.
+    assert!(llm.prompts()[0].contains("Conversion Error: Could not convert"));
     assert!(outcome.result.is_none());
+}
+
+/// File Parquet hỏng là lỗi máy chủ: không gửi mô hình (ScriptedLlm không có câu trả lời, gọi là panic).
+#[tokio::test]
+async fn corrupt_parquet_file_is_a_server_error() {
+    let data = Dataset::sales();
+    let file = data.tables[0].parquet_dir.join("part-0001.parquet");
+    std::fs::write(&file, b"not a parquet file").unwrap();
+    let llm = ScriptedLlm::new(vec![]);
+    let result = try_run(&llm, &data, GOOD_SQL, Duration::from_secs(30)).await;
+    assert!(matches!(result, Err(AppError::Internal(_))), "{result:?}");
+}
+
+#[test]
+fn sql_is_read_from_code_blocks_in_any_case() {
+    for reply in [
+        "SELECT 1",
+        "```sql\nSELECT 1\n```",
+        "```SQL\nSELECT 1\n```",
+        "```Sql SELECT 1```",
+        "```\nSELECT 1\n```",
+        "  ```sql\n  SELECT 1  \n```  ",
+    ] {
+        assert_eq!(read_sql_reply(reply), "SELECT 1", "{reply:?}");
+    }
+    // "select" ngay sau ``` là SQL, không phải tên ngôn ngữ.
+    assert_eq!(read_sql_reply("```select 1```"), "select 1");
+}
+
+#[test]
+fn user_errors_drop_the_duckdb_error_kind() {
+    assert_eq!(
+        build_user_error(
+            "Binder Error: Referenced column \"x\" not found\nCandidate bindings: \"a\""
+        ),
+        "Referenced column \"x\" not found"
+    );
+    assert_eq!(
+        build_user_error("Không có cột x trong các bảng đang dùng"),
+        "Không có cột x trong các bảng đang dùng"
+    );
 }
 
 /// Guard từ chối vì cột không có trong hồ sơ: lý do của guard gửi cho mô hình sửa.
@@ -407,6 +472,26 @@ fn cells_follow_the_kind_of_their_column() {
             "[1, 2]",
             null,
             "Hà Nội"
+        ])
+    );
+}
+
+/// FLOAT gửi đúng số ngắn nhất của f32; ngày giờ ngoài năm 0000 tới 9999 và vô cực theo chú thích của ValueKind.
+#[test]
+fn float_and_edge_dates_follow_the_contract() {
+    let sql = "SELECT 0.1::FLOAT AS f, DATE '10000-01-01' AS future, DATE '0001-01-01' - 1 AS bc, \
+               'infinity'::DATE AS forever, TIMESTAMP '10000-01-01 00:00:00' AS ts, 'infinity'::TIMESTAMP AS ts_inf";
+    let output = run_query(sql, SENT_ROWS, Duration::from_secs(30)).unwrap();
+    let table = build_result_table(output, MAX_ROWS);
+    assert_eq!(
+        serde_json::to_value(&table.rows[0]).unwrap(),
+        serde_json::json!([
+            0.1,
+            "+10000-01-01",
+            "0000-12-31",
+            null,
+            "+10000-01-01T00:00:00",
+            null
         ])
     );
 }

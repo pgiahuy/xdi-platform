@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask_other_text.rs - chữ của ô dạng other (ValueKind::Other: TIME, INTERVAL, danh sách, struct, map, UUID,
 BLOB...), viết như DuckDB in khi đổi giá trị sang VARCHAR, để người dùng thấy giống khi tự chạy câu trong DuckDB.
-ask_result.rs gọi build_other_text cho các cột này. ask_run_tests.rs so với chính DuckDB cho từng loại kể trên. Còn
-khác ở ca hiếm: số thực rất lớn trong danh sách (DuckDB in 1e+20, ở đây 1e20), giờ có múi giờ nằm trong danh sách. */
+ask_result.rs gọi build_other_text cho các cột này. ask_run_tests.rs so với chính DuckDB cho từng loại kể trên.
+
+Cột ngoài cùng kiểu TIME_NS, TIMETZ, BIT, BIGNUM không tới đây: engine/query.rs báo lỗi để mô hình đổi sang VARCHAR, vì
+duckdb-rs đọc chúng sai hoặc thiếu. Còn khác DuckDB khi các kiểu đó nằm trong danh sách, struct hay map: BIT, BIGNUM ra
+byte thô dạng \xAA, TIMETZ mất múi giờ; ngày giờ trong danh sách in theo chrono (năm ngoài 0000 tới 9999 có dấu); số
+thực rất lớn in 1e20 thay vì 1e+20. */
 
 use duckdb::types::{TimeUnit, Value};
 

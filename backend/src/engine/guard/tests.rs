@@ -475,24 +475,76 @@ fn rejects_column_with_too_many_parts() {
     assert_rejected("SELECT main.sales.region FROM sales");
 }
 
+// Hàm dựng giá trị lớn từ tham số (guard/sizes.rs)
+
+/// Câu đầu là câu được báo vượt cả giới hạn thời gian lẫn bộ nhớ: DuckDB tính lpad hằng lúc chuẩn bị câu (sizes.rs).
+#[test]
+fn rejects_padding_to_huge_lengths() {
+    for sql in [
+        "SELECT length(lpad('x', 1900000000, 'y'))",
+        "SELECT length(RPAD('x', 1900000000, 'y'))",
+        "SELECT lpad(region, 10001, 'y') FROM sales",
+        "SELECT lpad(region, 1000 * 1000, 'y') FROM sales",
+        "SELECT lpad(region, amount, 'y') FROM sales",
+        "SELECT lpad(region, (SELECT 5), 'y') FROM sales",
+        "SELECT region FROM sales WHERE lpad(region, 99999999, ' ') = 'x'",
+    ] {
+        let reason = assert_rejected(sql);
+        assert!(reason.contains("10000"), "{sql}: {reason}");
+        assert_rejected_for_other_reason(sql);
+    }
+}
+
+#[test]
+fn rejects_replacements_that_grow_the_text() {
+    for sql in [
+        "SELECT replace(region, 'a', 'aa') FROM sales",
+        "SELECT replace(replace('y', 'y', 'yyyyyyyyyy'), 'y', 'yyyyyyyyyy')",
+        "SELECT replace(region, 'a', region) FROM sales",
+        "SELECT replace(region, region, 'x') FROM sales",
+        "SELECT regexp_replace(region, '', 'x', 'g') FROM sales",
+        "SELECT regexp_replace(region, '(a)', '\\1\\1', 'g') FROM sales",
+    ] {
+        assert_rejected_for_other_reason(sql);
+    }
+}
+
+#[test]
+fn accepts_size_functions_used_for_cleaning() {
+    for sql in [
+        "SELECT lpad(CAST(customer_id AS VARCHAR), 8, '0') FROM sales",
+        "SELECT rpad(region, 10000, ' ') FROM sales",
+        "SELECT replace(region, ',', '') FROM sales",
+        "SELECT replace(region, 'South', 'Nam') FROM sales",
+        "SELECT regexp_replace(region, '[0-9]+', '', 'g') FROM sales",
+    ] {
+        assert_accepted(sql);
+    }
+}
+
 // Giới hạn dòng
 
 #[test]
 fn adds_limit_when_missing() {
     let guarded = assert_accepted("SELECT region FROM sales");
     assert_eq!(guarded.shown, "SELECT region FROM sales LIMIT 100");
+    assert_eq!(guarded.limit_note.as_deref(), Some("Thêm LIMIT 100"));
+    let guarded = assert_accepted("SELECT region FROM sales OFFSET 5");
+    assert_eq!(guarded.limit_note.as_deref(), Some("Thêm LIMIT 100"));
 }
 
 #[test]
 fn lowers_limit_above_max_rows() {
     let guarded = assert_accepted("SELECT region FROM sales LIMIT 5000");
     assert_eq!(guarded.shown, "SELECT region FROM sales LIMIT 100");
+    assert_eq!(guarded.limit_note.as_deref(), Some("Hạ LIMIT xuống 100"));
 }
 
 #[test]
 fn keeps_smaller_limit_and_offset() {
     let guarded = assert_accepted("SELECT region FROM sales LIMIT 10 OFFSET 5");
     assert_eq!(guarded.shown, "SELECT region FROM sales LIMIT 10 OFFSET 5");
+    assert_eq!(guarded.limit_note, None);
 }
 
 #[test]

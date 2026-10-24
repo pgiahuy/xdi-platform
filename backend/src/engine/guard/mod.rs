@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/guard/mod.rs - kiểm SQL do LLM sinh trước khi chạy, theo bốn bước trong build_guarded_sql: chỉ nhận một câu
-SELECT chỉ đọc; kiểm tên bảng, hàm, cột; thêm LIMIT; đổi bảng logic sang file Parquet. Test ở guard/tests.rs.
+SELECT chỉ đọc; kiểm tên bảng, hàm, cột (luật kích thước của vài hàm ở guard/sizes.rs); thêm LIMIT; đổi bảng logic
+sang file Parquet. Test ở guard/tests.rs.
 
 Kiểm trên cây cú pháp vì dò chữ "DROP" thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Hạn chế: cây do
 sqlparser dựng, không phải DuckDB, nên cú pháp hiếm có thể bị hai bên hiểu khác nhau.
@@ -40,6 +41,8 @@ pub struct GuardedSql {
     pub shown: String,
     /// Chỉ đưa cho DuckDB.
     pub runnable: String,
+    /// Guard đã đổi LIMIT thế nào, chữ cho người dùng ("Thêm LIMIT 100000"); None khi giữ LIMIT của câu.
+    pub limit_note: Option<String>,
 }
 
 /// Vì sao guard không nhận câu. Lý do là chữ tiếng Việt chỉ đúng chỗ sai, đọc được cả với mô hình lẫn người dùng.
@@ -66,12 +69,16 @@ pub fn build_guarded_sql(
     let cte_names = check_names(&query, tables)?;
     // Chỗ cho #31 tiêm điều kiện phân quyền. Sau check_names để mọi bảng gặp được đều có trong danh sách; trước
     // build_runnable vì sau đó `sales s` thành `read_parquet(...) AS s`, mất tên bảng. `shown` sẽ chứa cả điều kiện.
-    apply_row_limit(&mut query, max_rows)?;
+    let limit_note = apply_row_limit(&mut query, max_rows)?;
     let shown = query.to_string();
     let runnable = build_runnable(query, tables, &cte_names)
         .map_err(GuardError::Internal)?
         .to_string();
-    Ok(GuardedSql { shown, runnable })
+    Ok(GuardedSql {
+        shown,
+        runnable,
+        limit_note,
+    })
 }
 
 // Bước 1: chỉ nhận một câu SELECT chỉ đọc.
@@ -358,12 +365,15 @@ struct ExprChecker<'a> {
 impl ExprChecker<'_> {
     /// `main.sum` bị từ chối dù sum có trong danh sách: danh sách chỉ ghi tên trơn, không xét schema nào chứa gì.
     fn check_function(&self, function: &Function) -> ControlFlow<GuardError> {
-        let allowed = single_ident(&function.name)
-            .is_some_and(|ident| ALLOWED_FUNCTIONS.contains(&name_key(ident).as_str()));
-        if allowed {
-            ControlFlow::Continue(())
-        } else {
-            ControlFlow::Break(rejected(format!("Không cho dùng hàm {}", function.name)))
+        let name = single_ident(&function.name)
+            .map(name_key)
+            .filter(|name| ALLOWED_FUNCTIONS.contains(&name.as_str()));
+        let Some(name) = name else {
+            return ControlFlow::Break(rejected(format!("Không cho dùng hàm {}", function.name)));
+        };
+        match sizes::check_function_size(&name, function) {
+            Ok(()) => ControlFlow::Continue(()),
+            Err(reason) => ControlFlow::Break(rejected(reason)),
         }
     }
 
@@ -408,8 +418,9 @@ impl Visitor for ExprChecker<'_> {
 
 // Bước 3: giới hạn số dòng.
 
-/// Chỉ giới hạn số dòng trả về; thời gian chạy và bộ nhớ của câu giới hạn lúc chạy, ở engine/query.rs.
-fn apply_row_limit(query: &mut Query, max_rows: u64) -> Result<(), GuardError> {
+/// Chỉ giới hạn số dòng trả về; thời gian chạy và bộ nhớ của câu giới hạn lúc chạy, ở engine/query.rs. Trả ghi chú
+/// cho GuardedSql::limit_note.
+fn apply_row_limit(query: &mut Query, max_rows: u64) -> Result<Option<String>, GuardError> {
     // Từ chối thay vì sửa: FETCH FIRST làm cùng việc với LIMIT, LLM đọc lý do rồi viết lại bằng LIMIT.
     if query.fetch.is_some() {
         return Err(rejected("Dùng LIMIT thay cho FETCH FIRST"));
@@ -422,21 +433,25 @@ fn apply_row_limit(query: &mut Query, max_rows: u64) -> Result<(), GuardError> {
                 offset: None,
                 limit_by: vec![],
             });
+            Ok(Some(format!("Thêm LIMIT {max_rows}")))
         }
         Some(LimitClause::LimitOffset {
             limit, limit_by, ..
-        }) if limit_by.is_empty() => {
-            // Biểu thức hay câu con thì không biết trước số dòng nên thay bằng max_rows, kể cả khi nó ra số nhỏ hơn.
-            if !limit
-                .as_ref()
-                .is_some_and(|l| is_number_at_most(l, max_rows))
-            {
+        }) if limit_by.is_empty() => match limit {
+            // Chỉ có OFFSET.
+            None => {
                 *limit = Some(max);
+                Ok(Some(format!("Thêm LIMIT {max_rows}")))
             }
-        }
-        Some(_) => return Err(rejected("Chỉ hỗ trợ LIMIT n hoặc LIMIT n OFFSET m")),
+            Some(l) if is_number_at_most(l, max_rows) => Ok(None),
+            // Biểu thức hay câu con thì không biết trước số dòng nên thay bằng max_rows, kể cả khi nó ra số nhỏ hơn.
+            Some(_) => {
+                *limit = Some(max);
+                Ok(Some(format!("Hạ LIMIT xuống {max_rows}")))
+            }
+        },
+        Some(_) => Err(rejected("Chỉ hỗ trợ LIMIT n hoặc LIMIT n OFFSET m")),
     }
-    Ok(())
 }
 
 fn is_number_at_most(expr: &Expr, max: u64) -> bool {
@@ -572,5 +587,6 @@ fn unknown_name(reason: String) -> GuardError {
     GuardError::UnknownName(reason)
 }
 
+mod sizes;
 #[cfg(test)]
 mod tests;

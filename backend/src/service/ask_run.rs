@@ -16,7 +16,8 @@ use tokio::sync::Semaphore;
 
 use super::ask_contract::{AskStatus, AskStep, ResultTable, StepName};
 use super::ask_repair::{
-    build_repair_prompt, build_safe_error, build_user_text, first_line, read_sql_reply,
+    build_repair_prompt, build_safe_error, build_user_error, build_user_text, mentions_data_files,
+    read_sql_reply,
 };
 use super::ask_result::{build_result_table, SENT_ROWS};
 use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError};
@@ -116,7 +117,7 @@ pub async fn run_with_repair(
             // Câu hỏi dừng ở bước repair nên là failed; SQL giữ là câu đầu.
             let message = format!(
                 "Câu SQL lỗi ({}) và mô hình không sửa được: {model_error}.",
-                first_line(&error)
+                build_user_error(&error)
             );
             return Ok(RunOutcome {
                 status: AskStatus::Failed,
@@ -147,7 +148,8 @@ async fn attempt(
     let started = Instant::now();
     let (reason, fixable) = match build_guarded_sql(sql, input.tables, input.max_rows) {
         Ok(guarded) => {
-            steps.push(build_step(StepName::Guard, started, true, None));
+            let note = guarded.limit_note.as_deref();
+            steps.push(build_step(StepName::Guard, started, true, note));
             return run_guarded(input, guarded.shown, guarded.runnable, steps).await;
         }
         Err(GuardError::Internal(e)) => return Err(e),
@@ -171,9 +173,13 @@ async fn run_guarded(
             let result = build_result_table(output, input.max_rows);
             (Attempt::Answered { shown, result }, None)
         }
+        // File Parquet hỏng: lỗi máy chủ như IO Error, không gửi mô hình (xem mentions_data_files).
+        Err(QueryError::Sql(raw)) if mentions_data_files(&raw, input.tables) => {
+            return Err(AppError::Internal(format!("read dataset files: {raw}")));
+        }
         Err(QueryError::Sql(raw)) => {
             let error = build_safe_error(&raw, input.tables);
-            let detail = first_line(&error);
+            let detail = build_user_error(&error);
             (Attempt::RunFailed { shown, error }, Some(detail))
         }
         Err(QueryError::Timeout) => {
@@ -241,7 +247,7 @@ fn build_outcome(attempt: Attempt, sql: String, steps: Vec<AskStep>) -> RunOutco
             AskStatus::Failed,
             Some(format!(
                 "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: {}. Thử hỏi lại theo cách khác.",
-                first_line(&error)
+                build_user_error(&error)
             )),
             Some(shown),
             None,

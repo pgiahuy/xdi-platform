@@ -71,7 +71,16 @@ sổ (`row_number`, `rank`, `lag`...), số, null và điều kiện (`coalesce`
 (`date_trunc`, `year`, `strftime`...). Hàm ngoài danh sách bị từ chối ở mọi chỗ có biểu thức: danh sách cột, `WHERE`,
 `GROUP BY`, `HAVING`, `ORDER BY`, `CASE`, `FILTER`, `OVER`, điều kiện `JOIN`. Ví dụ bị từ chối: `getenv`,
 `current_setting`, `read_text`, `COLUMNS(...)`, tên hàm kèm schema (`main.sum`). Chỉ thêm hàm vào danh sách sau khi chắc
-nó không đọc file, cấu hình hay mạng.
+nó không đọc file, cấu hình hay mạng, và không dựng được giá trị khổng lồ từ tham số.
+
+Vài hàm trong danh sách có luật riêng vì tham số quyết định kích thước kết quả (`engine/guard/sizes.rs`). DuckDB tính
+biểu thức hằng ngay lúc chuẩn bị câu, khi giới hạn thời gian chưa có tác dụng, và chuỗi dựng ra không tính vào trần bộ
+nhớ. Đo bằng `run_query` trên máy phát triển: `SELECT length(lpad('x', 300000000, 'y'))` chạy 32 giây với giới hạn 1
+giây; độ dài lấy từ cột chạy 87 giây và dùng 1,2 GB RAM với trần 1 GB.
+
+- `lpad`, `rpad`: độ dài phải là số viết thẳng, tối đa 10 000.
+- `replace`: chuỗi tìm và chuỗi thay viết thẳng, chuỗi thay không dài hơn chuỗi tìm (bỏ ký tự, đổi dấu phân cách).
+- `regexp_replace`: chỉ để xóa, chuỗi thay phải là `''`, vì mẫu khớp được chuỗi rỗng ở mọi vị trí.
 
 **Cột.** Tên cột `cot` phải là cột trong danh sách của một bảng câu đang dùng, hoặc tên chính câu đặt ra (`AS tong`,
 `WITH t(a, b)`, `(SELECT ...) AS x(a, b)`). Dạng `bang.cot` thì `bang` phải là bảng, bảng tạm hay bí danh có trong câu.
@@ -123,9 +132,9 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
 | Câu lệnh | Ghi, `ATTACH`, `COPY`, `PRAGMA`, `INSTALL`, `LOAD`, `DESCRIBE`, `SHOW`, `SUMMARIZE`, `EXPLAIN`, `SET`, `RESET`, `CALL`, `USE`, `DETACH`, `CREATE SECRET`, `EXPORT DATABASE`, `CHECKPOINT`; `DELETE` trong `WITH`; `SELECT INTO`; `TABLE x` kể cả trong `UNION` |
 | Bảng | `read_csv`, `glob`, `read_parquet`, `parquet_scan`, `read_json_auto`, `generate_series`, `range` ở chỗ bảng, kể cả trong `JOIN`, truy vấn con và `WITH`; bảng hệ thống (`duckdb_tables`, `duckdb_settings`, `pg_catalog.pg_tables`, `sqlite_master`, `information_schema`); vế `UNION` đọc nguồn ngoài danh sách; tên file trong nháy đơn và nháy kép; bảng lạ (lý do liệt kê bảng dùng được); tên kèm schema; chữ Unicode giống chữ Latin; bí danh trùng tên bảng khác; `WITH RECURSIVE`; bảng tạm trùng tên bảng dữ liệu |
 | Độ dài | Chuỗi 20 000 vế `UNION ALL` bị từ chối trước khi đọc; câu sát 32 KB vẫn qua mà không tràn stack 2 MB của luồng test |
-| Hàm | `current_setting`, `getenv` (cả trong nháy kép), `read_text`, `main.sum`, `COLUMNS`; hàm lạ trong `ORDER BY`, `HAVING`, `CASE`, `FILTER`, `OVER`, `JOIN ... ON` |
+| Hàm | `current_setting`, `getenv` (cả trong nháy kép), `read_text`, `main.sum`, `COLUMNS`; hàm lạ trong `ORDER BY`, `HAVING`, `CASE`, `FILTER`, `OVER`, `JOIN ... ON`; `lpad`, `rpad` với độ dài hằng lớn, biểu thức, tên cột, câu con; `replace` làm chuỗi dài ra (cả lồng nhau); `regexp_replace` có chuỗi thay; các cách dùng để làm sạch chuỗi vẫn qua |
 | Cột | Cột không có (cả dạng `s.profit`); chữ Unicode giống chữ Latin; bí danh bảng không có; tên ba phần |
-| Số dòng | Thêm `LIMIT`; hạ `LIMIT 5000`; giữ `LIMIT 10 OFFSET 5`; thay `LIMIT (SELECT 5000)`; giới hạn cả `UNION`; từ chối `FETCH FIRST` |
+| Số dòng | Thêm `LIMIT` (cả khi chỉ có `OFFSET`); hạ `LIMIT 5000`; giữ `LIMIT 10 OFFSET 5`; thay `LIMIT (SELECT 5000)`; giới hạn cả `UNION`; từ chối `FETCH FIRST`; ghi chú `limit_note` ("Thêm LIMIT 100", "Hạ LIMIT xuống 100") |
 | Bản chạy | Bảng logic thành `read_parquet` và giữ tên làm bí danh; giữ bí danh có sẵn; đổi tên bảng tạm; bảng tạm tên giống file không còn trong bản chạy; `shown` không chứa đường dẫn; một câu có `WITH` và `JOIN` chạy trên DuckDB thật với file Parquet và ra đúng kết quả |
 
 ## Hạn chế đã biết
@@ -136,7 +145,12 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
   dữ liệu là việc của danh sách bảng và hàm.
 - Trường của cột kiểu struct (`cot.truong`) bị từ chối, vì guard hiểu `cot` là tên bảng.
 - Guard chỉ giới hạn số dòng trả về. Thời gian chạy (`QUERY_TIMEOUT_SECS`) và bộ nhớ (1 GB mỗi câu) giới hạn lúc
-  chạy, ở `engine/query.rs`.
+  chạy, ở `engine/query.rs`, và chỉ chặn được phần DuckDB tự quản: câu dừng ở lần DuckDB kiểm cờ dừng trong lúc chạy,
+  trần bộ nhớ tính bảng băm, sắp xếp, bộ đệm đọc file. Không chặn được phần tính lúc chuẩn bị câu và chuỗi rất dài.
+  Guard chặn các hàm dựng chuỗi dài từ tham số (bước 2), nhưng ghép chuỗi (`||`, `concat`) qua nhiều tầng câu con vẫn
+  nhân đôi được chuỗi mỗi tầng: đo bằng `run_query` trên máy phát triển, 25 tầng `SELECT v || v AS v FROM (...)`
+  dựng chuỗi 268 MB trong dưới một giây, RSS lên 1,1 GB. Bảo đảm thật cần chạy câu trong tiến trình con có trần RAM và thời gian của hệ
+  điều hành, như bộ đọc Excel (`engine/excel_worker.rs`); chưa làm.
 - Chưa tiêm điều kiện phân quyền theo dòng ([#31](https://github.com/pgiahuy/xdi-platform/issues/31)). Chỗ tiêm đã
   định: sau bước 2 (mọi bảng đã được kiểm), trước bước 4 (còn tên bảng logic); `shown` sẽ chứa cả điều kiện đó.
 - Chưa có nơi gọi ([#33](https://github.com/pgiahuy/xdi-platform/issues/33)): danh sách cột của `AllowedTable` sẽ lấy

@@ -34,7 +34,8 @@ pub struct Config {
     /// Như gemini_timeout, nhưng mặc định dài hơn nhiều: mô hình chạy bằng CPU của máy thường chậm hơn Gemini nhiều
     /// lần, và lần gọi đầu còn phải nạp mô hình vào RAM.
     pub ollama_timeout: Duration,
-    /// Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB (QUERY_TIMEOUT_SECS); quá thì câu bị dừng.
+    /// Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB (QUERY_TIMEOUT_SECS); quá thì câu bị dừng, trừ phần
+    /// DuckDB tính lúc chuẩn bị câu (engine/query.rs).
     // Endpoint hỏi (#33) đọc trường này khi gọi service/ask_run.rs; gỡ allow khi đó.
     #[allow(dead_code)]
     pub query_timeout: Duration,
