@@ -4,6 +4,12 @@ Gọi engine và auth; không bao giờ gọi ngược lên api. */
 
 pub mod accounts;
 pub mod ask;
+// Ngữ cảnh câu hỏi có trước luồng hỏi; endpoint hỏi (#33) và prompt (#29) gọi tới. Gỡ allow khi đó để clippy bắt lại
+// mã thừa.
+#[allow(dead_code)]
+pub mod ask_context;
+#[cfg(test)]
+mod ask_context_tests;
 // Hợp đồng khai đủ kiểu ô, vai trò cột và loại cảnh báo trước khi luồng hỏi (#33, #35, #36) dựng chúng; mẫu chỉ dùng
 // một phần. Tạm cho phép "chưa dùng" ở module này; gỡ khi luồng hỏi chạy để clippy bắt lại.
 #[allow(dead_code)]
@@ -11,6 +17,11 @@ pub mod ask_contract;
 pub mod ask_examples;
 #[cfg(test)]
 mod ask_examples_tests;
+// Hai phần của ngữ cảnh câu hỏi (ask_context), cùng lý do cho phép "chưa dùng".
+#[allow(dead_code)]
+pub mod ask_match;
+#[allow(dead_code)]
+pub mod ask_phrases;
 // Kết quả và vòng sửa của câu hỏi; endpoint hỏi (#33) gọi run_with_repair. Gỡ allow khi đó, như ở ask_contract.
 #[allow(dead_code)]
 pub mod ask_other_text;

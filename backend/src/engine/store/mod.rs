@@ -27,7 +27,7 @@ pub mod test_support;
 mod workspaces;
 
 pub use accounts::{Membership, NewAdmin, User};
-pub use columns::{NewColumn, NewColumnValue, ProfileRole};
+pub use columns::{ColumnValue, NewColumn, NewColumnValue, ProfileColumn, ProfileRole, ValueHit};
 #[allow(unused_imports)]
 pub use datasets::{
     Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SourceKind,
