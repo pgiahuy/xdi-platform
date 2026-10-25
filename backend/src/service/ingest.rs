@@ -12,6 +12,7 @@ Các bước, sắp để lỗi ở bước đầu không để lại gì:
    lỗi thì xóa dataset vừa tạo, nên nạp lại cùng bộ file không vấp phiên bản trùng hash mà thiếu hồ sơ.
 5. Chuyển thư mục Parquet về chỗ cuối <DATA_DIR>/<workspace>/<dataset>/<thư mục phiên bản>, rồi mới đặt phiên bản
    hiện hành, để phiên bản hiện hành luôn có file và có hồ sơ.
+6. Trả 201 rồi lập hồ sơ lớp ngữ nghĩa nền (service/semantic.rs): mô tả, bí danh, câu hỏi gợi ý.
 Thư mục tạm xóa khi Staging ra khỏi phạm vi, kể cả khi lỗi; backend chết giữa chừng thì lần khởi động sau xóa
 (clear_staging). Bước 4 và 5 chưa nằm trong một giao dịch: lỗi giữa hai bước có thể để lại dòng thừa trong Postgres
 (#79).
@@ -31,7 +32,7 @@ use uuid::Uuid;
 use crate::auth::{Member, WorkspaceId};
 use crate::engine::analytics::{self, Column, FileFormat, InputFile};
 use crate::engine::store::{Dataset, DatasetVersion, NewColumn, NewVersion, SourceKind};
-use crate::service::{excel, profile};
+use crate::service::{excel, profile, semantic};
 use crate::{error::AppError, state::AppState};
 
 /// Thư mục tạm cho một lần nạp, dưới <DATA_DIR>/staging/. Tự xóa khi ra khỏi phạm vi (Drop), nên lỗi giữa chừng
@@ -303,6 +304,10 @@ pub async fn upload(
         .await?
         .ok_or_else(dataset_not_found)?;
     tracing::info!(dataset_id = %dataset.id, version = version.version, rows = materialized.row_count, "dataset version created");
+
+    // Lớp ngữ nghĩa (#23) chạy nền sau khi trả 201: gọi mô hình có thể chậm hoặc lỗi, không để chặn hay làm hỏng
+    // lần nạp. Giao diện theo dõi qua profile_status của phiên bản. Phiên bản trùng (trả sớm ở trên) không gọi lại.
+    semantic::spawn_semantic_profile(state.clone(), *ws, dataset.clone(), version.clone());
 
     Ok(UploadResult {
         created: true,

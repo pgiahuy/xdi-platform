@@ -59,6 +59,13 @@ pub struct Dataset {
     pub domain: Option<String>,
     #[schema(required)]
     pub current_version_id: Option<Uuid>,
+    /// Suggested questions of the current version, written by the semantic profile (#23); empty while that step has
+    /// not finished.
+    #[schema(required)]
+    // Câu hỏi gợi ý nằm trên dataset_versions (đi theo phiên bản): list_datasets và get_dataset nối sang phiên bản
+    // hiện hành để lấy; create_dataset (RETURNING không nối được) nhờ `default` mà có mảng rỗng.
+    #[sqlx(json, default)]
+    pub suggested_questions: Vec<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -96,6 +103,15 @@ pub struct PendingVersion {
 }
 
 const DATASET_COLUMNS: &str = "id, name, logical_table, domain, current_version_id, created_at";
+// Cùng danh sách đó kèm câu hỏi gợi ý, có tiền tố bảng, dùng khi câu SQL nối datasets với phiên bản hiện hành.
+// suggested_questions là jsonb trên dataset_versions; dataset chưa có phiên bản hiện hành (mới tạo, chưa nạp xong)
+// hay phiên bản chưa qua lớp ngữ nghĩa thì ra mảng rỗng.
+const DATASET_COLUMNS_D: &str =
+    "d.id, d.name, d.logical_table, d.domain, d.current_version_id, d.created_at, \
+    COALESCE(v.suggested_questions, '[]'::jsonb) AS suggested_questions";
+const CURRENT_VERSION_JOIN: &str =
+    "FROM datasets d LEFT JOIN dataset_versions v ON v.workspace_id = d.workspace_id \
+    AND v.id = d.current_version_id";
 const VERSION_COLUMNS: &str =
     "id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status, created_at";
 // Cùng danh sách cột, có tiền tố bảng, dùng khi câu SQL nối với datasets.
@@ -139,8 +155,9 @@ impl Store {
     }
 
     pub async fn list_datasets(&self, ws: &WorkspaceId) -> Result<Vec<Dataset>, AppError> {
-        let sql =
-            format!("SELECT {DATASET_COLUMNS} FROM datasets WHERE workspace_id = $1 ORDER BY created_at DESC");
+        let sql = format!(
+            "SELECT {DATASET_COLUMNS_D} {CURRENT_VERSION_JOIN} WHERE d.workspace_id = $1 ORDER BY d.created_at DESC"
+        );
         sqlx::query_as(&sql)
             .bind(ws.as_uuid())
             .fetch_all(&self.pool)
@@ -153,8 +170,9 @@ impl Store {
         ws: &WorkspaceId,
         id: Uuid,
     ) -> Result<Option<Dataset>, AppError> {
-        let sql =
-            format!("SELECT {DATASET_COLUMNS} FROM datasets WHERE workspace_id = $1 AND id = $2");
+        let sql = format!(
+            "SELECT {DATASET_COLUMNS_D} {CURRENT_VERSION_JOIN} WHERE d.workspace_id = $1 AND d.id = $2"
+        );
         sqlx::query_as(&sql)
             .bind(ws.as_uuid())
             .bind(id)

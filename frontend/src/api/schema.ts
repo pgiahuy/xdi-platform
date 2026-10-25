@@ -636,6 +636,11 @@ export interface components {
             /** @description Table name used in SQL, derived from the dataset name. */
             logical_table: string;
             name: string;
+            /**
+             * @description Suggested questions of the current version, written by the semantic profile (#23); empty while that step has
+             *     not finished.
+             */
+            suggested_questions: string[];
         };
         DatasetVersion: {
             /** Format: date-time */

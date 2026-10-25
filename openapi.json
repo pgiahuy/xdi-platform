@@ -2518,6 +2518,7 @@
           "logical_table",
           "domain",
           "current_version_id",
+          "suggested_questions",
           "created_at"
         ],
         "properties": {
@@ -2548,6 +2549,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "suggested_questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Suggested questions of the current version, written by the semantic profile (#23); empty while that step has\nnot finished."
           }
         }
       },

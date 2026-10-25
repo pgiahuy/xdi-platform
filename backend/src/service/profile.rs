@@ -253,7 +253,7 @@ fn is_time_type(data_type: &str) -> bool {
     data_type == "DATE" || data_type.starts_with("TIMESTAMP")
 }
 
-fn is_integer_type(data_type: &str) -> bool {
+pub(crate) fn is_integer_type(data_type: &str) -> bool {
     matches!(
         data_type,
         "TINYINT"

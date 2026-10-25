@@ -122,7 +122,7 @@ vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset
   với `DATA_DIR`. Trong lúc nạp, file nằm ở thư mục tạm `<DATA_DIR>/staging/`, xóa khi xong hay khi lỗi; backend dừng
   giữa chừng thì lần khởi động sau xóa.
 - Phiên bản lưu số dòng (`row_count`) và trạng thái hồ sơ `profile_status`: `structure` khi đã có hồ sơ cột (mục
-  dưới), `pending` khi chưa.
+  dưới), `semantic` khi xong lớp ngữ nghĩa, `pending` khi chưa, `failed` khi lớp cấu trúc lỗi do dữ liệu.
 
 ## Tên bảng và tên cột
 
@@ -185,14 +185,35 @@ Bảng một hai dòng thì cột số nào cũng mỗi dòng một giá trị v
 
 Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order City` (3597 thành phố) là `text`,
 `Order Item Id` là `key`, hai cột `... (DateOrders)` là `time`. Số nguyên lặp lại như `Order Id` hay `Customer Id` ra
-`measure` theo luật; sửa vai trò thuộc hồ sơ ngữ nghĩa ([#23](https://github.com/pgiahuy/xdi-platform/issues/23)) hoặc
-màn sửa hồ sơ của admin, chưa có.
+`measure` theo luật; lớp ngữ nghĩa (mục dưới) sửa được một số ca như vậy trong phạm vi hẹp.
+
+## Hồ sơ lớp ngữ nghĩa
+
+Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
+(`service/semantic.rs`): mô hình đề xuất mô tả và bí danh cột, bí danh giá trị, câu hỏi gợi ý, và sửa vai trò cột
+trong phạm vi hẹp. Xong thì `profile_status` là `semantic`; mô hình lỗi hay trả lời hỏng thì giữ `structure`, chỉ ghi
+log, người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới.
+Nạp trùng (không tạo phiên bản) không gọi lại.
+
+Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác
+nhau; min, max chỉ kèm cột `measure` và `time` (min, max của cột chữ có thể là một giá trị thật của người dùng);
+danh sách giá trị chỉ gửi cho cột `dimension` không nhạy cảm (`is_sensitive`). Giá trị của cột `text`, `key` hay cột
+nhạy cảm không bao giờ vào prompt.
+
+Câu trả lời được kiểm từng mục trước khi ghi, mục sai bỏ riêng: cột và giá trị phải có thật (giá trị phải nằm trong
+`column_values`), mô tả tối đa 300 ký tự, tối đa 8 bí danh mỗi mục và mỗi bí danh tối đa 60 ký tự, tối đa 5 câu gợi
+ý và mỗi câu tối đa 200 ký tự. Đổi vai trò chỉ nhận hai chiều: cột số nguyên đang là `measure` thành `key` (mã lặp
+lại như `Order Id`, mã bưu điện) hoặc `dimension` (năm, tháng dạng số), và cột `dimension` thành `text` (đường dẫn
+ảnh, mô tả dài). Cột thành `text` thì giá trị của nó không đi vào prompt về sau, vì các bước sau chọn giá trị theo
+vai trò.
+
+Câu hỏi gợi ý lưu ở `dataset_versions.suggested_questions` (đi theo phiên bản) và trả ra trong
+`GET /api/workspaces/{slug}/datasets` và `.../datasets/{id}` (của phiên bản hiện hành); trang hỏi hiện chúng ở
+[#50](https://github.com/pgiahuy/xdi-platform/issues/50).
 
 ## Chưa có
 
-- API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm).
-- Hồ sơ lớp ngữ nghĩa: mô tả cột, bí danh cột và bí danh giá trị (ví dụ "miền Nam" cho `South`)
-  ([#23](https://github.com/pgiahuy/xdi-platform/issues/23)).
+- API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm, mô tả, bí danh).
 - So hồ sơ giữa hai phiên bản (cột mất, thêm, đổi kiểu) trước khi chuyển phiên bản hiện hành, như thiết kế ở
   [Kiến trúc](ARCHITECTURE.md), mục 7.
 - Xóa dataset, chọn lại phiên bản cũ làm hiện hành.

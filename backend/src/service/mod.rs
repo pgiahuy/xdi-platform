@@ -52,5 +52,6 @@ pub mod explain;
 mod explain_tests;
 pub mod ingest;
 pub mod profile;
+pub mod semantic;
 pub mod users;
 pub mod workspaces;
