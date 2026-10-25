@@ -750,8 +750,10 @@ fn preceded_by_ratio(text: &str, start: usize) -> bool {
 
 /// Câu khuôn thay cho lời của mô hình khi mô hình lỗi, quá giờ, trả câu không dùng được, hoặc không cần gọi
 /// (chênh lệch bằng 0). Mọi số lấy nguyên chuỗi từ bảng phân rã, còn nhãn và giá trị nhóm được build_number_check
-/// miễn khi xuất hiện nguyên văn, nên câu khuôn luôn qua được bước kiểm (test ở ask_narrate_tests.rs kiểm điều này,
-/// theo tiêu chí của #41). change không đọc được thì viết câu tối thiểu, trung tính, không đoán chiều.
+/// miễn khi xuất hiện nguyên văn, nên câu khuôn thường qua được bước kiểm (test ở ask_narrate_tests.rs, theo tiêu chí
+/// của #41). Ngoại lệ: giá trị nhóm tự chứa số kèm chữ tỷ lệ ("10%", "Hàng gấp 3", "Giao 2 lần") hay bị cắt ngắn thì
+/// không được miễn; câu khuôn không đi qua bước kiểm lúc chạy nên người dùng vẫn thấy câu này.
+/// change không đọc được thì viết câu tối thiểu, trung tính, không đoán chiều.
 pub fn build_template_summary(explanation: &Explanation) -> String {
     let change = explanation.change.parse::<Decimal>();
     let (measure, base, compare) = (
