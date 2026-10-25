@@ -515,14 +515,19 @@ export interface components {
          *       again. This can happen before the model is called (a word matches several columns) or after (the two slices of
          *       a "why" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.
          *       Not recorded in the history, so `query_id` is null.
-         *     - `rejected`: the guard refused the SQL, the generated one or the one fixed in the `repair` round. Set: `message`
-         *       (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false.
-         *     - `failed`: the SQL failed on the analytics engine and the one fix round did not help, either because the fixed
-         *       SQL failed too or because the model failed during the fix. Set: `message`, `query_id`, `sql_generated`,
-         *       `sql_guarded`; the `run` or `repair` step that stopped it has `ok` false.
+         *     - `rejected`: the guard refused the SQL: the generated one for a reason a fix cannot change (for example it is not
+         *       a read-only SELECT, or it calls a function that is not allowed), or the one fixed in the `repair` round. Set:
+         *       `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false.
+         *     - `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or
+         *       because the model failed during the fix; or the SQL ran past the time or memory limit, which gets no fix round.
+         *       Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or
+         *       `repair` step that stopped it has `ok` false.
          *
-         *     The status names the step that stopped the question: the guard gives `rejected`, the engine or the fix round gives
-         *     `failed`. A model error before any SQL exists is not a status: the request gets 502 or 503.
+         *     A fix round starts when the analytics engine fails on the SQL, or when the guard refuses it because a table or
+         *     column does not exist or because it could build a value too large (too deep, too many concatenated pieces, too
+         *     wide, a size argument over the limit); there is at most one round per question. The status names the step that stopped the
+         *     question: the guard gives `rejected`, the engine or the fix round gives `failed`. A model error before any SQL
+         *     exists is not a status: the request gets 502 or 503.
          * @enum {string}
          */
         AskStatus: "answered" | "needs_choice" | "rejected" | "failed";
@@ -533,8 +538,8 @@ export interface components {
             duration_ms: number;
             name: components["schemas"]["StepName"];
             /**
-             * @description False for a step that failed. A failed step does not always stop the question: a failed `run` can be followed by
-             *     `repair`, a failed `narrate` by a template summary. `AskStatus` tells whether the question stopped.
+             * @description False for a step that failed. A failed step does not always stop the question: a failed `run` or `guard` can be
+             *     followed by `repair`, a failed `narrate` by a template summary. `AskStatus` tells whether the question stopped.
              */
             ok: boolean;
         };
@@ -821,7 +826,8 @@ export interface components {
          *     - `llm`: the language model writes SQL.
          *     - `guard`: check the SQL, add row-level filters and a row limit.
          *     - `run`: run the SQL on the analytics engine.
-         *     - `repair`: the language model fixes SQL that failed to run (at most once).
+         *     - `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column
+         *       does not exist or because it could build a value too large (at most once).
          *     - `explain`: compute the breakdown of a "why" question (code, no model).
          *     - `narrate`: the language model writes the summary of the breakdown.
          *     - `record`: save the question in the history.
@@ -910,6 +916,11 @@ export interface components {
          *     - `timestamp`: JSON string in ISO 8601, `YYYY-MM-DDTHH:MM:SS[.ffffff]` for TIMESTAMP (no time zone, as stored),
          *       ending in `Z` for TIMESTAMPTZ (converted to UTC).
          *     - `other`: JSON string as the analytics engine prints the value: TIME, INTERVAL, lists, structs and other types.
+         *
+         *     A `date` or `timestamp` with a year after 9999 or before 1 AD uses the ISO 8601 expanded form: `+10000-01-01`;
+         *     year 1 BC is `0000`, 2 BC is `-0001`. Infinite dates and times are sent as null. A result column of type TIME_NS,
+         *     TIME WITH TIME ZONE, BIT, BIGNUM, VARIANT, GEOMETRY or a type the backend does not recognize is not read: the `run`
+         *     step fails and the fix round casts it to text.
          * @enum {string}
          */
         ValueKind: "text" | "number" | "decimal" | "boolean" | "date" | "timestamp" | "other";

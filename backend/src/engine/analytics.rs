@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/analytics.rs - DuckDB nhúng trong tiến trình backend: đọc CSV, Parquet; đổi file người dùng nạp lên thành
-Parquet. Sheet Excel đã được engine/excel.rs đổi sang CSV trước khi tới đây. Chạy SQL đã qua guard thêm ở issue chạy truy vấn. Không có container riêng, không giữ dữ liệu bền: mỗi lần
-dùng mở một kết nối DuckDB trong bộ nhớ, đọc và ghi file trên đĩa.
+Parquet. Sheet Excel đã được engine/excel.rs đổi sang CSV trước khi tới đây. Chạy SQL đã qua guard ở engine/query.rs.
+Không có container riêng, không giữ dữ liệu bền: mỗi lần dùng mở một kết nối DuckDB trong bộ nhớ, đọc và ghi file trên
+đĩa.
 
 DuckDB là thư viện đồng bộ và tốn CPU, nên các hàm ở đây là hàm thường (không async); service gọi chúng trong
 tokio::task::spawn_blocking để không chặn các request khác.

@@ -50,6 +50,16 @@
     "answer": "SELECT \"Category Name\" AS category, SUM(\"Order Item Total\") AS revenue FROM dataco WHERE \"Market\" = 'Europe' GROUP BY \"Category Name\" ORDER BY revenue DESC LIMIT 5"
   },
   {
+    "task": "sql",
+    "question": "Doanh thu theo ngày giao hàng",
+    "answer": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day"
+  },
+  {
+    "task": "repair",
+    "question": "Doanh thu theo ngày giao hàng",
+    "answer": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%m/%d/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day"
+  },
+  {
     "task": "profile",
     "question": "dataco",
     "answer": {

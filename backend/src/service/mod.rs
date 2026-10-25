@@ -11,6 +11,17 @@ pub mod ask_contract;
 pub mod ask_examples;
 #[cfg(test)]
 mod ask_examples_tests;
+// Kết quả và vòng sửa của câu hỏi; endpoint hỏi (#33) gọi run_with_repair. Gỡ allow khi đó, như ở ask_contract.
+#[allow(dead_code)]
+pub mod ask_other_text;
+#[allow(dead_code)]
+pub mod ask_repair;
+#[allow(dead_code)]
+pub mod ask_result;
+#[allow(dead_code)]
+pub mod ask_run;
+#[cfg(test)]
+mod ask_run_tests;
 pub mod excel;
 // Phần toán của câu "tại sao" có trước SQL và luồng hỏi; nối vào ở #38/#39. Gỡ allow khi đó để clippy bắt lại mã thừa.
 #[allow(dead_code)]

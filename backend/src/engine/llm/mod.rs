@@ -28,6 +28,8 @@ use crate::{config::Config, error::AppError};
 pub enum LlmTask {
     /// Sinh SQL cho một câu hỏi.
     Sql,
+    /// Sửa câu SQL vừa sinh, theo lời báo lỗi của guard hay DuckDB (service/ask_run.rs). Câu hỏi là câu hỏi gốc.
+    Repair,
     /// Viết mô tả, bí danh, câu hỏi gợi ý cho một dataset lúc nạp.
     Profile,
 }

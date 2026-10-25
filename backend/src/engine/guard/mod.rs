@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/guard/mod.rs - kiểm SQL do LLM sinh trước khi chạy, theo bốn bước trong build_guarded_sql: chỉ nhận một câu
-SELECT chỉ đọc; kiểm tên bảng, hàm, cột; thêm LIMIT; đổi bảng logic sang file Parquet. Test ở guard/tests.rs.
+SELECT chỉ đọc; kiểm tên bảng, hàm, cột (luật kích thước của vài hàm ở guard/sizes.rs), số tầng câu lồng nhau
+(guard/depth.rs), số mảnh ghép chuỗi (guard/pieces.rs), độ dài chuỗi hằng và số cột (guard/width.rs); thêm LIMIT;
+đổi bảng logic sang file Parquet. Test ở guard/tests.rs.
 
 Kiểm trên cây cú pháp vì dò chữ "DROP" thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Hạn chế: cây do
 sqlparser dựng, không phải DuckDB, nên cú pháp hiếm có thể bị hai bên hiểu khác nhau.
 
-Lý do từ chối được gửi lại cho LLM tự sửa, nên phải chỉ đúng chỗ sai. Guard nhận hồ sơ bảng từ service thay vì tự đọc
-Postgres, để test không cần cơ sở dữ liệu. */
+Lý do từ chối được gửi lại cho LLM tự sửa, nên phải chỉ đúng chỗ sai. Chỉ lý do sai tên bảng hay cột
+(GuardError::UnknownName) và câu có thể dựng giá trị quá lớn (GuardError::Oversized) được service gửi lại; lý do khác
+dừng câu hỏi ngay. Guard nhận hồ sơ bảng từ service thay vì
+tự đọc Postgres, để test không cần cơ sở dữ liệu. */
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
@@ -14,8 +18,8 @@ use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use sqlparser::ast::{
-    Expr, Function, Ident, LimitClause, ObjectName, Query, Select, SelectItem, SetExpr, Statement,
-    TableAlias, TableFactor, Value, Visit, VisitMut, Visitor, VisitorMut,
+    AccessExpr, Expr, Function, Ident, LimitClause, ObjectName, Query, Select, SelectItem, SetExpr,
+    Statement, TableAlias, TableFactor, Value, Visit, VisitMut, Visitor, VisitorMut,
 };
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
@@ -39,6 +43,25 @@ pub struct GuardedSql {
     pub shown: String,
     /// Chỉ đưa cho DuckDB.
     pub runnable: String,
+    /// Guard đã đổi LIMIT thế nào, chữ cho người dùng ("Thêm LIMIT 100000"); None khi giữ LIMIT của câu.
+    pub limit_note: Option<String>,
+}
+
+/// Vì sao guard không nhận câu. Lý do là chữ tiếng Việt chỉ đúng chỗ sai, đọc được cả với mô hình lẫn người dùng.
+#[derive(Debug)]
+pub enum GuardError {
+    /// Câu dùng bảng, bí danh hay cột không có trong hồ sơ. Mô hình hay viết sai tên kiểu này và sửa được khi đọc lý do
+    /// (lý do sai bảng kèm danh sách bảng dùng được), nên service cho vào vòng sửa.
+    UnknownName(String),
+    /// Câu có thể dựng giá trị quá lớn: hàm có tham số kích thước vượt luật của guard/sizes.rs, lồng quá số tầng của
+    /// guard/depth.rs, ghép quá số mảnh của guard/pieces.rs, chuỗi hằng quá dài hay quá nhiều cột (guard/width.rs).
+    /// Mô hình viết lại được câu gọn hơn cho cùng câu hỏi, nên service cho vào vòng sửa.
+    Oversized(String),
+    /// Câu bị chặn vì lý do khác: không đọc được, không phải một câu SELECT chỉ đọc, hàm không cho dùng, quá dài. Sửa
+    /// tên không làm câu qua được, nên service dừng câu hỏi ngay.
+    Rejected(String),
+    /// Lỗi của máy chủ khi dựng bản chạy, không phải lỗi của câu.
+    Internal(AppError),
 }
 
 /// Cả hai bản in lại từ cây đã kiểm, không dùng câu gốc của LLM: phần guard bỏ qua khi đọc (chú thích) không tới được
@@ -47,15 +70,24 @@ pub fn build_guarded_sql(
     sql: &str,
     tables: &[AllowedTable],
     max_rows: u64,
-) -> Result<GuardedSql, AppError> {
+) -> Result<GuardedSql, GuardError> {
     let mut query = parse_single_select(sql)?;
     let cte_names = check_names(&query, tables)?;
+    depth::check_query_depth(&query).map_err(GuardError::Oversized)?;
+    pieces::check_concat_pieces(&query).map_err(GuardError::Oversized)?;
+    width::check_query_width(&query, tables).map_err(GuardError::Oversized)?;
     // Chỗ cho #31 tiêm điều kiện phân quyền. Sau check_names để mọi bảng gặp được đều có trong danh sách; trước
     // build_runnable vì sau đó `sales s` thành `read_parquet(...) AS s`, mất tên bảng. `shown` sẽ chứa cả điều kiện.
-    apply_row_limit(&mut query, max_rows)?;
+    let limit_note = apply_row_limit(&mut query, max_rows)?;
     let shown = query.to_string();
-    let runnable = build_runnable(query, tables, &cte_names)?.to_string();
-    Ok(GuardedSql { shown, runnable })
+    let runnable = build_runnable(query, tables, &cte_names)
+        .map_err(GuardError::Internal)?
+        .to_string();
+    Ok(GuardedSql {
+        shown,
+        runnable,
+        limit_note,
+    })
 }
 
 // Bước 1: chỉ nhận một câu SELECT chỉ đọc.
@@ -65,7 +97,7 @@ pub fn build_guarded_sql(
 /// đó. Câu do mô hình viết thường chỉ vài KB; 32 KB vẫn rộng, và dưới mức đã thử chạy được trên stack 2 MB của luồng.
 const MAX_SQL_BYTES: usize = 32 * 1024;
 
-fn parse_single_select(sql: &str) -> Result<Query, AppError> {
+fn parse_single_select(sql: &str) -> Result<Query, GuardError> {
     if sql.len() > MAX_SQL_BYTES {
         return Err(rejected(format!(
             "Câu SQL quá dài ({} KB), tối đa {} KB",
@@ -103,11 +135,17 @@ impl Visitor for ReadOnly {
     }
 
     fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<Self::Break> {
-        if is_select_body(&query.body) {
-            ControlFlow::Continue(())
-        } else {
-            ControlFlow::Break("Chỉ cho phép câu SELECT để đọc dữ liệu")
+        if !is_select_body(&query.body) {
+            return ControlFlow::Break("Chỉ cho phép câu SELECT để đọc dữ liệu");
         }
+        // `SELECT ... FOR UPDATE`, `FOR SHARE` xin khóa dòng để ghi sau: câu hỏi dữ liệu chỉ đọc, không cần khóa. Kiểm ở
+        // mọi câu, kể cả câu con.
+        if !query.locks.is_empty() {
+            return ControlFlow::Break(
+                "Không cho FOR UPDATE, FOR SHARE: câu đọc dữ liệu không cần khóa dòng",
+            );
+        }
+        ControlFlow::Continue(())
     }
 
     fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<Self::Break> {
@@ -169,20 +207,20 @@ const ALLOWED_FUNCTIONS: &[&str] = &[
 ];
 
 /// Trả tên các bảng tạm (WITH) cho build_runnable đổi tên.
-fn check_names(query: &Query, tables: &[AllowedTable]) -> Result<BTreeSet<String>, AppError> {
+fn check_names(query: &Query, tables: &[AllowedTable]) -> Result<BTreeSet<String>, GuardError> {
     let mut names = Names::default();
     let _ = query.visit(&mut Collector {
         tables,
         names: &mut names,
     });
-    if let ControlFlow::Break(reason) = query.visit(&mut TableChecker {
+    if let ControlFlow::Break(error) = query.visit(&mut TableChecker {
         tables,
         names: &names,
     }) {
-        return Err(rejected(reason));
+        return Err(error);
     }
-    if let ControlFlow::Break(reason) = query.visit(&mut ExprChecker { names: &names }) {
-        return Err(rejected(reason));
+    if let ControlFlow::Break(error) = query.visit(&mut ExprChecker { names: &names }) {
+        return Err(error);
     }
     Ok(names.ctes)
 }
@@ -272,45 +310,45 @@ impl TableChecker<'_> {
         names.join(", ")
     }
 
-    fn check_table(&self, name: &ObjectName) -> ControlFlow<String> {
+    fn check_table(&self, name: &ObjectName) -> ControlFlow<GuardError> {
         if let Some(ident) = single_ident(name) {
             let key = name_key(ident);
             if find_table(self.tables, &key).is_some() || self.names.ctes.contains(&key) {
                 return ControlFlow::Continue(());
             }
         }
-        ControlFlow::Break(format!(
+        ControlFlow::Break(unknown_name(format!(
             "Không có bảng {name}. Các bảng dùng được: {}",
             self.table_list()
-        ))
+        )))
     }
 }
 
 impl Visitor for TableChecker<'_> {
-    type Break = String;
+    type Break = GuardError;
 
-    fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<String> {
+    fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<GuardError> {
         let Some(with) = &query.with else {
             return ControlFlow::Continue(());
         };
         // Câu đệ quy có thể chạy không dừng, và câu hỏi phân tích không cần nó.
         if with.recursive {
-            return ControlFlow::Break("Không cho WITH RECURSIVE".to_string());
+            return ControlFlow::Break(rejected("Không cho WITH RECURSIVE"));
         }
         for cte in &with.cte_tables {
             // Nhận thì build_runnable đổi mọi `FROM sales` sang file Parquet: câu đọc bảng dữ liệu thay vì bảng tạm,
             // ra kết quả sai mà không báo lỗi.
             if find_table(self.tables, &name_key(&cte.alias.name)).is_some() {
-                return ControlFlow::Break(format!(
+                return ControlFlow::Break(rejected(format!(
                     "Bảng tạm {} trùng tên bảng dữ liệu, hãy đặt tên khác",
                     cte.alias.name
-                ));
+                )));
             }
         }
         ControlFlow::Continue(())
     }
 
-    fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<String> {
+    fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<GuardError> {
         match factor {
             // Chặn mọi hàm sinh bảng thay vì lọc từng hàm: read_csv, glob đọc được file ngoài dữ liệu đã nạp; range
             // vô hại nhưng câu hỏi dữ liệu không cần.
@@ -318,17 +356,19 @@ impl Visitor for TableChecker<'_> {
                 name,
                 args: Some(_),
                 ..
-            } => ControlFlow::Break(format!(
+            } => ControlFlow::Break(rejected(format!(
                 "Không cho gọi hàm {name} để lấy dữ liệu. Chỉ đọc từ các bảng: {}",
                 self.table_list()
-            )),
+            ))),
             TableFactor::Table { name, .. } => self.check_table(name),
             // Phần bên trong câu con và JOIN trong ngoặc được Visitor duyệt và kiểm tiếp.
             TableFactor::Derived { .. } | TableFactor::NestedJoin { .. } => {
                 ControlFlow::Continue(())
             }
             // UNNEST, PIVOT và các dạng khác: chưa cần; muốn nhận thì phải xét dạng đó có đọc được nguồn ngoài không.
-            other => ControlFlow::Break(format!("Không hỗ trợ cách lấy dữ liệu này: {other}")),
+            other => ControlFlow::Break(rejected(format!(
+                "Không hỗ trợ cách lấy dữ liệu này: {other}"
+            ))),
         }
     }
 }
@@ -338,43 +378,66 @@ struct ExprChecker<'a> {
 }
 
 impl ExprChecker<'_> {
-    /// `main.sum` bị từ chối dù sum có trong danh sách: danh sách chỉ ghi tên trơn, không xét schema nào chứa gì.
-    fn check_function(&self, function: &Function) -> ControlFlow<String> {
-        let allowed = single_ident(&function.name)
-            .is_some_and(|ident| ALLOWED_FUNCTIONS.contains(&name_key(ident).as_str()));
-        if allowed {
-            ControlFlow::Continue(())
-        } else {
-            ControlFlow::Break(format!("Không cho dùng hàm {}", function.name))
+    /// Tên nhiều phần mà phần cuối là hàm được phép (`x.lpad(3, '0')`, `main.sum(a)`): DuckDB đọc dạng này là gọi hàm
+    /// trên x như phương thức, x thành tham số đầu, nên các luật đếm tham số ở sizes.rs và pieces.rs đếm thiếu. Từ chối
+    /// loại vào vòng sửa, lý do chỉ cách viết lại dạng hàm thường.
+    fn check_function(&self, function: &Function) -> ControlFlow<GuardError> {
+        let last = function.name.0.last().and_then(|part| part.as_ident());
+        let allowed = |ident: &Ident| ALLOWED_FUNCTIONS.contains(&name_key(ident).as_str());
+        let Some(name) = single_ident(&function.name).filter(|ident| allowed(ident)) else {
+            if function.name.0.len() > 1 && last.is_some_and(allowed) {
+                return ControlFlow::Break(method_call(&function.name.to_string()));
+            }
+            return ControlFlow::Break(rejected(format!("Không cho dùng hàm {}", function.name)));
+        };
+        let name = name_key(name);
+        match sizes::check_function_size(&name, function) {
+            Ok(()) => ControlFlow::Continue(()),
+            Err(reason) => ControlFlow::Break(GuardError::Oversized(reason)),
         }
     }
 
-    fn check_column(&self, column: &Ident) -> ControlFlow<String> {
+    fn check_column(&self, column: &Ident) -> ControlFlow<GuardError> {
         if self.names.columns.contains(&name_key(column)) {
             ControlFlow::Continue(())
         } else {
-            ControlFlow::Break(format!("Không có cột {column} trong các bảng đang dùng"))
+            ControlFlow::Break(unknown_name(format!(
+                "Không có cột {column} trong các bảng đang dùng"
+            )))
         }
     }
 
     /// Hạn chế: trường của cột kiểu struct (`cot.truong`) cũng bị từ chối, vì guard hiểu `cot` là tên bảng.
-    fn check_qualified_column(&self, expr: &Expr, parts: &[Ident]) -> ControlFlow<String> {
+    fn check_qualified_column(&self, expr: &Expr, parts: &[Ident]) -> ControlFlow<GuardError> {
         let [qualifier, column] = parts else {
-            return ControlFlow::Break(format!("Tên cột chỉ viết dạng cot hoặc bang.cot: {expr}"));
+            return ControlFlow::Break(rejected(format!(
+                "Tên cột chỉ viết dạng cot hoặc bang.cot: {expr}"
+            )));
         };
         if !self.names.qualifiers.contains(&name_key(qualifier)) {
-            return ControlFlow::Break(format!("Không có bảng hay bí danh {qualifier}"));
+            return ControlFlow::Break(unknown_name(format!(
+                "Không có bảng hay bí danh {qualifier}"
+            )));
         }
         self.check_column(column)
     }
 }
 
 impl Visitor for ExprChecker<'_> {
-    type Break = String;
+    type Break = GuardError;
 
-    fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<String> {
+    fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<GuardError> {
         match expr {
             Expr::Function(function) => self.check_function(function),
+            // `(a).concat(b)`, `'ab'.concat(...)`: như tên nhiều phần ở check_function, biểu thức trước dấu chấm là
+            // tham số đầu mà các luật đếm không thấy.
+            Expr::CompoundFieldAccess { access_chain, .. }
+                if access_chain
+                    .iter()
+                    .any(|access| matches!(access, AccessExpr::Dot(Expr::Function(_)))) =>
+            {
+                ControlFlow::Break(method_call(&expr.to_string()))
+            }
             Expr::Identifier(column) => self.check_column(column),
             Expr::CompoundIdentifier(parts) => self.check_qualified_column(expr, parts),
             _ => ControlFlow::Continue(()),
@@ -384,8 +447,9 @@ impl Visitor for ExprChecker<'_> {
 
 // Bước 3: giới hạn số dòng.
 
-/// Hạn chế: chỉ giới hạn số dòng trả về, không giới hạn thời gian chạy hay bộ nhớ của câu.
-fn apply_row_limit(query: &mut Query, max_rows: u64) -> Result<(), AppError> {
+/// Chỉ giới hạn số dòng trả về; thời gian chạy và bộ nhớ của câu giới hạn lúc chạy, ở engine/query.rs. Trả ghi chú
+/// cho GuardedSql::limit_note.
+fn apply_row_limit(query: &mut Query, max_rows: u64) -> Result<Option<String>, GuardError> {
     // Từ chối thay vì sửa: FETCH FIRST làm cùng việc với LIMIT, LLM đọc lý do rồi viết lại bằng LIMIT.
     if query.fetch.is_some() {
         return Err(rejected("Dùng LIMIT thay cho FETCH FIRST"));
@@ -398,28 +462,34 @@ fn apply_row_limit(query: &mut Query, max_rows: u64) -> Result<(), AppError> {
                 offset: None,
                 limit_by: vec![],
             });
+            Ok(Some(format!("Thêm LIMIT {max_rows}")))
         }
         Some(LimitClause::LimitOffset {
             limit, limit_by, ..
-        }) if limit_by.is_empty() => {
-            // Biểu thức hay câu con thì không biết trước số dòng nên thay bằng max_rows, kể cả khi nó ra số nhỏ hơn.
-            if !limit
-                .as_ref()
-                .is_some_and(|l| is_number_at_most(l, max_rows))
-            {
+        }) if limit_by.is_empty() => match limit {
+            // Chỉ có OFFSET.
+            None => {
                 *limit = Some(max);
+                Ok(Some(format!("Thêm LIMIT {max_rows}")))
             }
-        }
-        Some(_) => return Err(rejected("Chỉ hỗ trợ LIMIT n hoặc LIMIT n OFFSET m")),
+            Some(l) if is_number_at_most(l, max_rows) => Ok(None),
+            // Biểu thức hay câu con thì không biết trước số dòng nên thay bằng max_rows, kể cả khi nó ra số nhỏ hơn.
+            Some(_) => {
+                *limit = Some(max);
+                Ok(Some(format!("Hạ LIMIT xuống {max_rows}")))
+            }
+        },
+        Some(_) => Err(rejected("Chỉ hỗ trợ LIMIT n hoặc LIMIT n OFFSET m")),
     }
-    Ok(())
 }
 
+/// DuckDB nhận số viết có gạch dưới (`1_000`); không bỏ gạch thì `LIMIT 1_000` không đọc được và bị nâng thành max.
 fn is_number_at_most(expr: &Expr, max: u64) -> bool {
     match expr {
-        Expr::Value(v) => {
-            matches!(&v.value, Value::Number(n, _) if n.parse::<u64>().is_ok_and(|n| n <= max))
-        }
+        Expr::Value(v) => matches!(
+            &v.value,
+            Value::Number(n, _) if n.replace('_', "").parse::<u64>().is_ok_and(|n| n <= max)
+        ),
         _ => false,
     }
 }
@@ -540,9 +610,30 @@ fn find_table<'a>(tables: &'a [AllowedTable], key: &str) -> Option<&'a AllowedTa
     tables.iter().find(|t| t.name.to_lowercase() == key)
 }
 
-fn rejected(reason: impl Into<String>) -> AppError {
-    AppError::BadRequest(reason.into())
+fn rejected(reason: impl Into<String>) -> GuardError {
+    GuardError::Rejected(reason.into())
 }
 
+/// written có thể là cả một biểu thức dài; lời báo chỉ chép phần đầu.
+fn method_call(written: &str) -> GuardError {
+    let mut shown: String = written.chars().take(80).collect();
+    if shown.len() < written.len() {
+        shown.push_str("...");
+    }
+    GuardError::Oversized(format!(
+        "Không gọi hàm dạng phương thức ({shown}): viết dạng hàm thường, ví dụ concat(a, b) thay cho a.concat(b)"
+    ))
+}
+
+fn unknown_name(reason: String) -> GuardError {
+    GuardError::UnknownName(reason)
+}
+
+mod depth;
+mod pieces;
+#[cfg(test)]
+mod sample_tests;
+mod sizes;
 #[cfg(test)]
 mod tests;
+mod width;
