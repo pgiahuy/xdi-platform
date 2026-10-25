@@ -28,6 +28,9 @@ use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{
     ColumnValue, Dataset, ProfileColumn, ProfileRole, SemanticColumnUpdate, SemanticValueUpdate,
 };
+use crate::service::ask_context::{COLUMN_VALUES_ALL_MAX, COLUMN_VALUES_SOME, CONTEXT_VALUES_MAX};
+use crate::service::ask_phrases::fold;
+use crate::service::ask_values::STRING_MAX_BYTES;
 use crate::service::profile::{is_integer_type, DIMENSION_MAX};
 use crate::{error::AppError, state::AppState};
 
@@ -39,17 +42,13 @@ pub(crate) const ALIASES_MAX: usize = 8;
 pub(crate) const QUESTIONS_MAX: usize = 5;
 pub(crate) const QUESTION_MAX_CHARS: usize = 200;
 
-// Trần phần giá trị trong prompt, theo ngưỡng của ngữ cảnh hỏi (#28): một cột có không quá VALUES_PER_COLUMN_MAX giá
-// trị thì gửi hết, nhiều hơn thì chỉ gửi VALUES_PER_COLUMN_TOP giá trị nhiều dòng nhất; tổng một prompt không quá
-// VALUES_TOTAL_MAX giá trị; giá trị dài quá PROMPT_VALUE_MAX_BYTES byte không gửi. Không có trần này thì bảng khảo
-// sát vài trăm cột, mỗi cột 200 giá trị dài tới 1000 byte, thổi prompt lên hàng chục MB: tốn token, vượt cửa sổ ngữ
+// Trần phần giá trị trong prompt dùng chung hằng với ngữ cảnh hỏi (#28): một cột có không quá COLUMN_VALUES_ALL_MAX
+// giá trị thì gửi hết, nhiều hơn thì chỉ gửi COLUMN_VALUES_SOME giá trị nhiều dòng nhất; tổng một prompt không quá
+// CONTEXT_VALUES_MAX giá trị; giá trị dài quá STRING_MAX_BYTES byte không gửi. Không có trần này thì bảng khảo sát
+// vài trăm cột, mỗi cột 200 giá trị dài tới 1000 byte, thổi prompt lên hàng chục MB: tốn token, vượt cửa sổ ngữ
 // cảnh, mô hình trả lỗi và hồ sơ mất. Đo trên hồ sơ kiểu DataCo (test measure_dataco_like_prompt, 54 cột, 14 cột
 // dimension có giá trị, cột 164 giá trị bị cắt còn 20): prompt khoảng 10 700 ký tự, trong đó phần giá trị khoảng
 // 5 100.
-pub(crate) const VALUES_PER_COLUMN_MAX: usize = 50;
-pub(crate) const VALUES_PER_COLUMN_TOP: usize = 20;
-pub(crate) const VALUES_TOTAL_MAX: usize = 400;
-pub(crate) const PROMPT_VALUE_MAX_BYTES: usize = 200;
 
 /// Tên cột (sau khi bỏ dấu, chữ thường) chứa một trong các cụm này thì đánh dấu nhạy cảm trước khi dựng prompt:
 /// email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên. Luật cố ý đơn giản và nghiêng về đánh dấu nhầm còn
@@ -294,15 +293,9 @@ fn looks_personal(value: &str) -> bool {
             .all(|c| c.is_ascii_digit() || matches!(c, ' ' | '+' | '-' | '(' | ')' | '.'))
 }
 
-/// Bỏ dấu, chữ thường, gộp khoảng trắng: dùng để so tên và bí danh (trùng sau chuẩn hóa cũng tính là trùng) và để
-/// luật tên nhạy cảm khớp cả tiếng Việt có dấu ("Mật khẩu" khớp "mat khau").
-fn fold(text: &str) -> String {
-    deunicode::deunicode(text)
-        .to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
+// So tên và bí danh (trùng sau chuẩn hóa cũng tính là trùng) và luật tên nhạy cảm đều qua fold của
+// service/ask_phrases.rs (bỏ dấu, chữ thường, tách từ), cùng một cách chuẩn hóa với khớp cụm ở ngữ cảnh hỏi: "Mật
+// khẩu" khớp "mat khau", bí danh "Thị  Trường" trùng "thị trường".
 
 /// Prompt cho task Profile: luật và khuôn JSON trước, rồi mỗi cột một dòng siêu dữ liệu, cuối cùng danh sách giá trị
 /// của các cột dimension không nhạy cảm. Chỉ siêu dữ liệu và giá trị cột dimension đi ra ngoài: min, max chỉ kèm cột
@@ -365,22 +358,22 @@ pub fn build_profile_prompt(
             let Some(list) = by_column.get(&c.id).filter(|_| printable) else {
                 continue;
             };
-            if total >= VALUES_TOTAL_MAX {
+            if total >= CONTEXT_VALUES_MAX {
                 break;
             }
             // Trần mỗi cột (xem đầu file): list đã xếp giá trị nhiều dòng nhất trước (list_column_values). Giá trị
             // quá dài bị bỏ trước khi đếm, không chiếm suất của giá trị gửi được.
-            let cap = if list.len() <= VALUES_PER_COLUMN_MAX {
+            let cap = if list.len() <= COLUMN_VALUES_ALL_MAX {
                 list.len()
             } else {
-                VALUES_PER_COLUMN_TOP
+                COLUMN_VALUES_SOME
             };
             let mut items = Vec::new();
             for v in list.iter() {
-                if items.len() >= cap || total >= VALUES_TOTAL_MAX {
+                if items.len() >= cap || total >= CONTEXT_VALUES_MAX {
                     break;
                 }
-                if v.value.len() > PROMPT_VALUE_MAX_BYTES {
+                if v.value.len() > STRING_MAX_BYTES {
                     continue;
                 }
                 total += 1;
