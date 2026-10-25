@@ -6,17 +6,21 @@ Hiện có phần toán, hàm thuần không đọc SQL, DuckDB hay mô hình: �
 lượng và giá (#40). Đầu vào là số đã đọc từ DuckDB (chuỗi VARCHAR đổi sang Decimal), đầu ra là struct của hợp đồng
 (ask_contract.rs) hoặc struct trung gian. Phần dựng SQL và nối vào luồng hỏi làm ở #38, #39; test ở explain_tests.rs.
 
+Cuối file là phần chữ của bước narrate (#41), cũng là hàm thuần: prompt gửi mô hình, tập số được phép, bước kiểm mọi
+số trong lời diễn giải và câu khuôn dự phòng. Việc gọi mô hình, giới hạn thời gian và dựng AskStep ở ask_narrate.rs.
+
 Mọi con số hiện ra tính bằng Decimal (rust_decimal, 28 chữ số), không qua f64: f64 làm sai chữ số cuối và tổng đóng
 góp sẽ lệch chênh lệch. Phép tính tràn khoảng của Decimal trả None hoặc lỗi, không panic. EP (phần đóng góp) cũng
 tính và so với ngưỡng bằng Decimal, để nhóm nằm đúng biên 0.1 hay 0.67 không bị loại; chỉ độ bất ngờ S là f64, vì cần
 logarit và chỉ dùng để so thứ tự, không so với ngưỡng nào. */
 
 use std::cmp::{Ordering, Reverse};
+use std::collections::HashSet;
 
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::{Decimal, RoundingStrategy};
 
-use super::ask_contract::{CellValue, DimensionBreakdown, GroupContribution};
+use super::ask_contract::{CellValue, DimensionBreakdown, Explanation, GroupContribution};
 
 // Hai ngưỡng của Adtributor (Bhagwan và cộng sự, NSDI 2014), giữ đúng như bài: một chiều "giải thích được" chênh lệch
 // khi vài nhóm của nó cộng lại đủ 67% chênh lệch, và chỉ tính nhóm góp từ 10% trở lên, để nhóm nhỏ không làm chiều đó
@@ -374,4 +378,248 @@ pub fn build_volume_price(
 fn build_price(measure: Decimal, volume: Decimal, scale: u32) -> Option<Decimal> {
     let quotient = measure.checked_div(volume)?;
     Some(quotient.round_dp_with_strategy(scale, RoundingStrategy::MidpointAwayFromZero))
+}
+
+/* Phần chữ của bước narrate (#41). Mô hình chỉ được diễn giải bảng phân rã đã tính, nên prompt gửi đúng các số của
+bảng và bước kiểm (build_number_check) so nguyên văn từng số trong câu trả lời với các chuỗi số của bảng: mô hình
+viết "1283400" thay "1283400.00", làm tròn, hay thêm phần trăm đều bị loại và ask_narrate.rs dùng câu khuôn. */
+
+/// Số ký tự tối đa của lời diễn giải; câu của mô hình dài hơn thì bỏ, dùng câu khuôn.
+pub const MAX_SUMMARY_CHARS: usize = 1000;
+
+// Gửi mô hình hai chiều đầu, mỗi chiều ba nhóm đầu: các nhóm đã xếp theo đóng góp giảm dần nên ba nhóm đầu là phần
+// đáng kể; gửi cả bảng thì prompt dài mà phần đuôi gần như không đổi.
+const NARRATE_DIMENSIONS: usize = 2;
+const NARRATE_GROUPS: usize = 3;
+
+/// Prompt của bước narrate: luật viết tiếng Anh như prompt sinh SQL và prompt sửa (#29, #32), dữ liệu là bảng phân
+/// rã dạng JSON. Chỉ gửi hai chiều đầu, ba nhóm mỗi chiều, và volume_price khi có. Câu hỏi gốc đứng riêng để mock
+/// tra câu trả lời theo nó (xem LlmRequest).
+pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String {
+    let dimensions: Vec<serde_json::Value> = explanation
+        .dimensions
+        .iter()
+        .take(NARRATE_DIMENSIONS)
+        .map(|dimension| {
+            let groups: Vec<serde_json::Value> = dimension
+                .groups
+                .iter()
+                .take(NARRATE_GROUPS)
+                .map(|group| {
+                    serde_json::json!({
+                        "value": group.value,
+                        "base_value": group.base_value,
+                        "compare_value": group.compare_value,
+                        "contribution": group.contribution,
+                    })
+                })
+                .collect();
+            serde_json::json!({ "column": dimension.column, "groups": groups })
+        })
+        .collect();
+    let volume_price = explanation.volume_price.as_ref().map(|split| {
+        serde_json::json!({
+            "volume_label": split.volume_label,
+            "price_label": split.price_label,
+            "base_volume": split.base_volume,
+            "compare_volume": split.compare_volume,
+            "base_price": split.base_price,
+            "compare_price": split.compare_price,
+            "volume_effect": split.volume_effect,
+            "price_effect": split.price_effect,
+            "if_volume_unchanged": split.if_volume_unchanged,
+        })
+    });
+    let breakdown = serde_json::json!({
+        "measure": explanation.measure,
+        "base": { "label": explanation.base.label, "value": explanation.base.value },
+        "compare": { "label": explanation.compare.label, "value": explanation.compare.value },
+        "change": explanation.change,
+        "dimensions": dimensions,
+        "volume_price": volume_price,
+    });
+    let json = serde_json::to_string_pretty(&breakdown).expect("serialize narrate breakdown");
+    format!(
+        "The breakdown below was computed from the data; every number in it is exact. Write a short summary of it \
+         in Vietnamese for the user who asked the question.\n\
+         Rules:\n\
+         - Vietnamese, at most four sentences, at most {MAX_SUMMARY_CHARS} characters.\n\
+         - Copy every number exactly as it appears in the JSON, decimal digits included: never round, never add or \
+         remove digits, never use a thousands separator, never compute a new number such as a percentage.\n\
+         - A negative change means the measure went down: say \"giảm\" only when change is negative, \"tăng\" only \
+         when it is positive.\n\
+         - Do not give causes that are not in the JSON.\n\
+         - Reply with the summary only, no introduction, no title.\n\n\
+         Question: {question}\n\
+         Breakdown:\n{json}"
+    )
+}
+
+/// Mọi chuỗi số được phép xuất hiện trong lời diễn giải: các số của bảng phân rã và trị tuyệt đối của chúng (để
+/// "giảm 1283400.00" nhận khi change là "-1283400.00"), cộng số trong nhãn, tên cột, giá trị nhóm và câu hỏi (để
+/// "quý 3/2017" nhận "3" và "2017" từ nhãn lát cắt).
+pub fn build_allowed_numbers(question: &str, explanation: &Explanation) -> HashSet<String> {
+    let mut allowed = HashSet::new();
+    allow_number(&mut allowed, &explanation.change);
+    allow_number(&mut allowed, &explanation.base.value);
+    allow_number(&mut allowed, &explanation.compare.value);
+    for dimension in &explanation.dimensions {
+        for group in &dimension.groups {
+            allow_number(&mut allowed, &group.base_value);
+            allow_number(&mut allowed, &group.compare_value);
+            allow_number(&mut allowed, &group.contribution);
+        }
+    }
+    if let Some(split) = &explanation.volume_price {
+        for text in [
+            &split.base_volume,
+            &split.compare_volume,
+            &split.base_price,
+            &split.compare_price,
+            &split.volume_effect,
+            &split.price_effect,
+            &split.if_volume_unchanged,
+        ] {
+            allow_number(&mut allowed, text);
+        }
+    }
+    allow_text(&mut allowed, question);
+    allow_text(&mut allowed, &explanation.measure);
+    allow_text(&mut allowed, &explanation.base.label);
+    allow_text(&mut allowed, &explanation.compare.label);
+    for dimension in &explanation.dimensions {
+        allow_text(&mut allowed, &dimension.column);
+        for group in &dimension.groups {
+            if let Some(value) = &group.value {
+                allow_text(&mut allowed, &build_value_text(value));
+            }
+        }
+    }
+    if let Some(split) = &explanation.volume_price {
+        allow_text(&mut allowed, &split.volume_label);
+        allow_text(&mut allowed, &split.price_label);
+    }
+    allowed
+}
+
+// Một chuỗi số của bảng: thêm nguyên chuỗi và trị tuyệt đối (bỏ dấu trừ đứng trước). So nguyên văn, không chuẩn hóa:
+// "1283400" và "1283400.00" là hai số khác nhau.
+fn allow_number(allowed: &mut HashSet<String>, text: &str) {
+    allowed.insert(text.to_string());
+    if let Some(abs) = text.strip_prefix('-') {
+        allowed.insert(abs.to_string());
+    }
+}
+
+// Mọi dãy chữ số trong một đoạn chữ, ví dụ "Quý 3/2017" cho "3" và "2017".
+fn allow_text(allowed: &mut HashSet<String>, text: &str) {
+    for (number, _) in scan_numbers(text) {
+        allowed.insert(number);
+    }
+}
+
+/// Kiểm mọi số trong lời diễn giải: mỗi dãy chữ số (không tính dấu trừ đứng trước) phải có nguyên văn trong
+/// `allowed`, và số đứng ngay trước `%` luôn sai vì bảng phân rã không có phần trăm (mô hình phải không tự tính).
+/// Err là các số sai, không trùng nhau, để ghi log và đưa vào detail của bước narrate.
+pub fn build_number_check(summary: &str, allowed: &HashSet<String>) -> Result<(), Vec<String>> {
+    let mut wrong = Vec::new();
+    for (number, before_percent) in scan_numbers(summary) {
+        if (before_percent || !allowed.contains(&number)) && !wrong.contains(&number) {
+            wrong.push(number);
+        }
+    }
+    if wrong.is_empty() {
+        Ok(())
+    } else {
+        Err(wrong)
+    }
+}
+
+// Quét các dãy chữ số trong text: một số là dãy chữ số và dấu chấm bắt đầu bằng chữ số, bỏ dấu chấm thừa ở cuối
+// ("năm 2017." vẫn là "2017"); dấu trừ đứng trước không thuộc số. Cờ bool báo số đứng ngay trước '%'. Cách viết
+// "1.283.400,00" cho các dãy "1.283.400" và "00", không dãy nào khớp một số của bảng, nên bị loại mà không cần hiểu
+// dấu ngăn nghìn.
+fn scan_numbers(text: &str) -> Vec<(String, bool)> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut found = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if !chars[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
+            i += 1;
+        }
+        let mut end = i;
+        while end > start && chars[end - 1] == '.' {
+            end -= 1;
+        }
+        if end > start {
+            found.push((
+                chars[start..end].iter().collect(),
+                chars.get(i) == Some(&'%'),
+            ));
+        }
+    }
+    found
+}
+
+/// Câu khuôn thay cho lời của mô hình khi mô hình lỗi, quá giờ, trả câu không dùng được, hoặc không cần gọi
+/// (chênh lệch bằng 0). Mọi số lấy nguyên chuỗi từ bảng phân rã nên câu khuôn qua được build_number_check (test ở
+/// ask_narrate_tests.rs kiểm điều này, theo tiêu chí của #41).
+pub fn build_template_summary(explanation: &Explanation) -> String {
+    let change = explanation
+        .change
+        .parse::<Decimal>()
+        .unwrap_or(Decimal::ZERO);
+    let (measure, base, compare) = (
+        &explanation.measure,
+        &explanation.base,
+        &explanation.compare,
+    );
+    let mut text = if change.is_zero() {
+        format!(
+            "{measure} {} không đổi so với {}: {}.",
+            compare.label, base.label, compare.value
+        )
+    } else if change < Decimal::ZERO {
+        format!(
+            "{measure} {} giảm {} so với {}, từ {} xuống {}.",
+            compare.label,
+            explanation.change.trim_start_matches('-'),
+            base.label,
+            base.value,
+            compare.value
+        )
+    } else {
+        format!(
+            "{measure} {} tăng {} so với {}, từ {} lên {}.",
+            compare.label, explanation.change, base.label, base.value, compare.value
+        )
+    };
+    // Các chiều và nhóm đã xếp sẵn: nhóm đầu của chiều đầu là nhóm đóng góp nhiều nhất.
+    if let Some(top) = explanation
+        .dimensions
+        .first()
+        .and_then(|d| d.groups.first())
+    {
+        let group = top
+            .value
+            .as_ref()
+            .map(build_value_text)
+            .unwrap_or_else(|| "giá trị trống".to_string());
+        text.push_str(&format!(
+            " Theo {}, nhóm {group} đóng góp nhiều nhất ({}).",
+            explanation.dimensions[0].column, top.contribution
+        ));
+    }
+    if let Some(split) = &explanation.volume_price {
+        text.push_str(&format!(
+            " Nếu {} giữ nguyên như {}, {measure} {} là {}.",
+            split.volume_label, base.label, compare.label, split.if_volume_unchanged
+        ));
+    }
+    text
 }

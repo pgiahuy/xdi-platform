@@ -32,6 +32,8 @@ pub enum LlmTask {
     Repair,
     /// Viết mô tả, bí danh, câu hỏi gợi ý cho một dataset lúc nạp.
     Profile,
+    /// Viết lời diễn giải từ bảng phân rã đã tính (service/ask_narrate.rs). Câu hỏi là câu hỏi gốc.
+    Narrate,
 }
 
 /// Một lần nhờ mô hình. Tách câu hỏi gốc khỏi prompt: prompt còn chứa các câu mẫu làm ví dụ, nên mock không tìm câu

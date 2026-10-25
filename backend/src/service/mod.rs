@@ -22,6 +22,12 @@ mod ask_examples_tests;
 pub mod ask_match;
 #[allow(dead_code)]
 pub mod ask_phrases;
+// Bước narrate của câu "tại sao" (#41): mô hình viết lời từ bảng phân rã, code kiểm số. Gỡ allow khi #33/#38 gọi,
+// như ở ask_contract.
+#[allow(dead_code)]
+pub mod ask_narrate;
+#[cfg(test)]
+mod ask_narrate_tests;
 // Kết quả và vòng sửa của câu hỏi; endpoint hỏi (#33) gọi run_with_repair. Gỡ allow khi đó, như ở ask_contract.
 #[allow(dead_code)]
 pub mod ask_other_text;
