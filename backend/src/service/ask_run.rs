@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask_run.rs - các bước guard, run, repair của luồng hỏi (docs/ARCHITECTURE.md mục 2, bước 5 và 6): kiểm câu SQL
 mô hình viết, chạy trên DuckDB (engine/query.rs), đổi kết quả sang ResultTable (ask_result.rs), và nhờ mô hình sửa một
-lần khi lỗi sửa được. service/ask.rs (#33) gọi run_with_repair sau bước llm rồi dựng AskResponse từ RunOutcome; nhận
-mô hình và đầu vào của guard qua tham số nên test chạy được với mô hình giả, không cần Postgres.
+lần khi lỗi sửa được. service/ask.rs (#33) gọi run_with_repair với câu trả lời thô của bước llm rồi dựng AskResponse
+từ RunOutcome; nhận mô hình và đầu vào của guard qua tham số nên test chạy được với mô hình giả, không cần Postgres.
+
+Câu trả lời của mô hình là object JSON {terms, assumptions, clarify, sql} (ask_reply.rs). Mô hình hỏi lại ở lần đầu thì
+trả needs_choice, không chạy gì. Câu trả lời không đọc được (không phải JSON, thiếu sql) cũng vào vòng sửa.
 
 Vào vòng sửa: DuckDB báo lỗi, hoặc guard từ chối vì bảng hay cột không có trong hồ sơ (GuardError::UnknownName) hay vì
-câu có thể dựng giá trị quá lớn (GuardError::Oversized: tham số kích thước, số tầng, mảnh ghép, độ rộng). Không sửa:
-guard từ chối vì lý do khác (câu ghi, hàm bị cấm), câu chạy quá giờ hay quá bộ nhớ. Lỗi guard và lỗi DuckDB chung một
-vòng sửa, tối đa một vòng. Lời báo lỗi gửi mô hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ
+câu có thể dựng giá trị quá lớn (GuardError::Oversized: tham số kích thước, số tầng, mảnh ghép, độ rộng), hoặc câu trả
+lời không đọc được. Không sửa: guard từ chối vì lý do khác (câu ghi, hàm bị cấm), câu chạy quá giờ hay quá bộ nhớ. Lỗi
+guard, lỗi DuckDB và câu trả lời không đọc được chung một vòng sửa, cả câu hỏi tối đa một vòng. Lời báo lỗi gửi mô hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ
 (ask_repair.rs, cùng prompt sửa). Test ở ask_run_tests.rs. */
 
 use std::sync::Arc;
@@ -18,7 +21,10 @@ use tokio::sync::Semaphore;
 use super::ask_contract::{AskStatus, AskStep, ResultTable, StepName};
 use super::ask_repair::{
     build_repair_prompt, build_safe_error, build_user_error, build_user_text, mentions_data_files,
-    read_sql_reply,
+};
+use super::ask_reply::{
+    build_answer_from_reply, build_sql_reply_schema, Assumption, Clarify, ModelAnswer, SqlAnswer,
+    Term,
 };
 use super::ask_result::{build_result_table, SENT_ROWS};
 use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError};
@@ -33,8 +39,8 @@ pub struct RunInput<'a> {
     /// Prompt đã gửi ở bước llm. Prompt sửa ghép thêm câu SQL và lời báo lỗi vào sau, để mô hình có đủ hồ sơ bảng như
     /// lần đầu.
     pub prompt: &'a str,
-    /// SQL mô hình viết ở bước llm.
-    pub sql: String,
+    /// Câu trả lời thô của mô hình ở bước llm, chưa đọc.
+    pub reply: &'a str,
     /// Đầu vào của guard: các bảng được phép và trần số dòng.
     pub tables: &'a [AllowedTable],
     pub max_rows: u64,
@@ -44,17 +50,25 @@ pub struct RunInput<'a> {
     pub jobs: &'a Arc<Semaphore>,
 }
 
-/// Phần của AskResponse do các bước guard, run, repair quyết định. status chỉ là answered, rejected hoặc failed.
+/// Phần của AskResponse do các bước guard, run, repair quyết định. status là answered, needs_choice, rejected hoặc
+/// failed.
 #[derive(Debug)]
 pub struct RunOutcome {
     pub status: AskStatus,
-    /// Lời cho người dùng khi rejected hoặc failed; None khi answered.
+    /// Lời cho người dùng khi rejected hoặc failed, câu hỏi lại khi needs_choice; None khi answered.
     pub message: Option<String>,
-    /// SQL mô hình viết; sau vòng sửa là câu đã sửa.
-    pub sql_generated: String,
+    /// SQL mô hình viết; sau vòng sửa là câu đã sửa. None khi chưa đọc được câu SQL nào: mô hình hỏi lại, hoặc câu trả
+    /// lời không đọc được cả hai lần.
+    pub sql_generated: Option<String>,
     /// Bản `shown` của sql_generated; None khi câu đó không qua guard.
     pub sql_guarded: Option<String>,
     pub result: Option<ResultTable>,
+    /// Cách hiểu của mô hình trong câu trả lời có sql_generated (câu sửa nếu đã sửa, vì câu sửa có thể hiểu lại câu
+    /// hỏi). #33 kiểm terms với hồ sơ và dựng giả định từ assumptions.
+    pub terms: Vec<Term>,
+    pub assumptions: Vec<Assumption>,
+    /// Câu hỏi lại; chỉ có khi needs_choice.
+    pub clarify: Option<Clarify>,
     /// Các bước theo đúng thứ tự đã chạy, ví dụ guard, run (lỗi), repair, guard, run.
     pub steps: Vec<AskStep>,
 }
@@ -82,32 +96,48 @@ enum Attempt {
     },
 }
 
-/// Err chỉ cho lỗi của máy chủ (không mở được DuckDB, file Parquet mất). Mô hình lỗi khi sửa không phải Err: câu hỏi
-/// đã có SQL, nên trả failed kèm các bước thay vì 502.
+/// Err cho lỗi của máy chủ (không mở được DuckDB, file Parquet mất), và cho lỗi của mô hình khi chưa có câu SQL nào
+/// (câu trả lời lần đầu không đọc được, rồi mô hình lỗi khi sửa): như mô hình lỗi ở bước llm, request nhận 502 hay 503
+/// (xem AskStatus). Mô hình lỗi khi sửa một câu SQL đã có thì không phải Err: trả failed kèm các bước.
 pub async fn run_with_repair(
     llm: &dyn LlmProvider,
     input: RunInput<'_>,
 ) -> Result<RunOutcome, AppError> {
     let mut steps = Vec::new();
-    // first_shown: bản shown của câu đầu khi nó đã qua guard và chạy lỗi; None khi guard từ chối.
-    let (error, first_shown) = match attempt(&input, &input.sql, &mut steps).await? {
-        Attempt::Refused {
-            reason,
-            fixable: true,
-        } => (reason, None),
-        Attempt::RunFailed { shown, error } => (error, Some(shown)),
-        other => return Ok(build_outcome(other, input.sql, steps)),
+    // first: câu trả lời đầu khi đọc được. first_shown: bản shown của câu SQL đầu khi nó đã qua guard và chạy lỗi;
+    // None khi guard từ chối hay câu trả lời không đọc được.
+    let (first, error, first_shown) = match build_answer_from_reply(input.reply) {
+        Ok(ModelAnswer::Clarify { terms, clarify }) => {
+            return Ok(build_clarify_outcome(terms, clarify));
+        }
+        Ok(ModelAnswer::Sql(answer)) => match attempt(&input, &answer.sql, &mut steps).await? {
+            Attempt::Refused {
+                reason,
+                fixable: true,
+            } => (Some(answer), reason, None),
+            Attempt::RunFailed { shown, error } => (Some(answer), error, Some(shown)),
+            other => return Ok(build_outcome(other, answer, steps)),
+        },
+        Err(unreadable) => {
+            tracing::warn!(reason = %unreadable.reason, "model reply is unreadable, asking the model to fix it");
+            (None, unreadable.reason, None)
+        }
     };
     let started = Instant::now();
-    let prompt = build_repair_prompt(input.prompt, &input.sql, &error);
+    let first_sql = first.as_ref().map(|answer| answer.sql.as_str());
+    let prompt = build_repair_prompt(input.prompt, first_sql, &error);
     let request = LlmRequest {
         task: LlmTask::Repair,
         question: input.question,
         prompt: &prompt,
+        json_schema: Some(build_sql_reply_schema()),
     };
     let reply = match llm.complete(&request).await {
         Ok(reply) => reply,
         Err(e) => {
+            let Some(first) = first else {
+                return Err(e);
+            };
             let model_error = build_user_text(&e, "repair");
             steps.push(build_step(
                 StepName::Repair,
@@ -120,23 +150,32 @@ pub async fn run_with_repair(
                 "Câu SQL lỗi ({}) và mô hình không sửa được: {model_error}.",
                 build_user_error(&error)
             );
-            return Ok(RunOutcome {
-                status: AskStatus::Failed,
-                message: Some(message),
-                sql_generated: input.sql,
-                sql_guarded: first_shown,
-                result: None,
-                steps,
-            });
+            return Ok(build_failed(message, Some(first), first_shown, steps));
         }
     };
-    let detail = match first_shown {
-        Some(_) => "Mô hình sửa SQL theo lỗi của lần chạy đầu",
-        None => "Mô hình sửa SQL theo lý do guard từ chối",
+    let fixed = match build_answer_from_reply(&reply) {
+        Ok(ModelAnswer::Sql(answer)) => answer,
+        // Câu sửa không đọc được, hay hỏi lại thay vì sửa: đã hết vòng sửa nên câu hỏi dừng ở đây.
+        other => {
+            let reason = match other {
+                Err(unreadable) => unreadable.reason,
+                _ => "the model asked a question instead of fixing the SQL".to_string(),
+            };
+            tracing::warn!(%reason, "repaired reply has no readable SQL");
+            let detail = "Câu trả lời sửa của mô hình không có câu SQL đọc được";
+            steps.push(build_step(StepName::Repair, started, false, Some(detail)));
+            let message = "Mô hình không trả câu SQL đọc được, kể cả sau khi sửa một lần. Thử hỏi lại theo cách khác."
+                .to_string();
+            return Ok(build_failed(message, first, first_shown, steps));
+        }
+    };
+    let detail = match (&first, &first_shown) {
+        (None, _) => "Mô hình viết lại câu trả lời không đọc được của lần đầu",
+        (Some(_), Some(_)) => "Mô hình sửa SQL theo lỗi của lần chạy đầu",
+        (Some(_), None) => "Mô hình sửa SQL theo lý do guard từ chối",
     };
     steps.push(build_step(StepName::Repair, started, true, Some(detail)));
-    let fixed = read_sql_reply(&reply);
-    let second = attempt(&input, &fixed, &mut steps).await?;
+    let second = attempt(&input, &fixed.sql, &mut steps).await?;
     Ok(build_outcome(second, fixed, steps))
 }
 
@@ -242,8 +281,8 @@ fn internal(message: String) -> QueryError {
 }
 
 /// RunOutcome từ lượt cuối cùng: lượt đầu khi không sửa, lượt sau khi đã sửa. Lượt đầu không bao giờ là RunFailed hay
-/// Refused sửa được (đã vào vòng sửa), nên RunFailed ở đây là câu đã sửa vẫn lỗi.
-fn build_outcome(attempt: Attempt, sql: String, steps: Vec<AskStep>) -> RunOutcome {
+/// Refused sửa được (đã vào vòng sửa), nên RunFailed ở đây là câu đã sửa vẫn lỗi. answer là câu trả lời của lượt đó.
+fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> RunOutcome {
     let (status, message, sql_guarded, result) = match attempt {
         Attempt::Answered { shown, result } => (AskStatus::Answered, None, Some(shown), Some(result)),
         Attempt::Refused { reason, .. } => (
@@ -268,10 +307,54 @@ fn build_outcome(attempt: Attempt, sql: String, steps: Vec<AskStep>) -> RunOutco
     RunOutcome {
         status,
         message,
-        sql_generated: sql,
+        sql_generated: Some(answer.sql),
         sql_guarded,
         result,
+        terms: answer.terms,
+        assumptions: answer.assumptions,
+        clarify: None,
         steps,
+    }
+}
+
+/// Câu hỏi dừng ở bước repair (mô hình lỗi, hay câu sửa không đọc được). answer là câu trả lời đầu nếu đọc được, để
+/// người dùng vẫn thấy câu SQL đã lỗi và cách mô hình hiểu câu hỏi.
+fn build_failed(
+    message: String,
+    answer: Option<SqlAnswer>,
+    sql_guarded: Option<String>,
+    steps: Vec<AskStep>,
+) -> RunOutcome {
+    let (sql_generated, terms, assumptions) = match answer {
+        Some(answer) => (Some(answer.sql), answer.terms, answer.assumptions),
+        None => (None, Vec::new(), Vec::new()),
+    };
+    RunOutcome {
+        status: AskStatus::Failed,
+        message: Some(message),
+        sql_generated,
+        sql_guarded,
+        result: None,
+        terms,
+        assumptions,
+        clarify: None,
+        steps,
+    }
+}
+
+/// Mô hình hỏi lại ở lần đầu: chưa có SQL, chưa chạy bước nào. message là câu hỏi lại, như AskResponse.message của
+/// needs_choice.
+fn build_clarify_outcome(terms: Vec<Term>, clarify: Clarify) -> RunOutcome {
+    RunOutcome {
+        status: AskStatus::NeedsChoice,
+        message: Some(clarify.question.clone()),
+        sql_generated: None,
+        sql_guarded: None,
+        result: None,
+        terms,
+        assumptions: Vec::new(),
+        clarify: Some(clarify),
+        steps: Vec::new(),
     }
 }
 

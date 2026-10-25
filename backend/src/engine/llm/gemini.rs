@@ -138,9 +138,17 @@ impl LlmProvider for Gemini {
         })?;
         key.set_sensitive(true);
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "contents": [{ "role": "user", "parts": [{ "text": request.prompt }] }]
         });
+        // responseJsonSchema nhận JSON Schema chuẩn (Gemini 2.5 trở lên), nên dùng được đúng schema gửi cho Ollama.
+        // responseSchema cũ chỉ nhận một phần của OpenAPI 3.0 và phải viết schema riêng cho Gemini.
+        if let Some(schema) = &request.json_schema {
+            body["generationConfig"] = serde_json::json!({
+                "responseMimeType": "application/json",
+                "responseJsonSchema": schema,
+            });
+        }
         let response = client
             .post(&self.endpoint)
             .header("x-goog-api-key", key)
@@ -314,6 +322,7 @@ mod tests {
             task: LlmTask::Sql,
             question: "doanh thu theo năm",
             prompt: PROMPT,
+            json_schema: None,
         };
         provider.complete(&request).await
     }
@@ -340,6 +349,31 @@ mod tests {
         assert_eq!(received.query, None, "key must not be in the URL");
         assert_eq!(received.headers["x-goog-api-key"], KEY);
         assert_eq!(received.body["contents"][0]["parts"][0]["text"], PROMPT);
+        // Không yêu cầu JSON thì không gửi generationConfig, để mô hình trả văn bản tự do như trước.
+        assert!(received.body.get("generationConfig").is_none());
+    }
+
+    #[tokio::test]
+    async fn sends_json_schema_when_asked() {
+        let _serial = SERIAL.lock().await;
+        let (url, received) = spawn(200, OK_BODY, Duration::ZERO).await;
+        let schema =
+            serde_json::json!({"type": "object", "properties": {"sql": {"type": "string"}}});
+        let request = LlmRequest {
+            task: LlmTask::Sql,
+            question: "doanh thu theo năm",
+            prompt: PROMPT,
+            json_schema: Some(schema.clone()),
+        };
+        gemini(&url, KEY, Duration::from_secs(5))
+            .complete(&request)
+            .await
+            .expect("answer");
+
+        let received = received.lock().unwrap().clone().expect("request");
+        let config = &received.body["generationConfig"];
+        assert_eq!(config["responseMimeType"], "application/json");
+        assert_eq!(config["responseJsonSchema"], schema);
     }
 
     #[tokio::test]

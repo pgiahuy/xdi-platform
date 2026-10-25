@@ -14,7 +14,8 @@ use tokio::sync::Semaphore;
 
 use super::ask_contract::{AskStatus, StepName, ValueKind};
 use super::ask_other_text::build_other_text;
-use super::ask_repair::{build_safe_error, build_user_error, read_sql_reply};
+use super::ask_repair::{build_safe_error, build_user_error};
+use super::ask_reply::{ChoiceKind, Term, TermKind};
 use super::ask_result::{build_result_table, SENT_ROWS};
 use super::ask_run::{run_with_repair, RunInput, RunOutcome};
 use crate::engine::analytics::parquet_glob;
@@ -76,7 +77,8 @@ impl Drop for Dataset {
 /// Mô hình giả: trả lần lượt các câu viết sẵn và ghi lại các request nhận được.
 struct ScriptedLlm {
     replies: Mutex<VecDeque<Result<String, AppError>>>,
-    requests: Mutex<Vec<(LlmTask, String)>>,
+    /// Loại việc, prompt, và request có gửi JSON Schema không.
+    requests: Mutex<Vec<(LlmTask, String, bool)>>,
 }
 
 impl ScriptedLlm {
@@ -89,7 +91,16 @@ impl ScriptedLlm {
 
     fn prompts(&self) -> Vec<String> {
         let requests = self.requests.lock().unwrap();
-        requests.iter().map(|(_, prompt)| prompt.clone()).collect()
+        requests
+            .iter()
+            .map(|(_, prompt, _)| prompt.clone())
+            .collect()
+    }
+
+    /// Mỗi request có gửi JSON Schema không, theo thứ tự.
+    fn schemas_sent(&self) -> Vec<bool> {
+        let requests = self.requests.lock().unwrap();
+        requests.iter().map(|(_, _, schema)| *schema).collect()
     }
 }
 
@@ -100,7 +111,11 @@ impl LlmProvider for ScriptedLlm {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        let entry = (request.task, request.prompt.to_string());
+        let entry = (
+            request.task,
+            request.prompt.to_string(),
+            request.json_schema.is_some(),
+        );
         self.requests.lock().unwrap().push(entry);
         let reply = self.replies.lock().unwrap().pop_front();
         reply.expect("model called more times than the test expects")
@@ -117,17 +132,32 @@ async fn try_run(
     sql: &str,
     timeout: Duration,
 ) -> Result<RunOutcome, AppError> {
+    try_run_reply(llm, data, &reply(sql), timeout).await
+}
+
+/// Như try_run, nhưng câu trả lời đầu của mô hình cho nguyên văn, để thử câu trả lời không đọc được hay hỏi lại.
+async fn try_run_reply(
+    llm: &dyn LlmProvider,
+    data: &Dataset,
+    first_reply: &str,
+    timeout: Duration,
+) -> Result<RunOutcome, AppError> {
     let jobs = Arc::new(Semaphore::new(2));
     let input = RunInput {
         question: "Doanh thu theo khu vực",
         prompt: PROMPT,
-        sql: sql.to_string(),
+        reply: first_reply,
         tables: &data.tables,
         max_rows: MAX_ROWS,
         timeout,
         jobs: &jobs,
     };
     run_with_repair(llm, input).await
+}
+
+/// Câu trả lời của mô hình dạng JSON (ask_reply.rs) với câu SQL cho sẵn, chưa có cách hiểu nào.
+fn reply(sql: &str) -> String {
+    serde_json::json!({"terms": [], "assumptions": [], "sql": sql}).to_string()
 }
 
 async fn run_scripted(llm: &ScriptedLlm, sql: &str) -> RunOutcome {
@@ -167,7 +197,7 @@ async fn good_sql_runs_without_the_model() {
 
 #[tokio::test]
 async fn run_error_is_fixed_once() {
-    let llm = ScriptedLlm::new(vec![Ok(format!("```sql\n{GOOD_SQL}\n```"))]);
+    let llm = ScriptedLlm::new(vec![Ok(format!("```json\n{}\n```", reply(GOOD_SQL)))]);
     let outcome = run_scripted(&llm, BAD_SQL).await;
     assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
     assert_eq!(
@@ -180,8 +210,8 @@ async fn run_error_is_fixed_once() {
             (StepName::Run, true),
         ]
     );
-    // sql_generated là câu đã sửa, lấy ra khỏi khối ```sql.
-    assert_eq!(outcome.sql_generated, GOOD_SQL);
+    // sql_generated là câu đã sửa, lấy ra khỏi object JSON trong khối ```json.
+    assert_eq!(outcome.sql_generated.as_deref(), Some(GOOD_SQL));
     let prompts = llm.prompts();
     assert_eq!(prompts.len(), 1);
     let prompt = &prompts[0];
@@ -190,13 +220,16 @@ async fn run_error_is_fixed_once() {
         prompt.contains(BAD_SQL) && prompt.contains("Could not convert string 'South'"),
         "{prompt}"
     );
+    // Câu sửa phải cùng dạng JSON như lần đầu: prompt dặn, và request gửi kèm schema.
+    assert!(prompt.contains("one JSON object"), "{prompt}");
+    assert_eq!(llm.schemas_sent(), [true]);
 }
 
 /// Đúng thứ tự bước của mẫu failed trong ask_examples.rs; không có vòng sửa thứ hai.
 #[tokio::test]
 async fn second_failure_stops_the_question() {
     let still_bad = "SELECT CAST(region AS DOUBLE) AS n FROM sales";
-    let llm = ScriptedLlm::new(vec![Ok(still_bad.to_string())]);
+    let llm = ScriptedLlm::new(vec![Ok(reply(still_bad))]);
     let outcome = run_scripted(&llm, BAD_SQL).await;
     assert_eq!(outcome.status, AskStatus::Failed);
     assert_eq!(
@@ -209,7 +242,7 @@ async fn second_failure_stops_the_question() {
             (StepName::Run, false),
         ]
     );
-    assert_eq!(outcome.sql_generated, still_bad);
+    assert_eq!(outcome.sql_generated.as_deref(), Some(still_bad));
     assert!(outcome.sql_guarded.unwrap().starts_with(still_bad));
     // Lời cho người dùng bỏ loại lỗi tiếng Anh của DuckDB ("Conversion Error: "), như mẫu failed.
     let message = outcome.message.unwrap();
@@ -241,31 +274,6 @@ async fn corrupt_parquet_file_is_a_server_error() {
 }
 
 #[test]
-fn sql_is_read_from_code_blocks_with_any_label() {
-    for reply in [
-        "SELECT 1",
-        "```sql\nSELECT 1\n```",
-        "```SQL\nSELECT 1\n```",
-        "```Sql SELECT 1```",
-        "```duckdb\nSELECT 1\n```",
-        "```postgresql\nSELECT 1\n```",
-        "```c++\nSELECT 1\n```",
-        "```\nSELECT 1\n```",
-        "```SELECT 1```",
-        "  ```sql\n  SELECT 1  \n```  ",
-    ] {
-        assert_eq!(read_sql_reply(reply), "SELECT 1", "{reply:?}");
-    }
-    // Từ mở đầu câu SQL ngay sau ``` là SQL, không phải nhãn.
-    assert_eq!(read_sql_reply("```select 1```"), "select 1");
-    assert_eq!(
-        read_sql_reply("```WITH t AS (SELECT 1) SELECT * FROM t```"),
-        "WITH t AS (SELECT 1) SELECT * FROM t"
-    );
-    assert_eq!(read_sql_reply("```(SELECT 1)```"), "(SELECT 1)");
-}
-
-#[test]
 fn user_errors_drop_the_duckdb_error_kind() {
     assert_eq!(
         build_user_error(
@@ -289,7 +297,7 @@ async fn oversized_sql_is_fixed_once() {
         many_pieces.as_str(),
         "SELECT regexp_replace(region, 'x*', ' ', 'g') AS r FROM sales",
     ] {
-        let llm = ScriptedLlm::new(vec![Ok(GOOD_SQL.to_string())]);
+        let llm = ScriptedLlm::new(vec![Ok(reply(GOOD_SQL))]);
         let outcome = run_scripted(&llm, sql).await;
         assert_eq!(outcome.status, AskStatus::Answered, "{sql}: {outcome:?}");
         assert_eq!(
@@ -307,7 +315,7 @@ async fn oversized_sql_is_fixed_once() {
 /// Guard từ chối vì cột không có trong hồ sơ: lý do của guard gửi cho mô hình sửa.
 #[tokio::test]
 async fn unknown_column_is_fixed_once() {
-    let llm = ScriptedLlm::new(vec![Ok(GOOD_SQL.to_string())]);
+    let llm = ScriptedLlm::new(vec![Ok(reply(GOOD_SQL))]);
     let outcome = run_scripted(&llm, "SELECT revenue FROM sales").await;
     assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
     assert_eq!(
@@ -336,7 +344,7 @@ async fn other_guard_refusals_are_not_fixed() {
 
 #[tokio::test]
 async fn fixed_sql_refused_by_the_guard_is_rejected() {
-    let llm = ScriptedLlm::new(vec![Ok("SELECT getenv('HOME')".to_string())]);
+    let llm = ScriptedLlm::new(vec![Ok(reply("SELECT getenv('HOME')"))]);
     let outcome = run_scripted(&llm, BAD_SQL).await;
     assert_eq!(outcome.status, AskStatus::Rejected);
     assert_eq!(
@@ -348,7 +356,10 @@ async fn fixed_sql_refused_by_the_guard_is_rejected() {
             (StepName::Guard, false),
         ]
     );
-    assert_eq!(outcome.sql_generated, "SELECT getenv('HOME')");
+    assert_eq!(
+        outcome.sql_generated.as_deref(),
+        Some("SELECT getenv('HOME')")
+    );
     assert!(outcome.sql_guarded.is_none());
 }
 
@@ -368,10 +379,156 @@ async fn model_error_during_repair_is_failed() {
             (StepName::Repair, false),
         ]
     );
-    assert_eq!(outcome.sql_generated, BAD_SQL);
+    assert_eq!(outcome.sql_generated.as_deref(), Some(BAD_SQL));
     assert!(outcome.sql_guarded.unwrap().starts_with(BAD_SQL));
     let message = outcome.message.unwrap();
     assert!(message.contains("Gemini đang quá tải"), "{message}");
+}
+
+// Câu trả lời JSON của mô hình
+
+/// Câu trả lời không phải JSON vào vòng sửa như lỗi guard và DuckDB; prompt sửa nói vì sao không đọc được.
+#[tokio::test]
+async fn unreadable_reply_is_fixed_once() {
+    let llm = ScriptedLlm::new(vec![Ok(reply(GOOD_SQL))]);
+    let data = Dataset::sales();
+    let outcome = try_run_reply(&llm, &data, GOOD_SQL, Duration::from_secs(30))
+        .await
+        .unwrap();
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    assert_eq!(
+        steps(&outcome),
+        [
+            (StepName::Repair, true),
+            (StepName::Guard, true),
+            (StepName::Run, true),
+        ]
+    );
+    assert_eq!(outcome.sql_generated.as_deref(), Some(GOOD_SQL));
+    let prompts = llm.prompts();
+    assert!(prompts[0].contains("could not be read"), "{}", prompts[0]);
+    assert!(prompts[0].contains("no JSON object"), "{}", prompts[0]);
+    assert_eq!(llm.schemas_sent(), [true]);
+}
+
+/// Câu sửa cũng không đọc được: hết vòng sửa, failed, không có câu SQL nào.
+#[tokio::test]
+async fn unreadable_twice_is_failed() {
+    let llm = ScriptedLlm::new(vec![Ok("vẫn không phải JSON".to_string())]);
+    let data = Dataset::sales();
+    let outcome = try_run_reply(&llm, &data, "{\"sql\": ", Duration::from_secs(30))
+        .await
+        .unwrap();
+    assert_eq!(outcome.status, AskStatus::Failed);
+    assert_eq!(steps(&outcome), [(StepName::Repair, false)]);
+    assert_eq!(outcome.sql_generated, None);
+    assert!(
+        outcome
+            .message
+            .unwrap()
+            .contains("kể cả sau khi sửa một lần"),
+        "one repair round only"
+    );
+}
+
+/// Chưa có câu SQL nào mà mô hình lỗi khi sửa: như mô hình lỗi ở bước llm, request nhận lỗi của mô hình (502).
+#[tokio::test]
+async fn model_error_after_an_unreadable_reply_is_an_error() {
+    let llm = ScriptedLlm::new(vec![Err(AppError::Upstream("Gemini quá tải".to_string()))]);
+    let data = Dataset::sales();
+    let result = try_run_reply(&llm, &data, "không phải JSON", Duration::from_secs(30)).await;
+    assert!(matches!(result, Err(AppError::Upstream(_))), "{result:?}");
+}
+
+/// Mô hình hỏi lại ở lần đầu: needs_choice, không chạy guard, không gọi mô hình lần nữa.
+#[tokio::test]
+async fn clarify_needs_a_choice_without_running() {
+    let llm = ScriptedLlm::new(vec![]);
+    let data = Dataset::sales();
+    let first = serde_json::json!({
+        "terms": [], "assumptions": [], "sql": "",
+        "clarify": {"kind": "metric", "question": "Bạn muốn xem giảm của chỉ số nào?",
+                    "options": ["doanh thu", "lợi nhuận"]}
+    })
+    .to_string();
+    let outcome = try_run_reply(&llm, &data, &first, Duration::from_secs(30))
+        .await
+        .unwrap();
+    assert_eq!(outcome.status, AskStatus::NeedsChoice);
+    assert!(outcome.steps.is_empty());
+    assert_eq!(
+        outcome.message.as_deref(),
+        Some("Bạn muốn xem giảm của chỉ số nào?")
+    );
+    let clarify = outcome.clarify.unwrap();
+    assert_eq!(clarify.kind, ChoiceKind::Metric);
+    assert_eq!(outcome.sql_generated, None);
+}
+
+/// Hỏi lại thay vì sửa: không còn lượt nào để dùng câu trả lời của người dùng, nên failed, giữ câu SQL đầu.
+#[tokio::test]
+async fn clarify_instead_of_a_fix_is_failed() {
+    let question = serde_json::json!({
+        "sql": "", "clarify": {"kind": "column", "question": "Cột nào?", "options": ["region"]}
+    })
+    .to_string();
+    let llm = ScriptedLlm::new(vec![Ok(question)]);
+    let outcome = run_scripted(&llm, BAD_SQL).await;
+    assert_eq!(outcome.status, AskStatus::Failed);
+    assert_eq!(outcome.sql_generated.as_deref(), Some(BAD_SQL));
+    assert!(outcome.clarify.is_none());
+    assert_eq!(
+        steps(&outcome),
+        [
+            (StepName::Guard, true),
+            (StepName::Run, false),
+            (StepName::Repair, false),
+        ]
+    );
+}
+
+/// Cách hiểu đi theo câu trả lời có câu SQL đã chạy: câu sửa có thể hiểu lại câu hỏi.
+#[tokio::test]
+async fn terms_and_assumptions_come_from_the_answer_that_ran() {
+    let fixed = serde_json::json!({
+        "terms": [{"text": "miền Nam", "kind": "value", "column": "region", "value": "South"}],
+        "assumptions": [{"kind": "time", "chosen": "all", "alternatives": [], "label": "Toàn bộ dữ liệu"}],
+        "sql": GOOD_SQL
+    })
+    .to_string();
+    let first = serde_json::json!({
+        "terms": [{"text": "miền Nam", "kind": "column", "column": "region"}],
+        "assumptions": [], "sql": BAD_SQL
+    })
+    .to_string();
+    let llm = ScriptedLlm::new(vec![Ok(fixed)]);
+    let data = Dataset::sales();
+    let outcome = try_run_reply(&llm, &data, &first, Duration::from_secs(30))
+        .await
+        .unwrap();
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    assert_eq!(
+        outcome.terms,
+        [Term {
+            text: "miền Nam".to_string(),
+            kind: TermKind::Value,
+            column: Some("region".to_string()),
+            value: Some("South".to_string()),
+        }]
+    );
+    assert_eq!(outcome.assumptions.len(), 1);
+
+    // Không sửa thì cách hiểu là của câu trả lời đầu.
+    let llm = ScriptedLlm::new(vec![]);
+    let first = serde_json::json!({
+        "terms": [{"text": "khu vực", "kind": "column", "column": "region"}],
+        "assumptions": [], "sql": GOOD_SQL
+    })
+    .to_string();
+    let outcome = try_run_reply(&llm, &data, &first, Duration::from_secs(30))
+        .await
+        .unwrap();
+    assert_eq!(outcome.terms[0].text, "khu vực");
 }
 
 /// Quá giờ thì dừng và báo, không nhờ mô hình sửa. Tích chéo ba lần bảng 3000 dòng (27 tỷ dòng) chạy lâu hơn nhiều so
@@ -412,7 +569,7 @@ fn big_sales() -> Dataset {
 #[tokio::test]
 async fn fixed_sql_over_the_time_limit_is_failed() {
     let slow = "SELECT COUNT(*) AS n FROM sales a, sales b, sales c";
-    let llm = ScriptedLlm::new(vec![Ok(slow.to_string())]);
+    let llm = ScriptedLlm::new(vec![Ok(reply(slow))]);
     let outcome = run(&llm, &big_sales(), BAD_SQL, Duration::from_millis(300)).await;
     assert_eq!(outcome.status, AskStatus::Failed, "{outcome:?}");
     assert_eq!(
@@ -425,7 +582,7 @@ async fn fixed_sql_over_the_time_limit_is_failed() {
             (StepName::Run, false),
         ]
     );
-    assert_eq!(outcome.sql_generated, slow);
+    assert_eq!(outcome.sql_generated.as_deref(), Some(slow));
     assert!(outcome.message.unwrap().contains("đã bị dừng"));
 }
 
@@ -453,7 +610,7 @@ async fn query_over_the_memory_limit_is_failed() {
 async fn fixed_sql_refused_as_oversized_is_rejected() {
     let five_levels =
         "SELECT v FROM (SELECT v FROM (SELECT v FROM (SELECT v FROM (SELECT region AS v FROM sales) a) b) c) d";
-    let llm = ScriptedLlm::new(vec![Ok(five_levels.to_string())]);
+    let llm = ScriptedLlm::new(vec![Ok(reply(five_levels))]);
     let outcome = run_scripted(&llm, BAD_SQL).await;
     assert_eq!(outcome.status, AskStatus::Rejected);
     assert_eq!(
@@ -479,10 +636,11 @@ async fn third_query_waits_for_a_turn() {
     let jobs = Arc::new(Semaphore::new(2));
     let first = Arc::clone(&jobs).acquire_owned().await.unwrap();
     let _second = Arc::clone(&jobs).acquire_owned().await.unwrap();
+    let first_reply = reply(GOOD_SQL);
     let input = RunInput {
         question: "Doanh thu theo khu vực",
         prompt: PROMPT,
-        sql: GOOD_SQL.to_string(),
+        reply: &first_reply,
         tables: &data.tables,
         max_rows: MAX_ROWS,
         timeout: Duration::from_secs(30),
@@ -504,9 +662,9 @@ async fn third_query_waits_for_a_turn() {
 #[tokio::test]
 async fn error_texts_have_no_server_paths() {
     let data = Dataset::sales();
-    let llm = ScriptedLlm::new(vec![Ok(
-        "SELECT strptime(ship_date, '%d/%m/%Y %H:%M') AS shipped FROM sales".to_string(),
-    )]);
+    let llm = ScriptedLlm::new(vec![Ok(reply(
+        "SELECT strptime(ship_date, '%d/%m/%Y %H:%M') AS shipped FROM sales",
+    ))]);
     let sql = "SELECT strptime(ship_date, '%d/%m/%Y') AS shipped FROM sales";
     let outcome = run(&llm, &data, sql, Duration::from_secs(30)).await;
     assert_eq!(outcome.status, AskStatus::Failed);
@@ -549,13 +707,14 @@ async fn mock_fixes_its_sample_question() {
         task: LlmTask::Sql,
         question,
         prompt: "",
+        json_schema: None,
     };
-    let sql = mock.complete(&request).await.unwrap();
+    let first_reply = mock.complete(&request).await.unwrap();
     let jobs = Arc::new(Semaphore::new(2));
     let input = RunInput {
         question,
         prompt: "",
-        sql,
+        reply: &first_reply,
         tables: &data.tables,
         max_rows: MAX_ROWS,
         timeout: Duration::from_secs(30),
@@ -736,7 +895,7 @@ fn sample_sql_passes_the_guard() {
     let mut samples: Vec<String> = answers
         .iter()
         .filter(|e| e["task"] == "sql" || e["task"] == "repair")
-        .map(|e| e["answer"].as_str().unwrap().to_string())
+        .map(|e| e["answer"]["sql"].as_str().unwrap().to_string())
         .collect();
     assert_eq!(samples.len(), 12);
     for example in [

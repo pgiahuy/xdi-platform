@@ -12,7 +12,9 @@ Tỷ lệ và số đếm về đơn tính theo đơn hàng (đếm "Order Id" p
 Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/năm nên DuckDB báo lỗi, và có câu sửa (task repair)
 đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask_run.rs) mà không cần mô hình thật. Câu narrate cho câu
 "tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask_examples.rs) nên qua
-được bước kiểm số của #41. */
+được bước kiểm số của #41.
+Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask_reply.rs);
+terms ghi cách hiểu từng cụm chữ ("châu Âu" là Market = Europe) để luồng hỏi có dữ liệu thử phần kiểm cách hiểu. */
 
 use std::collections::HashMap;
 
@@ -29,7 +31,7 @@ const ANSWERS_JSON: &str = include_str!("mock_answers.json");
 struct Entry {
     task: LlmTask,
     question: String,
-    /// SQL là chuỗi; hồ sơ là object JSON.
+    /// Object JSON: {terms, assumptions, sql} với task sql và repair, hồ sơ với task profile.
     answer: serde_json::Value,
 }
 
@@ -70,7 +72,7 @@ fn parse_answers(json: &str) -> Result<HashMap<(LlmTask, String), String>, Strin
         serde_json::from_str(json).map_err(|e| format!("invalid JSON: {e}"))?;
     let mut answers = HashMap::new();
     for entry in entries {
-        // Mô hình thật luôn trả văn bản, nên hồ sơ cũng trả dạng chuỗi JSON để người gọi xử lý như nhau.
+        // Mô hình thật luôn trả văn bản, nên object cũng trả dạng chuỗi JSON để người gọi xử lý như nhau.
         let answer = match entry.answer {
             serde_json::Value::String(text) => text,
             other => other.to_string(),
@@ -112,6 +114,7 @@ mod tests {
             task: LlmTask::Sql,
             question,
             prompt: "",
+            json_schema: None,
         }
     }
 
@@ -156,8 +159,8 @@ mod tests {
         serde_json::from_str(ANSWERS_JSON).unwrap()
     }
 
-    /// Mọi tên cột trong dấu nháy kép của các câu SQL phải có trong hồ sơ dataco: gõ sai tên cột thì test đỏ, không
-    /// cần tải DataCo về máy.
+    /// Mọi tên cột trong dấu nháy kép của các câu SQL, và cột trong terms, phải có trong hồ sơ dataco: gõ sai tên cột
+    /// thì test đỏ, không cần tải DataCo về máy.
     #[test]
     fn sql_answers_use_only_profile_columns() {
         let entries = file_entries();
@@ -175,12 +178,15 @@ mod tests {
             .iter()
             .filter(|e| matches!(e.task, LlmTask::Sql | LlmTask::Repair));
         for entry in sql_entries {
-            let sql = entry.answer.as_str().unwrap();
+            let sql = entry.answer["sql"].as_str().unwrap();
             // Tách theo dấu nháy kép: phần ở vị trí lẻ là phần nằm trong nháy.
-            for quoted in sql.split('"').skip(1).step_by(2) {
+            let quoted = sql.split('"').skip(1).step_by(2);
+            let terms = entry.answer["terms"].as_array().unwrap();
+            let term_columns = terms.iter().filter_map(|t| t["column"].as_str());
+            for column in quoted.chain(term_columns) {
                 assert!(
-                    columns.contains(&quoted),
-                    "unknown column {quoted:?} in answer to {:?}",
+                    columns.contains(&column),
+                    "unknown column {column:?} in answer to {:?}",
                     entry.question
                 );
             }
@@ -195,13 +201,13 @@ mod tests {
             .find(|e| e.task == LlmTask::Sql && e.question == "Doanh thu theo tháng")
             .unwrap()
             .answer
-            .as_str()
-            .unwrap();
-        let sql = Mock::new()
+            .clone();
+        let reply = Mock::new()
             .complete(&sql_request("doanh thu theo THANG ?"))
             .await
             .unwrap();
-        assert_eq!(sql, expected);
+        let reply: serde_json::Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply, expected);
     }
 
     /// Câu mẫu của vòng sửa: câu sinh lần đầu đọc sai định dạng ngày, câu sửa đọc đúng.
@@ -215,6 +221,7 @@ mod tests {
                 task: LlmTask::Repair,
                 question,
                 prompt: "",
+                json_schema: None,
             })
             .await
             .unwrap();
@@ -228,6 +235,7 @@ mod tests {
             task: LlmTask::Profile,
             question: "Doanh thu theo tháng",
             prompt: "",
+            json_schema: None,
         };
         assert!(Mock::new().complete(&request).await.is_err());
     }

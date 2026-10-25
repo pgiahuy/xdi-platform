@@ -2,62 +2,151 @@
   {
     "task": "sql",
     "question": "Doanh thu theo thị trường",
-    "answer": "SELECT \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Market\" ORDER BY revenue DESC"
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "thị trường", "kind": "column", "column": "Market" }
+      ],
+      "assumptions": [
+        { "kind": "time", "chosen": "all", "alternatives": [], "label": "Tính trên toàn bộ dữ liệu vì câu hỏi không nêu khoảng thời gian" }
+      ],
+      "sql": "SELECT \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Market\" ORDER BY revenue DESC"
+    }
   },
   {
     "task": "sql",
     "question": "Doanh thu theo tháng",
-    "answer": "SELECT date_trunc('month', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS month, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY month ORDER BY month"
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "tháng", "kind": "column", "column": "order date (DateOrders)" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT date_trunc('month', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS month, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY month ORDER BY month"
+    }
   },
   {
     "task": "sql",
     "question": "Top 10 danh mục có doanh thu cao nhất",
-    "answer": "SELECT \"Category Name\" AS category, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Category Name\" ORDER BY revenue DESC LIMIT 10"
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "danh mục", "kind": "column", "column": "Category Name" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT \"Category Name\" AS category, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Category Name\" ORDER BY revenue DESC LIMIT 10"
+    }
   },
   {
     "task": "sql",
     "question": "Tỷ lệ giao hàng trễ theo phương thức vận chuyển",
-    "answer": "SELECT \"Shipping Mode\" AS shipping_mode, COUNT(DISTINCT CASE WHEN \"Late_delivery_risk\" = 1 THEN \"Order Id\" END) / COUNT(DISTINCT \"Order Id\") AS late_rate FROM dataco GROUP BY \"Shipping Mode\" ORDER BY late_rate DESC"
+    "answer": {
+      "terms": [
+        { "text": "giao hàng trễ", "kind": "column", "column": "Late_delivery_risk" },
+        { "text": "phương thức vận chuyển", "kind": "column", "column": "Shipping Mode" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT \"Shipping Mode\" AS shipping_mode, COUNT(DISTINCT CASE WHEN \"Late_delivery_risk\" = 1 THEN \"Order Id\" END) / COUNT(DISTINCT \"Order Id\") AS late_rate FROM dataco GROUP BY \"Shipping Mode\" ORDER BY late_rate DESC"
+    }
   },
   {
     "task": "sql",
     "question": "Số đơn hàng theo trạng thái giao hàng",
-    "answer": "SELECT \"Delivery Status\" AS delivery_status, COUNT(DISTINCT \"Order Id\") AS orders FROM dataco GROUP BY \"Delivery Status\" ORDER BY orders DESC"
+    "answer": {
+      "terms": [
+        { "text": "đơn hàng", "kind": "column", "column": "Order Id" },
+        { "text": "trạng thái giao hàng", "kind": "column", "column": "Delivery Status" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT \"Delivery Status\" AS delivery_status, COUNT(DISTINCT \"Order Id\") AS orders FROM dataco GROUP BY \"Delivery Status\" ORDER BY orders DESC"
+    }
   },
   {
     "task": "sql",
     "question": "Lợi nhuận theo phân khúc khách hàng",
-    "answer": "SELECT \"Customer Segment\" AS customer_segment, SUM(\"Order Profit Per Order\") AS profit FROM dataco GROUP BY \"Customer Segment\" ORDER BY profit DESC"
+    "answer": {
+      "terms": [
+        { "text": "lợi nhuận", "kind": "column", "column": "Order Profit Per Order" },
+        { "text": "phân khúc khách hàng", "kind": "column", "column": "Customer Segment" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT \"Customer Segment\" AS customer_segment, SUM(\"Order Profit Per Order\") AS profit FROM dataco GROUP BY \"Customer Segment\" ORDER BY profit DESC"
+    }
   },
   {
     "task": "sql",
     "question": "5 khu vực có tỷ lệ giao trễ cao nhất",
-    "answer": "SELECT \"Order Region\" AS order_region, COUNT(DISTINCT CASE WHEN \"Late_delivery_risk\" = 1 THEN \"Order Id\" END) / COUNT(DISTINCT \"Order Id\") AS late_rate FROM dataco GROUP BY \"Order Region\" ORDER BY late_rate DESC LIMIT 5"
+    "answer": {
+      "terms": [
+        { "text": "khu vực", "kind": "column", "column": "Order Region" },
+        { "text": "giao trễ", "kind": "column", "column": "Late_delivery_risk" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT \"Order Region\" AS order_region, COUNT(DISTINCT CASE WHEN \"Late_delivery_risk\" = 1 THEN \"Order Id\" END) / COUNT(DISTINCT \"Order Id\") AS late_rate FROM dataco GROUP BY \"Order Region\" ORDER BY late_rate DESC LIMIT 5"
+    }
   },
   {
     "task": "sql",
     "question": "Số ngày giao thực tế và dự kiến theo phương thức vận chuyển",
-    "answer": "SELECT \"Shipping Mode\" AS shipping_mode, AVG(\"Days for shipping (real)\") AS avg_real_days, AVG(\"Days for shipment (scheduled)\") AS avg_scheduled_days FROM dataco GROUP BY \"Shipping Mode\" ORDER BY avg_real_days DESC"
+    "answer": {
+      "terms": [
+        { "text": "số ngày giao thực tế", "kind": "column", "column": "Days for shipping (real)" },
+        { "text": "dự kiến", "kind": "column", "column": "Days for shipment (scheduled)" },
+        { "text": "phương thức vận chuyển", "kind": "column", "column": "Shipping Mode" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT \"Shipping Mode\" AS shipping_mode, AVG(\"Days for shipping (real)\") AS avg_real_days, AVG(\"Days for shipment (scheduled)\") AS avg_scheduled_days FROM dataco GROUP BY \"Shipping Mode\" ORDER BY avg_real_days DESC"
+    }
   },
   {
     "task": "sql",
     "question": "Doanh thu từng quý năm 2017",
-    "answer": "SELECT quarter(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, SUM(\"Order Item Total\") AS revenue FROM dataco WHERE year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) = 2017 GROUP BY quarter ORDER BY quarter"
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "quý", "kind": "column", "column": "order date (DateOrders)" },
+        { "text": "năm 2017", "kind": "period", "column": "order date (DateOrders)", "value": "2017" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT quarter(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, SUM(\"Order Item Total\") AS revenue FROM dataco WHERE year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) = 2017 GROUP BY quarter ORDER BY quarter"
+    }
   },
   {
     "task": "sql",
     "question": "5 danh mục có doanh thu cao nhất ở châu Âu",
-    "answer": "SELECT \"Category Name\" AS category, SUM(\"Order Item Total\") AS revenue FROM dataco WHERE \"Market\" = 'Europe' GROUP BY \"Category Name\" ORDER BY revenue DESC LIMIT 5"
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "danh mục", "kind": "column", "column": "Category Name" },
+        { "text": "châu Âu", "kind": "value", "column": "Market", "value": "Europe" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT \"Category Name\" AS category, SUM(\"Order Item Total\") AS revenue FROM dataco WHERE \"Market\" = 'Europe' GROUP BY \"Category Name\" ORDER BY revenue DESC LIMIT 5"
+    }
   },
   {
     "task": "sql",
     "question": "Doanh thu theo ngày giao hàng",
-    "answer": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day"
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "ngày giao hàng", "kind": "column", "column": "shipping date (DateOrders)" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day"
+    }
   },
   {
     "task": "repair",
     "question": "Doanh thu theo ngày giao hàng",
-    "answer": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%m/%d/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day"
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "ngày giao hàng", "kind": "column", "column": "shipping date (DateOrders)" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%m/%d/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day"
+    }
   },
   {
     "task": "profile",

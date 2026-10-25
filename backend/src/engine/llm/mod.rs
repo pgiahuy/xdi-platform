@@ -27,9 +27,10 @@ use crate::{config::Config, error::AppError};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmTask {
-    /// Sinh SQL cho một câu hỏi.
+    /// Sinh SQL cho một câu hỏi. Câu trả lời là object JSON có SQL bên trong (service/ask_reply.rs).
     Sql,
-    /// Sửa câu SQL vừa sinh, theo lời báo lỗi của guard hay DuckDB (service/ask_run.rs). Câu hỏi là câu hỏi gốc.
+    /// Sửa câu trả lời vừa sinh, theo lời báo lỗi của guard hay DuckDB, hoặc vì câu trả lời không đọc được
+    /// (service/ask_run.rs). Câu hỏi là câu hỏi gốc; câu trả lời cùng dạng với Sql.
     Repair,
     /// Viết mô tả, bí danh, câu hỏi gợi ý cho một dataset lúc nạp.
     Profile,
@@ -45,6 +46,10 @@ pub struct LlmRequest<'a> {
     pub question: &'a str,
     /// Prompt đầy đủ gửi cho mô hình thật.
     pub prompt: &'a str,
+    /// JSON Schema câu trả lời phải theo; None là văn bản tự do. Gemini nhận qua generationConfig.responseJsonSchema,
+    /// Ollama qua format: mô hình bị ép trả đúng một object JSON, nên người gọi không phải đoán SQL nằm ở đâu trong
+    /// lời giải thích. Mock bỏ qua trường này, vì câu viết sẵn đã đúng dạng.
+    pub json_schema: Option<serde_json::Value>,
 }
 
 #[async_trait]
