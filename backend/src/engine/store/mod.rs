@@ -27,7 +27,7 @@ pub mod test_support;
 mod workspaces;
 
 pub use accounts::{Membership, NewAdmin, User};
-pub use columns::{NewColumn, NewColumnValue, ProfileRole};
+pub use columns::{NewColumn, NewColumnValue, ProfileColumn, ProfileRole, ValueRow};
 #[allow(unused_imports)]
 pub use datasets::{
     Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SourceKind,
@@ -100,4 +100,9 @@ fn db_error(context: &str, e: sqlx::Error) -> AppError {
 /// Lỗi vi phạm khóa ngoại (mã 23503 của Postgres): một id do người gọi đưa vào không trỏ tới dòng hợp lệ.
 fn is_foreign_key_violation(e: &sqlx::Error) -> bool {
     matches!(e, sqlx::Error::Database(db) if db.code().as_deref() == Some("23503"))
+}
+
+/// Câu lệnh bị Postgres hủy (mã 57014), ví dụ vì quá statement_timeout.
+fn is_query_canceled(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(db) if db.code().as_deref() == Some("57014"))
 }

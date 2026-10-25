@@ -4,10 +4,12 @@ Lớp cấu trúc (kiểu, số ô trống, min, max, vai trò, tần suất gi�
 mô tả và bí danh (#23) sửa sau. Như mọi hàm của store, câu SQL lọc theo workspace_id lấy từ WorkspaceId: đọc hồ sơ của
 phiên bản thuộc workspace khác ra rỗng. */
 
+use std::time::Duration;
+
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use super::{db_error, ProfileStatus, Store};
+use super::{db_error, is_query_canceled, ProfileStatus, Store};
 use crate::{auth::WorkspaceId, error::AppError};
 
 /// Vai trò của một cột trong dataset, khớp CHECK của columns.role (0001_init.sql). Luật chọn ở service/profile.rs.
@@ -57,9 +59,10 @@ pub struct NewColumn {
     pub values: Vec<NewColumnValue>,
 }
 
-// Ngoài test, mới có previous_time_formats (service/profile.rs) đọc tên và time_format; các trường khác chờ ngữ cảnh
-// prompt (#28), hồ sơ ngữ nghĩa (#23) và câu "tại sao" (#38). Gỡ allow khi có người đọc để clippy bắt lại mã thừa.
-/// Một dòng của bảng columns, phần lớp cấu trúc.
+// Số đo (null_count, distinct_count, min, max) chưa ai đọc ngoài test: chờ câu "tại sao" (#38) và màn xem hồ sơ. Gỡ
+// allow khi có người đọc để clippy bắt lại mã thừa.
+/// Một dòng của bảng columns: lớp cấu trúc, cộng mô tả, bí danh và cờ nhạy cảm của lớp ngữ nghĩa (#23 ghi; chưa ghi
+/// thì mô tả null, bí danh rỗng, không nhạy cảm).
 #[allow(dead_code)]
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ProfileColumn {
@@ -73,16 +76,27 @@ pub struct ProfileColumn {
     pub min_value: Option<String>,
     pub max_value: Option<String>,
     pub time_format: Option<String>,
+    pub description: Option<String>,
+    pub aliases: Vec<String>,
+    pub is_sensitive: bool,
 }
 
-// ColumnValue và list_column_values chưa có người gọi ngoài test: ngữ cảnh prompt (#28), hồ sơ ngữ nghĩa (#23) và câu
-// "tại sao" (#38) sẽ gọi. Gỡ allow khi có người gọi để clippy bắt lại mã thừa.
+// frequency chưa ai đọc ngoài test (thứ tự đã theo nó); gỡ allow khi có người đọc.
 #[allow(dead_code)]
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ColumnValue {
     pub column_id: Uuid,
     pub value: String,
     pub frequency: Option<i64>,
+}
+
+/// Một giá trị của một cột chiều không nhạy cảm, kèm bí danh: thứ service/ask_values.rs so với câu hỏi.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ValueRow {
+    pub column_id: Uuid,
+    pub column_name: String,
+    pub value: String,
+    pub aliases: Vec<String>,
 }
 
 impl Store {
@@ -133,7 +147,8 @@ impl Store {
         version_id: Uuid,
     ) -> Result<Vec<ProfileColumn>, AppError> {
         sqlx::query_as(
-            "SELECT id, position, name, data_type, role, null_count, distinct_count, min_value, max_value, time_format
+            "SELECT id, position, name, data_type, role, null_count, distinct_count, min_value, max_value, time_format,
+                 description, aliases, is_sensitive
              FROM columns WHERE workspace_id = $1 AND version_id = $2 ORDER BY position",
         )
         .bind(ws.as_uuid())
@@ -143,7 +158,54 @@ impl Store {
         .map_err(|e| db_error("list columns", e))
     }
 
+    /// Mọi giá trị và bí danh của các cột chiều (role dimension) không nhạy cảm của một phiên bản, để so với câu hỏi
+    /// trong bộ nhớ (service/ask_values.rs giữ sẵn theo phiên bản). Rỗng khi phiên bản thuộc workspace khác.
+    ///
+    /// Trả None khi chạy quá timeout (ghi log), không trả lỗi: khi đó prompt không có danh sách giá trị, mô hình chỉ thấy
+    /// schema (tên cột, kiểu, mô tả, bí danh) mà câu hỏi vẫn trả lời được; trả lỗi thì chặn cả câu hỏi.
+    pub async fn list_value_rows(
+        &self,
+        ws: &WorkspaceId,
+        version_id: Uuid,
+        timeout: Duration,
+    ) -> Result<Option<Vec<ValueRow>>, AppError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| db_error("begin list value rows", e))?;
+        // set_config(..., true) như SET LOCAL: chỉ có hiệu lực tới hết giao dịch này, không lan sang kết nối khác
+        // của pool. Giao dịch chỉ đọc, nên kết thúc bằng rollback (khi tx bị hủy) cũng như commit.
+        sqlx::query("SELECT set_config('statement_timeout', $1, true)")
+            .bind(format!("{}ms", timeout.as_millis().max(1)))
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("set list value rows timeout", e))?;
+        let rows = sqlx::query_as(
+            "SELECT c.id AS column_id, c.name AS column_name, v.value, v.aliases
+             FROM columns c
+             JOIN column_values v ON v.workspace_id = c.workspace_id AND v.column_id = c.id
+             WHERE c.workspace_id = $1 AND c.version_id = $2 AND c.role = $3 AND NOT c.is_sensitive
+             ORDER BY c.position, v.frequency DESC, v.value",
+        )
+        .bind(ws.as_uuid())
+        .bind(version_id)
+        .bind(ProfileRole::Dimension.as_str())
+        .fetch_all(&mut *tx)
+        .await;
+        match rows {
+            Ok(rows) => Ok(Some(rows)),
+            Err(e) if is_query_canceled(&e) => {
+                tracing::warn!(%version_id, timeout_ms = timeout.as_millis() as u64,
+                    "loading column values timed out; answering without mapped values");
+                Ok(None)
+            }
+            Err(e) => Err(db_error("list value rows", e)),
+        }
+    }
+
     /// Giá trị của các cột cho trước, mỗi cột giá trị nhiều dòng nhất trước. Id cột của workspace khác bị bỏ qua.
+    // Chưa ai gọi ngoài test: kiểm form câu "tại sao" (#38) cần đủ danh sách. Gỡ allow khi có người gọi.
     #[allow(dead_code)]
     pub async fn list_column_values(
         &self,

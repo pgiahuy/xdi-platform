@@ -9,6 +9,7 @@ use tokio::sync::Semaphore;
 use crate::config::Config;
 use crate::engine::llm::{self, LlmProvider};
 use crate::engine::store::Store;
+use crate::service::ask_values::ValueCache;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -27,6 +28,9 @@ pub struct AppState {
     // Endpoint hỏi (#33) truyền semaphore này vào service/ask_run.rs; gỡ allow khi đó.
     #[allow(dead_code)]
     pub query_jobs: Arc<Semaphore>,
+    /// Giá trị đã chuẩn hóa của các phiên bản dataset vừa được hỏi (service/ask_values.rs), để mỗi câu hỏi không phải
+    /// tải và bỏ dấu lại mọi giá trị.
+    pub value_cache: Arc<ValueCache>,
 }
 
 impl AppState {
@@ -39,6 +43,7 @@ impl AppState {
             setup_code: Arc::new(Mutex::new(None)),
             excel_jobs: Arc::new(Semaphore::new(1)),
             query_jobs: Arc::new(Semaphore::new(2)),
+            value_cache: Arc::new(ValueCache::new()),
         }
     }
 }

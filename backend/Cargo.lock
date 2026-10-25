@@ -3900,6 +3900,7 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
+ "unicode-normalization",
  "utoipa",
  "utoipa-axum",
  "utoipa-swagger-ui",
