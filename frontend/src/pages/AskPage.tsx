@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AskPage.tsx - trang đầu của một workspace: hỏi dữ liệu. Chọn dataset, gõ câu hỏi, xem thẻ "Đã hiểu là", đổi
-giả định hoặc trả lời câu hỏi lại; phần hiện response ở AskOutcome.tsx.
+giả định hoặc trả lời câu hỏi lại; phần hiện response ở AskOutcome.tsx, pane bằng chứng ở AskEvidence.tsx.
 Quy tắc gửi lựa chọn theo hợp đồng (ARCHITECTURE mục 8): đổi giả định hay trả lời câu hỏi lại thì gửi lại đúng câu
 hỏi đó kèm choices của response gần nhất (buildChoicesWith); gõ câu khác là câu mới, choices rỗng. Response gần nhất
 giữ trong state kèm request đã gửi, vì hỏi lại cần cả hai và useMutation xóa data khi bắt đầu lần gọi mới.
@@ -18,6 +18,7 @@ import { SampleModeSwitch } from '@/components/ask/SampleModeSwitch'
 import { EmptyState } from '@/components/EmptyState'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
+import { AskEvidence } from './AskEvidence'
 import { AskOutcome, type Answer } from './AskOutcome'
 import { workspaceHref } from './workspaceNav'
 
@@ -83,7 +84,8 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       evidence={
         answer &&
         !ask.error && (
-          <p className="text-sm text-muted-foreground">Bản này chưa hiện câu SQL, các bước và dòng nguồn.</p>
+          // key theo câu trả lời: câu trả lời mới thì pane về tab mặc định, bỏ dòng phân rã đã bấm của câu trước.
+          <AskEvidence key={evidenceKey(answer)} ws={ws} answer={answer} pending={ask.isPending} />
         )
       }
     >
@@ -133,6 +135,12 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       )}
     </AskLayout>
   )
+}
+
+// query_id là null với needs_choice, và response mẫu giữ cùng query_id khi đổi giả định: thêm request đã gửi để mỗi lần
+// hỏi là một khóa riêng.
+function evidenceKey({ variables, response }: Answer): string {
+  return `${response.query_id ?? ''}:${JSON.stringify(variables)}`
 }
 
 function announce(pending: boolean, answer: Answer | undefined): string {
