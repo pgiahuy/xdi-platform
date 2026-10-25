@@ -16,6 +16,7 @@ use crate::engine::store::{
 };
 use crate::error::AppError;
 use crate::service::semantic::*;
+use crate::service::semantic_schema::build_profile_schema;
 use crate::state::AppState;
 
 fn column(id: Uuid, name: &str, data_type: &str, role: ProfileRole) -> ProfileColumn {
@@ -396,18 +397,130 @@ fn unusable_answers_are_rejected_as_a_whole() {
     let columns = std::slice::from_ref(&market);
     let values = vec![value(market.id, "Europe", 5)];
     // JSON hỏng, không phải JSON, và JSON đúng nhưng không mục nào hợp lệ.
-    assert!(build_profile_answer("{not json", columns, &values).is_none());
-    assert!(build_profile_answer("xin lỗi, tôi không biết", columns, &values).is_none());
+    assert!(build_profile_answer("{not json", columns, &values).is_err());
+    assert!(build_profile_answer("xin lỗi, tôi không biết", columns, &values).is_err());
     let only_invalid =
         r#"{"columns": [{"name": "Không có"}], "values": [], "suggested_questions": ["", 42]}"#;
-    assert!(build_profile_answer(only_invalid, columns, &values).is_none());
+    assert!(build_profile_answer(only_invalid, columns, &values).is_err());
     // Cột có thật nhưng mọi mục đều sai (mô tả quá dài, không bí danh nào hợp lệ): không mục nào được ghi, cả câu trả
     // lời bị từ chối.
     let all_bad = format!(
         r#"{{"columns": [{{"name": "Market", "description": "{}"}}]}}"#,
         "x".repeat(400)
     );
-    assert!(build_profile_answer(&all_bad, columns, &values).is_none());
+    assert!(build_profile_answer(&all_bad, columns, &values).is_err());
+}
+
+/// Câu trả lời bị bỏ cả thì kèm lý do theo tên trường và vị trí, không chép giá trị hay chữ mô hình viết; tối đa 5
+/// lý do dù có nhiều mục sai hơn.
+#[test]
+fn rejected_answers_explain_why_without_data() {
+    let market = column(Uuid::new_v4(), "Market", "VARCHAR", ProfileRole::Dimension);
+    let columns = std::slice::from_ref(&market);
+    let values = vec![value(market.id, "Europe", 5)];
+    let answer = r#"{"columns": {"Market": "Thị trường"},
+        "values": [{"column": "Market", "value": "Châu Phi bí mật", "aliases": ["x"]}],
+        "suggested_questions": [""]}"#;
+    let reasons = build_profile_answer(answer, columns, &values).unwrap_err();
+    assert_eq!(
+        reasons,
+        [
+            "columns: not a list",
+            "values[0]: value not in the column's value list",
+            "suggested_questions[0]: not a valid question",
+        ]
+    );
+    let many = format!(
+        r#"{{"columns": [{}]}}"#,
+        [r#"{"name": "Không có"}"#; 9].join(", ")
+    );
+    let reasons = build_profile_answer(&many, columns, &values).unwrap_err();
+    assert_eq!(reasons.len(), 5);
+    assert_eq!(reasons[0], "columns[0]: unknown column name");
+    assert_eq!(
+        build_profile_answer("không phải JSON", columns, &values).unwrap_err(),
+        ["the answer is not a JSON object"]
+    );
+}
+
+/// Schema chỉ dùng từ khóa cả Gemini lẫn Ollama nhận, và câu trả lời viết sẵn của mock cho dataco theo đúng schema:
+/// có mọi trường bắt buộc, không có trường lạ, đúng kiểu. Câu đó đọc được bằng build_profile_answer ở
+/// mock_dataco_profile_is_applied, nên schema và bước đọc cùng một khuôn.
+#[test]
+fn profile_schema_uses_common_keywords_and_fits_the_mock_answer() {
+    let schema = build_profile_schema();
+    let allowed = [
+        "type",
+        "properties",
+        "required",
+        "items",
+        "enum",
+        "description",
+    ];
+    let mut stack = vec![&schema];
+    while let Some(node) = stack.pop() {
+        for (key, value) in node.as_object().unwrap() {
+            assert!(allowed.contains(&key.as_str()), "keyword {key} in {node}");
+            match key.as_str() {
+                "properties" => stack.extend(value.as_object().unwrap().values()),
+                "items" => stack.push(value),
+                _ => {}
+            }
+        }
+    }
+
+    let answer = mock_profile_answer();
+    assert_fits(&schema, &answer, "answer");
+}
+
+/// Câu trả lời viết sẵn của mock cho task profile trên bảng dataco.
+fn mock_profile_answer() -> serde_json::Value {
+    let entries: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("../engine/llm/mock_answers.json")).unwrap();
+    entries
+        .into_iter()
+        .find(|e| e["task"] == "profile" && e["question"] == "dataco")
+        .unwrap()["answer"]
+        .clone()
+}
+
+/// Kiểm một giá trị theo đúng phần schema dùng ở đây (type, properties, required, items, enum).
+fn assert_fits(schema: &serde_json::Value, value: &serde_json::Value, path: &str) {
+    match schema["type"].as_str().unwrap() {
+        "object" => {
+            let object = value
+                .as_object()
+                .unwrap_or_else(|| panic!("{path} is not an object"));
+            let properties = schema["properties"].as_object().unwrap();
+            for name in schema["required"].as_array().into_iter().flatten() {
+                let name = name.as_str().unwrap();
+                assert!(object.contains_key(name), "{path} has no {name}");
+            }
+            for (name, field) in object {
+                let field_schema = properties
+                    .get(name)
+                    .unwrap_or_else(|| panic!("{path}.{name} is not in the schema"));
+                assert_fits(field_schema, field, &format!("{path}.{name}"));
+            }
+        }
+        "array" => {
+            let items = value
+                .as_array()
+                .unwrap_or_else(|| panic!("{path} is not a list"));
+            for (i, item) in items.iter().enumerate() {
+                assert_fits(&schema["items"], item, &format!("{path}[{i}]"));
+            }
+        }
+        "string" => {
+            let text = value
+                .as_str()
+                .unwrap_or_else(|| panic!("{path} is not a string"));
+            if let Some(options) = schema["enum"].as_array() {
+                assert!(options.iter().any(|o| o == text), "{path} = {text}");
+            }
+        }
+        other => panic!("type {other} not used by the profile schema"),
+    }
 }
 
 #[test]
@@ -589,6 +702,44 @@ async fn mock_dataco_profile_is_applied() {
         Some("Thị trường nơi giao đơn hàng")
     );
 
+    drop_workspace(&store, ws).await;
+}
+
+/// Provider chỉ trả câu viết sẵn của mock khi request profile có JSON Schema; không có schema thì lỗi.
+struct SchemaRequiredLlm;
+
+#[async_trait::async_trait]
+impl LlmProvider for SchemaRequiredLlm {
+    fn name(&self) -> String {
+        "schema-required".to_string()
+    }
+
+    async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        match &request.json_schema {
+            Some(schema) if *schema == build_profile_schema() => {
+                Ok(mock_profile_answer().to_string())
+            }
+            _ => Err(AppError::Upstream(
+                "profile request without its schema".to_string(),
+            )),
+        }
+    }
+}
+
+/// Request profile gửi kèm build_profile_schema, để Gemini và Ollama bị ép đúng khuôn.
+#[tokio::test]
+async fn profile_request_carries_the_schema() {
+    let Some(store) = store().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let ws = temp_workspace(&store).await;
+    let (ds, v) = dataco(&store, &ws).await;
+    let mut state = mock_state(store.clone());
+    state.llm = Arc::new(SchemaRequiredLlm);
+    apply_semantic_profile(&state, &ws, &ds, v.id, v.row_count)
+        .await
+        .unwrap();
     drop_workspace(&store, ws).await;
 }
 

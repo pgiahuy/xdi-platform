@@ -70,7 +70,7 @@ impl Config {
             max_upload_bytes: upload_limit_bytes(env::var("MAX_UPLOAD_MB").ok().as_deref()),
             llm_provider: var_or("LLM_PROVIDER", "mock"),
             gemini_api_key: Secret::new(var_or("GEMINI_API_KEY", "")),
-            gemini_model: var_or("GEMINI_MODEL", "gemini-2.5-flash"),
+            gemini_model: var_or("GEMINI_MODEL", "gemini-3.5-flash-lite"),
             gemini_timeout: timeout_secs("GEMINI_TIMEOUT_SECS", 60),
             ollama_url: var_or("OLLAMA_URL", "http://localhost:11434"),
             ollama_model: var_or("OLLAMA_MODEL", "qwen2.5-coder:7b"),

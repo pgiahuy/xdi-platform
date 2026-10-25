@@ -39,3 +39,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Tài liệu `docs/API.md` (đặc tả, đăng nhập bằng cookie, workspace và vai, mã lỗi), `docs/GUARD.md` (câu SQL nào được chạy, câu nào bị từ chối, các ca đã có test) và `docs/DATA.md` (định dạng file nhận, giới hạn, phiên bản theo hash, tên bảng và tên cột).
 - `CARGO_BUILD_JOBS` trong `.env` giới hạn số tiến trình biên dịch khi build image backend, kể cả phần C++ của DuckDB, để máy ít RAM build được bằng `docker compose up --build` thường.
 - Hỏi dữ liệu chạy thật: gõ câu hỏi trên một dataset đã nạp, nhận bảng kết quả kèm câu SQL mô hình viết và câu SQL đã chạy sau khi guard kiểm; câu lỗi lúc chạy được mô hình sửa một lần; câu có chữ khớp nhiều cột thì hỏi lại để chọn cột; câu bị từ chối hay chạy lỗi vẫn hiện lý do và các bước. Mọi câu đã trả lời, bị từ chối hay chạy lỗi được ghi vào lịch sử. Trần số dòng mỗi câu đặt bằng `ASK_MAX_ROWS` (mặc định 100 000).
+
+### Changed
+
+- Mô hình Gemini mặc định đổi sang `gemini-3.5-flash-lite` (đổi bằng `GEMINI_MODEL`).
