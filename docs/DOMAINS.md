@@ -51,7 +51,8 @@ Thêm một file `data/domains/<id>.json` theo schema trên, không cần sửa 
 biên dịch và nhúng mọi file vào binary (image Docker và binary của `make install` không có thư mục `data/`, cùng lý
 do `engine/llm/mock.rs` nhúng câu trả lời mẫu). Thêm hay sửa file gói thì `cargo build` tự nhúng lại; với
 `CARGO_TARGET_DIR` dùng chung giữa nhiều bản checkout, chạy `touch backend/src/main.rs data/domains` trước để chắc
-chắn build script chạy lại. Test của `engine/domains.rs` chặn gói sai: mọi file đọc được theo schema, `id` trùng tên
+chắn build script chạy lại (phải touch cả thư mục `data/domains`, không chỉ `main.rs`: một bản checkout khác thêm file
+gói thì thư mục của bản này không đổi, cargo không tự chạy lại build script). Test của `engine/domains.rs` chặn gói sai: mọi file đọc được theo schema, `id` trùng tên
 file, id không trùng giữa các gói, mỗi khái niệm có hai đến ba cách tính, có từ đồng nghĩa và chiều phân rã, từ đồng
 nghĩa không rỗng và không trùng trong một gói, luật kiểm nhất quán (`non_negative` không có `min`/`max`,
 `value_range` có ít nhất một đầu và `min` không quá `max`). CI chạy các test này cả khi PR chỉ đổi `data/domains/`.

@@ -10,7 +10,9 @@ vì build.rs ở đó không thấy gốc repo.
 Mọi đường dẫn ghi vào file sinh và rerun-if-changed đều tương đối theo CARGO_MANIFEST_DIR: nhiều bản checkout (worktree)
 có thể dùng chung một CARGO_TARGET_DIR, đường dẫn tuyệt đối sẽ làm bản này nhúng gói của bản khác. Dù vậy cargo vẫn có
 thể dùng lại kết quả build script cũ khi thư mục data/domains không thay đổi, nên với target dùng chung, thêm hay sửa
-file gói thì chạy lại bằng: touch backend/src/main.rs data/domains */
+file gói thì chạy lại bằng: touch backend/src/main.rs data/domains. Phải touch cả thư mục data/domains, không chỉ
+main.rs: rerun-if-changed trỏ vào thư mục của bản checkout này, nên một bản khác thêm file gói thì thư mục của bản này
+không đổi, build script không tự chạy lại. */
 
 use std::{env, fs, path::Path};
 

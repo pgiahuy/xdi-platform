@@ -6,7 +6,7 @@
     {
       "id": "revenue",
       "name": "Doanh thu",
-      "description": "Tổng tiền bán hàng trong một kỳ. Câu hỏi về doanh thu thường cần nói rõ tính theo ngày đặt hay ngày giao, và trước hay sau giảm giá. Khi có hàng trả lại, doanh thu ròng của một nhóm hàng trong một kỳ có thể âm.",
+      "description": "Tổng tiền bán hàng trong một kỳ. Câu hỏi về doanh thu thường cần nói rõ tính theo ngày đặt hay ngày giao, và trước hay sau giảm giá. Khi có hàng trả lại, doanh thu sau khi trừ hàng trả lại của một nhóm hàng trong một kỳ có thể âm.",
       "synonyms": ["doanh thu", "doanh số", "tiền bán hàng", "revenue", "sales"],
       "calculations": [
         {
@@ -46,7 +46,7 @@
     {
       "id": "average_order_value",
       "name": "Giá trị đơn trung bình",
-      "description": "Mức tiền trung bình của một đơn. Dùng để biết khách mua to hay nhỏ hơn theo thời gian hay giữa các nhóm.",
+      "description": "Mức tiền trung bình của một đơn. Dùng để biết khách mua to hay nhỏ hơn theo thời gian hay giữa các nhóm. Khi có đơn trả hàng mang tổng âm, giá trị này của một nhóm có thể âm.",
       "synonyms": ["giá trị đơn trung bình", "giá trị trung bình mỗi đơn", "average order value", "aov"],
       "calculations": [
         {
@@ -59,7 +59,7 @@
         }
       ],
       "dimensions": ["thời gian", "khu vực", "kênh bán", "nhóm khách hàng"],
-      "sanity_checks": [{"kind": "non_negative"}]
+      "sanity_checks": []
     },
     {
       "id": "profit",
