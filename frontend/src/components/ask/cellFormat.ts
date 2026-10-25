@@ -8,10 +8,14 @@ của máy, hiện sai giờ đã lưu. */
 
 import type { Cell, CellKind } from './types'
 
-const numberFormat = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 6 })
-// Số có trị tuyệt đối dưới 1 (tỉ lệ, xác suất) định dạng theo chữ số có nghĩa: theo số chữ số thập phân thì 0,0000001
-// hiện thành 0, ô khác 0 lại hiện như 0.
-const smallNumberFormat = new Intl.NumberFormat('vi-VN', { maximumSignificantDigits: 6 })
+// Ô number có phần lẻ (SUM, AVG trên cột số thực) thường ra hàng chục chữ số lẻ như 6929653,690574; hai chữ số lẻ là đủ
+// để đọc và so, luôn đủ hai chữ số để cột thẳng hàng (3.667.633,20, không phải 3.667.633,2); giá trị đủ chữ số vẫn
+// ở CSV. Số nguyên giữ nguyên mọi chữ số.
+const integerFormat = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 })
+const fractionFormat = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Số có trị tuyệt đối dưới 1 (tỉ lệ, xác suất) định dạng theo hai chữ số có nghĩa: theo hai chữ số lẻ thì 0,004 hiện
+// thành 0, ô khác 0 lại hiện như 0. Với số từ 0,01 trở lên kết quả giống hai chữ số lẻ (0,1234 thành 0,12).
+const smallNumberFormat = new Intl.NumberFormat('vi-VN', { maximumSignificantDigits: 2 })
 
 export function formatCell(value: Cell, kind: CellKind): string {
   if (value === null) return ''
@@ -44,7 +48,8 @@ export function toChartNumber(value: Cell): number | null {
 function formatNumber(value: number): string {
   // value === 0 đúng cả với -0; Intl hiện -0 thành "-0".
   if (value === 0) return '0'
-  return Math.abs(value) < 1 ? smallNumberFormat.format(value) : numberFormat.format(value)
+  if (Number.isInteger(value)) return integerFormat.format(value)
+  return Math.abs(value) < 1 ? smallNumberFormat.format(value) : fractionFormat.format(value)
 }
 
 /** "-1234567.50" thành "-1.234.567,50"; chuỗi không đúng dạng chữ số thì giữ nguyên. */

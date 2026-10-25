@@ -60,7 +60,10 @@
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
     --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    /* Chữ phụ: shadcn để oklch(0.556 0 0), khoảng 4,7:1 trên nền trắng nhưng chỉ khoảng 4,3:1 trên nền bg-muted (khung
+       SQL, đầu bảng), dưới mức 4,5:1 của WCAG AA cho chữ thường. oklch(0.5 0 0) đạt khoảng 6:1 trên nền trắng và
+       5,5:1 trên bg-muted, tính theo công thức độ chói tương đối của WCAG. */
+    --muted-foreground: oklch(0.5 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);

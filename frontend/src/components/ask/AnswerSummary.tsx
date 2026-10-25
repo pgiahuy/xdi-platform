@@ -12,9 +12,9 @@ type Props = {
 export function AnswerSummary({ summary, byModel }: Props) {
   return (
     <section aria-labelledby="answer-summary-heading" className="flex flex-col gap-1">
-      <h2 id="answer-summary-heading" className="text-sm font-semibold">
+      <h3 id="answer-summary-heading" className="text-sm font-semibold">
         Giải thích
-      </h2>
+      </h3>
       <p className="text-sm">{summary}</p>
       {!byModel && (
         <p className="text-xs text-muted-foreground">Câu này viết theo khuôn từ các số đã tính, không phải lời của mô hình.</p>

@@ -31,9 +31,9 @@ export function ClarificationForm({ message, clarifications, onSubmit, disabled 
       aria-labelledby="clarification-heading"
       className="flex flex-col gap-4 rounded-lg border p-4"
     >
-      <h2 id="clarification-heading" className="text-sm font-semibold">
+      <h3 id="clarification-heading" className="text-sm font-semibold">
         {message}
-      </h2>
+      </h3>
       {clarifications.map((choice) => (
         <fieldset key={choice.id} className="flex flex-col gap-2" disabled={disabled}>
           <legend className="mb-1 text-sm">{choice.label}</legend>
