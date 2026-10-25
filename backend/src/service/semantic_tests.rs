@@ -182,8 +182,8 @@ fn prompt_value_caps() {
     assert!(!values_part.contains("\"v13\""), "{values_part}");
 }
 
-/// Luật đánh dấu nhạy cảm (service/profile.rs, chạy lúc lập hồ sơ cấu trúc): tên cột (bỏ dấu) chứa email, mật khẩu,
-/// số điện thoại...; hoặc phần lớn giá trị trông như email hay số điện thoại. Sau khi đánh dấu, prompt của lớp ngữ
+/// Luật đánh dấu nhạy cảm (service/profile.rs, chạy lúc lập hồ sơ cấu trúc): tên cột (bỏ dấu, so theo từ) có email,
+/// mật khẩu, số điện thoại...; hoặc phần lớn giá trị trông như email hay số điện thoại. Sau khi đánh dấu, prompt của lớp ngữ
 /// nghĩa không chứa giá trị nào của các cột đó (kể cả giá trị đã che).
 #[test]
 fn sensitive_columns_are_detected_by_name_and_values() {
@@ -208,6 +208,16 @@ fn sensitive_columns_are_detected_by_name_and_values() {
         "Tel",
         "Customer Street",
         "Tên KH",
+        // "dien thoai" ở đầu tên.
+        "Điện thoại",
+        "Điện thoại liên hệ",
+        // Ranh giới chữ - số và số nhiều.
+        "Address1",
+        "Phone2",
+        "Email1",
+        "Emails",
+        "Phones",
+        "Shipping Addresses",
     ] {
         assert!(is_sensitive_column(name, &[] as &[&str]), "{name}");
     }
@@ -221,6 +231,9 @@ fn sensitive_columns_are_detected_by_name_and_values() {
         "Mailing Region",
         "Dòng điện thoại",
         "Loại điện thoại",
+        // "DT" hay là doanh thu.
+        "DT",
+        "DT 2024",
     ] {
         assert!(!is_sensitive_column(name, &[] as &[&str]), "{name}");
     }
@@ -234,6 +247,19 @@ fn sensitive_columns_are_detected_by_name_and_values() {
         "Liên hệ",
         &["+84 901 234 567", "0901234567"]
     ));
+    // Dạng quốc tế, 84 ở đầu không dấu +, số bàn có ngoặc.
+    assert!(is_sensitive_column(
+        "Liên hệ",
+        &["+1 415 555 0100", "+84 (0) 912 345 678", "+44 20 7946 0958"]
+    ));
+    assert!(is_sensitive_column(
+        "Liên hệ",
+        &["84912345678", "84987654321"]
+    ));
+    assert!(is_sensitive_column(
+        "Liên hệ",
+        &["(028) 3823 4567", "(024) 3825 1234"]
+    ));
     assert!(!is_sensitive_column(
         "Liên hệ",
         &["lan@example.com", "hải phòng"]
@@ -242,6 +268,13 @@ fn sensitive_columns_are_detected_by_name_and_values() {
     assert!(!is_sensitive_column("Ngày", &["2018-01-31", "2018-02-01"]));
     assert!(!is_sensitive_column("Khóa ngày", &["20180131", "20180201"]));
     assert!(!is_sensitive_column("Mã hàng", &["10002345", "10002346"]));
+    assert!(!is_sensitive_column("Ngày", &["31.01.2018", "01/02/2018"]));
+    assert!(!is_sensitive_column(
+        "Mã đơn",
+        &["12345678901", "98765432109"]
+    ));
+    // Số nguyên đã mất số 0 đầu thì luật giá trị không bắt.
+    assert!(!is_sensitive_column("Liên hệ", &["912345678", "987654321"]));
     assert!(!is_sensitive_column("Market", &["Europe", "LATAM"]));
 
     // Cột đã đánh dấu: prompt không chứa giá trị của nó dù lỡ truyền vào.
@@ -619,7 +652,7 @@ async fn temporary_llm_failure_keeps_the_version_retryable() {
     drop_workspace(&store, ws).await;
 }
 
-/// Câu trả lời không dùng được (mock không có bảng, mô hình từ chối, JSON hỏng, mọi mục đều sai): đánh dấu đã thử
+/// Câu trả lời không dùng được (mock không có bảng, Gemini chặn prompt, JSON hỏng, mọi mục đều sai): đánh dấu đã thử
 /// kèm tên provider; việc khởi động với cùng provider không gọi lại, đổi provider thì thử lại. Phiên bản giữ
 /// structure, không chuyển sang semantic.
 #[tokio::test]
@@ -688,6 +721,54 @@ async fn unusable_answers_are_marked_with_the_provider() {
         .unwrap()
         .iter()
         .any(|c| c.id == v.id));
+
+    drop_workspace(&store, ws).await;
+}
+
+/// Đường khởi động đọc lại semantic_attempted_with sau khi có permit: một lượt nạp đã thử với cùng provider và đánh
+/// dấu lỗi vĩnh viễn sau khi việc khởi động lấy danh sách ứng viên thì việc khởi động bỏ qua, không gọi mô hình lần
+/// hai. Đường nạp vẫn chạy, vì nạp lại đúng bộ file là cách thử lại tường minh.
+#[tokio::test]
+async fn startup_pass_skips_versions_attempted_meanwhile() {
+    let Some(store) = store().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let ws = temp_workspace(&store).await;
+    // Bảng không phải dataco, provider tên "failing": profile_remaining_versions của test khác (mock) chạy song song
+    // trên cùng database chỉ đánh dấu "mock", không chuyển phiên bản sang semantic và không trùng tên provider ở đây.
+    let src = store.create_local_source(&ws).await.unwrap();
+    let ds = store
+        .create_dataset(&ws, src, "Sales", "sales", None)
+        .await
+        .unwrap();
+    let columns = [new_column(
+        0,
+        "Market",
+        "VARCHAR",
+        ProfileRole::Dimension,
+        &[("Europe", 2)],
+    )];
+    let version = NewVersion {
+        source_kind: SourceKind::Csv,
+        file_hash: "h1",
+        parquet_path: "x",
+        row_count: 2,
+    };
+    let v = store
+        .create_version(&ws, ds.id, &version, &columns)
+        .await
+        .unwrap();
+    let mut state = mock_state(store.clone());
+    state.llm = Arc::new(FailingLlm);
+
+    assert!(still_structure(&state, &ws, v.id, true).await);
+    store
+        .mark_semantic_attempted(&ws, v.id, "failing")
+        .await
+        .unwrap();
+    assert!(!still_structure(&state, &ws, v.id, true).await);
+    assert!(still_structure(&state, &ws, v.id, false).await);
 
     drop_workspace(&store, ws).await;
 }

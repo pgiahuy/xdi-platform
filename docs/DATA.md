@@ -188,23 +188,27 @@ Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order Ci
 `measure` theo luật; lớp ngữ nghĩa (mục dưới) sửa được một số ca như vậy trong phạm vi hẹp.
 
 **Cột nhạy cảm** (`is_sensitive`) được đánh dấu ngay trong lượt lập hồ sơ cấu trúc, cùng giao dịch ghi hồ sơ, trước
-khi phiên bản dùng được: tên cột (bỏ dấu, chữ thường) chứa một cụm như email, mật khẩu, số điện thoại, số giấy tờ,
-địa chỉ, họ tên (danh sách ở `SENSITIVE_NAME_PARTS`, service/profile.rs), hoặc phần lớn giá trị của cột trông như
-email hay số điện thoại. Luật tên cố ý đơn giản và nghiêng về đánh dấu nhầm còn hơn bỏ sót. Phiên bản nạp trước khi
-có luật này được quét đánh dấu lại mỗi lần khởi động (chỉ bật cờ, không tắt; đồng bộ trước khi server nhận
-request). Giá trị của cột nhạy cảm không vào
-prompt của lớp ngữ nghĩa lẫn ngữ cảnh hỏi (#28), ngay từ khi phiên bản ở `structure`.
+khi phiên bản dùng được: tên cột có một cụm như email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên (danh
+sách ở `SENSITIVE_NAME_PHRASES`, service/profile.rs) hay bắt đầu bằng "điện thoại", hoặc phần lớn giá trị của cột
+trông như email hay số điện thoại (dạng `0912 345 678`, `(028) 3823 4567`, `+84 912 345 678`, `+1 415 555 0100`,
+`84912345678`). Tên cột được bỏ dấu, chuyển chữ thường và tách từ (cả camelCase và chỗ chữ liền số, như `Address1`)
+rồi so theo từ, nên "Hotel" không khớp "tel", "Dòng điện thoại" không thành nhạy cảm. Luật cố ý đơn giản và nghiêng
+về đánh dấu nhầm còn hơn bỏ sót. Phiên bản nạp trước khi có luật này được quét đánh dấu lại mỗi lần khởi động (chỉ
+bật cờ, không tắt; đồng bộ trước khi server nhận request). Giá trị của cột nhạy cảm không vào prompt của lớp ngữ nghĩa
+lẫn ngữ cảnh hỏi (#28), ngay từ khi phiên bản ở `structure`.
 
 ## Hồ sơ lớp ngữ nghĩa
 
 Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
 (`service/semantic.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, bí danh giá trị, câu hỏi gợi
 ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì `profile_status` là `semantic`;
-người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Lỗi
-tạm (mô hình quá tải, timeout, thiếu cấu hình, Postgres lỗi) giữ `structure` và không đánh dấu gì: lần khởi động sau
-thử lại. Lỗi mà gọi lại y nguyên không khác (JSON hỏng, không mục nào hợp lệ, mô hình từ chối nội dung, mock không có
-bảng) thì đánh dấu đã thử kèm tên provider (`semantic_attempted_with`): việc khởi động không gọi lại với cùng
-provider, đổi `LLM_PROVIDER` thì thử lại, và nạp lại đúng bộ file cũ luôn là đường thử lại tường minh.
+người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Câu
+trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của provider (Gemini chặn prompt vì
+nội dung, mock không có bảng) thì đánh dấu đã thử kèm tên provider (`semantic_attempted_with`): việc khởi động không
+gọi lại với cùng provider, đổi `LLM_PROVIDER` thì thử lại, và nạp lại đúng bộ file cũ luôn là đường thử lại tường
+minh. Mọi lỗi khác (mô hình quá tải, timeout, thiếu cấu hình, Postgres lỗi) giữ `structure` và không đánh dấu gì:
+lần khởi động sau thử lại. Gemini báo câu trả lời bị cắt ở `MAX_TOKENS`, bị dừng vì `SAFETY` và mã 400 không phải
+khóa sai cũng bằng lỗi tạm, nên các lỗi này được thử lại mỗi lần khởi động dù gọi lại có thể vẫn hỏng.
 
 Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác
 nhau; min, max chỉ kèm cột `time` và `measure` số thực (min, max của cột chữ hay mã số nguyên như mã đơn, số điện

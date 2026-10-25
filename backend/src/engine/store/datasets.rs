@@ -513,22 +513,24 @@ impl Store {
         Ok(())
     }
 
-    /// profile_status hiện tại của một phiên bản; None khi không có (workspace khác hay đã xóa). semantic.rs đọc lại
-    /// sau khi lấy được permit, trước khi gọi mô hình: hai lượt xếp hàng cho cùng một phiên bản thì lượt sau thấy
-    /// semantic và dừng, không gọi mô hình hai lần.
-    pub async fn get_profile_status(
+    /// profile_status và semantic_attempted_with hiện tại của một phiên bản; None khi không có (workspace khác hay
+    /// đã xóa). semantic.rs đọc lại sau khi lấy được permit, trước khi gọi mô hình: hai lượt xếp hàng cho cùng một
+    /// phiên bản thì lượt sau thấy semantic (hay, ở đường khởi động, thấy đã thử với provider này) và dừng, không gọi
+    /// mô hình hai lần.
+    pub async fn get_semantic_state(
         &self,
         ws: &WorkspaceId,
         version_id: Uuid,
-    ) -> Result<Option<String>, AppError> {
-        sqlx::query_scalar(
-            "SELECT profile_status FROM dataset_versions WHERE workspace_id = $1 AND id = $2",
+    ) -> Result<Option<(String, Option<String>)>, AppError> {
+        sqlx::query_as(
+            "SELECT profile_status, semantic_attempted_with FROM dataset_versions
+             WHERE workspace_id = $1 AND id = $2",
         )
         .bind(ws.as_uuid())
         .bind(version_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| db_error("get profile status", e))
+        .map_err(|e| db_error("get semantic state", e))
     }
 }
 

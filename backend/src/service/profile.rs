@@ -104,17 +104,20 @@ pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColu
 
 /// Cụm tên cột nhạy cảm, so theo dạng đã chuẩn hóa (bỏ dấu, chữ thường, tách từ): email, mật khẩu, số điện
 /// thoại, số giấy tờ, địa chỉ, họ tên. Một cụm khớp khi các từ của nó đứng liền nhau trong tên cột (tách theo
-/// khoảng trắng, gạch, camelCase), nên "tel" không bắt nhầm "Hotel" và không có cụm "mail" hay "dien thoai" đứng một
-/// mình (để "Mailing Region", "Dòng điện thoại" không thành nhạy cảm). Luật cố ý đơn giản và nghiêng về đánh dấu
-/// nhầm còn hơn bỏ sót: đánh dấu nhầm chỉ làm prompt thiếu một danh sách giá trị.
+/// khoảng trắng, gạch, camelCase và ranh giới chữ - số), nên "tel" không bắt nhầm "Hotel" và không có cụm "mail" đứng
+/// một mình (để "Mailing Region" không thành nhạy cảm). Riêng "dien thoai" (SENSITIVE_NAME_PREFIX) chỉ khớp khi đứng đầu tên cột ("Điện
+/// thoại", "Điện thoại liên hệ"), để "Dòng điện thoại", "Loại điện thoại" vẫn là chiều thường. Luật cố ý đơn giản và
+/// nghiêng về đánh dấu nhầm còn hơn bỏ sót: đánh dấu nhầm chỉ làm prompt thiếu một danh sách giá trị.
 const SENSITIVE_NAME_PHRASES: &[&str] = &[
     "email",
     "e mail",
+    "emails",
     "password",
     "passwd",
     "mat khau",
     "phone",
     "phone number",
+    "phones",
     "mobile",
     "tel",
     "sdt",
@@ -126,6 +129,7 @@ const SENSITIVE_NAME_PHRASES: &[&str] = &[
     "ho chieu",
     "dia chi",
     "address",
+    "addresses",
     "street",
     "ho va ten",
     "ho ten",
@@ -143,15 +147,20 @@ const SENSITIVE_NAME_PHRASES: &[&str] = &[
     "lname",
 ];
 
-/// Cột nhạy cảm theo luật: tên khớp một cụm trong SENSITIVE_NAME_PHRASES (theo từ), hoặc phần lớn giá trị của cột
-/// trông như email hay số điện thoại. Chỉ cột ít giá trị có danh sách giá trị trong bộ nhớ, nên luật giá trị chỉ xét
-/// được các cột đó; đó cũng là các cột có giá trị đi vào prompt. Mô hình (#23) đề xuất đánh dấu thêm sau, chỉ chiều
-/// bật.
+/// Tên cột bắt đầu bằng cụm này là nhạy cảm (xem SENSITIVE_NAME_PHRASES). Không có "dt": trong bảng tiếng Việt
+/// "DT" hay là doanh thu.
+const SENSITIVE_NAME_PREFIX: &str = "dien thoai";
+
+/// Cột nhạy cảm theo luật: tên khớp một cụm trong SENSITIVE_NAME_PHRASES (theo từ) hay bắt đầu bằng
+/// SENSITIVE_NAME_PREFIX, hoặc phần lớn giá trị của cột trông như email hay số điện thoại. Chỉ cột ít giá trị có danh
+/// sách giá trị trong bộ nhớ, nên luật giá trị chỉ xét được các cột đó; đó cũng là các cột có giá trị đi vào prompt.
+/// Mô hình (#23) đề xuất đánh dấu thêm sau, chỉ chiều bật.
 pub(crate) fn is_sensitive_column(name: &str, values: &[impl AsRef<str>]) -> bool {
     let tokens = name_tokens(name);
-    if SENSITIVE_NAME_PHRASES
-        .iter()
-        .any(|phrase| contains_phrase(&tokens, phrase))
+    if starts_with_phrase(&tokens, SENSITIVE_NAME_PREFIX)
+        || SENSITIVE_NAME_PHRASES
+            .iter()
+            .any(|phrase| contains_phrase(&tokens, phrase))
     {
         return true;
     }
@@ -159,16 +168,21 @@ pub(crate) fn is_sensitive_column(name: &str, values: &[impl AsRef<str>]) -> boo
         && values.iter().filter(|v| looks_personal(v.as_ref())).count() * 2 > values.len()
 }
 
-/// Tên cột thành dãy từ: tách ranh giới camelCase trước ("CustomerName" thành "Customer Name"), rồi fold (bỏ dấu,
-/// chữ thường, tách theo ký tự không phải chữ hay số) và tách từ.
+/// Tên cột thành dãy từ: tách ranh giới camelCase ("CustomerName" thành "Customer Name") và ranh giới chữ - số
+/// ("Address1" thành "Address 1"), rồi fold (bỏ dấu, chữ thường, tách theo ký tự không phải chữ hay số) và tách từ.
 fn name_tokens(name: &str) -> Vec<String> {
     let mut spaced = String::with_capacity(name.len() + 8);
-    let mut prev_lower = false;
+    let mut prev: Option<char> = None;
     for c in name.chars() {
-        if c.is_uppercase() && prev_lower {
-            spaced.push(' ');
+        if let Some(p) = prev {
+            let camel = p.is_lowercase() && c.is_uppercase();
+            let letter_digit = (p.is_alphabetic() && c.is_ascii_digit())
+                || (p.is_ascii_digit() && c.is_alphabetic());
+            if camel || letter_digit {
+                spaced.push(' ');
+            }
         }
-        prev_lower = c.is_lowercase() || c.is_ascii_digit();
+        prev = Some(c);
         spaced.push(c);
     }
     fold(&spaced)
@@ -185,9 +199,14 @@ fn contains_phrase(tokens: &[String], phrase: &str) -> bool {
         .any(|w| w.iter().zip(&words).all(|(a, b)| a == b))
 }
 
-/// Giá trị trông như dữ liệu cá nhân: có dạng email (một @ và dấu chấm sau nó) hay số điện thoại Việt Nam/quốc tế
-/// (+84 hoặc 0 ở đầu, 9 tới 11 chữ số, cho phép khoảng trắng, chấm, gạch). Ngày (2018-01-31, 20180131) hay mã số
-/// không có số 0 đầu không phải số điện thoại.
+/// Cụm có đứng ngay đầu dãy từ của tên cột không.
+fn starts_with_phrase(tokens: &[String], phrase: &str) -> bool {
+    let len = phrase.split_whitespace().count();
+    tokens.len() >= len && contains_phrase(&tokens[..len], phrase)
+}
+
+/// Giá trị trông như dữ liệu cá nhân: có dạng email (một @ và dấu chấm sau nó) hay số điện thoại
+/// (looks_like_phone).
 fn looks_personal(value: &str) -> bool {
     if let Some((_, domain)) = value.split_once('@') {
         if domain.contains('.') {
@@ -197,19 +216,24 @@ fn looks_personal(value: &str) -> bool {
     looks_like_phone(value)
 }
 
+/// Số điện thoại, bỏ qua khoảng trắng, chấm, gạch, ngoặc: dấu + rồi 10 tới 12 chữ số (dạng quốc tế "+84 912 345 678",
+/// "+1 415 555 0100", "+84 (0) 912 345 678"); 9 tới 11 chữ số bắt đầu bằng 0 (di động "0912 345 678", số bàn
+/// "(028) 3823 4567"); hoặc 11 chữ số bắt đầu bằng 84 ("84912345678"). Ngày (8 chữ số) và mã số không có 0 hay 84 ở
+/// đầu thì không khớp; mã đệm số 0 ("0012345678") khớp, chấp nhận vì đánh dấu nhầm chỉ mất danh sách giá trị. Số lưu
+/// kiểu số nguyên mất số 0 đầu ("912345678") nên không khớp, trừ dạng 84 ở đầu.
 fn looks_like_phone(value: &str) -> bool {
     let d: String = value
         .chars()
-        .filter(|c| !matches!(c, ' ' | '.' | '-'))
+        .filter(|c| !matches!(c, ' ' | '.' | '-' | '(' | ')'))
         .collect();
     let digits = d.chars().filter(|c| c.is_ascii_digit()).count();
-    if !(9..=11).contains(&digits) {
+    if let Some(rest) = d.strip_prefix('+') {
+        return (10..=12).contains(&digits) && rest.chars().all(|c| c.is_ascii_digit());
+    }
+    if !(9..=11).contains(&digits) || !d.chars().all(|c| c.is_ascii_digit()) {
         return false;
     }
-    if let Some(rest) = d.strip_prefix("+84") {
-        return rest.len() == 9 && rest.chars().all(|c| c.is_ascii_digit());
-    }
-    d.starts_with('0') && d.chars().all(|c| c.is_ascii_digit())
+    d.starts_with('0') || (digits == 11 && d.starts_with("84"))
 }
 
 /// Danh sách giá trị ghi được vào column_values: không giá trị nào dài quá VALUE_MAX_BYTES, không giá trị nào có ký tự
@@ -349,8 +373,9 @@ pub async fn mark_sensitive_columns_at_start(state: &AppState) {
     for (ws, version) in candidates {
         let result: Result<usize, AppError> = async {
             let columns = state.store.list_columns(&ws, version.id).await?;
-            // Luật tên không cần giá trị, luật giá trị xét mọi cột có column_values, không chỉ dimension: cột số
-            // điện thoại lưu BIGINT cũng bị bắt.
+            // Luật tên không cần giá trị, luật giá trị xét mọi cột có column_values, không chỉ dimension. Cột số
+            // điện thoại lưu BIGINT đã mất số 0 đầu nên luật giá trị chỉ bắt dạng 84 ở đầu (looks_like_phone); cột số
+            // nguyên thường là measure hay key, mà chỉ giá trị của cột dimension vào prompt.
             let open_ids: Vec<Uuid> = columns
                 .iter()
                 .filter(|c| !c.is_sensitive)

@@ -120,7 +120,7 @@ async fn run(args: Vec<String>) {
     service::profile::mark_sensitive_columns_at_start(&state).await;
 
     // Việc nền còn lại trong một task: lớp cấu trúc cho phiên bản pending xong trước, rồi lớp ngữ nghĩa cho phiên bản
-    // structure chưa từng thử (gồm cả các phiên bản vừa lên structure ở bước trước).
+    // structure chưa thử với provider đang cấu hình (gồm cả các phiên bản vừa lên structure ở bước trước).
     tokio::spawn({
         let state = state.clone();
         async move {

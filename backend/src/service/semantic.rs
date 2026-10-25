@@ -8,11 +8,14 @@ nhà cung cấp):
 1. ingest.rs spawn sau khi trả 201 cho phiên bản mới; nạp lại đúng bộ file cũ mà phiên bản còn ở structure thì spawn
    lại (đường thử lại tường minh).
 2. Việc nền lúc khởi động (profile_remaining_versions, main.rs gọi sau khi lớp cấu trúc xong) chạy lần lượt cho các
-   phiên bản structure chưa từng thử, gồm cả phiên bản nạp trước khi có bước này.
-3. Lỗi chia hai: lỗi tạm (mô hình quá tải, timeout, mất mạng, thiếu cấu hình, Postgres lỗi) giữ structure và không
-   đánh dấu gì, lần khởi động sau thử lại; lỗi mà gọi lại y nguyên không khác (JSON hỏng, không mục nào hợp lệ, mô
-   hình từ chối, mock không có bảng) đánh dấu đã thử kèm tên provider (semantic_attempted_with) - cùng provider không
-   gọi lại, đổi LLM_PROVIDER thì thử lại. Người dùng không nhận lỗi ở đâu cả.
+   phiên bản structure chưa thử với provider đang cấu hình, gồm cả phiên bản nạp trước khi có bước này.
+3. Lỗi chia hai. Lỗi vĩnh viễn: câu trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) và lỗi BadRequest của
+   provider (Gemini chặn prompt vì nội dung, mock không có bảng); đánh dấu đã thử kèm tên provider
+   (semantic_attempted_with) - cùng provider không gọi lại, đổi LLM_PROVIDER thì thử lại. Mọi lỗi khác là lỗi tạm
+   (mô hình quá tải, timeout, mất mạng, thiếu cấu hình, Postgres lỗi), giữ structure và không đánh dấu gì, lần khởi
+   động sau thử lại. Gemini trả Upstream cả khi câu trả lời bị cắt ở MAX_TOKENS, bị dừng vì SAFETY và với mã 400
+   không phải khóa sai, nên các lỗi đó cũng được thử lại mỗi lần khởi động dù gọi lại có thể vẫn hỏng. Người dùng
+   không nhận lỗi ở đâu cả.
 
 Hai hàm thuần làm phần dễ sai: build_profile_prompt dựng prompt chỉ từ siêu dữ liệu (không bao giờ có giá trị của cột
 text, key hay cột nhạy cảm; min, max chỉ của cột số thực và thời gian), build_profile_answer kiểm từng mục của câu trả
@@ -65,16 +68,18 @@ pub struct SemanticProfile {
 /// Lỗi của một lượt lớp ngữ nghĩa, phân biệt để quyết định có thử lại lúc khởi động không.
 #[derive(Debug)]
 pub(crate) enum SemanticFailure {
-    /// Lỗi tạm: mô hình quá tải, timeout, mất mạng (Upstream), máy chủ thiếu cấu hình (Unavailable), Postgres lỗi.
-    /// Không đánh dấu gì: lần khởi động sau thử lại.
+    /// Lỗi tạm: mọi lỗi provider không phải BadRequest (quá tải, timeout, mất mạng, và cả MAX_TOKENS, SAFETY, mã 400
+    /// của Gemini, đều là Upstream), máy chủ thiếu cấu hình (Unavailable), Postgres lỗi. Không đánh dấu gì: lần khởi
+    /// động sau thử lại.
     Temporary(AppError),
-    /// Mô hình trả lời nhưng không dùng được (JSON hỏng, không mục nào hợp lệ, từ chối nội dung, mock không có
-    /// bảng): gọi lại y nguyên không khác, nên đánh dấu đã thử kèm tên provider; đổi LLM_PROVIDER thì thử lại.
+    /// Câu trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay provider trả BadRequest (Gemini chặn prompt
+    /// vì nội dung, mock không có bảng): gọi lại y nguyên không khác, nên đánh dấu đã thử kèm tên provider; đổi
+    /// LLM_PROVIDER thì thử lại.
     Permanent(AppError),
 }
 
 /// Ghi log và đánh dấu một lượt lỗi. Chỉ lỗi vĩnh viễn mới ghi semantic_attempted_with. BadRequest (mock không có
-/// bảng, mô hình từ chối nội dung) không cần cảnh báo: gọi lại không khác gì.
+/// bảng, Gemini chặn prompt vì nội dung) không cần cảnh báo: gọi lại không khác gì.
 async fn note_failure(
     state: &AppState,
     ws: &WorkspaceId,
@@ -105,10 +110,21 @@ async fn note_failure(
 
 /// Chỉ gọi mô hình khi phiên bản còn ở structure: hai lượt xếp hàng chờ semaphore cho cùng một phiên bản (nạp lại
 /// đúng bộ file hai lần liền, hay việc khởi động và nạp lại) thì lượt sau dừng ở đây, không tốn hai lời gọi mô hình.
+/// skip_attempted (đường khởi động) bỏ cả phiên bản đã thử với provider đang cấu hình: danh sách ứng viên lấy một lần
+/// lúc đầu, trong lúc đó một lượt nạp có thể đã thử và đánh dấu lỗi vĩnh viễn; không kiểm thì việc khởi động gọi mô
+/// hình lần hai trong cùng lần chạy. Đường nạp không bỏ, vì nạp lại đúng bộ file là cách thử lại tường minh.
 /// Phiên bản bị xóa trong lúc chờ (None) hay không đọc được status thì bỏ qua.
-async fn still_structure(state: &AppState, ws: &WorkspaceId, version_id: Uuid) -> bool {
-    match state.store.get_profile_status(ws, version_id).await {
-        Ok(Some(status)) => status == ProfileStatus::Structure.as_str(),
+pub(crate) async fn still_structure(
+    state: &AppState,
+    ws: &WorkspaceId,
+    version_id: Uuid,
+    skip_attempted: bool,
+) -> bool {
+    match state.store.get_semantic_state(ws, version_id).await {
+        Ok(Some((status, attempted_with))) => {
+            let attempted = attempted_with.is_some_and(|p| p == state.llm.name());
+            status == ProfileStatus::Structure.as_str() && !(skip_attempted && attempted)
+        }
         Ok(None) => false,
         Err(e) => {
             tracing::warn!(version_id = %version_id, error = ?e, "cannot re-check profile status");
@@ -131,7 +147,7 @@ pub fn spawn_semantic_profile(
         let Ok(_permit) = state.semantic_jobs.acquire().await else {
             return;
         };
-        if !still_structure(&state, &ws, version_id).await {
+        if !still_structure(&state, &ws, version_id, false).await {
             return;
         }
         match apply_semantic_profile(&state, &ws, &dataset, version_id, row_count).await {
@@ -174,7 +190,7 @@ pub async fn profile_remaining_versions(state: AppState) {
         let Ok(_permit) = state.semantic_jobs.acquire().await else {
             return;
         };
-        if !still_structure(&state, &ws, candidate.id).await {
+        if !still_structure(&state, &ws, candidate.id, true).await {
             continue;
         }
         match apply_semantic_profile(&state, &ws, &dataset, candidate.id, candidate.row_count).await
@@ -188,7 +204,7 @@ pub async fn profile_remaining_versions(state: AppState) {
 /// Một lượt lớp ngữ nghĩa: đọc hồ sơ cấu trúc của phiên bản (cờ nhạy cảm đã được lớp cấu trúc đặt lúc nạp,
 /// service/profile.rs), dựng prompt, gọi mô hình, kiểm rồi ghi trong một giao dịch. Lỗi trả về để người gọi ghi log
 /// và đánh dấu đã thử; không bao giờ chuyển profile_status sang failed (khác lỗi lớp cấu trúc: lỗi ở đây là của mô
-/// hình, thử lại bằng cách nạp lại cùng bộ file).
+/// hình, thử lại lúc khởi động hay bằng cách nạp lại cùng bộ file).
 pub async fn apply_semantic_profile(
     state: &AppState,
     ws: &WorkspaceId,
@@ -229,7 +245,8 @@ pub async fn apply_semantic_profile(
         json_schema: None,
     };
     let text = state.llm.complete(&request).await.map_err(|e| match e {
-        // Mô hình từ chối nội dung (và mock không có bảng): gọi lại y nguyên không khác.
+        // Chỉ BadRequest là vĩnh viễn: Gemini chặn prompt vì nội dung, mock không có bảng. MAX_TOKENS, SAFETY và mã
+        // 400 khác của Gemini đến dưới dạng Upstream nên là lỗi tạm, thử lại mỗi lần khởi động.
         AppError::BadRequest(_) => SemanticFailure::Permanent(e),
         other => SemanticFailure::Temporary(other),
     })?;
