@@ -5,5 +5,7 @@
 **/node_modules
 frontend/dist
 data
+# Riêng gói khái niệm ngành vẫn vào context: backend/build.rs nhúng chúng vào binary (Dockerfile chép data/domains/).
+!data/domains
 release
 .env

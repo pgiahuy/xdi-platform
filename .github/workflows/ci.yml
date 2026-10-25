@@ -48,6 +48,8 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
+              # Gói khái niệm ngành được build.rs nhúng vào backend; PR chỉ sửa gói vẫn phải chạy test.
+              - 'data/domains/**'
               # Test so openapi.json và response mẫu của ask với code.
               - 'openapi.json'
               - 'frontend/src/api/examples/**'

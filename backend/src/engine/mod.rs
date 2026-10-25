@@ -5,6 +5,9 @@ Chỉ service gọi vào đây; csv_encoding (đổi CSV không phải UTF-8 san
 
 pub mod analytics;
 mod csv_encoding;
+// Chưa có code gọi domains tới khi chọn gói cho dataset lúc nạp và đưa gói vào prompt (#29).
+#[allow(dead_code)]
+pub mod domains;
 pub mod excel;
 pub mod excel_worker;
 // Chưa có code gọi guard cho tới endpoint hỏi (#33). Gỡ dòng allow ở #33 để clippy bắt lại mã thừa.
