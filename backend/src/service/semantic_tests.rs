@@ -180,87 +180,55 @@ fn prompt_value_caps() {
     assert!(!values_part.contains("\"col 20\""), "{values_part}");
 }
 
-/// Luật đánh dấu nhạy cảm trước khi dựng prompt: tên cột (bỏ dấu) chứa email, mật khẩu, số điện thoại...; hoặc phần
-/// lớn giá trị trông như email hay số điện thoại. Trên bộ cột kiểu DataCo: Customer Email, Customer Password bị đánh
-/// dấu dù chỉ có một giá trị đã che; Customer Fname/Lname (text, nhiều giá trị) không có giá trị nào trong prompt.
+/// Luật đánh dấu nhạy cảm (service/profile.rs, chạy lúc lập hồ sơ cấu trúc): tên cột (bỏ dấu) chứa email, mật khẩu,
+/// số điện thoại...; hoặc phần lớn giá trị trông như email hay số điện thoại. Sau khi đánh dấu, prompt của lớp ngữ
+/// nghĩa không chứa giá trị nào của các cột đó (kể cả giá trị đã che).
 #[test]
 fn sensitive_columns_are_detected_by_name_and_values() {
-    let email = column(
+    use crate::service::profile::is_sensitive_column;
+
+    // Theo tên (bỏ dấu, chữ thường): cột một giá trị đã che cũng bị đánh dấu.
+    for name in [
+        "Customer Email",
+        "Customer Password",
+        "Mật khẩu",
+        "SĐT liên hệ",
+        "số điện thoại",
+        "Địa chỉ giao",
+        "Họ tên khách",
+        "CCCD",
+    ] {
+        assert!(is_sensitive_column(name, &[] as &[&str]), "{name}");
+    }
+    assert!(!is_sensitive_column("Market", &[] as &[&str]));
+    assert!(!is_sensitive_column("Category Name", &[] as &[&str]));
+
+    // Theo giá trị: phần lớn trông như email hay số điện thoại.
+    assert!(is_sensitive_column(
+        "Liên hệ",
+        &["lan@example.com", "0912 345 678", "hải phòng"]
+    ));
+    assert!(!is_sensitive_column(
+        "Liên hệ",
+        &["lan@example.com", "hải phòng"]
+    ));
+    assert!(!is_sensitive_column("Market", &["Europe", "LATAM"]));
+
+    // Cột đã đánh dấu: prompt không chứa giá trị của nó dù lỡ truyền vào.
+    let mut email = column(
         Uuid::new_v4(),
         "Customer Email",
         "VARCHAR",
         ProfileRole::Dimension,
     );
-    let password = column(
-        Uuid::new_v4(),
-        "Customer Password",
-        "VARCHAR",
-        ProfileRole::Dimension,
-    );
-    let mat_khau = column(
-        Uuid::new_v4(),
-        "Mật khẩu",
-        "VARCHAR",
-        ProfileRole::Dimension,
-    );
-    let sdt = column(
-        Uuid::new_v4(),
-        "SĐT liên hệ",
-        "VARCHAR",
-        ProfileRole::Dimension,
-    );
-    let by_value = column(Uuid::new_v4(), "Liên hệ", "VARCHAR", ProfileRole::Dimension);
-    let fname = column(
-        Uuid::new_v4(),
-        "Customer Fname",
-        "VARCHAR",
-        ProfileRole::Text,
-    );
+    email.is_sensitive = true;
     let market = column(Uuid::new_v4(), "Market", "VARCHAR", ProfileRole::Dimension);
-    let columns = vec![
-        email.clone(),
-        password.clone(),
-        mat_khau.clone(),
-        sdt.clone(),
-        by_value.clone(),
-        fname,
-        market.clone(),
-    ];
     let values = vec![
         value(email.id, "XXXXXXXXX", 10),
-        value(password.id, "XXXXXXXXX", 10),
-        value(mat_khau.id, "abc123", 10),
-        value(sdt.id, "0901234567", 10),
-        value(by_value.id, "lan@example.com", 4),
-        value(by_value.id, "0912 345 678", 3),
-        value(by_value.id, "hải phòng", 1),
         value(market.id, "Europe", 5),
     ];
-    let detected = detect_sensitive_columns(&columns, &values);
-    for c in [&email, &password, &mat_khau, &sdt, &by_value] {
-        assert!(detected.contains(&c.id), "not detected: {}", c.name);
-    }
-    assert!(!detected.contains(&market.id));
-
-    // Sau khi đánh dấu, prompt không chứa giá trị nào của các cột đó (kể cả giá trị đã che).
-    let marked: Vec<ProfileColumn> = columns
-        .into_iter()
-        .map(|mut c| {
-            c.is_sensitive = detected.contains(&c.id);
-            c
-        })
-        .collect();
-    let visible: Vec<ColumnValue> = values
-        .into_iter()
-        .filter(|v| !detected.contains(&v.column_id))
-        .collect();
-    let prompt = build_profile_prompt("DataCo", "dataco", Some(10), &marked, &visible);
-    for leaked in ["XXXXXXXXX", "abc123", "0901234567", "lan@example.com"] {
-        assert!(
-            !prompt.contains(leaked),
-            "prompt leaked {leaked:?}: {prompt}"
-        );
-    }
+    let prompt = build_profile_prompt("DataCo", "dataco", Some(10), &[email, market], &values);
+    assert!(!prompt.contains("XXXXXXXXX"), "{prompt}");
     assert!(prompt.contains("\"Europe\""), "{prompt}");
 }
 
@@ -420,6 +388,7 @@ fn new_column(
         name: name.to_string(),
         data_type: data_type.to_string(),
         role,
+        is_sensitive: false,
         null_count: 0,
         distinct_count: values.len() as i64,
         min_value: None,

@@ -463,6 +463,27 @@ impl Store {
         .map_err(|e| db_error("list semantic candidates", e))
     }
 
+    /// Phiên bản đã có hồ sơ (structure hay semantic) còn cột dimension chưa đánh dấu nhạy cảm, ở mọi workspace, cũ
+    /// nhất trước. Ngoại lệ có chủ đích của quy tắc lọc theo WorkspaceId, như list_pending_versions: việc nền lúc
+    /// khởi động chạy lại luật đánh dấu nhạy cảm cho phiên bản nạp trước khi luật nằm ở lớp cấu trúc, lúc đó chưa có
+    /// workspace nào để lọc.
+    pub async fn list_versions_for_sensitive_scan(
+        &self,
+    ) -> Result<Vec<SemanticCandidate>, AppError> {
+        sqlx::query_as(
+            "SELECT v.workspace_id, v.id, v.dataset_id, v.row_count FROM dataset_versions v
+             WHERE v.profile_status IN ($1, $2)
+               AND EXISTS (SELECT 1 FROM columns c WHERE c.workspace_id = v.workspace_id AND c.version_id = v.id
+                           AND c.role = 'dimension' AND NOT c.is_sensitive)
+             ORDER BY v.created_at",
+        )
+        .bind(ProfileStatus::Structure.as_str())
+        .bind(ProfileStatus::Semantic.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| db_error("list versions for sensitive scan", e))
+    }
+
     /// Đánh dấu đã thử lớp ngữ nghĩa (và lỗi): việc nền lúc khởi động không chọn lại phiên bản này. Chỉ đặt khi
     /// phiên bản còn ở structure: đã semantic thì không cần, và không ghi đè một lượt vừa thành công.
     pub async fn mark_semantic_attempted(

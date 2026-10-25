@@ -187,6 +187,13 @@ Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order Ci
 `Order Item Id` là `key`, hai cột `... (DateOrders)` là `time`. Số nguyên lặp lại như `Order Id` hay `Customer Id` ra
 `measure` theo luật; lớp ngữ nghĩa (mục dưới) sửa được một số ca như vậy trong phạm vi hẹp.
 
+**Cột nhạy cảm** (`is_sensitive`) được đánh dấu ngay trong lượt lập hồ sơ cấu trúc, cùng giao dịch ghi hồ sơ, trước
+khi phiên bản dùng được: tên cột (bỏ dấu, chữ thường) chứa một cụm như email, mật khẩu, số điện thoại, số giấy tờ,
+địa chỉ, họ tên (danh sách ở `SENSITIVE_NAME_PARTS`, service/profile.rs), hoặc phần lớn giá trị của cột trông như
+email hay số điện thoại. Luật tên cố ý đơn giản và nghiêng về đánh dấu nhầm còn hơn bỏ sót. Phiên bản nạp trước khi
+có luật này được quét đánh dấu lại một lần lúc khởi động (chỉ bật cờ, không tắt). Giá trị của cột nhạy cảm không vào
+prompt của lớp ngữ nghĩa lẫn ngữ cảnh hỏi (#28), ngay từ khi phiên bản ở `structure`.
+
 ## Hồ sơ lớp ngữ nghĩa
 
 Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
@@ -205,12 +212,8 @@ nhiều hơn gửi 20 giá trị nhiều dòng nhất), tổng tối đa 400 gi�
 in dạng chuỗi JSON nên dữ liệu không chèn được dòng giả vào prompt. Giá trị của cột `text`, `key` hay cột nhạy cảm
 không bao giờ vào prompt.
 
-Cột nhạy cảm (`is_sensitive`) được đặt ở hai nơi: trước khi dựng prompt, code đánh dấu theo luật đơn giản — tên cột
-(bỏ dấu, chữ thường) chứa một cụm như email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên (danh sách ở
-`SENSITIVE_NAME_PARTS`), hoặc phần lớn giá trị của cột trông như email hay số điện thoại — và ghi ngay vào Postgres,
-không phụ thuộc mô hình chạy được không; trong câu trả lời, mô hình đề xuất đánh dấu thêm qua `sensitive_columns`
-(chỉ chiều đặt, không bao giờ gỡ, có hiệu lực từ các lần sau). Luật tên cố ý đơn giản và nghiêng về đánh dấu nhầm còn
-hơn bỏ sót.
+Cột nhạy cảm (`is_sensitive`) do lớp cấu trúc đánh dấu ngay lúc nạp (mục trên); trong câu trả lời của lớp ngữ nghĩa,
+mô hình đề xuất đánh dấu thêm qua `sensitive_columns` (chỉ chiều đặt, không bao giờ gỡ, có hiệu lực từ các lần sau).
 
 Câu trả lời được kiểm từng mục trước khi ghi, mục sai bỏ riêng: cột và giá trị phải có thật (giá trị phải nằm trong
 `column_values`), mô tả tối đa 300 ký tự, tối đa 8 bí danh mỗi mục và mỗi bí danh tối đa 60 ký tự, tối đa 5 câu gợi

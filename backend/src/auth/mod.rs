@@ -117,6 +117,18 @@ pub async fn pending_semantic_profiles(
         .collect())
 }
 
+/// Như pending_profiles nhưng cho lượt quét đánh dấu nhạy cảm: phiên bản đã có hồ sơ còn cột dimension chưa đánh dấu,
+/// kèm WorkspaceId dựng từ chính dòng đọc được. Việc nền lúc khởi động (service/profile.rs) dùng.
+pub async fn versions_for_sensitive_scan(
+    store: &Store,
+) -> Result<Vec<(WorkspaceId, SemanticCandidate)>, AppError> {
+    let versions = store.list_versions_for_sensitive_scan().await?;
+    Ok(versions
+        .into_iter()
+        .map(|v| (WorkspaceId(v.workspace_id), v))
+        .collect())
+}
+
 pub fn workspace_not_found() -> AppError {
     AppError::NotFound("Không có workspace này hoặc bạn không thuộc workspace này".to_string())
 }

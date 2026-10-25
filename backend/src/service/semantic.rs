@@ -14,10 +14,10 @@ nhà cung cấp):
 
 Hai hàm thuần làm phần dễ sai: build_profile_prompt dựng prompt chỉ từ siêu dữ liệu (không bao giờ có giá trị của cột
 text, key hay cột nhạy cảm; min, max chỉ của cột số thực và thời gian), build_profile_answer kiểm từng mục của câu trả
-lời (mục sai bỏ riêng, mục đúng vẫn ghi; không còn mục nào hợp lệ thì coi như lỗi). Trước khi dựng prompt,
-detect_sensitive_columns đánh dấu is_sensitive theo luật đơn giản và ghi ngay vào Postgres, để lỗi mô hình không làm
-mất đánh dấu. Ghi hồ sơ xuống Postgres ở engine/store/columns.rs (apply_semantic_profile). Test ở
-service/semantic_tests.rs. */
+lời (mục sai bỏ riêng, mục đúng vẫn ghi; không còn mục nào hợp lệ thì coi như lỗi). Cờ is_sensitive đã được lớp cấu
+trúc đặt lúc nạp (service/profile.rs), nên phiên bản dùng được là giá trị cột nhạy cảm đã an toàn; ở lớp này mô hình
+chỉ đề xuất đánh dấu thêm (chỉ chiều bật). Ghi hồ sơ xuống Postgres ở engine/store/columns.rs
+(apply_semantic_profile). Test ở service/semantic_tests.rs. */
 
 use std::collections::{HashMap, HashSet};
 
@@ -49,31 +49,6 @@ pub(crate) const QUESTION_MAX_CHARS: usize = 200;
 // cảnh, mô hình trả lỗi và hồ sơ mất. Đo trên hồ sơ kiểu DataCo (test measure_dataco_like_prompt, 54 cột, 14 cột
 // dimension có giá trị, cột 164 giá trị bị cắt còn 20): prompt khoảng 10 700 ký tự, trong đó phần giá trị khoảng
 // 5 100.
-
-/// Tên cột (sau khi bỏ dấu, chữ thường) chứa một trong các cụm này thì đánh dấu nhạy cảm trước khi dựng prompt:
-/// email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên. Luật cố ý đơn giản và nghiêng về đánh dấu nhầm còn
-/// hơn bỏ sót: đánh dấu nhầm chỉ làm prompt thiếu một danh sách giá trị.
-const SENSITIVE_NAME_PARTS: &[&str] = &[
-    "email",
-    "mail",
-    "password",
-    "passwd",
-    "mat khau",
-    "phone",
-    "dien thoai",
-    "sdt",
-    "so dt",
-    "cmnd",
-    "cccd",
-    "passport",
-    "ho chieu",
-    "address",
-    "dia chi",
-    "ten khach",
-    "customer name",
-    "full name",
-    "ho ten",
-];
 
 /// Câu trả lời của mô hình sau khi kiểm: tên cột và giá trị đã đổi ra id, mọi giới hạn đã áp.
 pub struct SemanticProfile {
@@ -157,9 +132,9 @@ pub async fn profile_remaining_versions(state: AppState) {
     }
 }
 
-/// Một lượt lớp ngữ nghĩa: đọc hồ sơ cấu trúc của phiên bản, đánh dấu cột nhạy cảm theo luật (ghi ngay, không phụ
-/// thuộc mô hình), dựng prompt, gọi mô hình, kiểm rồi ghi trong một giao dịch. Lỗi trả về để người gọi ghi log và
-/// đánh dấu đã thử; không bao giờ chuyển profile_status sang failed (khác lỗi lớp cấu trúc: lỗi ở đây là của mô
+/// Một lượt lớp ngữ nghĩa: đọc hồ sơ cấu trúc của phiên bản (cờ nhạy cảm đã được lớp cấu trúc đặt lúc nạp,
+/// service/profile.rs), dựng prompt, gọi mô hình, kiểm rồi ghi trong một giao dịch. Lỗi trả về để người gọi ghi log
+/// và đánh dấu đã thử; không bao giờ chuyển profile_status sang failed (khác lỗi lớp cấu trúc: lỗi ở đây là của mô
 /// hình, thử lại bằng cách nạp lại cùng bộ file).
 pub async fn apply_semantic_profile(
     state: &AppState,
@@ -168,45 +143,22 @@ pub async fn apply_semantic_profile(
     version_id: Uuid,
     row_count: Option<i64>,
 ) -> Result<(), AppError> {
-    let mut columns = state.store.list_columns(ws, version_id).await?;
-    // Đọc giá trị của mọi cột dimension để luật dạng giá trị (email, số điện thoại) xét cả cột chưa ai đánh dấu;
-    // giá trị chỉ rời tiến trình qua build_profile_prompt, vốn lọc lại theo cờ ngay tại đó.
-    let dimension_ids: Vec<Uuid> = columns
+    let columns = state.store.list_columns(ws, version_id).await?;
+    // Chỉ cột dimension không nhạy cảm có danh sách giá trị trong prompt, nên cũng chỉ đọc giá trị của các cột đó;
+    // mô hình không thấy thì bí danh nó đề xuất cho giá trị khác cũng không qua được kiểm tra.
+    let value_columns: Vec<Uuid> = columns
         .iter()
-        .filter(|c| c.role == ProfileRole::Dimension.as_str())
+        .filter(|c| c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive)
         .map(|c| c.id)
         .collect();
-    let values = state.store.list_column_values(ws, &dimension_ids).await?;
+    let values = state.store.list_column_values(ws, &value_columns).await?;
 
-    let detected = detect_sensitive_columns(&columns, &values);
-    if !detected.is_empty() {
-        state
-            .store
-            .mark_columns_sensitive(ws, version_id, &detected)
-            .await?;
-        for c in &mut columns {
-            if detected.contains(&c.id) {
-                c.is_sensitive = true;
-            }
-        }
-    }
-
-    // Mô hình không thấy giá trị của cột nhạy cảm thì bí danh nó đề xuất cho giá trị đó cũng không qua được kiểm tra.
-    let visible: Vec<ColumnValue> = values
-        .into_iter()
-        .filter(|v| {
-            columns
-                .iter()
-                .find(|c| c.id == v.column_id)
-                .is_some_and(|c| !c.is_sensitive)
-        })
-        .collect();
     let prompt = build_profile_prompt(
         &dataset.name,
         &dataset.logical_table,
         row_count,
         &columns,
-        &visible,
+        &values,
     );
     let request = LlmRequest {
         task: LlmTask::Profile,
@@ -214,7 +166,7 @@ pub async fn apply_semantic_profile(
         prompt: &prompt,
     };
     let text = state.llm.complete(&request).await?;
-    let answer = build_profile_answer(&text, &columns, &visible).ok_or_else(|| {
+    let answer = build_profile_answer(&text, &columns, &values).ok_or_else(|| {
         AppError::Internal("semantic profile answer has no valid item".to_string())
     })?;
     let written = state
@@ -249,53 +201,8 @@ pub async fn apply_semantic_profile(
     Ok(())
 }
 
-/// Đánh dấu nhạy cảm theo luật, trước khi dựng prompt: tên cột (bỏ dấu, chữ thường) chứa một cụm trong
-/// SENSITIVE_NAME_PARTS, hoặc phần lớn giá trị của cột trông như email hay số điện thoại. Trả id các cột cần đặt
-/// (chưa tính cột đã có cờ). Chỉ cột dimension có danh sách giá trị trong bộ nhớ, nên luật giá trị cũng chỉ xét được
-/// các cột đó; đó cũng là các cột có giá trị đi vào prompt.
-pub(crate) fn detect_sensitive_columns(
-    columns: &[ProfileColumn],
-    values: &[ColumnValue],
-) -> Vec<Uuid> {
-    let mut by_column: HashMap<Uuid, Vec<&str>> = HashMap::new();
-    for v in values {
-        by_column.entry(v.column_id).or_default().push(&v.value);
-    }
-    columns
-        .iter()
-        .filter(|c| !c.is_sensitive)
-        .filter(|c| {
-            let name = fold(&c.name);
-            if SENSITIVE_NAME_PARTS.iter().any(|part| name.contains(part)) {
-                return true;
-            }
-            let Some(list) = by_column.get(&c.id) else {
-                return false;
-            };
-            !list.is_empty() && list.iter().filter(|v| looks_personal(v)).count() * 2 > list.len()
-        })
-        .map(|c| c.id)
-        .collect()
-}
-
-/// Giá trị trông như dữ liệu cá nhân: có dạng email (một @ và dấu chấm sau nó) hay số điện thoại (từ 8 chữ số, ngoài
-/// ra chỉ khoảng trắng và ký tự gọi điện).
-fn looks_personal(value: &str) -> bool {
-    if let Some((_, domain)) = value.split_once('@') {
-        if domain.contains('.') {
-            return true;
-        }
-    }
-    let digits = value.chars().filter(|c| c.is_ascii_digit()).count();
-    digits >= 8
-        && value
-            .chars()
-            .all(|c| c.is_ascii_digit() || matches!(c, ' ' | '+' | '-' | '(' | ')' | '.'))
-}
-
-// So tên và bí danh (trùng sau chuẩn hóa cũng tính là trùng) và luật tên nhạy cảm đều qua fold của
-// service/ask_phrases.rs (bỏ dấu, chữ thường, tách từ), cùng một cách chuẩn hóa với khớp cụm ở ngữ cảnh hỏi: "Mật
-// khẩu" khớp "mat khau", bí danh "Thị  Trường" trùng "thị trường".
+// So tên và bí danh (trùng sau chuẩn hóa cũng tính là trùng) qua fold của service/ask_phrases.rs (bỏ dấu, chữ
+// thường, tách từ), cùng một cách chuẩn hóa với khớp cụm ở ngữ cảnh hỏi: bí danh "Thị  Trường" trùng "thị trường".
 
 /// Prompt cho task Profile: luật và khuôn JSON trước, rồi mỗi cột một dòng siêu dữ liệu, cuối cùng danh sách giá trị
 /// của các cột dimension không nhạy cảm. Chỉ siêu dữ liệu và giá trị cột dimension đi ra ngoài: min, max chỉ kèm cột

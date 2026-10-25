@@ -41,9 +41,9 @@ Nội dung gửi (thiết kế):
 | Diễn giải câu "tại sao" | Bảng phân rã đã tính: nhóm và phần đóng góp của từng nhóm | Các dòng dữ liệu gốc |
 
 Lưu ý: giá trị mẫu và giá trị phân loại là dữ liệu thật của bạn, ví dụ tên khu vực hay tên sản phẩm. Cột chữ có ít
-giá trị khác nhau được tính là cột phân loại; backend tự đánh dấu nhạy cảm theo tên cột và dạng giá trị khi nạp, nhưng
-một cột không khớp luật (ví dụ tên khách hàng đặt tên khác thường) vẫn có thể được gửi cho tới khi được đánh dấu. Nếu
-dữ liệu nhạy cảm, dùng `mock` hoặc Ollama chạy nội bộ.
+giá trị khác nhau được tính là cột phân loại; backend đánh dấu cột nhạy cảm theo tên cột và dạng giá trị ngay khi nạp,
+nhưng một cột không khớp luật (ví dụ tên khách hàng đặt tên khác thường) vẫn có thể được gửi cho tới khi được đánh
+dấu. Nếu dữ liệu nhạy cảm, dùng `mock` hoặc Ollama chạy nội bộ.
 
 Không bao giờ gửi: mật khẩu, khóa API của bạn cho nhà cung cấp khác, token đăng nhập.
 

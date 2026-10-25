@@ -50,6 +50,9 @@ pub struct NewColumn {
     pub name: String,
     pub data_type: String,
     pub role: ProfileRole,
+    /// Cờ nhạy cảm do luật của service/profile.rs đặt ngay lúc lập hồ sơ cấu trúc, để giá trị cột nhạy cảm không bao
+    /// giờ rời máy chủ, kể cả trước khi lớp ngữ nghĩa (#23) chạy.
+    pub is_sensitive: bool,
     pub null_count: i64,
     pub distinct_count: i64,
     pub min_value: Option<String>,
@@ -361,9 +364,9 @@ pub(super) async fn insert_columns(
 ) -> Result<(), AppError> {
     for column in columns {
         let column_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO columns (workspace_id, version_id, position, name, data_type, role, null_count,
+            "INSERT INTO columns (workspace_id, version_id, position, name, data_type, role, is_sensitive, null_count,
                  distinct_count, min_value, max_value, time_format)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
         )
         .bind(ws.as_uuid())
         .bind(version_id)
@@ -371,6 +374,7 @@ pub(super) async fn insert_columns(
         .bind(&column.name)
         .bind(&column.data_type)
         .bind(column.role.as_str())
+        .bind(column.is_sensitive)
         .bind(column.null_count)
         .bind(column.distinct_count)
         .bind(&column.min_value)
@@ -417,6 +421,7 @@ mod tests {
             name: name.to_string(),
             data_type: "VARCHAR".to_string(),
             role,
+            is_sensitive: false,
             null_count: 0,
             distinct_count: values.len() as i64,
             min_value: None,

@@ -140,3 +140,11 @@ pub async fn fetch_count(store: &Store, sql: &str) -> i64 {
         .await
         .expect("fetch test count")
 }
+
+/// Đọc một chuỗi từ câu SQL thô (ví dụ id dạng text), để test dựng lại kiểu của tầng trên.
+pub async fn fetch_text(store: &Store, sql: &str) -> String {
+    sqlx::query_scalar(sql)
+        .fetch_one(&store.pool)
+        .await
+        .expect("fetch test text")
+}

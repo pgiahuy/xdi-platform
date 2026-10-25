@@ -16,6 +16,7 @@ use crate::auth::WorkspaceId;
 use crate::engine::analytics::SOURCE_COLUMN;
 use crate::engine::profile::{self, ColumnStats, ValueCount};
 use crate::engine::store::{NewColumn, NewColumnValue, PendingVersion, ProfileRole, ProfileStatus};
+use crate::service::ask_phrases::fold;
 use crate::{error::AppError, state::AppState};
 
 /// Cột chữ có không quá ngần này giá trị khác nhau là chiều (dimension), nhiều hơn là chữ tự do (text). Cũng là ngưỡng
@@ -75,7 +76,9 @@ pub fn build_column_role(stats: &ColumnStats, row_count: i64) -> ProfileRole {
     ProfileRole::Text
 }
 
-/// Hồ sơ chờ ghi của mọi cột, giữ thứ tự cột của bảng.
+/// Hồ sơ chờ ghi của mọi cột, giữ thứ tự cột của bảng. Cờ nhạy cảm được đặt ngay tại đây (is_sensitive_column),
+/// trong cùng giao dịch ghi hồ sơ, trước khi phiên bản dùng được: giá trị của cột nhạy cảm không bao giờ rời máy
+/// chủ, kể cả khi lớp ngữ nghĩa (#23) chưa chạy hay lỗi mãi.
 pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColumn> {
     stats
         .into_iter()
@@ -84,6 +87,7 @@ pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColu
             // Số cột của một bảng không tới giới hạn i32 (DuckDB và Parquet giới hạn thấp hơn nhiều).
             position: i as i32,
             role: build_column_role(&s, row_count),
+            is_sensitive: is_sensitive_column(&s.name, &s.values),
             name: s.name,
             data_type: s.data_type,
             null_count: s.null_count,
@@ -94,6 +98,62 @@ pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColu
             values: build_new_values(s.values),
         })
         .collect()
+}
+
+/// Tên cột (sau khi bỏ dấu, chữ thường) chứa một trong các cụm này thì cột là nhạy cảm: email, mật khẩu, số điện
+/// thoại, số giấy tờ, địa chỉ, họ tên. Luật cố ý đơn giản và nghiêng về đánh dấu nhầm còn hơn bỏ sót: đánh dấu nhầm
+/// chỉ làm prompt thiếu một danh sách giá trị.
+const SENSITIVE_NAME_PARTS: &[&str] = &[
+    "email",
+    "mail",
+    "password",
+    "passwd",
+    "mat khau",
+    "phone",
+    "dien thoai",
+    "sdt",
+    "so dt",
+    "cmnd",
+    "cccd",
+    "passport",
+    "ho chieu",
+    "address",
+    "dia chi",
+    "ten khach",
+    "customer name",
+    "full name",
+    "ho ten",
+];
+
+/// Cột nhạy cảm theo luật: tên (bỏ dấu, chữ thường) chứa một cụm trong SENSITIVE_NAME_PARTS, hoặc phần lớn giá trị
+/// của cột trông như email hay số điện thoại. Chỉ cột ít giá trị có danh sách giá trị trong bộ nhớ, nên luật giá trị
+/// chỉ xét được các cột đó; đó cũng là các cột có giá trị đi vào prompt. Mô hình (#23) đề xuất đánh dấu thêm sau,
+/// chỉ chiều bật.
+pub(crate) fn is_sensitive_column(name: &str, values: &[impl AsRef<str>]) -> bool {
+    let folded = fold(name);
+    if SENSITIVE_NAME_PARTS
+        .iter()
+        .any(|part| folded.contains(part))
+    {
+        return true;
+    }
+    !values.is_empty()
+        && values.iter().filter(|v| looks_personal(v.as_ref())).count() * 2 > values.len()
+}
+
+/// Giá trị trông như dữ liệu cá nhân: có dạng email (một @ và dấu chấm sau nó) hay số điện thoại (từ 8 chữ số, ngoài
+/// ra chỉ khoảng trắng và ký tự gọi điện).
+fn looks_personal(value: &str) -> bool {
+    if let Some((_, domain)) = value.split_once('@') {
+        if domain.contains('.') {
+            return true;
+        }
+    }
+    let digits = value.chars().filter(|c| c.is_ascii_digit()).count();
+    digits >= 8
+        && value
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, ' ' | '+' | '-' | '(' | ')' | '.'))
 }
 
 /// Danh sách giá trị ghi được vào column_values: không giá trị nào dài quá VALUE_MAX_BYTES, không giá trị nào có ký tự
@@ -213,6 +273,61 @@ pub async fn profile_pending_versions(
                     tracing::warn!(version_id = %version.id, error = ?e, "cannot mark dataset version failed");
                 }
             }
+        }
+    }
+}
+
+/// Chạy lại luật đánh dấu nhạy cảm (is_sensitive_column) cho các phiên bản đã có hồ sơ từ trước khi luật nằm ở lớp
+/// cấu trúc: chỉ bật cờ, không tắt (cờ do mô hình hay admin đặt thì giữ). Lần khởi động sau quét lại nhưng không còn
+/// gì để ghi. main.rs gọi sau khi lập hồ sơ cấu trúc xong, trước lớp ngữ nghĩa, để giá trị cột nhạy cảm của phiên
+/// bản cũ không lọt vào prompt ngữ nghĩa hay ngữ cảnh hỏi (#28). Lỗi một phiên bản chỉ ghi log, không chặn phiên bản
+/// sau.
+pub async fn mark_sensitive_columns_at_start(state: &AppState) {
+    let candidates = match crate::auth::versions_for_sensitive_scan(&state.store).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = ?e, "cannot list dataset versions for the sensitive-column scan");
+            return;
+        }
+    };
+    for (ws, version) in candidates {
+        let result: Result<usize, AppError> = async {
+            let columns = state.store.list_columns(&ws, version.id).await?;
+            let dimension_ids: Vec<Uuid> = columns
+                .iter()
+                .filter(|c| c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive)
+                .map(|c| c.id)
+                .collect();
+            let values = state.store.list_column_values(&ws, &dimension_ids).await?;
+            let detected: Vec<Uuid> = columns
+                .iter()
+                .filter(|c| !c.is_sensitive)
+                .filter(|c| {
+                    let column_values: Vec<&str> = values
+                        .iter()
+                        .filter(|v| v.column_id == c.id)
+                        .map(|v| v.value.as_str())
+                        .collect();
+                    is_sensitive_column(&c.name, &column_values)
+                })
+                .map(|c| c.id)
+                .collect();
+            if detected.is_empty() {
+                return Ok(0);
+            }
+            state
+                .store
+                .mark_columns_sensitive(&ws, version.id, &detected)
+                .await?;
+            Ok(detected.len())
+        }
+        .await;
+        match result {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(version_id = %version.id, count = n,
+                "marked sensitive columns of an earlier dataset version"),
+            Err(e) => tracing::warn!(version_id = %version.id, error = ?e,
+                "cannot scan a dataset version for sensitive columns"),
         }
     }
 }

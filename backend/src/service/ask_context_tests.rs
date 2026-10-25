@@ -346,6 +346,7 @@ fn new_column(position: i32, name: &str, role: ProfileRole, values: &[&str]) -> 
         name: name.to_string(),
         data_type: "VARCHAR".to_string(),
         role,
+        is_sensitive: false,
         null_count: 0,
         distinct_count: values.len() as i64,
         min_value: None,
