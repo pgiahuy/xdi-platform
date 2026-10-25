@@ -191,19 +191,20 @@ Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order Ci
 khi phiên bản dùng được: tên cột (bỏ dấu, chữ thường) chứa một cụm như email, mật khẩu, số điện thoại, số giấy tờ,
 địa chỉ, họ tên (danh sách ở `SENSITIVE_NAME_PARTS`, service/profile.rs), hoặc phần lớn giá trị của cột trông như
 email hay số điện thoại. Luật tên cố ý đơn giản và nghiêng về đánh dấu nhầm còn hơn bỏ sót. Phiên bản nạp trước khi
-có luật này được quét đánh dấu lại một lần lúc khởi động (chỉ bật cờ, không tắt). Giá trị của cột nhạy cảm không vào
+có luật này được quét đánh dấu lại mỗi lần khởi động (chỉ bật cờ, không tắt; đồng bộ trước khi server nhận
+request). Giá trị của cột nhạy cảm không vào
 prompt của lớp ngữ nghĩa lẫn ngữ cảnh hỏi (#28), ngay từ khi phiên bản ở `structure`.
 
 ## Hồ sơ lớp ngữ nghĩa
 
 Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
 (`service/semantic.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, bí danh giá trị, câu hỏi gợi
-ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì `profile_status` là `semantic`; mô
-hình lỗi hay trả lời hỏng thì giữ `structure`, ghi log và đánh dấu đã thử (`semantic_attempted_at`), người nạp không
-nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Hai đường thử lại cho
-phiên bản còn ở `structure`: mỗi lần khởi động, backend chạy lớp ngữ nghĩa cho các phiên bản chưa từng thử (gồm cả
-phiên bản nạp trước khi có bước này); và nạp lại đúng bộ file cũ thì gọi lại một lần nữa. Phiên bản đã thử mà lỗi
-không bị việc khởi động gọi lại, để lỗi vĩnh viễn (thiếu khóa, mock không có bảng) không lặp mỗi lần mở máy.
+ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì `profile_status` là `semantic`;
+người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Lỗi
+tạm (mô hình quá tải, timeout, thiếu cấu hình, Postgres lỗi) giữ `structure` và không đánh dấu gì: lần khởi động sau
+thử lại. Lỗi mà gọi lại y nguyên không khác (JSON hỏng, không mục nào hợp lệ, mô hình từ chối nội dung, mock không có
+bảng) thì đánh dấu đã thử kèm tên provider (`semantic_attempted_with`): việc khởi động không gọi lại với cùng
+provider, đổi `LLM_PROVIDER` thì thử lại, và nạp lại đúng bộ file cũ luôn là đường thử lại tường minh.
 
 Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác
 nhau; min, max chỉ kèm cột `time` và `measure` số thực (min, max của cột chữ hay mã số nguyên như mã đơn, số điện

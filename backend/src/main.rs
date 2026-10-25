@@ -114,14 +114,17 @@ async fn run(args: Vec<String>) {
 
     let state = state::AppState::new(config, store);
     *state.setup_code.lock().expect("setup code lock") = setup_code;
-    // Việc nền lúc khởi động trong một task: lớp cấu trúc cho phiên bản pending xong trước, rồi quét đánh dấu nhạy
-    // cảm cho phiên bản nạp trước khi luật nằm ở lớp cấu trúc, rồi lớp ngữ nghĩa cho phiên bản structure chưa từng
-    // thử (gồm cả các phiên bản vừa lên structure ở bước trước).
+    // Quét đánh dấu nhạy cảm cho phiên bản nạp trước khi luật nằm ở lớp cấu trúc: đồng bộ, trước khi nhận request,
+    // để ngữ cảnh hỏi (#28) không gửi giá trị cột nhạy cảm của phiên bản cũ trong khởi đầu phiên chạy. Rẻ: hai câu
+    // SELECT mỗi phiên bản.
+    service::profile::mark_sensitive_columns_at_start(&state).await;
+
+    // Việc nền còn lại trong một task: lớp cấu trúc cho phiên bản pending xong trước, rồi lớp ngữ nghĩa cho phiên bản
+    // structure chưa từng thử (gồm cả các phiên bản vừa lên structure ở bước trước).
     tokio::spawn({
         let state = state.clone();
         async move {
             service::profile::profile_pending_versions(state.clone(), pending).await;
-            service::profile::mark_sensitive_columns_at_start(&state).await;
             service::semantic::profile_remaining_versions(state).await;
         }
     });

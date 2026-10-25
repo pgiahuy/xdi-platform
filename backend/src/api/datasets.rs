@@ -814,8 +814,9 @@ mod tests {
         db.drop().await;
     }
 
-    /// Mô hình lỗi (provider ollama trỏ vào cổng không nghe): lần nạp vẫn 201, phiên bản giữ structure và được đánh
-    /// dấu đã thử; nạp lại đúng bộ file đó trả 200 created = false và gọi lại mô hình lần nữa (vẫn lỗi, vẫn 200).
+    /// Mô hình lỗi tạm (provider ollama trỏ vào cổng không nghe: kết nối bị từ chối, mã Upstream): lần nạp vẫn 201,
+    /// phiên bản giữ structure và không bị đánh dấu đã thử (lần khởi động sau thử lại); nạp lại đúng bộ file đó trả
+    /// 200 created = false và gọi lại mô hình lần nữa (vẫn lỗi, vẫn 200).
     #[tokio::test]
     async fn llm_failure_does_not_block_the_upload() {
         let Some(db) = fresh_database().await else {
@@ -835,16 +836,12 @@ mod tests {
             upload(&app, &lan, &[("name", "DataCo")], &[("d.csv", DATACO_CSV)]).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let version_id = body["version"]["id"].as_str().unwrap().to_string();
+        // Chờ lượt nền chạy xong (lỗi tạm: không đánh dấu), rồi kiểm: structure, chưa đánh dấu.
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let attempted = format!(
-            "SELECT count(*) FROM dataset_versions WHERE id = '{version_id}' AND semantic_attempted_at IS NOT NULL"
+            "SELECT count(*) FROM dataset_versions WHERE id = '{version_id}' AND semantic_attempted_with IS NOT NULL"
         );
-        for _ in 0..100 {
-            if fetch_count(&db.store, &attempted).await == 1 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        assert_eq!(fetch_count(&db.store, &attempted).await, 1);
+        assert_eq!(fetch_count(&db.store, &attempted).await, 0);
         let status_of = format!(
             "SELECT count(*) FROM dataset_versions WHERE id = '{version_id}' AND profile_status = 'structure'"
         );

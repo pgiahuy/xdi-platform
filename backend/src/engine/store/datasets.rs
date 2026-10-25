@@ -64,8 +64,8 @@ pub struct Dataset {
     #[schema(required)]
     #[sqlx(default)]
     pub current_profile_status: Option<String>,
-    /// Suggested questions of the current version, written by the semantic profile (#23); empty while that step has
-    /// not finished.
+    /// Suggested questions of the current version, written by the semantic profile; empty while that step has not
+    /// finished.
     #[schema(required)]
     // Câu hỏi gợi ý nằm trên dataset_versions (đi theo phiên bản): list_datasets và get_dataset nối sang phiên bản
     // hiện hành để lấy; create_dataset (RETURNING không nối được) nhờ `default` mà có mảng rỗng.
@@ -448,23 +448,29 @@ impl Store {
         Ok(())
     }
 
-    /// Phiên bản đang ở structure và chưa từng thử lớp ngữ nghĩa, ở mọi workspace, cũ nhất trước. Ngoại lệ có chủ
-    /// đích của quy tắc lọc theo WorkspaceId, như list_pending_versions: việc nền lúc khởi động lập hồ sơ ngữ nghĩa
-    /// cho phiên bản nạp trước khi có bước này (#23), lúc đó chưa có workspace nào để lọc. Phiên bản đã thử mà lỗi
-    /// (semantic_attempted_at đã đặt) không nằm trong danh sách, để lỗi vĩnh viễn không bị gọi lại mỗi lần khởi động.
-    pub async fn list_semantic_candidates(&self) -> Result<Vec<SemanticCandidate>, AppError> {
+    /// Phiên bản đang ở structure và chưa thử lớp ngữ nghĩa với provider đang cấu hình, ở mọi workspace, cũ nhất
+    /// trước. Ngoại lệ có chủ đích của quy tắc lọc theo WorkspaceId, như list_pending_versions: việc nền lúc khởi
+    /// động lập hồ sơ ngữ nghĩa cho phiên bản nạp trước khi có bước này (#23), lúc đó chưa có workspace nào để lọc.
+    /// Phiên bản đã thử với provider này mà lỗi (semantic_attempted_with trùng tên) không nằm trong danh sách; đổi
+    /// LLM_PROVIDER thì được thử lại.
+    pub async fn list_semantic_candidates(
+        &self,
+        provider: &str,
+    ) -> Result<Vec<SemanticCandidate>, AppError> {
         sqlx::query_as(
             "SELECT workspace_id, id, dataset_id, row_count FROM dataset_versions
-             WHERE profile_status = $1 AND semantic_attempted_at IS NULL ORDER BY created_at",
+             WHERE profile_status = $1 AND (semantic_attempted_with IS NULL OR semantic_attempted_with <> $2)
+             ORDER BY created_at",
         )
         .bind(ProfileStatus::Structure.as_str())
+        .bind(provider)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| db_error("list semantic candidates", e))
     }
 
-    /// Phiên bản đã có hồ sơ (structure hay semantic) còn cột dimension chưa đánh dấu nhạy cảm, ở mọi workspace, cũ
-    /// nhất trước. Ngoại lệ có chủ đích của quy tắc lọc theo WorkspaceId, như list_pending_versions: việc nền lúc
+    /// Phiên bản đã có hồ sơ (structure hay semantic) còn cột chưa đánh dấu nhạy cảm, ở mọi workspace, cũ nhất
+    /// trước. Ngoại lệ có chủ đích của quy tắc lọc theo WorkspaceId, như list_pending_versions: việc nền lúc
     /// khởi động chạy lại luật đánh dấu nhạy cảm cho phiên bản nạp trước khi luật nằm ở lớp cấu trúc, lúc đó chưa có
     /// workspace nào để lọc.
     pub async fn list_versions_for_sensitive_scan(
@@ -474,7 +480,7 @@ impl Store {
             "SELECT v.workspace_id, v.id, v.dataset_id, v.row_count FROM dataset_versions v
              WHERE v.profile_status IN ($1, $2)
                AND EXISTS (SELECT 1 FROM columns c WHERE c.workspace_id = v.workspace_id AND c.version_id = v.id
-                           AND c.role = 'dimension' AND NOT c.is_sensitive)
+                           AND NOT c.is_sensitive)
              ORDER BY v.created_at",
         )
         .bind(ProfileStatus::Structure.as_str())
@@ -484,24 +490,45 @@ impl Store {
         .map_err(|e| db_error("list versions for sensitive scan", e))
     }
 
-    /// Đánh dấu đã thử lớp ngữ nghĩa (và lỗi): việc nền lúc khởi động không chọn lại phiên bản này. Chỉ đặt khi
-    /// phiên bản còn ở structure: đã semantic thì không cần, và không ghi đè một lượt vừa thành công.
+    /// Đánh dấu đã thử lớp ngữ nghĩa với provider này (và câu trả lời không dùng được): việc nền lúc khởi động không
+    /// chọn lại phiên bản này cho tới khi đổi LLM_PROVIDER. Chỉ đặt khi phiên bản còn ở structure: đã semantic thì
+    /// không cần, và không ghi đè một lượt vừa thành công.
     pub async fn mark_semantic_attempted(
         &self,
         ws: &WorkspaceId,
         version_id: Uuid,
+        provider: &str,
     ) -> Result<(), AppError> {
         sqlx::query(
-            "UPDATE dataset_versions SET semantic_attempted_at = now()
+            "UPDATE dataset_versions SET semantic_attempted_with = $4
              WHERE workspace_id = $1 AND id = $2 AND profile_status = $3",
         )
         .bind(ws.as_uuid())
         .bind(version_id)
         .bind(ProfileStatus::Structure.as_str())
+        .bind(provider)
         .execute(&self.pool)
         .await
         .map_err(|e| db_error("mark semantic attempted", e))?;
         Ok(())
+    }
+
+    /// profile_status hiện tại của một phiên bản; None khi không có (workspace khác hay đã xóa). semantic.rs đọc lại
+    /// sau khi lấy được permit, trước khi gọi mô hình: hai lượt xếp hàng cho cùng một phiên bản thì lượt sau thấy
+    /// semantic và dừng, không gọi mô hình hai lần.
+    pub async fn get_profile_status(
+        &self,
+        ws: &WorkspaceId,
+        version_id: Uuid,
+    ) -> Result<Option<String>, AppError> {
+        sqlx::query_scalar(
+            "SELECT profile_status FROM dataset_versions WHERE workspace_id = $1 AND id = $2",
+        )
+        .bind(ws.as_uuid())
+        .bind(version_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| db_error("get profile status", e))
     }
 }
 

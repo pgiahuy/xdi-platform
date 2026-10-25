@@ -64,8 +64,8 @@ pub struct NewColumn {
 
 // position chỉ để sắp xếp trong SQL, description và aliases đợi ngữ cảnh prompt (#29) đọc ngoài test; gỡ allow khi
 // có người đọc để clippy bắt lại mã thừa.
-/// Một dòng của bảng columns: lớp cấu trúc (kiểu, số đo, vai trò), cộng mô tả, bí danh và cờ nhạy cảm của lớp ngữ
-/// nghĩa (#23 ghi; chưa ghi thì mô tả null, bí danh rỗng, không nhạy cảm).
+/// Một dòng của bảng columns: lớp cấu trúc (kiểu, số đo, vai trò; cờ nhạy cảm do luật của service/profile.rs đặt
+/// ngay lúc lập hồ sơ), cộng mô tả và bí danh của lớp ngữ nghĩa (#23 ghi sau; chưa ghi thì mô tả null, bí danh rỗng).
 #[allow(dead_code)]
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ProfileColumn {
@@ -248,8 +248,9 @@ impl Store {
         .map_err(|e| db_error("list column values", e))
     }
 
-    /// Đánh dấu cột nhạy cảm theo luật của service/semantic.rs (tên cột, dạng giá trị), trước khi dựng prompt. Chỉ
-    /// một chiều false -> true; chạy riêng với giao dịch ghi hồ sơ để lỗi mô hình không làm mất đánh dấu.
+    /// Bật cờ nhạy cảm cho các cột (chỉ chiều false -> true). Hai người gọi: lượt quét lúc khởi động cho phiên
+    /// bản cũ (service/profile.rs) và cột do mô hình đề xuất thêm trong câu trả lời ngữ nghĩa (service/semantic.rs,
+    /// qua apply_semantic_profile).
     pub async fn mark_columns_sensitive(
         &self,
         ws: &WorkspaceId,

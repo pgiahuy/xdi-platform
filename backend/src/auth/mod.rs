@@ -109,8 +109,9 @@ pub async fn pending_profiles(
 /// dòng đọc được. Việc nền lúc khởi động (service/semantic.rs) dùng, không gắn với người dùng nào.
 pub async fn pending_semantic_profiles(
     store: &Store,
+    provider: &str,
 ) -> Result<Vec<(WorkspaceId, SemanticCandidate)>, AppError> {
-    let versions = store.list_semantic_candidates().await?;
+    let versions = store.list_semantic_candidates(provider).await?;
     Ok(versions
         .into_iter()
         .map(|v| (WorkspaceId(v.workspace_id), v))

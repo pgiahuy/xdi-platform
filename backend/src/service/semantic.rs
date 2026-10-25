@@ -9,8 +9,10 @@ nhà cung cấp):
    lại (đường thử lại tường minh).
 2. Việc nền lúc khởi động (profile_remaining_versions, main.rs gọi sau khi lớp cấu trúc xong) chạy lần lượt cho các
    phiên bản structure chưa từng thử, gồm cả phiên bản nạp trước khi có bước này.
-3. Lỗi (mô hình 502/503, mock không có bảng, JSON hỏng, không mục nào hợp lệ): phiên bản giữ structure, ghi
-   semantic_attempted_at để lần khởi động sau không thử lại mãi; người dùng không nhận lỗi ở đâu cả.
+3. Lỗi chia hai: lỗi tạm (mô hình quá tải, timeout, mất mạng, thiếu cấu hình, Postgres lỗi) giữ structure và không
+   đánh dấu gì, lần khởi động sau thử lại; lỗi mà gọi lại y nguyên không khác (JSON hỏng, không mục nào hợp lệ, mô
+   hình từ chối, mock không có bảng) đánh dấu đã thử kèm tên provider (semantic_attempted_with) - cùng provider không
+   gọi lại, đổi LLM_PROVIDER thì thử lại. Người dùng không nhận lỗi ở đâu cả.
 
 Hai hàm thuần làm phần dễ sai: build_profile_prompt dựng prompt chỉ từ siêu dữ liệu (không bao giờ có giá trị của cột
 text, key hay cột nhạy cảm; min, max chỉ của cột số thực và thời gian), build_profile_answer kiểm từng mục của câu trả
@@ -26,9 +28,10 @@ use uuid::Uuid;
 use crate::auth::WorkspaceId;
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{
-    ColumnValue, Dataset, ProfileColumn, ProfileRole, SemanticColumnUpdate, SemanticValueUpdate,
+    ColumnValue, Dataset, ProfileColumn, ProfileRole, ProfileStatus, SemanticColumnUpdate,
+    SemanticValueUpdate,
 };
-use crate::service::ask_context::{COLUMN_VALUES_ALL_MAX, COLUMN_VALUES_SOME, CONTEXT_VALUES_MAX};
+use crate::service::ask_context;
 use crate::service::ask_phrases::fold;
 use crate::service::ask_values::STRING_MAX_BYTES;
 use crate::service::profile::{is_integer_type, DIMENSION_MAX};
@@ -42,9 +45,9 @@ pub(crate) const ALIASES_MAX: usize = 8;
 pub(crate) const QUESTIONS_MAX: usize = 5;
 pub(crate) const QUESTION_MAX_CHARS: usize = 200;
 
-// Trần phần giá trị trong prompt dùng chung hằng với ngữ cảnh hỏi (#28): một cột có không quá COLUMN_VALUES_ALL_MAX
-// giá trị thì gửi hết, nhiều hơn thì chỉ gửi COLUMN_VALUES_SOME giá trị nhiều dòng nhất; tổng một prompt không quá
-// CONTEXT_VALUES_MAX giá trị; giá trị dài quá STRING_MAX_BYTES byte không gửi. Không có trần này thì bảng khảo sát
+// Trần phần giá trị trong prompt chia bằng chính hàm của ngữ cảnh hỏi (ask_context::build_column_values): một cột có
+// không quá 50 giá trị thì gửi hết, nhiều hơn thì 20 giá trị nhiều dòng nhất; tổng quá 400 thì hạ một trần chung cho
+// mọi cột; giá trị dài quá STRING_MAX_BYTES byte không gửi. Không có trần này thì bảng khảo sát
 // vài trăm cột, mỗi cột 200 giá trị dài tới 1000 byte, thổi prompt lên hàng chục MB: tốn token, vượt cửa sổ ngữ
 // cảnh, mô hình trả lỗi và hồ sơ mất. Đo trên hồ sơ kiểu DataCo (test measure_dataco_like_prompt, 54 cột, 14 cột
 // dimension có giá trị, cột 164 giá trị bị cắt còn 20): prompt khoảng 10 700 ký tự, trong đó phần giá trị khoảng
@@ -59,7 +62,63 @@ pub struct SemanticProfile {
     pub suggested_questions: Vec<String>,
 }
 
-/// Lập hồ sơ ngữ nghĩa cho một phiên bản, chạy nền qua semaphore (xem đầu file). Lỗi chỉ ghi log và đánh dấu đã thử.
+/// Lỗi của một lượt lớp ngữ nghĩa, phân biệt để quyết định có thử lại lúc khởi động không.
+#[derive(Debug)]
+pub(crate) enum SemanticFailure {
+    /// Lỗi tạm: mô hình quá tải, timeout, mất mạng (Upstream), máy chủ thiếu cấu hình (Unavailable), Postgres lỗi.
+    /// Không đánh dấu gì: lần khởi động sau thử lại.
+    Temporary(AppError),
+    /// Mô hình trả lời nhưng không dùng được (JSON hỏng, không mục nào hợp lệ, từ chối nội dung, mock không có
+    /// bảng): gọi lại y nguyên không khác, nên đánh dấu đã thử kèm tên provider; đổi LLM_PROVIDER thì thử lại.
+    Permanent(AppError),
+}
+
+/// Ghi log và đánh dấu một lượt lỗi. Chỉ lỗi vĩnh viễn mới ghi semantic_attempted_with. BadRequest (mock không có
+/// bảng, mô hình từ chối nội dung) không cần cảnh báo: gọi lại không khác gì.
+async fn note_failure(
+    state: &AppState,
+    ws: &WorkspaceId,
+    version_id: Uuid,
+    failure: SemanticFailure,
+) {
+    let (e, permanent) = match failure {
+        SemanticFailure::Temporary(e) => (e, false),
+        SemanticFailure::Permanent(e) => (e, true),
+    };
+    if permanent {
+        let provider = state.llm.name();
+        if let Err(e) = state
+            .store
+            .mark_semantic_attempted(ws, version_id, &provider)
+            .await
+        {
+            tracing::warn!(version_id = %version_id, error = ?e, "cannot mark semantic profile attempted");
+        }
+    }
+    if matches!(e, AppError::BadRequest(_)) {
+        tracing::info!(version_id = %version_id, error = ?e, "no semantic profile for this dataset");
+    } else {
+        tracing::warn!(version_id = %version_id, error = ?e,
+            "semantic profile failed, keeping the structural profile");
+    }
+}
+
+/// Chỉ gọi mô hình khi phiên bản còn ở structure: hai lượt xếp hàng chờ semaphore cho cùng một phiên bản (nạp lại
+/// đúng bộ file hai lần liền, hay việc khởi động và nạp lại) thì lượt sau dừng ở đây, không tốn hai lời gọi mô hình.
+/// Phiên bản bị xóa trong lúc chờ (None) hay không đọc được status thì bỏ qua.
+async fn still_structure(state: &AppState, ws: &WorkspaceId, version_id: Uuid) -> bool {
+    match state.store.get_profile_status(ws, version_id).await {
+        Ok(Some(status)) => status == ProfileStatus::Structure.as_str(),
+        Ok(None) => false,
+        Err(e) => {
+            tracing::warn!(version_id = %version_id, error = ?e, "cannot re-check profile status");
+            false
+        }
+    }
+}
+
+/// Lập hồ sơ ngữ nghĩa cho một phiên bản, chạy nền qua semaphore (xem đầu file). Lỗi chỉ ghi log và, khi lỗi vĩnh
+/// viễn, đánh dấu đã thử kèm provider.
 pub fn spawn_semantic_profile(
     state: AppState,
     ws: WorkspaceId,
@@ -72,30 +131,24 @@ pub fn spawn_semantic_profile(
         let Ok(_permit) = state.semantic_jobs.acquire().await else {
             return;
         };
+        if !still_structure(&state, &ws, version_id).await {
+            return;
+        }
         match apply_semantic_profile(&state, &ws, &dataset, version_id, row_count).await {
             Ok(()) => tracing::info!(version_id = %version_id, "semantic profile applied"),
-            Err(e) => {
-                if let Err(e) = state.store.mark_semantic_attempted(&ws, version_id).await {
-                    tracing::warn!(version_id = %version_id, error = ?e, "cannot mark semantic profile attempted");
-                }
-                // Mock trả BadRequest cho mọi bảng ngoài dataco, và mô hình thật từ chối nội dung cũng là BadRequest:
-                // gọi lại không khác gì, nên không cần cảnh báo.
-                if matches!(e, AppError::BadRequest(_)) {
-                    tracing::info!(version_id = %version_id, error = ?e, "no semantic profile for this dataset");
-                } else {
-                    tracing::warn!(version_id = %version_id, error = ?e,
-                        "semantic profile failed, keeping the structural profile");
-                }
-            }
+            Err(f) => note_failure(&state, &ws, version_id, f).await,
         }
     });
 }
 
-/// Việc nền lúc khởi động: lần lượt lập hồ sơ ngữ nghĩa cho các phiên bản structure chưa từng thử (gồm phiên bản
-/// nạp trước khi có bước này). main.rs gọi sau khi lớp cấu trúc xong, trong cùng một task, nên ở đây không cần
-/// semaphore: một lúc chỉ một phiên bản. Dataset hay phiên bản bị xóa trong lúc chờ thì bỏ qua phiên bản đó.
+/// Việc nền lúc khởi động: lần lượt lập hồ sơ ngữ nghĩa cho các phiên bản structure chưa thử với provider đang cấu
+/// hình (gồm phiên bản nạp trước khi có bước này). Mỗi phiên bản lấy một permit của semantic_jobs như đường nạp, nên
+/// trong lúc việc khởi động chạy, nạp mới không gọi mô hình song song với nó. Dataset hay phiên bản bị xóa trong lúc
+/// chờ thì bỏ qua phiên bản đó.
 pub async fn profile_remaining_versions(state: AppState) {
-    let candidates = match crate::auth::pending_semantic_profiles(&state.store).await {
+    let candidates = match crate::auth::pending_semantic_profiles(&state.store, &state.llm.name())
+        .await
+    {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!(error = ?e, "cannot list dataset versions waiting for a semantic profile");
@@ -118,16 +171,16 @@ pub async fn profile_remaining_versions(state: AppState) {
                 continue;
             }
         };
+        let Ok(_permit) = state.semantic_jobs.acquire().await else {
+            return;
+        };
+        if !still_structure(&state, &ws, candidate.id).await {
+            continue;
+        }
         match apply_semantic_profile(&state, &ws, &dataset, candidate.id, candidate.row_count).await
         {
             Ok(()) => tracing::info!(version_id = %candidate.id, "semantic profile applied"),
-            Err(e) => {
-                if let Err(e) = state.store.mark_semantic_attempted(&ws, candidate.id).await {
-                    tracing::warn!(version_id = %candidate.id, error = ?e, "cannot mark semantic profile attempted");
-                }
-                tracing::warn!(version_id = %candidate.id, error = ?e,
-                    "semantic profile failed, keeping the structural profile");
-            }
+            Err(f) => note_failure(&state, &ws, candidate.id, f).await,
         }
     }
 }
@@ -142,8 +195,12 @@ pub async fn apply_semantic_profile(
     dataset: &Dataset,
     version_id: Uuid,
     row_count: Option<i64>,
-) -> Result<(), AppError> {
-    let columns = state.store.list_columns(ws, version_id).await?;
+) -> Result<(), SemanticFailure> {
+    let columns = state
+        .store
+        .list_columns(ws, version_id)
+        .await
+        .map_err(SemanticFailure::Temporary)?;
     // Chỉ cột dimension không nhạy cảm có danh sách giá trị trong prompt, nên cũng chỉ đọc giá trị của các cột đó;
     // mô hình không thấy thì bí danh nó đề xuất cho giá trị khác cũng không qua được kiểm tra.
     let value_columns: Vec<Uuid> = columns
@@ -151,7 +208,11 @@ pub async fn apply_semantic_profile(
         .filter(|c| c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive)
         .map(|c| c.id)
         .collect();
-    let values = state.store.list_column_values(ws, &value_columns).await?;
+    let values = state
+        .store
+        .list_column_values(ws, &value_columns)
+        .await
+        .map_err(SemanticFailure::Temporary)?;
 
     let prompt = build_profile_prompt(
         &dataset.name,
@@ -165,9 +226,15 @@ pub async fn apply_semantic_profile(
         question: &dataset.logical_table,
         prompt: &prompt,
     };
-    let text = state.llm.complete(&request).await?;
+    let text = state.llm.complete(&request).await.map_err(|e| match e {
+        // Mô hình từ chối nội dung (và mock không có bảng): gọi lại y nguyên không khác.
+        AppError::BadRequest(_) => SemanticFailure::Permanent(e),
+        other => SemanticFailure::Temporary(other),
+    })?;
     let answer = build_profile_answer(&text, &columns, &values).ok_or_else(|| {
-        AppError::Internal("semantic profile answer has no valid item".to_string())
+        SemanticFailure::Permanent(AppError::Internal(
+            "semantic profile answer has no valid item".to_string(),
+        ))
     })?;
     let written = state
         .store
@@ -179,7 +246,8 @@ pub async fn apply_semantic_profile(
             &answer.sensitive_columns,
             &answer.suggested_questions,
         )
-        .await?;
+        .await
+        .map_err(SemanticFailure::Temporary)?;
     // Phiên bản không còn ở structure (ví dụ một lượt chạy song song đã ghi xong, hoặc phiên bản bị xóa): không có
     // gì để làm.
     if !written {
@@ -257,38 +325,35 @@ pub fn build_profile_prompt(
         for v in values {
             by_column.entry(v.column_id).or_default().push(v);
         }
-        let mut total = 0;
-        for c in columns {
-            // Chốt riêng tư nằm ở đây chứ không trông chờ người gọi lọc trước: giá trị của cột text, key hay cột
-            // nhạy cảm không bao giờ vào prompt, kể cả khi lỡ truyền vào.
-            let printable = c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive;
-            let Some(list) = by_column.get(&c.id).filter(|_| printable) else {
-                continue;
-            };
-            if total >= CONTEXT_VALUES_MAX {
-                break;
-            }
-            // Trần mỗi cột (xem đầu file): list đã xếp giá trị nhiều dòng nhất trước (list_column_values). Giá trị
-            // quá dài bị bỏ trước khi đếm, không chiếm suất của giá trị gửi được.
-            let cap = if list.len() <= COLUMN_VALUES_ALL_MAX {
-                list.len()
-            } else {
-                COLUMN_VALUES_SOME
-            };
-            let mut items = Vec::new();
-            for v in list.iter() {
-                if items.len() >= cap || total >= CONTEXT_VALUES_MAX {
-                    break;
-                }
-                if v.value.len() > STRING_MAX_BYTES {
-                    continue;
-                }
-                total += 1;
-                match v.frequency {
-                    Some(n) => items.push(format!("{} ({n})", json_string(&v.value))),
-                    None => items.push(json_string(&v.value)),
-                }
-            }
+        // Chốt riêng tư nằm ở đây chứ không trông chờ người gọi lọc trước: giá trị của cột text, key hay cột nhạy
+        // cảm không bao giờ vào prompt, kể cả khi lỡ truyền vào. Giá trị quá dài bỏ trước khi đếm.
+        let printable: Vec<(&ProfileColumn, Vec<&ColumnValue>)> = columns
+            .iter()
+            .filter(|c| c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive)
+            .filter_map(|c| {
+                let list: Vec<&ColumnValue> = by_column
+                    .get(&c.id)?
+                    .iter()
+                    .filter(|v| v.value.len() <= STRING_MAX_BYTES)
+                    .copied()
+                    .collect();
+                (!list.is_empty()).then_some((c, list))
+            })
+            .collect();
+        // Chia trần như ngữ cảnh hỏi (#28), cùng một hàm: đủ khi tới COLUMN_VALUES_ALL_MAX, COLUMN_VALUES_SOME khi
+        // nhiều hơn; tổng vượt CONTEXT_VALUES_MAX thì hạ một trần chung cho mọi cột, không bỏ hẳn cột đứng sau.
+        let counts: Vec<usize> = printable.iter().map(|(_, list)| list.len()).collect();
+        let caps = ask_context::build_column_values(&counts);
+        for ((c, list), cap) in printable.iter().zip(caps) {
+            // list đã xếp giá trị nhiều dòng nhất trước (list_column_values).
+            let items: Vec<String> = list
+                .iter()
+                .take(cap)
+                .map(|v| match v.frequency {
+                    Some(n) => format!("{} ({n})", json_string(&v.value)),
+                    None => json_string(&v.value),
+                })
+                .collect();
             if !items.is_empty() {
                 prompt.push_str(&format!("{}: {}\n", json_string(&c.name), items.join(", ")));
             }
@@ -320,8 +385,9 @@ fn column_line(c: &ProfileColumn, row_count: Option<i64>) -> String {
         c.data_type,
         c.role
     );
-    let with_range = c.role == ProfileRole::Time.as_str()
-        || (c.role == ProfileRole::Measure.as_str() && !is_integer_type(&c.data_type));
+    let with_range = !c.is_sensitive
+        && (c.role == ProfileRole::Time.as_str()
+            || (c.role == ProfileRole::Measure.as_str() && !is_integer_type(&c.data_type)));
     if with_range {
         if let (Some(min), Some(max)) = (&c.min_value, &c.max_value) {
             line.push_str(&format!(" | {min} | {max}"));
@@ -354,18 +420,24 @@ pub fn build_profile_answer(
     let column_names: HashSet<String> = columns.iter().map(|c| fold(&c.name)).collect();
 
     // Mục cột và đổi vai trò cùng ghi vào bảng columns, nên gom theo id cột: đổi vai trò của một cột không có mục
-    // riêng vẫn được ghi (mô tả null, bí danh rỗng là mặc định sẵn có).
+    // riêng vẫn được ghi (mô tả null, bí danh rỗng là mặc định sẵn có). Mục cột không có gì hợp lệ (mô tả null, bí
+    // danh rỗng) thì bỏ hẳn: ghi NULL không đổi gì mà làm câu trả lời toàn mục sai vẫn thành "có mục hợp lệ".
     let mut column_updates: HashMap<Uuid, SemanticColumnUpdate> = HashMap::new();
     for item in json["columns"].as_array().into_iter().flatten() {
         let Some(column) = item["name"].as_str().and_then(|n| by_name.get(n)) else {
             continue;
         };
+        let description = clean_text_opt(&item["description"], DESCRIPTION_MAX_CHARS);
+        let aliases = valid_aliases(&item["aliases"], &column_names);
+        if description.is_none() && aliases.is_empty() {
+            continue;
+        }
         column_updates.insert(
             column.id,
             SemanticColumnUpdate {
                 column_id: column.id,
-                description: clean_text_opt(&item["description"], DESCRIPTION_MAX_CHARS),
-                aliases: valid_aliases(&item["aliases"], &column_names),
+                description,
+                aliases,
                 role: None,
             },
         );
@@ -413,6 +485,9 @@ pub fn build_profile_answer(
             .insert(fold(&v.value));
     }
     let mut value_updates = Vec::new();
+    // Bí danh đã nhận của từng cột, để một bí danh không đứng cho hai giá trị cùng cột ("châu Âu" không nhận cho cả
+    // Western Europe và Southern Europe).
+    let mut accepted_by_column: HashMap<Uuid, HashSet<String>> = HashMap::new();
     for item in json["values"].as_array().into_iter().flatten() {
         let (Some(column_name), Some(value)) = (item["column"].as_str(), item["value"].as_str())
         else {
@@ -424,12 +499,31 @@ pub fn build_profile_answer(
         if !known.contains(&(column.id, value)) {
             continue;
         }
-        // Bí danh của giá trị không được trùng (sau chuẩn hóa) một giá trị khác cùng cột: "Europe" không nhận "LATAM".
-        let forbidden = values_by_column.entry(column.id).or_default();
+        // Bí danh của giá trị không được trùng (sau chuẩn hóa) một giá trị khác cùng cột hay bí danh đã nhận của cột
+        // đó: "Europe" không nhận "LATAM".
+        let mut forbidden = values_by_column
+            .get(&column.id)
+            .cloned()
+            .unwrap_or_default();
+        forbidden.extend(
+            accepted_by_column
+                .get(&column.id)
+                .cloned()
+                .unwrap_or_default(),
+        );
+        let aliases = valid_aliases(&item["aliases"], &forbidden);
+        // Mục giá trị không có bí danh hợp lệ thì bỏ hẳn: không có gì để ghi.
+        if aliases.is_empty() {
+            continue;
+        }
+        accepted_by_column
+            .entry(column.id)
+            .or_default()
+            .extend(aliases.iter().map(|a| fold(a)));
         value_updates.push(SemanticValueUpdate {
             column_id: column.id,
             value: value.to_string(),
-            aliases: valid_aliases(&item["aliases"], forbidden),
+            aliases,
         });
     }
 
@@ -493,8 +587,12 @@ fn clean_text(text: &str, max_chars: usize) -> Option<String> {
     }
     let bad = trimmed.chars().any(|c| {
         c.is_control()
-            || ('\u{202a}'..='\u{202e}').contains(&c)
+            || ('\u{200b}'..='\u{200f}').contains(&c) // zero-width, LRM/RLM
+            || ('\u{2028}'..='\u{2029}').contains(&c) // line/paragraph separator
+            || ('\u{202a}'..='\u{202e}').contains(&c) // điều hướng hai chiều
+            || ('\u{2060}'..='\u{2064}').contains(&c) // word joiner, dấu nối vô hình
             || ('\u{2066}'..='\u{2069}').contains(&c)
+            || c == '\u{61c}' || c == '\u{feff}'
     });
     if bad {
         return None;

@@ -158,7 +158,8 @@ fn prompt_value_caps() {
     assert!(!prompt.contains("\"country 020\""), "{prompt}");
     assert!(!prompt.contains(&"d".repeat(201)), "{prompt}");
 
-    // Trần tổng 400: 30 cột mỗi cột 20 giá trị, cột đứng sau khi hết hạn mức không có giá trị nào trong prompt.
+    // Trần tổng 400 chia như #28 (cùng hàm build_column_values): 30 cột mỗi cột 20 giá trị (tổng 600) thì hạ một
+    // trần chung xuống 13 (30 x 13 = 390), mọi cột đều còn giá trị, không cột nào bị bỏ hẳn.
     let columns: Vec<ProfileColumn> = (0..30)
         .map(|i| {
             column(
@@ -176,8 +177,9 @@ fn prompt_value_caps() {
     let prompt = build_profile_prompt("DataCo", "dataco", Some(1000), &columns, &values);
     // Chỉ xét phần danh sách giá trị: phần siêu dữ liệu luôn liệt kê mọi cột.
     let values_part = prompt.split("Values of dimension columns").nth(1).unwrap();
-    assert!(values_part.contains("\"col 19\""), "{values_part}");
-    assert!(!values_part.contains("\"col 20\""), "{values_part}");
+    assert!(values_part.contains("\"col 29\""), "{values_part}");
+    assert!(values_part.contains("\"v12\""), "{values_part}");
+    assert!(!values_part.contains("\"v13\""), "{values_part}");
 }
 
 /// Luật đánh dấu nhạy cảm (service/profile.rs, chạy lúc lập hồ sơ cấu trúc): tên cột (bỏ dấu) chứa email, mật khẩu,
@@ -187,31 +189,59 @@ fn prompt_value_caps() {
 fn sensitive_columns_are_detected_by_name_and_values() {
     use crate::service::profile::is_sensitive_column;
 
-    // Theo tên (bỏ dấu, chữ thường): cột một giá trị đã che cũng bị đánh dấu.
+    // Theo tên (bỏ dấu, chữ thường, tách từ cả camelCase): cột một giá trị đã che cũng bị đánh dấu.
     for name in [
         "Customer Email",
         "Customer Password",
         "Mật khẩu",
         "SĐT liên hệ",
-        "số điện thoại",
+        "Số điện thoại",
         "Địa chỉ giao",
-        "Họ tên khách",
         "CCCD",
+        "Họ và tên",
+        "First Name",
+        "Customer Fname",
+        "Customer Lname",
+        "CustomerName",
+        "Fullname",
+        "Mobile",
+        "Tel",
+        "Customer Street",
+        "Tên KH",
     ] {
         assert!(is_sensitive_column(name, &[] as &[&str]), "{name}");
     }
-    assert!(!is_sensitive_column("Market", &[] as &[&str]));
-    assert!(!is_sensitive_column("Category Name", &[] as &[&str]));
+    // So theo từ, không theo chuỗi con: các chiều có ích này không được đánh dấu.
+    for name in [
+        "Market",
+        "Category Name",
+        "Product Name",
+        "Order City",
+        "Ship Mode",
+        "Mailing Region",
+        "Dòng điện thoại",
+        "Loại điện thoại",
+    ] {
+        assert!(!is_sensitive_column(name, &[] as &[&str]), "{name}");
+    }
 
-    // Theo giá trị: phần lớn trông như email hay số điện thoại.
+    // Theo giá trị: phần lớn trông như email hay số điện thoại (dạng VN/quốc tế).
     assert!(is_sensitive_column(
         "Liên hệ",
         &["lan@example.com", "0912 345 678", "hải phòng"]
+    ));
+    assert!(is_sensitive_column(
+        "Liên hệ",
+        &["+84 901 234 567", "0901234567"]
     ));
     assert!(!is_sensitive_column(
         "Liên hệ",
         &["lan@example.com", "hải phòng"]
     ));
+    // Ngày và mã số không phải số điện thoại.
+    assert!(!is_sensitive_column("Ngày", &["2018-01-31", "2018-02-01"]));
+    assert!(!is_sensitive_column("Khóa ngày", &["20180131", "20180201"]));
+    assert!(!is_sensitive_column("Mã hàng", &["10002345", "10002346"]));
     assert!(!is_sensitive_column("Market", &["Europe", "LATAM"]));
 
     // Cột đã đánh dấu: prompt không chứa giá trị của nó dù lỡ truyền vào.
@@ -257,7 +287,8 @@ fn answers_are_checked_item_by_item() {
             {{\"name\": \"Sales\", \"description\": \"{}\", \"aliases\": [\"doanh\\u0000số\"]}}
         ],
         \"values\": [
-            {{\"column\": \"Market\", \"value\": \"Europe\", \"aliases\": [\"châu Âu\", \"LATAM\", \"latam\", \"\\u0000\"]}},
+            {{\"column\": \"Market\", \"value\": \"Europe\", \"aliases\": [\"châu Âu\", \"LATAM\", \"latam\", \"\\u0000\", \"tây\\u200bÂu\"]}},
+            {{\"column\": \"Market\", \"value\": \"LATAM\", \"aliases\": [\"Châu  Âu\", \"Mỹ Latinh\"]}},
             {{\"column\": \"Market\", \"value\": \"Châu Âu\", \"aliases\": [\"x\"]}},
             {{\"column\": \"Không có\", \"value\": \"Europe\", \"aliases\": [\"x\"]}}
         ],
@@ -278,26 +309,23 @@ fn answers_are_checked_item_by_item() {
     );
     let profile = build_profile_answer(&answer, &columns, &values).unwrap();
 
-    // Cột không có thật bị bỏ; mô tả quá dài thành null nhưng cột vẫn ghi; bí danh 500 ký tự, bí danh trùng tên cột
-    // khác ("Sales"), bí danh toàn khoảng trắng, bí danh trùng sau chuẩn hóa ("Thị  Trường" trùng "thị trường") đều
-    // bị bỏ riêng.
-    assert_eq!(profile.columns.len(), 4, "{:?}", profile.columns);
+    // Cột không có thật bị bỏ. Mục cột không có gì hợp lệ (mô tả quá dài thành null, bí danh duy nhất có NUL) bị bỏ
+    // hẳn, để câu trả lời toàn mục sai không thành "có mục hợp lệ": Sales không được ghi. Bí danh 500 ký tự, bí danh
+    // trùng tên cột khác ("Sales"), bí danh toàn khoảng trắng, bí danh trùng sau chuẩn hóa ("Thị  Trường" trùng "thị
+    // trường") đều bị bỏ riêng.
+    assert_eq!(profile.columns.len(), 3, "{:?}", profile.columns);
     let market_update = &profile.columns[0];
     assert_eq!(market_update.description.as_deref(), Some("Thị trường"));
     assert_eq!(market_update.aliases, ["thị trường"]);
-    let sales_update = profile
-        .columns
-        .iter()
-        .find(|c| c.column_id == columns[2].id)
-        .unwrap();
-    assert_eq!(sales_update.description, None);
-    // Bí danh có NUL bị bỏ riêng, cột Sales vẫn được ghi.
-    assert!(sales_update.aliases.is_empty());
+    assert!(!profile.columns.iter().any(|c| c.column_id == columns[2].id));
 
     // Giá trị không có trong column_values, hoặc thuộc cột không có, đều bị bỏ. Bí danh của Europe không được trùng
-    // giá trị khác cùng cột ("LATAM", kể cả "latam" sau chuẩn hóa) và không nhận chuỗi có NUL.
-    assert_eq!(profile.values.len(), 1);
+    // giá trị khác cùng cột ("LATAM", kể cả "latam" sau chuẩn hóa) và không nhận chuỗi có NUL hay ký tự vô hình
+    // (U+200B). Một bí danh không đứng cho hai giá trị cùng cột: "châu Âu" đã của Europe nên LATAM chỉ còn "Mỹ
+    // Latinh".
+    assert_eq!(profile.values.len(), 2);
     assert_eq!(profile.values[0].aliases, ["châu Âu"]);
+    assert_eq!(profile.values[1].aliases, ["Mỹ Latinh"]);
 
     // Chỉ hai đổi vai trò được phép: measure số nguyên -> key, dimension -> text.
     let role_of = |id: Uuid| {
@@ -333,6 +361,13 @@ fn unusable_answers_are_rejected_as_a_whole() {
     let only_invalid =
         r#"{"columns": [{"name": "Không có"}], "values": [], "suggested_questions": ["", 42]}"#;
     assert!(build_profile_answer(only_invalid, columns, &values).is_none());
+    // Cột có thật nhưng mọi mục đều sai (mô tả quá dài, không bí danh nào hợp lệ): không mục nào được ghi, cả câu trả
+    // lời bị từ chối.
+    let all_bad = format!(
+        r#"{{"columns": [{{"name": "Market", "description": "{}"}}]}}"#,
+        "x".repeat(400)
+    );
+    assert!(build_profile_answer(&all_bad, columns, &values).is_none());
 }
 
 #[test]
@@ -531,10 +566,10 @@ impl LlmProvider for FailingLlm {
     }
 }
 
-/// Mô hình lỗi: apply báo lỗi để người gọi ghi log, phiên bản giữ structure, không mô tả nào được ghi; vòng nền
-/// (spawn_semantic_profile) đánh dấu đã thử để việc khởi động không gọi lại mãi.
+/// Lỗi tạm (Upstream: quá tải, timeout, mạng): apply báo Temporary để người gọi ghi log, phiên bản giữ structure,
+/// không mô tả nào được ghi, và không đánh dấu đã thử - lần khởi động sau thử lại.
 #[tokio::test]
-async fn llm_failure_keeps_the_structural_profile() {
+async fn temporary_llm_failure_keeps_the_version_retryable() {
     let Some(store) = store().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
@@ -547,7 +582,10 @@ async fn llm_failure_keeps_the_structural_profile() {
     let err = apply_semantic_profile(&state, &ws, &ds, v.id, v.row_count)
         .await
         .unwrap_err();
-    assert!(matches!(err, AppError::Upstream(_)), "{err:?}");
+    assert!(
+        matches!(err, SemanticFailure::Temporary(AppError::Upstream(_))),
+        "{err:?}"
+    );
     let v2 = store
         .find_version_by_hash(&ws, ds.id, "h1")
         .await
@@ -557,10 +595,68 @@ async fn llm_failure_keeps_the_structural_profile() {
     let columns = store.list_columns(&ws, v.id).await.unwrap();
     assert!(columns.iter().all(|c| c.description.is_none()));
 
-    // Qua vòng spawn nền: lỗi được đánh dấu semantic_attempted_at, việc khởi động sau đó không chọn lại.
+    // Chưa đánh dấu thì còn trong danh sách ứng viên của việc khởi động (kiểm trước khi spawn, để không đua với
+    // profile_remaining_versions của test khác chạy song song trên cùng database, vốn hợp lệ mà xử lý phiên bản này).
+    assert!(store
+        .list_semantic_candidates("failing")
+        .await
+        .unwrap()
+        .iter()
+        .any(|c| c.id == v.id));
+
+    // Qua vòng spawn nền: lỗi tạm không đánh dấu.
+    spawn_semantic_profile(state.clone(), ws, ds.clone(), v.id, v.row_count);
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let attempted = format!(
+        "SELECT count(*) FROM dataset_versions WHERE id = '{}' AND semantic_attempted_with IS NOT NULL",
+        v.id
+    );
+    assert_eq!(
+        crate::engine::store::test_support::fetch_count(&store, &attempted).await,
+        0
+    );
+
+    drop_workspace(&store, ws).await;
+}
+
+/// Câu trả lời không dùng được (mock không có bảng, mô hình từ chối, JSON hỏng, mọi mục đều sai): đánh dấu đã thử
+/// kèm tên provider; việc khởi động với cùng provider không gọi lại, đổi provider thì thử lại. Phiên bản giữ
+/// structure, không chuyển sang semantic.
+#[tokio::test]
+async fn unusable_answers_are_marked_with_the_provider() {
+    let Some(store) = store().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let ws = temp_workspace(&store).await;
+    // Bảng không phải dataco: mock trả BadRequest.
+    let src = store.create_local_source(&ws).await.unwrap();
+    let ds = store
+        .create_dataset(&ws, src, "Sales", "sales", None)
+        .await
+        .unwrap();
+    let columns = [new_column(
+        0,
+        "Market",
+        "VARCHAR",
+        ProfileRole::Dimension,
+        &[("Europe", 2)],
+    )];
+    let version = NewVersion {
+        source_kind: SourceKind::Csv,
+        file_hash: "h1",
+        parquet_path: "x",
+        row_count: 2,
+    };
+    let v = store
+        .create_version(&ws, ds.id, &version, &columns)
+        .await
+        .unwrap();
+
+    let state = mock_state(store.clone());
     spawn_semantic_profile(state.clone(), ws, ds.clone(), v.id, v.row_count);
     let attempted = format!(
-        "SELECT count(*) FROM dataset_versions WHERE id = '{}' AND semantic_attempted_at IS NOT NULL",
+        "SELECT count(*) FROM dataset_versions WHERE id = '{}' AND semantic_attempted_with = 'mock'",
         v.id
     );
     for _ in 0..100 {
@@ -573,12 +669,59 @@ async fn llm_failure_keeps_the_structural_profile() {
         crate::engine::store::test_support::fetch_count(&store, &attempted).await,
         1
     );
+    // Vẫn structure; cùng provider (mock) không thử lại, provider khác thử lại.
+    let v2 = store
+        .find_version_by_hash(&ws, ds.id, "h1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(v2.profile_status, "structure");
     assert!(store
-        .list_semantic_candidates()
+        .list_semantic_candidates("mock")
         .await
         .unwrap()
         .iter()
         .all(|c| c.id != v.id));
+    assert!(store
+        .list_semantic_candidates("gemini-2.5-flash")
+        .await
+        .unwrap()
+        .iter()
+        .any(|c| c.id == v.id));
+
+    drop_workspace(&store, ws).await;
+}
+
+/// Việc khởi động lấy semaphore như đường nạp: đang có lượt giữ permit thì nó chờ, không gọi mô hình song song.
+#[tokio::test]
+async fn startup_pass_takes_the_semaphore() {
+    let Some(store) = store().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let ws = temp_workspace(&store).await;
+    let (ds, _v) = dataco(&store, &ws).await;
+    let state = mock_state(store.clone());
+    let permit = state.semantic_jobs.acquire().await.unwrap();
+
+    let task = tokio::spawn(profile_remaining_versions(state.clone()));
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let v1 = store
+        .find_version_by_hash(&ws, ds.id, "h1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(v1.profile_status, "structure");
+    assert!(!task.is_finished());
+
+    drop(permit);
+    task.await.unwrap();
+    let v2 = store
+        .find_version_by_hash(&ws, ds.id, "h1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(v2.profile_status, "semantic");
 
     drop_workspace(&store, ws).await;
 }
