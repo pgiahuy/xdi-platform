@@ -10,7 +10,9 @@ Các câu giả định cột ngày "order date (DateOrders)" là chữ dạng "
 VARCHAR) nên tự parse bằng strptime; hồ sơ (#22) hay bước seed (#25) đổi cột này sang kiểu ngày thì phải sửa các câu.
 Tỷ lệ và số đếm về đơn tính theo đơn hàng (đếm "Order Id" phân biệt), không theo dòng: một đơn có nhiều dòng.
 Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/năm nên DuckDB báo lỗi, và có câu sửa (task repair)
-đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask_run.rs) mà không cần mô hình thật. */
+đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask_run.rs) mà không cần mô hình thật. Câu narrate cho câu
+"tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask_examples.rs) nên qua
+được bước kiểm số của #41. */
 
 use std::collections::HashMap;
 
@@ -119,6 +121,7 @@ mod tests {
         let count = |wanted: LlmTask| answers.keys().filter(|(task, _)| *task == wanted).count();
         assert_eq!(count(LlmTask::Sql), 11);
         assert_eq!(count(LlmTask::Repair), 1);
+        assert_eq!(count(LlmTask::Narrate), 1);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];
         let profile: serde_json::Value = serde_json::from_str(profile).unwrap();
         assert!(profile["columns"].is_array());

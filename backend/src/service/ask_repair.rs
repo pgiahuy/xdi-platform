@@ -106,8 +106,9 @@ fn strip_block_label(body: &str) -> &str {
 }
 
 /// Lời cho người dùng từ lỗi của mô hình: các loại lỗi của LlmProvider đã viết lời tiếng Việt (engine/llm/mod.rs). Lỗi
-/// nội bộ chỉ ghi chi tiết vào log, như AppError::Internal ở error.rs.
-pub(super) fn build_user_text(error: &AppError) -> String {
+/// nội bộ chỉ ghi chi tiết vào log, như AppError::Internal ở error.rs. `step` là tên bước đang gọi mô hình ("repair",
+/// "narrate"), chỉ để dòng log của lỗi nội bộ nói đúng bước.
+pub(super) fn build_user_text(error: &AppError, step: &str) -> String {
     match error {
         AppError::BadRequest(text)
         | AppError::Upstream(text)
@@ -118,7 +119,7 @@ pub(super) fn build_user_text(error: &AppError) -> String {
         | AppError::NotFound(text) => text.clone(),
         AppError::NotImplemented(feature) => format!("Chưa cài đặt: {feature}"),
         AppError::Internal(text) => {
-            tracing::error!(error = %text, "model failed during repair");
+            tracing::error!(error = %text, "model failed during {step}");
             "Lỗi nội bộ, xem log của backend".to_string()
         }
     }
