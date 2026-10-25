@@ -27,6 +27,7 @@ Mở http://localhost:8000; lần đầu, nhập mã thiết lập in trong log 
 - [API](API.md): đặc tả OpenAPI, đăng nhập bằng cookie, workspace và vai, mã lỗi.
 - [Guard SQL](GUARD.md): câu SQL nào được chạy, câu nào bị từ chối, các ca đã có test.
 - [Dữ liệu](DATA.md): định dạng file nhận, giới hạn, phiên bản, tên bảng và tên cột.
+- [Gói khái niệm ngành](DOMAINS.md): khái niệm chung của một ngành, schema của file gói, cách thêm một ngành.
 
 ## Tham gia
 

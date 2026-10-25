@@ -1,5 +1,5 @@
 # Dockerfile - một image chạy cả hệ thống: backend Rust phục vụ API dưới /api và giao diện ở các đường dẫn còn lại.
-# Build từ gốc repo vì cần cả backend/ và frontend/: docker build -f backend/Dockerfile .
+# Build từ gốc repo vì cần cả backend/, frontend/ và data/domains/: docker build -f backend/Dockerfile .
 # Rust build nhiều giai đoạn với cargo-chef để cache dependency riêng; sửa code không biên dịch lại crate.
 
 # Giao diện: chép package*.json trước để lớp npm ci chỉ chạy lại khi đổi phụ thuộc.
@@ -30,6 +30,9 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY backend/ ./
+# Gói khái niệm ngành để backend/build.rs nhúng vào binary; .dockerignore mở riêng data/domains/, dataset lớn trong
+# data/ vẫn nằm ngoài context. build.rs tìm ở ../data/domains tính từ crate, tức /data/domains ở stage này.
+COPY data/domains/ /data/domains/
 RUN cargo build --release --locked
 
 FROM debian:bookworm-slim
