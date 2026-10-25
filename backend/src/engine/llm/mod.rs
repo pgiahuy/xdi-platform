@@ -12,8 +12,8 @@ lời trả về bị thay bằng câu chung, người dùng không biết cách
 
 mod gemini;
 mod http;
-// pub để test ở tầng service dùng được mô hình giả (ask_narrate_tests.rs kiểm câu narrate mẫu qua bước kiểm số).
-pub mod mock;
+// pub(crate) để test ở tầng service dùng được mô hình giả (ask_narrate_tests.rs kiểm câu narrate mẫu qua bước kiểm số).
+pub(crate) mod mock;
 mod ollama;
 
 use std::sync::Arc;

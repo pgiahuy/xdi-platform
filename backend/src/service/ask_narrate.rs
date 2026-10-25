@@ -16,8 +16,7 @@ use rust_decimal::Decimal;
 use super::ask_contract::{AskStep, Explanation, StepName};
 use super::ask_repair::build_user_text;
 use super::explain::{
-    build_allowed_numbers, build_known_texts, build_narrate_prompt, build_number_check,
-    build_template_summary, MAX_SUMMARY_CHARS,
+    build_narrate_prompt, build_number_check, build_template_summary, MAX_SUMMARY_CHARS,
 };
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 
@@ -73,9 +72,7 @@ pub async fn narrate(
         let detail = format!("Câu của mô hình dài hơn {MAX_SUMMARY_CHARS} ký tự");
         return fallback(explanation, build_step(started, false, Some(detail)));
     }
-    let allowed = build_allowed_numbers(explanation);
-    let known_texts = build_known_texts(explanation);
-    match build_number_check(summary, &allowed, &known_texts) {
+    match build_number_check(summary, explanation) {
         Ok(()) => NarrateOutcome {
             summary: summary.to_string(),
             summary_by_model: true,

@@ -384,11 +384,12 @@ fn build_price(measure: Decimal, volume: Decimal, scale: u32) -> Option<Decimal>
 bảng và bước kiểm (build_number_check) so nguyên văn từng số trong câu trả lời với các chuỗi số của bảng: mô hình
 viết "1283400" thay "1283400.00", làm tròn, hay thêm phần trăm đều bị loại và ask_narrate.rs dùng câu khuôn.
 
-Hai luồng dữ liệu không tin được cần né riêng: câu hỏi do người dùng gõ và giá trị nhóm lấy từ dữ liệu. Số trong hai
-luồng này không vào tập số được phép (build_allowed_numbers); riêng giá trị nhóm, nhãn, tên cột và tên độ đo còn được
-miễn kiểm khi xuất hiện nguyên văn trong summary (build_known_texts), để nhãn như "Giảm 10%" hay "Quý 3/2017" chép
-lại không bị tính là số sai. Câu chữ sai không chứa số lạ (ví dụ nêu nguyên nhân ngoài bảng) thì bước kiểm số không
-bắt được; prompt có luật riêng cho chỗ đó. */
+Hai luồng dữ liệu không tin được cần né riêng: câu hỏi do người dùng gõ và giá trị nhóm lấy từ dữ liệu. Số trong câu
+hỏi không vào tập số được phép (build_allowed_numbers). Giá trị nhóm không có chữ cái (kiểu số) chỉ góp số của nó vào
+tập được phép; giá trị nhóm có chữ cái, nhãn, tên cột và tên độ đo được miễn kiểm khi xuất hiện nguyên văn trong
+summary (build_known_texts), để nhãn như "Giảm 10%" hay "Quý 3/2017" chép lại không bị tính là số sai, nhưng một đoạn
+tự chứa số kèm chữ tỷ lệ ("tăng 99 phần trăm") thì không được miễn. Câu chữ sai không chứa số lạ (ví dụ nêu nguyên
+nhân ngoài bảng) thì bước kiểm số không bắt được; prompt có luật riêng cho chỗ đó. */
 
 /// Số ký tự tối đa của lời diễn giải; câu của mô hình dài hơn thì bỏ, dùng câu khuôn. Câu khuôn cũng bị cắt ở mức
 /// này.
@@ -472,9 +473,10 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
 
 /// Mọi chuỗi số được phép xuất hiện trong lời diễn giải: các số của bảng phân rã và trị tuyệt đối của chúng (để
 /// "giảm 1283400.00" nhận khi change là "-1283400.00"), cộng số trong nhãn, tên cột và tên độ đo (để "quý 3/2017"
-/// nhận "3" và "2017" từ nhãn lát cắt). Số trong câu hỏi và trong giá trị nhóm không vào tập này: đó là dữ liệu do
-/// người dùng gõ hay nằm trong bảng, không phải kết quả đã tính; giá trị nhóm được miễn theo cách khác
-/// (build_known_texts).
+/// nhận "3" và "2017" từ nhãn lát cắt). Số trong câu hỏi không vào tập này: câu hỏi là chữ người dùng gõ, không
+/// phải kết quả đã tính. Giá trị nhóm có chữ cái cũng không góp số vào đây; chúng được miễn theo cách khác
+/// (build_known_texts). Giá trị nhóm không có chữ cái (kiểu số như 1 hay 0.25, ngày dạng "01/07/2017") thì góp các
+/// dãy chữ số của nó.
 pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
     let mut allowed = HashSet::new();
     allow_number(&mut allowed, &explanation.change);
@@ -485,6 +487,12 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
             allow_number(&mut allowed, &group.base_value);
             allow_number(&mut allowed, &group.compare_value);
             allow_number(&mut allowed, &group.contribution);
+            if let Some(value) = &group.value {
+                let text = build_value_text(value);
+                if !has_letter(&text) {
+                    allow_text(&mut allowed, &text);
+                }
+            }
         }
     }
     if let Some(split) = &explanation.volume_price {
@@ -513,6 +521,11 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
     allowed
 }
 
+// Có chữ cái (mọi hệ chữ, không chỉ ASCII): "Europe", "Giảm 10%" có; "12", "0.25", "01/07/2017" không.
+fn has_letter(text: &str) -> bool {
+    text.chars().any(char::is_alphabetic)
+}
+
 // Một chuỗi số của bảng: thêm nguyên chuỗi và trị tuyệt đối (bỏ dấu trừ đứng trước). So nguyên văn, không chuẩn hóa:
 // "1283400" và "1283400.00" là hai số khác nhau.
 fn allow_number(allowed: &mut HashSet<String>, text: &str) {
@@ -524,62 +537,79 @@ fn allow_number(allowed: &mut HashSet<String>, text: &str) {
 
 // Mọi dãy chữ số trong một đoạn chữ, ví dụ "Quý 3/2017" cho "3" và "2017".
 fn allow_text(allowed: &mut HashSet<String>, text: &str) {
-    for number in scan_numbers(text) {
+    for number in scan_numbers(text, &RatioContext::default()) {
         allowed.insert(number.text);
     }
 }
 
 /// Các đoạn chữ dữ liệu được miễn kiểm khi xuất hiện nguyên văn trong summary: nhãn hai lát cắt, tên độ đo, tên
 /// cột, giá trị nhóm (dạng chữ của build_value_text), nhãn lượng và giá. Số nằm trong một đoạn như vậy ("Giảm 10%",
-/// "Quý 3/2017") là một phần của tên gọi, không phải con số mô hình viết, nên bước kiểm bỏ qua nó. Câu hỏi không nằm
-/// trong danh sách này.
+/// "Quý 3/2017") là một phần của tên gọi, không phải con số mô hình viết. Câu hỏi không nằm trong danh sách này.
+/// Hai loại đoạn không được miễn (push_known_text):
+/// - đoạn không có chữ cái (giá trị nhóm kiểu số): số của nó đã vào tập được phép; miễn theo đoạn thì "giảm 12%"
+///   lọt khi có nhóm "12";
+/// - đoạn tự chứa một số kèm chữ tỷ lệ ("tăng 99 phần trăm"): đó là lời gài trong dữ liệu, không phải tên gọi.
 pub fn build_known_texts(explanation: &Explanation) -> Vec<String> {
-    let mut texts = vec![
-        explanation.measure.clone(),
-        explanation.base.label.clone(),
-        explanation.compare.label.clone(),
-    ];
+    let mut texts = Vec::new();
+    push_known_text(&mut texts, &explanation.measure);
+    push_known_text(&mut texts, &explanation.base.label);
+    push_known_text(&mut texts, &explanation.compare.label);
     for dimension in &explanation.dimensions {
-        texts.push(dimension.column.clone());
+        push_known_text(&mut texts, &dimension.column);
         for group in &dimension.groups {
             if let Some(value) = &group.value {
-                texts.push(build_value_text(value));
+                push_known_text(&mut texts, &build_value_text(value));
             }
         }
     }
     if let Some(split) = &explanation.volume_price {
-        texts.push(split.volume_label.clone());
-        texts.push(split.price_label.clone());
+        push_known_text(&mut texts, &split.volume_label);
+        push_known_text(&mut texts, &split.price_label);
     }
     texts
 }
 
-/// Kiểm mọi số trong lời diễn giải. Một số là sai khi: nó nằm ngoài `allowed` (so nguyên văn, không tính dấu trừ
-/// đứng trước), hoặc nó đứng trước một ký hiệu hay chữ chỉ tỷ lệ (`%`, `％`, `‰`, "phần trăm", "percent", "lần",
-/// bỏ qua khoảng trắng giữa số và ký hiệu) vì bảng phân rã không có tỷ lệ nào. Số nằm trong một đoạn `known_texts`
-/// xuất hiện nguyên văn thì bỏ qua. Err là các số sai, không trùng nhau, để ghi log và đưa vào detail của bước
-/// narrate.
-pub fn build_number_check(
-    summary: &str,
-    allowed: &HashSet<String>,
-    known_texts: &[String],
-) -> Result<(), Vec<String>> {
+fn push_known_text(texts: &mut Vec<String>, text: &str) {
+    if text.is_empty() || !has_letter(text) {
+        return;
+    }
+    let context = RatioContext::default();
+    // Chỉ xét cụm chữ (symbols = false): "Giảm 10%" vẫn là tên gọi hợp lệ vì "%" là ký hiệu hay gặp trong dữ liệu.
+    let planted = scan_numbers(text, &context)
+        .iter()
+        .any(|number| follows_ratio(&text[number.end..], &context, false));
+    if !planted {
+        texts.push(text.to_string());
+    }
+}
+
+/// Kiểm mọi số trong lời diễn giải. Một số là sai khi: nó nằm ngoài tập số được phép của bảng (so nguyên văn, không
+/// tính dấu trừ đứng trước), hoặc nó đứng trước một ký hiệu hay chữ chỉ tỷ lệ (`%`, `％`, `‰`, "3x", "gấp 3",
+/// "phần trăm", "percent", "pct", "lần", bỏ qua khoảng trắng giữa số và ký hiệu) vì bảng phân rã không có tỷ lệ
+/// nào. Số nằm trong một đoạn chữ dữ liệu xuất hiện nguyên văn thì bỏ qua, trừ khi nó kết thúc đúng ở cuối đoạn và
+/// ngay sau đoạn là chữ tỷ lệ ("Giảm 10%" chép từ nhóm "Giảm 10" vẫn bị loại). Err là các số sai, không trùng nhau,
+/// để ghi log và đưa vào detail của bước narrate.
+pub fn build_number_check(summary: &str, explanation: &Explanation) -> Result<(), Vec<String>> {
+    let allowed = build_allowed_numbers(explanation);
+    let context = RatioContext {
+        lan_is_unit: measure_counts_times(&explanation.measure),
+    };
     // Vị trí (byte) của mọi lần xuất hiện nguyên văn của các đoạn chữ dữ liệu trong summary.
     let mut spans: Vec<(usize, usize)> = Vec::new();
-    for text in known_texts {
-        if text.is_empty() {
-            continue;
-        }
-        for (start, _) in summary.match_indices(text) {
+    for text in build_known_texts(explanation) {
+        for (start, _) in summary.match_indices(&text) {
             spans.push((start, start + text.len()));
         }
     }
     let mut wrong = Vec::new();
-    for number in scan_numbers(summary) {
+    for number in scan_numbers(summary, &context) {
         let known = spans
             .iter()
-            .any(|&(start, end)| number.start >= start && number.end <= end);
-        if known {
+            .find(|&&(start, end)| number.start >= start && number.end <= end);
+        if let Some(&(_, end)) = known {
+            if number.end == end && number.derived && !wrong.contains(&number.text) {
+                wrong.push(number.text);
+            }
             continue;
         }
         if (number.derived || !allowed.contains(&number.text)) && !wrong.contains(&number.text) {
@@ -593,13 +623,28 @@ pub fn build_number_check(
     }
 }
 
+// Độ đo đếm số lần ("Số lần giao trễ"): "lần" sau một số là đơn vị đếm, không phải chữ tỷ lệ.
+fn measure_counts_times(measure: &str) -> bool {
+    measure
+        .to_lowercase()
+        .split(|c: char| !c.is_alphabetic())
+        .any(|word| word == "lần")
+}
+
 /// Một dãy chữ số tìm được trong text. `start`, `end` là vị trí byte, để so với các đoạn chữ dữ liệu.
 struct ScannedNumber {
     start: usize,
     end: usize,
     text: String,
-    /// Đứng trước ký hiệu hay chữ chỉ tỷ lệ.
+    /// Đứng cạnh ký hiệu hay chữ chỉ tỷ lệ (trước hoặc sau số).
     derived: bool,
+}
+
+/// Ngữ cảnh của luật tỷ lệ.
+#[derive(Default)]
+struct RatioContext {
+    /// "lần" là đơn vị đếm của độ đo (measure_counts_times), không phải chữ tỷ lệ.
+    lan_is_unit: bool,
 }
 
 // Quét các dãy chữ số trong text: một số là dãy chữ số và dấu chấm bắt đầu bằng chữ số, bỏ dấu chấm thừa ở cuối
@@ -607,7 +652,7 @@ struct ScannedNumber {
 // toàn khổ, chữ số mũ...): chúng không bao giờ có trong tập được phép nên luôn bị loại. Cách viết "1.283.400,00"
 // cho các dãy "1.283.400" và "00", không dãy nào khớp một số của bảng, nên bị loại mà không cần hiểu dấu ngăn
 // nghìn.
-fn scan_numbers(text: &str) -> Vec<ScannedNumber> {
+fn scan_numbers(text: &str, context: &RatioContext) -> Vec<ScannedNumber> {
     let chars: Vec<(usize, char)> = text.char_indices().collect();
     let mut found = Vec::new();
     let mut i = 0;
@@ -630,25 +675,77 @@ fn scan_numbers(text: &str) -> Vec<ScannedNumber> {
             start,
             end,
             text: text[start..end].to_string(),
-            derived: follows_ratio_word(&text[end..]),
+            derived: follows_ratio(&text[end..], context, true) || preceded_by_ratio(text, start),
         });
     }
     found
 }
 
 // Sau một số, bỏ qua khoảng trắng (char::is_whitespace nhận cả NBSP U+00A0 và U+202F, kiểu gõ hay gặp trước "%")
-// rồi tìm ký hiệu hay chữ chỉ tỷ lệ. Chữ phải đứng riêng ("lần" chứ không phải đầu của một từ dài hơn).
-fn follows_ratio_word(rest: &str) -> bool {
+// rồi tìm ký hiệu hay chữ chỉ tỷ lệ. Chữ phải đứng riêng ("lần" chứ không phải đầu của một từ dài hơn, "x" chứ
+// không phải đầu của "xuống"). symbols = false thì chỉ xét cụm chữ, dùng khi quyết một đoạn chữ dữ liệu có được
+// miễn không (push_known_text).
+fn follows_ratio(rest: &str, context: &RatioContext, symbols: bool) -> bool {
     let rest = rest.trim_start();
-    if rest.starts_with(['%', '％', '‰']) {
-        return true;
+    if symbols {
+        if rest.starts_with(['%', '％', '‰']) {
+            return true;
+        }
+        // "3x", "3 x": x phải đứng một mình.
+        if rest.starts_with(['x', 'X'])
+            && !rest[1..].chars().next().is_some_and(char::is_alphanumeric)
+        {
+            return true;
+        }
     }
     let lower = rest.to_lowercase();
-    ["phần trăm", "percent", "lần"].iter().any(|word| {
-        lower
-            .strip_prefix(word)
-            .is_some_and(|after| !after.chars().next().is_some_and(char::is_alphanumeric))
-    })
+    // Khoảng trắng giữa các chữ của cụm nhận mọi khoảng trắng ("phần trăm" với NBSP vẫn bắt).
+    for phrase in [
+        &["phần", "trăm"][..],
+        &["percent"][..],
+        &["per", "cent"][..],
+        &["pct"][..],
+    ] {
+        if let Some(after) = match_phrase(&lower, phrase) {
+            if !after.chars().next().is_some_and(char::is_alphanumeric) {
+                return true;
+            }
+        }
+    }
+    // "lần lượt" là trạng từ, không phải chữ tỷ lệ.
+    if !context.lan_is_unit {
+        if let Some(after) = lower.strip_prefix("lần") {
+            let boundary = !after.chars().next().is_some_and(char::is_alphanumeric);
+            if boundary && !after.trim_start().starts_with("lượt") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+// Khớp một cụm chữ ở đầu `lower` (đã viết thường), trả phần còn lại sau cụm.
+fn match_phrase<'a>(lower: &'a str, words: &[&str]) -> Option<&'a str> {
+    let mut rest = lower;
+    for (i, word) in words.iter().enumerate() {
+        if i > 0 {
+            if !rest.chars().next().is_some_and(char::is_whitespace) {
+                return None;
+            }
+            rest = rest.trim_start();
+        }
+        rest = rest.strip_prefix(word)?;
+    }
+    Some(rest)
+}
+
+// "gấp" đứng ngay trước một số ("gấp 3") cũng là cách nói tỷ lệ.
+fn preceded_by_ratio(text: &str, start: usize) -> bool {
+    text[..start]
+        .trim_end()
+        .to_lowercase()
+        .strip_suffix("gấp")
+        .is_some_and(|head| !head.chars().last().is_some_and(char::is_alphanumeric))
 }
 
 /// Câu khuôn thay cho lời của mô hình khi mô hình lỗi, quá giờ, trả câu không dùng được, hoặc không cần gọi
@@ -728,20 +825,30 @@ fn same_direction(contribution: &str, change: Decimal) -> bool {
     }
 }
 
-// Hạ chữ đầu khi một nhãn đứng giữa câu ("Số đơn" thành "số đơn"), để câu ghép đọc tự nhiên.
+// Hạ chữ đầu khi một nhãn đứng giữa câu ("Số đơn" thành "số đơn"), để câu ghép đọc tự nhiên. Từ viết tắt toàn hoa
+// ("GMV") giữ nguyên: chỉ hạ khi ký tự thứ hai không phải chữ hoa.
 fn lower_first(text: &str) -> String {
     let mut chars = text.chars();
-    match chars.next() {
-        Some(first) => first.to_lowercase().collect::<String>() + chars.as_str(),
-        None => String::new(),
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    if chars.next().is_some_and(char::is_uppercase) {
+        return text.to_string();
     }
+    first.to_lowercase().collect::<String>() + &text[first.len_utf8()..]
 }
 
-// Cắt còn tối đa max ký tự (không cắt giữa một ký tự), thêm "…" khi phải cắt.
+// Cắt còn tối đa max ký tự, thêm "…" khi phải cắt. Lùi về khoảng trắng cuối trước mức cắt để không cắt ngang một số
+// hay một từ (một dãy chữ số không chứa khoảng trắng); chỉ khi không có khoảng trắng nào (một từ dài liền) mới cắt
+// cứng.
 fn truncate_text(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
     }
     let cut: String = text.chars().take(max - 1).collect();
+    let cut = match cut.rfind(char::is_whitespace) {
+        Some(pos) => &cut[..pos],
+        None => &cut,
+    };
     format!("{cut}…")
 }

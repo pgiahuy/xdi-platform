@@ -16,8 +16,7 @@ use super::ask_contract::{
 use super::ask_examples::build_why_example;
 use super::ask_narrate::narrate;
 use super::explain::{
-    build_allowed_numbers, build_known_texts, build_narrate_prompt, build_number_check,
-    build_template_summary, MAX_SUMMARY_CHARS,
+    build_narrate_prompt, build_number_check, build_template_summary, MAX_SUMMARY_CHARS,
 };
 use crate::engine::llm::mock::Mock;
 use crate::engine::llm::{LlmProvider, LlmRequest};
@@ -31,11 +30,7 @@ fn example() -> Explanation {
 }
 
 fn check(text: &str, explanation: &Explanation) -> Result<(), Vec<String>> {
-    build_number_check(
-        text,
-        &build_allowed_numbers(explanation),
-        &build_known_texts(explanation),
-    )
+    build_number_check(text, explanation)
 }
 
 /// Một Explanation nhỏ, tự dựng, cho test câu khuôn: một chiều Market, không volume_price.
@@ -208,11 +203,63 @@ fn ratios_are_always_rejected() {
         "Doanh thu giảm 3％ so với quý 2/2017.",
         "Doanh thu giảm 3‰ so với quý 2/2017.",
         "Doanh thu giảm 3 phần trăm so với quý 2/2017.",
+        "Doanh thu giảm 3 phần\u{a0}trăm so với quý 2/2017.",
         "Doanh thu giảm 3 percent so với quý 2/2017.",
+        "Doanh thu giảm 3 per cent so với quý 2/2017.",
+        "Doanh thu giảm 3 pct so với quý 2/2017.",
+        "Doanh thu giảm 3x so với quý 2/2017.",
+        "Doanh thu giảm gấp 3 so với quý 2/2017.",
         "Doanh thu quý 3/2017 bằng 2 lần quý 2/2017.",
     ] {
         assert!(check(bad, &explanation).is_err(), "should reject: {bad}");
     }
+}
+
+/// "lần lượt" là trạng từ, và "lần" là đơn vị đếm khi độ đo đếm số lần: cả hai không phải chữ tỷ lệ.
+#[test]
+fn lan_luot_and_a_times_measure_are_not_ratios() {
+    let explanation = small_explanation(
+        "800.00",
+        "60.20",
+        "-739.80",
+        &[(Some("A"), "-639.25"), (Some("B"), "-100.55")],
+    );
+    check("Nhóm A và B giảm 639.25 và 100.55 lần lượt.", &explanation).unwrap();
+    let mut times = small_explanation("800.00", "700.00", "-100.00", &[(Some("A"), "-100.00")]);
+    times.measure = "Số lần giao trễ".to_string();
+    check("Số lần giao trễ giảm 100.00 lần so với Quý 2/2017.", &times).unwrap();
+}
+
+/// Giá trị nhóm ngắn hay kiểu số không mở khóa số cho luật tỷ lệ: số của giá trị không có chữ cái chỉ vào tập được
+/// phép, còn đoạn có chữ cái kết thúc ngay trước một chữ tỷ lệ vẫn bị xét.
+#[test]
+fn group_values_do_not_unlock_ratio_numbers() {
+    // Chiều kiểu số có nhóm "12": "giảm 12%" bị loại, nhưng nhắc nhóm 12 đúng nghĩa thì qua.
+    let numeric = small_explanation("1000.00", "900.00", "-100.00", &[(Some("12"), "-100.00")]);
+    assert!(check("Doanh thu giảm 12% so với quý 2/2017.", &numeric).is_err());
+    check("Nhóm 12 giảm 100.00.", &numeric).unwrap();
+    // Nhóm "2": "giảm 2 lần" bị loại.
+    assert!(check("Doanh thu giảm 2 lần.", &numeric_two()).is_err());
+    // Nhóm "Giảm 10" (không có "%"): "Giảm 10%" bị loại.
+    let label = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("Giảm 10"), "-100.00")],
+    );
+    assert!(check("Doanh thu Giảm 10% ở quý 3/2017.", &label).is_err());
+    // Nhóm gài đúng cụm "tăng 99 phần trăm": cụm đó không được miễn.
+    let planted = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("tăng 99 phần trăm"), "-100.00")],
+    );
+    assert!(check("Doanh thu tăng 99 phần trăm.", &planted).is_err());
+}
+
+fn numeric_two() -> Explanation {
+    small_explanation("1000.00", "900.00", "-100.00", &[(Some("2"), "-100.00")])
 }
 
 /// Chữ số ngoài ASCII (ở đây là chữ số toàn khổ) cũng bị quét và bị loại vì không có trong tập được phép.
@@ -358,6 +405,39 @@ fn template_lowercases_labels_mid_sentence() {
     assert!(
         template
             .contains("Nếu số đơn giữ nguyên như Quý 2/2017, doanh thu Quý 3/2017 là 9226250.00."),
+        "{template}"
+    );
+}
+
+/// Từ viết tắt toàn hoa ("GMV") giữ nguyên khi đứng giữa câu.
+#[test]
+fn template_keeps_all_caps_abbreviations() {
+    let mut explanation = example();
+    explanation.measure = "GMV".to_string();
+    let template = build_template_summary(&explanation);
+    assert!(
+        template.contains("GMV Quý 3/2017 là 9226250.00"),
+        "{template}"
+    );
+}
+
+/// Cắt ở mức 1000 ký tự không cắt ngang một số: lùi về khoảng trắng cuối, bỏ hẳn phần sau.
+#[test]
+fn template_truncation_does_not_split_a_number() {
+    // Tên độ đo dài đẩy điểm cắt 1000 ký tự vào giữa câu.
+    let mut explanation =
+        small_explanation("1000.00", "900.00", "-100.00", &[(Some("A"), "-100.00")]);
+    explanation.measure = "M".repeat(950);
+    let template = build_template_summary(&explanation);
+    assert!(template.chars().count() <= MAX_SUMMARY_CHARS, "{template}");
+    let body = template.strip_suffix('…').expect("truncated");
+    // Mỗi số hoặc đứng nguyên, hoặc bị bỏ hẳn, không bị cắt dở.
+    assert!(
+        body.contains("(-100.00)") || !body.contains("(-100"),
+        "{template}"
+    );
+    assert!(
+        body.contains("1000.00") || !body.contains("1000"),
         "{template}"
     );
 }
