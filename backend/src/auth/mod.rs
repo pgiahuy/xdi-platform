@@ -11,7 +11,7 @@ pub mod token;
 
 use uuid::Uuid;
 
-use crate::engine::store::{Membership, PendingVersion, Store, User};
+use crate::engine::store::{Membership, PendingVersion, SemanticCandidate, Store, User};
 use crate::error::AppError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,6 +99,18 @@ pub async fn pending_profiles(
     store: &Store,
 ) -> Result<Vec<(WorkspaceId, PendingVersion)>, AppError> {
     let versions = store.list_pending_versions().await?;
+    Ok(versions
+        .into_iter()
+        .map(|v| (WorkspaceId(v.workspace_id), v))
+        .collect())
+}
+
+/// Như pending_profiles nhưng cho lớp ngữ nghĩa: phiên bản ở structure chưa từng thử, kèm WorkspaceId dựng từ chính
+/// dòng đọc được. Việc nền lúc khởi động (service/semantic.rs) dùng, không gắn với người dùng nào.
+pub async fn pending_semantic_profiles(
+    store: &Store,
+) -> Result<Vec<(WorkspaceId, SemanticCandidate)>, AppError> {
+    let versions = store.list_semantic_candidates().await?;
     Ok(versions
         .into_iter()
         .map(|v| (WorkspaceId(v.workspace_id), v))

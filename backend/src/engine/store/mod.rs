@@ -33,7 +33,8 @@ pub use columns::{
 };
 #[allow(unused_imports)]
 pub use datasets::{
-    Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SourceKind,
+    Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SemanticCandidate,
+    SourceKind,
 };
 pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]

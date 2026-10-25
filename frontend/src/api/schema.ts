@@ -628,6 +628,11 @@ export interface components {
         Dataset: {
             /** Format: date-time */
             created_at: string;
+            /**
+             * @description Profile status of the current version (`pending`, `structure`, `semantic`, `failed`); null while the dataset
+             *     has no current version. The UI polls it to know when the semantic profile is done.
+             */
+            current_profile_status: string | null;
             /** Format: uuid */
             current_version_id: string | null;
             domain: string | null;

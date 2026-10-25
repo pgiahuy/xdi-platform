@@ -59,6 +59,11 @@ pub struct Dataset {
     pub domain: Option<String>,
     #[schema(required)]
     pub current_version_id: Option<Uuid>,
+    /// Profile status of the current version (`pending`, `structure`, `semantic`, `failed`); null while the dataset
+    /// has no current version. The UI polls it to know when the semantic profile is done.
+    #[schema(required)]
+    #[sqlx(default)]
+    pub current_profile_status: Option<String>,
     /// Suggested questions of the current version, written by the semantic profile (#23); empty while that step has
     /// not finished.
     #[schema(required)]
@@ -102,12 +107,22 @@ pub struct PendingVersion {
     pub row_count: Option<i64>,
 }
 
+/// Phiên bản đã có hồ sơ cấu trúc mà chưa qua lớp ngữ nghĩa, ở bất kỳ workspace nào (xem list_semantic_candidates).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SemanticCandidate {
+    pub workspace_id: Uuid,
+    pub id: Uuid,
+    pub dataset_id: Uuid,
+    pub row_count: Option<i64>,
+}
+
 const DATASET_COLUMNS: &str = "id, name, logical_table, domain, current_version_id, created_at";
 // Cùng danh sách đó kèm câu hỏi gợi ý, có tiền tố bảng, dùng khi câu SQL nối datasets với phiên bản hiện hành.
 // suggested_questions là jsonb trên dataset_versions; dataset chưa có phiên bản hiện hành (mới tạo, chưa nạp xong)
 // hay phiên bản chưa qua lớp ngữ nghĩa thì ra mảng rỗng.
 const DATASET_COLUMNS_D: &str =
     "d.id, d.name, d.logical_table, d.domain, d.current_version_id, d.created_at, \
+    v.profile_status AS current_profile_status, \
     COALESCE(v.suggested_questions, '[]'::jsonb) AS suggested_questions";
 const CURRENT_VERSION_JOIN: &str =
     "FROM datasets d LEFT JOIN dataset_versions v ON v.workspace_id = d.workspace_id \
@@ -430,6 +445,41 @@ impl Store {
         if r.rows_affected() == 0 {
             return Err(AppError::NotFound("Không tìm thấy phiên bản".to_string()));
         }
+        Ok(())
+    }
+
+    /// Phiên bản đang ở structure và chưa từng thử lớp ngữ nghĩa, ở mọi workspace, cũ nhất trước. Ngoại lệ có chủ
+    /// đích của quy tắc lọc theo WorkspaceId, như list_pending_versions: việc nền lúc khởi động lập hồ sơ ngữ nghĩa
+    /// cho phiên bản nạp trước khi có bước này (#23), lúc đó chưa có workspace nào để lọc. Phiên bản đã thử mà lỗi
+    /// (semantic_attempted_at đã đặt) không nằm trong danh sách, để lỗi vĩnh viễn không bị gọi lại mỗi lần khởi động.
+    pub async fn list_semantic_candidates(&self) -> Result<Vec<SemanticCandidate>, AppError> {
+        sqlx::query_as(
+            "SELECT workspace_id, id, dataset_id, row_count FROM dataset_versions
+             WHERE profile_status = $1 AND semantic_attempted_at IS NULL ORDER BY created_at",
+        )
+        .bind(ProfileStatus::Structure.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| db_error("list semantic candidates", e))
+    }
+
+    /// Đánh dấu đã thử lớp ngữ nghĩa (và lỗi): việc nền lúc khởi động không chọn lại phiên bản này. Chỉ đặt khi
+    /// phiên bản còn ở structure: đã semantic thì không cần, và không ghi đè một lượt vừa thành công.
+    pub async fn mark_semantic_attempted(
+        &self,
+        ws: &WorkspaceId,
+        version_id: Uuid,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "UPDATE dataset_versions SET semantic_attempted_at = now()
+             WHERE workspace_id = $1 AND id = $2 AND profile_status = $3",
+        )
+        .bind(ws.as_uuid())
+        .bind(version_id)
+        .bind(ProfileStatus::Structure.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| db_error("mark semantic attempted", e))?;
         Ok(())
     }
 }

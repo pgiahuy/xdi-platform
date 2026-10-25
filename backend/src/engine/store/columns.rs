@@ -245,16 +245,42 @@ impl Store {
         .map_err(|e| db_error("list column values", e))
     }
 
-    /// Ghi hồ sơ lớp ngữ nghĩa (#23) cho một phiên bản: mô tả, bí danh và vai trò mới của cột, bí danh giá trị, câu
-    /// hỏi gợi ý, rồi chuyển profile_status sang semantic, trong một giao dịch. Như insert_profile, câu UPDATE đầu
-    /// khóa dòng phiên bản và chỉ nhận phiên bản đang ở structure, nên hai lần ghi cùng lúc thì lần sau thấy semantic
-    /// và bỏ qua (trả false, không ghi gì). Câu hỏi gợi ý nằm trên dataset_versions vì chúng đi theo phiên bản.
+    /// Đánh dấu cột nhạy cảm theo luật của service/semantic.rs (tên cột, dạng giá trị), trước khi dựng prompt. Chỉ
+    /// một chiều false -> true; chạy riêng với giao dịch ghi hồ sơ để lỗi mô hình không làm mất đánh dấu.
+    pub async fn mark_columns_sensitive(
+        &self,
+        ws: &WorkspaceId,
+        version_id: Uuid,
+        column_ids: &[Uuid],
+    ) -> Result<(), AppError> {
+        if column_ids.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(
+            "UPDATE columns SET is_sensitive = true
+             WHERE workspace_id = $1 AND version_id = $2 AND id = ANY($3)",
+        )
+        .bind(ws.as_uuid())
+        .bind(version_id)
+        .bind(column_ids)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| db_error("mark sensitive columns", e))?;
+        Ok(())
+    }
+
+    /// Ghi hồ sơ lớp ngữ nghĩa (#23) cho một phiên bản: mô tả, bí danh và vai trò mới của cột, cột nhạy cảm do mô
+    /// hình đề xuất thêm (chỉ chiều false -> true), bí danh giá trị, câu hỏi gợi ý, rồi chuyển profile_status sang
+    /// semantic, trong một giao dịch. Như insert_profile, câu UPDATE đầu khóa dòng phiên bản và chỉ nhận phiên bản
+    /// đang ở structure, nên hai lần ghi cùng lúc thì lần sau thấy semantic và bỏ qua (trả false, không ghi gì).
+    /// Câu hỏi gợi ý nằm trên dataset_versions vì chúng đi theo phiên bản.
     pub async fn apply_semantic_profile(
         &self,
         ws: &WorkspaceId,
         version_id: Uuid,
         columns: &[SemanticColumnUpdate],
         values: &[SemanticValueUpdate],
+        sensitive_columns: &[Uuid],
         suggested_questions: &[String],
     ) -> Result<bool, AppError> {
         let mut tx = self
@@ -306,6 +332,17 @@ impl Store {
             .execute(&mut *tx)
             .await
             .map_err(|e| db_error("update value aliases", e))?;
+        }
+        // Cột nhạy cảm do mô hình đề xuất thêm: chỉ đặt, không bao giờ gỡ (mô hình không nói gì thì giữ nguyên).
+        if !sensitive_columns.is_empty() {
+            sqlx::query(
+                "UPDATE columns SET is_sensitive = true WHERE workspace_id = $1 AND id = ANY($2)",
+            )
+            .bind(ws.as_uuid())
+            .bind(sensitive_columns)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("mark llm-suggested sensitive columns", e))?;
         }
         tx.commit()
             .await
@@ -608,24 +645,26 @@ mod tests {
             aliases: vec!["châu Âu".to_string()],
         }];
         let questions = vec!["Doanh thu theo thị trường".to_string()];
+        // Mô hình đề xuất đánh dấu thêm cột nhạy cảm (chỉ chiều false -> true).
+        let sensitive = vec![read[1].id];
 
         // Phiên bản pending và workspace khác đều bị từ chối.
         assert!(!store
-            .apply_semantic_profile(&a, pending.id, &updates, &values, &questions)
+            .apply_semantic_profile(&a, pending.id, &updates, &values, &sensitive, &questions)
             .await
             .unwrap());
         assert!(!store
-            .apply_semantic_profile(&b, v.id, &updates, &values, &questions)
+            .apply_semantic_profile(&b, v.id, &updates, &values, &sensitive, &questions)
             .await
             .unwrap());
 
         assert!(store
-            .apply_semantic_profile(&a, v.id, &updates, &values, &questions)
+            .apply_semantic_profile(&a, v.id, &updates, &values, &sensitive, &questions)
             .await
             .unwrap());
         // Ghi lần hai (hai lượt chạy song song) không đổi gì.
         assert!(!store
-            .apply_semantic_profile(&a, v.id, &[], &[], &[])
+            .apply_semantic_profile(&a, v.id, &[], &[], &[], &[])
             .await
             .unwrap());
 
@@ -633,7 +672,9 @@ mod tests {
         assert_eq!(read[0].description.as_deref(), Some("Thị trường"));
         assert_eq!(read[0].aliases, ["thị trường"]);
         assert_eq!(read[0].role, "dimension");
+        assert!(!read[0].is_sensitive);
         assert_eq!(read[1].role, "key");
+        assert!(read[1].is_sensitive);
         let vals = store.list_column_values(&a, &[read[0].id]).await.unwrap();
         let europe = vals.iter().find(|v| v.value == "Europe").unwrap();
         assert_eq!(europe.aliases, ["châu Âu"]);

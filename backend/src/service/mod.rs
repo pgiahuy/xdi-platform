@@ -53,5 +53,7 @@ mod explain_tests;
 pub mod ingest;
 pub mod profile;
 pub mod semantic;
+#[cfg(test)]
+mod semantic_tests;
 pub mod users;
 pub mod workspaces;

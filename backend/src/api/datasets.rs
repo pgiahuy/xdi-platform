@@ -693,4 +693,97 @@ mod tests {
         // Không có thư mục staging cũng không lỗi.
         crate::service::ingest::clear_staging(&data.0);
     }
+
+    const DATACO_CSV: &[u8] = b"Type,Market,Order Id,Product Image,Order Item Total\n\
+        DEBIT,Europe,1,img/1.jpg,100.5\n\
+        CASH,LATAM,1,img/2.jpg,200.0\n\
+        DEBIT,Europe,2,img/1.jpg,150.25\n";
+
+    /// Nạp xong, hồ sơ ngữ nghĩa chạy nền tới xong: dataset tên DataCo (bảng logic dataco) nhận hồ sơ mock — mô tả,
+    /// bí danh, vai trò sửa, 5 câu gợi ý, current_profile_status thành semantic. Xóa dòng spawn trong ingest thì test
+    /// này đỏ.
+    #[tokio::test]
+    async fn upload_spawns_the_semantic_profile() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone();
+            // Tường minh mock, không theo biến môi trường của máy chạy test.
+            c.llm_provider = "mock".to_string();
+        });
+        let lan = setup(&app).await;
+
+        let (status, body) =
+            upload(&app, &lan, &[("name", "DataCo")], &[("d.csv", DATACO_CSV)]).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(body["version"]["profile_status"], "structure");
+        let dataset_id = body["dataset"]["id"].as_str().unwrap().to_string();
+        let url = format!("{URL}/{dataset_id}");
+
+        let mut detail = serde_json::Value::Null;
+        for _ in 0..100 {
+            let (_, _, body) = call(&app, "GET", &url, Some(&lan), None).await;
+            if body["current_profile_status"] == "semantic" {
+                detail = body;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(detail["current_profile_status"], "semantic", "{detail}");
+        assert_eq!(
+            detail["suggested_questions"].as_array().map(Vec::len),
+            Some(5),
+            "{detail}"
+        );
+
+        db.drop().await;
+    }
+
+    /// Mô hình lỗi (provider ollama trỏ vào cổng không nghe): lần nạp vẫn 201, phiên bản giữ structure và được đánh
+    /// dấu đã thử; nạp lại đúng bộ file đó trả 200 created = false và gọi lại mô hình lần nữa (vẫn lỗi, vẫn 200).
+    #[tokio::test]
+    async fn llm_failure_does_not_block_the_upload() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone();
+            c.llm_provider = "ollama".to_string();
+            // Cổng 9 (discard) hầu như luôn không có gì nghe: kết nối bị từ chối ngay, không phải chờ timeout.
+            c.ollama_url = "http://127.0.0.1:9".to_string();
+        });
+        let lan = setup(&app).await;
+
+        let (status, body) =
+            upload(&app, &lan, &[("name", "DataCo")], &[("d.csv", DATACO_CSV)]).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let version_id = body["version"]["id"].as_str().unwrap().to_string();
+        let attempted = format!(
+            "SELECT count(*) FROM dataset_versions WHERE id = '{version_id}' AND semantic_attempted_at IS NOT NULL"
+        );
+        for _ in 0..100 {
+            if fetch_count(&db.store, &attempted).await == 1 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(fetch_count(&db.store, &attempted).await, 1);
+        let status_of = format!(
+            "SELECT count(*) FROM dataset_versions WHERE id = '{version_id}' AND profile_status = 'structure'"
+        );
+        assert_eq!(fetch_count(&db.store, &status_of).await, 1);
+
+        // Nạp lại đúng bộ file: không tạo gì mới, nhưng là đường thử lại tường minh của lớp ngữ nghĩa.
+        let (status, body) =
+            upload(&app, &lan, &[("name", "DataCo")], &[("d.csv", DATACO_CSV)]).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["created"], false);
+
+        db.drop().await;
+    }
 }

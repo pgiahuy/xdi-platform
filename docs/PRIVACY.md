@@ -35,14 +35,15 @@ Nội dung gửi (thiết kế):
 
 | Lúc | Gửi | Không gửi |
 |---|---|---|
-| Nạp dữ liệu, viết mô tả cột | Tên cột, kiểu, min, max, vài giá trị mẫu của mỗi cột, giá trị phân loại của cột ít giá trị | Các dòng dữ liệu |
+| Nạp dữ liệu, lập hồ sơ ngữ nghĩa (mô tả, bí danh cột và giá trị, câu hỏi gợi ý) | Tên dataset; mỗi cột: tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác nhau; min, max của cột thời gian và cột độ đo số thực; giá trị của cột phân loại ít giá trị (tối đa 50 giá trị một cột, 400 giá trị một lần, bỏ giá trị dài quá 200 byte) | Các dòng dữ liệu; giá trị của cột chữ tự do, cột khóa và cột nhạy cảm (backend tự đánh dấu theo tên cột như email, mật khẩu, số điện thoại, địa chỉ, họ tên, và theo giá trị có dạng email hay số điện thoại) |
 | Hỏi | Câu hỏi; tên, kiểu, mô tả, bí danh của các cột: cả bảng khi bảng tới 60 cột, bảng nhiều cột hơn thì chỉ các cột khớp câu hỏi và cột thời gian; danh sách giá trị của mỗi cột phân loại (cột chiều) không đánh dấu nhạy cảm, kèm bí danh: đủ khi cột tới 50 giá trị, 20 giá trị nhiều dòng nhất khi nhiều hơn, tối đa 400 giá trị mỗi câu hỏi; vài câu hỏi đã trả lời đúng trước đó trong cùng workspace | Các dòng dữ liệu; giá trị của cột đánh dấu nhạy cảm; dữ liệu của workspace khác |
 | SQL chạy lỗi hoặc dùng bảng, cột không có, sửa một lần | Prompt của lần hỏi, SQL vừa sinh và thông báo lỗi của DuckDB hay lý do guard từ chối. Thông báo của DuckDB có thể chép một giá trị của dữ liệu, ví dụ chuỗi ngày không đọc được | Đường dẫn file trên máy chủ |
 | Diễn giải câu "tại sao" | Bảng phân rã đã tính: nhóm và phần đóng góp của từng nhóm | Các dòng dữ liệu gốc |
 
 Lưu ý: giá trị mẫu và giá trị phân loại là dữ liệu thật của bạn, ví dụ tên khu vực hay tên sản phẩm. Cột chữ có ít
-giá trị khác nhau được tính là cột phân loại, nên ở bảng nhỏ một cột như tên khách hàng hay địa chỉ cũng có thể được
-gửi danh sách giá trị cho tới khi được đánh dấu nhạy cảm. Nếu dữ liệu nhạy cảm, dùng `mock` hoặc Ollama chạy nội bộ.
+giá trị khác nhau được tính là cột phân loại; backend tự đánh dấu nhạy cảm theo tên cột và dạng giá trị khi nạp, nhưng
+một cột không khớp luật (ví dụ tên khách hàng đặt tên khác thường) vẫn có thể được gửi cho tới khi được đánh dấu. Nếu
+dữ liệu nhạy cảm, dùng `mock` hoặc Ollama chạy nội bộ.
 
 Không bao giờ gửi: mật khẩu, khóa API của bạn cho nhà cung cấp khác, token đăng nhập.
 

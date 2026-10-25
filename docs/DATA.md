@@ -190,25 +190,41 @@ Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order Ci
 ## Hồ sơ lớp ngữ nghĩa
 
 Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
-(`service/semantic.rs`): mô hình đề xuất mô tả và bí danh cột, bí danh giá trị, câu hỏi gợi ý, và sửa vai trò cột
-trong phạm vi hẹp. Xong thì `profile_status` là `semantic`; mô hình lỗi hay trả lời hỏng thì giữ `structure`, chỉ ghi
-log, người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới.
-Nạp trùng (không tạo phiên bản) không gọi lại.
+(`service/semantic.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, bí danh giá trị, câu hỏi gợi
+ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì `profile_status` là `semantic`; mô
+hình lỗi hay trả lời hỏng thì giữ `structure`, ghi log và đánh dấu đã thử (`semantic_attempted_at`), người nạp không
+nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Hai đường thử lại cho
+phiên bản còn ở `structure`: mỗi lần khởi động, backend chạy lớp ngữ nghĩa cho các phiên bản chưa từng thử (gồm cả
+phiên bản nạp trước khi có bước này); và nạp lại đúng bộ file cũ thì gọi lại một lần nữa. Phiên bản đã thử mà lỗi
+không bị việc khởi động gọi lại, để lỗi vĩnh viễn (thiếu khóa, mock không có bảng) không lặp mỗi lần mở máy.
 
 Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác
-nhau; min, max chỉ kèm cột `measure` và `time` (min, max của cột chữ có thể là một giá trị thật của người dùng);
-danh sách giá trị chỉ gửi cho cột `dimension` không nhạy cảm (`is_sensitive`). Giá trị của cột `text`, `key` hay cột
-nhạy cảm không bao giờ vào prompt.
+nhau; min, max chỉ kèm cột `time` và `measure` số thực (min, max của cột chữ hay mã số nguyên như mã đơn, số điện
+thoại là dữ liệu thật); danh sách giá trị chỉ gửi cho cột `dimension` không nhạy cảm, tối đa 50 giá trị một cột (cột
+nhiều hơn gửi 20 giá trị nhiều dòng nhất), tổng tối đa 400 giá trị, bỏ giá trị dài quá 200 byte. Tên cột và giá trị
+in dạng chuỗi JSON nên dữ liệu không chèn được dòng giả vào prompt. Giá trị của cột `text`, `key` hay cột nhạy cảm
+không bao giờ vào prompt.
+
+Cột nhạy cảm (`is_sensitive`) được đặt ở hai nơi: trước khi dựng prompt, code đánh dấu theo luật đơn giản — tên cột
+(bỏ dấu, chữ thường) chứa một cụm như email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên (danh sách ở
+`SENSITIVE_NAME_PARTS`), hoặc phần lớn giá trị của cột trông như email hay số điện thoại — và ghi ngay vào Postgres,
+không phụ thuộc mô hình chạy được không; trong câu trả lời, mô hình đề xuất đánh dấu thêm qua `sensitive_columns`
+(chỉ chiều đặt, không bao giờ gỡ, có hiệu lực từ các lần sau). Luật tên cố ý đơn giản và nghiêng về đánh dấu nhầm còn
+hơn bỏ sót.
 
 Câu trả lời được kiểm từng mục trước khi ghi, mục sai bỏ riêng: cột và giá trị phải có thật (giá trị phải nằm trong
 `column_values`), mô tả tối đa 300 ký tự, tối đa 8 bí danh mỗi mục và mỗi bí danh tối đa 60 ký tự, tối đa 5 câu gợi
-ý và mỗi câu tối đa 200 ký tự. Đổi vai trò chỉ nhận hai chiều: cột số nguyên đang là `measure` thành `key` (mã lặp
-lại như `Order Id`, mã bưu điện) hoặc `dimension` (năm, tháng dạng số), và cột `dimension` thành `text` (đường dẫn
-ảnh, mô tả dài). Cột thành `text` thì giá trị của nó không đi vào prompt về sau, vì các bước sau chọn giá trị theo
-vai trò.
+ý và mỗi câu tối đa 200 ký tự. Chuỗi rỗng sau trim hay có ký tự điều khiển (NUL, xuống dòng) bị bỏ — một chuỗi như
+vậy nếu qua sẽ làm Postgres từ chối cả giao dịch ghi. Bí danh không được trùng (sau khi bỏ dấu, chữ thường) với tên
+cột khác, giá trị khác cùng cột, hay bí danh đã nhận của cùng mục. Đổi vai trò chỉ nhận hai chiều: cột số nguyên đang
+là `measure` thành `key` (mã lặp lại như `Order Id`) hoặc thành `dimension` khi có không quá 200 giá trị khác nhau
+(năm, tháng dạng số; nhiều hơn thì cột chiều mới sẽ không có danh sách giá trị), và cột `dimension` thành `text`
+(đường dẫn ảnh, mô tả dài). Mỗi đổi vai trò được ghi log (tên cột, vai trò cũ, mới). Cột thành `text` thì giá trị của
+nó không đi vào prompt về sau, vì các bước sau chọn giá trị theo vai trò.
 
 Câu hỏi gợi ý lưu ở `dataset_versions.suggested_questions` (đi theo phiên bản) và trả ra trong
-`GET /api/workspaces/{slug}/datasets` và `.../datasets/{id}` (của phiên bản hiện hành); trang hỏi hiện chúng ở
+`GET /api/workspaces/{slug}/datasets` và `.../datasets/{id}` (của phiên bản hiện hành), cùng
+`current_profile_status` để giao diện biết lớp ngữ nghĩa xong chưa; trang hỏi hiện chúng ở
 [#50](https://github.com/pgiahuy/xdi-platform/issues/50).
 
 ## Chưa có

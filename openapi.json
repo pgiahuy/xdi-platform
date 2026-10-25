@@ -2518,6 +2518,7 @@
           "logical_table",
           "domain",
           "current_version_id",
+          "current_profile_status",
           "suggested_questions",
           "created_at"
         ],
@@ -2525,6 +2526,13 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "current_profile_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Profile status of the current version (`pending`, `structure`, `semantic`, `failed`); null while the dataset\nhas no current version. The UI polls it to know when the semantic profile is done."
           },
           "current_version_id": {
             "type": [
