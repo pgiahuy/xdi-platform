@@ -35,9 +35,9 @@ export function ResultTable({ result, fileName, heading = 'Kết quả' }: Props
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 id={headingId} className="text-sm font-semibold">
+          <h3 id={headingId} className="text-sm font-semibold">
             {heading}
-          </h2>
+          </h3>
           <p className="text-xs text-muted-foreground">{describeCount(result)}</p>
         </div>
         {fileName && (

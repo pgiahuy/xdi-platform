@@ -43,3 +43,4 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 ### Changed
 
 - Mô hình Gemini mặc định đổi sang `gemini-3.5-flash-lite` (đổi bằng `GEMINI_MODEL`).
+- Trang Hỏi dữ liệu gọn hơn: mỗi khối một thẻ, câu SQL xuống dòng theo mệnh đề và tô màu từ khóa, số thực hiện tối đa hai chữ số lẻ, pane bằng chứng thu gọn được.

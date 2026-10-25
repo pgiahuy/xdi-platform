@@ -6,24 +6,32 @@ hỏi đó kèm choices của response gần nhất (buildChoicesWith); gõ câu
 giữ trong state kèm request đã gửi, vì hỏi lại cần cả hai và useMutation xóa data khi bắt đầu lần gọi mới.
 Câu gợi ý lấy từ dataset đang chọn (suggested_questions, lớp hồ sơ ngữ nghĩa viết sau khi nạp); danh sách dataset tự
 tải lại khi còn dataset đang lập hồ sơ (useDatasets, watchProfiles), nên câu gợi ý hiện ra mà không phải tải lại trang.
+Mỗi khối (câu hỏi, câu gợi ý, kết quả, bằng chứng) nằm trong một thẻ riêng; chưa hỏi gì thì chỗ kết quả là một dòng
+nhắc bước tiếp theo (AskIdle). Pane bằng chứng chỉ hiện khi đã có câu trả lời; mở hay thu gọn nhớ trong localStorage
+(storedFlag.ts) cho mọi workspace, vì đó là thói quen của người dùng, không phải của từng dataset.
 Ở chế độ dev có công tắc dữ liệu mẫu (api/askSamples.ts); bản build production không có công tắc lẫn file mẫu. */
 
 import { useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { buildChoicesWith, isRepeatedClarification, useAsk, type AskVariables, type ChosenOption } from '@/api/ask'
 import { sampleQuestions } from '@/api/askSamples'
 import { useMe } from '@/api/auth'
 import { isProfiling, useDatasets, type Dataset } from '@/api/datasets'
+import { AskIdle } from '@/components/ask/AskIdle'
 import { AskLayout } from '@/components/ask/AskLayout'
+import { AskSection } from '@/components/ask/AskSection'
 import { QuestionForm } from '@/components/ask/QuestionForm'
 import { SampleModeSwitch } from '@/components/ask/SampleModeSwitch'
+import { SuggestedQuestions } from '@/components/ask/SuggestedQuestions'
 import type { ProfileProgress } from '@/components/ask/types'
-import { EmptyState } from '@/components/EmptyState'
 import { FormMessage } from '@/components/forms/FormMessage'
-import { Button } from '@/components/ui/button'
+import { AskDatasetStatus } from './AskDatasetStatus'
 import { AskEvidence } from './AskEvidence'
 import { AskOutcome, type Answer } from './AskOutcome'
+import { useStoredFlag } from './storedFlag'
 import { workspaceHref } from './workspaceNav'
+
+const evidenceOpenKey = 'xdi.ask.evidenceOpen'
 
 export function AskPage() {
   const { ws = '' } = useParams()
@@ -39,6 +47,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   const [pickedDataset, setPickedDataset] = useState<string>()
   const [sampleMode, setSampleMode] = useState(false)
   const [answer, setAnswer] = useState<Answer>()
+  const [evidenceOpen, setEvidenceOpen] = useStoredFlag(evidenceOpenKey, true)
 
   // Chưa chọn thì hỏi dataset mới nhất (backend trả mới tạo trước).
   const datasetId = pickedDataset ?? datasets.data?.[0]?.id ?? ''
@@ -83,8 +92,14 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   }
 
   const hasDatasets = (datasets.data?.length ?? 0) > 0
+  const suggestions = fromSamples
+    ? sampleQuestions.map((sample) => sample.question)
+    : (dataset?.suggested_questions ?? [])
+  const canAsk = hasDatasets || fromSamples
   return (
     <AskLayout
+      evidenceOpen={evidenceOpen}
+      onEvidenceOpenChange={setEvidenceOpen}
       evidence={
         answer &&
         !ask.error && (
@@ -94,24 +109,29 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       }
     >
       {import.meta.env.DEV && <SampleModeSwitch checked={sampleMode} onChange={setSampleMode} />}
-      {hasDatasets || fromSamples ? (
-        <QuestionForm
-          datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
-          datasetId={datasetId}
-          onDatasetChange={changeDataset}
-          // Dữ liệu mẫu không qua dataset thật, báo hồ sơ của dataset đang chọn ở đó chỉ gây nhầm.
-          profile={fromSamples ? 'ready' : buildProfileProgress(dataset)}
-          question={question}
-          onQuestionChange={setQuestion}
-          onSubmit={() => askQuestion(question)}
-          pending={ask.isPending}
-          suggestions={
-            fromSamples ? sampleQuestions.map((sample) => sample.question) : (dataset?.suggested_questions ?? [])
-          }
-          onSuggestion={pickSuggestion}
-        />
+      {canAsk ? (
+        <>
+          <AskSection title="Câu hỏi">
+            <QuestionForm
+              datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
+              datasetId={datasetId}
+              onDatasetChange={changeDataset}
+              // Dữ liệu mẫu không qua dataset thật, báo hồ sơ của dataset đang chọn ở đó chỉ gây nhầm.
+              profile={fromSamples ? 'ready' : buildProfileProgress(dataset)}
+              question={question}
+              onQuestionChange={setQuestion}
+              onSubmit={() => askQuestion(question)}
+              pending={ask.isPending}
+            />
+          </AskSection>
+          {suggestions.length > 0 && (
+            <AskSection title="Câu gợi ý">
+              <SuggestedQuestions questions={suggestions} onPick={pickSuggestion} disabled={ask.isPending} />
+            </AskSection>
+          )}
+        </>
       ) : (
-        <DatasetStatus
+        <AskDatasetStatus
           error={datasets.error}
           loading={datasets.isPending}
           onRetry={() => datasets.refetch()}
@@ -125,6 +145,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
         {announce(ask.isPending, ask.error ? undefined : answer)}
       </p>
       {ask.error && <FormMessage kind="error">{ask.error.message}</FormMessage>}
+      {canAsk && !answer && !ask.error && <AskIdle pending={ask.isPending} hasSuggestions={suggestions.length > 0} />}
       {/* Lỗi (501, 502, 503, mạng) hiện thay cho câu trả lời cũ, để không ai tưởng câu trả lời cũ là kết quả mới. Câu
       trả lời cũ vẫn giữ trong state: hỏi lại đúng câu đó sau khi lỗi thì vẫn giữ các giả định đã đổi. */}
       {answer && !ask.error && (
@@ -169,47 +190,4 @@ function announce(pending: boolean, answer: Answer | undefined): string {
     return 'Câu hỏi hiểu được theo nhiều cách, cần chọn cách hiểu.'
   }
   return ''
-}
-
-type DatasetStatusProps = {
-  error: Error | null
-  loading: boolean
-  onRetry: () => void
-  isAdmin: boolean
-  datasetsHref: string
-}
-
-/** Chưa hỏi được vì danh sách dataset đang tải, tải lỗi, hoặc workspace chưa có dataset nào. */
-function DatasetStatus({ error, loading, onRetry, isAdmin, datasetsHref }: DatasetStatusProps) {
-  if (error) {
-    return (
-      <EmptyState
-        title="Không tải được danh sách dataset"
-        description={error.message}
-        action={
-          <Button variant="outline" onClick={onRetry}>
-            Thử lại
-          </Button>
-        }
-      />
-    )
-  }
-  if (loading) return <p className="text-sm text-muted-foreground">Đang tải...</p>
-  return (
-    <EmptyState
-      title="Chưa có dataset nào để hỏi"
-      description={
-        isAdmin
-          ? 'Nạp file CSV, Parquet hoặc Excel ở trang Dữ liệu.'
-          : 'Admin của workspace nạp dữ liệu; khi có, hỏi ở đây.'
-      }
-      action={
-        isAdmin && (
-          <Button variant="outline" asChild>
-            <Link to={datasetsHref}>Tới trang Dữ liệu</Link>
-          </Button>
-        )
-      }
-    />
-  )
 }

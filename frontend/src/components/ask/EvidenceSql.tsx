@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/EvidenceSql.tsx - tab SQL của pane bằng chứng: bản mô hình viết và bản sau guard (bản đã chạy), mỗi
 bản một nút chép. Dưới bản sau guard là những gì guard ghi đã thêm (giới hạn số dòng) và lời nhắc về điều kiện phân
-quyền. Câu SQL xuống dòng trong khung thay vì cuộn ngang, để trang không rộng hơn màn điện thoại. */
+quyền. Câu SQL hiện đã xuống dòng theo mệnh đề (SqlCode.tsx); nút chép chép nguyên văn câu backend gửi, không chép bản
+đã định dạng, để câu dán sang công cụ khác đúng là câu đã chạy. */
 
 import { useState } from 'react'
 import { Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { SqlView } from './evidenceTypes'
+import { SqlCode } from './SqlCode'
 
 type Props = {
   sql: SqlView
@@ -71,7 +73,7 @@ function SqlBlock({ title, text }: { title: string; text: string | null }) {
         )}
       </div>
       {text ? (
-        <pre className="rounded-md bg-muted px-3 py-2 font-mono text-xs break-all whitespace-pre-wrap">{text}</pre>
+        <SqlCode sql={text} />
       ) : (
         <p className="text-sm text-muted-foreground">Mô hình chưa viết SQL cho câu này.</p>
       )}

@@ -23,9 +23,9 @@ export function UnderstandingCard({ understanding: u, onChangeAssumption, disabl
   ]
   return (
     <section aria-labelledby="understanding-heading" className="flex flex-col gap-3 rounded-lg border p-4">
-      <h2 id="understanding-heading" className="text-sm font-semibold">
+      <h3 id="understanding-heading" className="text-sm font-semibold">
         Đã hiểu là
-      </h2>
+      </h3>
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
         {lines
           .filter(([, items]) => items.length > 0)

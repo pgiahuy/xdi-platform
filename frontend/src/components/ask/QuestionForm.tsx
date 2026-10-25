@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/QuestionForm.tsx - ô hỏi: chọn dataset (kèm dòng báo hồ sơ chưa xong), gõ câu hỏi, bấm Hỏi; câu gợi ý
-ngay dưới ô.
+/* components/ask/QuestionForm.tsx - ô hỏi: chọn dataset (kèm dòng báo hồ sơ chưa xong), gõ câu hỏi, bấm Hỏi. Câu gợi ý
+nằm ở thẻ riêng ngay dưới (SuggestedQuestions.tsx), trang đặt cả hai.
+Chọn dataset dùng Select của shadcn (Radix) thay cho select của trình duyệt, để giống các ô khác trên trang; Radix vẫn
+cho chọn bằng bàn phím và trình đọc màn hình đọc được như một combobox.
 Enter gửi, Shift+Enter xuống dòng, như ô chat quen thuộc. Bỏ qua Enter khi bộ gõ đang ghép chữ (isComposing): gõ tiếng
 Việt bằng bộ gõ kiểu IBus, Enter lúc đó là chốt chữ, gửi luôn thì câu hỏi bị cắt giữa chừng. */
 
 import type { FormEvent, KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
 import { ProfileNote } from './ProfileNote'
-import { SuggestedQuestions } from './SuggestedQuestions'
 import type { DatasetOption, ProfileProgress } from './types'
 
 type Props = {
@@ -22,8 +23,6 @@ type Props = {
   onQuestionChange: (question: string) => void
   onSubmit: () => void
   pending: boolean
-  suggestions: string[]
-  onSuggestion: (question: string) => void
 }
 
 export function QuestionForm(props: Props) {
@@ -43,27 +42,23 @@ export function QuestionForm(props: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       {datasets.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <Label htmlFor="ask-dataset">Dataset</Label>
-            <select
-              id="ask-dataset"
-              value={datasetId}
-              onChange={(event) => onDatasetChange(event.target.value)}
-              disabled={pending}
-              className={cn(
-                'h-9 max-w-full min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm outline-none',
-                'sm:flex-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50',
-              )}
-            >
-              {datasets.map((dataset) => (
-                <option key={dataset.id} value={dataset.id}>
-                  {dataset.name}
-                </option>
-              ))}
-            </select>
+            <Select value={datasetId} onValueChange={onDatasetChange} disabled={pending}>
+              <SelectTrigger id="ask-dataset" className="max-w-full min-w-40 flex-1 sm:flex-none">
+                <SelectValue placeholder="Chọn dataset" />
+              </SelectTrigger>
+              <SelectContent>
+                {datasets.map((dataset) => (
+                  <SelectItem key={dataset.id} value={dataset.id}>
+                    {dataset.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <ProfileNote progress={props.profile} />
         </div>
@@ -89,7 +84,6 @@ export function QuestionForm(props: Props) {
           Enter để hỏi, Shift+Enter để xuống dòng.
         </p>
       </div>
-      <SuggestedQuestions questions={props.suggestions} onPick={props.onSuggestion} disabled={pending} />
     </form>
   )
 }

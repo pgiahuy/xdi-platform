@@ -6,6 +6,7 @@ backend chưa truy được (dòng phân rã trả 400, chờ #38) trang truyề
 import { formatCell } from './cellFormat'
 import type { DrillTarget, RowsView } from './evidenceTypes'
 import { ResultTable } from './ResultTable'
+import { SqlCode } from './SqlCode'
 
 type Props = {
   rows: RowsView
@@ -57,7 +58,7 @@ function RowsBody({ rows }: { rows: Exclude<RowsView, { state: 'idle' }> }) {
           <ResultTable result={rows.result} heading="Dòng nguồn" />
           <details className="text-xs">
             <summary className="cursor-pointer text-muted-foreground">SQL đã chạy để lấy các dòng này</summary>
-            <pre className="mt-1 rounded-md bg-muted px-3 py-2 font-mono break-all whitespace-pre-wrap">{rows.sql}</pre>
+            <SqlCode sql={rows.sql} className="mt-1" />
           </details>
         </>
       )
