@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/query.rs - hỏi dữ liệu (ask) và truy dòng nguồn (drill). Toàn bộ luồng chín bước nằm ở service/ask.rs; kiểu
-response của ask ở service/ask_contract.rs, mẫu ở service/ask_examples.rs.
+response của ask ở service/ask_contract.rs, mẫu ở service/ask_examples.rs. Truy dòng nguồn ở service/drill.rs, hợp đồng
+ở service/drill_contract.rs.
 Route nằm dưới /workspaces/{ws}/ và nhận Member: chỉ thành viên workspace hỏi được dữ liệu của nó.
 
 Ask trả JSON một lần, không SSE (#33). Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi, kể cả mô hình
@@ -20,6 +21,7 @@ use crate::service::ask_examples::{
     build_failed_example, build_needs_choice_example, build_rejected_example, build_simple_example,
     build_why_example,
 };
+use crate::service::drill_contract::{DrillRequest, DrillResponse};
 use crate::{error::AppError, service, state::AppState};
 
 pub fn routes() -> OpenApiRouter<AppState> {
@@ -85,25 +87,37 @@ async fn ask(
     Ok(Json(response))
 }
 
+// Request chỉ có query_id và khóa của chỗ được bấm, không bao giờ có SQL (docs/ARCHITECTURE.md mục 8): backend dựng câu
+// từ câu đã lưu, qua guard với quyền của người đang bấm.
 #[utoipa::path(
     post,
     path = "/workspaces/{ws}/datasets/{id}/drill",
     tag = "query",
     operation_id = "drill",
-    summary = "Source rows behind a number (not implemented yet)",
+    summary = "Source rows behind a number of an answer",
+    description = "Reads the stored question, keeps its table and filters, adds the keys of the clicked cell, and runs \
+                   that on the dataset version the question used, through the guard with the row filters of the \
+                   member calling now. One page of rows per call, in the order the analytics engine reads them.",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = String, Path, description = "Dataset id (UUID)")
     ),
+    request_body = DrillRequest,
     responses(
-        (status = 501, body = ErrorBody, description = "Not implemented yet"),
-        (status = "4XX", body = ErrorBody, description = "401, 404 not a member")
+        (status = 200, body = DrillResponse, description = "One page of source rows and their total count"),
+        (status = "4XX", body = ErrorBody, description = "400 invalid body, keys that do not match the result, a \
+                                                         question that was rejected or failed, a question whose \
+                                                         form cannot be traced yet (the message says why), a \
+                                                         breakdown row (not supported yet) or a deleted version; \
+                                                         401; 404 not a member, or no such question in this dataset")
     )
 )]
 async fn drill(
     State(state): State<AppState>,
     member: Member,
     PathParams((_ws, id)): PathParams<(String, String)>,
-) -> Result<(), AppError> {
-    service::ask::drill(&state, &member, &id).await
+    JsonBody(req): JsonBody<DrillRequest>,
+) -> Result<Json<DrillResponse>, AppError> {
+    let response = service::drill::drill(&state, &member, &id, &req).await?;
+    Ok(Json(response))
 }

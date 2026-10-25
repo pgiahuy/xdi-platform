@@ -16,7 +16,7 @@ pub enum QueryStatus {
 }
 
 impl QueryStatus {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             QueryStatus::Ok => "ok",
             QueryStatus::Rejected => "rejected",
@@ -38,6 +38,18 @@ pub struct NewQuery<'a> {
     pub row_count: Option<i64>,
     /// Phần giải thích của câu "tại sao" (#38), gồm điều kiện hai lát cắt cho truy dòng nguồn (#34); None với câu thường.
     pub explanation: Option<serde_json::Value>,
+}
+
+/// Phần của một dòng queries mà truy dòng nguồn (#34) cần.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct StoredQuery {
+    /// None khi câu không gắn dataset, hay dataset đã xóa.
+    pub dataset_id: Option<Uuid>,
+    /// None khi phiên bản đã xóa.
+    pub version_id: Option<Uuid>,
+    /// Chữ của QueryStatus::as_str.
+    pub status: String,
+    pub sql_guarded: Option<String>,
 }
 
 /// Một câu hỏi đã được đánh dấu trả lời đúng, làm ví dụ trong prompt sinh SQL.
@@ -69,6 +81,23 @@ impl Store {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| db_error("list correct queries", e))
+    }
+
+    /// Một câu hỏi của workspace theo id; None nếu không có hay thuộc workspace khác.
+    pub async fn get_query(
+        &self,
+        ws: &WorkspaceId,
+        id: Uuid,
+    ) -> Result<Option<StoredQuery>, AppError> {
+        sqlx::query_as(
+            "SELECT dataset_id, version_id, status, sql_guarded FROM queries
+             WHERE workspace_id = $1 AND id = $2",
+        )
+        .bind(ws.as_uuid())
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| db_error("get query", e))
     }
 
     pub async fn record_query(&self, ws: &WorkspaceId, q: &NewQuery<'_>) -> Result<Uuid, AppError> {

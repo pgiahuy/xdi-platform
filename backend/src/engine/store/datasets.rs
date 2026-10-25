@@ -411,6 +411,27 @@ impl Store {
             .map_err(|e| db_error("get current version", e))
     }
 
+    /// Một phiên bản theo id, dù còn là phiên bản hiện hành hay không: truy dòng nguồn (#34) chạy trên đúng phiên bản
+    /// câu hỏi đã dùng, không trên phiên bản mới nạp sau đó. None nếu không có, đã xóa, hay thuộc dataset khác.
+    pub async fn get_version(
+        &self,
+        ws: &WorkspaceId,
+        dataset_id: Uuid,
+        version_id: Uuid,
+    ) -> Result<Option<DatasetVersion>, AppError> {
+        let sql = format!(
+            "SELECT {VERSION_COLUMNS} FROM dataset_versions
+             WHERE workspace_id = $1 AND dataset_id = $2 AND id = $3"
+        );
+        sqlx::query_as(&sql)
+            .bind(ws.as_uuid())
+            .bind(dataset_id)
+            .bind(version_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| db_error("get version", e))
+    }
+
     /// Phiên bản còn profile_status = pending ở mọi workspace, cũ nhất trước. Ngoại lệ có chủ đích của quy tắc lọc theo
     /// WorkspaceId (xem store/mod.rs): việc nền lúc khởi động lập hồ sơ cho phiên bản nạp trước khi có bước hồ sơ, và
     /// lúc đó chưa có workspace nào để lọc. Chỉ auth::pending_profiles gọi, để dựng WorkspaceId từ chính các dòng này.

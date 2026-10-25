@@ -388,7 +388,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Source rows behind a number (not implemented yet) */
+        /**
+         * Source rows behind a number of an answer
+         * @description Reads the stored question, keeps its table and filters, adds the keys of the clicked cell, and runs that on the dataset version the question used, through the guard with the row filters of the member calling now. One page of rows per call, in the order the analytics engine reads them.
+         */
         post: operations["drill"];
         delete?: never;
         options?: never;
@@ -549,6 +552,13 @@ export interface components {
             /** @description Email of an active account; it becomes `admin` of the workspace. */
             email: string;
         };
+        /** @description One group of a breakdown table in one slice. */
+        BreakdownKey: {
+            /** @description `DimensionBreakdown.column`: a column name of the dataset, not of `result.columns`. */
+            column: string;
+            slice: components["schemas"]["SliceName"];
+            value: components["schemas"]["CellValue"] | null;
+        };
         /** @description One cell: a JSON number, string or boolean; read it with the `kind` of its column. */
         CellValue: number | string | boolean;
         ChangePasswordRequest: {
@@ -675,6 +685,57 @@ export interface components {
             kind: components["schemas"]["ValueKind"];
             /** @description SQL that computed the groups of both slices, after the guard. */
             sql: string;
+        };
+        /** @description One grouping key of the clicked cell. */
+        DrillKey: {
+            /** @description A name from `result.columns`, of a column with role `dimension` or `time`. */
+            column: string;
+            value: components["schemas"]["CellValue"] | null;
+        };
+        /**
+         * @description Which number to trace back to its source rows: set exactly one of `cell` and `breakdown`. Rows come one page at a
+         *     time, in the order the analytics engine reads them.
+         */
+        DrillRequest: {
+            breakdown?: components["schemas"]["BreakdownKey"] | null;
+            /**
+             * @description A cell of `AskResponse.result`: the values of every `dimension` and `time` column of its row, one key per
+             *     column. An empty list is the one row of a query without grouping keys.
+             */
+            cell?: components["schemas"]["DrillKey"][] | null;
+            /**
+             * Format: int32
+             * @description Rows per page, 1 to 1000. Default 100.
+             */
+            limit?: number;
+            /**
+             * Format: int64
+             * @description Number of source rows to skip. Default 0.
+             */
+            offset?: number;
+            /**
+             * Format: uuid
+             * @description `AskResponse.query_id` of the answer the number belongs to.
+             */
+            query_id: string;
+        };
+        /** @description One page of the source rows behind a number. */
+        DrillResponse: {
+            /**
+             * @description The page: every column of the dataset, including `_source_file`, the file each row came from. Here
+             *     `result.total_rows` counts the rows of this page only.
+             */
+            result: components["schemas"]["ResultTable"];
+            /**
+             * @description The SQL that read this page, after the guard: the filters of the answered question, the keys of the clicked
+             *     number, and the row filters of the member asking now (which may differ from the member who asked the question).
+             */
+            sql: string;
+            /**
+             * Format: int64
+             * @description Number of source rows behind the number, over all pages.
+             */
+            total_rows: number;
         };
         /** @description Error body returned by every endpoint on failure. */
         ErrorBody: {
@@ -832,6 +893,11 @@ export interface components {
             hidden: boolean;
             name: string;
         };
+        /**
+         * @description `base` or `compare`: one of the two slices of `AskResponse.explanation`.
+         * @enum {string}
+         */
+        SliceName: "base" | "compare";
         /**
          * @description Step of the backend:
          *     - `context`: read the dataset profile and build the prompt.
@@ -1971,8 +2037,21 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DrillRequest"];
+            };
+        };
         responses: {
+            /** @description One page of source rows and their total count */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DrillResponse"];
+                };
+            };
             /** @description Internal error; details are in the server log, not in the response */
             500: {
                 headers: {
@@ -1982,16 +2061,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Not implemented yet */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description 401, 404 not a member */
+            /** @description 400 invalid body, keys that do not match the result, a question that was rejected or failed, a question whose form cannot be traced yet (the message says why), a breakdown row (not supported yet) or a deleted version; 401; 404 not a member, or no such question in this dataset */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

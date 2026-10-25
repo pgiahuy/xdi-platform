@@ -80,7 +80,7 @@ Lỗi trả cùng một dạng body (`ErrorBody`), trừ hai ngoại lệ ở cu
 | `not_found` | 404 | Đường dẫn dưới `/api` không tồn tại, workspace mình không thuộc, dataset không có; tham số đường dẫn không đọc được (ví dụ `%FF`) |
 | `too_large` | 413 | Tổng dung lượng một lần nạp vượt `MAX_UPLOAD_MB`; file Excel vượt trần kích thước giải nén, bảng chuỗi dùng chung hay dung lượng CSV ghi ra ([Dữ liệu](DATA.md)) |
 | `internal` | 500 | Lỗi phía máy chủ, ví dụ mất kết nối Postgres |
-| `not_implemented` | 501 | Route đã có trong đặc tả nhưng chưa cài đặt: truy dòng nguồn, đăng nhập demo |
+| `not_implemented` | 501 | Route đã có trong đặc tả nhưng chưa cài đặt: đăng nhập demo |
 | `upstream` | 502 | Dịch vụ mô hình ngôn ngữ lỗi, quá tải hoặc không trả lời |
 | `unavailable` | 503 | Máy chủ thiếu cấu hình cho mô hình ngôn ngữ, ví dụ chưa đặt khóa API |
 
@@ -112,6 +112,17 @@ có câu trả lời mẫu; 404 dataset không có; 502, 503 khi mô hình lỗi
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).
+
+## Truy dòng nguồn
+
+`POST /api/workspaces/{ws}/datasets/{id}/drill` trả một trang dòng nguồn của một ô trong bảng kết quả: request gửi
+`query_id` và `cell` (giá trị các cột `dimension`, `time` của dòng được bấm, theo tên trong `result.columns`), kèm
+`offset`, `limit` (mặc định 100, tối đa 1000); response có câu SQL đã chạy sau guard, các dòng (mọi cột của dataset,
+kể cả `_source_file`) và `total_rows` của mọi trang. Câu chạy trên phiên bản dữ liệu của câu hỏi, qua guard với vai
+dữ liệu của người đang bấm. Mã lỗi: 400 khi câu hỏi bị từ chối hay chạy lỗi, khóa không khớp cột nhóm, câu có dạng chưa
+truy được (lời báo nói lý do), phiên bản đã xóa, hay request gửi `breakdown` (dòng phân rã chưa truy được: cột `queries.explanation`
+đã có nhưng chỉ được ghi khi câu "tại sao" chạy qua route hỏi, [#38](https://github.com/pgiahuy/xdi-platform/issues/38)); 404 khi `query_id` không thuộc dataset
+và workspace trong đường dẫn. Cách dựng câu: [Kiến trúc](ARCHITECTURE.md), mục 8.
 
 ## Đổi API và sinh kiểu TypeScript
 

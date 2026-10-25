@@ -20,6 +20,8 @@ mod ask_tests;
 mod auth;
 mod datasets;
 #[cfg(test)]
+mod drill_tests;
+#[cfg(test)]
 mod excel_tests;
 mod extract;
 mod openapi;
