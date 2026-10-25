@@ -135,11 +135,17 @@ impl Visitor for ReadOnly {
     }
 
     fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<Self::Break> {
-        if is_select_body(&query.body) {
-            ControlFlow::Continue(())
-        } else {
-            ControlFlow::Break("Chỉ cho phép câu SELECT để đọc dữ liệu")
+        if !is_select_body(&query.body) {
+            return ControlFlow::Break("Chỉ cho phép câu SELECT để đọc dữ liệu");
         }
+        // `SELECT ... FOR UPDATE`, `FOR SHARE` xin khóa dòng để ghi sau: câu hỏi dữ liệu chỉ đọc, không cần khóa. Kiểm ở
+        // mọi câu, kể cả câu con.
+        if !query.locks.is_empty() {
+            return ControlFlow::Break(
+                "Không cho FOR UPDATE, FOR SHARE: câu đọc dữ liệu không cần khóa dòng",
+            );
+        }
+        ControlFlow::Continue(())
     }
 
     fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<Self::Break> {
@@ -477,11 +483,13 @@ fn apply_row_limit(query: &mut Query, max_rows: u64) -> Result<Option<String>, G
     }
 }
 
+/// DuckDB nhận số viết có gạch dưới (`1_000`); không bỏ gạch thì `LIMIT 1_000` không đọc được và bị nâng thành max.
 fn is_number_at_most(expr: &Expr, max: u64) -> bool {
     match expr {
-        Expr::Value(v) => {
-            matches!(&v.value, Value::Number(n, _) if n.parse::<u64>().is_ok_and(|n| n <= max))
-        }
+        Expr::Value(v) => matches!(
+            &v.value,
+            Value::Number(n, _) if n.replace('_', "").parse::<u64>().is_ok_and(|n| n <= max)
+        ),
         _ => false,
     }
 }

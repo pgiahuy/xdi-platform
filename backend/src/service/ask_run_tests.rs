@@ -391,8 +391,112 @@ async fn query_over_the_time_limit_is_stopped() {
         steps(&outcome),
         [(StepName::Guard, true), (StepName::Run, false)]
     );
+    // Dưới một giây thì lời báo nói mili giây, không nói "0 giây".
     let message = outcome.message.unwrap();
-    assert!(message.contains("đã bị dừng"), "{message}");
+    assert!(
+        message.contains("quá 300 mili giây") && message.contains("đã bị dừng"),
+        "{message}"
+    );
+}
+
+/// Bảng 3000 dòng dùng cho các câu chạy lâu hay tốn bộ nhớ.
+fn big_sales() -> Dataset {
+    Dataset::new(
+        "sales",
+        &["region", "amount"],
+        "SELECT 'South' AS region, range AS amount FROM range(3000)",
+    )
+}
+
+/// Câu sửa chạy quá giờ: dừng, failed, không có vòng sửa thứ hai.
+#[tokio::test]
+async fn fixed_sql_over_the_time_limit_is_failed() {
+    let slow = "SELECT COUNT(*) AS n FROM sales a, sales b, sales c";
+    let llm = ScriptedLlm::new(vec![Ok(slow.to_string())]);
+    let outcome = run(&llm, &big_sales(), BAD_SQL, Duration::from_millis(300)).await;
+    assert_eq!(outcome.status, AskStatus::Failed, "{outcome:?}");
+    assert_eq!(
+        steps(&outcome),
+        [
+            (StepName::Guard, true),
+            (StepName::Run, false),
+            (StepName::Repair, true),
+            (StepName::Guard, true),
+            (StepName::Run, false),
+        ]
+    );
+    assert_eq!(outcome.sql_generated, slow);
+    assert!(outcome.message.unwrap().contains("đã bị dừng"));
+}
+
+/// Câu chạm trần bộ nhớ lúc chạy: failed, không nhờ mô hình sửa. Ghép một chuỗi 1000 byte qua 9 triệu dòng (tích chéo
+/// bảng 3000 dòng với chính nó) cần khoảng 9 GB, quá trần 1 GB; ghi tạm ra đĩa đã tắt nên DuckDB báo hết bộ nhớ.
+#[tokio::test]
+async fn query_over_the_memory_limit_is_failed() {
+    let llm = ScriptedLlm::new(vec![]);
+    let sql = format!(
+        "SELECT length(string_agg(v, '')) AS n FROM (SELECT '{}' AS v FROM sales a, sales b) t",
+        "y".repeat(1000)
+    );
+    let outcome = run(&llm, &big_sales(), &sql, Duration::from_secs(60)).await;
+    assert_eq!(outcome.status, AskStatus::Failed, "{outcome:?}");
+    assert_eq!(
+        steps(&outcome),
+        [(StepName::Guard, true), (StepName::Run, false)]
+    );
+    let message = outcome.message.unwrap();
+    assert!(message.contains("bộ nhớ"), "{message}");
+}
+
+/// Câu sửa bị guard từ chối vì quá lớn: rejected, không có vòng sửa thứ hai dù Oversized bình thường vào vòng sửa.
+#[tokio::test]
+async fn fixed_sql_refused_as_oversized_is_rejected() {
+    let five_levels =
+        "SELECT v FROM (SELECT v FROM (SELECT v FROM (SELECT v FROM (SELECT region AS v FROM sales) a) b) c) d";
+    let llm = ScriptedLlm::new(vec![Ok(five_levels.to_string())]);
+    let outcome = run_scripted(&llm, BAD_SQL).await;
+    assert_eq!(outcome.status, AskStatus::Rejected);
+    assert_eq!(
+        steps(&outcome),
+        [
+            (StepName::Guard, true),
+            (StepName::Run, false),
+            (StepName::Repair, true),
+            (StepName::Guard, false),
+        ]
+    );
+    assert!(outcome.message.unwrap().contains("tối đa 4"));
+}
+
+/// Hết lượt chạy (AppState::query_jobs có hai lượt) thì câu thứ ba chờ, không chạy, không bị từ chối. Test giữ cả hai
+/// lượt, thấy câu chưa xong sau 300 ms, trả một lượt rồi thấy câu chạy xong. Không phụ thuộc tốc độ máy: lúc giữ lượt
+/// câu đang chờ semaphore chứ không chạy, nên máy chậm chỉ làm nó chờ lâu hơn. Không so thời gian của bước run: khi các
+/// test khác chạy song song, phần kiểm guard có thể tự mất quá 300 ms, và lúc đó thời gian chờ rơi vào bước guard.
+#[tokio::test]
+async fn third_query_waits_for_a_turn() {
+    let data = Dataset::sales();
+    let llm = ScriptedLlm::new(vec![]);
+    let jobs = Arc::new(Semaphore::new(2));
+    let first = Arc::clone(&jobs).acquire_owned().await.unwrap();
+    let _second = Arc::clone(&jobs).acquire_owned().await.unwrap();
+    let input = RunInput {
+        question: "Doanh thu theo khu vực",
+        prompt: PROMPT,
+        sql: GOOD_SQL.to_string(),
+        tables: &data.tables,
+        max_rows: MAX_ROWS,
+        timeout: Duration::from_secs(30),
+        jobs: &jobs,
+    };
+    let mut third = std::pin::pin!(run_with_repair(&llm, input));
+    let waited = tokio::time::timeout(Duration::from_millis(300), &mut third).await;
+    assert!(
+        waited.is_err(),
+        "third query ran while both turns were held"
+    );
+    drop(first);
+    let outcome = third.await.unwrap();
+    assert_eq!(outcome.status, AskStatus::Answered);
 }
 
 /// Không lời báo nào, cho người dùng hay cho mô hình, chứa đường dẫn trên máy chủ: lỗi đọc ngày của DuckDB chạy trên

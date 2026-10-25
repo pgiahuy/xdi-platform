@@ -39,7 +39,8 @@ câu gốc, nên phần bị bỏ qua khi đọc (chú thích) không tới đư
   `DESCRIBE`, `SHOW`, `SUMMARIZE`, `EXPLAIN`, `CREATE SECRET`, `EXPORT DATABASE`, `CHECKPOINT`.
 - Kiểm cả bên trong câu, không chỉ câu ngoài cùng: câu lệnh lồng (`WITH t AS (DELETE ... RETURNING *)`) và
   `SELECT ... INTO` bị từ chối. Mỗi truy vấn con phải là `SELECT`, truy vấn trong ngoặc, hoặc `UNION`, `INTERSECT`,
-  `EXCEPT` của chúng; `TABLE x` (đọc cả bảng mà không qua `FROM`) và `VALUES` bị từ chối.
+  `EXCEPT` của chúng; `TABLE x` (đọc cả bảng mà không qua `FROM`) và `VALUES` bị từ chối. `FOR UPDATE`, `FOR SHARE`
+  (xin khóa dòng để ghi sau) bị từ chối ở mọi câu, kể cả câu con.
 
 ## Bước 2: bảng, hàm, cột theo danh sách được phép
 
@@ -97,7 +98,9 @@ nhiều lần qua các tầng câu con, hay chép một giá trị lớn ra nhi�
 
 - Tối đa 4 tầng câu (`engine/guard/depth.rs`): câu con ở mọi chỗ (`FROM`, `WHERE`, danh sách cột, `ORDER BY`,
   `JOIN ... ON`) và bảng tạm `WITH` đều tính; bảng tạm đọc từ bảng tạm khác tính như câu con lồng trong nó. Bảng tạm
-  cùng tên trong một `WITH` lồng chỉ che bảng tạm ngoài bên trong câu đó, không làm số tầng ít đi.
+  cùng tên trong một `WITH` lồng chỉ che bảng tạm ngoài bên trong câu đó, không làm số tầng ít đi. Bảng tạm không ai
+  đọc vẫn tính (`WITH a AS (... 4 tầng) SELECT 1` là 5 tầng): đếm bảo thủ, vì chưa biết chắc DuckDB bỏ qua bảng tạm
+  không dùng trước khi tính biểu thức hằng trong nó; câu như vậy vào vòng sửa, mô hình chỉ cần bỏ bảng tạm thừa.
 - Tối đa 20 mảnh ghép trong cả câu (`engine/guard/pieces.rs`): toán hạng của `||` (`a || b || c` là 3), tham số của
   `concat`, `concat_ws` (dấu ngăn là biểu thức thì tính cả các lần nó được chèn vào), phần tử của danh sách, struct,
   map viết thẳng. Dùng lại bí danh đặt trước đó trong cùng danh sách cột (`a0 || a0 AS a1, a1 || a1 AS a2`) cộng số
@@ -197,14 +200,14 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
 |---|---|
 | Nhận | `SELECT` có `GROUP BY`, `ORDER BY`; `WITH`, `UNION ALL`, truy vấn con trong `FROM` và `WHERE`; `JOIN` có bí danh; tên viết hoa thường lẫn lộn và cột có khoảng trắng trong nháy kép (`"Order Item Total"`); `date_trunc` và bí danh cột; `WITH t(r, total)`; dấu `;` cuối câu; chuỗi `'; DROP TABLE sales; --'` là một giá trị so sánh |
 | Đọc câu | Câu sai cú pháp; câu rỗng, chỉ khoảng trắng, chỉ chú thích; hai câu; chú thích giấu câu thứ hai (`--`, `/* */`) bị bỏ khỏi `shown`; `;` trước chú thích rồi câu thứ hai bị từ chối; `SEL/**/ECT` |
-| Câu lệnh | Ghi, `ATTACH`, `COPY`, `PRAGMA`, `INSTALL`, `LOAD`, `DESCRIBE`, `SHOW`, `SUMMARIZE`, `EXPLAIN`, `SET`, `RESET`, `CALL`, `USE`, `DETACH`, `CREATE SECRET`, `EXPORT DATABASE`, `CHECKPOINT`; `DELETE` trong `WITH`; `SELECT INTO`; `TABLE x` kể cả trong `UNION` |
+| Câu lệnh | `FOR UPDATE`, `FOR SHARE` ở câu ngoài cùng, câu con, bảng tạm; ghi, `ATTACH`, `COPY`, `PRAGMA`, `INSTALL`, `LOAD`, `DESCRIBE`, `SHOW`, `SUMMARIZE`, `EXPLAIN`, `SET`, `RESET`, `CALL`, `USE`, `DETACH`, `CREATE SECRET`, `EXPORT DATABASE`, `CHECKPOINT`; `DELETE` trong `WITH`; `SELECT INTO`; `TABLE x` kể cả trong `UNION` |
 | Bảng | `read_csv`, `glob`, `read_parquet`, `parquet_scan`, `read_json_auto`, `generate_series`, `range` ở chỗ bảng, kể cả trong `JOIN`, truy vấn con và `WITH`; bảng hệ thống (`duckdb_tables`, `duckdb_settings`, `pg_catalog.pg_tables`, `sqlite_master`, `information_schema`); vế `UNION` đọc nguồn ngoài danh sách; tên file trong nháy đơn và nháy kép; bảng lạ (lý do liệt kê bảng dùng được); tên kèm schema; chữ Unicode giống chữ Latin; bí danh trùng tên bảng khác; `WITH RECURSIVE`; bảng tạm trùng tên bảng dữ liệu |
 | Độ dài | Chuỗi 20 000 vế `UNION ALL` bị từ chối trước khi đọc; câu sát 32 KB vẫn qua mà không tràn stack 2 MB của luồng test |
 | Hàm | `current_setting`, `getenv` (cả trong nháy kép), `read_text`, `main.sum`, `COLUMNS`; hàm lạ trong `ORDER BY`, `HAVING`, `CASE`, `FILTER`, `OVER`, `JOIN ... ON`; `lpad`, `rpad` với độ dài hằng lớn, biểu thức, tên cột, câu con; `replace` làm chuỗi dài ra, tính theo byte (cả lồng nhau); `regexp_replace` với mẫu khớp được chuỗi rỗng hay chuỗi thay dài hơn một byte; `strftime` với định dạng từ cột, đảo thứ tự tham số hay dài hơn 100 byte; các cách dùng để làm sạch chuỗi (cả gộp khoảng trắng) vẫn qua |
 | Số tầng, mảnh, độ rộng | 4 tầng nhận, 5 tầng từ chối ở mọi chỗ (`FROM`, `WHERE`, cột, `WITH`, bảng tạm đọc bảng tạm); bảng tạm cùng tên trong `WITH` lồng không che số tầng; bảng tạm kèm câu con kiểu mô hình hay viết vẫn qua; 20 mảnh nhận, 21 từ chối (`||`, `concat`, `concat_ws`, cộng qua các tầng, danh sách và struct viết thẳng, bí danh dùng lại); tuple, mảng trong `IN`, `ANY`, `ALL` không tính; gọi hàm dạng phương thức bị từ chối; chuỗi hằng 1000 byte nhận, 1001 từ chối (tính theo byte, ở `IN`, đối số hàm); 200 cột nhận, 201 từ chối; `*` trên nhiều nguồn tính theo số cột thật, từ chối khi có bảng tạm; 4 nguồn trong `FROM` nhận, 5 từ chối; 10 nhánh `UNION`, `INTERSECT`, `EXCEPT` nhận, 11 từ chối, cộng qua các tầng; câu mẫu của mock và của `ask_examples.rs` vẫn qua |
-| Câu mẫu (`sample_tests.rs`) | 31 câu phân tích dạng mô hình hay viết, 25 qua; 6 bị từ chối có chủ ý: 3 câu 5 tầng (vào vòng sửa), `strftime` đảo thứ tự tham số, hàm `list_contains` ngoài danh sách, nhãn 1200 byte. 17 câu tìm cách lách: các câu nhân giá trị bị chặn, các câu vô hại qua |
+| Câu mẫu (`sample_tests.rs`) | 32 câu phân tích dạng mô hình hay viết, 25 qua; 7 bị từ chối có chủ ý: 3 câu 5 tầng (vào vòng sửa), bảng tạm 4 tầng không ai dùng, `strftime` đảo thứ tự tham số, hàm `list_contains` ngoài danh sách, nhãn 1200 byte. 18 câu tìm cách lách (B01 tới B16, kể cả B01b, B05b): các câu nhân giá trị bị chặn, các câu vô hại qua |
 | Cột | Cột không có (cả dạng `s.profit`); chữ Unicode giống chữ Latin; bí danh bảng không có; tên ba phần |
-| Số dòng | Thêm `LIMIT` (cả khi chỉ có `OFFSET`); hạ `LIMIT 5000`; giữ `LIMIT 10 OFFSET 5`; thay `LIMIT (SELECT 5000)`; giới hạn cả `UNION`; từ chối `FETCH FIRST`; ghi chú `limit_note` ("Thêm LIMIT 100", "Hạ LIMIT xuống 100") |
+| Số dòng | Thêm `LIMIT` (cả khi chỉ có `OFFSET`); hạ `LIMIT 5000`; giữ `LIMIT 10 OFFSET 5`; đọc số có gạch dưới (`LIMIT 1_0` giữ, `LIMIT 1_000` hạ); thay `LIMIT (SELECT 5000)`; giới hạn cả `UNION`; từ chối `FETCH FIRST`; ghi chú `limit_note` ("Thêm LIMIT 100", "Hạ LIMIT xuống 100") |
 | Bản chạy | Bảng logic thành `read_parquet` và giữ tên làm bí danh; giữ bí danh có sẵn; đổi tên bảng tạm; bảng tạm tên giống file không còn trong bản chạy; `shown` không chứa đường dẫn; một câu có `WITH` và `JOIN` chạy trên DuckDB thật với file Parquet và ra đúng kết quả |
 
 ## Hạn chế đã biết

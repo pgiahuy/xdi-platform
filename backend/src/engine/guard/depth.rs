@@ -94,6 +94,10 @@ impl Visitor for DepthCounter {
         if let (Some((_, name)), Some(owner)) = (cte, self.open.last_mut()) {
             owner.ctes.insert(name.clone(), depth);
         }
+        // Thân bảng tạm cũng cộng vào câu định nghĩa nó dù câu chính không đọc bảng tạm đó: `WITH a AS (... 4 tầng)
+        // SELECT 1` là 5 tầng. Đếm bảo thủ vì không biết chắc DuckDB bỏ qua bảng tạm không dùng trước khi tính biểu thức
+        // hằng trong nó; nếu nó vẫn tính, bỏ bảng tạm này khỏi số tầng là mở lại đúng lỗ luật này chặn. Câu như vậy vào
+        // vòng sửa (Oversized), mô hình chỉ cần bỏ bảng tạm thừa.
         if self.open.is_empty() {
             self.deepest = depth;
         } else {

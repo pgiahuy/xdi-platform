@@ -36,7 +36,8 @@ use uuid::Uuid;
 ///   `repair` step that stopped it has `ok` false.
 ///
 /// A fix round starts when the analytics engine fails on the SQL, or when the guard refuses it because a table or
-/// column does not exist; there is at most one round per question. The status names the step that stopped the
+/// column does not exist or because it could build a value too large (too deep, too many concatenated pieces, too
+/// wide, a size argument over the limit); there is at most one round per question. The status names the step that stopped the
 /// question: the guard gives `rejected`, the engine or the fix round gives `failed`. A model error before any SQL
 /// exists is not a status: the request gets 502 or 503.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
@@ -421,7 +422,7 @@ pub struct VolumePrice {
 /// - `guard`: check the SQL, add row-level filters and a row limit.
 /// - `run`: run the SQL on the analytics engine.
 /// - `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column
-///   does not exist (at most once).
+///   does not exist or because it could build a value too large (at most once).
 /// - `explain`: compute the breakdown of a "why" question (code, no model).
 /// - `narrate`: the language model writes the summary of the breakdown.
 /// - `record`: save the question in the history.

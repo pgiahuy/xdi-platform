@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/* engine/guard/sample_tests.rs - các luật kích thước của guard (sizes.rs, depth.rs, pieces.rs, width.rs) trên 31 câu
-phân tích dạng mô hình hay viết (R01 tới R31) và các câu tìm cách lách luật (B01 tới B16), trên bảng dataco có 52 cột
-như DataCo. Mỗi câu ghi kết quả mong đợi; câu bị từ chối có chủ ý ghi lý do ngay cạnh. Câu lấy từ đợt review các luật
-này, để sửa luật sau này thấy ngay câu nào đổi kết quả. */
+/* engine/guard/sample_tests.rs - các luật kích thước của guard (sizes.rs, depth.rs, pieces.rs, width.rs) trên 32 câu
+phân tích dạng mô hình hay viết (R01 tới R32) và 18 câu tìm cách lách luật (B01 tới B16, kể cả B01b, B05b), trên bảng
+dataco có 52 cột như DataCo. Mỗi câu ghi kết quả mong đợi; câu bị từ chối có chủ ý ghi lý do ngay cạnh. Câu lấy từ các
+đợt review các luật này, để sửa luật sau này thấy ngay câu nào đổi kết quả. */
 
 use std::path::PathBuf;
 
@@ -146,6 +146,7 @@ fn realistic() -> Vec<(&'static str, String)> {
         ("R29 mô tả dài trong CASE nhãn (nhãn 1200 byte)", format!(r#"SELECT CASE WHEN "Order Status" = 'COMPLETE' THEN '{}' ELSE 'x' END FROM dataco LIMIT 1"#, "a".repeat(1200))),
         ("R30 nhãn tiếng Việt nhiều ghép (5 cột nhãn, mỗi cột 5 mảnh)", format!(r#"SELECT 'Tháng ' || month({d}) || '/' || year({d}) || ' - ' AS l1, 'Quý ' || quarter({d}) || '/' || year({d}) || ':' AS l2, "Customer Fname" || ' ' || "Customer Lname" || ' (' || "Customer Segment" AS l3, "Order City" || ', ' || "Order State" || ', ' || "Order Country" AS l4, COUNT(*) FROM dataco GROUP BY ALL"#)),
         ("R31 CTE + câu con trong CTE + câu con vô hướng ở SELECT ngoài", String::from(r#"WITH orders AS (SELECT "Order Id", "Market", SUM("Order Item Total") AS total FROM dataco WHERE "Order Status" IN (SELECT "Order Status" FROM dataco WHERE "Order Status" <> 'CANCELED' GROUP BY 1) GROUP BY 1, 2), stats AS (SELECT "Market", AVG(total) AS avg_total FROM orders GROUP BY 1) SELECT "Market", avg_total, avg_total / (SELECT AVG(avg_total) FROM stats) AS idx FROM stats ORDER BY idx DESC"#)),
+        ("R32 bảng tạm 4 tầng không ai dùng", r#"WITH a AS (SELECT v FROM (SELECT v FROM (SELECT "Market" AS v FROM (SELECT "Market" FROM dataco) t1) t2) t3) SELECT 1 AS k"#.into()),
     ]
 }
 
@@ -224,6 +225,8 @@ fn realistic_queries() {
         ("R30", Accept),
         // Bảng tạm có câu con, bảng tạm thứ hai đọc nó, câu chính có câu con vô hướng đọc bảng tạm thứ hai: 5 tầng.
         ("R31", Oversized),
+        // Bảng tạm 4 tầng mà câu chính không đọc vẫn tính vào số tầng (5): đếm bảo thủ, xem chú thích ở depth.rs.
+        ("R32", Oversized),
     ];
     check(realistic(), &expected);
 }

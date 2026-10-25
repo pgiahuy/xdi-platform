@@ -251,6 +251,22 @@ fn rejects_statements_that_change_settings_or_databases() {
     }
 }
 
+/// FOR UPDATE, FOR SHARE xin khóa dòng để ghi sau; chặn ở câu ngoài cùng và mọi câu con, loại dừng ngay.
+#[test]
+fn rejects_row_locks() {
+    for sql in [
+        "SELECT region FROM sales FOR UPDATE",
+        "SELECT region FROM sales FOR SHARE",
+        "SELECT region FROM sales WHERE region IN (SELECT region FROM sales FOR UPDATE)",
+        "SELECT r FROM (SELECT region AS r FROM sales FOR UPDATE) t",
+        "WITH t AS (SELECT region FROM sales FOR UPDATE) SELECT region FROM t",
+    ] {
+        let reason = assert_rejected(sql);
+        assert!(reason.contains("FOR UPDATE"), "{sql}: {reason}");
+        assert_rejected_for_other_reason(sql);
+    }
+}
+
 #[test]
 fn rejects_write_hidden_inside_select() {
     assert_rejected("WITH t AS (DELETE FROM sales RETURNING *) SELECT * FROM t");
@@ -882,6 +898,16 @@ fn keeps_smaller_limit_and_offset() {
     let guarded = assert_accepted("SELECT region FROM sales LIMIT 10 OFFSET 5");
     assert_eq!(guarded.shown, "SELECT region FROM sales LIMIT 10 OFFSET 5");
     assert_eq!(guarded.limit_note, None);
+}
+
+/// DuckDB đọc `1_000` là 1000: LIMIT viết có gạch dưới vẫn được giữ, không bị nâng thành trần.
+#[test]
+fn keeps_limit_written_with_underscores() {
+    let guarded = assert_accepted("SELECT region FROM sales LIMIT 1_0");
+    assert_eq!(guarded.shown, "SELECT region FROM sales LIMIT 1_0");
+    assert_eq!(guarded.limit_note, None);
+    let guarded = assert_accepted("SELECT region FROM sales LIMIT 1_000");
+    assert_eq!(guarded.limit_note.as_deref(), Some("Hạ LIMIT xuống 100"));
 }
 
 #[test]

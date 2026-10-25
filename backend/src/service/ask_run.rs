@@ -185,9 +185,8 @@ async fn run_guarded(
         }
         Err(QueryError::Timeout) => {
             let message = format!(
-                "Câu SQL chạy quá {} giây nên đã bị dừng. Thử hỏi hẹp hơn, ví dụ thêm khoảng thời gian hoặc bớt chiều \
-                 nhóm",
-                input.timeout.as_secs()
+                "Câu SQL chạy quá {} nên đã bị dừng. Thử hỏi hẹp hơn, ví dụ thêm khoảng thời gian hoặc bớt chiều nhóm",
+                build_duration_text(input.timeout)
             );
             (stopped(shown, &message), Some(message))
         }
@@ -202,6 +201,15 @@ async fn run_guarded(
     let ok = matches!(outcome, Attempt::Answered { .. });
     steps.push(build_step(StepName::Run, started, ok, detail.as_deref()));
     Ok(outcome)
+}
+
+/// "30 giây"; dưới một giây thì mili giây ("300 mili giây"), không in "0 giây".
+fn build_duration_text(duration: Duration) -> String {
+    if duration < Duration::from_secs(1) {
+        format!("{} mili giây", duration.as_millis())
+    } else {
+        format!("{} giây", duration.as_secs())
+    }
 }
 
 fn stopped(shown: String, message: &str) -> Attempt {
