@@ -12,7 +12,6 @@ import {
   type AskResponse,
   type AskVariables,
   type ChartSuggestion,
-  type ResultTable as ResultTableData,
   type Understanding,
 } from '@/api/ask'
 import { AnswerSummary } from '@/components/ask/AnswerSummary'
@@ -25,6 +24,7 @@ import { UnderstandingCard } from '@/components/ask/UnderstandingCard'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { cn } from '@/lib/utils'
+import { buildResultView } from './resultView'
 
 const ResultChart = lazy(() => import('@/components/ask/ResultChart').then((m) => ({ default: m.ResultChart })))
 
@@ -141,16 +141,6 @@ function AnsweredBody({ response, pending, onChangeAssumption }: AnsweredProps) 
       )}
     </>
   )
-}
-
-function buildResultView(result: ResultTableData): ResultView {
-  return {
-    columns: result.columns.map((column) => ({ name: column.name, kind: column.kind })),
-    rows: result.rows,
-    totalRows: result.total_rows,
-    truncated: result.truncated,
-    limitReached: result.limit_reached,
-  }
 }
 
 // Gợi ý trỏ tới cột không có trong kết quả thì bỏ biểu đồ, vẫn hiện bảng: vẽ sai cột còn tệ hơn không vẽ. Không có
