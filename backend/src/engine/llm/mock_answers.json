@@ -225,6 +225,10 @@
         { "column": "Customer Segment", "value": "Corporate", "aliases": ["khách doanh nghiệp"] },
         { "column": "Customer Segment", "value": "Home Office", "aliases": ["văn phòng tại nhà"] }
       ],
+      "role_changes": [
+        { "name": "Order Id", "role": "key" },
+        { "name": "Product Image", "role": "text" }
+      ],
       "suggested_questions": [
         "Doanh thu theo thị trường",
         "Doanh thu theo tháng",

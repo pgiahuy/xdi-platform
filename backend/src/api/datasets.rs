@@ -309,7 +309,7 @@ mod tests {
     use serde_json::{json, Value};
 
     use crate::api::test_support::{app_with, call, multipart, send_raw, CODE};
-    use crate::engine::store::test_support::{fetch_count, fresh_database};
+    use crate::engine::store::test_support::{fetch_count, fetch_text, fresh_database};
 
     const URL: &str = "/api/workspaces/cua-hang/datasets";
 
@@ -692,5 +692,167 @@ mod tests {
         assert!(!data.0.join("staging").exists());
         // Không có thư mục staging cũng không lỗi.
         crate::service::ingest::clear_staging(&data.0);
+    }
+
+    const DATACO_CSV: &[u8] = b"Type,Market,Order Id,Product Image,Order Item Total\n\
+        DEBIT,Europe,1,img/1.jpg,100.5\n\
+        CASH,LATAM,1,img/2.jpg,200.0\n\
+        DEBIT,Europe,2,img/1.jpg,150.25\n";
+
+    /// Nạp xong, hồ sơ ngữ nghĩa chạy nền tới xong: dataset tên DataCo (bảng logic dataco) nhận hồ sơ mock — mô tả,
+    /// bí danh, vai trò sửa, 5 câu gợi ý, current_profile_status thành semantic. Xóa dòng spawn trong ingest thì test
+    /// này đỏ.
+    #[tokio::test]
+    async fn upload_spawns_the_semantic_profile() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone();
+            // Tường minh mock, không theo biến môi trường của máy chạy test.
+            c.llm_provider = "mock".to_string();
+        });
+        let lan = setup(&app).await;
+
+        let (status, body) =
+            upload(&app, &lan, &[("name", "DataCo")], &[("d.csv", DATACO_CSV)]).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(body["version"]["profile_status"], "structure");
+        let dataset_id = body["dataset"]["id"].as_str().unwrap().to_string();
+        let url = format!("{URL}/{dataset_id}");
+
+        let mut detail = serde_json::Value::Null;
+        for _ in 0..100 {
+            let (_, _, body) = call(&app, "GET", &url, Some(&lan), None).await;
+            if body["current_profile_status"] == "semantic" {
+                detail = body;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(detail["current_profile_status"], "semantic", "{detail}");
+        assert_eq!(
+            detail["suggested_questions"].as_array().map(Vec::len),
+            Some(5),
+            "{detail}"
+        );
+
+        db.drop().await;
+    }
+
+    /// Cột nhạy cảm được đánh dấu ngay trong lượt lập hồ sơ cấu trúc: sau khi nạp (dù lớp ngữ nghĩa chưa chạy hay
+    /// lỗi mãi, ở đây provider luôn lỗi), giá trị của Customer Email không vào ngữ cảnh hỏi của #28
+    /// (build_ask_context), cũng không có trong danh sách giá trị đọc ra (list_value_rows).
+    #[tokio::test]
+    async fn sensitive_columns_keep_values_out_of_the_ask_context() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone();
+            c.llm_provider = "ollama".to_string();
+            c.ollama_url = "http://127.0.0.1:9".to_string();
+        });
+        let lan = setup(&app).await;
+        let csv: &[u8] = b"Customer Email,Market,Order Id\n\
+            lan@example.com,Europe,1\n\
+            huy@example.com,LATAM,2\n\
+            lan@example.com,Europe,3\n";
+        let (status, body) = upload(&app, &lan, &[("name", "Khách")], &[("k.csv", csv)]).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(body["version"]["profile_status"], "structure");
+        let dataset_id = body["dataset"]["id"].as_str().unwrap().to_string();
+
+        // Dựng lại bối cảnh gọi của tầng service từ dữ liệu vừa nạp.
+        let ws_text = fetch_text(
+            &db.store,
+            "SELECT workspace_id::text FROM memberships LIMIT 1",
+        )
+        .await;
+        let ws = crate::auth::WorkspaceId::for_test(uuid::Uuid::parse_str(&ws_text).unwrap());
+        let version = db
+            .store
+            .get_current_version(&ws, uuid::Uuid::parse_str(&dataset_id).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+        let state =
+            crate::state::AppState::new(crate::config::Config::from_env(), db.store.clone());
+        let context = crate::service::ask_context::build_ask_context(
+            &state,
+            &ws,
+            &version,
+            "doanh thu theo thị trường",
+            &[],
+        )
+        .await
+        .unwrap();
+        let context = format!("{context:?}");
+        assert!(!context.contains("lan@example.com"), "{context}");
+        assert!(!context.contains("huy@example.com"), "{context}");
+        // Cột không nhạy cảm vẫn có giá trị trong ngữ cảnh (Europe có trong câu hỏi qua "thị trường"? không; kiểm
+        // trực tiếp danh sách đọc ra thay vì suy từ câu hỏi).
+        let rows = db
+            .store
+            .list_value_rows(&ws, version.id, std::time::Duration::from_secs(2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(rows.iter().any(|r| r.value == "Europe"));
+        assert!(!rows.iter().any(|r| r.value.contains('@')));
+        let email_col = db.store.list_columns(&ws, version.id).await.unwrap();
+        let email_col = email_col
+            .iter()
+            .find(|c| c.name == "Customer Email")
+            .unwrap();
+        assert!(email_col.is_sensitive);
+
+        db.drop().await;
+    }
+
+    /// Mô hình lỗi tạm (provider ollama trỏ vào cổng không nghe: kết nối bị từ chối, mã Upstream): lần nạp vẫn 201,
+    /// phiên bản giữ structure và không bị đánh dấu đã thử (lần khởi động sau thử lại); nạp lại đúng bộ file đó trả
+    /// 200 created = false và gọi lại mô hình lần nữa (vẫn lỗi, vẫn 200).
+    #[tokio::test]
+    async fn llm_failure_does_not_block_the_upload() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone();
+            c.llm_provider = "ollama".to_string();
+            // Cổng 9 (discard) hầu như luôn không có gì nghe: kết nối bị từ chối ngay, không phải chờ timeout.
+            c.ollama_url = "http://127.0.0.1:9".to_string();
+        });
+        let lan = setup(&app).await;
+
+        let (status, body) =
+            upload(&app, &lan, &[("name", "DataCo")], &[("d.csv", DATACO_CSV)]).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let version_id = body["version"]["id"].as_str().unwrap().to_string();
+        // Chờ lượt nền chạy xong (lỗi tạm: không đánh dấu), rồi kiểm: structure, chưa đánh dấu.
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let attempted = format!(
+            "SELECT count(*) FROM dataset_versions WHERE id = '{version_id}' AND semantic_attempted_with IS NOT NULL"
+        );
+        assert_eq!(fetch_count(&db.store, &attempted).await, 0);
+        let status_of = format!(
+            "SELECT count(*) FROM dataset_versions WHERE id = '{version_id}' AND profile_status = 'structure'"
+        );
+        assert_eq!(fetch_count(&db.store, &status_of).await, 1);
+
+        // Nạp lại đúng bộ file: không tạo gì mới, nhưng là đường thử lại tường minh của lớp ngữ nghĩa.
+        let (status, body) =
+            upload(&app, &lan, &[("name", "DataCo")], &[("d.csv", DATACO_CSV)]).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["created"], false);
+
+        db.drop().await;
     }
 }

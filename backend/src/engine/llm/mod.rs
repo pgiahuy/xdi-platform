@@ -58,8 +58,6 @@ pub trait LlmProvider: Send + Sync {
     fn name(&self) -> String;
 
     /// Gửi yêu cầu, nhận văn bản trả về.
-    // Khung: service/ask gọi hàm này từ issue sinh SQL. Gỡ allow khi đó.
-    #[allow(dead_code)]
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError>;
 }
 

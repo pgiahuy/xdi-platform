@@ -8,7 +8,8 @@ giá trị trong danh sách ("miền Nam" thành South) và trả `{terms, sql}`
 
 Không có dòng dữ liệu nào ở đây: chỉ tên cột, mô tả, bí danh và giá trị của cột chiều (column_values), cột nhạy cảm
 không kèm giá trị nào. Rủi ro còn lại: bảng nhỏ có cột chữ ít giá trị như tên người, địa chỉ thì cột đó là cột chiều,
-giá trị của nó vào prompt cho tới khi admin hay #23 đánh dấu nhạy cảm (docs/PRIVACY.md).
+giá trị của nó vào prompt khi luật tên và dạng giá trị của lớp cấu trúc (service/profile.rs) không bắt được, cho
+tới khi admin hay #23 đánh dấu (docs/PRIVACY.md).
 
 Các bước:
 - Tách câu hỏi thành cụm (service/ask_phrases.rs).

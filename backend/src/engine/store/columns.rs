@@ -50,6 +50,9 @@ pub struct NewColumn {
     pub name: String,
     pub data_type: String,
     pub role: ProfileRole,
+    /// Cờ nhạy cảm do luật của service/profile.rs đặt ngay lúc lập hồ sơ cấu trúc, để giá trị cột nhạy cảm không bao
+    /// giờ rời máy chủ, kể cả trước khi lớp ngữ nghĩa (#23) chạy.
+    pub is_sensitive: bool,
     pub null_count: i64,
     pub distinct_count: i64,
     pub min_value: Option<String>,
@@ -59,10 +62,10 @@ pub struct NewColumn {
     pub values: Vec<NewColumnValue>,
 }
 
-// Số đo (null_count, distinct_count, min, max) chưa ai đọc ngoài test: chờ câu "tại sao" (#38) và màn xem hồ sơ. Gỡ
-// allow khi có người đọc để clippy bắt lại mã thừa.
-/// Một dòng của bảng columns: lớp cấu trúc, cộng mô tả, bí danh và cờ nhạy cảm của lớp ngữ nghĩa (#23 ghi; chưa ghi
-/// thì mô tả null, bí danh rỗng, không nhạy cảm).
+// position chỉ để sắp xếp trong SQL, description và aliases đợi ngữ cảnh prompt (#29) đọc ngoài test; gỡ allow khi
+// có người đọc để clippy bắt lại mã thừa.
+/// Một dòng của bảng columns: lớp cấu trúc (kiểu, số đo, vai trò; cờ nhạy cảm do luật của service/profile.rs đặt
+/// ngay lúc lập hồ sơ), cộng mô tả và bí danh của lớp ngữ nghĩa (#23 ghi sau; chưa ghi thì mô tả null, bí danh rỗng).
 #[allow(dead_code)]
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ProfileColumn {
@@ -71,22 +74,26 @@ pub struct ProfileColumn {
     pub name: String,
     pub data_type: String,
     pub role: String,
+    pub description: Option<String>,
+    pub aliases: Vec<String>,
+    pub is_sensitive: bool,
     pub null_count: Option<i64>,
     pub distinct_count: Option<i64>,
     pub min_value: Option<String>,
     pub max_value: Option<String>,
     pub time_format: Option<String>,
-    pub description: Option<String>,
-    pub aliases: Vec<String>,
-    pub is_sensitive: bool,
 }
 
-// frequency chưa ai đọc ngoài test (thứ tự đã theo nó); gỡ allow khi có người đọc.
-#[allow(dead_code)]
+/// Một dòng của bảng column_values.
+// aliases do #23 ghi, ngữ cảnh prompt (#28) đọc qua ValueRow; frequency chưa ai đọc ngoài test (thứ tự đã theo nó).
+// Gỡ allow khi có người đọc trực tiếp.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ColumnValue {
     pub column_id: Uuid,
     pub value: String,
+    #[allow(dead_code)]
+    pub aliases: Vec<String>,
+    #[allow(dead_code)]
     pub frequency: Option<i64>,
 }
 
@@ -95,6 +102,25 @@ pub struct ColumnValue {
 pub struct ValueRow {
     pub column_id: Uuid,
     pub column_name: String,
+    pub value: String,
+    pub aliases: Vec<String>,
+}
+
+/// Phần ngữ nghĩa của một cột, đã qua kiểm tra của service/semantic.rs: tên cột đã đổi ra id, giới hạn độ dài đã áp.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticColumnUpdate {
+    pub column_id: Uuid,
+    /// None khi mô hình không có mô tả hợp lệ cho cột này.
+    pub description: Option<String>,
+    pub aliases: Vec<String>,
+    /// Vai trò mới khi mô hình đề xuất và luật cho phép (xem service/semantic.rs); None là giữ vai trò cũ.
+    pub role: Option<ProfileRole>,
+}
+
+/// Bí danh của một giá trị đã qua kiểm tra (giá trị có thật trong column_values của cột).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticValueUpdate {
+    pub column_id: Uuid,
     pub value: String,
     pub aliases: Vec<String>,
 }
@@ -147,8 +173,8 @@ impl Store {
         version_id: Uuid,
     ) -> Result<Vec<ProfileColumn>, AppError> {
         sqlx::query_as(
-            "SELECT id, position, name, data_type, role, null_count, distinct_count, min_value, max_value, time_format,
-                 description, aliases, is_sensitive
+            "SELECT id, position, name, data_type, role, description, aliases, is_sensitive,
+                 null_count, distinct_count, min_value, max_value, time_format
              FROM columns WHERE workspace_id = $1 AND version_id = $2 ORDER BY position",
         )
         .bind(ws.as_uuid())
@@ -205,15 +231,13 @@ impl Store {
     }
 
     /// Giá trị của các cột cho trước, mỗi cột giá trị nhiều dòng nhất trước. Id cột của workspace khác bị bỏ qua.
-    // Chưa ai gọi ngoài test: kiểm form câu "tại sao" (#38) cần đủ danh sách. Gỡ allow khi có người gọi.
-    #[allow(dead_code)]
     pub async fn list_column_values(
         &self,
         ws: &WorkspaceId,
         column_ids: &[Uuid],
     ) -> Result<Vec<ColumnValue>, AppError> {
         sqlx::query_as(
-            "SELECT column_id, value, frequency FROM column_values
+            "SELECT column_id, value, aliases, frequency FROM column_values
              WHERE workspace_id = $1 AND column_id = ANY($2)
              ORDER BY column_id, frequency DESC, value",
         )
@@ -222,6 +246,112 @@ impl Store {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| db_error("list column values", e))
+    }
+
+    /// Bật cờ nhạy cảm cho các cột (chỉ chiều false -> true). Hai người gọi: lượt quét lúc khởi động cho phiên
+    /// bản cũ (service/profile.rs) và cột do mô hình đề xuất thêm trong câu trả lời ngữ nghĩa (service/semantic.rs,
+    /// qua apply_semantic_profile).
+    pub async fn mark_columns_sensitive(
+        &self,
+        ws: &WorkspaceId,
+        version_id: Uuid,
+        column_ids: &[Uuid],
+    ) -> Result<(), AppError> {
+        if column_ids.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(
+            "UPDATE columns SET is_sensitive = true
+             WHERE workspace_id = $1 AND version_id = $2 AND id = ANY($3)",
+        )
+        .bind(ws.as_uuid())
+        .bind(version_id)
+        .bind(column_ids)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| db_error("mark sensitive columns", e))?;
+        Ok(())
+    }
+
+    /// Ghi hồ sơ lớp ngữ nghĩa (#23) cho một phiên bản: mô tả, bí danh và vai trò mới của cột, cột nhạy cảm do mô
+    /// hình đề xuất thêm (chỉ chiều false -> true), bí danh giá trị, câu hỏi gợi ý, rồi chuyển profile_status sang
+    /// semantic, trong một giao dịch. Như insert_profile, câu UPDATE đầu khóa dòng phiên bản và chỉ nhận phiên bản
+    /// đang ở structure, nên hai lần ghi cùng lúc thì lần sau thấy semantic và bỏ qua (trả false, không ghi gì).
+    /// Câu hỏi gợi ý nằm trên dataset_versions vì chúng đi theo phiên bản.
+    pub async fn apply_semantic_profile(
+        &self,
+        ws: &WorkspaceId,
+        version_id: Uuid,
+        columns: &[SemanticColumnUpdate],
+        values: &[SemanticValueUpdate],
+        sensitive_columns: &[Uuid],
+        suggested_questions: &[String],
+    ) -> Result<bool, AppError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| db_error("begin semantic profile", e))?;
+        let claimed = sqlx::query(
+            "UPDATE dataset_versions SET profile_status = $3, suggested_questions = $4
+             WHERE workspace_id = $1 AND id = $2 AND profile_status = $5",
+        )
+        .bind(ws.as_uuid())
+        .bind(version_id)
+        .bind(ProfileStatus::Semantic.as_str())
+        .bind(sqlx::types::Json(suggested_questions))
+        .bind(ProfileStatus::Structure.as_str())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| db_error("claim version for semantic profile", e))?
+        .rows_affected();
+        // Ra khỏi hàm mà chưa commit thì sqlx tự rollback giao dịch.
+        if claimed == 0 {
+            return Ok(false);
+        }
+
+        for column in columns {
+            let role = column.role.map(|r| r.as_str());
+            sqlx::query(
+                "UPDATE columns SET description = $3, aliases = $4, role = COALESCE($5, role)
+                 WHERE workspace_id = $1 AND id = $2",
+            )
+            .bind(ws.as_uuid())
+            .bind(column.column_id)
+            .bind(&column.description)
+            .bind(&column.aliases)
+            .bind(role)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("update column semantics", e))?;
+        }
+        for value in values {
+            sqlx::query(
+                "UPDATE column_values SET aliases = $4 WHERE workspace_id = $1 AND column_id = $2 AND value = $3",
+            )
+            .bind(ws.as_uuid())
+            .bind(value.column_id)
+            .bind(&value.value)
+            .bind(&value.aliases)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("update value aliases", e))?;
+        }
+        // Cột nhạy cảm do mô hình đề xuất thêm: chỉ đặt, không bao giờ gỡ (mô hình không nói gì thì giữ nguyên).
+        if !sensitive_columns.is_empty() {
+            sqlx::query(
+                "UPDATE columns SET is_sensitive = true WHERE workspace_id = $1 AND id = ANY($2)",
+            )
+            .bind(ws.as_uuid())
+            .bind(sensitive_columns)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("mark llm-suggested sensitive columns", e))?;
+        }
+        tx.commit()
+            .await
+            .map_err(|e| db_error("commit semantic profile", e))?;
+        Ok(true)
     }
 }
 
@@ -235,9 +365,9 @@ pub(super) async fn insert_columns(
 ) -> Result<(), AppError> {
     for column in columns {
         let column_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO columns (workspace_id, version_id, position, name, data_type, role, null_count,
+            "INSERT INTO columns (workspace_id, version_id, position, name, data_type, role, is_sensitive, null_count,
                  distinct_count, min_value, max_value, time_format)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
         )
         .bind(ws.as_uuid())
         .bind(version_id)
@@ -245,6 +375,7 @@ pub(super) async fn insert_columns(
         .bind(&column.name)
         .bind(&column.data_type)
         .bind(column.role.as_str())
+        .bind(column.is_sensitive)
         .bind(column.null_count)
         .bind(column.distinct_count)
         .bind(&column.min_value)
@@ -291,6 +422,7 @@ mod tests {
             name: name.to_string(),
             data_type: "VARCHAR".to_string(),
             role,
+            is_sensitive: false,
             null_count: 0,
             distinct_count: values.len() as i64,
             min_value: None,
@@ -456,5 +588,118 @@ mod tests {
         assert!(store.get_dataset(&ws, ds.id).await.unwrap().is_some());
 
         drop_workspace(&store, ws).await;
+    }
+
+    /// Hồ sơ ngữ nghĩa: chỉ ghi khi phiên bản đang ở structure (ghi lần hai hay của workspace khác ra false, không
+    /// đổi gì), ghi đủ mô tả, bí danh, vai trò mới, bí danh giá trị và câu gợi ý trong một giao dịch.
+    #[tokio::test]
+    async fn semantic_profile_is_written_once_and_per_workspace() {
+        let Some(store) = store().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let a = temp_workspace(&store).await;
+        let b = temp_workspace(&store).await;
+        let src = store.create_local_source(&a).await.unwrap();
+        let ds = store
+            .create_dataset(&a, src, "Sales", "sales", None)
+            .await
+            .unwrap();
+        let new = |hash| NewVersion {
+            source_kind: SourceKind::Csv,
+            file_hash: hash,
+            parquet_path: "x",
+            row_count: 3,
+        };
+        // Không có cột thì pending (chưa qua lớp cấu trúc): lớp ngữ nghĩa không ghi được.
+        let pending = store
+            .create_version(&a, ds.id, &new("h0"), &[])
+            .await
+            .unwrap();
+        let columns = [
+            new_column(
+                0,
+                "Market",
+                ProfileRole::Dimension,
+                &[("Europe", 2), ("LATAM", 1)],
+            ),
+            new_column(1, "Order Id", ProfileRole::Measure, &[]),
+        ];
+        let v = store
+            .create_version(&a, ds.id, &new("h1"), &columns)
+            .await
+            .unwrap();
+
+        let read = store.list_columns(&a, v.id).await.unwrap();
+        let updates = vec![
+            SemanticColumnUpdate {
+                column_id: read[0].id,
+                description: Some("Thị trường".to_string()),
+                aliases: vec!["thị trường".to_string()],
+                role: None,
+            },
+            SemanticColumnUpdate {
+                column_id: read[1].id,
+                description: None,
+                aliases: Vec::new(),
+                role: Some(ProfileRole::Key),
+            },
+        ];
+        let values = vec![SemanticValueUpdate {
+            column_id: read[0].id,
+            value: "Europe".to_string(),
+            aliases: vec!["châu Âu".to_string()],
+        }];
+        let questions = vec!["Doanh thu theo thị trường".to_string()];
+        // Mô hình đề xuất đánh dấu thêm cột nhạy cảm (chỉ chiều false -> true).
+        let sensitive = vec![read[1].id];
+
+        // Phiên bản pending và workspace khác đều bị từ chối.
+        assert!(!store
+            .apply_semantic_profile(&a, pending.id, &updates, &values, &sensitive, &questions)
+            .await
+            .unwrap());
+        assert!(!store
+            .apply_semantic_profile(&b, v.id, &updates, &values, &sensitive, &questions)
+            .await
+            .unwrap());
+
+        assert!(store
+            .apply_semantic_profile(&a, v.id, &updates, &values, &sensitive, &questions)
+            .await
+            .unwrap());
+        // Ghi lần hai (hai lượt chạy song song) không đổi gì.
+        assert!(!store
+            .apply_semantic_profile(&a, v.id, &[], &[], &[], &[])
+            .await
+            .unwrap());
+
+        let read = store.list_columns(&a, v.id).await.unwrap();
+        assert_eq!(read[0].description.as_deref(), Some("Thị trường"));
+        assert_eq!(read[0].aliases, ["thị trường"]);
+        assert_eq!(read[0].role, "dimension");
+        assert!(!read[0].is_sensitive);
+        assert_eq!(read[1].role, "key");
+        assert!(read[1].is_sensitive);
+        let vals = store.list_column_values(&a, &[read[0].id]).await.unwrap();
+        let europe = vals.iter().find(|v| v.value == "Europe").unwrap();
+        assert_eq!(europe.aliases, ["châu Âu"]);
+        let latam = vals.iter().find(|v| v.value == "LATAM").unwrap();
+        assert!(latam.aliases.is_empty());
+
+        let v = store
+            .find_version_by_hash(&a, ds.id, "h1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(v.profile_status, "semantic");
+        store.set_current_version(&a, ds.id, v.id).await.unwrap();
+        let ds = store.get_dataset(&a, ds.id).await.unwrap().unwrap();
+        assert_eq!(ds.suggested_questions, ["Doanh thu theo thị trường"]);
+        // Workspace khác không đọc được phần đã ghi.
+        assert!(store.list_columns(&b, v.id).await.unwrap().is_empty());
+
+        drop_workspace(&store, a).await;
+        drop_workspace(&store, b).await;
     }
 }

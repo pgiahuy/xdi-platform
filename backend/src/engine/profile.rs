@@ -47,6 +47,13 @@ pub struct ValueCount {
     pub frequency: i64,
 }
 
+/// Để luật đánh dấu nhạy cảm (service/profile.rs) xét danh sách giá trị mà không phải tách chuỗi ra.
+impl AsRef<str> for ValueCount {
+    fn as_ref(&self) -> &str {
+        &self.value
+    }
+}
+
 /// Số đo của một cột. Giá trị (min, max, value) ghi dạng chữ như DuckDB CAST sang VARCHAR.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnStats {

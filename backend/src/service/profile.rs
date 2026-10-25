@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/profile.rs - hồ sơ cột lớp cấu trúc của một phiên bản dataset: số đo của từng cột (engine/profile.rs) cộng
-vai trò cột (build_column_role), ghi vào columns và column_values (engine/store/columns.rs). Code tính hết, không gọi
-mô hình ngôn ngữ, nên chạy như nhau với LLM_PROVIDER=mock. Guard (#31, #33), ngữ cảnh prompt (#28) và câu "tại sao"
-(#38, #39) đọc hồ sơ này; mô tả, bí danh là lớp ngữ nghĩa (#23).
+vai trò cột (build_column_role) cộng cờ nhạy cảm theo luật (is_sensitive_column), ghi vào columns và column_values
+(engine/store/columns.rs). Code tính hết, không gọi mô hình ngôn ngữ, nên chạy như nhau với LLM_PROVIDER=mock. Guard
+(#31, #33), ngữ cảnh prompt (#28) và câu "tại sao" (#38, #39) đọc hồ sơ này; mô tả, bí danh là lớp ngữ nghĩa (#23).
 
-Hai chỗ gọi: service/ingest.rs lập hồ sơ cho phiên bản vừa nạp, trước khi trả 201; main.rs gọi profile_pending_versions
-một lần lúc khởi động cho phiên bản nạp trước khi có bước này. Luật vai trò ghi lại ở docs/DATA.md. */
+Ba chỗ gọi: service/ingest.rs lập hồ sơ cho phiên bản vừa nạp, trước khi trả 201; main.rs gọi profile_pending_versions
+lúc khởi động cho phiên bản nạp trước khi có bước này; main.rs cũng gọi mark_sensitive_columns_at_start (đồng bộ,
+trước khi nhận request) để chạy lại luật nhạy cảm cho phiên bản nạp trước khi luật tồn tại. Luật vai trò ghi lại ở
+docs/DATA.md. */
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -16,6 +18,7 @@ use crate::auth::WorkspaceId;
 use crate::engine::analytics::SOURCE_COLUMN;
 use crate::engine::profile::{self, ColumnStats, ValueCount};
 use crate::engine::store::{NewColumn, NewColumnValue, PendingVersion, ProfileRole, ProfileStatus};
+use crate::service::ask_phrases::fold;
 use crate::{error::AppError, state::AppState};
 
 /// Cột chữ có không quá ngần này giá trị khác nhau là chiều (dimension), nhiều hơn là chữ tự do (text). Cũng là ngưỡng
@@ -75,7 +78,9 @@ pub fn build_column_role(stats: &ColumnStats, row_count: i64) -> ProfileRole {
     ProfileRole::Text
 }
 
-/// Hồ sơ chờ ghi của mọi cột, giữ thứ tự cột của bảng.
+/// Hồ sơ chờ ghi của mọi cột, giữ thứ tự cột của bảng. Cờ nhạy cảm được đặt ngay tại đây (is_sensitive_column),
+/// trong cùng giao dịch ghi hồ sơ, trước khi phiên bản dùng được: giá trị của cột nhạy cảm không bao giờ rời máy
+/// chủ, kể cả khi lớp ngữ nghĩa (#23) chưa chạy hay lỗi mãi.
 pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColumn> {
     stats
         .into_iter()
@@ -84,6 +89,7 @@ pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColu
             // Số cột của một bảng không tới giới hạn i32 (DuckDB và Parquet giới hạn thấp hơn nhiều).
             position: i as i32,
             role: build_column_role(&s, row_count),
+            is_sensitive: is_sensitive_column(&s.name, &s.values),
             name: s.name,
             data_type: s.data_type,
             null_count: s.null_count,
@@ -94,6 +100,148 @@ pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColu
             values: build_new_values(s.values),
         })
         .collect()
+}
+
+/// Cụm tên cột nhạy cảm, so theo dạng đã chuẩn hóa (bỏ dấu, chữ thường, tách từ): email, mật khẩu, số điện
+/// thoại, số giấy tờ, địa chỉ, họ tên. Một cụm khớp khi các từ của nó đứng liền nhau trong tên cột (tách theo
+/// khoảng trắng, gạch, camelCase và ranh giới chữ - số), nên "tel" không bắt nhầm "Hotel" và không có cụm "mail" đứng
+/// một mình (để "Mailing Region" không thành nhạy cảm). Riêng "dien thoai" (SENSITIVE_NAME_PREFIX) chỉ khớp khi đứng đầu tên cột ("Điện
+/// thoại", "Điện thoại liên hệ"), để "Dòng điện thoại", "Loại điện thoại" vẫn là chiều thường. Luật cố ý đơn giản và
+/// nghiêng về đánh dấu nhầm còn hơn bỏ sót: đánh dấu nhầm chỉ làm prompt thiếu một danh sách giá trị.
+const SENSITIVE_NAME_PHRASES: &[&str] = &[
+    "email",
+    "e mail",
+    "emails",
+    "password",
+    "passwd",
+    "mat khau",
+    "phone",
+    "phone number",
+    "phones",
+    "telephone",
+    "telephones",
+    "mobile",
+    "tel",
+    "sdt",
+    "so dien thoai",
+    "so dt",
+    "cmnd",
+    "cccd",
+    "passport",
+    "ho chieu",
+    "dia chi",
+    "address",
+    "addresses",
+    "street",
+    "ho va ten",
+    "ho ten",
+    "ten khach hang",
+    "ten kh",
+    "ten khach",
+    "customer name",
+    "full name",
+    "fullname",
+    "first name",
+    "firstname",
+    "fname",
+    "last name",
+    "lastname",
+    "lname",
+];
+
+/// Tên cột bắt đầu bằng cụm này là nhạy cảm (xem SENSITIVE_NAME_PHRASES). Không có "dt": trong bảng tiếng Việt
+/// "DT" hay là doanh thu.
+const SENSITIVE_NAME_PREFIX: &str = "dien thoai";
+
+/// Cột nhạy cảm theo luật: tên khớp một cụm trong SENSITIVE_NAME_PHRASES (theo từ) hay bắt đầu bằng
+/// SENSITIVE_NAME_PREFIX, hoặc phần lớn giá trị của cột trông như email hay số điện thoại. Chỉ cột ít giá trị có danh
+/// sách giá trị trong bộ nhớ, nên luật giá trị chỉ xét được các cột đó; đó cũng là các cột có giá trị đi vào prompt.
+/// Mô hình (#23) đề xuất đánh dấu thêm sau, chỉ chiều bật.
+pub(crate) fn is_sensitive_column(name: &str, values: &[impl AsRef<str>]) -> bool {
+    let tokens = name_tokens(name);
+    if starts_with_phrase(&tokens, SENSITIVE_NAME_PREFIX)
+        || SENSITIVE_NAME_PHRASES
+            .iter()
+            .any(|phrase| contains_phrase(&tokens, phrase))
+    {
+        return true;
+    }
+    !values.is_empty()
+        && values.iter().filter(|v| looks_personal(v.as_ref())).count() * 2 > values.len()
+}
+
+/// Tên cột thành dãy từ: tách ranh giới camelCase ("CustomerName" thành "Customer Name") và ranh giới chữ - số
+/// ("Address1" thành "Address 1"), rồi fold (bỏ dấu, chữ thường, tách theo ký tự không phải chữ hay số) và tách từ.
+fn name_tokens(name: &str) -> Vec<String> {
+    let mut spaced = String::with_capacity(name.len() + 8);
+    let mut prev: Option<char> = None;
+    for c in name.chars() {
+        if let Some(p) = prev {
+            let camel = p.is_lowercase() && c.is_uppercase();
+            let letter_digit = (p.is_alphabetic() && c.is_ascii_digit())
+                || (p.is_ascii_digit() && c.is_alphabetic());
+            if camel || letter_digit {
+                spaced.push(' ');
+            }
+        }
+        prev = Some(c);
+        spaced.push(c);
+    }
+    fold(&spaced)
+        .split_whitespace()
+        .map(str::to_string)
+        .collect()
+}
+
+/// Cụm (dãy từ) có đứng liền nhau trong dãy từ của tên cột không.
+fn contains_phrase(tokens: &[String], phrase: &str) -> bool {
+    let words: Vec<&str> = phrase.split_whitespace().collect();
+    tokens
+        .windows(words.len())
+        .any(|w| w.iter().zip(&words).all(|(a, b)| a == b))
+}
+
+/// Cụm có đứng ngay đầu dãy từ của tên cột không.
+fn starts_with_phrase(tokens: &[String], phrase: &str) -> bool {
+    let len = phrase.split_whitespace().count();
+    tokens.len() >= len && contains_phrase(&tokens[..len], phrase)
+}
+
+/// Giá trị trông như dữ liệu cá nhân: có dạng email (một @ và dấu chấm sau nó) hay số điện thoại
+/// (looks_like_phone).
+fn looks_personal(value: &str) -> bool {
+    if let Some((_, domain)) = value.split_once('@') {
+        if domain.contains('.') {
+            return true;
+        }
+    }
+    looks_like_phone(value)
+}
+
+/// Số điện thoại, bỏ qua khoảng trắng, chấm, gạch, ngoặc: dấu + rồi 10 tới 12 chữ số (dạng quốc tế "+84 912 345 678",
+/// "+1 415 555 0100", "+84 (0) 912 345 678"); 9 tới 11 chữ số bắt đầu bằng 0 (di động "0912 345 678", số bàn
+/// "(028) 3823 4567"); hoặc 11 chữ số bắt đầu bằng 84 ("84912345678"). Ngày (8 chữ số) và mã số không có 0 hay 84 ở
+/// đầu thì không khớp; mã đệm số 0 ("0012345678") khớp, chấp nhận vì đánh dấu nhầm chỉ mất danh sách giá trị. Số lưu
+/// kiểu số nguyên mất số 0 đầu ("912345678") nên không khớp, trừ dạng 84 ở đầu.
+fn looks_like_phone(value: &str) -> bool {
+    // Số thập phân và số âm ("0.039999999", "-0.8") không phải số điện thoại: nếu bỏ dấu chấm như bên dưới thì
+    // "0.039999999" thành mười chữ số bắt đầu bằng 0, và cột tỷ lệ kiểu DOUBLE bị đánh dấu nhạy cảm nhầm.
+    let trimmed = value.trim();
+    if trimmed.starts_with('-') || (trimmed.contains('.') && trimmed.parse::<f64>().is_ok()) {
+        return false;
+    }
+    let d: String = value
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '.' | '-' | '(' | ')'))
+        .collect();
+    let digits = d.chars().filter(|c| c.is_ascii_digit()).count();
+    if let Some(rest) = d.strip_prefix('+') {
+        return (10..=12).contains(&digits) && rest.chars().all(|c| c.is_ascii_digit());
+    }
+    if !(9..=11).contains(&digits) || !d.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    d.starts_with('0') || (digits == 11 && d.starts_with("84"))
 }
 
 /// Danh sách giá trị ghi được vào column_values: không giá trị nào dài quá VALUE_MAX_BYTES, không giá trị nào có ký tự
@@ -217,6 +365,64 @@ pub async fn profile_pending_versions(
     }
 }
 
+/// Chạy lại luật đánh dấu nhạy cảm (is_sensitive_column) cho các phiên bản đã có hồ sơ từ trước khi luật nằm ở lớp
+/// cấu trúc: chỉ bật cờ, không tắt (cờ do mô hình hay admin đặt thì giữ). Không có dấu "đã quét", nên mỗi lần khởi
+/// động quét lại: rẻ (hai câu SELECT mỗi phiên bản) và lần sau thường không còn gì để ghi. main.rs gọi đồng bộ
+/// trước khi server nhận request, để giá trị cột nhạy cảm của phiên bản cũ không lọt vào ngữ cảnh hỏi (#28) ngay từ
+/// đầu phiên chạy. Lỗi một phiên bản chỉ ghi log, không chặn phiên bản sau.
+pub async fn mark_sensitive_columns_at_start(state: &AppState) {
+    let candidates = match crate::auth::versions_for_sensitive_scan(&state.store).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = ?e, "cannot list dataset versions for the sensitive-column scan");
+            return;
+        }
+    };
+    for (ws, version) in candidates {
+        let result: Result<usize, AppError> = async {
+            let columns = state.store.list_columns(&ws, version.id).await?;
+            // Luật tên không cần giá trị, luật giá trị xét mọi cột có column_values, không chỉ dimension. Cột số
+            // điện thoại lưu BIGINT đã mất số 0 đầu nên luật giá trị chỉ bắt dạng 84 ở đầu (looks_like_phone); cột số
+            // nguyên thường là measure hay key, mà chỉ giá trị của cột dimension vào prompt.
+            let open_ids: Vec<Uuid> = columns
+                .iter()
+                .filter(|c| !c.is_sensitive)
+                .map(|c| c.id)
+                .collect();
+            let values = state.store.list_column_values(&ws, &open_ids).await?;
+            let detected: Vec<Uuid> = columns
+                .iter()
+                .filter(|c| !c.is_sensitive)
+                .filter(|c| {
+                    let column_values: Vec<&str> = values
+                        .iter()
+                        .filter(|v| v.column_id == c.id)
+                        .map(|v| v.value.as_str())
+                        .collect();
+                    is_sensitive_column(&c.name, &column_values)
+                })
+                .map(|c| c.id)
+                .collect();
+            if detected.is_empty() {
+                return Ok(0);
+            }
+            state
+                .store
+                .mark_columns_sensitive(&ws, version.id, &detected)
+                .await?;
+            Ok(detected.len())
+        }
+        .await;
+        match result {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(version_id = %version.id, count = n,
+                "marked sensitive columns of an earlier dataset version"),
+            Err(e) => tracing::warn!(version_id = %version.id, error = ?e,
+                "cannot scan a dataset version for sensitive columns"),
+        }
+    }
+}
+
 async fn profile_version(
     state: &AppState,
     ws: &WorkspaceId,
@@ -253,7 +459,7 @@ fn is_time_type(data_type: &str) -> bool {
     data_type == "DATE" || data_type.starts_with("TIMESTAMP")
 }
 
-fn is_integer_type(data_type: &str) -> bool {
+pub(crate) fn is_integer_type(data_type: &str) -> bool {
     matches!(
         data_type,
         "TINYINT"
