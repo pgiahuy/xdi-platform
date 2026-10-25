@@ -206,6 +206,8 @@ fn sensitive_columns_are_detected_by_name_and_values() {
         "Fullname",
         "Mobile",
         "Tel",
+        "Telephone",
+        "TelephoneNumber",
         "Customer Street",
         "Tên KH",
         // "dien thoai" ở đầu tên.
@@ -268,6 +270,11 @@ fn sensitive_columns_are_detected_by_name_and_values() {
     assert!(!is_sensitive_column("Ngày", &["2018-01-31", "2018-02-01"]));
     assert!(!is_sensitive_column("Khóa ngày", &["20180131", "20180201"]));
     assert!(!is_sensitive_column("Mã hàng", &["10002345", "10002346"]));
+    // Số thập phân và số âm, như cột tỷ lệ giảm giá kiểu DOUBLE, không phải số điện thoại.
+    assert!(!is_sensitive_column(
+        "Order Item Discount Rate",
+        &["0.039999999", "0.090000004", "-0.800000012"]
+    ));
     assert!(!is_sensitive_column("Ngày", &["31.01.2018", "01/02/2018"]));
     assert!(!is_sensitive_column(
         "Mã đơn",

@@ -118,6 +118,8 @@ const SENSITIVE_NAME_PHRASES: &[&str] = &[
     "phone",
     "phone number",
     "phones",
+    "telephone",
+    "telephones",
     "mobile",
     "tel",
     "sdt",
@@ -222,6 +224,12 @@ fn looks_personal(value: &str) -> bool {
 /// đầu thì không khớp; mã đệm số 0 ("0012345678") khớp, chấp nhận vì đánh dấu nhầm chỉ mất danh sách giá trị. Số lưu
 /// kiểu số nguyên mất số 0 đầu ("912345678") nên không khớp, trừ dạng 84 ở đầu.
 fn looks_like_phone(value: &str) -> bool {
+    // Số thập phân và số âm ("0.039999999", "-0.8") không phải số điện thoại: nếu bỏ dấu chấm như bên dưới thì
+    // "0.039999999" thành mười chữ số bắt đầu bằng 0, và cột tỷ lệ kiểu DOUBLE bị đánh dấu nhạy cảm nhầm.
+    let trimmed = value.trim();
+    if trimmed.starts_with('-') || (trimmed.contains('.') && trimmed.parse::<f64>().is_ok()) {
+        return false;
+    }
     let d: String = value
         .chars()
         .filter(|c| !matches!(c, ' ' | '.' | '-' | '(' | ')'))
