@@ -3,11 +3,11 @@
 backend/src/service/ask_contract.rs), giữ tab đang mở và dòng phân rã vừa bấm, gọi useDrill để lấy dòng nguồn. Phần
 hiện ở components/ask/EvidencePane.tsx. AskPage gắn key theo câu trả lời, nên câu trả lời mới thì về tab mặc định và
 bỏ lần truy cũ.
-Route drill còn trả 501 (#34): tab Dòng nguồn hiện lời báo; ở chế độ dữ liệu mẫu thì hiện vài dòng mẫu. */
+Backend chưa truy được dòng phân rã (trả 400, chờ #38): tab Dòng nguồn hiện lời báo của backend; ở chế độ dữ liệu
+mẫu thì hiện vài dòng mẫu. */
 
 import { useState } from 'react'
 import type { AskResponse } from '@/api/ask'
-import { ApiError } from '@/api/client'
 import { drillPageSize, useDrill, type DrillVariables } from '@/api/drill'
 import { EvidencePane } from '@/components/ask/EvidencePane'
 import type {
@@ -67,7 +67,7 @@ export function AskEvidence({ ws, answer, pending }: Props) {
 
   const rows = ((): RowsView => {
     if (!target) return { state: 'idle' }
-    if (drill.error) return { state: 'error', target, message: drillErrorMessage(drill.error) }
+    if (drill.error) return { state: 'error', target, message: drill.error.message }
     if (!drill.data) return { state: 'loading', target }
     const sample = import.meta.env.DEV && variables.fromSamples === true
     return { state: 'ready', target, sql: drill.data.sql, result: buildResultView(drill.data.result), sample }
@@ -107,13 +107,6 @@ function buildDefaultTab(response: AskResponse): EvidenceTab {
     case 'failed':
       return 'steps'
   }
-}
-
-function drillErrorMessage(error: Error): string {
-  if (error instanceof ApiError && error.status === 501) {
-    return 'Bản này chưa truy được dòng nguồn: backend chưa cài đặt phần này.'
-  }
-  return error.message
 }
 
 function buildSql(response: AskResponse): TabData<SqlView> {

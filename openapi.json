@@ -1810,7 +1810,8 @@
         "tags": [
           "query"
         ],
-        "summary": "Source rows behind a number (not implemented yet)",
+        "summary": "Source rows behind a number of an answer",
+        "description": "Reads the stored question, keeps its table and filters, adds the keys of the clicked cell, and runs that on the dataset version the question used, through the guard with the row filters of the member calling now. One page of rows per call, in the order the analytics engine reads them.",
         "operationId": "drill",
         "parameters": [
           {
@@ -1832,9 +1833,29 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DrillRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
+          "200": {
+            "description": "One page of source rows and their total count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DrillResponse"
+                }
+              }
+            }
+          },
           "4XX": {
-            "description": "401, 404 not a member",
+            "description": "400 invalid body, keys that do not match the result, a question that was rejected or failed, a question whose form cannot be traced yet (the message says why), a breakdown row (not supported yet) or a deleted version; 401; 404 not a member, or no such question in this dataset",
             "content": {
               "application/json": {
                 "schema": {
@@ -1845,16 +1866,6 @@
           },
           "500": {
             "description": "Internal error; details are in the server log, not in the response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
             "content": {
               "application/json": {
                 "schema": {
@@ -2321,6 +2332,35 @@
           }
         }
       },
+      "BreakdownKey": {
+        "type": "object",
+        "description": "One group of a breakdown table in one slice.",
+        "required": [
+          "slice",
+          "column",
+          "value"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "`DimensionBreakdown.column`: a column name of the dataset, not of `result.columns`."
+          },
+          "slice": {
+            "$ref": "#/components/schemas/SliceName"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CellValue",
+                "description": "`GroupContribution.value` of the group; null for the group of empty cells."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "CellValue": {
         "oneOf": [
           {
@@ -2652,6 +2692,103 @@
           "sql": {
             "type": "string",
             "description": "SQL that computed the groups of both slices, after the guard."
+          }
+        }
+      },
+      "DrillKey": {
+        "type": "object",
+        "description": "One grouping key of the clicked cell.",
+        "required": [
+          "column",
+          "value"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "A name from `result.columns`, of a column with role `dimension` or `time`."
+          },
+          "value": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CellValue",
+                "description": "The cell of that column in the clicked row, exactly as received; null for a SQL NULL."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DrillRequest": {
+        "type": "object",
+        "description": "Which number to trace back to its source rows: set exactly one of `cell` and `breakdown`. Rows come one page at a\ntime, in the order the analytics engine reads them.",
+        "required": [
+          "query_id"
+        ],
+        "properties": {
+          "breakdown": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BreakdownKey",
+                "description": "A row of the breakdown in `AskResponse.explanation`. Not supported yet: the request gets 400."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cell": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DrillKey"
+            },
+            "description": "A cell of `AskResponse.result`: the values of every `dimension` and `time` column of its row, one key per\ncolumn. An empty list is the one row of a query without grouping keys."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows per page, 1 to 1000. Default 100.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of source rows to skip. Default 0.",
+            "minimum": 0
+          },
+          "query_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "`AskResponse.query_id` of the answer the number belongs to."
+          }
+        }
+      },
+      "DrillResponse": {
+        "type": "object",
+        "description": "One page of the source rows behind a number.",
+        "required": [
+          "sql",
+          "result",
+          "total_rows"
+        ],
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/ResultTable",
+            "description": "The page: every column of the dataset, including `_source_file`, the file each row came from. Here\n`result.total_rows` counts the rows of this page only."
+          },
+          "sql": {
+            "type": "string",
+            "description": "The SQL that read this page, after the guard: the filters of the answered question, the keys of the clicked\nnumber, and the row filters of the member asking now (which may differ from the member who asked the question)."
+          },
+          "total_rows": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of source rows behind the number, over all pages.",
+            "minimum": 0
           }
         }
       },
@@ -3078,6 +3215,14 @@
             "type": "string"
           }
         }
+      },
+      "SliceName": {
+        "type": "string",
+        "description": "`base` or `compare`: one of the two slices of `AskResponse.explanation`.",
+        "enum": [
+          "base",
+          "compare"
+        ]
       },
       "StepName": {
         "type": "string",

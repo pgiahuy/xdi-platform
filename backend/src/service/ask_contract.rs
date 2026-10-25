@@ -216,9 +216,10 @@ pub enum ColumnRole {
     Other,
 }
 
-// untagged: serde ghi thẳng giá trị bên trong (5, "Europe", true), không bọc tên biến thể.
+// untagged: serde ghi thẳng giá trị bên trong (5, "Europe", true), không bọc tên biến thể. Deserialize vì request truy
+// dòng nguồn (drill_contract.rs) gửi lại đúng giá trị ô đã nhận.
 /// One cell: a JSON number, string or boolean; read it with the `kind` of its column.
-#[derive(Debug, Clone, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(untagged)]
 pub enum CellValue {
     Number(f64),

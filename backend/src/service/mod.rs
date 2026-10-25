@@ -38,6 +38,12 @@ pub mod ask_run;
 #[cfg(test)]
 mod ask_run_tests;
 pub mod ask_values;
+// Truy dòng nguồn (#34): hợp đồng, dựng SQL từ câu đã chạy, ghép các bước.
+pub mod drill;
+pub mod drill_contract;
+mod drill_sql;
+#[cfg(test)]
+mod drill_tests;
 pub mod excel;
 // Đường câu "tại sao" (#38, #39, #40): phần toán, form, kiểm form, SQL, phân rã; run_why ghép tất cả. Chỉ endpoint hỏi
 // gọi run_why; luồng hỏi của #33 mới có câu thường, nên gỡ allow khi service/ask.rs nối câu "tại sao" vào.

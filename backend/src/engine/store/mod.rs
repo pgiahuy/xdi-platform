@@ -12,6 +12,7 @@ phiên bản chờ lập hồ sơ lúc khởi động (datasets.rs, list_pending
 mod accounts;
 mod columns;
 mod members;
+mod policies;
 mod users;
 // Khung: các hàm truy vấn dưới đây được gọi từ issue nạp dữ liệu (#20), endpoint hỏi (#33) và chế độ xác thực (#42).
 // Chưa có code gọi nên tạm cho phép "chưa dùng" ở đúng ba module này; gỡ khi có người gọi để clippy bắt lại.
@@ -40,7 +41,7 @@ pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]
 pub use metrics::MetricDefinition;
 #[allow(unused_imports)]
-pub use queries::{NewQuery, PromptExample, QueryStatus};
+pub use queries::{NewQuery, PromptExample, QueryStatus, StoredQuery};
 pub use users::{Deactivated, UserSummary};
 #[allow(unused_imports)]
 pub use workspaces::WorkspaceKind;

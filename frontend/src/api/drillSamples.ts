@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/drillSamples.ts - chỉ dùng ở chế độ dev: vài dòng nguồn mẫu cho một dòng phân rã của mẫu why trong
-examples/ask.json, để thấy bố cục tab Dòng nguồn khi route drill còn trả 501 (#34). Chỉ được gọi sau điều kiện
-import.meta.env.DEV, nên bản build production không chứa file này.
+examples/ask.json, để thấy bố cục tab Dòng nguồn khi backend chưa truy được dòng phân rã (trả 400, chờ #38). Chỉ được
+gọi sau điều kiện import.meta.env.DEV, nên bản build production không chứa file này.
 Dòng là số minh họa: chỉ giá trị nhóm và lát cắt khớp với chỗ được bấm, tổng các dòng không bằng số trong bảng phân
 rã. */
 
@@ -19,6 +19,8 @@ const sampleTotals = [327.75, 199.99, 1250.4]
 
 export async function drillFromSamples(request: DrillRequest): Promise<DrillResponse> {
   await new Promise((resolve) => setTimeout(resolve, delayMs))
+  // Tab Dòng nguồn chỉ gửi breakdown; mẫu không có dòng cho ô của bảng kết quả.
+  if (!request.breakdown) throw new Error('Dữ liệu mẫu chỉ có dòng nguồn của dòng phân rã.')
   const { slice, column, value } = request.breakdown
   const explanation = examples.why.explanation
   const filter = slice === 'base' ? explanation.base.filter : explanation.compare.filter
@@ -46,5 +48,6 @@ export async function drillFromSamples(request: DrillRequest): Promise<DrillResp
       truncated: false,
       limit_reached: false,
     },
+    total_rows: sampleDates[slice].length,
   }
 }

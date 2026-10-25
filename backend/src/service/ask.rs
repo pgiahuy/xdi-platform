@@ -166,10 +166,6 @@ pub async fn ask(
     })
 }
 
-pub async fn drill(_state: &AppState, _member: &Member, _dataset_id: &str) -> Result<(), AppError> {
-    Err(AppError::NotImplemented("truy dòng nguồn"))
-}
-
 /// Dataset của workspace người hỏi và phiên bản đang dùng. Id của workspace khác trả 404 như id không có.
 async fn load_target(
     state: &AppState,
