@@ -38,7 +38,37 @@ pub struct NewQuery<'a> {
     pub row_count: Option<i64>,
 }
 
+/// Một câu hỏi đã được đánh dấu trả lời đúng, làm ví dụ trong prompt sinh SQL.
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct PromptExample {
+    pub question: String,
+    pub sql: String,
+}
+
 impl Store {
+    /// Tối đa `limit` câu đã đánh dấu đúng của dataset, mới nhất trước. Lấy SQL mô hình viết (sql_generated), không lấy
+    /// bản sau guard: bản đó có LIMIT và điều kiện phân quyền theo vai của người đã hỏi, đưa vào prompt thì mô hình sẽ
+    /// chép điều kiện của người khác vào câu mới.
+    pub async fn list_correct_queries(
+        &self,
+        ws: &WorkspaceId,
+        dataset_id: Uuid,
+        limit: i64,
+    ) -> Result<Vec<PromptExample>, AppError> {
+        sqlx::query_as(
+            "SELECT question, sql_generated AS sql FROM queries
+             WHERE workspace_id = $1 AND dataset_id = $2 AND feedback = 'correct' AND status = 'ok'
+               AND sql_generated IS NOT NULL
+             ORDER BY created_at DESC LIMIT $3",
+        )
+        .bind(ws.as_uuid())
+        .bind(dataset_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| db_error("list correct queries", e))
+    }
+
     pub async fn record_query(&self, ws: &WorkspaceId, q: &NewQuery<'_>) -> Result<Uuid, AppError> {
         // Tách cặp thành hai giá trị cùng có hoặc cùng không: kiểu Option<(Uuid, Uuid)> làm cho việc ghi lệch một
         // trong hai không thể xảy ra từ phía code.
@@ -70,7 +100,7 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_support::{drop_workspace, store, temp_workspace};
+    use super::super::test_support::{drop_workspace, exec, store, temp_workspace};
     use super::super::{NewVersion, SourceKind};
     use super::*;
 
@@ -120,6 +150,103 @@ mod tests {
             matches!(err, AppError::Internal(ref m) if m.contains("foreign key")),
             "unexpected error: {err:?}"
         );
+
+        drop_workspace(&store, ws).await;
+        drop_workspace(&store, other).await;
+    }
+
+    #[tokio::test]
+    async fn correct_queries_are_examples_newest_first() {
+        let Some(store) = store().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let ws = temp_workspace(&store).await;
+        let src = store.create_local_source(&ws).await.unwrap();
+        let ds = store
+            .create_dataset(&ws, src, "DataCo", "dataco", None)
+            .await
+            .unwrap();
+        let v = store
+            .create_version(
+                &ws,
+                ds.id,
+                &NewVersion {
+                    source_kind: SourceKind::Csv,
+                    file_hash: "h",
+                    parquet_path: "x",
+                    row_count: 1,
+                },
+                &[],
+            )
+            .await
+            .unwrap();
+        // (câu hỏi, trạng thái, đánh giá, số giờ trước): chỉ hai câu đầu là ví dụ.
+        let rows = [
+            ("old correct", QueryStatus::Ok, Some("correct"), 2),
+            ("new correct", QueryStatus::Ok, Some("correct"), 1),
+            ("marked wrong", QueryStatus::Ok, Some("incorrect"), 1),
+            ("not marked", QueryStatus::Ok, None, 1),
+            ("rejected", QueryStatus::Rejected, Some("correct"), 1),
+        ];
+        for (question, status, feedback, hours_ago) in rows {
+            let sql = format!("SELECT '{question}'");
+            let id = store
+                .record_query(
+                    &ws,
+                    &NewQuery {
+                        target: Some((ds.id, v.id)),
+                        user_id: None,
+                        question,
+                        sql_generated: Some(&sql),
+                        sql_guarded: Some("SELECT 1 LIMIT 100000"),
+                        status,
+                        error: None,
+                        timings: serde_json::json!({}),
+                        row_count: None,
+                    },
+                )
+                .await
+                .unwrap();
+            // Chưa có endpoint đánh dấu đúng sai, nên đặt thẳng bằng SQL; created_at đặt rõ để thứ tự không phụ thuộc
+            // tốc độ chèn.
+            let feedback = feedback.map_or("NULL".to_string(), |f| format!("'{f}'"));
+            exec(
+                &store,
+                &format!(
+                    "UPDATE queries SET feedback = {feedback}, created_at = now() - interval '{hours_ago} hours'
+                     WHERE id = '{id}'"
+                ),
+            )
+            .await;
+        }
+
+        let examples = store.list_correct_queries(&ws, ds.id, 10).await.unwrap();
+        let got: Vec<(&str, &str)> = examples
+            .iter()
+            .map(|e| (e.question.as_str(), e.sql.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("new correct", "SELECT 'new correct'"),
+                ("old correct", "SELECT 'old correct'"),
+            ]
+        );
+        assert_eq!(
+            store
+                .list_correct_queries(&ws, ds.id, 1)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        let other = temp_workspace(&store).await;
+        assert!(store
+            .list_correct_queries(&other, ds.id, 10)
+            .await
+            .unwrap()
+            .is_empty());
 
         drop_workspace(&store, ws).await;
         drop_workspace(&store, other).await;

@@ -4,6 +4,9 @@ Gọi engine và auth; không bao giờ gọi ngược lên api. */
 
 pub mod accounts;
 pub mod ask;
+// Lựa chọn và prompt của luồng hỏi (#29); endpoint hỏi (#33) gọi tới. Gỡ allow khi đó để clippy bắt lại mã thừa.
+#[allow(dead_code)]
+pub mod ask_choices;
 // Ngữ cảnh câu hỏi có trước luồng hỏi; endpoint hỏi (#33) và prompt (#29) gọi tới. Gỡ allow khi đó để clippy bắt lại
 // mã thừa.
 #[allow(dead_code)]
@@ -22,6 +25,13 @@ mod ask_examples_tests;
 pub mod ask_match;
 #[allow(dead_code)]
 pub mod ask_phrases;
+// Cùng lý do với ask_choices.
+#[allow(dead_code)]
+pub mod ask_prompt;
+#[cfg(test)]
+mod ask_prompt_tests;
+#[allow(dead_code)]
+pub mod ask_why_prompt;
 // Bước narrate của câu "tại sao" (#41): mô hình viết lời từ bảng phân rã, code kiểm số. Gỡ allow khi #33/#38 gọi,
 // như ở ask_contract.
 #[allow(dead_code)]

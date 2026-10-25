@@ -165,6 +165,28 @@ fn unreadable(reason: &str) -> UnreadableReply {
     }
 }
 
+/// Schema của danh sách terms, dùng chung cho câu trả lời SQL ở đây và form câu "tại sao" (ask_prompt.rs), để hai
+/// đường ghi cách hiểu cùng một dạng và #33 kiểm chung một cách.
+pub fn build_terms_schema() -> serde_json::Value {
+    json!({
+        "type": "array",
+        "description": "How each phrase of the question maps to the data",
+        "items": {
+            "type": "object",
+            "properties": {
+                "text": { "type": "string", "description": "The phrase as the user wrote it" },
+                "kind": { "type": "string", "enum": ["column", "value", "metric", "period"] },
+                "column": { "type": "string", "description": "The column; leave out for a metric" },
+                "value": {
+                    "type": "string",
+                    "description": "The column value, the metric name, or the period such as 2017, 2017-Q3, 2017-05"
+                }
+            },
+            "required": ["text", "kind"]
+        }
+    })
+}
+
 /// JSON Schema của câu trả lời, gửi kèm request ở bước sinh SQL và bước sửa. Chỉ dùng các từ khóa cả Gemini
 /// (responseJsonSchema) lẫn Ollama (format) nhận: type, properties, required, items, enum, description. Trường không bắt
 /// buộc thì để ngoài required thay vì cho kiểu null, vì kiểu ["string", "null"] chưa chắc mọi mô hình trên Ollama theo
@@ -182,23 +204,7 @@ pub fn build_sql_reply_schema() -> serde_json::Value {
     json!({
         "type": "object",
         "properties": {
-            "terms": {
-                "type": "array",
-                "description": "How each phrase of the question maps to the data",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "text": { "type": "string", "description": "The phrase as the user wrote it" },
-                        "kind": { "type": "string", "enum": ["column", "value", "metric", "period"] },
-                        "column": { "type": "string", "description": "The column; leave out for a metric" },
-                        "value": {
-                            "type": "string",
-                            "description": "The column value, the metric name, or the period such as 2017, 2017-Q3, 2017-05"
-                        }
-                    },
-                    "required": ["text", "kind"]
-                }
-            },
+            "terms": build_terms_schema(),
             "assumptions": {
                 "type": "array",
                 "description": "Defaults you chose where the question can be read in more than one way",

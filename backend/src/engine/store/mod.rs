@@ -17,6 +17,9 @@ mod users;
 // Chưa có code gọi nên tạm cho phép "chưa dùng" ở đúng ba module này; gỡ khi có người gọi để clippy bắt lại.
 #[allow(dead_code)]
 mod datasets;
+// Prompt sinh SQL (#29) đọc chỉ số; endpoint hỏi (#33) mới gọi tới nó. Gỡ allow khi đó, như ba module trên.
+#[allow(dead_code)]
+mod metrics;
 #[allow(dead_code)]
 mod queries;
 #[cfg(test)]
@@ -38,7 +41,9 @@ pub use datasets::{
 };
 pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]
-pub use queries::{NewQuery, QueryStatus};
+pub use metrics::MetricDefinition;
+#[allow(unused_imports)]
+pub use queries::{NewQuery, PromptExample, QueryStatus};
 pub use users::{Deactivated, UserSummary};
 #[allow(unused_imports)]
 pub use workspaces::WorkspaceKind;
