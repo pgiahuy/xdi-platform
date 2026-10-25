@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask_context_tests.rs - test của service/ask_context.rs: phần thuần (chọn cột, mơ hồ, bảng rộng) không cần
-database; phần tìm giá trị chạy trên Postgres thật, bỏ qua khi thiếu DATABASE_URL như mọi test store. Bí danh, mô tả và
-cờ nhạy cảm do #23 ghi, chưa có code ghi, nên test tự UPDATE bằng SQL. Dataset mẫu là hồ sơ viết sẵn của dataco trong
-engine/llm/mock_answers.json (53 cột, bí danh tiếng Việt), cộng vài giá trị của DataCo thật. Các ca khớp sai đã gặp
-khi review (#28) nằm ở các test Postgres, mỗi ca một câu hỏi kèm kết quả mong đợi. */
+/* service/ask_context_tests.rs - test của service/ask_context.rs: phần thuần (chọn cột, mơ hồ, bảng rộng, trần số giá
+trị, gợi ý khớp chính xác) không cần database; phần đọc hồ sơ chạy trên Postgres thật, bỏ qua khi thiếu DATABASE_URL như
+mọi test store. Bí danh, mô tả và cờ nhạy cảm do #23 ghi, chưa có code ghi, nên test tự UPDATE bằng SQL. Dataset mẫu là
+hồ sơ viết sẵn của dataco trong engine/llm/mock_answers.json (53 cột, bí danh tiếng Việt), cộng giá trị của DataCo thật
+cho các cột nhóm. Các câu đã sinh khớp nhầm ở những bản trước (review của #28) có trong test, mỗi câu kèm kết quả mong
+đợi. */
 
 use std::time::Duration;
 
@@ -39,13 +40,14 @@ fn profile(name: &str, role: &str, aliases: &[&str]) -> ColumnProfile {
         time_format: None,
         description: None,
         aliases: aliases.iter().map(|a| a.to_string()).collect(),
-        sample_values: Vec::new(),
         is_sensitive: false,
+        values: Vec::new(),
+        values_complete: false,
         matched: false,
     }
 }
 
-/// Chỉ mục giá trị từ các bộ (cột, giá trị, bí danh).
+/// Chỉ mục giá trị từ các bộ (cột, giá trị, bí danh), theo thứ tự truyền vào.
 fn index(rows: &[(&str, &str, &[&str])]) -> ValueIndex {
     let rows: Vec<ValueRow> = rows
         .iter()
@@ -70,11 +72,27 @@ fn names(context: &AskContext) -> Vec<&str> {
     context.columns.iter().map(|c| c.name.as_str()).collect()
 }
 
-fn values(context: &AskContext) -> Vec<(&str, &str)> {
+fn hints(context: &AskContext) -> Vec<(&str, &str)> {
     context
+        .hints
+        .iter()
+        .map(|h| (h.column.as_str(), h.value.as_str()))
+        .collect()
+}
+
+fn column<'a>(context: &'a AskContext, name: &str) -> &'a ColumnProfile {
+    context
+        .columns
+        .iter()
+        .find(|c| c.name == name)
+        .unwrap_or_else(|| panic!("no column {name}"))
+}
+
+fn column_values(context: &AskContext, name: &str) -> Vec<String> {
+    column(context, name)
         .values
         .iter()
-        .map(|v| (v.column.as_str(), v.value.as_str()))
+        .map(|v| v.value.clone())
         .collect()
 }
 
@@ -85,8 +103,9 @@ fn close_columns_are_ambiguous_until_the_user_picks() {
         profile("Order Region", "dimension", &["khu vực"]),
         profile("Sales", "measure", &[]),
     ];
+    let empty = ValueIndex::default();
     let phrases = build_phrases("Doanh thu theo khu vực");
-    let context = build_context(&phrases, columns.clone(), &ValueIndex::default(), &[]);
+    let context = build_context(&phrases, columns.clone(), &empty, &[]);
     assert_eq!(
         context.ambiguous,
         [AmbiguousWord {
@@ -100,7 +119,7 @@ fn close_columns_are_ambiguous_until_the_user_picks() {
     let picked = build_context(
         &phrases,
         columns.clone(),
-        &ValueIndex::default(),
+        &empty,
         &[chosen("column:khu vuc", "Order Region")],
     );
     assert!(picked.ambiguous.is_empty());
@@ -120,7 +139,7 @@ fn close_columns_are_ambiguous_until_the_user_picks() {
         chosen("column:khu vuc", "Sales"),
         chosen("column:thi truong", "Order Region"),
     ] {
-        let context = build_context(&phrases, columns.clone(), &ValueIndex::default(), &[wrong]);
+        let context = build_context(&phrases, columns.clone(), &empty, &[wrong]);
         assert_eq!(context.ambiguous.len(), 1);
     }
 }
@@ -128,7 +147,7 @@ fn close_columns_are_ambiguous_until_the_user_picks() {
 /// Cả hai bên có dấu thì so có dấu, đúng nguyên văn hơn sau bỏ dấu đủ CLOSE_SCORE nên chọn luôn và ghi thành giả định
 /// có cột khác; một bên không dấu ("khu vuc", cột khu_vuc) thì so sau bỏ dấu. Gõ dạng tổ hợp cho cùng kết quả.
 #[test]
-fn accents_are_compared_when_both_sides_have_them() {
+fn column_names_compare_accents_when_both_sides_have_them() {
     let columns = vec![
         profile("Market", "dimension", &["khu vuc"]),
         profile("Order Region", "dimension", &["Khu vực"]),
@@ -153,7 +172,6 @@ fn accents_are_compared_when_both_sides_have_them() {
     assert_eq!(context.picks[0].column, "Market");
     assert_eq!(context.picks[0].others, ["Order Region"]);
     assert!(!context.picks[0].chosen_by_user);
-    // Cột khu_vuc (tên không dấu) khớp "khu vực" có dấu.
     let columns = vec![profile("khu_vuc", "dimension", &[])];
     let context = build_context(
         &build_phrases("doanh thu theo khu vực"),
@@ -164,40 +182,8 @@ fn accents_are_compared_when_both_sides_have_them() {
     assert_eq!(context.picks[0].column, "khu_vuc");
 }
 
-/// Khớp gần chỉ giữa chuỗi cùng số từ, và đã có khớp bằng nhau thì cột chỉ khớp gần không thành giả định.
 #[test]
-fn value_matches_need_the_same_word_count() {
-    let columns = vec![
-        profile("Market", "dimension", &[]),
-        profile("Order Region", "dimension", &[]),
-    ];
-    let values_index = index(&[
-        ("Market", "Europe", &[]),
-        ("Order Region", "Western Europe", &[]),
-        ("Order Region", "Europa", &[]),
-    ]);
-    let context = build_context(
-        &build_phrases("doanh thu europe"),
-        columns.clone(),
-        &values_index,
-        &[],
-    );
-    assert_eq!(values(&context), [("Market", "Europe")]);
-    assert_eq!(context.values[0].score, 1.0);
-    assert_eq!(context.picks[0].column, "Market");
-    assert!(context.picks[0].others.is_empty());
-    // Gõ sai một chữ: khớp gần với giá trị một từ.
-    let context = build_context(
-        &build_phrases("doanh thu europ"),
-        columns,
-        &index(&[("Market", "Europe", &[])]),
-        &[],
-    );
-    assert_eq!(values(&context), [("Market", "Europe")]);
-}
-
-#[test]
-fn wide_tables_keep_matched_and_time_columns_only() {
+fn wide_tables_keep_matched_hinted_and_time_columns_only() {
     let mut columns: Vec<ColumnProfile> = (0..70)
         .map(|i| profile(&format!("Metric {i}"), "measure", &[]))
         .collect();
@@ -206,41 +192,150 @@ fn wide_tables_keep_matched_and_time_columns_only() {
     columns.push(profile("Category Id", "key", &["mã danh mục"]));
     columns.push(profile("Market", "dimension", &[]));
     columns.push(profile("Order Region", "dimension", &[]));
-    let values_index = index(&[("Market", "Europe", &["châu Âu"])]);
+    columns.push(profile("Customer Segment", "dimension", &[]));
+    let values = index(&[
+        ("Market", "Europe", &["châu Âu"]),
+        ("Order Region", "Southern Europe", &[]),
+        ("Customer Segment", "Home Office", &[]),
+    ]);
 
     let context = build_context(
-        &build_phrases("Doanh thu theo danh mục ở châu Âu, từng region"),
+        &build_phrases("Doanh thu theo danh mục ở châu Âu, từng segment"),
         columns.clone(),
-        &values_index,
+        &values,
         &[],
     );
-    // Category Id chỉ chứa "danh mục" trong bí danh dài hơn, mà "danh mục" đã khớp đúng Category Name, nên không giữ.
-    // "region" không bằng tên cột nào, nhưng là một từ của Order Region, nên cột vẫn được giữ.
+    // Category Name: bí danh "danh mục". Market: gợi ý giá trị "châu âu". Customer Segment: "segment" là một từ của
+    // tên. Category Id chỉ chứa "danh mục" trong bí danh dài hơn, mà "danh mục" đã khớp đúng Category Name.
     assert_eq!(
         names(&context),
         [
             "order date (DateOrders)",
             "Category Name",
             "Market",
-            "Order Region"
+            "Customer Segment"
         ]
     );
     assert!(context
         .columns
         .iter()
         .all(|c| c.matched || c.role == "time"));
-    assert_eq!(values(&context), [("Market", "Europe")]);
-    // Chỉ một cột ứng viên mỗi cụm: không có giả định nào cần hiện.
-    assert!(context.picks.iter().all(|p| p.others.is_empty()));
+    assert_eq!(hints(&context), [("Market", "Europe")]);
+    assert_eq!(column_values(&context, "Market"), ["Europe"]);
 
     // Không cụm nào khớp: gửi cả schema thay vì chỉ cột thời gian.
-    let none = build_context(
-        &build_phrases("xin chào"),
-        columns.clone(),
-        &values_index,
-        &[],
-    );
+    let none = build_context(&build_phrases("xin chào"), columns.clone(), &values, &[]);
     assert_eq!(none.columns.len(), columns.len());
+}
+
+#[test]
+fn column_values_are_capped_per_column_and_in_total() {
+    // Tới 50 giá trị thì gửi đủ, nhiều hơn thì 20 giá trị nhiều dòng nhất.
+    assert_eq!(
+        build_column_values(&[5, 23, 50, 51, 164]),
+        [5, 23, 50, 20, 20]
+    );
+    // Tổng vượt 400: hạ trần chung, cột nhiều giá trị bị cắt trước, cột ít giá trị giữ đủ.
+    let mut counts = vec![3, 4];
+    counts.extend([50; 8]);
+    counts.push(164);
+    let sent = build_column_values(&counts);
+    assert!(sent.iter().sum::<usize>() <= CONTEXT_VALUES_MAX);
+    assert_eq!(&sent[..2], [3, 4]);
+    assert_eq!(sent[2], 46);
+    assert_eq!(sent[10], 20);
+    assert_eq!(build_column_values(&[]), Vec::<usize>::new());
+}
+
+/// Gợi ý chỉ là khớp chính xác của cụm từ hai âm tiết không có từ dừng; không chọn hộ khi hai cột cùng khớp, và không
+/// có gợi ý cho các câu đã sinh khớp nhầm ở những bản trước.
+#[test]
+fn hints_are_exact_matches_of_multi_syllable_phrases() {
+    let mut columns: Vec<ColumnProfile> = [
+        "Market",
+        "Order Region",
+        "Shipping Mode",
+        "region",
+        "khu_vuc",
+        "mien",
+        "huong",
+        "loai_khach",
+        "gioi_tinh",
+        "ghi_chu",
+    ]
+    .iter()
+    .map(|name| profile(name, "dimension", &[]))
+    .collect();
+    let mut secret = profile("ho_ten", "dimension", &[]);
+    secret.is_sensitive = true;
+    columns.push(secret);
+    let values = index(&[
+        ("Market", "Europe", &[]),
+        ("Order Region", "Southern Europe", &[]),
+        ("Shipping Mode", "Standard Class", &[]),
+        ("region", "South", &["miền Nam"]),
+        ("khu_vuc", "Mien Nam", &[]),
+        ("khu_vuc", "Ha Noi", &[]),
+        ("mien", "Bac", &[]),
+        ("mien", "Trung", &[]),
+        ("huong", "Dong", &[]),
+        ("loai_khach", "Khac", &[]),
+        ("loai_khach", "Ca nhan", &[]),
+        ("gioi_tinh", "Nam", &[]),
+        ("gioi_tinh", "Nữ", &[]),
+        ("ghi_chu", "Hòa Bình", &[]),
+        ("ho_ten", "Nguyen Van A", &["khách quen"]),
+    ]);
+    let ask =
+        |question: &str| build_context(&build_phrases(question), columns.clone(), &values, &[]);
+
+    for (question, expected) in [
+        (
+            "doanh thu Southern Europe",
+            ("Order Region", "Southern Europe"),
+        ),
+        (
+            "số đơn standard class năm 2017",
+            ("Shipping Mode", "Standard Class"),
+        ),
+        ("doanh thu Hà Nội", ("khu_vuc", "Ha Noi")),
+        ("doanh thu Hoà Bình", ("ghi_chu", "Hòa Bình")),
+    ] {
+        assert_eq!(hints(&ask(question)), [expected], "{question}");
+    }
+    // Hai cột cùng khớp: hai gợi ý, không hỏi lại, không chọn hộ.
+    let context = ask("doanh thu miền Nam");
+    assert_eq!(
+        hints(&context),
+        [("region", "South"), ("khu_vuc", "Mien Nam")]
+    );
+    assert!(context.ambiguous.is_empty());
+    for question in [
+        "doanh thu từng miền năm 2017",
+        "doanh thu theo miền năm 2017",
+        "doanh thu mien nam",
+        "doanh thu trung bình",
+        "doanh thu trên 5 triệu đồng",
+        "doanh thu khách lẻ",
+        "doanh thu Việt Nam",
+        "doanh thu Việt Nam năm 2017",
+        "doanh thu Quảng Nam",
+        "doanh thu Đông Nam Á",
+        "doanh thu Europe",
+        "doanh thu nữ",
+        "doanh thu khách quen",
+        "tổng số đơn theo tháng",
+    ] {
+        let context = ask(question);
+        assert!(context.hints.is_empty(), "{question}: {:?}", context.hints);
+        assert!(context.ambiguous.is_empty(), "{question}");
+    }
+    // Cột nhạy cảm: không có giá trị, không có gợi ý.
+    let context = ask("doanh thu nguyen van a");
+    assert!(context.hints.is_empty());
+    assert!(column(&context, "ho_ten").values.is_empty());
+    assert_eq!(column_values(&context, "gioi_tinh"), ["Nam", "Nữ"]);
+    assert!(column(&context, "gioi_tinh").values_complete);
 }
 
 // ---- Postgres ----
@@ -256,13 +351,13 @@ fn new_column(position: i32, name: &str, role: ProfileRole, values: &[&str]) -> 
         min_value: None,
         max_value: None,
         time_format: None,
-        // Tần suất giảm dần theo thứ tự truyền vào, để thứ tự giá trị mẫu biết trước.
+        // Tần suất giảm dần theo thứ tự truyền vào, để thứ tự giá trị biết trước.
         values: values
             .iter()
             .enumerate()
             .map(|(i, v)| NewColumnValue {
                 value: v.to_string(),
-                frequency: 100 - i as i64,
+                frequency: 1000 - i as i64,
             })
             .collect(),
     }
@@ -342,7 +437,7 @@ async fn ask(
         .unwrap()
 }
 
-/// Bảng nhỏ có cột miền (bí danh tiếng Việt), cột nước có "Việt Nam" và một cột nhạy cảm chứa đúng chữ "Miền Nam".
+/// Bảng nhỏ có cột miền (bí danh tiếng Việt), cột nước và một cột nhạy cảm có giá trị và bí danh.
 async fn small_version(
     store: &Store,
     ws: &WorkspaceId,
@@ -363,7 +458,7 @@ async fn small_version(
             ProfileRole::Dimension,
             &["Việt Nam", "Thái Lan"],
         ),
-        new_column(2, "amount", ProfileRole::Measure, &[]),
+        new_column(2, "amount", ProfileRole::Measure, &["1", "2"]),
         new_column(3, "order_date", ProfileRole::Time, &[]),
         new_column(
             4,
@@ -375,14 +470,13 @@ async fn small_version(
     let v = new_version(store, ws, dataset, hash, &columns).await;
     set_value_aliases(store, v.id, "region", south, &["miền Nam"]).await;
     set_value_aliases(store, v.id, "region", "North", &["miền Bắc"]).await;
-    set_value_aliases(store, v.id, "region", "Central", &["miền Trung"]).await;
     set_value_aliases(store, v.id, "customer_name", "An", &["khách quen"]).await;
     set_column(store, v.id, "customer_name", "is_sensitive = true").await;
     v
 }
 
 #[tokio::test]
-async fn vietnamese_spellings_map_to_the_value_and_time_words_do_not() {
+async fn context_reads_one_version_of_one_workspace() {
     let Some(store) = store().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
@@ -396,81 +490,36 @@ async fn vietnamese_spellings_map_to_the_value_and_time_words_do_not() {
         .unwrap();
     let v1 = small_version(&store, &ws, ds.id, "h1", "South").await;
 
-    for question in [
-        "doanh thu mien nam",
-        "Doanh thu Miền Nam",
-        "DOANH THU MIỀN NAM",
-        "doanh thu mien nma",
-    ] {
-        let context = ask(&state, &ws, &v1, question).await;
-        assert_eq!(values(&context), [("region", "South")], "{question}");
-        assert_eq!(context.values[0].matched_text, "miền Nam", "{question}");
-        assert!(context.ambiguous.is_empty(), "{question}");
-    }
-    // Giới hạn đã biết: gõ sai trong cụm có từ dừng không được nhận ("nam" gõ không dấu có thể là "năm").
-    for question in ["doanh thu mie nam", "doanh thu mienn nam"] {
-        assert!(
-            ask(&state, &ws, &v1, question).await.values.is_empty(),
-            "{question}"
-        );
-    }
-    let accented = ask(&state, &ws, &v1, "Doanh thu Miền Nam").await;
-    let plain = ask(&state, &ws, &v1, "doanh thu mien nam").await;
-    let typo = ask(&state, &ws, &v1, "doanh thu mien nma").await;
-    assert!(accented.values[0].score > plain.values[0].score);
-    assert!(plain.values[0].score > typo.values[0].score);
-
-    // "năm" bỏ dấu là "nam", nhưng không bao giờ thành South hay Việt Nam.
-    for question in [
-        "doanh thu năm 2017",
-        "doanh thu nam 2017",
-        "Doanh thu tháng 5 năm 2017 theo quý",
-    ] {
-        let context = ask(&state, &ws, &v1, question).await;
-        assert!(
-            context.values.is_empty(),
-            "{question}: {:?}",
-            context.values
-        );
-        assert!(context.ambiguous.is_empty() && context.picks.is_empty());
-    }
-    // "năm" gõ có dấu đứng sau một từ của giá trị: "miền năm" khác "miền Nam" ở dấu. Một âm tiết ("miền") không khớp
-    // gần giá trị hai âm tiết, nên câu gom nhóm theo miền không thành bộ lọc.
-    for question in [
-        "doanh thu từng miền năm 2017",
-        "doanh thu các miền năm 2017",
-        "doanh thu theo miền năm 2016",
-        "doanh thu theo miền",
-        "doanh thu theo từng miền",
-    ] {
-        let context = ask(&state, &ws, &v1, question).await;
-        assert!(
-            context.values.is_empty(),
-            "{question}: {:?}",
-            context.values
-        );
-    }
-    let context = ask(&state, &ws, &v1, "Doanh thu Việt Nam năm 2017").await;
-    assert_eq!(values(&context), [("country", "Việt Nam")]);
-
-    // Cột nhạy cảm: có trong schema, không giá trị mẫu, không tìm giá trị (giá trị "Miền Nam" và bí danh "khách quen"
-    // của nó không khớp).
-    assert!(ask(&state, &ws, &v1, "doanh thu khách quen")
-        .await
-        .values
-        .is_empty());
-    let context = ask(&state, &ws, &v1, "Miền Nam").await;
-    assert_eq!(values(&context), [("region", "South")]);
+    // Danh sách giá trị của cột chiều, nhiều dòng nhất trước, kèm bí danh; cột số và cột nhạy cảm không có.
+    let context = ask(&state, &ws, &v1, "doanh thu theo miền").await;
     assert_eq!(
         names(&context),
         ["region", "country", "amount", "order_date", "customer_name"]
     );
-    let sensitive = &context.columns[4];
-    assert!(sensitive.is_sensitive && sensitive.sample_values.is_empty());
     assert_eq!(
-        context.columns[0].sample_values,
+        column_values(&context, "region"),
         ["South", "North", "Central"]
     );
+    assert_eq!(column(&context, "region").values[0].aliases, ["miền Nam"]);
+    assert!(column(&context, "region").values_complete);
+    assert!(column(&context, "amount").values.is_empty());
+    let sensitive = column(&context, "customer_name");
+    assert!(sensitive.is_sensitive && sensitive.values.is_empty());
+    assert!(context.hints.is_empty());
+
+    // Gợi ý khớp chính xác: có dấu khớp bí danh; cột nhạy cảm (giá trị "Miền Nam", bí danh "khách quen") không có.
+    assert_eq!(
+        hints(&ask(&state, &ws, &v1, "Doanh thu Miền Nam").await),
+        [("region", "South")]
+    );
+    for question in [
+        "doanh thu khách quen",
+        "doanh thu từng miền năm 2017",
+        "doanh thu năm 2017",
+    ] {
+        let context = ask(&state, &ws, &v1, question).await;
+        assert!(context.hints.is_empty(), "{question}");
+    }
 
     // Câu toàn dấu câu, câu rất dài, câu không khớp gì, một từ rất dài: vẫn có cả schema, không lỗi.
     let huge = format!("doanh thu miền nam {}", "x".repeat(100_000));
@@ -483,21 +532,14 @@ async fn vietnamese_spellings_map_to_the_value_and_time_words_do_not() {
         let context = ask(&state, &ws, &v1, question).await;
         assert_eq!(context.columns.len(), 5);
     }
-    assert_eq!(
-        values(&ask(&state, &ws, &v1, &huge).await),
-        [("region", "South")]
-    );
 
     // Phiên bản khác của cùng dataset có giá trị khác: mỗi phiên bản chỉ thấy giá trị của nó.
     let v2 = small_version(&store, &ws, ds.id, "h2", "Southeast").await;
-    assert_eq!(
-        values(&ask(&state, &ws, &v2, "miền nam").await),
-        [("region", "Southeast")]
-    );
-    assert_eq!(
-        values(&ask(&state, &ws, &v1, "miền nam").await),
-        [("region", "South")]
-    );
+    let context = ask(&state, &ws, &v2, "miền nam").await;
+    assert_eq!(column_values(&context, "region")[0], "Southeast");
+    assert_eq!(hints(&context), [("region", "Southeast")]);
+    let context = ask(&state, &ws, &v1, "miền nam").await;
+    assert_eq!(column_values(&context, "region")[0], "South");
 
     // Workspace khác ra rỗng, kể cả khi biết đúng id phiên bản.
     let other = temp_workspace(&store).await;
@@ -568,53 +610,53 @@ fn dataco_profile() -> SampleProfile {
     serde_json::from_value(answer).unwrap()
 }
 
-/// Giá trị của DataCo thật cho vài cột chiều; Market và các cột có bí danh giá trị lấy từ hồ sơ mẫu.
+/// 23 khu vực của DataCo thật, nhiều dòng nhất trước.
+const DATACO_REGIONS: [&str; 23] = [
+    "Central America",
+    "Western Europe",
+    "South America",
+    "Oceania",
+    "Northern Europe",
+    "Southeast Asia",
+    "Southern Europe",
+    "Caribbean",
+    "West of USA ",
+    "South Asia",
+    "Eastern Asia",
+    "East of USA",
+    "West Asia",
+    "US Center ",
+    "South of  USA ",
+    "Eastern Europe",
+    "West Africa",
+    "North Africa",
+    "East Africa",
+    "Central Africa",
+    "Southern Africa",
+    "Canada",
+    "Central Asia",
+];
+
+/// Giá trị của các cột chiều: Market, Delivery Status, Shipping Mode, Customer Segment lấy từ hồ sơ mẫu (đủ như DataCo
+/// thật); Order Region đủ 23 khu vực thật; Category Name 50 giá trị và Order Country 164 giá trị như DataCo thật (tên
+/// sinh ra, chỉ số lượng là thật).
 fn dataco_values(column: &str, profile: &SampleProfile) -> Vec<String> {
-    let extra: &[&str] = match column {
-        "Order Region" => &[
-            "Western Europe",
-            "Central America",
-            "South America",
-            "Northern Europe",
-            "Southern Europe",
-            "Oceania",
-            "Southeast Asia",
-            "Caribbean",
-            "West of USA ",
-            "South Asia",
-            "Eastern Asia",
-            "East of USA",
-            "US Center ",
-            "Eastern Europe",
-            "South of  USA ",
-            "West Africa",
-        ],
-        "Order Country" => &[
-            "Estados Unidos",
-            "Francia",
-            "México",
-            "Alemania",
-            "Vietnam",
-            "Japón",
-        ],
-        "Category Name" => &[
-            "Cleats",
-            "Men's Footwear",
-            "Women's Apparel",
-            "Fishing",
-            "Water Sports",
-        ],
-        "Customer Email" => &["XXXXXXXXX"],
-        "Customer Password" => &["XXXXXXXXX"],
-        _ => &[],
-    };
     let mut list: Vec<String> = profile
         .values
         .iter()
         .filter(|v| v.column == column)
         .map(|v| v.value.clone())
         .collect();
-    list.extend(extra.iter().map(|v| v.to_string()));
+    let generated = |prefix: &str, n: usize| -> Vec<String> {
+        (1..=n).map(|i| format!("{prefix} {i:03}")).collect()
+    };
+    match column {
+        "Order Region" => list.extend(DATACO_REGIONS.iter().map(|r| r.to_string())),
+        "Category Name" => list.extend(generated("Category", 50)),
+        "Order Country" => list.extend(generated("Country", 164)),
+        "Customer Email" | "Customer Password" => list.push("XXXXXXXXX".to_string()),
+        _ => {}
+    }
     list
 }
 
@@ -659,7 +701,6 @@ async fn dataco_version(store: &Store, ws: &WorkspaceId) -> DatasetVersion {
         let aliases: Vec<&str> = value.aliases.iter().map(String::as_str).collect();
         set_value_aliases(store, v.id, &value.column, &value.value, &aliases).await;
     }
-    set_value_aliases(store, v.id, "Order Country", "Vietnam", &["Việt Nam"]).await;
     for sensitive in ["Customer Email", "Customer Password"] {
         set_column(store, v.id, sensitive, "is_sensitive = true").await;
     }
@@ -667,7 +708,7 @@ async fn dataco_version(store: &Store, ws: &WorkspaceId) -> DatasetVersion {
 }
 
 #[tokio::test]
-async fn dataco_sample_maps_aliases_and_columns() {
+async fn dataco_sample_sends_group_values_and_exact_hints() {
     let Some(store) = store().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
@@ -676,18 +717,33 @@ async fn dataco_sample_maps_aliases_and_columns() {
     let ws = temp_workspace(&store).await;
     let v = dataco_version(&store, &ws).await;
 
-    // 53 cột, dưới ngưỡng: cả schema, theo thứ tự cột.
-    let context = ask(
-        &state,
-        &ws,
-        &v,
-        "5 danh mục có doanh thu cao nhất ở châu Âu",
-    )
-    .await;
+    // 53 cột, dưới ngưỡng: cả schema; cột nhóm có đủ giá trị, cột 164 nước gửi 20 giá trị nhiều dòng nhất.
+    let context = ask(&state, &ws, &v, "Doanh thu theo thị trường").await;
     assert_eq!(context.columns.len(), 53);
-    assert_eq!(context.columns[0].name, "Type");
-    assert_eq!(values(&context), [("Market", "Europe")]);
-    assert_eq!(context.values[0].matched_text, "châu Âu");
+    for (name, count) in [
+        ("Market", 5),
+        ("Order Region", 23),
+        ("Customer Segment", 3),
+        ("Shipping Mode", 4),
+        ("Delivery Status", 4),
+        ("Category Name", 50),
+    ] {
+        let c = column(&context, name);
+        assert_eq!(c.values.len(), count, "{name}");
+        assert!(c.values_complete, "{name}");
+    }
+    let market = column(&context, "Market");
+    assert_eq!(market.values[0].value, "Europe");
+    assert_eq!(market.values[0].aliases, ["châu Âu"]);
+    let country = column(&context, "Order Country");
+    assert_eq!(country.values.len(), 20);
+    assert!(!country.values_complete);
+    for name in ["Customer Email", "Customer Password"] {
+        assert!(column(&context, name).values.is_empty(), "{name}");
+    }
+    let sent: usize = context.columns.iter().map(|c| c.values.len()).sum();
+    assert!(sent <= CONTEXT_VALUES_MAX);
+
     let column_of = |context: &AskContext, phrase: &str| {
         context
             .picks
@@ -695,8 +751,13 @@ async fn dataco_sample_maps_aliases_and_columns() {
             .find(|p| p.phrase == phrase)
             .map(|p| p.column.clone())
     };
-    // "danh mục" là bí danh của Category Name, và chỉ nằm trong bí danh dài hơn của Category Id: chọn Category Name,
-    // không hỏi lại.
+    let context = ask(
+        &state,
+        &ws,
+        &v,
+        "5 danh mục có doanh thu cao nhất ở châu Âu",
+    )
+    .await;
     assert_eq!(
         column_of(&context, "danh mục").as_deref(),
         Some("Category Name")
@@ -705,89 +766,41 @@ async fn dataco_sample_maps_aliases_and_columns() {
         column_of(&context, "doanh thu").as_deref(),
         Some("Order Item Total")
     );
+    assert_eq!(hints(&context), [("Market", "Europe")]);
     assert!(context.ambiguous.is_empty());
 
-    // Không dấu, và qua bí danh giá trị.
-    let context = ask(&state, &ws, &v, "doanh thu chau au theo danh muc").await;
-    assert_eq!(values(&context), [("Market", "Europe")]);
-    assert_eq!(
-        column_of(&context, "danh muc").as_deref(),
-        Some("Category Name")
-    );
-    // Gõ sai một chữ trong bí danh hai âm tiết: khớp gần.
-    for question in ["doanh thu Mỹ Latin", "doanh thu mỹ latnih"] {
+    // Khớp chính xác ra gợi ý đúng.
+    for (question, expected) in [
+        (
+            "doanh thu Southern Europe năm 2017",
+            ("Order Region", "Southern Europe"),
+        ),
+        (
+            "số đơn Standard Class theo tháng",
+            ("Shipping Mode", "Standard Class"),
+        ),
+        ("doanh thu chau au", ("Market", "Europe")),
+    ] {
         assert_eq!(
-            values(&ask(&state, &ws, &v, question).await),
-            [("Market", "LATAM")],
+            hints(&ask(&state, &ws, &v, question).await),
+            [expected],
             "{question}"
         );
     }
-    // Khớp bằng nhau: Market, không kèm giả định sang Order Region (West Africa, Eastern Europe chỉ khớp gần).
-    for (question, value) in [
-        ("doanh thu châu Phi", "Africa"),
-        ("doanh thu Africa", "Africa"),
-        ("doanh thu europe", "Europe"),
-    ] {
-        let context = ask(&state, &ws, &v, question).await;
-        assert_eq!(values(&context), [("Market", value)], "{question}");
-        assert!(
-            context.picks.iter().all(|p| p.others.is_empty()),
-            "{question}: {:?}",
-            context.picks
-        );
-    }
-    // Từ chung chung không thành bộ lọc: một âm tiết không khớp gần giá trị hai âm tiết, "châu Á" (không có bí danh)
-    // không thành châu Âu.
+    // Không có ánh xạ nào do luật tự đoán.
     for question in [
+        "doanh thu từng miền năm 2017",
+        "doanh thu trung bình",
+        "doanh thu trên 5 triệu đồng",
+        "doanh thu khách lẻ",
+        "doanh thu Việt Nam",
+        "doanh thu Quảng Nam",
         "doanh thu châu Á",
-        "doanh thu châu Mỹ",
-        "doanh thu chau my",
-        "doanh thu theo từng châu",
-        "số đơn hàng giao trong tháng 5",
-        "số đơn đã giao năm 2017",
-        "doanh thu văn phòng",
+        "số đơn giao hàng tiêu chuẩn",
     ] {
         let context = ask(&state, &ws, &v, question).await;
-        assert!(
-            context.values.is_empty(),
-            "{question}: {:?}",
-            context.values
-        );
+        assert!(context.hints.is_empty(), "{question}: {:?}", context.hints);
     }
-    // "giao hàng tiêu chuẩn" không ra Standard Class (bí danh "giao tiêu chuẩn"): khác số âm tiết, và "hàng tiêu
-    // chuẩn" khác "giao tiêu chuẩn" hẳn một âm tiết. Cần bí danh "giao hàng tiêu chuẩn" từ lớp ngữ nghĩa (#23).
-    assert!(ask(&state, &ws, &v, "số đơn giao hàng tiêu chuẩn")
-        .await
-        .values
-        .is_empty());
-    // Cụm dài khớp gần chắc thắng cụm ngắn nằm trong nó khớp bằng nhau.
-    for (question, column, value) in [
-        (
-            "doanh thu southen europe",
-            "Order Region",
-            "Southern Europe",
-        ),
-        ("doanh thu westen europe", "Order Region", "Western Europe"),
-    ] {
-        let context = ask(&state, &ws, &v, question).await;
-        assert_eq!(values(&context), [(column, value)], "{question}");
-    }
-    // "năm" không thành Vietnam (bí danh Việt Nam), "nam" không thành South Asia hay South of USA.
-    let context = ask(&state, &ws, &v, "Doanh thu năm 2017 theo tháng").await;
-    assert!(context.values.is_empty(), "{:?}", context.values);
-    assert_eq!(
-        values(&ask(&state, &ws, &v, "doanh thu Việt Nam").await),
-        [("Order Country", "Vietnam")]
-    );
-
-    // Cột nhạy cảm không có giá trị mẫu, giá trị của nó không được tìm.
-    let context = ask(&state, &ws, &v, "khách XXXXXXXXX").await;
-    assert!(context.values.is_empty(), "{:?}", context.values);
-    for c in context.columns.iter().filter(|c| c.is_sensitive) {
-        assert!(c.sample_values.is_empty(), "{}", c.name);
-    }
-    let market = context.columns.iter().find(|c| c.name == "Market").unwrap();
-    assert_eq!(market.sample_values[0], "Europe");
 
     // "khu vực" chỉ là bí danh của Order Region; thêm vào Market thì mơ hồ, chọn rồi thì hết.
     let context = ask(&state, &ws, &v, "Doanh thu theo khu vực").await;
@@ -818,118 +831,55 @@ async fn dataco_sample_maps_aliases_and_columns() {
     drop_workspace(&store, ws).await;
 }
 
-/// Câu 40 từ không từ dừng: số cụm được tìm khớp gần có trần, cụm một từ trước.
-#[test]
-fn fuzzy_phrases_are_capped() {
-    let words: Vec<String> = (0..40u8)
-        .map(|i| format!("zx{}{}", (b'a' + i / 26) as char, (b'a' + i % 26) as char))
-        .collect();
-    let question = words.join(" ");
-    let phrases = build_phrases(&question);
-    let fuzzy = build_fuzzy_phrases(&phrases);
-    assert_eq!(fuzzy.len(), 40);
-    assert!(fuzzy.iter().all(|f| !f.contains(' ')), "single words first");
-}
-
-/// Bảng có giá trị ngắn, mã có chữ số, cột "miền" với giá trị một âm tiết, một giá trị lưu dạng tổ hợp và một cột số
-/// ít giá trị.
-async fn probe_version(store: &Store, ws: &WorkspaceId) -> DatasetVersion {
-    let src = store.create_local_source(ws).await.unwrap();
-    let ds = store
-        .create_dataset(ws, src, "Probe", "probe", None)
-        .await
-        .unwrap();
-    let columns = [
-        new_column(0, "trạng thái", ProfileRole::Dimension, &["Mới", "Cũ"]),
-        new_column(1, "giới tính", ProfileRole::Dimension, &["Nam", "Nữ"]),
-        new_column(2, "phân khúc", ProfileRole::Dimension, &["B2B", "B2C"]),
-        new_column(3, "mạng", ProfileRole::Dimension, &["5G", "4G"]),
-        new_column(4, "miền", ProfileRole::Dimension, &["Bắc", "Trung", "Nam"]),
-        new_column(
-            5,
-            "region",
-            ProfileRole::Dimension,
-            &["South", "Mie\u{302}\u{300}n Ta\u{302}y"],
-        ),
-        new_column(6, "quantity", ProfileRole::Measure, &["1", "2"]),
-    ];
-    let v = new_version(store, ws, ds.id, "probe", &columns).await;
-    set_value_aliases(store, v.id, "region", "South", &["miền Nam"]).await;
-    set_column(store, v.id, "giới tính", "aliases = ARRAY['khách']").await;
-    v
-}
-
+/// Câu hỏi sau dùng giá trị đã cache; cột vừa đánh dấu nhạy cảm không lộ giá trị qua cache cũ.
 #[tokio::test]
-async fn short_values_codes_and_column_value_pairs() {
+async fn cached_values_respect_current_sensitivity() {
     let Some(store) = store().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
     let state = app_state(&store);
     let ws = temp_workspace(&store).await;
-    let v = probe_version(&store, &ws).await;
-
-    for (question, column, value) in [
-        ("số đơn trạng thái mới", "trạng thái", "Mới"),
-        ("doanh thu giới tính nữ", "giới tính", "Nữ"),
-        // "khách" là bí danh của cột giới tính trong bảng này.
-        ("doanh thu khách nam", "giới tính", "Nam"),
-        ("doanh thu B2B", "phân khúc", "B2B"),
-        ("thuê bao 5G", "mạng", "5G"),
-        ("doanh thu miền bắc", "miền", "Bắc"),
-        // Giá trị lưu dạng tổ hợp, câu gõ dạng dựng sẵn: vẫn khớp đúng nguyên văn.
-        (
-            "doanh thu miền tây",
-            "region",
-            "Mie\u{302}\u{300}n Ta\u{302}y",
-        ),
-    ] {
-        let context = ask(&state, &ws, &v, question).await;
-        assert_eq!(values(&context), [(column, value)], "{question}");
-        assert_eq!(context.values[0].score, 1.0, "{question}");
-    }
-    // "miền nam": bí danh của South ở region, và cột "miền" với giá trị Nam, cùng điểm: mơ hồ.
-    let context = ask(&state, &ws, &v, "doanh thu miền nam").await;
-    assert_eq!(context.ambiguous.len(), 1, "{:?}", context.values);
-    assert_eq!(context.ambiguous[0].columns, ["miền", "region"]);
-    let choice = chosen(&context.ambiguous[0].choice_id, "miền");
-    let context = build_ask_context(&state, &ws, &v, "doanh thu miền nam", &[choice])
+    let src = store.create_local_source(&ws).await.unwrap();
+    let ds = store
+        .create_dataset(&ws, src, "VN", "vn", None)
         .await
         .unwrap();
-    assert_eq!(values(&context), [("miền", "Nam")]);
-    // Giá trị một âm tiết tiếng Việt không khớp khi đứng một mình; từ ngắn gõ không dấu không khớp sau bỏ dấu; "năm"
-    // có dấu không phải "Nam".
-    for question in [
-        "số đơn mới",
-        "doanh thu nữ",
-        "doanh thu Trung Quốc",
-        "doanh thu nu",
-        "doanh thu từng miền năm 2017",
-        "doanh thu năm 2017",
-    ] {
-        let context = ask(&state, &ws, &v, question).await;
-        assert!(
-            context.values.is_empty(),
-            "{question}: {:?}",
-            context.values
-        );
-    }
-    // Giá trị mẫu chỉ của cột chiều.
-    let context = ask(&state, &ws, &v, "xin chào").await;
-    let quantity = context
-        .columns
-        .iter()
-        .find(|c| c.name == "quantity")
-        .unwrap();
-    assert!(quantity.sample_values.is_empty());
-    assert_eq!(context.columns[0].sample_values, ["Mới", "Cũ"]);
+    let columns = [new_column(
+        0,
+        "tinh_thanh",
+        ProfileRole::Dimension,
+        &["Ha Noi", "Da Nang"],
+    )];
+    let v = new_version(&store, &ws, ds.id, "vn", &columns).await;
+    assert_eq!(
+        hints(&ask(&state, &ws, &v, "doanh thu Hà Nội").await),
+        [("tinh_thanh", "Ha Noi")]
+    );
+    assert_eq!(state.value_cache.len(), 1);
+    // Xóa thẳng trong database mà không qua cache: câu sau vẫn thấy giá trị cũ, tức là đã đọc từ cache.
+    exec(
+        &store,
+        &format!(
+            "DELETE FROM column_values WHERE value = 'Da Nang' AND workspace_id = '{}'",
+            ws.as_uuid()
+        ),
+    )
+    .await;
+    let context = ask(&state, &ws, &v, "doanh thu Đà Nẵng").await;
+    assert_eq!(hints(&context), [("tinh_thanh", "Da Nang")]);
+    assert_eq!(state.value_cache.len(), 1);
+    set_column(&store, v.id, "tinh_thanh", "is_sensitive = true").await;
+    let context = ask(&state, &ws, &v, "doanh thu Hà Nội").await;
+    assert!(context.hints.is_empty());
+    assert!(column(&context, "tinh_thanh").values.is_empty());
 
     drop_workspace(&store, ws).await;
 }
 
-/// Tải giá trị quá thời gian thì trả None, không lỗi: câu hỏi vẫn đi tiếp, không có giá trị đã ánh xạ.
+/// Tải giá trị quá thời gian thì trả None, không lỗi: câu hỏi vẫn đi tiếp, không có danh sách giá trị.
 #[tokio::test]
-async fn value_search_times_out_to_no_values() {
+async fn value_loading_times_out_to_no_values() {
     let Some(store) = store().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
@@ -951,236 +901,11 @@ async fn value_search_times_out_to_no_values() {
         .await
         .unwrap();
     assert!(rows.is_none());
-    // Đủ thời gian thì có kết quả.
     let rows = store
         .list_value_rows(&ws, v.id, Duration::from_secs(10))
         .await
         .unwrap();
     assert_eq!(rows.unwrap().len(), 100 * 200);
-
-    drop_workspace(&store, ws).await;
-}
-
-/// Bảng kiểu dữ liệu xuất từ hệ thống Việt Nam: giá trị và tên cột không dấu, vùng có tên anh em, cột giới tính.
-async fn vn_version(store: &Store, ws: &WorkspaceId) -> DatasetVersion {
-    let src = store.create_local_source(ws).await.unwrap();
-    let ds = store
-        .create_dataset(ws, src, "VN", "vn", None)
-        .await
-        .unwrap();
-    let columns = [
-        new_column(
-            0,
-            "tinh_thanh",
-            ProfileRole::Dimension,
-            &["Ha Noi", "Da Nang", "Ho Chi Minh", "Hai Phong"],
-        ),
-        new_column(
-            1,
-            "vung",
-            ProfileRole::Dimension,
-            &[
-                "Đông Nam Bộ",
-                "Tây Nam Bộ",
-                "Nam Trung Bộ",
-                "Tây Nguyên",
-                "Đồng bằng sông Hồng",
-            ],
-        ),
-        new_column(
-            2,
-            "nganh_hang",
-            ProfileRole::Dimension,
-            &[
-                "Thời trang nam",
-                "Thời trang trẻ em",
-                "Điện thoại",
-                "Máy tính bảng",
-                "Giày nam",
-            ],
-        ),
-        new_column(3, "gioi_tinh", ProfileRole::Dimension, &["Nam", "Nữ"]),
-        new_column(
-            4,
-            "kenh",
-            ProfileRole::Dimension,
-            &["Online", "Cửa hàng", "Đại lý"],
-        ),
-        new_column(5, "doanh_thu", ProfileRole::Measure, &[]),
-        new_column(
-            6,
-            "khu_vuc",
-            ProfileRole::Dimension,
-            &["Mien Bac", "Mien Trung", "Mien Nam"],
-        ),
-    ];
-    new_version(store, ws, ds.id, "vn", &columns).await
-}
-
-#[tokio::test]
-async fn unaccented_data_one_syllable_values_and_sibling_names() {
-    let Some(store) = store().await else {
-        eprintln!("skip: DATABASE_URL not set");
-        return;
-    };
-    let state = app_state(&store);
-    let ws = temp_workspace(&store).await;
-    let v = vn_version(&store, &ws).await;
-
-    // Giá trị hay tên cột không dấu: câu có dấu so sau bỏ dấu.
-    for (question, column, value) in [
-        ("doanh thu Hà Nội", "tinh_thanh", "Ha Noi"),
-        ("doanh thu ha noi", "tinh_thanh", "Ha Noi"),
-        ("doanh thu Hải Phòng năm 2017", "tinh_thanh", "Hai Phong"),
-        ("doanh thu miền Bắc", "khu_vuc", "Mien Bac"),
-        ("doanh thu nam 2017 ở Hà Nội", "tinh_thanh", "Ha Noi"),
-        ("doanh thu điện thoại tháng 5", "nganh_hang", "Điện thoại"),
-        ("doanh thu dien thoai", "nganh_hang", "Điện thoại"),
-        ("doanh thu đại lý", "kenh", "Đại lý"),
-        (
-            "doanh thu dong bang song hong",
-            "vung",
-            "Đồng bằng sông Hồng",
-        ),
-        // Gõ thiếu dấu một từ: khớp gần, cùng số từ, từng âm tiết sai một chữ.
-        ("doanh thu tây nguyen", "vung", "Tây Nguyên"),
-        ("doanh thu máy tinh bảng", "nganh_hang", "Máy tính bảng"),
-        // "giay" không còn là từ dừng ("giây"): gõ không dấu vẫn ra Giày nam.
-        ("doanh thu giay nam nam 2017", "nganh_hang", "Giày nam"),
-    ] {
-        let context = ask(&state, &ws, &v, question).await;
-        assert_eq!(values(&context), [(column, value)], "{question}");
-    }
-    let context = ask(&state, &ws, &v, "doanh thu theo khu vực").await;
-    assert!(context
-        .picks
-        .iter()
-        .any(|p| p.phrase == "khu vực" && p.column == "khu_vuc"));
-
-    // "nam" của một tên dài hơn không thành giới tính Nam; vùng không có trong dữ liệu không thành vùng anh em.
-    for question in [
-        "doanh thu Việt Nam năm 2017",
-        "doanh thu Quảng Nam",
-        "doanh thu Đông Nam Á",
-        "doanh thu thang 5 nam 2017 của khách hàng",
-        "doanh thu thời trang nữ",
-        "doanh thu thoi trang nu",
-        "doanh thu Bắc Trung Bộ",
-        "doanh thu Tây Bắc Bộ",
-    ] {
-        let context = ask(&state, &ws, &v, question).await;
-        assert!(
-            context.values.is_empty(),
-            "{question}: {:?}",
-            context.values
-        );
-        assert!(context.ambiguous.is_empty(), "{question}");
-    }
-    // Giá trị một âm tiết qua tên cột: cột gioi_tinh không có bí danh, nên "giới tính nam" khớp sau bỏ dấu tên cột.
-    assert_eq!(
-        values(&ask(&state, &ws, &v, "doanh thu gioi tinh nu").await),
-        [("gioi_tinh", "Nữ")]
-    );
-
-    drop_workspace(&store, ws).await;
-}
-
-/// Hai kiểu đặt dấu thanh ("hoà" và "hòa") là một chữ.
-#[tokio::test]
-async fn tone_marks_in_old_and_new_places_match() {
-    let Some(store) = store().await else {
-        eprintln!("skip: DATABASE_URL not set");
-        return;
-    };
-    let state = app_state(&store);
-    let ws = temp_workspace(&store).await;
-    let src = store.create_local_source(&ws).await.unwrap();
-    let ds = store
-        .create_dataset(&ws, src, "Tone", "tone", None)
-        .await
-        .unwrap();
-    let columns = [
-        new_column(
-            0,
-            "tỉnh",
-            ProfileRole::Dimension,
-            &["Hòa Bình", "Khánh Hòa", "Thanh Hóa", "Nam Định", "Bắc Ninh"],
-        ),
-        new_column(
-            1,
-            "ngành",
-            ProfileRole::Dimension,
-            &["Thủy sản", "Kỹ thuật", "Hóa chất"],
-        ),
-        new_column(2, "giới tính", ProfileRole::Dimension, &["Nam", "Nữ"]),
-        new_column(3, "miền", ProfileRole::Dimension, &["Bắc", "Trung", "Nam"]),
-    ];
-    let v = new_version(&store, &ws, ds.id, "tone", &columns).await;
-    for (question, column, value) in [
-        ("doanh thu Hoà Bình", "tỉnh", "Hòa Bình"),
-        ("doanh thu Khánh Hoà", "tỉnh", "Khánh Hòa"),
-        ("doanh thu Thanh Hoá", "tỉnh", "Thanh Hóa"),
-        ("doanh thu ngành thuỷ sản", "ngành", "Thủy sản"),
-        ("doanh thu hoá chất", "ngành", "Hóa chất"),
-        ("doanh thu Nam Định", "tỉnh", "Nam Định"),
-        ("doanh thu Bắc Ninh", "tỉnh", "Bắc Ninh"),
-        ("doanh thu giới tính nam", "giới tính", "Nam"),
-    ] {
-        let context = ask(&state, &ws, &v, question).await;
-        assert_eq!(values(&context), [(column, value)], "{question}");
-        assert_eq!(context.values[0].score, 1.0, "{question}");
-    }
-    for question in [
-        "doanh thu Trung Quốc",
-        "doanh thu Việt Nam năm 2017",
-        "doanh thu Quảng Nam",
-    ] {
-        let context = ask(&state, &ws, &v, question).await;
-        assert!(
-            context.values.is_empty(),
-            "{question}: {:?}",
-            context.values
-        );
-        assert!(context.ambiguous.is_empty(), "{question}");
-    }
-
-    drop_workspace(&store, ws).await;
-}
-
-/// Câu hỏi sau dùng giá trị đã cache; cột vừa đánh dấu nhạy cảm không lộ giá trị qua cache cũ.
-#[tokio::test]
-async fn cached_values_respect_current_sensitivity() {
-    let Some(store) = store().await else {
-        eprintln!("skip: DATABASE_URL not set");
-        return;
-    };
-    let state = app_state(&store);
-    let ws = temp_workspace(&store).await;
-    let v = vn_version(&store, &ws).await;
-    assert_eq!(
-        values(&ask(&state, &ws, &v, "doanh thu ha noi").await),
-        [("tinh_thanh", "Ha Noi")]
-    );
-    assert_eq!(state.value_cache.len(), 1);
-    // Ghi thẳng vào database mà không qua cache: giá trị mới không có cho tới khi phiên bản đổi trạng thái hồ sơ.
-    exec(
-        &store,
-        &format!(
-            "DELETE FROM column_values WHERE value = 'Da Nang' AND workspace_id = '{}'",
-            ws.as_uuid()
-        ),
-    )
-    .await;
-    assert_eq!(
-        values(&ask(&state, &ws, &v, "doanh thu da nang").await),
-        [("tinh_thanh", "Da Nang")]
-    );
-    assert_eq!(state.value_cache.len(), 1);
-    set_column(&store, v.id, "tinh_thanh", "is_sensitive = true").await;
-    assert!(ask(&state, &ws, &v, "doanh thu ha noi")
-        .await
-        .values
-        .is_empty());
 
     drop_workspace(&store, ws).await;
 }

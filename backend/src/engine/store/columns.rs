@@ -204,31 +204,6 @@ impl Store {
         }
     }
 
-    /// Tối đa per_column giá trị nhiều dòng nhất của mỗi cột cho trước, theo cột rồi tần suất giảm dần. Id cột của
-    /// workspace khác bị bỏ qua.
-    pub async fn list_sample_values(
-        &self,
-        ws: &WorkspaceId,
-        column_ids: &[Uuid],
-        per_column: i64,
-    ) -> Result<Vec<ColumnValue>, AppError> {
-        sqlx::query_as(
-            "SELECT column_id, value, frequency FROM (
-                 SELECT column_id, value, frequency,
-                        row_number() OVER (PARTITION BY column_id ORDER BY frequency DESC, value) AS rank
-                 FROM column_values WHERE workspace_id = $1 AND column_id = ANY($2)
-             ) AS ranked
-             WHERE rank <= $3
-             ORDER BY column_id, rank",
-        )
-        .bind(ws.as_uuid())
-        .bind(column_ids)
-        .bind(per_column)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| db_error("list sample values", e))
-    }
-
     /// Giá trị của các cột cho trước, mỗi cột giá trị nhiều dòng nhất trước. Id cột của workspace khác bị bỏ qua.
     // Chưa ai gọi ngoài test: kiểm form câu "tại sao" (#38) cần đủ danh sách. Gỡ allow khi có người gọi.
     #[allow(dead_code)]
