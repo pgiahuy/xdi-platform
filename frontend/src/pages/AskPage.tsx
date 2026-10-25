@@ -4,6 +4,8 @@ giả định hoặc trả lời câu hỏi lại; phần hiện response ở As
 Quy tắc gửi lựa chọn theo hợp đồng (ARCHITECTURE mục 8): đổi giả định hay trả lời câu hỏi lại thì gửi lại đúng câu
 hỏi đó kèm choices của response gần nhất (buildChoicesWith); gõ câu khác là câu mới, choices rỗng. Response gần nhất
 giữ trong state kèm request đã gửi, vì hỏi lại cần cả hai và useMutation xóa data khi bắt đầu lần gọi mới.
+Câu gợi ý lấy từ dataset đang chọn (suggested_questions, lớp hồ sơ ngữ nghĩa viết sau khi nạp); danh sách dataset tự
+tải lại khi còn dataset đang lập hồ sơ (useDatasets, watchProfiles), nên câu gợi ý hiện ra mà không phải tải lại trang.
 Ở chế độ dev có công tắc dữ liệu mẫu (api/askSamples.ts); bản build production không có công tắc lẫn file mẫu. */
 
 import { useState } from 'react'
@@ -11,10 +13,11 @@ import { Link, useParams } from 'react-router'
 import { buildChoicesWith, isRepeatedClarification, useAsk, type AskVariables, type ChosenOption } from '@/api/ask'
 import { sampleQuestions } from '@/api/askSamples'
 import { useMe } from '@/api/auth'
-import { useDatasets } from '@/api/datasets'
+import { isProfiling, useDatasets, type Dataset } from '@/api/datasets'
 import { AskLayout } from '@/components/ask/AskLayout'
 import { QuestionForm } from '@/components/ask/QuestionForm'
 import { SampleModeSwitch } from '@/components/ask/SampleModeSwitch'
+import type { ProfileProgress } from '@/components/ask/types'
 import { EmptyState } from '@/components/EmptyState'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
@@ -30,7 +33,7 @@ export function AskPage() {
 
 function WorkspaceAsk({ ws }: { ws: string }) {
   const me = useMe()
-  const datasets = useDatasets(ws)
+  const datasets = useDatasets(ws, { watchProfiles: true })
   const ask = useAsk(ws)
   const [question, setQuestion] = useState('')
   const [pickedDataset, setPickedDataset] = useState<string>()
@@ -39,6 +42,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
 
   // Chưa chọn thì hỏi dataset mới nhất (backend trả mới tạo trước).
   const datasetId = pickedDataset ?? datasets.data?.[0]?.id ?? ''
+  const dataset = datasets.data?.find((d) => d.id === datasetId)
   const isAdmin = me.data?.workspaces.find((m) => m.slug === ws)?.role === 'admin'
   const fromSamples = import.meta.env.DEV && sampleMode
 
@@ -95,12 +99,15 @@ function WorkspaceAsk({ ws }: { ws: string }) {
           datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
           datasetId={datasetId}
           onDatasetChange={changeDataset}
+          // Dữ liệu mẫu không qua dataset thật, báo hồ sơ của dataset đang chọn ở đó chỉ gây nhầm.
+          profile={fromSamples ? 'ready' : buildProfileProgress(dataset)}
           question={question}
           onQuestionChange={setQuestion}
           onSubmit={() => askQuestion(question)}
           pending={ask.isPending}
-          // Câu gợi ý theo dataset chưa có nguồn trong API (sinh từ hồ sơ lúc nạp); chỉ dữ liệu mẫu có câu gợi ý.
-          suggestions={fromSamples ? sampleQuestions.map((sample) => sample.question) : []}
+          suggestions={
+            fromSamples ? sampleQuestions.map((sample) => sample.question) : (dataset?.suggested_questions ?? [])
+          }
           onSuggestion={pickSuggestion}
         />
       ) : (
@@ -127,7 +134,10 @@ function WorkspaceAsk({ ws }: { ws: string }) {
           onChangeAssumption={(choiceId, optionId) => askAgainWith([{ choice_id: choiceId, option_id: optionId }])}
           onAnswerClarifications={(picks) =>
             askAgainWith(
-              picks.map((pick) => ({ choice_id: pick.choiceId, option_id: pick.optionId })),
+              picks.map((pick) => ({
+                choice_id: pick.choiceId,
+                option_id: pick.optionId,
+              })),
               picks.map((pick) => pick.choiceId),
             )
           }
@@ -141,6 +151,12 @@ function WorkspaceAsk({ ws }: { ws: string }) {
 // hỏi là một khóa riêng.
 function evidenceKey({ variables, response }: Answer): string {
   return `${response.query_id ?? ''}:${JSON.stringify(variables)}`
+}
+
+function buildProfileProgress(dataset: Dataset | undefined): ProfileProgress {
+  if (dataset && isProfiling(dataset)) return 'profiling'
+  if (dataset?.current_profile_status === 'failed') return 'failed'
+  return 'ready'
 }
 
 function announce(pending: boolean, answer: Answer | undefined): string {

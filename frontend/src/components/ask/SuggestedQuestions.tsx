@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/SuggestedQuestions.tsx - câu hỏi gợi ý dưới ô hỏi; bấm một câu là hỏi luôn câu đó.
-Danh sách rỗng thì không hiện gì: câu gợi ý sinh từ hồ sơ dataset lúc nạp (ARCHITECTURE mục 6) chưa có nguồn trong
-API, nên hiện tại chỉ chế độ dữ liệu mẫu có câu gợi ý. */
+Danh sách rỗng thì không hiện gì: câu gợi ý do lớp hồ sơ ngữ nghĩa viết sau khi nạp (ARCHITECTURE mục 6), chưa xong
+hoặc mô hình không đề xuất câu nào thì dataset không có câu gợi ý. */
 
 import { Button } from '@/components/ui/button'
 
