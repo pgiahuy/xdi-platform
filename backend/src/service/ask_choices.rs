@@ -11,7 +11,7 @@ lần hỏi sau áp được. Phương án không có trong ngữ cảnh (cột,
 Chỉ số chưa xác nhận luôn hiện rõ: phương án mang nhãn "chưa xác nhận", nhãn giả định nói rõ khi chỉ số đang dùng chưa
 xác nhận, và câu trả lời dùng chỉ số đó mà mô hình không ghi giả định thì code tự thêm một giả định. */
 
-use super::ask_context::AskContext;
+use super::ask_context::{AskContext, ColumnProfile};
 use super::ask_contract::{Choice, ChoiceOption};
 use super::ask_phrases::{build_key, fold};
 use super::ask_reply::{ChoiceKind, Clarify, SqlAnswer, Term, TermKind};
@@ -101,6 +101,10 @@ pub fn build_clarify_choice(
 ) -> Option<Choice> {
     let options = build_options(clarify.kind, clarify.options.iter(), context, metrics);
     if options.is_empty() {
+        // Ghi câu hỏi lại và các phương án mô hình đưa (tên cột, tên chỉ số, giá trị hay kỳ; không có dòng dữ liệu)
+        // để chẩn đoán vì sao không phương án nào khớp ngữ cảnh.
+        tracing::info!(kind = ?clarify.kind, question = %clarify.question, options = ?clarify.options,
+            "clarify has no option found in the data");
         return None;
     }
     Some(Choice {
@@ -146,7 +150,8 @@ pub fn build_metric_mismatches(
     mismatches
 }
 
-/// Phương án có thật trong ngữ cảnh, giữ thứ tự, bỏ trùng và bỏ chuỗi rỗng.
+/// Phương án có thật trong ngữ cảnh, giữ thứ tự, bỏ trùng và bỏ chuỗi rỗng. Id của phương án cột và chỉ số là tên
+/// đúng như trong ngữ cảnh, không phải chữ mô hình viết, nên hai cách viết của cùng một cột chỉ thành một phương án.
 fn build_options<'a>(
     kind: ChoiceKind,
     names: impl Iterator<Item = &'a String>,
@@ -155,27 +160,60 @@ fn build_options<'a>(
 ) -> Vec<ChoiceOption> {
     let mut options: Vec<ChoiceOption> = Vec::new();
     for name in names.filter(|n| !n.trim().is_empty()) {
-        if options.iter().any(|o| &o.id == name) {
-            continue;
-        }
         let option = match kind {
-            ChoiceKind::Column => {
-                context
-                    .columns
-                    .iter()
-                    .find(|c| &c.name == name)
-                    .map(|c| ChoiceOption {
-                        id: c.name.clone(),
-                        label: c.name.clone(),
-                    })
-            }
-            ChoiceKind::Metric => find_metric(metrics, name).map(build_metric_option),
+            ChoiceKind::Column => find_column(context, name).map(|c| ChoiceOption {
+                id: c.name.clone(),
+                label: c.name.clone(),
+            }),
+            ChoiceKind::Metric => find_metric(metrics, unquote(name)).map(build_metric_option),
             // Kỳ không có danh sách để đối chiếu; bước kiểm terms của #33 kiểm kỳ có dữ liệu.
             ChoiceKind::Time => Some(build_time_option(name)),
         };
-        options.extend(option);
+        if let Some(option) = option {
+            if !options.iter().any(|o| o.id == option.id) {
+                options.push(option);
+            }
+        }
     }
     options
+}
+
+/// Bỏ khoảng trắng và một cặp nháy bao ngoài (", ', `). Prompt in tên cột trong nháy kép và dặn mô hình viết tên cột
+/// trong nháy kép trong SQL, nên mô hình hay viết phương án là "\"Sales\"" thay vì "Sales"; không bỏ thì không phương
+/// án nào khớp và câu hỏi lại thành lỗi.
+fn unquote(name: &str) -> &str {
+    let name = name.trim();
+    for quote in ['"', '\'', '`'] {
+        if let Some(inner) = name
+            .strip_prefix(quote)
+            .and_then(|rest| rest.strip_suffix(quote))
+        {
+            return inner.trim();
+        }
+    }
+    name
+}
+
+/// Cột mà mô hình đưa làm phương án. Thử lần lượt: đúng tên; tên so không phân biệt hoa thường và cách đặt dấu thanh
+/// (build_key, như find_metric); rồi bí danh của hồ sơ ngữ nghĩa, vì prompt in bí danh cạnh tên cột ("Also called")
+/// nên mô hình có khi đưa bí danh. Bí danh chỉ nhận khi đúng một cột có nó, để không đoán cột thay người dùng.
+fn find_column<'a>(context: &'a AskContext, name: &str) -> Option<&'a ColumnProfile> {
+    let name = unquote(name);
+    if let Some(column) = context.columns.iter().find(|c| c.name == name) {
+        return Some(column);
+    }
+    let key = build_key(name);
+    if let Some(column) = context.columns.iter().find(|c| build_key(&c.name) == key) {
+        return Some(column);
+    }
+    let mut by_alias = context
+        .columns
+        .iter()
+        .filter(|c| c.aliases.iter().any(|a| build_key(a) == key));
+    match (by_alias.next(), by_alias.next()) {
+        (Some(column), None) => Some(column),
+        _ => None,
+    }
 }
 
 fn build_metric_option(metric: &MetricDefinition) -> ChoiceOption {

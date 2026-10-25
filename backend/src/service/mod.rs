@@ -76,6 +76,7 @@ mod explain_tests;
 pub mod ingest;
 pub mod profile;
 pub mod semantic;
+pub mod semantic_schema;
 #[cfg(test)]
 mod semantic_tests;
 // Thẻ "Đã hiểu là" (#35): endpoint hỏi (service/ask.rs) sẽ gọi build_understanding và build_column_roles; luồng hỏi của

@@ -38,6 +38,7 @@ use crate::service::ask_context;
 use crate::service::ask_phrases::fold;
 use crate::service::ask_values::STRING_MAX_BYTES;
 use crate::service::profile::{is_integer_type, DIMENSION_MAX};
+use crate::service::semantic_schema::build_profile_schema;
 use crate::{error::AppError, state::AppState};
 
 // Các giới hạn khi kiểm câu trả lời của mô hình (đếm theo ký tự, không phải byte). Mô tả và bí danh vào prompt của
@@ -57,6 +58,7 @@ pub(crate) const QUESTION_MAX_CHARS: usize = 200;
 // 5 100.
 
 /// Câu trả lời của mô hình sau khi kiểm: tên cột và giá trị đã đổi ra id, mọi giới hạn đã áp.
+#[derive(Debug)]
 pub struct SemanticProfile {
     pub columns: Vec<SemanticColumnUpdate>,
     pub values: Vec<SemanticValueUpdate>,
@@ -241,8 +243,9 @@ pub async fn apply_semantic_profile(
         task: LlmTask::Profile,
         question: &dataset.logical_table,
         prompt: &prompt,
-        // Chưa ép schema: build_profile_answer tự tìm object JSON trong câu trả lời và kiểm từng mục.
-        json_schema: None,
+        // Schema ép khuôn ở Gemini và Ollama; build_profile_answer vẫn kiểm từng mục vì schema không biết cột nào có
+        // thật, và mock không theo schema.
+        json_schema: Some(build_profile_schema()),
     };
     let text = state.llm.complete(&request).await.map_err(|e| match e {
         // Chỉ BadRequest là vĩnh viễn: Gemini chặn prompt vì nội dung, mock không có bảng. MAX_TOKENS, SAFETY và mã
@@ -250,7 +253,11 @@ pub async fn apply_semantic_profile(
         AppError::BadRequest(_) => SemanticFailure::Permanent(e),
         other => SemanticFailure::Temporary(other),
     })?;
-    let answer = build_profile_answer(&text, &columns, &values).ok_or_else(|| {
+    let answer = build_profile_answer(&text, &columns, &values).map_err(|reasons| {
+        // Vài lý do bỏ đầu tiên (tên trường, vị trí, lý do; không có giá trị dữ liệu) để biết mô hình trả sai chỗ
+        // nào mà không phải bật log câu trả lời đầy đủ.
+        tracing::warn!(version_id = %version_id, reasons = ?reasons,
+            "semantic profile answer has no valid item");
         SemanticFailure::Permanent(AppError::Internal(
             "semantic profile answer has no valid item".to_string(),
         ))
@@ -311,7 +318,7 @@ pub fn build_profile_prompt(
          \"suggested_questions\": [...]}}\n\
          Rules:\n\
          - \"description\": one Vietnamese sentence on what the column means, 1 to {DESCRIPTION_MAX_CHARS} characters; \
-         null when nothing useful to say.\n\
+         leave it out when nothing useful to say.\n\
          - \"aliases\": up to {ALIASES_MAX} Vietnamese names users may use for that column or value, each 1 to \
          {ALIAS_MAX_CHARS} characters.\n\
          - Only the columns and values listed below exist; never invent new ones.\n\
@@ -415,15 +422,47 @@ fn column_line(c: &ProfileColumn, row_count: Option<i64>) -> String {
     line
 }
 
-/// Đọc câu trả lời của mô hình thành SemanticProfile đã kiểm. None khi không đọc được JSON hoặc không còn mục nào
-/// hợp lệ (người gọi coi như lỗi mô hình). Từng mục được kiểm riêng: cột không có thật, giá trị không có trong
-/// column_values, chuỗi rỗng sau trim hay có ký tự điều khiển (một chuỗi như vậy làm Postgres từ chối cả giao dịch),
-/// chuỗi quá dài, bí danh trùng tên khác, vai trò không được phép thì bỏ mục đó, các mục khác vẫn ghi.
+/// Số lý do bỏ mục giữ lại để ghi log khi cả câu trả lời bị bỏ: đủ thấy mô hình sai kiểu gì, không làm dòng log dài
+/// theo số cột của bảng.
+const REJECTIONS_MAX: usize = 5;
+
+/// Ghi một lý do bỏ mục, dạng "columns[2]: unknown column name". Chỉ tên trường, vị trí và lý do, không bao giờ có
+/// giá trị dữ liệu hay chữ mô hình viết.
+fn note_rejection(reasons: &mut Vec<String>, field: &str, index: usize, reason: &str) {
+    if reasons.len() < REJECTIONS_MAX {
+        reasons.push(format!("{field}[{index}]: {reason}"));
+    }
+}
+
+/// Danh sách ở khóa field của câu trả lời. Khóa có mà không phải danh sách thì ghi lý do, vì đó là kiểu sai khuôn
+/// làm mất cả nhóm mục một lúc.
+fn answer_list<'a>(
+    json: &'a serde_json::Value,
+    field: &str,
+    reasons: &mut Vec<String>,
+) -> &'a [serde_json::Value] {
+    match &json[field] {
+        serde_json::Value::Array(items) => items,
+        serde_json::Value::Null => &[],
+        _ => {
+            if reasons.len() < REJECTIONS_MAX {
+                reasons.push(format!("{field}: not a list"));
+            }
+            &[]
+        }
+    }
+}
+
+/// Đọc câu trả lời của mô hình thành SemanticProfile đã kiểm. Err khi không đọc được JSON hoặc không còn mục nào
+/// hợp lệ (người gọi coi như lỗi mô hình), kèm vài lý do bỏ đầu tiên để ghi log. Từng mục được kiểm riêng: cột không
+/// có thật, giá trị không có trong column_values, chuỗi rỗng sau trim hay có ký tự điều khiển (một chuỗi như vậy làm
+/// Postgres từ chối cả giao dịch), chuỗi quá dài, bí danh trùng tên khác, vai trò không được phép thì bỏ mục đó, các
+/// mục khác vẫn ghi.
 pub fn build_profile_answer(
     text: &str,
     columns: &[ProfileColumn],
     values: &[ColumnValue],
-) -> Option<SemanticProfile> {
+) -> Result<SemanticProfile, Vec<String>> {
     let json: serde_json::Value = serde_json::from_str(strip_fence(text))
         .ok()
         // Mô hình thêm lời dẫn trước hoặc sau khối JSON: lấy từ { đầu tới } cuối.
@@ -431,7 +470,9 @@ pub fn build_profile_answer(
             let start = text.find('{')?;
             let end = text.rfind('}')?;
             serde_json::from_str(text.get(start..=end)?).ok()
-        })?;
+        })
+        .ok_or_else(|| vec!["the answer is not a JSON object".to_string()])?;
+    let mut reasons: Vec<String> = Vec::new();
     let by_name: HashMap<&str, &ProfileColumn> =
         columns.iter().map(|c| (c.name.as_str(), c)).collect();
     // Tên mọi cột, đã chuẩn hóa: bí danh của cột không được trùng tên một cột (kể cả tên chính nó), nếu không câu
@@ -442,13 +483,27 @@ pub fn build_profile_answer(
     // riêng vẫn được ghi (mô tả null, bí danh rỗng là mặc định sẵn có). Mục cột không có gì hợp lệ (mô tả null, bí
     // danh rỗng) thì bỏ hẳn: ghi NULL không đổi gì mà làm câu trả lời toàn mục sai vẫn thành "có mục hợp lệ".
     let mut column_updates: HashMap<Uuid, SemanticColumnUpdate> = HashMap::new();
-    for item in json["columns"].as_array().into_iter().flatten() {
-        let Some(column) = item["name"].as_str().and_then(|n| by_name.get(n)) else {
+    for (i, item) in answer_list(&json, "columns", &mut reasons)
+        .iter()
+        .enumerate()
+    {
+        let Some(name) = item["name"].as_str() else {
+            note_rejection(
+                &mut reasons,
+                "columns",
+                i,
+                "name is missing or not a string",
+            );
+            continue;
+        };
+        let Some(column) = by_name.get(name) else {
+            note_rejection(&mut reasons, "columns", i, "unknown column name");
             continue;
         };
         let description = clean_text_opt(&item["description"], DESCRIPTION_MAX_CHARS);
         let aliases = valid_aliases(&item["aliases"], &column_names);
         if description.is_none() && aliases.is_empty() {
+            note_rejection(&mut reasons, "columns", i, "no valid description or alias");
             continue;
         }
         column_updates.insert(
@@ -461,14 +516,20 @@ pub fn build_profile_answer(
             },
         );
     }
-    for item in json["role_changes"].as_array().into_iter().flatten() {
+    for (i, item) in answer_list(&json, "role_changes", &mut reasons)
+        .iter()
+        .enumerate()
+    {
         let (Some(name), Some(role)) = (item["name"].as_str(), item["role"].as_str()) else {
+            note_rejection(&mut reasons, "role_changes", i, "name or role is missing");
             continue;
         };
         let Some(column) = by_name.get(name) else {
+            note_rejection(&mut reasons, "role_changes", i, "unknown column name");
             continue;
         };
         let Some(role) = allowed_role_change(column, role) else {
+            note_rejection(&mut reasons, "role_changes", i, "role change not allowed");
             continue;
         };
         column_updates
@@ -481,14 +542,16 @@ pub fn build_profile_answer(
             })
             .role = Some(role);
     }
-    let sensitive_columns: Vec<Uuid> = json["sensitive_columns"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|item| item.as_str())
-        .filter_map(|name| by_name.get(name))
-        .map(|c| c.id)
-        .collect();
+    let mut sensitive_columns: Vec<Uuid> = Vec::new();
+    for (i, item) in answer_list(&json, "sensitive_columns", &mut reasons)
+        .iter()
+        .enumerate()
+    {
+        match item.as_str().and_then(|name| by_name.get(name)) {
+            Some(column) => sensitive_columns.push(column.id),
+            None => note_rejection(&mut reasons, "sensitive_columns", i, "unknown column name"),
+        }
+    }
 
     // Giá trị phải có thật trong column_values của đúng cột (danh sách đã đọc chỉ gồm cột dimension không nhạy cảm):
     // mô hình không thể đặt bí danh cho giá trị nó không thấy.
@@ -507,15 +570,26 @@ pub fn build_profile_answer(
     // Bí danh đã nhận của từng cột, để một bí danh không đứng cho hai giá trị cùng cột ("châu Âu" không nhận cho cả
     // Western Europe và Southern Europe).
     let mut accepted_by_column: HashMap<Uuid, HashSet<String>> = HashMap::new();
-    for item in json["values"].as_array().into_iter().flatten() {
+    for (i, item) in answer_list(&json, "values", &mut reasons)
+        .iter()
+        .enumerate()
+    {
         let (Some(column_name), Some(value)) = (item["column"].as_str(), item["value"].as_str())
         else {
+            note_rejection(&mut reasons, "values", i, "column or value is missing");
             continue;
         };
         let Some(column) = by_name.get(column_name) else {
+            note_rejection(&mut reasons, "values", i, "unknown column name");
             continue;
         };
         if !known.contains(&(column.id, value)) {
+            note_rejection(
+                &mut reasons,
+                "values",
+                i,
+                "value not in the column's value list",
+            );
             continue;
         }
         // Bí danh của giá trị không được trùng (sau chuẩn hóa) một giá trị khác cùng cột hay bí danh đã nhận của cột
@@ -533,6 +607,7 @@ pub fn build_profile_answer(
         let aliases = valid_aliases(&item["aliases"], &forbidden);
         // Mục giá trị không có bí danh hợp lệ thì bỏ hẳn: không có gì để ghi.
         if aliases.is_empty() {
+            note_rejection(&mut reasons, "values", i, "no valid alias");
             continue;
         }
         accepted_by_column
@@ -548,7 +623,10 @@ pub fn build_profile_answer(
 
     let mut suggested_questions = Vec::new();
     let mut seen_questions = HashSet::new();
-    for item in json["suggested_questions"].as_array().into_iter().flatten() {
+    for (i, item) in answer_list(&json, "suggested_questions", &mut reasons)
+        .iter()
+        .enumerate()
+    {
         if suggested_questions.len() >= QUESTIONS_MAX {
             break;
         }
@@ -556,6 +634,12 @@ pub fn build_profile_answer(
             .as_str()
             .and_then(|q| clean_text(q, QUESTION_MAX_CHARS))
         else {
+            note_rejection(
+                &mut reasons,
+                "suggested_questions",
+                i,
+                "not a valid question",
+            );
             continue;
         };
         if seen_questions.insert(fold(&q)) {
@@ -568,14 +652,17 @@ pub fn build_profile_answer(
         && suggested_questions.is_empty()
         && sensitive_columns.is_empty()
     {
-        return None;
+        if reasons.is_empty() {
+            reasons.push("the answer has no item".to_string());
+        }
+        return Err(reasons);
     }
     // Giữ thứ tự cột của bảng để log và test đọc dễ.
     let columns_out: Vec<SemanticColumnUpdate> = columns
         .iter()
         .filter_map(|c| column_updates.remove(&c.id))
         .collect();
-    Some(SemanticProfile {
+    Ok(SemanticProfile {
         columns: columns_out,
         values: value_updates,
         sensitive_columns,

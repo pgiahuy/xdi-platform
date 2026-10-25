@@ -697,6 +697,46 @@ fn clarify_keeps_real_options_or_gives_up() {
     assert!(build_clarify_choice(&nothing_real, &context, &metrics).is_none());
 }
 
+/// Phương án cột mô hình viết trong nháy (như tên cột trong prompt), khác hoa thường, hay bằng bí danh vẫn khớp, và
+/// id luôn là tên cột thật; hai cách viết cùng một cột chỉ thành một phương án. Bí danh nhiều cột cùng có thì không
+/// khớp. Phương án chỉ số trong nháy cũng khớp.
+#[test]
+fn clarify_options_match_quoted_cased_and_alias_names() {
+    let mut context = dataco_context();
+    let clarify = Clarify {
+        kind: ChoiceKind::Column,
+        phrase: Some("doanh thu".to_string()),
+        question: "Doanh thu tính theo cột nào?".to_string(),
+        options: vec![
+            "\"Order Item Total\"".to_string(),
+            "sales".to_string(),
+            "`Sales`".to_string(),
+            "doanh thu gộp".to_string(),
+            "Không có".to_string(),
+        ],
+    };
+    let choice = build_clarify_choice(&clarify, &context, &[]).unwrap();
+    assert_eq!(option_ids(&choice), ["Order Item Total", "Sales"]);
+    assert_eq!(choice.options[0].label, "Order Item Total");
+
+    // "doanh thu" là bí danh của cả Order Item Total lẫn Sales: không đoán thay người dùng.
+    context.columns[6].aliases.push("doanh thu".to_string());
+    let by_shared_alias = Clarify {
+        options: vec!["doanh thu".to_string()],
+        ..clarify
+    };
+    assert!(build_clarify_choice(&by_shared_alias, &context, &[]).is_none());
+
+    let metric = Clarify {
+        kind: ChoiceKind::Metric,
+        phrase: None,
+        question: "Chỉ số nào?".to_string(),
+        options: vec!["'Doanh thu'".to_string(), "doanh thu".to_string()],
+    };
+    let choice = build_clarify_choice(&metric, &context, &dataco_metrics()).unwrap();
+    assert_eq!(option_ids(&choice), ["doanh thu"]);
+}
+
 /// SQL không có đúng công thức hay điều kiện của chỉ số câu trả lời nói đã dùng; khác khoảng trắng, hoa thường thì
 /// không tính; chỉ số không có trong metrics thì bỏ qua (#33 kiểm).
 #[test]

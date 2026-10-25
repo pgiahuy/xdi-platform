@@ -109,6 +109,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `BACKEND_PORT` | `8000` | Cổng của giao diện và API |
 | `POSTGRES_PORT` | `5433` | Cổng Postgres mở ra máy host (để công cụ quản trị database kết nối) |
 | `LLM_PROVIDER` | `mock` | `mock` không gọi ra ngoài; `gemini` cần `GEMINI_API_KEY`; `ollama` cần máy chạy Ollama ở `OLLAMA_URL` |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini khi `LLM_PROVIDER=gemini` |
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
 | `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB; quá thì câu bị dừng, trừ phần DuckDB tính trước khi chạy ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |
 | `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; chạm trần thì giao diện ghi "ít nhất N dòng". Giao diện chỉ nhận 1000 dòng đầu |
@@ -119,6 +120,8 @@ Mô hình ngôn ngữ:
 
 - `gemini`: khóa lấy ở Google AI Studio, đặt vào `GEMINI_API_KEY`. Thiếu khóa thì backend vẫn chạy, ghi cảnh báo vào
   log lúc khởi động, và câu hỏi nhận lỗi nhắc đặt khóa. Khóa chỉ gửi tới Google trong header, không ghi vào log.
+  Mô hình mặc định là `gemini-3.5-flash-lite` vì hạn mức miễn phí theo ngày của bản lite cao hơn nhiều so với bản
+  flash; đổi mô hình bằng `GEMINI_MODEL`. Hạn mức hiện tại của từng mô hình xem trong Google AI Studio.
 - `ollama`: cần Ollama đang chạy và mô hình đã tải (`ollama pull qwen2.5-coder:7b`, đổi mô hình bằng `OLLAMA_MODEL`).
   Chạy compose mà để trống `OLLAMA_URL` thì backend gọi `http://host.docker.internal:11434`, tức Ollama trên máy host.
   Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới được: chạy Ollama với
