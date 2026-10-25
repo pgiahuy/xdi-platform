@@ -100,11 +100,15 @@ impl LlmProvider for Ollama {
                 "Máy chủ không tạo được client HTTP để gọi Ollama, xem log của backend".to_string(),
             )
         })?;
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": self.model,
             "prompt": request.prompt,
             "stream": false,
         });
+        // format nhận cả "json" (JSON bất kỳ) lẫn một JSON Schema; gửi schema thì Ollama ép mô hình theo đúng các trường.
+        if let Some(schema) = &request.json_schema {
+            body["format"] = schema.clone();
+        }
         let response = client
             .post(format!("{}/api/generate", self.url))
             .json(&body)
@@ -182,6 +186,7 @@ mod tests {
             task: LlmTask::Sql,
             question: "số đơn theo khu vực",
             prompt: PROMPT,
+            json_schema: None,
         };
         provider.complete(&request).await
     }
@@ -208,6 +213,27 @@ mod tests {
         assert_eq!(received.body["model"], "qwen2.5-coder:7b");
         assert_eq!(received.body["prompt"], PROMPT);
         assert_eq!(received.body["stream"], false);
+        assert!(received.body.get("format").is_none());
+    }
+
+    #[tokio::test]
+    async fn sends_json_schema_as_format() {
+        let (url, received) = spawn(200, OK_BODY, Duration::ZERO).await;
+        let schema =
+            serde_json::json!({"type": "object", "properties": {"sql": {"type": "string"}}});
+        let request = LlmRequest {
+            task: LlmTask::Sql,
+            question: "số đơn theo khu vực",
+            prompt: PROMPT,
+            json_schema: Some(schema.clone()),
+        };
+        ollama(&url, Duration::from_secs(5))
+            .complete(&request)
+            .await
+            .expect("answer");
+
+        let received = received.lock().unwrap().clone().expect("request");
+        assert_eq!(received.body["format"], schema);
     }
 
     #[tokio::test]

@@ -45,6 +45,8 @@ pub async fn narrate(
         task: LlmTask::Narrate,
         question,
         prompt: &prompt,
+        // Lời diễn giải là văn bản tự do, không ép JSON.
+        json_schema: None,
     };
     let reply = match tokio::time::timeout(timeout, llm.complete(&request)).await {
         Ok(Ok(reply)) => reply,

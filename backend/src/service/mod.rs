@@ -31,8 +31,11 @@ mod ask_narrate_tests;
 // Kết quả và vòng sửa của câu hỏi; endpoint hỏi (#33) gọi run_with_repair. Gỡ allow khi đó, như ở ask_contract.
 #[allow(dead_code)]
 pub mod ask_other_text;
+// Định dạng câu trả lời của mô hình (#29); ask_run.rs đọc nó, endpoint hỏi (#33) gửi schema. Lý do allow như trên.
 #[allow(dead_code)]
 pub mod ask_repair;
+#[allow(dead_code)]
+pub mod ask_reply;
 #[allow(dead_code)]
 pub mod ask_result;
 #[allow(dead_code)]

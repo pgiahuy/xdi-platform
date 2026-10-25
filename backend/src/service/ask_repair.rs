@@ -1,20 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask_repair.rs - chữ của vòng sửa: prompt gửi mô hình, lời báo lỗi đã bỏ đường dẫn trên máy chủ, đọc câu SQL
-mô hình trả về, lời cho người dùng khi mô hình lỗi. ask_run.rs ghép các bước và gọi các hàm ở đây. */
+/* service/ask_repair.rs - chữ của vòng sửa: prompt gửi mô hình, lời báo lỗi đã bỏ đường dẫn trên máy chủ, lời cho
+người dùng khi mô hình lỗi. ask_run.rs ghép các bước và gọi các hàm ở đây; câu trả lời của lần sửa đọc bằng
+ask_reply.rs như lần đầu. */
 
 use crate::engine::analytics::parquet_glob;
 use crate::engine::guard::AllowedTable;
 use crate::error::AppError;
 
 /// Prompt của bước repair. Phần luật viết tiếng Anh như prompt sinh SQL (#29); prompt gốc đã có hồ sơ bảng và câu hỏi.
-pub fn build_repair_prompt(prompt: &str, sql: &str, error: &str) -> String {
+/// sql là câu SQL của lần đầu; None khi câu trả lời lần đầu không đọc được, error khi đó là lý do của ask_reply.rs.
+/// Câu sửa phải cùng dạng JSON như lần đầu nhưng không được hỏi lại: hết vòng sửa thì không còn lượt nào để dùng câu
+/// trả lời của người dùng.
+pub fn build_repair_prompt(prompt: &str, sql: Option<&str>, error: &str) -> String {
+    let problem = match sql {
+        Some(sql) => format!("The SQL you wrote for this question could not run.\nSQL:\n{sql}"),
+        None => "Your reply to this question could not be read.".to_string(),
+    };
     format!(
         "{prompt}\n\n\
-         The SQL you wrote for this question could not run.\n\
-         SQL:\n{sql}\n\n\
+         {problem}\n\n\
          Error:\n{error}\n\n\
-         Fix the SQL so that it answers the same question. Use only the tables and columns given above. \
-         Reply with the fixed SQL only: one SELECT statement, no explanation."
+         Fix it so that it answers the same question. Use only the tables and columns given above. \
+         Reply with one JSON object in the same format as before: \"terms\", \"assumptions\", and the fixed SQL in \
+         \"sql\" as one SELECT statement. Do not use \"clarify\" and write nothing outside the JSON object."
     )
 }
 
@@ -69,40 +77,6 @@ pub(super) fn build_user_error(text: &str) -> String {
         _ => line,
     };
     without_kind.to_string()
-}
-
-/// Lấy câu SQL trong câu trả lời: mô hình hay bọc SQL trong khối ```...```, có nhãn ngôn ngữ tùy mô hình (```sql,
-/// ```SQL, ```duckdb, ```postgresql) hoặc không nhãn. Đọc chữ thừa trước và sau khối là việc của #29
-/// (build_sql_from_reply); khi có hàm đó thì dùng chung.
-pub(super) fn read_sql_reply(reply: &str) -> String {
-    let text = reply.trim();
-    let Some(start) = text.find("```") else {
-        return text.to_string();
-    };
-    let body = strip_block_label(&text[start + 3..]);
-    let end = body.find("```").unwrap_or(body.len());
-    body[..end].trim().to_string()
-}
-
-/// Bỏ nhãn ngôn ngữ ở đầu khối: một từ gồm chữ, số, `_`, `+`, `-`, `.`, theo sau là khoảng trắng hay xuống dòng. Từ mở
-/// đầu câu SQL ("```select 1```", "```WITH t AS ...") không phải nhãn.
-fn strip_block_label(body: &str) -> &str {
-    const SQL_STARTS: [&str; 5] = ["select", "with", "from", "values", "table"];
-    let word_end = body.find(char::is_whitespace).unwrap_or(body.len());
-    let word = &body[..word_end];
-    let is_label = !word.is_empty()
-        && word_end < body.len()
-        && word
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '+' | '-' | '.'))
-        && !SQL_STARTS
-            .iter()
-            .any(|start| word.eq_ignore_ascii_case(start));
-    if is_label {
-        &body[word_end..]
-    } else {
-        body
-    }
 }
 
 /// Lời cho người dùng từ lỗi của mô hình: các loại lỗi của LlmProvider đã viết lời tiếng Việt (engine/llm/mod.rs). Lỗi
