@@ -161,8 +161,8 @@ impl Store {
     /// Mọi giá trị và bí danh của các cột chiều (role dimension) không nhạy cảm của một phiên bản, để so với câu hỏi
     /// trong bộ nhớ (service/ask_values.rs giữ sẵn theo phiên bản). Rỗng khi phiên bản thuộc workspace khác.
     ///
-    /// Trả None khi chạy quá timeout (ghi log), không trả lỗi: thiếu giá trị đã ánh xạ thì câu hỏi vẫn trả lời được (mô
-    /// hình thấy giá trị mẫu), còn lỗi thì chặn cả câu hỏi.
+    /// Trả None khi chạy quá timeout (ghi log), không trả lỗi: khi đó prompt không có danh sách giá trị, mô hình chỉ thấy
+    /// schema (tên cột, kiểu, mô tả, bí danh) mà câu hỏi vẫn trả lời được; trả lỗi thì chặn cả câu hỏi.
     pub async fn list_value_rows(
         &self,
         ws: &WorkspaceId,

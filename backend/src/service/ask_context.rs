@@ -274,7 +274,7 @@ fn build_sent_columns(
     }
     columns
         .into_iter()
-        .filter(|c| send_all || c.matched || c.role == "time")
+        .filter(|c| send_all || c.matched || c.role == ProfileRole::Time.as_str())
         .collect()
 }
 
@@ -282,11 +282,14 @@ fn build_sent_columns(
 /// COLUMN_VALUES_SOME khi nhiều hơn; tổng vượt CONTEXT_VALUES_MAX thì hạ một trần chung cho mọi cột, từ số lớn nhất
 /// xuống, tới khi tổng vừa.
 ///
-/// Đã đo trên DataCo thật (180 519 dòng, 53 cột; hồ sơ dựng theo luật vai trò của docs/DATA.md, Customer Email và
-/// Customer Password đánh dấu nhạy cảm): 16 cột chiều gửi 224 giá trị, chưa tới trần 400. In mỗi cột một dòng dạng
-/// `"Cột": a | b | c`, phần giá trị dài 4 070 ký tự, ước chừng 1 000 token (4 ký tự một token, quy ước thô cho chữ
-/// Latin). Khoảng 1 600 ký tự trong đó là 20 đường dẫn ảnh của Product Image: cột chữ ít giá trị là cột chiều theo luật
-/// vai trò, nên admin hay #23 cần đổi vai trò cột như vậy sang text.
+/// Đã đo trên DataCo thật (DataCoSupplyChainDataset.csv, 180 519 dòng, 53 cột), bằng test measure_dataco_values ở
+/// ask_context_tests.rs: file đi qua đúng đường nạp (materialize, rồi lập hồ sơ của service/profile.rs), Customer Email
+/// và Customer Password đánh dấu nhạy cảm, hỏi "Doanh thu theo thị trường", in mỗi cột có giá trị một dòng dạng
+/// `"Cột": a | b | c` rồi đếm ký tự. Lệnh: `DATACO_CSV=<file> DATABASE_URL=... cargo test measure_dataco_values --
+/// --ignored --nocapture`. Kết quả: 16 cột chiều gửi 224 giá trị, chưa tới trần 400; phần giá trị dài 4 052 ký tự, ước
+/// chừng 1 000 token (4 ký tự một token, quy ước thô cho chữ Latin). Riêng dòng Product Image (20 đường dẫn ảnh) dài
+/// 1 210 ký tự: cột chữ ít giá trị là cột chiều theo luật vai trò, nên admin hay #23 cần đổi vai trò cột như vậy sang
+/// text.
 pub fn build_column_values(counts: &[usize]) -> Vec<usize> {
     let wanted: Vec<usize> = counts
         .iter()
@@ -308,12 +311,17 @@ pub fn build_column_values(counts: &[usize]) -> Vec<usize> {
 
 /// Gắn danh sách giá trị vào các cột chiều không nhạy cảm sẽ gửi (open), theo build_column_values.
 fn apply_column_values(columns: &mut [ColumnProfile], index: &ValueIndex, open: &HashSet<Uuid>) {
-    let found: Vec<(usize, &ColumnValues)> = columns
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| open.contains(&c.id))
-        .filter_map(|(i, c)| Some((i, index.columns.iter().find(|v| v.column_id == c.id)?)))
-        .collect();
+    let mut found: Vec<(usize, &ColumnValues)> = Vec::new();
+    for (i, column) in columns.iter_mut().enumerate() {
+        if !open.contains(&column.id) {
+            continue;
+        }
+        match index.columns.iter().find(|v| v.column_id == column.id) {
+            Some(values) => found.push((i, values)),
+            // Cột chiều không có dòng nào trong column_values: danh sách rỗng là đủ, nếu giá trị đã tải được.
+            None => column.values_complete = index.loaded,
+        }
+    }
     let counts: Vec<usize> = found.iter().map(|(_, v)| v.values.len()).collect();
     for ((i, values), sent) in found.into_iter().zip(build_column_values(&counts)) {
         columns[i].values = values.values[..sent].to_vec();
@@ -348,8 +356,9 @@ fn apply_choice(
         .collect();
 
     let (column, chosen_by_user) = match user_pick {
-        // Lựa chọn chỉ có nghĩa khi có hơn một cột; một cột thì chọn gì cũng là cột đó.
-        Some(&(i, _)) if candidates.len() > 1 => (i, true),
+        // Người hỏi đã chọn một ứng viên (kể cả khi chỉ có một): ghi là lựa chọn của họ, để #33 không báo
+        // choice_not_applied cho một lựa chọn đã áp dụng.
+        Some(&(i, _)) => (i, true),
         _ if close.len() > 1 => {
             context.ambiguous.push(AmbiguousWord {
                 choice_id,

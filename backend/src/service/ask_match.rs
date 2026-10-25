@@ -128,6 +128,9 @@ pub fn build_scored_phrases<'a>(
 /// của cột trong open (cột chiều không nhạy cảm theo hồ sơ hiện tại). Cụm dài trước; cụm đè lên chữ của một cụm đã có
 /// gợi ý thì bỏ ("châu á thái bình dương" có gợi ý thì không xét "thái bình dương" nữa). Không chọn hộ giữa các cột: cụm
 /// bằng giá trị ở hai cột thì có hai gợi ý, mô hình quyết định.
+///
+/// Rủi ro đã biết: khớp chính xác hai âm tiết vẫn gợi ý nhầm khi giá trị trùng một cụm từ thường (giá trị "Trung Bình"
+/// với câu "phí vận chuyển trung bình"). Gợi ý chỉ là gợi ý: mô hình quyết định, #33 kiểm `terms` với column_values.
 pub fn build_value_hints(
     phrases: &[Phrase],
     index: &ValueIndex,

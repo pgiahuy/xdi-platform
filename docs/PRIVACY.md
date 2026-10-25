@@ -36,7 +36,7 @@ Nội dung gửi (thiết kế):
 | Lúc | Gửi | Không gửi |
 |---|---|---|
 | Nạp dữ liệu, viết mô tả cột | Tên cột, kiểu, min, max, vài giá trị mẫu của mỗi cột, giá trị phân loại của cột ít giá trị | Các dòng dữ liệu |
-| Hỏi | Câu hỏi; tên, kiểu, mô tả, bí danh của các cột (cả bảng khi bảng tới 60 cột); danh sách giá trị của mỗi cột phân loại (cột chiều) không đánh dấu nhạy cảm, kèm bí danh: đủ khi cột tới 50 giá trị, 20 giá trị nhiều dòng nhất khi nhiều hơn, tối đa 400 giá trị mỗi câu hỏi; vài câu hỏi đã trả lời đúng trước đó trong cùng workspace | Các dòng dữ liệu; giá trị của cột đánh dấu nhạy cảm; dữ liệu của workspace khác |
+| Hỏi | Câu hỏi; tên, kiểu, mô tả, bí danh của các cột: cả bảng khi bảng tới 60 cột, bảng nhiều cột hơn thì chỉ các cột khớp câu hỏi và cột thời gian; danh sách giá trị của mỗi cột phân loại (cột chiều) không đánh dấu nhạy cảm, kèm bí danh: đủ khi cột tới 50 giá trị, 20 giá trị nhiều dòng nhất khi nhiều hơn, tối đa 400 giá trị mỗi câu hỏi; vài câu hỏi đã trả lời đúng trước đó trong cùng workspace | Các dòng dữ liệu; giá trị của cột đánh dấu nhạy cảm; dữ liệu của workspace khác |
 | SQL chạy lỗi hoặc dùng bảng, cột không có, sửa một lần | Prompt của lần hỏi, SQL vừa sinh và thông báo lỗi của DuckDB hay lý do guard từ chối. Thông báo của DuckDB có thể chép một giá trị của dữ liệu, ví dụ chuỗi ngày không đọc được | Đường dẫn file trên máy chủ |
 | Diễn giải câu "tại sao" | Bảng phân rã đã tính: nhóm và phần đóng góp của từng nhóm | Các dòng dữ liệu gốc |
 

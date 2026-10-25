@@ -909,3 +909,135 @@ async fn value_loading_times_out_to_no_values() {
 
     drop_workspace(&store, ws).await;
 }
+
+/// Người hỏi chọn cột cho một cụm chỉ có một ứng viên: vẫn ghi là lựa chọn của họ.
+#[test]
+fn a_choice_for_a_single_candidate_counts_as_applied() {
+    let columns = vec![profile("Order Region", "dimension", &["khu vực"])];
+    let context = build_context(
+        &build_phrases("Doanh thu theo khu vực"),
+        columns,
+        &ValueIndex::default(),
+        &[chosen("column:khu vuc", "Order Region")],
+    );
+    assert_eq!(context.picks.len(), 1);
+    assert_eq!(context.picks[0].column, "Order Region");
+    assert!(context.picks[0].chosen_by_user);
+}
+
+/// Cột nhiều giá trị chỉ gửi 20 giá trị nhiều dòng nhất, nhưng gợi ý vẫn có cho giá trị nằm ngoài 20 giá trị đó.
+#[test]
+fn hints_reach_values_beyond_the_sample_of_a_large_column() {
+    let columns = vec![profile("Order Country", "dimension", &[])];
+    let names: Vec<String> = (1..=60).map(|i| format!("Country {i:03}")).collect();
+    let mut rows: Vec<(&str, &str, &[&str])> = names
+        .iter()
+        .map(|n| ("Order Country", n.as_str(), &[][..]))
+        .collect();
+    rows.push(("Order Country", "Puerto Rico", &[]));
+    let context = build_context(
+        &build_phrases("doanh thu Puerto Rico"),
+        columns,
+        &index(&rows),
+        &[],
+    );
+    let country = column(&context, "Order Country");
+    assert_eq!(country.values.len(), 20);
+    assert!(!country.values_complete);
+    assert!(!column_values(&context, "Order Country").contains(&"Puerto Rico".to_string()));
+    assert_eq!(hints(&context), [("Order Country", "Puerto Rico")]);
+}
+
+/// values_complete: false khi một giá trị bị bỏ vì quá dài; true với cột chiều không có giá trị nào, trừ khi giá trị
+/// chưa tải được (tải quá thời gian).
+#[test]
+fn values_complete_follows_dropped_values_and_loading() {
+    let columns = vec![
+        profile("note", "dimension", &[]),
+        profile("empty", "dimension", &[]),
+        profile("region", "dimension", &[]),
+    ];
+    let long = "x".repeat(300);
+    let values = index(&[
+        ("note", "short", &[]),
+        ("note", long.as_str(), &[]),
+        ("region", "South", &[]),
+    ]);
+    let context = build_context(&build_phrases("xin chào"), columns.clone(), &values, &[]);
+    assert_eq!(column_values(&context, "note"), ["short"]);
+    assert!(!column(&context, "note").values_complete);
+    assert!(column(&context, "empty").values_complete);
+    assert!(column(&context, "region").values_complete);
+    let not_loaded = build_context(
+        &build_phrases("xin chào"),
+        columns,
+        &ValueIndex::default(),
+        &[],
+    );
+    assert!(not_loaded.columns.iter().all(|c| !c.values_complete));
+}
+
+/// Đo phần giá trị gửi cho mô hình trên một file DataCo thật, qua đúng đường nạp (materialize, lập hồ sơ). Không chạy
+/// mặc định vì file không có trong repo (data/README.md). Chạy:
+/// `DATACO_CSV=<đường dẫn DataCoSupplyChainDataset.csv> DATABASE_URL=... cargo test measure_dataco_values -- --ignored --nocapture`.
+#[tokio::test]
+#[ignore]
+async fn measure_dataco_values() {
+    use crate::engine::analytics::{materialize, FileFormat, InputFile};
+    let (Some(store), Ok(csv)) = (store().await, std::env::var("DATACO_CSV")) else {
+        panic!("set DATABASE_URL and DATACO_CSV");
+    };
+    let dir = std::env::temp_dir().join(format!("xdi-measure-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = InputFile {
+        path: csv.into(),
+        name: "DataCoSupplyChainDataset.csv".to_string(),
+        format: FileFormat::Csv,
+        timestamp_columns: Vec::new(),
+    };
+    let materialized = materialize(&[input], &dir).unwrap();
+    let columns =
+        super::profile::build_profile(dir.clone(), materialized.row_count, Default::default())
+            .await
+            .unwrap();
+    let state = app_state(&store);
+    let ws = temp_workspace(&store).await;
+    let src = store.create_local_source(&ws).await.unwrap();
+    let ds = store
+        .create_dataset(&ws, src, "DataCo", "dataco", None)
+        .await
+        .unwrap();
+    let v = new_version(&store, &ws, ds.id, "dataco-real", &columns).await;
+    for name in ["Customer Email", "Customer Password"] {
+        set_column(&store, v.id, name, "is_sensitive = true").await;
+    }
+    let context = ask(&state, &ws, &v, "Doanh thu theo thị trường").await;
+    let mut block = String::new();
+    for c in context.columns.iter().filter(|c| !c.values.is_empty()) {
+        let values: Vec<&str> = c.values.iter().map(|v| v.value.as_str()).collect();
+        block.push_str(&format!("\"{}\": {}\n", c.name, values.join(" | ")));
+    }
+    println!("{block}");
+    let image = block
+        .lines()
+        .find(|l| l.starts_with("\"Product Image\""))
+        .map_or(0, |l| l.chars().count());
+    println!(
+        "rows={} columns_with_values={} values={} chars={} product_image_chars={}",
+        materialized.row_count,
+        context
+            .columns
+            .iter()
+            .filter(|c| !c.values.is_empty())
+            .count(),
+        context
+            .columns
+            .iter()
+            .map(|c| c.values.len())
+            .sum::<usize>(),
+        block.chars().count(),
+        image
+    );
+    drop_workspace(&store, ws).await;
+    std::fs::remove_dir_all(&dir).unwrap();
+}

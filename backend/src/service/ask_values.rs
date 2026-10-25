@@ -76,6 +76,9 @@ pub struct ValueIndex {
     by_folded: HashMap<String, Vec<usize>>,
     /// Số chuỗi đã giữ, giá trị và bí danh: đơn vị của VALUE_CACHE_STRINGS.
     pub strings: usize,
+    /// Đã tải được giá trị của phiên bản. false với chỉ mục rỗng khi tải quá thời gian: khi đó không cột nào có danh
+    /// sách đủ.
+    pub loaded: bool,
 }
 
 /// Một giá trị khớp chính xác một cụm của câu hỏi.
@@ -89,7 +92,10 @@ pub struct ExactMatch<'a> {
 impl ValueIndex {
     /// rows theo cột, trong mỗi cột giá trị nhiều dòng nhất trước (Store::list_value_rows).
     pub fn build(rows: &[ValueRow]) -> ValueIndex {
-        let mut index = ValueIndex::default();
+        let mut index = ValueIndex {
+            loaded: true,
+            ..ValueIndex::default()
+        };
         for row in rows {
             let column = match index.columns.last() {
                 Some(last) if last.column_id == row.column_id => index.columns.len() - 1,
