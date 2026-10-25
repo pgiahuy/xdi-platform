@@ -35,8 +35,9 @@ pub struct DomainConcept {
     pub name: String,
     /// Khái niệm nói về điều gì, khi nào dùng.
     pub description: String,
-    /// Cách gọi khác của khái niệm, tiếng Việt và tiếng Anh, để nhận ra khái niệm trong câu hỏi. Hai khái niệm không
-    /// được dùng chung một từ, kể cả khác dấu hay khác hoa thường (test kiểm).
+    /// Cách gọi khác của khái niệm, tiếng Việt và tiếng Anh, để nhận ra khái niệm trong câu hỏi. Hai khái niệm trong
+    /// cùng một gói không được dùng chung một từ, kể cả khác dấu hay khác hoa thường (test kiểm); hai gói khác nhau
+    /// được dùng chung từ, vì mỗi dataset chỉ gắn một gói.
     pub synonyms: Vec<String>,
     /// Hai đến ba cách tính phổ biến, viết bằng lời; công thức trên cột thật là của chỉ số trong workspace.
     pub calculations: Vec<Calculation>,
@@ -56,7 +57,8 @@ pub struct Calculation {
     pub description: String,
 }
 
-/// Một luật kiểm hợp lý của giá trị khái niệm. min và max chỉ có khi kind là value_range.
+/// Một luật kiểm hợp lý của giá trị khái niệm. min và max chỉ có khi kind là value_range, và cần ít nhất một đầu
+/// (ví dụ biên lợi nhuận chỉ chặn cận trên: {"kind": "value_range", "max": 1.0}).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SanityCheck {
@@ -68,15 +70,16 @@ pub struct SanityCheck {
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SanityCheckKind {
-    /// Giá trị phải nằm trong khoảng [min, max], ví dụ tỷ lệ trong 0 đến 1.
+    /// Giá trị phải nằm trong khoảng [min, max], một đầu có thể vắng: chỉ min là chặn dưới, chỉ max là chặn trên.
     ValueRange,
     /// Giá trị không được âm.
     NonNegative,
 }
 
 /// Mọi gói đã nhúng. Parse một lần và giữ lại: file nằm sẵn trong binary, không đọc lại được, nên parse mỗi lần gọi
-/// chỉ tốn công. File hỏng thì panic với thông điệp nêu tên file; test của module này đọc mọi gói, nên gói sai schema
-/// bị CI chặn trước khi tới máy chủ (cùng cách với engine/llm/mock.rs).
+/// chỉ tốn công. File hỏng thì panic với thông điệp nêu tên file; test của module này đọc mọi gói và CI chạy test cả
+/// khi PR chỉ đổi data/domains (bộ lọc của .github/workflows/ci.yml), nên gói sai schema bị chặn trước khi tới máy
+/// chủ (cùng cách với engine/llm/mock.rs).
 pub fn list_domain_packages() -> &'static [DomainPackage] {
     static PACKAGES: std::sync::OnceLock<Vec<DomainPackage>> = std::sync::OnceLock::new();
     PACKAGES.get_or_init(|| {
@@ -188,13 +191,19 @@ mod tests {
     }
 
     #[test]
-    fn synonyms_do_not_repeat_within_or_across_concepts() {
-        // Khóa là từ đã chuẩn hóa, giá trị là khái niệm đang giữ từ đó, để lời báo lỗi chỉ ra cả hai khái niệm.
-        let mut seen: HashMap<String, String> = HashMap::new();
+    fn synonyms_do_not_repeat_within_a_package() {
         for (file, package) in packages() {
+            // Khóa là từ đã chuẩn hóa, giá trị là khái niệm đang giữ từ đó, để lời báo lỗi chỉ ra cả hai khái niệm.
+            // seen đặt trong vòng lặp gói: mỗi dataset chỉ gắn một gói, nên hai gói khác nhau được dùng chung một từ.
+            let mut seen: HashMap<String, String> = HashMap::new();
             for concept in &package.concepts {
                 for synonym in &concept.synonyms {
                     let key = normalize(synonym);
+                    assert!(
+                        !key.is_empty(),
+                        "{file}/{}: từ đồng nghĩa rỗng hoặc toàn khoảng trắng",
+                        concept.id
+                    );
                     if let Some(owner) = seen.get(&key) {
                         panic!(
                             "{file}: từ đồng nghĩa {synonym:?} thuộc cả {} và {}",
@@ -216,10 +225,17 @@ mod tests {
                         SanityCheckKind::ValueRange => {
                             let (min, max) = (check.min, check.max);
                             assert!(
-                                min.is_some_and(|min| max.is_some_and(|max| min <= max)),
-                                "{file}/{}: value_range cần min và max, min không quá max",
+                                min.is_some() || max.is_some(),
+                                "{file}/{}: value_range cần ít nhất một đầu min hoặc max",
                                 concept.id
                             );
+                            if let (Some(min), Some(max)) = (min, max) {
+                                assert!(
+                                    min <= max,
+                                    "{file}/{}: value_range có min lớn hơn max",
+                                    concept.id
+                                );
+                            }
                         }
                         SanityCheckKind::NonNegative => {
                             assert!(
@@ -240,5 +256,10 @@ mod tests {
     fn unknown_fields_are_rejected() {
         let json = r#"{"id": "x", "name": "x", "description": "x", "concepts": [], "extra": 1}"#;
         assert!(serde_json::from_str::<DomainPackage>(json).is_err());
+        let concept = r#"{"id": "x", "name": "x", "description": "x", "synonyms": [], "calculations": [],
+            "dimensions": [], "sanity_checks": [], "extra": 1}"#;
+        assert!(serde_json::from_str::<DomainConcept>(concept).is_err());
+        let check = r#"{"kind": "non_negative", "extra": 1}"#;
+        assert!(serde_json::from_str::<SanityCheck>(check).is_err());
     }
 }

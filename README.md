@@ -52,7 +52,7 @@ HTTPS, sao lưu, lỗi hay gặp): [docs/INSTALL.md](docs/INSTALL.md).
 backend/     crate Rust: api/ -> service/ -> engine/ và auth/, migrations/ cho Postgres
 frontend/    React, Vite, Tailwind, shadcn/ui; build ra file tĩnh
 docs/        tài liệu, cũng là nguồn GitHub Pages
-data/        nguồn và giấy phép dataset, download.sh, samples/
+data/        nguồn và giấy phép dataset, download.sh, samples/, domains/ (gói khái niệm ngành, backend nhúng vào binary)
 Makefile     lối vào duy nhất cho build, test, chạy; CI gọi đúng các target này
 ```
 

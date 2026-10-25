@@ -36,18 +36,22 @@ Mỗi khái niệm trong `concepts`:
 | `id` | chuỗi | Khóa trong gói, tiếng Anh, không trùng nhau, ví dụ `revenue` |
 | `name` | chuỗi | Tên hiện cho người dùng, ví dụ "Doanh thu" |
 | `description` | chuỗi | Khái niệm nói về điều gì, khi nào dùng |
-| `synonyms` | mảng chuỗi | Cách gọi khác, tiếng Việt và tiếng Anh; không trùng nhau kể cả giữa hai khái niệm (so sau khi chữ thường và bỏ dấu) |
-| `calculations` | mảng | Hai đến ba cách tính phổ biến, mỗi mục có `name` và `description` bằng lời, kèm khi nào chọn cách đó; không ghi công thức trên cột thật |
+| `synonyms` | mảng chuỗi | Cách gọi khác, tiếng Việt và tiếng Anh; trong cùng một gói không trùng nhau, kể cả giữa hai khái niệm (so sau khi chữ thường và bỏ dấu). Hai gói khác nhau được dùng chung một từ, vì mỗi dataset chỉ gắn một gói |
+| `calculations` | mảng | Hai đến ba cách tính phổ biến, mỗi mục có `name` và `description` bằng lời, kèm khi nào chọn cách đó; các cách tính của một khái niệm phải cùng đơn vị (không trộn tiền với tỷ lệ) và không ghi công thức trên cột thật |
 | `dimensions` | mảng chuỗi | Chiều hay dùng để phân rã khái niệm: thời gian, khu vực, nhóm hàng... |
 | `sanity_checks` | mảng | Luật kiểm giá trị có hợp lý không; được để rỗng |
 
 Mỗi luật trong `sanity_checks` có trường `kind`: `non_negative` (giá trị không âm, không kèm trường nào khác) hoặc
-`value_range` kèm `min` và `max` là số (ví dụ một tỷ lệ: `{"kind": "value_range", "min": 0.0, "max": 1.0}`).
+`value_range` kèm `min`, `max` là số; một đầu có thể vắng (chỉ `max` là chặn trên, ví dụ biên lợi nhuận:
+`{"kind": "value_range", "max": 1.0}`), có cả hai thì `min` không được lớn hơn `max`.
 
 ## Thêm một ngành
 
 Thêm một file `data/domains/<id>.json` theo schema trên, không cần sửa code: `backend/build.rs` liệt kê thư mục lúc
 biên dịch và nhúng mọi file vào binary (image Docker và binary của `make install` không có thư mục `data/`, cùng lý
-do `engine/llm/mock.rs` nhúng câu trả lời mẫu). Trước khi build lại, kiểm nhanh bằng test của `engine/domains.rs`:
-mọi file đọc được theo schema, `id` trùng tên file, id không trùng giữa các gói, mỗi khái niệm có hai đến ba cách tính
-và có từ đồng nghĩa, từ đồng nghĩa không trùng giữa các khái niệm.
+do `engine/llm/mock.rs` nhúng câu trả lời mẫu). Thêm hay sửa file gói thì `cargo build` tự nhúng lại; với
+`CARGO_TARGET_DIR` dùng chung giữa nhiều bản checkout, chạy `touch backend/src/main.rs data/domains` trước để chắc
+chắn build script chạy lại. Test của `engine/domains.rs` chặn gói sai: mọi file đọc được theo schema, `id` trùng tên
+file, id không trùng giữa các gói, mỗi khái niệm có hai đến ba cách tính, có từ đồng nghĩa và chiều phân rã, từ đồng
+nghĩa không rỗng và không trùng trong một gói, luật kiểm nhất quán (`non_negative` không có `min`/`max`,
+`value_range` có ít nhất một đầu và `min` không quá `max`). CI chạy các test này cả khi PR chỉ đổi `data/domains/`.

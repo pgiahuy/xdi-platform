@@ -1,12 +1,12 @@
 {
   "id": "retail",
   "name": "Bán lẻ và chuỗi cung ứng",
-  "description": "Khái niệm chung của doanh nghiệp bán lẻ có giao hàng: đơn hàng, doanh thu, lợi nhuận, vận chuyển. Áp dụng được cho dữ liệu đơn hàng nhiều dòng như DataCo Smart Supply Chain hay Online Retail (mỗi dòng là một mặt hàng của đơn). Gói không ghi tên cột của dataset cụ thể: công thức trên cột thật thuộc về chỉ số của từng workspace.",
+  "description": "Khái niệm chung của doanh nghiệp bán lẻ có giao hàng: đơn hàng, doanh thu, lợi nhuận, vận chuyển. Áp dụng cho dữ liệu đơn hàng nhiều dòng, mỗi dòng là một mặt hàng của đơn.",
   "concepts": [
     {
       "id": "revenue",
       "name": "Doanh thu",
-      "description": "Tổng tiền bán hàng trong một kỳ. Câu hỏi về doanh thu thường cần nói rõ tính theo ngày đặt hay ngày giao, và trước hay sau giảm giá.",
+      "description": "Tổng tiền bán hàng trong một kỳ. Câu hỏi về doanh thu thường cần nói rõ tính theo ngày đặt hay ngày giao, và trước hay sau giảm giá. Khi có hàng trả lại, doanh thu ròng của một nhóm hàng trong một kỳ có thể âm.",
       "synonyms": ["doanh thu", "doanh số", "tiền bán hàng", "revenue", "sales"],
       "calculations": [
         {
@@ -23,7 +23,7 @@
         }
       ],
       "dimensions": ["thời gian", "khu vực", "nhóm hàng", "kênh bán", "nhóm khách hàng"],
-      "sanity_checks": [{"kind": "non_negative"}]
+      "sanity_checks": []
     },
     {
       "id": "order_count",
@@ -65,7 +65,7 @@
       "id": "profit",
       "name": "Lợi nhuận",
       "description": "Phần tiền còn lại sau khi trừ giá vốn khỏi doanh thu. Có thể âm khi bán lỗ.",
-      "synonyms": ["lợi nhuận", "lãi", "tiền lãi", "profit", "gross profit", "earnings"],
+      "synonyms": ["lợi nhuận", "tiền lãi", "lãi gộp", "lợi nhuận gộp", "profit", "gross profit", "earnings"],
       "calculations": [
         {
           "name": "Tổng lợi nhuận dòng hàng",
@@ -82,8 +82,8 @@
     {
       "id": "profit_margin",
       "name": "Biên lợi nhuận",
-      "description": "Lợi nhuận chiếm bao nhiêu phần của doanh thu. Giá trị từ -1 đến 1; bán lỗ thì âm.",
-      "synonyms": ["biên lợi nhuận", "tỷ suất lợi nhuận", "profit margin", "margin"],
+      "description": "Lợi nhuận chiếm bao nhiêu phần của doanh thu. Giá trị không quá 1; bán lỗ thì âm, có thể dưới -1.",
+      "synonyms": ["biên lợi nhuận", "tỷ suất lợi nhuận", "tỉ suất lợi nhuận", "profit margin", "margin"],
       "calculations": [
         {
           "name": "Lợi nhuận trên doanh thu",
@@ -95,13 +95,13 @@
         }
       ],
       "dimensions": ["nhóm hàng", "khu vực", "thời gian"],
-      "sanity_checks": [{"kind": "value_range", "min": -1.0, "max": 1.0}]
+      "sanity_checks": [{"kind": "value_range", "max": 1.0}]
     },
     {
       "id": "late_delivery_rate",
       "name": "Tỷ lệ giao trễ",
       "description": "Tỷ lệ đơn giao chậm hơn cam kết, từ 0 đến 1. Chỉ tính trên các đơn đã giao.",
-      "synonyms": ["tỷ lệ giao trễ", "tỷ lệ giao hàng trễ", "tỷ lệ trễ hẹn", "late delivery rate"],
+      "synonyms": ["tỷ lệ giao trễ", "tỉ lệ giao trễ", "tỷ lệ giao hàng trễ", "tỷ lệ trễ hẹn", "late delivery rate"],
       "calculations": [
         {
           "name": "Theo ngày dự kiến",
@@ -119,7 +119,7 @@
       "id": "delivery_time",
       "name": "Thời gian giao hàng",
       "description": "Số ngày từ lúc đặt tới lúc giao. Chỉ tính trên các đơn đã giao.",
-      "synonyms": ["thời gian giao hàng", "thời gian giao", "số ngày giao hàng", "delivery time", "lead time"],
+      "synonyms": ["thời gian giao hàng", "số ngày giao hàng", "delivery time", "lead time"],
       "calculations": [
         {
           "name": "Trung bình từ đặt tới giao",
@@ -137,7 +137,7 @@
       "id": "cancellation_rate",
       "name": "Tỷ lệ hủy đơn",
       "description": "Tỷ lệ đơn bị hủy, từ 0 đến 1.",
-      "synonyms": ["tỷ lệ hủy đơn", "tỷ lệ hủy", "tỷ lệ đơn bị hủy", "cancellation rate", "cancel rate"],
+      "synonyms": ["tỷ lệ hủy đơn", "tỉ lệ hủy đơn", "tỷ lệ hủy", "tỷ lệ đơn bị hủy", "cancellation rate", "cancel rate"],
       "calculations": [
         {
           "name": "Trên tổng số đơn",
@@ -162,8 +162,8 @@
           "description": "Đếm số mã khách hàng khác nhau có phát sinh đơn trong kỳ."
         },
         {
-          "name": "Đếm khách mới",
-          "description": "Đếm số khách có đơn đầu tiên trong kỳ. Chọn khi câu hỏi nói về khách mới hay tăng trưởng khách."
+          "name": "Đếm theo email hay số điện thoại",
+          "description": "Đếm số email hoặc số điện thoại khác nhau có phát sinh đơn. Chọn khi dữ liệu không có mã khách."
         }
       ],
       "dimensions": ["thời gian", "khu vực", "phân khúc khách hàng"],
@@ -180,12 +180,8 @@
           "description": "Cộng phần tiền đã giảm của mọi dòng hàng."
         },
         {
-          "name": "Tỷ lệ giảm bình quân theo dòng",
-          "description": "Trung bình cộng tỷ lệ giảm của các dòng hàng được giảm. Chọn khi hỏi mức chiết khấu điển hình của một dòng."
-        },
-        {
-          "name": "Tỷ trọng giảm trên doanh thu",
-          "description": "Tổng tiền giảm chia doanh thu trước giảm. Chọn khi so sức ép giảm giá giữa các kỳ."
+          "name": "Tiền giảm bình quân một dòng",
+          "description": "Trung bình cộng phần tiền đã giảm của các dòng hàng được giảm. Chọn khi hỏi mức chiết khấu điển hình của một dòng."
         }
       ],
       "dimensions": ["thời gian", "nhóm hàng", "kênh bán"],
