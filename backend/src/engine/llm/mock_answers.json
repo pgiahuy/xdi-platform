@@ -149,6 +149,54 @@
     }
   },
   {
+    "task": "sql",
+    "question": "Xóa các đơn hàng bị hủy",
+    "answer": {
+      "terms": [
+        { "text": "đơn hàng bị hủy", "kind": "value", "column": "Delivery Status", "value": "Shipping canceled" }
+      ],
+      "assumptions": [],
+      "sql": "DELETE FROM dataco WHERE \"Delivery Status\" = 'Shipping canceled'"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Doanh thu theo ngày đặt hàng",
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "ngày đặt hàng", "kind": "column", "column": "order date (DateOrders)" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT CAST(strptime(\"order date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS order_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY order_day ORDER BY order_day"
+    }
+  },
+  {
+    "task": "repair",
+    "question": "Doanh thu theo ngày đặt hàng",
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "ngày đặt hàng", "kind": "column", "column": "order date (DateOrders)" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT CAST(strptime(\"order date (DateOrders)\", '%Y-%m-%d %H:%M') AS DATE) AS order_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY order_day ORDER BY order_day"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Doanh thu ở thị trường châu Á",
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "thị trường", "kind": "column", "column": "Market" },
+        { "text": "châu Á", "kind": "value", "column": "Market", "value": "Asia" }
+      ],
+      "assumptions": [],
+      "sql": "SELECT \"Market\", SUM(\"Order Item Total\") AS revenue FROM dataco WHERE \"Market\" = 'Asia' GROUP BY \"Market\" ORDER BY revenue DESC"
+    }
+  },
+  {
     "task": "profile",
     "question": "dataco",
     "answer": {

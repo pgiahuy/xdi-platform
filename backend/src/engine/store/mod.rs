@@ -17,10 +17,7 @@ mod users;
 // Chưa có code gọi nên tạm cho phép "chưa dùng" ở đúng ba module này; gỡ khi có người gọi để clippy bắt lại.
 #[allow(dead_code)]
 mod datasets;
-// Prompt sinh SQL (#29) đọc chỉ số; endpoint hỏi (#33) mới gọi tới nó. Gỡ allow khi đó, như ba module trên.
-#[allow(dead_code)]
 mod metrics;
-#[allow(dead_code)]
 mod queries;
 #[cfg(test)]
 mod schema_tests;

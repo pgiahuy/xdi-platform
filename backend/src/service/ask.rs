@@ -1,24 +1,323 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask.rs - luồng một câu hỏi: đọc hồ sơ, ghép ngữ cảnh, LLM sinh SQL, guard kiểm và tiêm phân quyền,
-chạy trên DuckDB, giải thích nếu là câu "tại sao", ghi lịch sử. Xem docs/ARCHITECTURE.md mục 2.
-Kết quả trả về theo hợp đồng ở ask_contract.rs; luồng chưa cài đặt (#33) nên hiện trả 501. */
+/* service/ask.rs - luồng một câu hỏi thường (docs/ARCHITECTURE.md mục 2): dataset và phiên bản đang dùng, ngữ cảnh
+(ask_context.rs) cùng chỉ số, câu đã đúng và gói ngành, mô hình viết SQL (prompt ở ask_prompt.rs), guard, chạy và sửa
+một lần (ask_run.rs), ghi lịch sử (engine/store/queries.rs), rồi dựng AskResponse (ask_contract.rs). Mỗi bước đo thời
+gian thành một AskStep. Lựa chọn của response dựng ở ask_choices.rs và ask_response_choices.rs.
 
-use super::ask_contract::{AskResponse, ChosenOption};
-use crate::{auth::Member, error::AppError, state::AppState};
+Câu không trả lời được vẫn là Ok kèm status (ARCHITECTURE mục 8). Err chỉ cho request sai (400, 404), mô hình lỗi khi
+chưa có câu SQL nào (502, 503; mock gặp câu lạ thì 400) và lỗi máy chủ. needs_choice không ghi lịch sử: câu chưa được
+trả lời, người hỏi sẽ gửi lại kèm lựa chọn.
+
+Chưa nối, các trường tương ứng của AskResponse để null hay rỗng: câu "tại sao" đi như câu thường cho tới khi ask gọi
+run_why (explain_run.rs, #38), thẻ "Đã hiểu là" và vai trò cột (understanding.rs, #35), kiểm hợp lý (#36), gợi ý biểu
+đồ (cần vai trò cột), lọc dòng theo vai (row_filters rỗng tới #45). */
+
+use std::time::Instant;
+
+use super::ask_choices::{build_assumption_choices, build_clarify_choice};
+use super::ask_context::{build_ask_context, AskContext};
+use super::ask_contract::{
+    AskResponse, AskStatus, AskStep, ChosenOption, StepName, Warning, WarningCode,
+};
+use super::ask_prompt::{build_sql_prompt, PromptInput};
+use super::ask_reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
+use super::ask_response_choices::{
+    build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
+    build_unapplied_warnings, build_used_choices,
+};
+use super::ask_run::{build_step, run_with_repair, RunInput, RunOutcome};
+use super::ingest::{dataset_not_found, parse_dataset_id};
+use crate::auth::{Member, WorkspaceId};
+use crate::engine::domains::find_domain_package;
+use crate::engine::guard::AllowedTable;
+use crate::engine::llm::{LlmRequest, LlmTask};
+use crate::engine::store::{Dataset, DatasetVersion, NewQuery, QueryStatus};
+use crate::{error::AppError, state::AppState};
+
+/// Số câu đã đúng gần nhất đọc từ lịch sử; prompt chỉ lấy tối đa EXAMPLES_MAX câu có từ trùng câu hỏi trong số này
+/// (ask_prompt.rs). Đọc ít quá thì câu liên quan mà cũ không bao giờ được chọn; nhiều quá thì mỗi câu hỏi đọc Postgres
+/// lâu hơn.
+const EXAMPLE_POOL: i64 = 50;
+
+/// Cùng lời với đường dự phòng của câu "tại sao" (explain_plain.rs), để hai đường báo một kiểu.
+const CLARIFY_WITHOUT_OPTIONS: &str =
+    "Mô hình hỏi lại nhưng không đưa phương án nào có trong dữ liệu. Thử hỏi lại theo cách khác.";
 
 pub async fn ask(
-    _state: &AppState,
-    _member: &Member,
-    _dataset_id: &str,
+    state: &AppState,
+    member: &Member,
+    dataset_id: &str,
     question: &str,
-    _choices: &[ChosenOption],
+    choices: &[ChosenOption],
 ) -> Result<AskResponse, AppError> {
     if question.trim().is_empty() {
         return Err(AppError::BadRequest("Câu hỏi đang trống".to_string()));
     }
-    Err(AppError::NotImplemented("hỏi dữ liệu"))
+    let ws = &member.workspace;
+    let (dataset, version) = load_target(state, ws, dataset_id).await?;
+
+    // Chỉ số và câu đã đúng là hai tầng của ngữ cảnh (ARCHITECTURE mục 5), nên tính vào bước context.
+    let started = Instant::now();
+    let context = build_ask_context(state, ws, &version, question, choices).await?;
+    let metrics = state.store.list_metrics(ws, dataset.id).await?;
+    let examples = state
+        .store
+        .list_correct_queries(ws, dataset.id, EXAMPLE_POOL)
+        .await?;
+    let columns = list_column_names(state, ws, &version).await?;
+    let detail = build_ambiguity_detail(&context);
+    let mut steps = vec![build_step(
+        StepName::Context,
+        started,
+        true,
+        detail.as_deref(),
+    )];
+    // Hỏi lại trước khi gọi mô hình: cột nào cũng đoán thì SQL có thể đọc sai cột mà không ai biết.
+    if !context.ambiguous.is_empty() {
+        let used = build_used_choices(&context, &[]);
+        return Ok(AskResponse {
+            message: Some(build_ambiguity_message(&context)),
+            warnings: build_unapplied_warnings(choices, &used),
+            choices: used,
+            clarifications: build_ambiguity_choices(&context),
+            steps,
+            ..build_base_response(state, &version, question, AskStatus::NeedsChoice)
+        });
+    }
+
+    let prompt = build_sql_prompt(&PromptInput {
+        table: &dataset.logical_table,
+        question,
+        context: &context,
+        metrics: &metrics,
+        examples: &examples,
+        domain: dataset.domain.as_deref().and_then(find_domain_package),
+        choices,
+    });
+    let started = Instant::now();
+    let request = LlmRequest {
+        task: LlmTask::Sql,
+        question,
+        prompt: &prompt,
+        json_schema: Some(build_sql_reply_schema()),
+    };
+    let reply = state.llm.complete(&request).await?;
+    steps.push(build_step(StepName::Llm, started, true, None));
+
+    let tables = [build_allowed_table(state, &dataset, &version, columns)?];
+    let input = RunInput {
+        question,
+        prompt: &prompt,
+        reply: &reply,
+        tables: &tables,
+        max_rows: state.config.ask_max_rows,
+        timeout: state.config.query_timeout,
+        jobs: &state.query_jobs,
+    };
+    let mut outcome = run_with_repair(state.llm.as_ref(), input).await?;
+    steps.append(&mut outcome.steps);
+    // Giả định thành Choice; tới khi có thẻ "Đã hiểu là" (#35) chúng chỉ dùng để dựng AskResponse.choices.
+    let answer = SqlAnswer {
+        terms: outcome.terms.clone(),
+        assumptions: outcome.assumptions.clone(),
+        sql: outcome.sql_generated.clone().unwrap_or_default(),
+    };
+    let assumptions = build_assumption_choices(&answer, &context, &metrics);
+    let used = build_used_choices(&context, &assumptions);
+    let mut warnings = build_unapplied_warnings(choices, &used);
+    warnings.extend(build_value_warnings(&context, &outcome.terms));
+
+    if let Some(clarify) = &outcome.clarify {
+        match build_clarify_choice(clarify, &context, &metrics) {
+            Some(choice) => {
+                return Ok(AskResponse {
+                    message: outcome.message,
+                    choices: used,
+                    warnings,
+                    clarifications: vec![choice],
+                    steps,
+                    ..build_base_response(state, &version, question, AskStatus::NeedsChoice)
+                });
+            }
+            // Hỏi lại mà không cho chọn gì thì người hỏi kẹt: coi như mô hình trả lời sai, ghi lịch sử như câu lỗi.
+            None => {
+                outcome.status = AskStatus::Failed;
+                outcome.message = Some(CLARIFY_WITHOUT_OPTIONS.to_string());
+            }
+        }
+    }
+
+    let started = Instant::now();
+    let query_id = record_query(
+        state, member, &dataset, &version, question, &outcome, &steps,
+    )
+    .await?;
+    steps.push(build_step(StepName::Record, started, true, None));
+    Ok(AskResponse {
+        message: outcome.message,
+        query_id: Some(query_id),
+        choices: used,
+        sql_generated: outcome.sql_generated,
+        sql_guarded: outcome.sql_guarded,
+        result: outcome.result,
+        warnings,
+        steps,
+        ..build_base_response(state, &version, question, outcome.status)
+    })
 }
 
 pub async fn drill(_state: &AppState, _member: &Member, _dataset_id: &str) -> Result<(), AppError> {
     Err(AppError::NotImplemented("truy dòng nguồn"))
+}
+
+/// Dataset của workspace người hỏi và phiên bản đang dùng. Id của workspace khác trả 404 như id không có.
+async fn load_target(
+    state: &AppState,
+    ws: &WorkspaceId,
+    dataset_id: &str,
+) -> Result<(Dataset, DatasetVersion), AppError> {
+    let id = parse_dataset_id(dataset_id)?;
+    let dataset = state
+        .store
+        .get_dataset(ws, id)
+        .await?
+        .ok_or_else(dataset_not_found)?;
+    let version = state
+        .store
+        .get_current_version(ws, id)
+        .await?
+        .ok_or_else(|| {
+            AppError::BadRequest("Dataset chưa có dữ liệu nào; nạp file trước khi hỏi".to_string())
+        })?;
+    Ok((dataset, version))
+}
+
+/// Mọi cột của phiên bản, không chỉ cột ngữ cảnh gửi mô hình: dataset nhiều cột thì ngữ cảnh chỉ gửi cột khớp câu
+/// hỏi, mà guard từ chối cột không có trong danh sách nó nhận, nên câu SQL dùng một cột khác có thật sẽ bị chặn oan.
+async fn list_column_names(
+    state: &AppState,
+    ws: &WorkspaceId,
+    version: &DatasetVersion,
+) -> Result<Vec<String>, AppError> {
+    let columns = state.store.list_columns(ws, version.id).await?;
+    Ok(columns.into_iter().map(|c| c.name).collect())
+}
+
+/// Bảng duy nhất câu hỏi được đọc: dataset đang hỏi, trên file Parquet của phiên bản đang dùng.
+fn build_allowed_table(
+    state: &AppState,
+    dataset: &Dataset,
+    version: &DatasetVersion,
+    columns: Vec<String>,
+) -> Result<AllowedTable, AppError> {
+    // Phiên bản nạp từ file luôn có đường dẫn; nguồn database (sau này) thì không, và cần cách chạy khác.
+    let Some(relative) = &version.parquet_path else {
+        return Err(AppError::Internal(
+            "dataset version has no parquet path".to_string(),
+        ));
+    };
+    Ok(AllowedTable {
+        name: dataset.logical_table.clone(),
+        columns,
+        parquet_dir: state.config.data_dir.join(relative),
+        // Lọc dòng theo data_role của người hỏi do #45 đọc từ rls_policies; tới đó mọi thành viên thấy mọi dòng.
+        row_filters: vec![],
+    })
+}
+
+/// Giá trị mô hình nói là có trong một cột (terms kind value) mà danh sách đủ của cột đó không có: câu SQL lọc theo nó
+/// sẽ ra rỗng hay thiếu dòng. Chỉ xét cột ngữ cảnh gửi đủ giá trị; danh sách chỉ là mẫu thì không biết chắc.
+fn build_value_warnings(context: &AskContext, terms: &[Term]) -> Vec<Warning> {
+    let mut warnings = Vec::new();
+    for term in terms.iter().filter(|t| t.kind == TermKind::Value) {
+        let (Some(column_name), Some(value)) = (&term.column, &term.value) else {
+            continue;
+        };
+        let Some(column) = context
+            .columns
+            .iter()
+            .find(|c| c.name == *column_name && c.values_complete)
+        else {
+            continue;
+        };
+        if column.values.iter().all(|entry| entry.value != *value) {
+            warnings.push(Warning {
+                code: WarningCode::FilterValueNotFound,
+                message: format!(
+                    "Cột {column_name} không có giá trị \"{value}\"; kết quả có thể rỗng hoặc thiếu dòng"
+                ),
+            });
+        }
+    }
+    warnings
+}
+
+/// Ghi câu hỏi đã có kết quả cuối (answered, rejected, failed). Lỗi ghi là lỗi máy chủ (500), kể cả khi đã có kết quả:
+/// answered bắt buộc có query_id để truy dòng nguồn (#34) và lịch sử dùng lại được.
+async fn record_query(
+    state: &AppState,
+    member: &Member,
+    dataset: &Dataset,
+    version: &DatasetVersion,
+    question: &str,
+    outcome: &RunOutcome,
+    steps: &[AskStep],
+) -> Result<uuid::Uuid, AppError> {
+    let status = match outcome.status {
+        AskStatus::Answered => QueryStatus::Ok,
+        AskStatus::Rejected => QueryStatus::Rejected,
+        AskStatus::Failed => QueryStatus::Error,
+        AskStatus::NeedsChoice => {
+            return Err(AppError::Internal(
+                "a question that needs a choice is not recorded".to_string(),
+            ))
+        }
+    };
+    let timings = serde_json::to_value(steps)
+        .map_err(|e| AppError::Internal(format!("serialize ask steps: {e}")))?;
+    let row_count = outcome
+        .result
+        .as_ref()
+        .map(|r| i64::try_from(r.total_rows).unwrap_or(i64::MAX));
+    let query = NewQuery {
+        target: Some((dataset.id, version.id)),
+        user_id: Some(member.user.id),
+        question,
+        sql_generated: outcome.sql_generated.as_deref(),
+        sql_guarded: outcome.sql_guarded.as_deref(),
+        status,
+        error: outcome.message.as_deref(),
+        timings,
+        row_count,
+        // Câu "tại sao" (#38) ghi form và phân rã vào đây.
+        explanation: None,
+    };
+    state.store.record_query(&member.workspace, &query).await
+}
+
+/// Phần chung của mọi response: mỗi nhánh của ask chỉ ghi các trường của nó.
+fn build_base_response(
+    state: &AppState,
+    version: &DatasetVersion,
+    question: &str,
+    status: AskStatus,
+) -> AskResponse {
+    AskResponse {
+        status,
+        question: question.to_string(),
+        message: None,
+        query_id: None,
+        version_id: version.id,
+        model: state.llm.name(),
+        choices: vec![],
+        sql_generated: None,
+        sql_guarded: None,
+        understanding: None,
+        result: None,
+        chart: None,
+        warnings: vec![],
+        explanation: None,
+        clarifications: vec![],
+        steps: vec![],
+    }
 }

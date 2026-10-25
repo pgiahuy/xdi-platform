@@ -10,7 +10,10 @@ Các câu giả định cột ngày "order date (DateOrders)" là chữ dạng "
 VARCHAR) nên tự parse bằng strptime; hồ sơ (#22) hay bước seed (#25) đổi cột này sang kiểu ngày thì phải sửa các câu.
 Tỷ lệ và số đếm về đơn tính theo đơn hàng (đếm "Order Id" phân biệt), không theo dòng: một đơn có nhiều dòng.
 Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/năm nên DuckDB báo lỗi, và có câu sửa (task repair)
-đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask_run.rs) mà không cần mô hình thật. Câu narrate cho câu
+đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask_run.rs) mà không cần mô hình thật. Ba câu nữa để thử các
+nhánh còn lại của luồng hỏi (service/ask.rs) trên giao diện: "Xóa các đơn hàng bị hủy" viết câu DELETE nên guard từ
+chối (rejected); "Doanh thu theo ngày đặt hàng" đọc sai định dạng ngày cả ở câu sửa (failed); "Doanh thu ở thị trường
+châu Á" lọc Market = 'Asia', giá trị DataCo không có (cảnh báo filter_value_not_found). Câu narrate cho câu
 "tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask_examples.rs) nên qua
 được bước kiểm số của #41.
 Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask_reply.rs);
@@ -124,8 +127,8 @@ mod tests {
     fn answers_file_is_valid() {
         let answers = parse_answers(ANSWERS_JSON).unwrap();
         let count = |wanted: LlmTask| answers.keys().filter(|(task, _)| *task == wanted).count();
-        assert_eq!(count(LlmTask::Sql), 11);
-        assert_eq!(count(LlmTask::Repair), 1);
+        assert_eq!(count(LlmTask::Sql), 14);
+        assert_eq!(count(LlmTask::Repair), 2);
         assert_eq!(count(LlmTask::Narrate), 1);
         assert_eq!(count(LlmTask::Why), 3);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];

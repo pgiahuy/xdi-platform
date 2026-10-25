@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/test_support.rs - phần dùng chung cho test gọi API qua router thật: dựng app, gửi request, đọc cookie phiên. */
 
+use std::sync::Arc;
+
 use axum::{body::Body, http::Request, http::StatusCode};
 use http_body_util::BodyExt;
 use serde_json::Value;
@@ -8,6 +10,7 @@ use tower::ServiceExt;
 
 use super::auth::SESSION_COOKIE;
 use crate::config::Config;
+use crate::engine::llm::LlmProvider;
 use crate::engine::store::Store;
 use crate::state::AppState;
 
@@ -23,6 +26,26 @@ pub fn app_with(
     setup_code: Option<&str>,
     configure: impl FnOnce(&mut Config),
 ) -> axum::Router {
+    crate::api::router(build_state(store, setup_code, configure))
+}
+
+/// Như app_with, thay mô hình ngôn ngữ của cấu hình bằng llm: mô hình giả trả câu viết sẵn mà mock không có.
+pub fn app_with_llm(
+    store: Store,
+    setup_code: Option<&str>,
+    configure: impl FnOnce(&mut Config),
+    llm: Arc<dyn LlmProvider>,
+) -> axum::Router {
+    let mut state = build_state(store, setup_code, configure);
+    state.llm = llm;
+    crate::api::router(state)
+}
+
+fn build_state(
+    store: Store,
+    setup_code: Option<&str>,
+    configure: impl FnOnce(&mut Config),
+) -> AppState {
     let mut config = Config::from_env();
     config.static_dir = None;
     // Binary của test không phải xdi-backend, nên không chạy được tiến trình con excel-worker.
@@ -30,7 +53,7 @@ pub fn app_with(
     configure(&mut config);
     let state = AppState::new(config, store);
     *state.setup_code.lock().unwrap() = setup_code.map(str::to_string);
-    crate::api::router(state)
+    state
 }
 
 /// Gửi một request, trả mã, cookie phiên mới (nếu có) và body JSON (nếu có).

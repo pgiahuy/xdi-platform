@@ -166,6 +166,8 @@ fn mock_answers() -> Vec<(String, SqlAnswer)> {
     mock_entries()
         .into_iter()
         .filter(|e| e["task"] == "sql" || e["task"] == "repair")
+        // Câu này có để thử nhánh rejected trên giao diện: guard từ chối nó nên không có thẻ.
+        .filter(|e| e["question"] != "Xóa các đơn hàng bị hủy")
         .map(|e| {
             let question = e["question"].as_str().unwrap().to_string();
             match build_answer_from_reply(&e["answer"].to_string()) {
@@ -178,8 +180,8 @@ fn mock_answers() -> Vec<(String, SqlAnswer)> {
 
 #[test]
 fn mock_answers_get_cards_and_roles() {
-    // Theo thứ tự trong mock_answers.json; hai câu cuối là bước sql và bước sửa của cùng một câu hỏi.
-    let expected_roles: [&[ColumnRole]; 12] = [
+    // Theo thứ tự trong mock_answers.json; câu 11 và 12, câu 13 và 14 là bước sql và bước sửa của cùng một câu hỏi.
+    let expected_roles: [&[ColumnRole]; 15] = [
         &[Dimension, Measure],
         &[Time, Measure],
         &[Dimension, Measure],
@@ -192,6 +194,9 @@ fn mock_answers_get_cards_and_roles() {
         &[Dimension, Measure],
         &[Time, Measure],
         &[Time, Measure],
+        &[Time, Measure],
+        &[Time, Measure],
+        &[Dimension, Measure],
     ];
     let answers = mock_answers();
     assert_eq!(answers.len(), expected_roles.len());

@@ -7,9 +7,11 @@ chỉ đọc, trên đúng các bảng, hàm và cột được phép, lọc dò
 Code: `backend/src/engine/guard/mod.rs`, hàm `build_guarded_sql`. Test: `backend/src/engine/guard/tests.rs`,
 `sample_tests.rs`, `row_filter_tests.rs`.
 
-Trạng thái: guard đã có và có test, nhưng chưa endpoint nào gọi nó. Endpoint hỏi dữ liệu
-([#33](https://github.com/pgiahuy/xdi-platform/issues/33)) sẽ gọi guard; chưa nơi nào đọc chính sách lọc dòng và
-truyền vào guard ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Tài liệu này mô tả đúng hàm hiện có.
+Trạng thái: guard đã có và có test. Endpoint hỏi dữ liệu ([#33](https://github.com/pgiahuy/xdi-platform/issues/33),
+`service/ask.rs`) gọi guard qua `service/ask_run.rs`, với một bảng là dataset đang hỏi và đủ mọi cột của phiên bản đang
+dùng; chưa nơi nào đọc chính sách lọc dòng và truyền vào guard
+([#45](https://github.com/pgiahuy/xdi-platform/issues/45)), nên `row_filters` còn rỗng. Tài liệu này mô tả đúng hàm hiện
+có.
 
 ## Đầu vào và đầu ra
 
@@ -203,8 +205,8 @@ row_filters:  "region" IN ('South')
 
 ## Bước 4: giới hạn số dòng
 
-`max_rows` do nơi gọi guard đặt; trần cụ thể sẽ do #33 chọn. Giới hạn đặt trên truy vấn ngoài cùng, nên áp cho cả
-chuỗi `UNION`.
+`max_rows` do nơi gọi guard đặt; endpoint hỏi dùng `ASK_MAX_ROWS` (mặc định 100 000). Giới hạn đặt trên truy vấn ngoài
+cùng, nên áp cho cả chuỗi `UNION`.
 
 | Câu vào | Guard làm |
 |---|---|
@@ -219,7 +221,7 @@ chuỗi `UNION`.
 
 | Bản | Dùng để | Nội dung |
 |---|---|---|
-| `shown` | Hiện cho người dùng, lưu vào lịch sử câu hỏi (`queries.sql_guarded`) khi #33 nối guard vào luồng hỏi | Câu đã kiểm, còn tên bảng logic, có `LIMIT`; không chứa đường dẫn file trên máy chủ |
+| `shown` | Hiện cho người dùng, lưu vào lịch sử câu hỏi (`queries.sql_guarded`) | Câu đã kiểm, còn tên bảng logic, có `LIMIT`; không chứa đường dẫn file trên máy chủ |
 | `runnable` | Chỉ đưa cho DuckDB | Bảng logic thành `read_parquet(...)` đọc thư mục Parquet của phiên bản; bảng tạm đổi tên |
 
 Ví dụ với `max_rows = 100`, bảng `sales` ở thư mục `/data/sales` (dòng `runnable` lấy từ test):
@@ -275,7 +277,5 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
 - `row_filters` rỗng là không lọc: guard không biết người hỏi có đáng bị lọc hay không. Service
   ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)) phải luôn truyền đủ chính sách của người hỏi; quên truyền
   thì người đó thấy mọi dòng.
-- Chưa có nơi gọi ([#33](https://github.com/pgiahuy/xdi-platform/issues/33)): danh sách cột của `AllowedTable` sẽ lấy
-  từ hồ sơ cột, phần này chưa làm (xem [Dữ liệu](DATA.md), mục Chưa có). Trong luồng hỏi, câu bị guard từ chối (sau
-  vòng sửa, nếu lý do là sai tên) sẽ trả 200 với `status: rejected` ([Kiến trúc](ARCHITECTURE.md), mục 8), không trả
-  lỗi 400.
+- Trong luồng hỏi, câu bị guard từ chối (sau vòng sửa, nếu lý do sửa được) trả 200 với `status: rejected`
+  ([Kiến trúc](ARCHITECTURE.md), mục 8), không trả lỗi 400.

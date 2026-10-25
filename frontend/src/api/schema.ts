@@ -369,7 +369,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ask a question about a dataset (not implemented yet: returns 501)
+         * Ask a question about a dataset
          * @description One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. Error codes are for invalid requests, access, and the language model service.
          */
         post: operations["ask"];
@@ -483,6 +483,8 @@ export interface components {
              * @description Id of the question in the history (`queries`); null for `needs_choice`.
              */
             query_id: string | null;
+            /** @description The question exactly as sent in `AskRequest.question`. */
+            question: string;
             result: components["schemas"]["ResultTable"] | null;
             /** @description SQL written by the model, on logical table names. After a fix round, the fixed SQL. */
             sql_generated: string | null;
@@ -1928,15 +1930,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Not implemented yet */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
             /** @description The language model service failed or did not answer before any SQL was written */
             502: {
                 headers: {
@@ -1955,7 +1948,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description 400 empty question or invalid JSON body, 401, 404 not a member or unknown dataset */
+            /** @description 400 empty question, invalid JSON body, dataset with no data or whose profile is not ready, or a question the mock model has no answer for; 401; 404 not a member or unknown dataset */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

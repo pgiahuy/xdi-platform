@@ -87,7 +87,7 @@ pub fn build_simple_example() -> AskResponse {
             build_step(StepName::Run, 38, true, None),
             build_step(StepName::Record, 6, true, None),
         ],
-        ..build_base(AskStatus::Answered, Some(1))
+        ..build_base(AskStatus::Answered, "Doanh thu theo khu vực", Some(1))
     }
 }
 
@@ -176,7 +176,7 @@ pub fn build_why_example() -> AskResponse {
             build_step(StepName::Narrate, 1840, true, None),
             build_step(StepName::Record, 7, true, None),
         ],
-        ..build_base(AskStatus::Answered, Some(2))
+        ..build_base(AskStatus::Answered, "Tại sao doanh thu quý 3 năm 2017 giảm?", Some(2))
     }
 }
 
@@ -265,7 +265,7 @@ pub fn build_needs_choice_example() -> AskResponse {
             true,
             Some("\"khu vực\" khớp hai cột: Order Region, Market"),
         )],
-        ..build_base(AskStatus::NeedsChoice, None)
+        ..build_base(AskStatus::NeedsChoice, "Doanh thu theo khu vực", None)
     }
 }
 
@@ -281,7 +281,7 @@ pub fn build_rejected_example() -> AskResponse {
             build_step(StepName::Guard, 2, false, Some(reason)),
             build_step(StepName::Record, 5, true, None),
         ],
-        ..build_base(AskStatus::Rejected, Some(3))
+        ..build_base(AskStatus::Rejected, "Xóa các đơn hàng bị hủy", Some(3))
     }
 }
 
@@ -312,15 +312,16 @@ pub fn build_failed_example() -> AskResponse {
             build_step(StepName::Run, 8, false, Some(second_error)),
             build_step(StepName::Record, 6, true, None),
         ],
-        ..build_base(AskStatus::Failed, Some(4))
+        ..build_base(AskStatus::Failed, "Doanh thu theo ngày giao hàng", Some(4))
     }
 }
 
 // Phần chung của mọi mẫu: mỗi mẫu chỉ ghi các trường của nó, phần còn lại lấy từ đây bằng cú pháp `..build_base(..)`.
 // query_number phân biệt id câu hỏi giữa các mẫu; None cho needs_choice (không ghi lịch sử).
-fn build_base(status: AskStatus, query_number: Option<u128>) -> AskResponse {
+fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> AskResponse {
     AskResponse {
         status,
+        question: question.to_string(),
         message: None,
         query_id: query_number.map(|n| Uuid::from_u128(0x5b2f0c1e_7a4d_4e8b_9c61_0d3e2f1a4b00 + n)),
         version_id: VERSION_ID,

@@ -47,7 +47,7 @@ pub struct AskRequest {
     path = "/workspaces/{ws}/datasets/{id}/ask",
     tag = "query",
     operation_id = "ask",
-    summary = "Ask a question about a dataset (not implemented yet: returns 501)",
+    summary = "Ask a question about a dataset",
     description = "One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, \
                    `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. \
                    Error codes are for invalid requests, access, and the language model service.",
@@ -66,9 +66,10 @@ pub struct AskRequest {
                 ("failed" = (summary = "SQL failed, also after one fix round", value = json!(build_failed_example())))
             )
         ),
-        (status = 501, body = ErrorBody, description = "Not implemented yet"),
-        (status = "4XX", body = ErrorBody, description = "400 empty question or invalid JSON body, 401, 404 not a \
-                                                         member or unknown dataset"),
+        (status = "4XX", body = ErrorBody, description = "400 empty question, invalid JSON body, dataset with no \
+                                                         data or whose profile is not ready, or a question the mock \
+                                                         model has no answer for; 401; 404 not a member or unknown \
+                                                         dataset"),
         (status = 502, body = ErrorBody, description = "The language model service failed or did not answer before \
                                                        any SQL was written"),
         (status = 503, body = ErrorBody, description = "The language model is not configured on the server")

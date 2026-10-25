@@ -118,8 +118,9 @@ async fn member_reads_and_admin_manages() {
     assert_eq!(status, StatusCode::OK);
     let ask = Some(json!({"question": "doanh thu"}));
     let (status, _, _) = call(&app, "POST", &format!("{path}/ask"), Some(&minh), ask).await;
-    // Route hỏi chưa làm xong nên trả 501; làm xong thì đổi thành mã thành công. Quan trọng là không 403, không 404.
-    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+    // Mock không có câu trả lời mẫu cho câu này nên trả 400, tức là request đã qua bước kiểm quyền và tới bước gọi mô
+    // hình. Quan trọng là không 403, không 404: member hỏi được. Luồng hỏi đầy đủ có test ở ask_tests.rs.
+    assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(
         roles(&app, &minh, SHOP).await,
         [
