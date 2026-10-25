@@ -55,6 +55,9 @@ pub struct GuardedSql {
     pub runnable: String,
     /// Guard đã đổi LIMIT thế nào, chữ cho người dùng ("Thêm LIMIT 100000"); None khi giữ LIMIT của câu.
     pub limit_note: Option<String>,
+    /// Điều kiện lọc dòng guard đã thêm, in đúng như trong `shown`, để thẻ "Đã hiểu là" (#35) gắn nhãn điều kiện nào do
+    /// phân quyền chứ không do câu hỏi. Mỗi điều kiện một lần dù bảng được đọc ở nhiều chỗ; rỗng khi không lọc.
+    pub row_filters: Vec<String>,
 }
 
 /// Vì sao guard không nhận câu. Lý do là chữ tiếng Việt chỉ đúng chỗ sai, đọc được cả với mô hình lẫn người dùng.
@@ -90,7 +93,8 @@ pub fn build_guarded_sql(
     // thành `read_parquet(...) AS s`, mất tên bảng. `shown` chứa cả điều kiện để người hỏi thấy phạm vi dữ liệu của mình.
     // Sau các luật kích thước: hộp lọc thêm một tầng câu nhưng chỉ là SELECT * kèm WHERE, không ghép thêm giá trị, nên
     // không đếm vào số tầng; đếm thì câu 4 tầng hợp lệ của người bị lọc thành 5 tầng và bị từ chối.
-    apply_row_filters(&mut query, tables).map_err(GuardError::Internal)?;
+    let row_filters =
+        apply_row_filters(&mut query, tables, &cte_names).map_err(GuardError::Internal)?;
     let limit_note = apply_row_limit(&mut query, max_rows)?;
     let shown = query.to_string();
     let runnable = build_runnable(query, tables, &cte_names)
@@ -100,6 +104,7 @@ pub fn build_guarded_sql(
         shown,
         runnable,
         limit_note,
+        row_filters,
     })
 }
 
@@ -464,16 +469,43 @@ impl Visitor for ExprChecker<'_> {
 // điều kiện vào WHERE của câu LLM viết vì điều kiện trong câu con chạy trước mọi JOIN, WHERE, OR của câu ngoài: viết
 // khéo cỡ nào cũng không gỡ được nó. Chỉ cần bọc chỗ đọc bảng vì bước 2 đã từ chối mọi nguồn khác: hàm đọc file, bảng
 // hệ thống, tên kèm schema, bảng tạm trùng tên bảng dữ liệu.
+//
+// Bước này vẫn không tin hẳn bước 2: gặp chỗ đọc dữ liệu nào không nhận ra thì chặn cả câu thay vì bỏ qua. Bỏ qua thì
+// một dạng bước 2 sót, nay hay sau này, thành chỗ đọc dữ liệu không qua lọc.
 
-fn apply_row_filters(query: &mut Query, tables: &[AllowedTable]) -> Result<(), AppError> {
-    if let ControlFlow::Break(error) = VisitMut::visit(query, &mut RowFilterInjector { tables }) {
+/// Trả các điều kiện đã thêm cho GuardedSql::row_filters.
+fn apply_row_filters(
+    query: &mut Query,
+    tables: &[AllowedTable],
+    cte_names: &BTreeSet<String>,
+) -> Result<Vec<String>, AppError> {
+    let mut injector = RowFilterInjector {
+        tables,
+        cte_names,
+        added: Vec::new(),
+    };
+    if let ControlFlow::Break(error) = VisitMut::visit(query, &mut injector) {
         return Err(error);
     }
-    Ok(())
+    Ok(injector.added)
 }
 
 struct RowFilterInjector<'a> {
     tables: &'a [AllowedTable],
+    cte_names: &'a BTreeSet<String>,
+    /// Điều kiện đã thêm, in như trong `shown`, theo thứ tự gặp và không lặp.
+    added: Vec<String>,
+}
+
+impl RowFilterInjector<'_> {
+    fn note_added(&mut self, conditions: &[Expr]) {
+        for condition in conditions {
+            let text = condition.to_string();
+            if !self.added.contains(&text) {
+                self.added.push(text);
+            }
+        }
+    }
 }
 
 impl VisitorMut for RowFilterInjector<'_> {
@@ -482,19 +514,39 @@ impl VisitorMut for RowFilterInjector<'_> {
     // Bọc ở post_visit vì Visitor đi vào bên trong một nút sau pre_visit: bọc ở pre_visit thì nó đi tiếp vào câu con
     // vừa tạo, gặp lại `sales` và bọc mãi không dừng.
     fn post_visit_table_factor(&mut self, factor: &mut TableFactor) -> ControlFlow<AppError> {
-        let TableFactor::Table { name, alias, .. } = factor else {
+        let TableFactor::Table {
+            name, alias, args, ..
+        } = factor
+        else {
+            return match factor {
+                // Phần bên trong câu con và JOIN trong ngoặc đã được duyệt và bọc trước khi tới đây.
+                TableFactor::Derived { .. } | TableFactor::NestedJoin { .. } => {
+                    ControlFlow::Continue(())
+                }
+                other => ControlFlow::Break(unfilterable_read(other)),
+            };
+        };
+        let ident = match (args, single_ident(name)) {
+            (None, Some(ident)) => ident.clone(),
+            _ => return ControlFlow::Break(unfilterable_read(name)),
+        };
+        let key = name_key(&ident);
+        let Some(table) = find_table(self.tables, &key) else {
+            // Bảng tạm (WITH) không phải bảng dữ liệu nên không bọc; bảng dữ liệu bên trong nó được bọc ở chỗ đọc.
+            if self.cte_names.contains(&key) {
+                return ControlFlow::Continue(());
+            }
+            return ControlFlow::Break(unfilterable_read(&ident));
+        };
+        let conditions = match build_row_conditions(table) {
+            Ok(conditions) => conditions,
+            Err(error) => return ControlFlow::Break(error),
+        };
+        // Bảng không có chính sách thì giữ nguyên chỗ đọc: shown và runnable như khi chưa có bước này.
+        let Some(condition) = build_all_of(&conditions) else {
             return ControlFlow::Continue(());
         };
-        let Some(ident) = single_ident(name).cloned() else {
-            return ControlFlow::Continue(());
-        };
-        // Bảng tạm (WITH) không có trong danh sách nên không bọc; bảng dữ liệu bên trong nó được bọc ở chỗ đọc.
-        let Some(table) = find_table(self.tables, &name_key(&ident)) else {
-            return ControlFlow::Continue(());
-        };
-        let Some(condition) = build_row_condition(&table.row_filters) else {
-            return ControlFlow::Continue(());
-        };
+        self.note_added(&conditions);
         // Bí danh chuyển ra ngoài câu con để `s.region` hay `sales.region` của câu vẫn trỏ đúng bảng.
         let outer_alias = alias.take().unwrap_or(TableAlias {
             explicit: true,
@@ -518,11 +570,38 @@ impl VisitorMut for RowFilterInjector<'_> {
     }
 }
 
-/// None khi bảng không có chính sách nào. Nhiều chính sách trên một bảng (mỗi cột một dòng) thì dòng phải qua tất cả.
-fn build_row_condition(filters: &[RowFilter]) -> Option<Expr> {
-    filters
+/// Chỗ đọc dữ liệu bước 3 không biết lọc thế nào. Bước 2 phải đã từ chối nó, nên gặp ở đây là lỗi của guard.
+fn unfilterable_read(read: impl std::fmt::Display) -> AppError {
+    AppError::Internal(format!("row filter cannot filter the data source {read}"))
+}
+
+/// Mỗi chính sách một điều kiện; rỗng khi bảng không có chính sách. Cột phải có trong hồ sơ bảng: cột không có thì
+/// DuckDB lấy cột cùng tên của bảng khác ở câu ngoài (câu con trong FROM được nối như LATERAL), điều kiện thành lọc
+/// bảng khác và mọi dòng của bảng này lọt ra.
+fn build_row_conditions(table: &AllowedTable) -> Result<Vec<Expr>, AppError> {
+    let mut conditions = Vec::new();
+    for filter in &table.row_filters {
+        let column_key = filter.column.to_lowercase();
+        let is_table_column = table
+            .columns
+            .iter()
+            .any(|column| column.to_lowercase() == column_key);
+        if !is_table_column {
+            return Err(AppError::Internal(format!(
+                "row filter column {} is not a column of table {}",
+                filter.column, table.name
+            )));
+        }
+        conditions.push(build_column_condition(filter));
+    }
+    Ok(conditions)
+}
+
+/// None khi không có điều kiện. Nhiều chính sách trên một bảng (mỗi cột một dòng) thì dòng phải qua tất cả.
+fn build_all_of(conditions: &[Expr]) -> Option<Expr> {
+    conditions
         .iter()
-        .map(build_column_condition)
+        .cloned()
         .reduce(|left, right| Expr::BinaryOp {
             left: Box::new(left),
             op: BinaryOperator::And,
@@ -755,6 +834,8 @@ fn unknown_name(reason: String) -> GuardError {
 
 mod depth;
 mod pieces;
+#[cfg(test)]
+mod row_filter_tests;
 #[cfg(test)]
 mod sample_tests;
 mod sizes;

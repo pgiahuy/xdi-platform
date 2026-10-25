@@ -1,22 +1,23 @@
 # Guard SQL
 
 Mô hình ngôn ngữ viết câu SQL từ câu hỏi; guard kiểm câu đó trước khi DuckDB chạy. Guard chỉ nhận một câu `SELECT`
-chỉ đọc, trên đúng các bảng, hàm và cột được phép, thêm giới hạn số dòng, rồi đổi tên bảng logic sang file Parquet của
-dataset.
+chỉ đọc, trên đúng các bảng, hàm và cột được phép, lọc dòng theo vai dữ liệu của người hỏi, thêm giới hạn số dòng, rồi
+đổi tên bảng logic sang file Parquet của dataset.
 
-Code: `backend/src/engine/guard/mod.rs`, hàm `build_guarded_sql`. Test: `backend/src/engine/guard/tests.rs`.
+Code: `backend/src/engine/guard/mod.rs`, hàm `build_guarded_sql`. Test: `backend/src/engine/guard/tests.rs`,
+`sample_tests.rs`, `row_filter_tests.rs`.
 
 Trạng thái: guard đã có và có test, nhưng chưa endpoint nào gọi nó. Endpoint hỏi dữ liệu
-([#33](https://github.com/pgiahuy/xdi-platform/issues/33)) sẽ gọi guard; tiêm điều kiện phân quyền theo dòng
-([#31](https://github.com/pgiahuy/xdi-platform/issues/31)) chưa làm. Tài liệu này mô tả đúng hàm hiện có.
+([#33](https://github.com/pgiahuy/xdi-platform/issues/33)) sẽ gọi guard; chưa nơi nào đọc chính sách lọc dòng và
+truyền vào guard ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Tài liệu này mô tả đúng hàm hiện có.
 
 ## Đầu vào và đầu ra
 
 | | Nội dung |
 |---|---|
-| Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản); `max_rows` |
-| Ra khi nhận | `GuardedSql` gồm hai bản của cùng một câu: `shown` và `runnable` (mục Bước 4) |
-| Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Oversized` khi câu có thể dựng giá trị quá lớn (luật kích thước, số tầng, mảnh ghép, độ rộng ở bước 2), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy |
+| Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản, chính sách lọc dòng `row_filters`); `max_rows` |
+| Ra khi nhận | `GuardedSql` gồm hai bản của cùng một câu: `shown` và `runnable` (mục Bước 5), ghi chú `limit_note`, và `row_filters` là các điều kiện lọc dòng guard đã thêm (mục Bước 3) |
+| Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Oversized` khi câu có thể dựng giá trị quá lớn (luật kích thước, số tầng, mảnh ghép, độ rộng ở bước 2), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy hay chính sách lọc dòng sai (mục Bước 3) |
 
 Guard không đọc Postgres hay DuckDB: service đưa danh sách bảng vào, nên test chạy không cần database. Lý do từ chối
 viết để mô hình đọc và sửa ở vòng sau, nên nói rõ tên bảng, hàm hay cột bị từ chối. Trong luồng hỏi
@@ -62,7 +63,7 @@ Bảng kiểm trước cột, để `SELECT region FROM orders` báo sai bảng 
 - Tên file viết như tên bảng: `FROM 'secret.csv'`, `FROM "secret.csv"`.
 - `UNNEST`, `PIVOT` và các dạng lấy dữ liệu khác ngoài bảng, truy vấn con và `JOIN`.
 - `WITH RECURSIVE`: có thể chạy không dừng, câu hỏi phân tích không cần.
-- Bảng tạm trùng tên bảng dữ liệu (`WITH sales AS (...)`): nhận thì bước 4 đổi mọi `FROM sales` sang file Parquet,
+- Bảng tạm trùng tên bảng dữ liệu (`WITH sales AS (...)`): nhận thì bước 5 đổi mọi `FROM sales` sang file Parquet,
   câu ra kết quả sai mà không báo lỗi.
 
 Bí danh trùng tên bảng khác chỉ đổi tên gọi: `FROM customers AS sales` vẫn đọc dữ liệu của `customers`.
@@ -157,7 +158,50 @@ lại gọn hơn, như sai tên bảng, cột.
 `WITH t(a, b)`, `(SELECT ...) AS x(a, b)`). Dạng `bang.cot` thì `bang` phải là bảng, bảng tạm hay bí danh có trong câu.
 Tên ba phần trở lên (`main.sales.region`) bị từ chối.
 
-## Bước 3: giới hạn số dòng
+## Bước 3: lọc dòng theo vai dữ liệu
+
+Mỗi `AllowedTable` mang `row_filters`: các `RowFilter { column, allowed_values }` service lấy từ `rls_policies` theo
+`data_role` của người hỏi ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Rỗng thì bảng đó không lọc.
+Guard không tự đọc chính sách và không quyết ai được thấy hết.
+
+Guard thay mỗi chỗ đọc bảng có chính sách bằng một câu con chỉ chứa dòng được phép, giữ bí danh của câu. Ví dụ chính
+sách `region` chỉ `South` (dòng `runnable` lấy từ test):
+
+```
+Câu vào:      SELECT region FROM sales
+shown:        SELECT region FROM (SELECT * FROM sales WHERE "region" IN ('South')) AS sales LIMIT 100
+runnable:     SELECT region FROM (SELECT * FROM read_parquet('/data/sales/*.parquet', union_by_name = true) AS sales WHERE "region" IN ('South')) AS sales LIMIT 100
+row_filters:  "region" IN ('South')
+```
+
+- Bọc mọi chỗ đọc: `JOIN` mọi kiểu, `FROM a, b`, câu con ở `FROM`, `WHERE`, danh sách cột, `EXISTS`, `IN`, `LATERAL`,
+  thân bảng tạm `WITH` (kể cả bảng tạm đọc bảng tạm), mọi vế `UNION`, `INTERSECT`, `EXCEPT`. Bảng đọc nhiều lần thì bọc
+  từng lần. Bảng tạm không bọc; bảng dữ liệu bên trong nó được bọc. Lọc theo bảng được đọc, không theo bí danh:
+  `FROM sales AS customers` vẫn lọc theo chính sách của `sales`.
+- Câu con chứ không thêm vế vào `WHERE` của câu: điều kiện trong câu con chạy trước mọi `JOIN`, `WHERE`, `OR` của câu
+  ngoài, nên câu ngoài viết thế nào cũng chỉ thấy dòng được phép, và kết quả như khi bảng chỉ có các dòng đó. Thêm vế
+  vào `WHERE` thì lọt: `WHERE region = 'North' OR true AND "region" IN ('South')` ra cả dòng North vì `AND` tính trước
+  `OR`; đặt điều kiện ở `ON` của `LEFT JOIN` khi bảng bị lọc nằm bên trái thì mọi dòng bên trái vẫn ra. Câu con không
+  làm chậm: DuckDB gỡ câu con trước khi chạy; `EXPLAIN` của câu bọc và của câu viết `WHERE` tay ra cùng kế hoạch, chỉ
+  đọc các cột câu cần và lọc ngay lúc đọc Parquet.
+- Nhiều chính sách trên một bảng nối bằng `AND`. `allowed_values` rỗng thành `WHERE false`. Dòng có ô trống (NULL) ở
+  cột lọc bị ẩn, vì NULL không khớp `IN`. Giá trị so dạng chuỗi (`"col" IN ('a')`): sai kiểu trên cột số thì DuckDB báo
+  lỗi và câu không chạy; khác hoa thường thì không khớp.
+- Điều kiện dựng trên cây cú pháp, không ghép chuỗi: giá trị `South') OR ('1' = '1` chỉ là một chuỗi để so; tên cột đặt
+  trong nháy kép, dấu `"` trong tên được nhân đôi.
+- Chạy sau các luật kích thước của bước 2: câu con thêm một tầng nhưng chỉ là `SELECT *` kèm `WHERE`, không ghép giá
+  trị, nên không tính vào số tầng.
+- Chặn cả câu (`GuardError::Internal`: lỗi máy chủ, không vào vòng sửa) khi:
+  - cột của chính sách không có trong danh sách cột của bảng. Không chặn thì DuckDB lấy cột cùng tên của bảng khác ở
+    câu ngoài (câu con trong `FROM` được nối như `LATERAL`), điều kiện thành lọc bảng khác và mọi dòng lọt ra;
+  - gặp chỗ đọc dữ liệu bước 3 không nhận ra: hàm ở chỗ bảng, tên kèm schema, tên không phải bảng hay bảng tạm, dạng
+    khác bảng. Bước 2 đã từ chối các dạng này; bước 3 vẫn chặn, để bước 2 sót một dạng cũng không thành chỗ đọc dữ
+    liệu không qua lọc.
+- `GuardedSql.row_filters` liệt kê điều kiện đã thêm, in đúng như trong `shown`, mỗi điều kiện một lần, để thẻ "Đã hiểu
+  là" ([#35](https://github.com/pgiahuy/xdi-platform/issues/35)) gắn nhãn điều kiện do phân quyền. Không có chính sách
+  thì danh sách rỗng, `shown` và `runnable` như khi chưa có bước này.
+
+## Bước 4: giới hạn số dòng
 
 `max_rows` do nơi gọi guard đặt; trần cụ thể sẽ do #33 chọn. Giới hạn đặt trên truy vấn ngoài cùng, nên áp cho cả
 chuỗi `UNION`.
@@ -171,7 +215,7 @@ chuỗi `UNION`.
 | `FETCH FIRST n ROWS ONLY` | Từ chối, lý do nhắc dùng `LIMIT` |
 | Dạng `LIMIT` khác, như `LIMIT n BY cot` | Từ chối |
 
-## Bước 4: hai bản shown và runnable
+## Bước 5: hai bản shown và runnable
 
 | Bản | Dùng để | Nội dung |
 |---|---|---|
@@ -207,6 +251,7 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
 | Số tầng, mảnh, độ rộng | 4 tầng nhận, 5 tầng từ chối ở mọi chỗ (`FROM`, `WHERE`, cột, `WITH`, bảng tạm đọc bảng tạm); bảng tạm cùng tên trong `WITH` lồng không che số tầng; bảng tạm kèm câu con kiểu mô hình hay viết vẫn qua; 20 mảnh nhận, 21 từ chối (`||`, `concat`, `concat_ws`, cộng qua các tầng, danh sách và struct viết thẳng, bí danh dùng lại); tuple, mảng trong `IN`, `ANY`, `ALL` không tính; gọi hàm dạng phương thức bị từ chối; chuỗi hằng 1000 byte nhận, 1001 từ chối (tính theo byte, ở `IN`, đối số hàm); 200 cột nhận, 201 từ chối; `*` trên nhiều nguồn tính theo số cột thật, từ chối khi có bảng tạm; 4 nguồn trong `FROM` nhận, 5 từ chối; 10 nhánh `UNION`, `INTERSECT`, `EXCEPT` nhận, 11 từ chối, cộng qua các tầng; câu mẫu của mock và của `ask_examples.rs` vẫn qua |
 | Câu mẫu (`sample_tests.rs`) | 32 câu phân tích dạng mô hình hay viết, 25 qua; 7 bị từ chối có chủ ý: 3 câu 5 tầng (vào vòng sửa), bảng tạm 4 tầng không ai dùng, `strftime` đảo thứ tự tham số, hàm `list_contains` ngoài danh sách, nhãn 1200 byte. 18 câu tìm cách lách (B01 tới B16, kể cả B01b, B05b): các câu nhân giá trị bị chặn, các câu vô hại qua |
 | Cột | Cột không có (cả dạng `s.profit`); chữ Unicode giống chữ Latin; bí danh bảng không có; tên ba phần |
+| Lọc dòng | Các dạng câu so nguyên `shown`: một bảng, `WHERE`, `WHERE a OR b`, `GROUP BY` và `HAVING`, `JOIN` hai bảng chỉ một bảng có lọc, tự `JOIN`, `LEFT JOIN` chính bảng, `FROM a, b`, câu con ở `FROM` và `WHERE`, `IN`, `EXISTS`, `UNION ALL`, `WITH`, bảng tạm đọc bảng tạm, `LATERAL`; giữ bí danh, lọc theo bảng không theo bí danh, tên viết hoa; nhiều chính sách nối `AND`, danh sách rỗng, giá trị có dấu nháy, cột có khoảng trắng; hai bảng cùng có lọc và `row_filters`; không có chính sách thì `shown` như cũ; cột chính sách không có trong bảng; bước 3 tự chặn chỗ đọc không nhận ra; 17 câu lách (đọc file, bảng hệ thống, tên kèm schema, chữ Unicode giống chữ Latin, bảng tạm trùng tên bảng dữ liệu). Trên DuckDB thật: 15 câu cố lấy dòng ngoài phạm vi không lấy được; 90 câu (30 dạng câu nhân 3 cách viết tên bảng, cả hai bảng có lọc) qua guard ra đúng kết quả như khi chạy trên bảng chỉ còn dòng được phép (`row_filter_tests.rs`) |
 | Số dòng | Thêm `LIMIT` (cả khi chỉ có `OFFSET`); hạ `LIMIT 5000`; giữ `LIMIT 10 OFFSET 5`; đọc số có gạch dưới (`LIMIT 1_0` giữ, `LIMIT 1_000` hạ); thay `LIMIT (SELECT 5000)`; giới hạn cả `UNION`; từ chối `FETCH FIRST`; ghi chú `limit_note` ("Thêm LIMIT 100", "Hạ LIMIT xuống 100") |
 | Bản chạy | Bảng logic thành `read_parquet` và giữ tên làm bí danh; giữ bí danh có sẵn; đổi tên bảng tạm; bảng tạm tên giống file không còn trong bản chạy; `shown` không chứa đường dẫn; một câu có `WITH` và `JOIN` chạy trên DuckDB thật với file Parquet và ra đúng kết quả |
 
@@ -227,8 +272,9 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
   gian. Đó là số đo trên các dạng câu đã thử, không phải bảo đảm;
   bảo đảm thật cần chạy câu trong tiến trình con có trần RAM và thời gian của hệ điều hành, như bộ đọc Excel
   (`engine/excel_worker.rs`). Refs [#119](https://github.com/pgiahuy/xdi-platform/issues/119).
-- Chưa tiêm điều kiện phân quyền theo dòng ([#31](https://github.com/pgiahuy/xdi-platform/issues/31)). Chỗ tiêm đã
-  định: sau bước 2 (mọi bảng đã được kiểm), trước bước 4 (còn tên bảng logic); `shown` sẽ chứa cả điều kiện đó.
+- `row_filters` rỗng là không lọc: guard không biết người hỏi có đáng bị lọc hay không. Service
+  ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)) phải luôn truyền đủ chính sách của người hỏi; quên truyền
+  thì người đó thấy mọi dòng.
 - Chưa có nơi gọi ([#33](https://github.com/pgiahuy/xdi-platform/issues/33)): danh sách cột của `AllowedTable` sẽ lấy
   từ hồ sơ cột, phần này chưa làm (xem [Dữ liệu](DATA.md), mục Chưa có). Trong luồng hỏi, câu bị guard từ chối (sau
   vòng sửa, nếu lý do là sai tên) sẽ trả 200 với `status: rejected` ([Kiến trúc](ARCHITECTURE.md), mục 8), không trả

@@ -3,10 +3,16 @@
 trên DuckDB thật vì so chuỗi không chứng minh được DuckDB chạy được bản đã đổi. Nhiều test so nguyên chuỗi sqlparser in
 ra, nên nâng phiên bản sqlparser có thể phải sửa chuỗi mong đợi. */
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+
+use sqlparser::ast::Statement;
+use sqlparser::dialect::DuckDbDialect;
+use sqlparser::parser::Parser;
 
 use super::{build_guarded_sql, AllowedTable, GuardError, GuardedSql, RowFilter};
 use crate::engine::analytics::parquet_glob;
+use crate::error::AppError;
 
 const MAX_ROWS: u64 = 100;
 
@@ -1142,6 +1148,161 @@ fn with_name_like_a_table_cannot_dodge_the_filter() {
     }
 }
 
+/// Các dạng câu issue #31 liệt kê, so nguyên `shown`: mọi chỗ đọc sales được bọc, câu ngoài giữ nguyên.
+#[test]
+fn filters_every_listed_query_shape() {
+    for (sql, expected) in [
+        (
+            "SELECT region FROM sales WHERE amount > 5",
+            format!("SELECT region FROM {SOUTH_SALES} AS sales WHERE amount > 5 LIMIT 100"),
+        ),
+        (
+            "SELECT region FROM sales WHERE amount > 5 OR region = 'North'",
+            format!(
+                "SELECT region FROM {SOUTH_SALES} AS sales WHERE amount > 5 OR region = 'North' LIMIT 100"
+            ),
+        ),
+        (
+            "SELECT region, SUM(amount) FROM sales GROUP BY region HAVING SUM(amount) > 10",
+            format!(
+                "SELECT region, SUM(amount) FROM {SOUTH_SALES} AS sales GROUP BY region HAVING SUM(amount) > 10 \
+                 LIMIT 100"
+            ),
+        ),
+        (
+            "SELECT a.region FROM sales a JOIN sales b ON a.customer_id = b.customer_id",
+            format!(
+                "SELECT a.region FROM {SOUTH_SALES} a JOIN {SOUTH_SALES} b ON a.customer_id = b.customer_id \
+                 LIMIT 100"
+            ),
+        ),
+        (
+            "SELECT a.region, b.amount FROM sales a LEFT JOIN sales b ON a.customer_id = b.customer_id",
+            format!(
+                "SELECT a.region, b.amount FROM {SOUTH_SALES} a LEFT JOIN {SOUTH_SALES} b \
+                 ON a.customer_id = b.customer_id LIMIT 100"
+            ),
+        ),
+        (
+            "SELECT a.region FROM sales a, sales b WHERE a.customer_id = b.customer_id",
+            format!(
+                "SELECT a.region FROM {SOUTH_SALES} a, {SOUTH_SALES} b WHERE a.customer_id = b.customer_id \
+                 LIMIT 100"
+            ),
+        ),
+        (
+            "SELECT segment FROM customers WHERE customer_id IN (SELECT customer_id FROM sales)",
+            format!(
+                "SELECT segment FROM customers WHERE customer_id IN (SELECT customer_id FROM {SOUTH_SALES} AS sales) \
+                 LIMIT 100"
+            ),
+        ),
+        (
+            "SELECT region FROM sales UNION ALL SELECT segment FROM customers",
+            format!(
+                "SELECT region FROM {SOUTH_SALES} AS sales UNION ALL SELECT segment FROM customers LIMIT 100"
+            ),
+        ),
+        (
+            "WITH a AS (SELECT region, amount FROM sales), b AS (SELECT region FROM a) SELECT region FROM b",
+            format!(
+                "WITH a AS (SELECT region, amount FROM {SOUTH_SALES} AS sales), b AS (SELECT region FROM a) \
+                 SELECT region FROM b LIMIT 100"
+            ),
+        ),
+        (
+            "SELECT s.region, t.total FROM sales s, \
+             LATERAL (SELECT SUM(amount) AS total FROM sales x WHERE x.customer_id = s.customer_id) t",
+            format!(
+                "SELECT s.region, t.total FROM {SOUTH_SALES} s, \
+                 LATERAL (SELECT SUM(amount) AS total FROM {SOUTH_SALES} x WHERE x.customer_id = s.customer_id) t \
+                 LIMIT 100"
+            ),
+        ),
+    ] {
+        assert_eq!(assert_accepted_for_south_member(sql).shown, expected);
+    }
+}
+
+/// Hai bảng cùng có chính sách: mỗi chỗ đọc mang điều kiện của chính bảng đó, và row_filters liệt kê mỗi điều kiện một
+/// lần dù sales được đọc hai chỗ.
+#[test]
+fn lists_each_added_condition_once() {
+    let mut tables = tables_with_sales_policy("/data", vec![row_filter("region", &["South"])]);
+    for table in &mut tables {
+        if table.name == "customers" {
+            table.row_filters = vec![row_filter("segment", &["Retail"])];
+        }
+    }
+    let guarded = build_guarded_sql(
+        "SELECT c.segment FROM sales s JOIN customers c ON s.customer_id = c.customer_id \
+         UNION ALL SELECT region FROM sales",
+        &tables,
+        MAX_ROWS,
+    )
+    .unwrap();
+    assert_eq!(
+        guarded.shown,
+        format!(
+            "SELECT c.segment FROM {SOUTH_SALES} s \
+             JOIN (SELECT * FROM customers WHERE \"segment\" IN ('Retail')) c ON s.customer_id = c.customer_id \
+             UNION ALL SELECT region FROM {SOUTH_SALES} AS sales LIMIT 100"
+        )
+    );
+    assert_eq!(
+        guarded.row_filters,
+        vec!["\"region\" IN ('South')", "\"segment\" IN ('Retail')"]
+    );
+}
+
+#[test]
+fn no_policy_adds_no_condition() {
+    let guarded = assert_accepted("SELECT region FROM sales");
+    assert_eq!(guarded.shown, "SELECT region FROM sales LIMIT 100");
+    assert!(guarded.row_filters.is_empty(), "{:?}", guarded.row_filters);
+}
+
+/// Chính sách ghi cột sales không có. Không chặn thì DuckDB lấy customers.segment, điều kiện thành lọc khách hàng và mọi
+/// dòng sales của khách Retail lọt ra, kể cả dòng North.
+#[test]
+fn policy_on_a_column_the_table_lacks_blocks_the_query() {
+    let tables = tables_with_sales_policy("/data", vec![row_filter("segment", &["Retail"])]);
+    let result = build_guarded_sql(
+        "SELECT s.region FROM customers c, sales s",
+        &tables,
+        MAX_ROWS,
+    );
+    assert!(matches!(result, Err(GuardError::Internal(_))), "{result:?}");
+}
+
+/// Gọi thẳng bước lọc, bỏ qua bước 2, để kiểm bước lọc tự chặn chỗ đọc nó không nhận ra thay vì để nó chạy không lọc.
+fn filter_without_name_check(sql: &str) -> Result<Vec<String>, AppError> {
+    let mut statements = Parser::parse_sql(&DuckDbDialect {}, sql).unwrap();
+    let Statement::Query(mut query) = statements.remove(0) else {
+        panic!("not a query: {sql}");
+    };
+    let tables = tables_with_sales_policy("/data", vec![row_filter("region", &["South"])]);
+    super::apply_row_filters(&mut query, &tables, &BTreeSet::new())
+}
+
+#[test]
+fn row_filter_step_blocks_reads_it_cannot_filter() {
+    for sql in [
+        "SELECT * FROM main.sales",
+        "SELECT * FROM 'sales.parquet'",
+        "SELECT * FROM read_parquet('/data/sales/*.parquet')",
+        "SELECT * FROM sales()",
+        "SELECT * FROM orders",
+        "SELECT * FROM UNNEST([1, 2])",
+    ] {
+        let result = filter_without_name_check(sql);
+        assert!(
+            matches!(result, Err(AppError::Internal(_))),
+            "{sql:?} gave {result:?}"
+        );
+    }
+}
+
 // Giới hạn dòng
 
 #[test]
@@ -1337,6 +1498,13 @@ fn member_sees_only_rows_of_the_policy_on_duckdb() {
         "SELECT region FROM sales UNION ALL SELECT region FROM sales WHERE region = 'North'",
         // COALESCE vì câu con không còn dòng nào sẽ ra NULL, mà hàm đọc kết quả nhận chuỗi.
         "SELECT COALESCE((SELECT MAX(region) FROM sales WHERE region = 'North'), 'none') AS region",
+        "SELECT customers.region FROM sales AS customers",
+        "SELECT region FROM \"SALES\"",
+        "SELECT b.region FROM sales a LEFT JOIN sales b ON a.customer_id = b.customer_id",
+        "SELECT b.region FROM sales a, sales b WHERE a.customer_id = b.customer_id",
+        "SELECT t.region FROM sales s, LATERAL (SELECT region FROM sales x WHERE x.customer_id = s.customer_id) t",
+        "WITH a AS (SELECT * FROM sales), b AS (SELECT * FROM a) SELECT region FROM b",
+        "SELECT region FROM sales GROUP BY region HAVING COUNT(*) > 0",
     ];
     let tricky_results: Vec<(&str, Vec<String>)> = tricky_queries
         .iter()
