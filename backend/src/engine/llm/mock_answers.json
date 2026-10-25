@@ -242,5 +242,89 @@
     "task": "narrate",
     "question": "Tại sao doanh thu quý 3 năm 2017 giảm",
     "answer": "Doanh thu quý 3/2017 giảm 1283400.00 so với quý 2/2017, từ 9402500.00 xuống 8119100.00. Thị trường Europe giảm nhiều nhất (-639780.25), sau đó là LATAM (-339049.50). Phần lớn mức giảm do số đơn ít đi, từ 5000 xuống 4400 đơn (-1117725.00); giá trị đơn trung bình giảm từ 1880.50 xuống 1845.25 (-165675.00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9226250.00."
+  },
+  {
+    "task": "why",
+    "question": "Tại sao doanh thu quý 3 năm 2017 giảm",
+    "answer": {
+      "terms": [
+        {
+          "text": "doanh thu",
+          "kind": "metric",
+          "value": "doanh thu"
+        },
+        {
+          "text": "quý 3 năm 2017",
+          "kind": "period",
+          "column": "order date (DateOrders)",
+          "value": "2017-Q3"
+        }
+      ],
+      "metric": "doanh thu",
+      "time": {
+        "column": "order date (DateOrders)",
+        "grain": "quarter"
+      },
+      "compare": "2017-Q3",
+      "filters": []
+    }
+  },
+  {
+    "task": "why",
+    "question": "Vì sao doanh thu tháng 5 năm 2017 tăng",
+    "answer": {
+      "terms": [
+        {
+          "text": "doanh thu",
+          "kind": "metric",
+          "value": "doanh thu"
+        },
+        {
+          "text": "tháng 5 năm 2017",
+          "kind": "period",
+          "column": "order date (DateOrders)",
+          "value": "2017-05"
+        }
+      ],
+      "metric": "doanh thu",
+      "time": {
+        "column": "order date (DateOrders)",
+        "grain": "month"
+      },
+      "compare": "2017-05",
+      "filters": []
+    }
+  },
+  {
+    "task": "why",
+    "question": "Tại sao doanh thu Europe thấp hơn LATAM",
+    "answer": {
+      "terms": [
+        {
+          "text": "doanh thu",
+          "kind": "metric",
+          "value": "doanh thu"
+        },
+        {
+          "text": "Europe",
+          "kind": "value",
+          "column": "Market",
+          "value": "Europe"
+        },
+        {
+          "text": "LATAM",
+          "kind": "value",
+          "column": "Market",
+          "value": "LATAM"
+        }
+      ],
+      "metric": "doanh thu",
+      "groups": {
+        "column": "Market",
+        "compare": "Europe",
+        "base": "LATAM"
+      },
+      "filters": []
+    }
   }
 ]

@@ -1,0 +1,582 @@
+// SPDX-License-Identifier: Apache-2.0
+/* service/explain_run_tests.rs - test trọn đường câu "tại sao" (explain_run.rs): form của mô hình, kiểm form, SQL qua
+guard, chạy trên DuckDB thật với file Parquet tạm kiểu DataCo, phân rã, lời diễn giải. Mô hình là mock (câu mẫu) hoặc
+mô hình giả trả câu viết sẵn; không cần Postgres.
+
+Dữ liệu dựng để ra đúng các số của mẫu why (ask_examples.rs): quý 2/2017 và quý 3/2017 có mỗi ô Market x Customer
+Segment một dòng mang cả số tiền của ô (bảng tính sẵn để cộng theo hàng ra đúng số của từng Market, theo cột ra đúng số
+của từng Segment), cộng các dòng 0 đồng để số đơn phân biệt là 5000 và 4400. Một trăm đơn của quý 2 có hai dòng, để
+Order Id là cột key lặp lại như DataCo thật. Quý 3/2016 có một dòng để thử cùng kỳ năm trước; quý 1/2017 không có dòng
+nào để thử kỳ thủng. */
+
+use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use async_trait::async_trait;
+use serde_json::json;
+use tokio::sync::Semaphore;
+
+use super::ask_context::{AmbiguousWord, AskContext};
+use super::ask_contract::{
+    AskStatus, CellValue, ChosenOption, DimensionBreakdown, StepName, WarningCode,
+};
+use super::ask_examples::build_why_example;
+use super::ask_prompt::PromptInput;
+use super::ask_values::ValueIndex;
+use super::explain_check_tests::{
+    dataco_columns, dataco_values, quarter_form, revenue, DATE, TABLE,
+};
+use super::explain_run::{run_why, WhyInput, WhyOutcome};
+use crate::engine::guard::{AllowedTable, RowFilter};
+use crate::engine::llm::mock::Mock;
+use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
+use crate::engine::store::{MetricDefinition, ProfileColumn};
+use crate::error::AppError;
+
+const QUARTER_QUESTION: &str = "Tại sao doanh thu quý 3 năm 2017 giảm";
+
+// Ô Market x Segment của hai quý: tổng theo Market và theo Segment đúng bằng các nhóm của mẫu why.
+const BASE_CELLS: [(&str, &str, &str, &str); 7] = [
+    ("Europe", "Consumer", "5/15/2017 10:00", "2850120.40"),
+    ("LATAM", "Consumer", "5/15/2017 10:00", "2030079.75"),
+    ("LATAM", "Corporate", "5/15/2017 10:00", "610220.35"),
+    ("Pacific Asia", "Corporate", "5/15/2017 10:00", "2105430.25"),
+    ("USCA", "Corporate", "5/15/2017 10:00", "134349.50"),
+    ("USCA", "Home Office", "5/15/2017 10:00", "1076150.50"),
+    // Tháng 4 thay vì tháng 5: để câu theo tháng có tháng trước để so.
+    ("Africa", "Home Office", "4/10/2017 09:00", "596149.25"),
+];
+const COMPARE_CELLS: [(&str, &str, &str, &str); 7] = [
+    ("Europe", "Consumer", "8/15/2017 10:00", "2210340.15"),
+    ("LATAM", "Consumer", "8/15/2017 10:00", "1939760.35"),
+    ("LATAM", "Corporate", "8/15/2017 10:00", "361490.25"),
+    ("Pacific Asia", "Corporate", "8/15/2017 10:00", "1960120.00"),
+    ("USCA", "Corporate", "8/15/2017 10:00", "158690.00"),
+    ("USCA", "Home Office", "8/15/2017 10:00", "931540.00"),
+    ("Africa", "Home Office", "8/15/2017 10:00", "557159.25"),
+];
+const ROWS: i64 = 9_501;
+
+/// Thư mục tạm chứa Parquet của bảng dataco, tự xóa khi ra khỏi phạm vi.
+struct Dataco {
+    root: PathBuf,
+    dir: PathBuf,
+    columns: Vec<ProfileColumn>,
+    values: ValueIndex,
+    metrics: Vec<MetricDefinition>,
+    context: AskContext,
+    jobs: Arc<Semaphore>,
+}
+
+impl Dataco {
+    fn new() -> Self {
+        let root = std::env::temp_dir().join(format!("xdi-why-{}", uuid::Uuid::new_v4()));
+        let dir = root.join("ws").join("dataset").join("v1");
+        std::fs::create_dir_all(&dir).unwrap();
+        let cells: Vec<String> = BASE_CELLS
+            .iter()
+            .chain(COMPARE_CELLS.iter())
+            .enumerate()
+            .map(|(i, (market, segment, day, amount))| {
+                let id = if i < 7 { i + 1 } else { 10_001 + i - 7 };
+                format!("({id}, '{market}', '{segment}', '{day}', CAST({amount} AS DOUBLE))")
+            })
+            .collect();
+        let zeros = |from: i64, until: i64, day: &str| {
+            format!(
+                "SELECT CAST(i AS INTEGER), 'Europe', 'Consumer', '{day}', CAST(0 AS DOUBLE) FROM range({from}, {until}) t(i)"
+            )
+        };
+        let rows = format!(
+            "SELECT * FROM (VALUES {}, (20001, 'Europe', 'Consumer', '8/1/2016 10:00', CAST(1000 AS DOUBLE))) \
+             v(\"Order Id\", \"Market\", \"Customer Segment\", \"{DATE}\", \"Order Item Total\") \
+             UNION ALL {} UNION ALL {} UNION ALL {}",
+            cells.join(", "),
+            zeros(8, 5_001, "6/1/2017 08:00"),
+            zeros(1, 101, "6/2/2017 08:00"),
+            zeros(10_008, 14_401, "9/1/2017 08:00"),
+        );
+        let file = dir.join("part-0001.parquet");
+        let conn = duckdb::Connection::open_in_memory().unwrap();
+        conn.execute_batch(&format!(
+            "COPY ({rows}) TO '{}' (FORMAT parquet)",
+            file.display()
+        ))
+        .unwrap();
+        let count: i64 = conn
+            .query_row(
+                &format!("SELECT count(*) FROM '{}'", file.display()),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, ROWS);
+        Dataco {
+            root,
+            dir,
+            columns: dataco_columns("2016-08-01", "2017-09-01"),
+            values: dataco_values(),
+            metrics: vec![revenue()],
+            context: AskContext {
+                columns: Vec::new(),
+                hints: Vec::new(),
+                ambiguous: Vec::new(),
+                picks: Vec::new(),
+            },
+            jobs: Arc::new(Semaphore::new(2)),
+        }
+    }
+
+    fn tables(&self, row_filters: Vec<RowFilter>) -> Vec<AllowedTable> {
+        vec![AllowedTable {
+            name: TABLE.to_string(),
+            columns: self.columns.iter().map(|c| c.name.clone()).collect(),
+            parquet_dir: self.dir.clone(),
+            row_filters,
+        }]
+    }
+
+    async fn ask(
+        &self,
+        llm: &dyn LlmProvider,
+        question: &str,
+        choices: &[ChosenOption],
+    ) -> WhyOutcome {
+        self.ask_as(llm, question, choices, Vec::new())
+            .await
+            .unwrap()
+    }
+
+    async fn ask_as(
+        &self,
+        llm: &dyn LlmProvider,
+        question: &str,
+        choices: &[ChosenOption],
+        row_filters: Vec<RowFilter>,
+    ) -> Result<WhyOutcome, AppError> {
+        let tables = self.tables(row_filters);
+        let input = WhyInput {
+            prompt: PromptInput {
+                table: TABLE,
+                question,
+                context: &self.context,
+                metrics: &self.metrics,
+                examples: &[],
+                domain: None,
+                choices,
+            },
+            columns: &self.columns,
+            values: &self.values,
+            row_count: Some(ROWS),
+            tables: &tables,
+            max_rows: 100_000,
+            timeout: Duration::from_secs(30),
+            jobs: &self.jobs,
+            narrate_timeout: Duration::from_secs(5),
+        };
+        run_why(llm, input).await
+    }
+}
+
+impl Drop for Dataco {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+/// Mô hình giả: trả lần lượt các câu viết sẵn, hết câu thì báo lỗi (bước narrate rơi về câu khuôn), ghi lại request.
+struct ScriptedLlm {
+    replies: Mutex<VecDeque<String>>,
+    requests: Mutex<Vec<(LlmTask, String)>>,
+}
+
+impl ScriptedLlm {
+    fn new(replies: Vec<serde_json::Value>) -> Self {
+        let replies = replies.into_iter().map(|r| r.to_string()).collect();
+        ScriptedLlm {
+            replies: Mutex::new(replies),
+            requests: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn tasks(&self) -> Vec<LlmTask> {
+        self.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(t, _)| *t)
+            .collect()
+    }
+
+    fn prompt(&self, i: usize) -> String {
+        self.requests.lock().unwrap()[i].1.clone()
+    }
+}
+
+#[async_trait]
+impl LlmProvider for ScriptedLlm {
+    fn name(&self) -> String {
+        "scripted".to_string()
+    }
+
+    async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        self.requests
+            .lock()
+            .unwrap()
+            .push((request.task, request.prompt.to_string()));
+        let reply = self.replies.lock().unwrap().pop_front();
+        reply.ok_or_else(|| AppError::Upstream("no more scripted replies".to_string()))
+    }
+}
+
+fn steps(outcome: &WhyOutcome) -> Vec<(StepName, bool)> {
+    outcome.steps.iter().map(|s| (s.name, s.ok)).collect()
+}
+
+fn groups(dimension: &DimensionBreakdown) -> Vec<(String, String, String, String)> {
+    dimension
+        .groups
+        .iter()
+        .map(|g| {
+            let value = match &g.value {
+                Some(CellValue::String(text)) => text.clone(),
+                other => format!("{other:?}"),
+            };
+            (
+                value,
+                g.base_value.clone(),
+                g.compare_value.clone(),
+                g.contribution.clone(),
+            )
+        })
+        .collect()
+}
+
+fn choose(choice_id: &str, option_id: &str) -> Vec<ChosenOption> {
+    vec![ChosenOption {
+        choice_id: choice_id.to_string(),
+        option_id: option_id.to_string(),
+    }]
+}
+
+/// Trọn chuỗi với mock: số của bảng, phân rã theo hai chiều và tách lượng, giá ra đúng như mẫu why.
+#[tokio::test]
+async fn sample_question_gives_the_sample_breakdown() {
+    let data = Dataco::new();
+    let outcome = data.ask(&Mock::new(), QUARTER_QUESTION, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    assert_eq!(
+        steps(&outcome),
+        [
+            (StepName::Llm, true),
+            (StepName::Guard, true),
+            (StepName::Run, true),
+            (StepName::Explain, true),
+            (StepName::Narrate, true),
+        ]
+    );
+    let result = outcome.result.as_ref().unwrap();
+    assert_eq!(result.total_rows, 2);
+    assert_eq!(result.columns[0].name, "quarter");
+    assert!(outcome
+        .sql_guarded
+        .as_deref()
+        .unwrap()
+        .contains("LIMIT 100000"));
+
+    let explanation = outcome.explanation.as_ref().unwrap();
+    let example = build_why_example().explanation.unwrap();
+    assert_eq!(explanation.measure, example.measure);
+    for (got, want) in [
+        (&explanation.base, &example.base),
+        (&explanation.compare, &example.compare),
+    ] {
+        assert_eq!(
+            (&got.label, &got.filter, &got.value),
+            (&want.label, &want.filter, &want.value)
+        );
+    }
+    assert_eq!(explanation.change, example.change);
+    let columns: Vec<&str> = explanation
+        .dimensions
+        .iter()
+        .map(|d| d.column.as_str())
+        .collect();
+    assert_eq!(columns, ["Market", "Customer Segment"]);
+    for (got, want) in explanation.dimensions.iter().zip(&example.dimensions) {
+        assert_eq!(groups(got), groups(want), "{}", got.column);
+        assert!(got.sql.ends_with("LIMIT 100000"), "{}", got.sql);
+    }
+    let split = explanation.volume_price.as_ref().unwrap();
+    let want = example.volume_price.as_ref().unwrap();
+    assert_eq!(
+        (
+            &split.base_volume,
+            &split.compare_volume,
+            &split.base_price,
+            &split.compare_price,
+            &split.volume_effect,
+            &split.price_effect,
+            &split.if_volume_unchanged
+        ),
+        (
+            &want.base_volume,
+            &want.compare_volume,
+            &want.base_price,
+            &want.compare_price,
+            &want.volume_effect,
+            &want.price_effect,
+            &want.if_volume_unchanged
+        )
+    );
+    assert_eq!(split.volume_label, "Số Order Id");
+    // Lời của mock chỉ chép số có trong bảng nên qua bước kiểm số.
+    assert!(explanation.summary_by_model, "{}", explanation.summary);
+
+    // Form lưu được cùng câu hỏi; giả định kỳ so sánh đang ở kỳ liền trước.
+    assert_eq!(outcome.form.as_ref().unwrap()["compare"], "2017-Q3");
+    let base = outcome
+        .assumptions
+        .iter()
+        .find(|c| c.id == "why:base")
+        .unwrap();
+    assert_eq!(base.selected.as_deref(), Some("previous_quarter"));
+    assert!(outcome.warnings.is_empty());
+}
+
+/// Người hỏi đổi kỳ so sánh sang cùng kỳ năm trước: quý 3/2016.
+#[tokio::test]
+async fn base_choice_compares_with_last_year() {
+    let data = Dataco::new();
+    let choices = choose("why:base", "same_quarter_last_year");
+    let outcome = data.ask(&Mock::new(), QUARTER_QUESTION, &choices).await;
+    let explanation = outcome.explanation.unwrap();
+    assert_eq!(explanation.base.label, "Quý 3/2016");
+    assert_eq!(explanation.base.value, "1000.00");
+    assert_eq!(explanation.change, "8118100.00");
+    let base = outcome
+        .assumptions
+        .iter()
+        .find(|c| c.id == "why:base")
+        .unwrap();
+    assert_eq!(base.selected.as_deref(), Some("same_quarter_last_year"));
+}
+
+#[tokio::test]
+async fn month_question_compares_with_the_month_before() {
+    let data = Dataco::new();
+    let outcome = data
+        .ask(&Mock::new(), "Vì sao doanh thu tháng 5 năm 2017 tăng", &[])
+        .await;
+    let explanation = outcome.explanation.unwrap();
+    assert_eq!(
+        (
+            explanation.base.label.as_str(),
+            explanation.compare.label.as_str()
+        ),
+        ("Tháng 4/2017", "Tháng 5/2017")
+    );
+    assert_eq!(explanation.base.value, "596149.25");
+    assert_eq!(explanation.compare.value, "8806350.75");
+    // Mock không có lời cho câu này: câu khuôn.
+    assert!(!explanation.summary_by_model);
+}
+
+/// "Tại sao doanh thu Europe thấp hơn LATAM": hai nhóm của Market trên toàn bộ dữ liệu.
+#[tokio::test]
+async fn two_groups_are_compared() {
+    let data = Dataco::new();
+    let outcome = data
+        .ask(&Mock::new(), "Tại sao doanh thu Europe thấp hơn LATAM", &[])
+        .await;
+    assert_eq!(outcome.status, AskStatus::Answered);
+    let explanation = outcome.explanation.unwrap();
+    assert_eq!(explanation.base.label, "LATAM");
+    assert_eq!(explanation.base.value, "4941550.70");
+    assert_eq!(explanation.compare.value, "5061460.55");
+    let columns: Vec<&str> = explanation
+        .dimensions
+        .iter()
+        .map(|d| d.column.as_str())
+        .collect();
+    assert_eq!(columns, ["Customer Segment"]);
+    assert_eq!(outcome.result.unwrap().total_rows, 2);
+    assert!(outcome.assumptions.iter().all(|c| c.id != "why:base"));
+}
+
+/// Bộ lọc dòng theo vai dữ liệu của người hỏi nằm trong mọi câu, cả câu phân rã: người chỉ thấy Europe được phân rã
+/// trên dòng Europe.
+#[tokio::test]
+async fn data_role_filter_reaches_the_breakdown_sql() {
+    let data = Dataco::new();
+    let filter = RowFilter {
+        column: "Market".to_string(),
+        allowed_values: vec!["Europe".to_string()],
+    };
+    let outcome = data
+        .ask_as(&Mock::new(), QUARTER_QUESTION, &[], vec![filter])
+        .await
+        .unwrap();
+    assert!(outcome
+        .sql_guarded
+        .unwrap()
+        .contains("\"Market\" IN ('Europe')"));
+    let explanation = outcome.explanation.unwrap();
+    assert_eq!(explanation.base.value, "2850120.40");
+    assert_eq!(explanation.compare.value, "2210340.15");
+    for dimension in &explanation.dimensions {
+        assert!(
+            dimension.sql.contains("\"Market\" IN ('Europe')"),
+            "{}",
+            dimension.sql
+        );
+        let values: Vec<String> = groups(dimension).into_iter().map(|g| g.0).collect();
+        assert!(!values.contains(&"LATAM".to_string()), "{values:?}");
+    }
+    assert!(explanation
+        .volume_price
+        .unwrap()
+        .sql
+        .contains("\"Market\" IN ('Europe')"));
+}
+
+/// Form sai một lần: lỗi từng trường gửi lại, form sửa chạy bình thường.
+#[tokio::test]
+async fn wrong_form_is_fixed_once() {
+    let data = Dataco::new();
+    let mut wrong = quarter_form();
+    wrong["filters"] = json!([{"column": "Market", "op": "=", "value": "Europe' OR 1=1 --"}]);
+    wrong["time"]["column"] = json!("Order Date");
+    let llm = ScriptedLlm::new(vec![wrong, quarter_form()]);
+    let outcome = data.ask(&llm, QUARTER_QUESTION, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered);
+    assert!(outcome.explanation.is_some());
+    assert_eq!(
+        steps(&outcome)[..3],
+        [
+            (StepName::Llm, true),
+            (StepName::Repair, true),
+            (StepName::Guard, true)
+        ]
+    );
+    let repair = llm.prompt(1);
+    assert!(
+        repair.contains("- time.column: \"Order Date\" is not a column"),
+        "{repair}"
+    );
+    assert!(
+        repair.contains("- filters[0].value: \"Europe' OR 1=1 --\" is not a value"),
+        "{repair}"
+    );
+    // Hai lần điền form, rồi narrate (hết câu, rơi về câu khuôn).
+    assert_eq!(llm.tasks(), [LlmTask::Why, LlmTask::Why, LlmTask::Narrate]);
+}
+
+/// Kỳ liền trước nằm trong khoảng dữ liệu mà không có dòng nào: lỗi của form, mô hình chọn lại.
+#[tokio::test]
+async fn slice_without_rows_is_sent_back() {
+    let data = Dataco::new();
+    let mut empty = quarter_form();
+    empty["compare"] = json!("2017-Q2");
+    let llm = ScriptedLlm::new(vec![empty, quarter_form()]);
+    let outcome = data.ask(&llm, QUARTER_QUESTION, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered);
+    assert_eq!(
+        steps(&outcome)[..5],
+        [
+            (StepName::Llm, true),
+            (StepName::Guard, true),
+            (StepName::Run, true),
+            (StepName::Explain, false),
+            (StepName::Repair, true),
+        ]
+    );
+    assert!(
+        llm.prompt(1).contains("- base: no rows match 2017-Q1"),
+        "{}",
+        llm.prompt(1)
+    );
+    assert_eq!(outcome.explanation.unwrap().compare.label, "Quý 3/2017");
+}
+
+/// Form sai cả hai lần: chạy như câu thường, vẫn answered, kèm cảnh báo explanation_unavailable.
+#[tokio::test]
+async fn wrong_form_twice_runs_as_a_plain_question() {
+    let data = Dataco::new();
+    let mut wrong = quarter_form();
+    wrong["metric"] = json!("lợi nhuận");
+    let sql =
+        "SELECT \"Market\", SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Market\"";
+    let llm = ScriptedLlm::new(vec![
+        wrong.clone(),
+        wrong,
+        json!({"terms": [], "assumptions": [], "sql": sql}),
+    ]);
+    let outcome = data.ask(&llm, "tai sao doanh thu giam", &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered);
+    assert_eq!(outcome.sql_generated.as_deref(), Some(sql));
+    assert!(outcome.explanation.is_none() && outcome.form.is_none());
+    assert_eq!(outcome.warnings.len(), 1);
+    assert_eq!(
+        outcome.warnings[0].code,
+        WarningCode::ExplanationUnavailable
+    );
+    assert_eq!(
+        steps(&outcome),
+        [
+            (StepName::Llm, true),
+            (StepName::Repair, true),
+            (StepName::Llm, true),
+            (StepName::Guard, true),
+            (StepName::Run, true),
+        ]
+    );
+    assert_eq!(llm.tasks(), [LlmTask::Why, LlmTask::Why, LlmTask::Sql]);
+    assert_eq!(outcome.result.unwrap().total_rows, 5);
+}
+
+/// Form không nêu độ đo: hỏi lại chỉ số nào, không chạy gì.
+#[tokio::test]
+async fn missing_measure_asks_which_metric() {
+    let data = Dataco::new();
+    let mut form = quarter_form();
+    form["metric"] = serde_json::Value::Null;
+    let llm = ScriptedLlm::new(vec![form]);
+    let outcome = data.ask(&llm, "vì sao giảm", &[]).await;
+    assert_eq!(outcome.status, AskStatus::NeedsChoice);
+    let choice = &outcome.clarifications[0];
+    assert_eq!(choice.id, "metric:default");
+    assert_eq!(choice.options[0].id, "doanh thu");
+    assert!(outcome.result.is_none());
+    assert_eq!(steps(&outcome), [(StepName::Llm, true)]);
+}
+
+/// Cụm khớp hai cột gần nhau mà người hỏi chưa chọn: hỏi lại trước khi gọi mô hình, cùng id như #28.
+#[tokio::test]
+async fn ambiguous_word_asks_before_the_model() {
+    let mut data = Dataco::new();
+    data.context.ambiguous.push(AmbiguousWord {
+        choice_id: "column:khu vuc".to_string(),
+        phrase: "khu vực".to_string(),
+        columns: vec!["Market".to_string(), "Customer Segment".to_string()],
+    });
+    let llm = ScriptedLlm::new(vec![]);
+    let outcome = data.ask(&llm, "Tại sao doanh thu khu vực giảm", &[]).await;
+    assert_eq!(outcome.status, AskStatus::NeedsChoice);
+    assert_eq!(outcome.clarifications[0].id, "column:khu vuc");
+    assert!(llm.tasks().is_empty());
+}
+
+/// Mô hình lỗi ngay lần đầu: lỗi của request (502), như câu thường.
+#[tokio::test]
+async fn model_error_before_any_form_is_an_error() {
+    let data = Dataco::new();
+    let llm = ScriptedLlm::new(vec![]);
+    let error = data
+        .ask_as(&llm, QUARTER_QUESTION, &[], Vec::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, AppError::Upstream(_)), "{error:?}");
+}

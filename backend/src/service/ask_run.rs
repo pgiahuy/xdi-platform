@@ -243,7 +243,7 @@ async fn run_guarded(
 }
 
 /// "30 giây"; dưới một giây thì mili giây ("300 mili giây"), không in "0 giây".
-fn build_duration_text(duration: Duration) -> String {
+pub(super) fn build_duration_text(duration: Duration) -> String {
     if duration < Duration::from_secs(1) {
         format!("{} mili giây", duration.as_millis())
     } else {
@@ -262,11 +262,20 @@ fn stopped(shown: String, message: &str) -> Attempt {
 /// câu: request bị hủy giữa chừng thì DuckDB vẫn chạy tới khi xong hoặc hết giờ, và lượt chỉ được trả lúc đó, nên số
 /// câu chạy cùng lúc không vượt số lượt.
 async fn run_in_turn(input: &RunInput<'_>, runnable: String) -> Result<QueryOutput, QueryError> {
-    let turn = Arc::clone(input.jobs)
+    run_query_in_turn(input.jobs, runnable, input.timeout).await
+}
+
+/// Phần của run_in_turn không cần RunInput, để câu SQL do code dựng (câu "tại sao", explain_breakdown.rs) chờ cùng
+/// một hàng lượt với câu của mô hình.
+pub(super) async fn run_query_in_turn(
+    jobs: &Arc<Semaphore>,
+    runnable: String,
+    timeout: Duration,
+) -> Result<QueryOutput, QueryError> {
+    let turn = Arc::clone(jobs)
         .acquire_owned()
         .await
         .map_err(|e| internal(format!("query semaphore closed: {e}")))?;
-    let timeout = input.timeout;
     tokio::task::spawn_blocking(move || {
         let output = run_query(&runnable, SENT_ROWS, timeout);
         drop(turn);
@@ -358,7 +367,12 @@ fn build_clarify_outcome(terms: Vec<Term>, clarify: Clarify) -> RunOutcome {
     }
 }
 
-fn build_step(name: StepName, started: Instant, ok: bool, detail: Option<&str>) -> AskStep {
+pub(super) fn build_step(
+    name: StepName,
+    started: Instant,
+    ok: bool,
+    detail: Option<&str>,
+) -> AskStep {
     AskStep {
         name,
         duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
