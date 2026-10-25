@@ -549,11 +549,12 @@ fn source_kind(format: FileFormat) -> SourceKind {
     }
 }
 
-fn parse_dataset_id(id: &str) -> Result<Uuid, AppError> {
+/// Id dataset trong đường dẫn; sai dạng UUID thì 404 như dataset không có. ask.rs dùng chung.
+pub(super) fn parse_dataset_id(id: &str) -> Result<Uuid, AppError> {
     Uuid::parse_str(id.trim()).map_err(|_| dataset_not_found())
 }
 
-fn dataset_not_found() -> AppError {
+pub(super) fn dataset_not_found() -> AppError {
     AppError::NotFound("Không có dataset này".to_string())
 }
 

@@ -10,16 +10,12 @@ mod csv_encoding;
 pub mod domains;
 pub mod excel;
 pub mod excel_worker;
-// Chưa có code gọi guard cho tới endpoint hỏi (#33). Gỡ dòng allow ở #33 để clippy bắt lại mã thừa.
-#[allow(dead_code)]
 pub mod guard;
 pub mod llm;
 pub mod profile;
-// Chưa có code gọi run_query cho tới endpoint hỏi (#33); gỡ cùng dòng allow của guard.
-#[allow(dead_code)]
 pub mod query;
 // Hình dạng câu đã chạy, cho thẻ "Đã hiểu là" (#35), truy dòng nguồn (#34), kiểm hợp lý (#36). Gỡ allow khi endpoint
-// hỏi (#33) gọi tới, như guard.
+// hỏi gọi build_understanding, phần chưa có trong luồng hỏi của #33.
 #[allow(dead_code)]
 pub mod sql_shape;
 #[cfg(test)]

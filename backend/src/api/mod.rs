@@ -15,6 +15,8 @@ Swagger UI chỉ để đổi body 404 thì không đáng.
 Mọi response, cả giao diện và trang 404, đi qua security_headers.rs để nhận header bảo mật. */
 
 mod admin;
+#[cfg(test)]
+mod ask_tests;
 mod auth;
 mod datasets;
 #[cfg(test)]

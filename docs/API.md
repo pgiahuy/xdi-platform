@@ -80,13 +80,12 @@ Lỗi trả cùng một dạng body (`ErrorBody`), trừ hai ngoại lệ ở cu
 | `not_found` | 404 | Đường dẫn dưới `/api` không tồn tại, workspace mình không thuộc, dataset không có; tham số đường dẫn không đọc được (ví dụ `%FF`) |
 | `too_large` | 413 | Tổng dung lượng một lần nạp vượt `MAX_UPLOAD_MB`; file Excel vượt trần kích thước giải nén, bảng chuỗi dùng chung hay dung lượng CSV ghi ra ([Dữ liệu](DATA.md)) |
 | `internal` | 500 | Lỗi phía máy chủ, ví dụ mất kết nối Postgres |
-| `not_implemented` | 501 | Route đã có trong đặc tả nhưng chưa cài đặt: hỏi dữ liệu, truy dòng nguồn, đăng nhập demo |
+| `not_implemented` | 501 | Route đã có trong đặc tả nhưng chưa cài đặt: truy dòng nguồn, đăng nhập demo |
 | `upstream` | 502 | Dịch vụ mô hình ngôn ngữ lỗi, quá tải hoặc không trả lời |
 | `unavailable` | 503 | Máy chủ thiếu cấu hình cho mô hình ngôn ngữ, ví dụ chưa đặt khóa API |
 
-Hai mã 502 và 503 đã có trong code của nhà cung cấp mô hình (`backend/src/engine/llm/`), nhưng chưa route nào gọi mô
-hình nên chưa route nào trả chúng; luồng hỏi dữ liệu
-([#33](https://github.com/pgiahuy/xdi-platform/issues/33)) sẽ dùng.
+Hai mã 502 và 503 do nhà cung cấp mô hình trả (`backend/src/engine/llm/`); route hỏi dữ liệu trả chúng khi mô hình
+lỗi hay thiếu cấu hình trước khi có câu SQL nào ([#33](https://github.com/pgiahuy/xdi-platform/issues/33)).
 
 Trong đặc tả, phần lớn thao tác khai lỗi phía client gộp là `4XX`, phần mô tả ghi mã cụ thể thao tác đó trả (ví dụ
 "401, 403 not admin, 404 not a member"); `GET /api/auth/me` và `GET /api/workspaces` khai riêng `401`; các thao tác
@@ -104,9 +103,12 @@ Enum lỗi nằm ở `backend/src/error.rs`.
 
 ## Hỏi dữ liệu
 
-`POST /api/workspaces/{ws}/datasets/{id}/ask` hiện trả 501 (câu hỏi rỗng thì 400), tới khi luồng hỏi được cài đặt
-([#33](https://github.com/pgiahuy/xdi-platform/issues/33)). Hợp đồng request và response đã chốt và có trong đặc tả:
-câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với `status` trong body, không phải mã lỗi.
+`POST /api/workspaces/{ws}/datasets/{id}/ask` trả lời một câu hỏi trên phiên bản đang dùng của dataset
+(`backend/src/service/ask.rs`): lấy ngữ cảnh từ hồ sơ cột, nhờ mô hình viết SQL, guard kiểm, DuckDB chạy, sửa một lần khi
+lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với `status` trong
+body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, dataset chưa có dữ liệu hay chưa lập hồ sơ xong, hoặc câu mock không
+có câu trả lời mẫu; 404 dataset không có; 502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào. Câu
+"tại sao" (phân rã), thẻ "Đã hiểu là" và gợi ý biểu đồ chưa nối vào route này, các trường đó là null.
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).

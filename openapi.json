@@ -1119,7 +1119,7 @@
         "tags": [
           "query"
         ],
-        "summary": "Ask a question about a dataset (not implemented yet: returns 501)",
+        "summary": "Ask a question about a dataset",
         "description": "One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. Error codes are for invalid requests, access, and the language model service.",
         "operationId": "ask",
         "parameters": [
@@ -1180,6 +1180,7 @@
                       "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
+                      "question": "Doanh thu theo ngày giao hàng",
                       "result": null,
                       "sql_generated": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day",
                       "sql_guarded": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day LIMIT 100000",
@@ -1265,6 +1266,7 @@
                       "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
                       "model": "gemini-2.5-flash",
                       "query_id": null,
+                      "question": "Doanh thu theo khu vực",
                       "result": null,
                       "sql_generated": null,
                       "sql_guarded": null,
@@ -1292,6 +1294,7 @@
                       "message": "Câu SQL bị từ chối: Chỉ chạy được câu SELECT đọc dữ liệu.",
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
+                      "question": "Xóa các đơn hàng bị hủy",
                       "result": null,
                       "sql_generated": "DELETE FROM dataco WHERE \"Order Status\" = 'CANCELED'",
                       "sql_guarded": null,
@@ -1352,6 +1355,7 @@
                       "message": null,
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
+                      "question": "Doanh thu theo khu vực",
                       "result": {
                         "columns": [
                           {
@@ -1601,6 +1605,7 @@
                       "message": null,
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
+                      "question": "Tại sao doanh thu quý 3 năm 2017 giảm?",
                       "result": {
                         "columns": [
                           {
@@ -1758,7 +1763,7 @@
             }
           },
           "4XX": {
-            "description": "400 empty question or invalid JSON body, 401, 404 not a member or unknown dataset",
+            "description": "400 empty question, invalid JSON body, dataset with no data or whose profile is not ready, or a question the mock model has no answer for; 401; 404 not a member or unknown dataset",
             "content": {
               "application/json": {
                 "schema": {
@@ -1769,16 +1774,6 @@
           },
           "500": {
             "description": "Internal error; details are in the server log, not in the response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet",
             "content": {
               "application/json": {
                 "schema": {
@@ -2142,6 +2137,7 @@
         "description": "Answer to one question, with the evidence behind it. See `AskStatus` for which fields are set.",
         "required": [
           "status",
+          "question",
           "message",
           "query_id",
           "version_id",
@@ -2210,6 +2206,10 @@
             ],
             "format": "uuid",
             "description": "Id of the question in the history (`queries`); null for `needs_choice`."
+          },
+          "question": {
+            "type": "string",
+            "description": "The question exactly as sent in `AskRequest.question`."
           },
           "result": {
             "oneOf": [

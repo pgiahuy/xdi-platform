@@ -885,7 +885,7 @@ fn dataco_table(answers: &[serde_json::Value]) -> Vec<AllowedTable> {
 }
 
 /// Luật của guard (số tầng câu, kích thước hàm) không chặn các câu mẫu: câu SQL và câu sửa của mock, các câu SQL trong
-/// response mẫu (ask_examples.rs) trừ câu DELETE của mẫu rejected.
+/// response mẫu (ask_examples.rs), trừ câu DELETE cố ý của mock và của mẫu rejected.
 #[test]
 fn sample_sql_passes_the_guard() {
     use super::ask_examples::{build_failed_example, build_simple_example, build_why_example};
@@ -897,9 +897,11 @@ fn sample_sql_passes_the_guard() {
     let mut samples: Vec<String> = answers
         .iter()
         .filter(|e| e["task"] == "sql" || e["task"] == "repair")
+        // Câu này có để thử nhánh rejected trên giao diện: guard phải từ chối nó.
+        .filter(|e| e["question"] != "Xóa các đơn hàng bị hủy")
         .map(|e| e["answer"]["sql"].as_str().unwrap().to_string())
         .collect();
-    assert_eq!(samples.len(), 12);
+    assert_eq!(samples.len(), 15);
     for example in [
         build_simple_example(),
         build_why_example(),

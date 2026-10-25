@@ -25,8 +25,6 @@ pub struct AppState {
     pub excel_jobs: Arc<Semaphore>,
     /// Tối đa hai câu SQL của câu hỏi chạy trên DuckDB cùng lúc (engine/query.rs): mỗi câu có trần 1 GB cho phần bộ
     /// nhớ DuckDB quản lý (không chặn được mọi câu, xem đầu engine/query.rs). Câu sau chờ, không bị từ chối.
-    // Endpoint hỏi (#33) truyền semaphore này vào service/ask_run.rs; gỡ allow khi đó.
-    #[allow(dead_code)]
     pub query_jobs: Arc<Semaphore>,
     /// Giá trị đã chuẩn hóa của các phiên bản dataset vừa được hỏi (service/ask_values.rs), để mỗi câu hỏi không phải
     /// tải và bỏ dấu lại mọi giá trị.

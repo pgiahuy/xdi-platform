@@ -36,6 +36,8 @@ pub struct NewQuery<'a> {
     pub error: Option<&'a str>,
     pub timings: serde_json::Value,
     pub row_count: Option<i64>,
+    /// Phần giải thích của câu "tại sao" (#38), gồm điều kiện hai lát cắt cho truy dòng nguồn (#34); None với câu thường.
+    pub explanation: Option<serde_json::Value>,
 }
 
 /// Một câu hỏi đã được đánh dấu trả lời đúng, làm ví dụ trong prompt sinh SQL.
@@ -78,8 +80,8 @@ impl Store {
         };
         sqlx::query_scalar(
             "INSERT INTO queries (workspace_id, dataset_id, version_id, user_id, question, sql_generated,
-                                  sql_guarded, status, error, timings, row_count)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+                                  sql_guarded, status, error, timings, row_count, explanation)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
         )
         .bind(ws.as_uuid())
         .bind(dataset_id)
@@ -92,6 +94,7 @@ impl Store {
         .bind(q.error)
         .bind(&q.timings)
         .bind(q.row_count)
+        .bind(&q.explanation)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| db_error("record query", e))
@@ -140,6 +143,7 @@ mod tests {
             error: None,
             timings: serde_json::json!({"llm_ms": 1}),
             row_count: Some(1),
+            explanation: Some(serde_json::json!({"base": {"filter": "x = 1"}})),
         };
         store.record_query(&ws, &q).await.unwrap();
 
@@ -204,6 +208,7 @@ mod tests {
                         error: None,
                         timings: serde_json::json!({}),
                         row_count: None,
+                        explanation: None,
                     },
                 )
                 .await

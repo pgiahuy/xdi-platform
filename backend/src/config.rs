@@ -36,9 +36,10 @@ pub struct Config {
     pub ollama_timeout: Duration,
     /// Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB (QUERY_TIMEOUT_SECS); quá thì câu bị dừng, trừ phần
     /// DuckDB tính lúc chuẩn bị câu (engine/query.rs).
-    // Endpoint hỏi (#33) đọc trường này khi gọi service/ask_run.rs; gỡ allow khi đó.
-    #[allow(dead_code)]
     pub query_timeout: Duration,
+    /// Trần số dòng guard đặt cho SQL của câu hỏi (ASK_MAX_ROWS). Cao hơn nhiều số dòng gửi về giao diện (1000) để
+    /// total_rows nói đúng kết quả có bao nhiêu dòng; chạm trần thì giao diện ghi "ít nhất N dòng" (limit_reached).
+    pub ask_max_rows: u64,
     /// Thư mục giao diện đã build (frontend/dist). Không đặt thì backend chỉ phục vụ API.
     pub static_dir: Option<PathBuf>,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
@@ -75,6 +76,11 @@ impl Config {
             ollama_model: var_or("OLLAMA_MODEL", "qwen2.5-coder:7b"),
             ollama_timeout: timeout_secs("OLLAMA_TIMEOUT_SECS", 300),
             query_timeout: timeout_secs("QUERY_TIMEOUT_SECS", 30),
+            ask_max_rows: u64::from(positive_number(
+                "ASK_MAX_ROWS",
+                env::var("ASK_MAX_ROWS").ok().as_deref(),
+                100_000,
+            )),
             static_dir: env::var("STATIC_DIR")
                 .ok()
                 .filter(|v| !v.is_empty())
