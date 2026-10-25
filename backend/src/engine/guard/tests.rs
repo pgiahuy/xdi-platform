@@ -326,13 +326,20 @@ fn rejects_sql_over_the_size_limit() {
     assert!(reason.contains("quá dài"), "{reason}");
 }
 
-/// Câu dài sát giới hạn, toàn vế UNION ngắn nhất guard nhận, vẫn qua được mà không tràn stack của luồng test (2 MB,
-/// bằng stack mặc định của luồng tokio).
+/// Câu dài sát giới hạn, cây lồng sâu nhất có thể, không tràn stack của luồng test (2 MB, bằng stack mặc định của luồng
+/// tokio). Chuỗi UNION giờ bị luật số nhánh (width.rs) từ chối, nhưng chỉ sau khi các lượt duyệt trước đã đi hết cây;
+/// chuỗi OR thì được nhận, nên đi tiếp cả bước in lại câu.
 #[test]
 fn sql_just_under_the_size_limit_does_not_overflow() {
     let part = "SELECT region FROM sales";
     let count = super::MAX_SQL_BYTES / (part.len() + " UNION ALL ".len());
     let sql = vec![part; count].join(" UNION ALL ");
+    assert!(sql.len() <= super::MAX_SQL_BYTES);
+    assert_oversized(&sql);
+
+    let head = "SELECT region FROM sales WHERE amount = 1";
+    let count = (super::MAX_SQL_BYTES - head.len()) / " OR amount = 1".len();
+    let sql = format!("{head}{}", " OR amount = 1".repeat(count));
     assert!(sql.len() <= super::MAX_SQL_BYTES);
     assert_accepted(&sql);
 }
@@ -770,6 +777,33 @@ fn star_over_several_sources_counts_real_columns() {
     }
     assert_oversized(&star_join(100));
     assert_oversized("WITH w AS (SELECT region FROM sales) SELECT a.* FROM w a, w b");
+}
+
+/// Mỗi nhánh UNION ALL cho một dòng chép lại giá trị: tối đa 10 nhánh trong cả câu, cộng qua mọi tầng.
+#[test]
+fn set_operations_have_at_most_ten_branches() {
+    let union = |n: usize| vec!["SELECT region FROM sales"; n].join(" UNION ALL ");
+    assert_accepted(&union(10));
+    let reason = assert_oversized(&union(11));
+    assert!(
+        reason.contains("11 nhánh") && reason.contains("tối đa 10"),
+        "{reason}"
+    );
+    // INTERSECT, EXCEPT, nhánh trong ngoặc cũng tính.
+    assert_oversized(&format!("({}) EXCEPT ({})", union(6), union(5)));
+    let intersect = ["SELECT region FROM sales"; 11].join(" INTERSECT ");
+    assert_oversized(&intersect);
+    // Cộng qua các tầng: 6 nhánh trong bảng tạm và 5 nhánh ở câu chính.
+    assert_oversized(&format!(
+        "WITH u AS ({}) SELECT region FROM u UNION ALL {}",
+        union(6),
+        union(4)
+    ));
+    assert_accepted(&format!(
+        "WITH u AS ({}) SELECT region FROM u UNION ALL {}",
+        union(5),
+        union(4)
+    ));
 }
 
 #[test]

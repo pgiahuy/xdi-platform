@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/guard/width.rs - giới hạn những thứ mà luật số tầng (depth.rs) và số mảnh ghép (pieces.rs) không đếm: độ dài
-mỗi chuỗi hằng viết trong câu, số cột của mỗi SELECT (kể cả `*` trên nhiều nguồn), số nguồn trong mỗi FROM.
-build_guarded_sql (mod.rs) gọi check_query_width cùng các luật kia.
+mỗi chuỗi hằng viết trong câu, số cột của mỗi SELECT (kể cả `*` trên nhiều nguồn), số nguồn trong mỗi FROM, và tổng số
+nhánh UNION, INTERSECT, EXCEPT trong cả câu. build_guarded_sql (mod.rs) gọi check_query_width cùng các luật kia.
 
 Vì sao: chép một giá trị lớn ra nhiều cột không cần ghép (`SELECT v, v, v, ...`), mà mỗi bản chép là một chuỗi riêng
 DuckDB dựng lúc chuẩn bị câu. Đo qua guard trước khi có luật này: chuỗi hằng 16 KB chép ra 8000 cột cho RSS đỉnh 690 MB
 dù không ghép gì; thêm ghép qua các tầng thì nhân lên (600 cột, 49 lần, 2,5 GB). Chuỗi hằng tối đa 1000 byte, 200 cột
 mỗi SELECT và 4 nguồn mỗi FROM giữ các ca cho một dòng kết quả đã đo dưới 270 MB (bảng số đo ở docs/GUARD.md, mục Số
 tầng, mảnh ghép, độ rộng). Chuỗi dài lấy từ dữ liệu thì không bị luật này giới hạn: đó là phần tính lúc chạy, trong
-trần của engine/query.rs. Phần nhân theo số dòng (dòng của bảng, UNION ALL nhiều nhánh) đo tới khoảng 2 GB, để tiến
-trình con (#119). */
+trần của engine/query.rs. Mỗi nhánh UNION ALL cho một dòng chép lại cùng giá trị, nên nhân như chép cột: 74 nhánh × 200
+cột đo được 1,94 GB; tối đa 10 nhánh. Phần nhân theo số dòng của bảng thì để tiến trình con (#119). */
 
 use std::ops::ControlFlow;
 
 use sqlparser::ast::{
-    Query, Select, SelectItem, SelectItemQualifiedWildcardKind, TableFactor, TableWithJoins,
-    ValueWithSpan, Visit, Visitor,
+    Query, Select, SelectItem, SelectItemQualifiedWildcardKind, SetExpr, TableFactor,
+    TableWithJoins, ValueWithSpan, Visit, Visitor,
 };
 
 use super::{find_table, name_key, single_ident, AllowedTable};
@@ -31,9 +31,17 @@ pub const MAX_SELECT_ITEMS: usize = 200;
 /// `*` qua nhiều lần JOIN (mỗi lần JOIN nhân số cột) trong tầm.
 pub const MAX_FROM_SOURCES: usize = 4;
 
+/// Tổng số nhánh tối đa của mọi phép tập hợp (UNION, INTERSECT, EXCEPT) trong cả câu, ở mọi tầng: đủ cho dòng tổng,
+/// vài nhóm top và bottom ghép lại.
+pub const MAX_SET_BRANCHES: usize = 10;
+
 /// Err là lý do từ chối (tiếng Việt).
 pub(super) fn check_query_width(query: &Query, tables: &[AllowedTable]) -> Result<(), String> {
-    match query.visit(&mut WidthChecker { tables }) {
+    let mut checker = WidthChecker {
+        tables,
+        branches: 0,
+    };
+    match query.visit(&mut checker) {
         ControlFlow::Break(reason) => Err(reason),
         ControlFlow::Continue(()) => Ok(()),
     }
@@ -41,6 +49,8 @@ pub(super) fn check_query_width(query: &Query, tables: &[AllowedTable]) -> Resul
 
 struct WidthChecker<'a> {
     tables: &'a [AllowedTable],
+    /// Số nhánh phép tập hợp đã gặp, cộng qua mọi câu con.
+    branches: usize,
 }
 
 impl WidthChecker<'_> {
@@ -75,6 +85,22 @@ impl WidthChecker<'_> {
 
 impl Visitor for WidthChecker<'_> {
     type Break = String;
+
+    // Mỗi câu có thân là phép tập hợp cộng số nhánh của thân đó. Nhánh trong ngoặc mà tự là phép tập hợp được cộng thêm
+    // lần nữa khi tới câu của nó: đếm dư một, không đếm thiếu.
+    fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<String> {
+        if matches!(*query.body, SetExpr::SetOperation { .. }) {
+            self.branches = self.branches.saturating_add(count_branches(&query.body));
+        }
+        if self.branches > MAX_SET_BRANCHES {
+            return ControlFlow::Break(format!(
+                "Câu SQL có {} nhánh UNION, INTERSECT, EXCEPT, tối đa {MAX_SET_BRANCHES}: gộp bớt nhánh, ví dụ dùng \
+                 GROUP BY hay CASE thay cho nhiều câu ghép lại",
+                self.branches
+            ));
+        }
+        ControlFlow::Continue(())
+    }
 
     // Mọi chuỗi hằng ở mọi chỗ, kể cả `DATE '...'` và chuỗi trong IN (...).
     fn pre_visit_value(&mut self, value: &ValueWithSpan) -> ControlFlow<String> {
@@ -132,6 +158,16 @@ impl Visitor for WidthChecker<'_> {
             ));
         }
         ControlFlow::Continue(())
+    }
+}
+
+/// Số nhánh của một thân câu: `a UNION b UNION c` là 3.
+fn count_branches(body: &SetExpr) -> usize {
+    match body {
+        SetExpr::SetOperation { left, right, .. } => {
+            count_branches(left).saturating_add(count_branches(right))
+        }
+        _ => 1,
     }
 }
 
