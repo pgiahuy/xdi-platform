@@ -16,8 +16,8 @@ use rust_decimal::Decimal;
 use super::ask_contract::{AskStep, Explanation, StepName};
 use super::ask_repair::build_user_text;
 use super::explain::{
-    build_allowed_numbers, build_narrate_prompt, build_number_check, build_template_summary,
-    MAX_SUMMARY_CHARS,
+    build_allowed_numbers, build_known_texts, build_narrate_prompt, build_number_check,
+    build_template_summary, MAX_SUMMARY_CHARS,
 };
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 
@@ -52,12 +52,15 @@ pub async fn narrate(
         Ok(Err(error)) => {
             let detail = format!(
                 "Mô hình không viết được lời diễn giải: {}",
-                build_user_text(&error)
+                build_user_text(&error, "narrate")
             );
             return fallback(explanation, build_step(started, false, Some(detail)));
         }
         Err(_) => {
-            let detail = format!("Mô hình trả lời quá {}", build_duration_text(timeout));
+            let detail = format!(
+                "Mô hình không trả lời trong {}",
+                build_duration_text(timeout)
+            );
             return fallback(explanation, build_step(started, false, Some(detail)));
         }
     };
@@ -70,15 +73,17 @@ pub async fn narrate(
         let detail = format!("Câu của mô hình dài hơn {MAX_SUMMARY_CHARS} ký tự");
         return fallback(explanation, build_step(started, false, Some(detail)));
     }
-    let allowed = build_allowed_numbers(question, explanation);
-    match build_number_check(summary, &allowed) {
+    let allowed = build_allowed_numbers(explanation);
+    let known_texts = build_known_texts(explanation);
+    match build_number_check(summary, &allowed, &known_texts) {
         Ok(()) => NarrateOutcome {
             summary: summary.to_string(),
             summary_by_model: true,
             step: build_step(started, true, None),
         },
         Err(wrong) => {
-            tracing::warn!(question, numbers = ?wrong, "narrate summary has numbers outside the breakdown");
+            // Không ghi câu hỏi vào log: câu hỏi là chữ người dùng gõ, cả backend không log nó ở đâu.
+            tracing::warn!(numbers = ?wrong, "narrate summary has numbers outside the breakdown");
             let detail = format!(
                 "Câu của mô hình có số không nằm trong bảng phân rã: {}",
                 wrong.join(", ")

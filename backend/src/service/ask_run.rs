@@ -108,7 +108,7 @@ pub async fn run_with_repair(
     let reply = match llm.complete(&request).await {
         Ok(reply) => reply,
         Err(e) => {
-            let model_error = build_user_text(&e);
+            let model_error = build_user_text(&e, "repair");
             steps.push(build_step(
                 StepName::Repair,
                 started,
