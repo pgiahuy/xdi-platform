@@ -454,7 +454,7 @@ async fn profile_version(
     Ok(())
 }
 
-fn is_time_type(data_type: &str) -> bool {
+pub(crate) fn is_time_type(data_type: &str) -> bool {
     // TIMESTAMP, TIMESTAMP WITH TIME ZONE, TIMESTAMP_S, TIMESTAMP_MS, TIMESTAMP_NS đều bắt đầu bằng TIMESTAMP.
     data_type == "DATE" || data_type.starts_with("TIMESTAMP")
 }

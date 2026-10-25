@@ -4,7 +4,8 @@ từng chiều, xếp hạng đóng góp. Tổng các đóng góp phải bằng 
 
 Hiện có phần toán, hàm thuần không đọc SQL, DuckDB hay mô hình: đóng góp của từng nhóm và xếp hạng chiều (#39), tách
 lượng và giá (#40). Đầu vào là số đã đọc từ DuckDB (chuỗi VARCHAR đổi sang Decimal), đầu ra là struct của hợp đồng
-(ask_contract.rs) hoặc struct trung gian. Phần dựng SQL và nối vào luồng hỏi làm ở #38, #39; test ở explain_tests.rs.
+(ask_contract.rs) hoặc struct trung gian. SQL và các bước chạy ở explain_sql.rs, explain_breakdown.rs, explain_run.rs
+(#38); test ở explain_tests.rs.
 
 Cuối file là phần chữ của bước narrate (#41), cũng là hàm thuần: prompt gửi mô hình, tập số được phép, bước kiểm mọi
 số trong lời diễn giải và câu khuôn dự phòng. Việc gọi mô hình, giới hạn thời gian và dựng AskStep ở ask_narrate.rs.

@@ -14,7 +14,9 @@ Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/n�
 "tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask_examples.rs) nên qua
 được bước kiểm số của #41.
 Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask_reply.rs);
-terms ghi cách hiểu từng cụm chữ ("châu Âu" là Market = Europe) để luồng hỏi có dữ liệu thử phần kiểm cách hiểu. */
+terms ghi cách hiểu từng cụm chữ ("châu Âu" là Market = Europe) để luồng hỏi có dữ liệu thử phần kiểm cách hiểu. Câu
+trả lời của task why là form câu "tại sao" (service/ask_why_prompt.rs); lần sửa form cũng là task why nên mock trả lại
+đúng form đó. */
 
 use std::collections::HashMap;
 
@@ -31,7 +33,7 @@ const ANSWERS_JSON: &str = include_str!("mock_answers.json");
 struct Entry {
     task: LlmTask,
     question: String,
-    /// Object JSON: {terms, assumptions, sql} với task sql và repair, hồ sơ với task profile.
+    /// Object JSON: {terms, assumptions, sql} với task sql và repair, form với task why, hồ sơ với task profile.
     answer: serde_json::Value,
 }
 
@@ -125,6 +127,7 @@ mod tests {
         assert_eq!(count(LlmTask::Sql), 11);
         assert_eq!(count(LlmTask::Repair), 1);
         assert_eq!(count(LlmTask::Narrate), 1);
+        assert_eq!(count(LlmTask::Why), 3);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];
         let profile: serde_json::Value = serde_json::from_str(profile).unwrap();
         assert!(profile["columns"].is_array());
@@ -187,6 +190,51 @@ mod tests {
                 assert!(
                     columns.contains(&column),
                     "unknown column {column:?} in answer to {:?}",
+                    entry.question
+                );
+            }
+        }
+    }
+
+    /// Cột trong form câu "tại sao" (time, measure, groups, filters, terms) cũng phải có trong hồ sơ dataco.
+    #[test]
+    fn why_forms_use_only_profile_columns() {
+        let entries = file_entries();
+        let profile = entries
+            .iter()
+            .find(|e| e.task == LlmTask::Profile && e.question == "dataco")
+            .unwrap();
+        let columns: Vec<&str> = profile.answer["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["name"].as_str().unwrap())
+            .collect();
+        for entry in entries.iter().filter(|e| e.task == LlmTask::Why) {
+            let form = &entry.answer;
+            let mut used: Vec<&serde_json::Value> = vec![
+                &form["time"]["column"],
+                &form["measure"]["column"],
+                &form["groups"]["column"],
+            ];
+            used.extend(
+                form["filters"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|f| &f["column"]),
+            );
+            used.extend(
+                form["terms"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|t| &t["column"]),
+            );
+            for column in used.into_iter().filter_map(|c| c.as_str()) {
+                assert!(
+                    columns.contains(&column),
+                    "unknown column {column:?} in the form for {:?}",
                     entry.question
                 );
             }

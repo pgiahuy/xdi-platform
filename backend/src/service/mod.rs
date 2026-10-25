@@ -55,9 +55,32 @@ mod ask_run_tests;
 #[allow(dead_code)]
 pub mod ask_values;
 pub mod excel;
-// Phần toán của câu "tại sao" có trước SQL và luồng hỏi; nối vào ở #38/#39. Gỡ allow khi đó để clippy bắt lại mã thừa.
+// Đường câu "tại sao" (#38, #39, #40): phần toán, form, kiểm form, SQL, phân rã; run_why ghép tất cả. Chỉ endpoint hỏi
+// (#33) gọi run_why, nên gỡ allow ở #33 như các module của luồng hỏi phía trên.
 #[allow(dead_code)]
 pub mod explain;
+#[allow(dead_code)]
+pub mod explain_breakdown;
+#[allow(dead_code)]
+pub mod explain_check;
+#[cfg(test)]
+mod explain_check_tests;
+#[allow(dead_code)]
+pub mod explain_choices;
+#[allow(dead_code)]
+pub mod explain_form;
+#[allow(dead_code)]
+pub mod explain_measure;
+#[allow(dead_code)]
+pub mod explain_period;
+#[allow(dead_code)]
+pub mod explain_plain;
+#[allow(dead_code)]
+pub mod explain_run;
+#[cfg(test)]
+mod explain_run_tests;
+#[allow(dead_code)]
+pub mod explain_sql;
 #[cfg(test)]
 mod explain_tests;
 pub mod ingest;
