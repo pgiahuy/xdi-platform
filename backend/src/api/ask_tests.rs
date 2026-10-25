@@ -341,6 +341,79 @@ async fn model_clarify_keeps_only_real_columns() {
     assert_eq!(asking.queries_with("error").await, 1);
 }
 
+/// Mô hình giả như ScriptedLlm, giữ lại prompt của từng câu hỏi để test đọc.
+struct RecordingLlm {
+    replies: Mutex<VecDeque<String>>,
+    prompts: Arc<Mutex<Vec<String>>>,
+}
+
+#[async_trait]
+impl LlmProvider for RecordingLlm {
+    fn name(&self) -> String {
+        "recording".to_string()
+    }
+
+    async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        if request.task == LlmTask::Profile {
+            return Err(AppError::Upstream(
+                "recording model has no profile".to_string(),
+            ));
+        }
+        self.prompts
+            .lock()
+            .unwrap()
+            .push(request.prompt.to_string());
+        let reply = self.replies.lock().unwrap().pop_front();
+        Ok(reply.expect("model called more times than the test expects"))
+    }
+}
+
+/// Câu Gemini thật trả cho "Doanh thu từng tháng năm 2017" trên dataset chưa có chỉ số: hỏi lại loại metric với
+/// phương án là tên cột. Phản hồi là câu hỏi lại về cột (chỉ cột độ đo có thật); gửi lại kèm lựa chọn thì prompt có
+/// cột đã chọn, câu được trả lời, không có choice_not_applied.
+#[tokio::test]
+async fn metric_clarify_with_columns_asks_for_a_column_and_applies_it() {
+    let clarify = json!({"terms": [], "assumptions": [], "sql": "",
+        "clarify": {"kind": "metric", "phrase": "doanh thu", "question": "Bạn muốn tính doanh thu bằng cột nào?",
+                    "options": ["Sales", "Order Item Total", "Sales per customer"]}});
+    let total = r#"SELECT SUM("Order Item Total") AS revenue FROM dataco"#;
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let llm = Arc::new(RecordingLlm {
+        replies: Mutex::new([clarify.to_string(), sql_reply(total).to_string()].into()),
+        prompts: prompts.clone(),
+    });
+    let Some(asking) = start(Some(llm)).await else {
+        return;
+    };
+    let question = "Doanh thu từng tháng năm 2017";
+    let (status, response) = asking.ask(question, json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "needs_choice", "{response}");
+    let choice = &response["clarifications"][0];
+    assert_eq!(choice["id"], "column:doanh thu");
+    assert_eq!(
+        choice["options"],
+        json!([{"id": "Order Item Total", "label": "Order Item Total"}])
+    );
+
+    let picked = json!([{"choice_id": "column:doanh thu", "option_id": "Order Item Total"}]);
+    let (status, response) = asking.ask(question, picked.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    assert_eq!(response["choices"], picked);
+    assert!(
+        response["warnings"].as_array().unwrap().is_empty(),
+        "{response}"
+    );
+    let prompts = prompts.lock().unwrap();
+    assert!(
+        prompts[1]
+            .contains(r#""doanh thu" means the column "Order Item Total" (chosen by the user)"#),
+        "{}",
+        prompts[1]
+    );
+}
+
 /// Tên cột trùng trong kết quả được đổi cho duy nhất; giá trị mô hình nêu mà cột không có thì báo cạnh kết quả.
 #[tokio::test]
 async fn result_names_are_unique_and_unknown_values_are_flagged() {

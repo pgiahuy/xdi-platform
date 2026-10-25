@@ -257,6 +257,15 @@ pub fn build_context(
         }
     }
 
+    apply_user_columns(
+        &mut context,
+        phrases,
+        &columns,
+        choices,
+        &resolved,
+        &mut matched,
+    );
+
     let mut sent = build_sent_columns(columns, &matched);
     apply_column_values(&mut sent, index, &open);
     context.columns = sent;
@@ -327,6 +336,47 @@ fn apply_column_values(columns: &mut [ColumnProfile], index: &ValueIndex, open: 
     for ((i, values), sent) in found.into_iter().zip(build_column_values(&counts)) {
         columns[i].values = values.values[..sent].to_vec();
         columns[i].values_complete = sent == values.values.len() && !values.dropped;
+    }
+}
+
+/// Lựa chọn cột người hỏi gửi cho một cụm mà bước chấm điểm ở trên không thấy cột nào khớp: câu hỏi lại của mô hình
+/// (ví dụ "doanh thu tính bằng cột nào?" khi dataset chưa có chỉ số, ask_choices.rs) cho chọn cột theo cụm đó. Không
+/// ghi thành pick thì lựa chọn không vào prompt, câu gửi lại bị hỏi lại y nguyên và kèm choice_not_applied. Chỉ nhận
+/// khi cụm còn trong câu hỏi và cột có thật; còn lại bỏ qua như trước (choice_not_applied).
+fn apply_user_columns(
+    context: &mut AskContext,
+    phrases: &[Phrase],
+    columns: &[ColumnProfile],
+    choices: &[ChosenOption],
+    resolved: &HashMap<String, Vec<usize>>,
+    matched: &mut HashSet<usize>,
+) {
+    for choice in choices {
+        if resolved.contains_key(&choice.choice_id)
+            || context
+                .picks
+                .iter()
+                .any(|p| p.choice_id == choice.choice_id)
+        {
+            continue;
+        }
+        let Some(phrase) = phrases
+            .iter()
+            .find(|p| build_column_choice_id(p) == choice.choice_id)
+        else {
+            continue;
+        };
+        let Some(i) = columns.iter().position(|c| c.name == choice.option_id) else {
+            continue;
+        };
+        context.picks.push(ColumnPick {
+            choice_id: choice.choice_id.clone(),
+            phrase: phrase.text.clone(),
+            column: columns[i].name.clone(),
+            others: Vec::new(),
+            chosen_by_user: true,
+        });
+        matched.insert(i);
     }
 }
 

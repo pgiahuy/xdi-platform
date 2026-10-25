@@ -15,7 +15,7 @@ use super::ask_context::{AskContext, ColumnProfile};
 use super::ask_contract::{Choice, ChoiceOption};
 use super::ask_phrases::{build_key, fold};
 use super::ask_reply::{ChoiceKind, Clarify, SqlAnswer, Term, TermKind};
-use crate::engine::store::MetricDefinition;
+use crate::engine::store::{MetricDefinition, ProfileRole};
 
 pub const COLUMN_CHOICE_PREFIX: &str = "column:";
 pub const METRIC_CHOICE_PREFIX: &str = "metric:";
@@ -99,7 +99,16 @@ pub fn build_clarify_choice(
     context: &AskContext,
     metrics: &[MetricDefinition],
 ) -> Option<Choice> {
-    let options = build_options(clarify.kind, clarify.options.iter(), context, metrics);
+    let mut kind = clarify.kind;
+    let mut options = build_options(kind, clarify.options.iter(), context, metrics);
+    // Dataset chưa có chỉ số nào (hay không chỉ số nào hợp) thì mô hình hỏi lại loại metric mà đưa tên cột độ đo làm
+    // phương án ("Doanh thu tính bằng cột nào?": Sales, Order Item Total). Đổi thành câu hỏi lại về cột, cùng id
+    // column:<cụm>, để lựa chọn gửi lại đi đường lựa chọn cột của ask_context.rs; không đổi thì câu hỏi thành lỗi.
+    // Chỉ khi không phương án nào là chỉ số: một câu hỏi lại chỉ có một loại.
+    if kind == ChoiceKind::Metric && options.is_empty() {
+        kind = ChoiceKind::Column;
+        options = build_measure_options(clarify.options.iter(), context);
+    }
     if options.is_empty() {
         // Ghi câu hỏi lại và các phương án mô hình đưa (tên cột, tên chỉ số, giá trị hay kỳ; không có dòng dữ liệu)
         // để chẩn đoán vì sao không phương án nào khớp ngữ cảnh.
@@ -108,7 +117,7 @@ pub fn build_clarify_choice(
         return None;
     }
     Some(Choice {
-        id: build_choice_id(clarify.kind, clarify.phrase.as_deref()),
+        id: build_choice_id(kind, clarify.phrase.as_deref()),
         label: clarify.question.clone(),
         selected: None,
         options,
@@ -176,6 +185,23 @@ fn build_options<'a>(
         }
     }
     options
+}
+
+/// Phương án là cột độ đo (vai trò measure), khớp như phương án cột của build_options; phương án khác bỏ.
+fn build_measure_options<'a>(
+    names: impl Iterator<Item = &'a String>,
+    context: &AskContext,
+) -> Vec<ChoiceOption> {
+    let measure = ProfileRole::Measure.as_str();
+    build_options(ChoiceKind::Column, names, context, &[])
+        .into_iter()
+        .filter(|o| {
+            context
+                .columns
+                .iter()
+                .any(|c| c.name == o.id && c.role == measure)
+        })
+        .collect()
 }
 
 /// Bỏ khoảng trắng và một cặp nháy bao ngoài (", ', `). Prompt in tên cột trong nháy kép và dặn mô hình viết tên cột
