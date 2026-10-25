@@ -18,4 +18,10 @@ pub mod profile;
 // Chưa có code gọi run_query cho tới endpoint hỏi (#33); gỡ cùng dòng allow của guard.
 #[allow(dead_code)]
 pub mod query;
+// Hình dạng câu đã chạy, cho thẻ "Đã hiểu là" (#35), truy dòng nguồn (#34), kiểm hợp lý (#36). Gỡ allow khi endpoint
+// hỏi (#33) gọi tới, như guard.
+#[allow(dead_code)]
+pub mod sql_shape;
+#[cfg(test)]
+mod sql_shape_tests;
 pub mod store;
