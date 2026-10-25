@@ -65,5 +65,13 @@ pub mod profile;
 pub mod semantic;
 #[cfg(test)]
 mod semantic_tests;
+// Thẻ "Đã hiểu là" (#35): endpoint hỏi (#33) gọi build_understanding và build_column_roles. Gỡ allow khi đó, như ở
+// ask_contract.
+#[allow(dead_code)]
+pub mod understanding;
+#[allow(dead_code)]
+pub mod understanding_labels;
+#[cfg(test)]
+mod understanding_tests;
 pub mod users;
 pub mod workspaces;
