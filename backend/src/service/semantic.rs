@@ -225,6 +225,8 @@ pub async fn apply_semantic_profile(
         task: LlmTask::Profile,
         question: &dataset.logical_table,
         prompt: &prompt,
+        // Chưa ép schema: build_profile_answer tự tìm object JSON trong câu trả lời và kiểm từng mục.
+        json_schema: None,
     };
     let text = state.llm.complete(&request).await.map_err(|e| match e {
         // Mô hình từ chối nội dung (và mock không có bảng): gọi lại y nguyên không khác.
