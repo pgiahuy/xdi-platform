@@ -69,6 +69,7 @@ fn profile() -> Vec<ColumnProfile> {
             values: vec![],
             values_complete: false,
             matched: false,
+            unit: None,
         })
         .collect()
 }

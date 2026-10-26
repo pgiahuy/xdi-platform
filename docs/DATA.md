@@ -200,9 +200,9 @@ lẫn ngữ cảnh hỏi (#28), ngay từ khi phiên bản ở `structure`.
 ## Hồ sơ lớp ngữ nghĩa
 
 Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
-(`service/semantic.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, bí danh giá trị, câu hỏi gợi
-ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì `profile_status` là `semantic`;
-người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Câu
+(`service/semantic.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, đơn vị của cột số đo, bí
+danh giá trị, câu hỏi gợi ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì
+`profile_status` là `semantic`; người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Câu
 trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của provider (Gemini chặn prompt vì
 nội dung, mock không có bảng) thì đánh dấu đã thử kèm tên provider (`semantic_attempted_with`): việc khởi động không
 gọi lại với cùng provider, đổi `LLM_PROVIDER` thì thử lại, và nạp lại đúng bộ file cũ luôn là đường thử lại tường
@@ -229,6 +229,12 @@ là `measure` thành `key` (mã lặp lại như `Order Id`) hoặc thành `dime
 (năm, tháng dạng số; nhiều hơn thì cột chiều mới sẽ không có danh sách giá trị), và cột `dimension` thành `text`
 (đường dẫn ảnh, mô tả dài). Mỗi đổi vai trò được ghi log (tên cột, vai trò cũ, mới). Cột thành `text` thì giá trị của
 nó không đi vào prompt về sau, vì các bước sau chọn giá trị theo vai trò.
+
+Đơn vị (`columns.unit`) chỉ nhận cho cột `measure` và chỉ một trong năm chữ: `money` (tiền), `quantity` (số lượng
+hàng), `percent` (tỷ lệ), `duration` (số ngày, số giờ), `other`. Danh sách cố định để so được bằng dấu bằng: luật
+biểu đồ ([Kiến trúc](ARCHITECTURE.md), mục 6) cần biết hai số đo cùng hay khác đơn vị, mà chữ tự do ("ngày",
+"days") cùng nghĩa vẫn khác chữ. Đơn vị sai hay đặt cho cột không phải `measure` thì bỏ riêng, phần còn lại của mục
+vẫn giữ; chưa có đơn vị thì null, và luật biểu đồ coi như khác đơn vị.
 
 Câu hỏi gợi ý lưu ở `dataset_versions.suggested_questions` (đi theo phiên bản) và trả ra trong
 `GET /api/workspaces/{slug}/datasets` và `.../datasets/{id}` (của phiên bản hiện hành), cùng

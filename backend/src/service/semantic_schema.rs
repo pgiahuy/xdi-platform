@@ -41,7 +41,12 @@ pub fn build_profile_schema() -> serde_json::Value {
                                 "One Vietnamese sentence, 1 to {DESCRIPTION_MAX_CHARS} characters; leave out when nothing useful to say"
                             )
                         },
-                        "aliases": aliases("column")
+                        "aliases": aliases("column"),
+                        "unit": {
+                            "type": "string",
+                            "enum": ["money", "quantity", "percent", "duration", "other"],
+                            "description": "For a measure column only, what one value counts; leave out when unsure"
+                        }
                     },
                     "required": ["name", "aliases"]
                 }

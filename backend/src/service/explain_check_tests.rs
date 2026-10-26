@@ -46,6 +46,7 @@ pub(super) fn column(
         min_value: None,
         max_value: None,
         time_format: None,
+        unit: None,
     }
 }
 

@@ -31,8 +31,8 @@ use uuid::Uuid;
 use crate::auth::WorkspaceId;
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{
-    ColumnValue, Dataset, ProfileColumn, ProfileRole, ProfileStatus, SemanticColumnUpdate,
-    SemanticValueUpdate,
+    ColumnUnit, ColumnValue, Dataset, ProfileColumn, ProfileRole, ProfileStatus,
+    SemanticColumnUpdate, SemanticValueUpdate,
 };
 use crate::service::ask_context;
 use crate::service::ask_phrases::fold;
@@ -313,7 +313,7 @@ pub fn build_profile_prompt(
 ) -> String {
     let mut prompt = format!(
         "You are documenting a dataset for a Vietnamese analytics tool. Reply with one JSON object and nothing else:\n\
-         {{\"columns\": [{{\"name\", \"description\", \"aliases\"}}], \"values\": [{{\"column\", \"value\", \
+         {{\"columns\": [{{\"name\", \"description\", \"aliases\", \"unit\"}}], \"values\": [{{\"column\", \"value\", \
          \"aliases\"}}], \"role_changes\": [{{\"name\", \"role\"}}], \"sensitive_columns\": [...], \
          \"suggested_questions\": [...]}}\n\
          Rules:\n\
@@ -321,6 +321,9 @@ pub fn build_profile_prompt(
          leave it out when nothing useful to say.\n\
          - \"aliases\": up to {ALIASES_MAX} Vietnamese names users may use for that column or value, each 1 to \
          {ALIAS_MAX_CHARS} characters.\n\
+         - \"unit\": for a \"measure\" column only, what one value of it counts: \"money\" (an amount of money), \
+         \"quantity\" (a number of goods or items), \"percent\" (a share or a rate), \"duration\" (days or hours), or \
+         \"other\"; leave it out when unsure.\n\
          - Only the columns and values listed below exist; never invent new ones.\n\
          - \"role_changes\": propose a new role only in two cases. An integer \"measure\" column that is really an \
          identifier or a code: \"key\" when each value identifies one entity of this table (like the order id of an \
@@ -502,8 +505,14 @@ pub fn build_profile_answer(
         };
         let description = clean_text_opt(&item["description"], DESCRIPTION_MAX_CHARS);
         let aliases = valid_aliases(&item["aliases"], &column_names);
-        if description.is_none() && aliases.is_empty() {
-            note_rejection(&mut reasons, "columns", i, "no valid description or alias");
+        let unit = valid_unit(column, &item["unit"]);
+        if description.is_none() && aliases.is_empty() && unit.is_none() {
+            note_rejection(
+                &mut reasons,
+                "columns",
+                i,
+                "no valid description, alias or unit",
+            );
             continue;
         }
         column_updates.insert(
@@ -513,6 +522,7 @@ pub fn build_profile_answer(
                 description,
                 aliases,
                 role: None,
+                unit,
             },
         );
     }
@@ -539,6 +549,7 @@ pub fn build_profile_answer(
                 description: None,
                 aliases: Vec::new(),
                 role: None,
+                unit: None,
             })
             .role = Some(role);
     }
@@ -739,6 +750,16 @@ fn valid_aliases(value: &serde_json::Value, forbidden: &HashSet<String>) -> Vec<
 /// (số nguyên luôn ngắn), còn nhiều hơn thì cột dimension mới sẽ không có danh sách, phá bất biến "cột chiều luôn có
 /// danh sách giá trị" của lớp cấu trúc. Mọi chiều đổi khác (ví dụ measure thành time) bị bỏ: luật cấu trúc đã xét
 /// kiểu và số đo, mô hình chỉ sửa được những ca số đo không nói lên được.
+/// Đơn vị chỉ nhận cho cột measure của hồ sơ cấu trúc và chỉ giá trị trong danh sách ColumnUnit. Sai thì bỏ riêng
+/// đơn vị, mô tả và bí danh của cùng mục vẫn giữ: đơn vị chỉ dùng để chọn biểu đồ, thiếu nó thì biểu đồ tách riêng
+/// từng số đo chứ không sai số liệu.
+fn valid_unit(column: &ProfileColumn, value: &serde_json::Value) -> Option<ColumnUnit> {
+    if column.role != ProfileRole::Measure.as_str() {
+        return None;
+    }
+    value.as_str().and_then(ColumnUnit::parse)
+}
+
 pub(crate) fn allowed_role_change(column: &ProfileColumn, target: &str) -> Option<ProfileRole> {
     let measure = ProfileRole::Measure.as_str();
     let dimension = ProfileRole::Dimension.as_str();
