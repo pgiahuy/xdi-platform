@@ -386,7 +386,7 @@ fn two_groups_of_a_dimension() {
         "groups": {"column": "Market", "compare": "Europe", "base": "LATAM"},
         "filters": []
     });
-    let plan = fixture.plan(form);
+    let plan = fixture.plan(form.clone());
     let sql = build_why_sql(&plan);
     assert_eq!(sql.base_filter, "\"Market\" = 'LATAM'");
     assert_eq!(sql.compare_filter, "\"Market\" = 'Europe'");
@@ -396,6 +396,10 @@ fn two_groups_of_a_dimension() {
          OR \"Market\" = 'Europe') GROUP BY 1 ORDER BY 1"
     );
     assert_eq!(plan.dimensions, ["Customer Segment"]);
+    // compare rỗng (schema bắt buộc trường này) khi so hai nhóm không có kỳ: cùng plan như khi bỏ trường.
+    let mut empty = form.clone();
+    empty["compare"] = json!("");
+    assert_eq!(fixture.plan(empty), plan);
     // Có kỳ thì kỳ là khoảng thời gian của câu hỏi.
     let form = json!({
         "metric": "doanh thu",
@@ -474,6 +478,9 @@ fn periods_must_be_written_right_and_have_data() {
         ["base"]
     );
     let form = with(quarter_form(), "compare", serde_json::Value::Null);
+    assert_eq!(fixture.fields(form), ["compare"]);
+    // Schema bắt buộc compare nên mô hình có thể ghi chuỗi rỗng thay vì bỏ trường: so hai kỳ vẫn là lỗi compare.
+    let form = with(quarter_form(), "compare", json!(""));
     assert_eq!(fixture.fields(form), ["compare"]);
     let form = json!({"metric": "doanh thu", "compare": "2017-Q3"});
     assert_eq!(fixture.fields(form), ["time"]);

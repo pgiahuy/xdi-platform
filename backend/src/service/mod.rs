@@ -53,6 +53,7 @@ mod explain_check_tests;
 pub mod explain_choices;
 pub mod explain_form;
 pub mod explain_measure;
+pub mod explain_number;
 pub mod explain_period;
 pub mod explain_plain;
 pub mod explain_run;

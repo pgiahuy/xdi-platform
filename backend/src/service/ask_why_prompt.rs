@@ -33,6 +33,9 @@ pub fn build_why_prompt(input: &PromptInput) -> String {
 /// JSON Schema của form câu "tại sao", gửi kèm request (LlmRequest::json_schema); #38 đọc và kiểm form. Trường không
 /// có thì để vắng thay cho null, cùng lý do như build_sql_reply_schema: time vắng là so hai nhóm, groups vắng là so hai
 /// kỳ, metric và measure dùng một trong hai.
+// compare nằm trong required dù so hai nhóm có thể không cần kỳ: khi compare không bắt buộc, Gemini hay bỏ trống nó ở
+// lần điền đầu (kỳ chỉ ghi trong terms), kiểm form báo lỗi và tốn một vòng sửa. So hai nhóm không có kỳ thì ghi chuỗi
+// rỗng; check_slices bỏ qua compare khi form không có time.
 pub fn build_why_form_schema() -> serde_json::Value {
     let text = |description: &str| json!({ "type": "string", "description": description });
     json!({
@@ -58,7 +61,10 @@ pub fn build_why_form_schema() -> serde_json::Value {
                 },
                 "required": ["column", "grain"]
             },
-            "compare": text("The period being explained, such as 2017, 2017-Q3 or 2017-05, matching the grain"),
+            "compare": text(
+                "The period being explained, such as 2017, 2017-Q3 or 2017-05, matching the grain; an empty string \
+                 only when comparing two groups with no period"
+            ),
             "base": text("The period to compare with; leave out to use the period just before"),
             "filters": {
                 "type": "array",
@@ -84,7 +90,7 @@ pub fn build_why_form_schema() -> serde_json::Value {
                 "required": ["column", "compare", "base"]
             }
         },
-        "required": ["terms", "filters"]
+        "required": ["terms", "compare", "filters"]
     })
 }
 
@@ -97,10 +103,12 @@ fn build_why_rules(table: &str) -> String {
          column of role measure with \"agg\" sum, or to any column with \"agg\" count. A metric marked UNCONFIRMED is \
          a draft: use it only when no confirmed metric fits.\n\
          - To compare two periods, set \"time\" to a column of role time and a grain (month, quarter or year), and \
-         write \"compare\" and \"base\" as 2017, 2017-Q3 or 2017-05 to match the grain. Leave \"base\" out to compare \
-         with the period just before.\n\
+         write \"compare\" and \"base\" as 2017, 2017-Q3 or 2017-05 to match the grain. \"compare\" is the period the \
+         question asks about and is always required, also when the period is in \"terms\". Leave \"base\" out to \
+         compare with the period just before.\n\
          - To compare two groups, leave \"time\" out and set \"groups\" to a column of role dimension and two of its \
-         values.\n\
+         values. Write \"compare\" as the period of the question, or as an empty string when the question names no \
+         period.\n\
          - \"filters\" keeps only the rows the question is about. Use only columns and values listed here, written \
          exactly as listed.\n\
          - Record in \"terms\" how each phrase of the question maps to a column, a value, a metric or a period.\n\

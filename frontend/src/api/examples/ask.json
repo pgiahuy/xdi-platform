@@ -411,7 +411,7 @@
         }
       ],
       "measure": "Doanh thu",
-      "summary": "Doanh thu quý 3/2017 giảm 1283400.00 so với quý 2/2017, từ 9402500.00 xuống 8119100.00. Thị trường Europe giảm nhiều nhất (-639780.25), sau đó là LATAM (-339049.50). Phần lớn mức giảm do số đơn ít đi, từ 5000 xuống 4400 đơn (-1117725.00); giá trị đơn trung bình giảm từ 1880.50 xuống 1845.25 (-165675.00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9226250.00.",
+      "summary": "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9.226.250,00.",
       "summary_by_model": true,
       "volume_price": {
         "base_price": "1880.50",
