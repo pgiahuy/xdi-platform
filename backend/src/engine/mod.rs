@@ -14,9 +14,7 @@ pub mod guard;
 pub mod llm;
 pub mod profile;
 pub mod query;
-// Hình dạng câu đã chạy, cho thẻ "Đã hiểu là" (#35), truy dòng nguồn (#34), kiểm hợp lý (#36). Gỡ allow khi endpoint
-// hỏi gọi build_understanding, phần chưa có trong luồng hỏi của #33.
-#[allow(dead_code)]
+// Hình dạng câu đã chạy, cho thẻ "Đã hiểu là" (#35), truy dòng nguồn (#34), kiểm hợp lý (#36).
 pub mod sql_shape;
 #[cfg(test)]
 mod sql_shape_tests;

@@ -195,6 +195,25 @@ async fn answers_a_question_and_records_it() {
         json!([{"choice_id": "time:range", "option_id": "all"}])
     );
     assert_eq!(asking.queries_with("ok").await, 1);
+
+    // Thẻ, vai trò cột và biểu đồ dựng từ sql_guarded. LIMIT 100000 là trần guard thêm, không phải của câu hỏi, nên
+    // thẻ không có mục limit; giả định trên thẻ cùng id với choices.
+    let roles: Vec<&str> = response["result"]["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["role"].as_str().unwrap())
+        .collect();
+    assert_eq!(roles, ["dimension", "measure"]);
+    let understanding = &response["understanding"];
+    assert_eq!(understanding["group_by"].as_array().unwrap().len(), 1);
+    assert_eq!(understanding["measures"].as_array().unwrap().len(), 1);
+    assert!(understanding["limit"].is_null(), "{understanding}");
+    assert_eq!(understanding["assumptions"][0]["id"], "time:range");
+    assert_eq!(
+        response["chart"],
+        json!({"kind": "bar", "x": "market", "y": ["revenue"]})
+    );
 }
 
 /// Câu mẫu đọc ngày sai thứ tự, DuckDB báo lỗi, câu sửa của mock chạy được.
@@ -214,6 +233,11 @@ async fn repairs_a_failed_run_once() {
         .as_str()
         .unwrap()
         .contains("%m/%d/%Y"));
+    // Trục x là ngày nên vẽ đường.
+    assert_eq!(
+        response["chart"],
+        json!({"kind": "line", "x": "ship_day", "y": ["revenue"]})
+    );
 }
 
 #[tokio::test]
@@ -230,6 +254,9 @@ async fn guard_refusal_is_recorded_as_rejected() {
     assert!(response["query_id"].is_string());
     assert_eq!(step_names(&response), ["context", "llm", "guard", "record"]);
     assert_eq!(asking.queries_with("rejected").await, 1);
+    // Không có câu nào chạy nên không có thẻ hay biểu đồ.
+    assert!(response["understanding"].is_null());
+    assert!(response["chart"].is_null());
 }
 
 /// Câu đầu và câu sửa cùng lỗi lúc chạy: failed, vẫn ghi lịch sử kèm câu đã sửa.
