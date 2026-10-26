@@ -6,7 +6,7 @@ Quy trình ra một phiên bản mới. Số phiên bản theo Semantic Versioni
 
 1. `main` xanh: `make check` qua trên máy và CI qua trên GitHub.
 2. Đổi số phiên bản ở hai chỗ, cùng một số: `backend/Cargo.toml`, `frontend/package.json`. Rồi chạy `make openapi`:
-   đặc tả OpenAPI lấy số phiên bản từ `backend/Cargo.toml`, nên `openapi.json` và `frontend/src/api/schema.ts` đổi theo
+   đặc tả OpenAPI lấy số phiên bản từ `backend/Cargo.toml`, nên `openapi.json` đổi theo
    (thiếu bước này thì test `openapi_json_is_up_to_date` và `scripts/check-version.sh` báo lỗi).
 3. `CHANGELOG.md`: đổi mục `Unreleased` thành `[x.y.z] - YYYY-MM-DD`, tạo mục `Unreleased` trống mới ở trên.
 4. Tài liệu trong `docs/` khớp với code: hướng dẫn cài đặt làm theo được trên máy sạch, ARCHITECTURE.md mục Trạng thái cập nhật.
@@ -43,7 +43,10 @@ CI không build image trên mỗi PR.
 
 ## Sau khi phát hành
 
-1. Kiểm tra trên máy sạch: `docker compose up` với image vừa đẩy, không build local.
+1. Kiểm tra trên máy sạch rằng image vừa đẩy chạy được. Dịch vụ `backend` của compose chỉ có `build:`, nên
+   `docker compose up` tự build local; dùng image đã đẩy thì kéo về rồi gắn tên compose dùng (thư mục clone tên
+   `xdi-platform`): `docker pull ghcr.io/pgiahuy/xdi-platform:x.y.z`,
+   `docker tag ghcr.io/pgiahuy/xdi-platform:x.y.z xdi-platform-backend`, rồi `docker compose up -d --no-build`.
 2. Tải `xdi-backend-x.y.z-linux-x86_64.tar.gz` từ Release, giải nén, chạy binary với `DATABASE_URL` trỏ tới một
    Postgres, `/api/health` trả ok. Không cần Rust. Gói này chỉ có backend: muốn có giao diện thì đặt `STATIC_DIR` trỏ tới
    một bản `frontend/dist` đã build, hoặc dùng image Docker. Tarball mã nguồn thì cần Rust: `make install PREFIX=/tmp/xdi`.

@@ -1,8 +1,8 @@
 # Gói khái niệm ngành
 
 Một gói khái niệm ngành (domain package) mô tả các khái niệm kinh doanh chung của mọi doanh nghiệp cùng ngành: doanh
-thu, số đơn, tỷ lệ giao trễ... Mỗi ngành một file `data/domains/<id>.json`. Gói giúp hệ thống hiểu thuật ngữ trong câu
-hỏi và đề xuất chỉ số.
+thu, số đơn, tỷ lệ giao trễ... Mỗi ngành một file `data/domains/<id>.json`. Gói giúp mô hình ngôn ngữ hiểu thuật ngữ trong
+câu hỏi; đề xuất chỉ số và kiểm hợp lý theo gói là thiết kế, chưa có code dùng.
 
 Ba tầng tách riêng:
 
@@ -13,8 +13,11 @@ Ba tầng tách riêng:
 3. **Chỉ số của workspace** (bảng `metrics`) mới quyết định công thức trên cột thật của dataset.
 
 Hiện tại có một gói: `retail` (bán lẻ và chuỗi cung ứng), áp dụng được cho dữ liệu đơn hàng như DataCo hay Online
-Retail. Gói chưa nối vào prompt (#29) hay bước nạp dataset; khi nối, người dùng chọn một gói lúc nạp, một dataset một
-gói.
+Retail. Prompt sinh SQL và prompt form câu "tại sao" chèn tên gói và
+`name`, `synonyms`, `description` của từng khái niệm khi cột `datasets.domain` có giá trị (`service/ask_prompt.rs`).
+Chưa có cách gắn gói cho dataset (lúc nạp hay qua API), nên hiện chưa prompt nào có phần này. Thiết kế: người dùng
+chọn một gói lúc nạp, một dataset một gói. `calculations`, `dimensions`, `sanity_checks` chưa được code nào đọc ngoài
+test.
 
 ## Schema của file gói
 
@@ -37,7 +40,7 @@ Mỗi khái niệm trong `concepts`:
 | `name` | chuỗi | Tên hiện cho người dùng, ví dụ "Doanh thu" |
 | `description` | chuỗi | Khái niệm nói về điều gì, khi nào dùng |
 | `synonyms` | mảng chuỗi | Cách gọi khác, tiếng Việt và tiếng Anh; trong cùng một gói không trùng nhau, kể cả giữa hai khái niệm (so sau khi chữ thường và bỏ dấu). Hai gói khác nhau được dùng chung một từ, vì mỗi dataset chỉ gắn một gói |
-| `calculations` | mảng | Hai đến ba cách tính phổ biến, mỗi mục có `name` và `description` bằng lời, kèm khi nào chọn cách đó; các cách tính của một khái niệm phải cùng đơn vị (không trộn tiền với tỷ lệ) và không ghi công thức trên cột thật |
+| `calculations` | mảng | Hai đến ba cách tính phổ biến, mỗi mục có `name` và `description` bằng lời, kèm khi nào chọn cách đó; người viết gói giữ các cách tính của một khái niệm cùng đơn vị (không trộn tiền với tỷ lệ) và không ghi công thức trên cột thật; test không kiểm hai điều này |
 | `dimensions` | mảng chuỗi | Chiều hay dùng để phân rã khái niệm: thời gian, khu vực, nhóm hàng... |
 | `sanity_checks` | mảng | Luật kiểm giá trị có hợp lý không; được để rỗng |
 

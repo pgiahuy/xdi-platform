@@ -9,12 +9,13 @@ Cảm ơn bạn đã quan tâm. Tài liệu này nói cách làm việc trong re
 - Tính năng hoặc ý tưởng: đăng ở [Discussions mục Ideas](https://github.com/pgiahuy/xdi-platform/discussions) trước,
   chốt rồi mới mở Issue.
 - Câu hỏi: Discussions mục Q&A.
+- Lỗ hổng bảo mật: không mở Issue, báo riêng theo [SECURITY.md](SECURITY.md).
 
 Mỗi PR ứng với một Issue. Việc lớn tách thành nhiều Issue con.
 
 ## Chạy trên máy
 
-Cần Rust stable, Node.js 24 (hoặc 22.12 trở lên), Docker và GNU Make. Sau khi clone, chạy `make hooks` một lần để
+Cần Rust stable, Node.js 24 (hoặc 22.22 trở lên), Docker và GNU Make. Sau khi clone, chạy `make hooks` một lần để
 lỗi bị chặn trên máy trước khi push. Tóm tắt:
 
 ```bash
@@ -23,10 +24,11 @@ make dev-frontend # giao diện ở http://localhost:5173, /api chuyển sang ba
 make check      # check-fast, check-frontend và build image docker
 make check-fast # fmt, clippy, test backend; CI chạy lệnh này trên mỗi PR
 make check-frontend # lint, kiểm kiểu, build giao diện; CI chạy khi PR đổi frontend/
-make hooks      # cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/
+make hooks      # cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/, openapi.json, Makefile
 ```
 
-Thay đổi schema Postgres là một file migration mới trong `backend/migrations/`, đặt tên `0002_mo_ta.sql`, `0003_...`.
+Thay đổi schema Postgres là một file migration mới trong `backend/migrations/`, đánh số tiếp theo file mới nhất, ví dụ
+`0008_mo_ta.sql`.
 Không sửa file migration đã merge: mọi database đã áp nó sẽ từ chối khởi động vì checksum không khớp.
 
 Test cơ sở dữ liệu cần Postgres thật. Không có `DATABASE_URL` thì chúng tự bỏ qua trên máy (CI luôn chạy):
@@ -62,7 +64,8 @@ DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi make test
 - Tên biến, hàm, trường JSON, mã lỗi, biến môi trường, thông điệp log: tiếng Anh. Chú thích và tài liệu: tiếng Việt.
 - Không ghi cứng chuỗi, đường dẫn, cấu hình trong code.
 - Không commit khóa hay bí mật. `.env` nằm trong `.gitignore`; mẫu ở `.env.example`.
-- Thư viện mới phải có giấy phép tương thích Apache 2.0 (MIT, BSD, Apache, ISC, PostgreSQL) và được ghi vào bảng giấy phép thành phần.
+- Thư viện mới phải có giấy phép tương thích Apache 2.0 (MIT, BSD, Apache, ISC, PostgreSQL) và được ghi vào bảng
+  giấy phép thành phần ([docs/LICENSES.md](docs/LICENSES.md)).
 
 ## Giấy phép
 

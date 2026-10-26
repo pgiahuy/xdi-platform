@@ -103,8 +103,8 @@ Các trường hợp sau bị từ chối (400). Lời báo ghi tên file, trừ
 Mỗi file (hay mỗi sheet Excel) ghi thành một phần `part-NNNN.parquet` trong thư mục của phiên bản, kèm cột
 `_source_file` ở cuối, ghi tên file gốc (hay tên sheet) của từng dòng. Khi đọc, DuckDB đọc cả thư mục như một bảng
 (`read_parquet('<thư mục>/*.parquet', union_by_name = true)`), ghép cột theo tên. Nhờ vậy nhiều file cùng cột (mỗi tháng
-một file) thành một bảng, và truy dòng nguồn ([#34](https://github.com/pgiahuy/xdi-platform/issues/34), chưa làm)
-sẽ dùng cột này để chỉ dòng đến từ file nào. Guard SQL đổi bảng logic thành đúng biểu thức
+một file) thành một bảng, và truy dòng nguồn ([#34](https://github.com/pgiahuy/xdi-platform/issues/34), route `.../drill`)
+trả cột này cùng mỗi dòng để chỉ dòng đến từ file nào. Guard SQL đổi bảng logic thành đúng biểu thức
 đọc này ([Guard SQL](GUARD.md)).
 
 ## Phiên bản và hash
@@ -190,7 +190,7 @@ Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order Ci
 **Cột nhạy cảm** (`is_sensitive`) được đánh dấu ngay trong lượt lập hồ sơ cấu trúc, cùng giao dịch ghi hồ sơ, trước
 khi phiên bản dùng được: tên cột có một cụm như email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên (danh
 sách ở `SENSITIVE_NAME_PHRASES`, service/profile.rs) hay bắt đầu bằng "điện thoại", hoặc phần lớn giá trị của cột
-trông như email hay số điện thoại (dạng `0912 345 678`, `(028) 3823 4567`, `+84 912 345 678`, `+1 415 555 0100`,
+(chỉ xét cột có tối đa 200 giá trị khác nhau, tức cột có danh sách giá trị) trông như email hay số điện thoại (dạng `0912 345 678`, `(028) 3823 4567`, `+84 912 345 678`, `+1 415 555 0100`,
 `84912345678`). Tên cột được bỏ dấu, chuyển chữ thường và tách từ (cả camelCase và chỗ chữ liền số, như `Address1`)
 rồi so theo từ, nên "Hotel" không khớp "tel", "Dòng điện thoại" không thành nhạy cảm. Luật cố ý đơn giản và nghiêng
 về đánh dấu nhầm còn hơn bỏ sót. Phiên bản nạp trước khi có luật này được quét đánh dấu lại mỗi lần khởi động (chỉ
@@ -210,9 +210,9 @@ minh. Mọi lỗi khác (mô hình quá tải, timeout, thiếu cấu hình, Pos
 lần khởi động sau thử lại. Gemini báo câu trả lời bị cắt ở `MAX_TOKENS`, bị dừng vì `SAFETY` và mã 400 không phải
 khóa sai cũng bằng lỗi tạm, nên các lỗi này được thử lại mỗi lần khởi động dù gọi lại có thể vẫn hỏng.
 
-Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác
-nhau; min, max chỉ kèm cột `time` và `measure` số thực (min, max của cột chữ hay mã số nguyên như mã đơn, số điện
-thoại là dữ liệu thật); danh sách giá trị chỉ gửi cho cột `dimension` không nhạy cảm, tối đa 50 giá trị một cột (cột
+Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: tên dataset, tên bảng logic, số dòng; mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác
+nhau; min, max chỉ kèm cột `time` và `measure` số thực không nhạy cảm (min, max của cột chữ hay mã số nguyên như mã đơn, số điện
+thoại là dữ liệu thật); danh sách giá trị chỉ gửi cho cột `dimension` không nhạy cảm, mỗi giá trị kèm số dòng, tối đa 50 giá trị một cột (cột
 nhiều hơn gửi 20 giá trị nhiều dòng nhất), tổng tối đa 400 giá trị, bỏ giá trị dài quá 200 byte. Tên cột và giá trị
 in dạng chuỗi JSON nên dữ liệu không chèn được dòng giả vào prompt. Giá trị của cột `text`, `key` hay cột nhạy cảm
 không bao giờ vào prompt.
@@ -222,9 +222,9 @@ mô hình đề xuất đánh dấu thêm qua `sensitive_columns` (chỉ chiều
 
 Câu trả lời được kiểm từng mục trước khi ghi, mục sai bỏ riêng: cột và giá trị phải có thật (giá trị phải nằm trong
 `column_values`), mô tả tối đa 300 ký tự, tối đa 8 bí danh mỗi mục và mỗi bí danh tối đa 60 ký tự, tối đa 5 câu gợi
-ý và mỗi câu tối đa 200 ký tự. Chuỗi rỗng sau trim hay có ký tự điều khiển (NUL, xuống dòng) bị bỏ — một chuỗi như
+ý và mỗi câu tối đa 200 ký tự. Chuỗi rỗng sau trim hay có ký tự điều khiển (NUL, xuống dòng) bị bỏ: một chuỗi như
 vậy nếu qua sẽ làm Postgres từ chối cả giao dịch ghi. Bí danh không được trùng (sau khi bỏ dấu, chữ thường) với tên
-cột khác, giá trị khác cùng cột, hay bí danh đã nhận của cùng mục. Đổi vai trò chỉ nhận hai chiều: cột số nguyên đang
+bất kỳ cột nào (kể cả chính cột đó), giá trị khác cùng cột, hay bí danh đã nhận của cùng mục. Đổi vai trò chỉ nhận hai chiều: cột số nguyên đang
 là `measure` thành `key` (mã lặp lại như `Order Id`) hoặc thành `dimension` khi có không quá 200 giá trị khác nhau
 (năm, tháng dạng số; nhiều hơn thì cột chiều mới sẽ không có danh sách giá trị), và cột `dimension` thành `text`
 (đường dẫn ảnh, mô tả dài). Mỗi đổi vai trò được ghi log (tên cột, vai trò cũ, mới). Cột thành `text` thì giá trị của
@@ -232,14 +232,15 @@ nó không đi vào prompt về sau, vì các bước sau chọn giá trị theo
 
 Đơn vị (`columns.unit`) chỉ nhận cho cột `measure` và chỉ một trong năm chữ: `money` (tiền), `quantity` (số lượng
 hàng), `percent` (tỷ lệ), `duration` (số ngày, số giờ), `other`. Danh sách cố định để so được bằng dấu bằng: luật
-biểu đồ ([Kiến trúc](ARCHITECTURE.md), mục 6) cần biết hai số đo cùng hay khác đơn vị, mà chữ tự do ("ngày",
-"days") cùng nghĩa vẫn khác chữ. Đơn vị sai hay đặt cho cột không phải `measure` thì bỏ riêng, phần còn lại của mục
-vẫn giữ; chưa có đơn vị thì null, và luật biểu đồ coi như khác đơn vị.
+biểu đồ sau này cần biết hai số đo cùng hay khác đơn vị, mà chữ tự do ("ngày", "days") cùng nghĩa vẫn khác chữ. Đơn
+vị sai hay đặt cho cột không phải `measure` thì bỏ riêng, phần còn lại của mục vẫn giữ; chưa có đơn vị thì null.
+Luật biểu đồ hiện tại ([Kiến trúc](ARCHITECTURE.md), mục 6) chưa đọc đơn vị: chỉ theo vai trò cột, và biểu đồ đường
+chỉ vẽ độ đo đầu.
 
 Câu hỏi gợi ý lưu ở `dataset_versions.suggested_questions` (đi theo phiên bản) và trả ra trong
-`GET /api/workspaces/{slug}/datasets` và `.../datasets/{id}` (của phiên bản hiện hành), cùng
-`current_profile_status` để giao diện biết lớp ngữ nghĩa xong chưa; trang hỏi hiện chúng ở
-[#50](https://github.com/pgiahuy/xdi-platform/issues/50).
+`GET /api/workspaces/{ws}/datasets` và `.../datasets/{id}` (của phiên bản hiện hành), cùng
+`current_profile_status` để giao diện biết lớp ngữ nghĩa xong chưa và `semantic_unavailable` khi provider đang cấu
+hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và dòng báo theo hai trường này.
 
 ## Chưa có
 

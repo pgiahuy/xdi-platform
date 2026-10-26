@@ -1,12 +1,35 @@
 # xdi-platform
 
-Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên và giải thích kết quả, đang phát triển. Mục tiêu: nạp một file CSV,
-Parquet hoặc Excel, hỏi bằng tiếng Việt, nhận bảng, biểu đồ, câu SQL đã chạy và các dòng dữ liệu đứng sau mỗi con số.
-Với câu hỏi "tại sao", hệ thống tính nhóm nào làm con số tăng hay giảm. Con số do engine phân tích tính trên dữ liệu;
-mô hình ngôn ngữ chỉ chuyển câu hỏi thành SQL và diễn giải kết quả.
+Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên, đang phát triển, chưa có bản phát hành. Nạp một file CSV, Parquet
+hoặc Excel, hỏi bằng tiếng Việt, nhận bảng, biểu đồ và câu SQL đã chạy. Con số do engine phân tích (DuckDB) tính trên
+dữ liệu; mô hình ngôn ngữ chỉ viết SQL từ câu hỏi và mô tả cột từ hồ sơ dữ liệu, không nhận các dòng dữ liệu
+([docs/PRIVACY.md](docs/PRIVACY.md)). Mục tiêu của bản đầu còn hai phần đang làm: truy các dòng dữ liệu đứng sau
+mỗi con số trên giao diện, và với câu hỏi "tại sao", tính nhóm nào làm con số tăng hay giảm.
 
-Trạng thái: mới có khung backend và khung giao diện. Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1),
-lịch sử thay đổi ở [CHANGELOG.md](CHANGELOG.md).
+## Trạng thái
+
+Đã có trên `main`:
+
+- Tài khoản và workspace: màn thiết lập lần đầu, đăng nhập, mỗi người nhiều workspace, hai vai `admin` (nạp dữ liệu,
+  quản lý thành viên) và `member` (xem, hỏi), trang quản trị tài khoản cho quản trị hệ thống.
+- Nạp dữ liệu: CSV (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet; mỗi lần nạp là một phiên bản. Hồ sơ
+  cột (kiểu, vai trò, giá trị) lập lúc nạp; mô hình ngôn ngữ thêm mô tả, bí danh, đơn vị của cột số đo và câu hỏi gợi ý.
+- Hỏi dữ liệu: câu hỏi thành SQL, qua guard (một câu `SELECT` chỉ đọc trên bảng, cột, hàm được phép, có trần số dòng)
+  rồi chạy trên DuckDB, mô hình sửa một lần khi câu lỗi; câu có chữ khớp nhiều cột thì hỏi lại để chọn. Kết quả có bảng
+  phân trang, tải CSV, biểu đồ cột hoặc đường, thẻ "Đã hiểu là" (đo gì, lọc gì, nhóm theo gì, khoảng thời gian) và pane
+  bằng chứng với câu SQL trước và sau guard cùng các bước đã chạy. Mọi câu hỏi được ghi vào lịch sử trong database.
+- Mô hình ngôn ngữ: `mock` (không cần khóa, trả lời bộ câu hỏi mẫu trên dataset DataCo), Gemini, Ollama.
+
+Chưa có trên `main`:
+
+- Câu "tại sao": phần tính phân rã chênh lệch và lời giải thích đã có trong backend nhưng chưa nối vào endpoint hỏi, nên
+  câu "tại sao" hiện được trả lời như câu thường.
+- Xem dòng nguồn trên giao diện: API truy dòng nguồn của một ô kết quả đã có, giao diện chưa gọi.
+- Lọc dòng theo vai dữ liệu khi hỏi, cảnh báo kiểm hợp lý kết quả, chế độ demo, dataset mẫu đóng gói sẵn, màn xem lịch
+  sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.
+
+Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1), lịch sử thay đổi ở
+[CHANGELOG.md](CHANGELOG.md), bảng trạng thái chi tiết ở cuối [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái).
 
 Backend Rust (Axum, DuckDB nhúng, Postgres), frontend React với Vite. Giấy phép Apache 2.0.
 
@@ -55,7 +78,7 @@ HTTPS, sao lưu, lỗi hay gặp): [docs/INSTALL.md](docs/INSTALL.md).
 backend/     crate Rust: api/ -> service/ -> engine/ và auth/, migrations/ cho Postgres
 frontend/    React, Vite, Tailwind, shadcn/ui; build ra file tĩnh
 docs/        tài liệu, cũng là nguồn GitHub Pages
-data/        nguồn và giấy phép dataset, download.sh, samples/, domains/ (gói khái niệm ngành, backend nhúng vào binary)
+data/        nguồn và giấy phép dataset, download.sh và samples/ (chưa có dataset), domains/ (gói khái niệm ngành)
 Makefile     lối vào duy nhất cho build, test, chạy; CI gọi đúng các target này
 ```
 
@@ -70,6 +93,7 @@ phiên bản, tên cột: [docs/DATA.md](docs/DATA.md).
 - Ý tưởng: [Discussions, Ideas](https://github.com/pgiahuy/xdi-platform/discussions/categories/ideas).
 - Thông báo phát hành: [Discussions, Announcements](https://github.com/pgiahuy/xdi-platform/discussions/categories/announcements).
 - Đóng góp mã: [CONTRIBUTING.md](CONTRIBUTING.md). Quy tắc làm việc: [AGENTS.md](AGENTS.md).
+- Lỗ hổng bảo mật: báo riêng theo [SECURITY.md](SECURITY.md), không mở issue công khai.
 
 ## Giấy phép
 
