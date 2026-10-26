@@ -901,7 +901,7 @@ fn sample_sql_passes_the_guard() {
         .filter(|e| e["question"] != "Xóa các đơn hàng bị hủy")
         .map(|e| e["answer"]["sql"].as_str().unwrap().to_string())
         .collect();
-    assert_eq!(samples.len(), 16);
+    assert_eq!(samples.len(), 17);
     for example in [
         build_simple_example(),
         build_why_example(),

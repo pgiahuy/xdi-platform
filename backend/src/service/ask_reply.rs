@@ -379,7 +379,7 @@ mod tests {
             .filter(|e| e["task"] == "sql" || e["task"] == "repair")
             .map(|e| e["answer"].to_string())
             .collect();
-        assert_eq!(replies.len(), 17);
+        assert_eq!(replies.len(), 18);
         for reply in &replies {
             assert!(!sql_of(reply).is_empty(), "{reply}");
         }

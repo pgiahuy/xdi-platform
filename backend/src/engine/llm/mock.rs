@@ -16,7 +16,8 @@ chối (rejected); "Doanh thu theo ngày đặt hàng" đọc sai định dạng
 châu Á" lọc Market = 'Asia', giá trị DataCo không có (cảnh báo filter_value_not_found). "Doanh thu theo tháng giảm so
 với cùng kỳ năm trước" so từng tháng của năm mới nhất trong dữ liệu với năm liền trước (câu con lấy năm lớn nhất, nên
 chạy được với cả DataCo đầy đủ lẫn bản nhỏ): hai tổng tiền theo 12 tháng, để thử luật biểu đồ vẽ hai đường trên một
-thang đo (service/ask_chart.rs). Câu narrate cho câu
+thang đo (service/ask_chart.rs). "Doanh thu theo quý của từng thị trường" ra thời gian, nhóm và một tổng, để thử
+cột chồng. Câu narrate cho câu
 "tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask_examples.rs) nên qua
 được bước kiểm số của #41.
 Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask_reply.rs);
@@ -130,7 +131,7 @@ mod tests {
     fn answers_file_is_valid() {
         let answers = parse_answers(ANSWERS_JSON).unwrap();
         let count = |wanted: LlmTask| answers.keys().filter(|(task, _)| *task == wanted).count();
-        assert_eq!(count(LlmTask::Sql), 15);
+        assert_eq!(count(LlmTask::Sql), 16);
         assert_eq!(count(LlmTask::Repair), 2);
         assert_eq!(count(LlmTask::Narrate), 1);
         assert_eq!(count(LlmTask::Why), 3);
