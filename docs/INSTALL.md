@@ -610,7 +610,7 @@ Bốn tab:
   nguyên văn. Guard là gì: [GUARD.md](GUARD.md).
 - **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: giá trị hai lát cắt và
   **Chênh lệch**, mỗi chiều một bảng phần đóng góp của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách
-  được. Câu thường thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
+  được. Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
 - **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm số của một kỳ hay một nhóm trong bảng phân
   rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
 - **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL
