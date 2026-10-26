@@ -19,7 +19,8 @@ use super::ask_context::ColumnProfile;
 use super::ask_contract::{ChartKind, ChartLayout, ChartSuggestion, ColumnRole, ResultTable};
 use crate::engine::sql_shape::QueryShape;
 
-/// Tới số kỳ này thì cột đứng, nhiều hơn thì đường: mẫu biểu đồ đường của IBCS (C07) ghi đường hợp nhất khi có hơn 10 kỳ.
+/// Tới số kỳ này thì cột đứng, nhiều hơn thì đường: mẫu biểu đồ đường của IBCS (C07) ghi đường hợp nhất khi có hơn 10
+/// kỳ.
 const COLUMN_PERIODS_MAX: usize = 10;
 
 /// Cột chồng tối đa chừng này kỳ và chừng này phần: mẫu cột chồng của IBCS (C01) ghi không quá 25 kỳ, không quá 5 đến 6
@@ -31,8 +32,8 @@ const STACK_PARTS_MAX: usize = 6;
 /// còn đọc được trên màn hình hẹp, chưa đo.
 const BAR_GROUPS_MAX: usize = 15;
 
-/// Tối đa chừng này đường khi mỗi nhóm một đường. IBCS không đặt số; 5 chọn ở đây, nhiều hơn thì các đường chồng lên nhau
-/// khó theo dõi.
+/// Tối đa chừng này đường khi mỗi nhóm một đường. IBCS không đặt số; 5 chọn ở đây, nhiều hơn thì các đường chồng lên
+/// nhau khó theo dõi.
 const LINE_SERIES_MAX: usize = 5;
 
 /// Tối đa chừng này số đo trong một biểu đồ (cạnh nhau hay mỗi số đo một biểu đồ nhỏ); nhiều hơn thì chỉ hiện bảng.
@@ -205,8 +206,8 @@ fn build_ratio_names(measures: &[Measure], result: &ResultTable) -> Vec<String> 
         .collect()
 }
 
-/// Số giá trị khác nhau của một cột trong các dòng đã gửi. Kết quả bị cắt thì đây chỉ là số tối thiểu, đủ cho các ngưỡng
-/// ở đây vì chúng đều nhỏ hơn số dòng gửi.
+/// Số giá trị khác nhau của một cột trong các dòng đã gửi. Kết quả bị cắt thì đây chỉ là số tối thiểu, đủ cho các
+/// ngưỡng ở đây vì chúng đều nhỏ hơn số dòng gửi.
 fn count_distinct(result: &ResultTable, column: usize) -> usize {
     let mut seen = std::collections::HashSet::new();
     for row in &result.rows {
@@ -261,8 +262,8 @@ fn read_measure(expr: &Expr, profile: &[ColumnProfile]) -> (MeasureNature, Optio
     }
 }
 
-/// Hàm tổng hợp: SUM, COUNT cộng được; COUNT DISTINCT là số gốc không cộng được; AVG, MEDIAN, MIN, MAX là tỷ lệ mang đơn
-/// vị của cột bên trong. Hàm có FILTER hay OVER, hay hàm khác, coi như tỷ lệ chưa rõ đơn vị.
+/// Hàm tổng hợp: SUM, COUNT cộng được; COUNT DISTINCT là số gốc không cộng được; AVG, MEDIAN, MIN, MAX là tỷ lệ mang
+/// đơn vị của cột bên trong. Hàm có FILTER hay OVER, hay hàm khác, coi như tỷ lệ chưa rõ đơn vị.
 fn read_aggregate(
     function: &Function,
     profile: &[ColumnProfile],
@@ -293,8 +294,8 @@ fn read_aggregate(
     }
 }
 
-/// Đơn vị của giá trị bên trong hàm tổng hợp: đơn vị của cột nếu giá trị là đúng một cột, kể cả qua CAST hay CASE (SUM(CASE
-/// WHEN năm = 2017 THEN "Order Item Total" END) vẫn là tiền). Biểu thức khác thì chưa biết.
+/// Đơn vị của giá trị bên trong hàm tổng hợp: đơn vị của cột nếu giá trị là đúng một cột, kể cả qua CAST hay CASE
+/// (SUM(CASE WHEN năm = 2017 THEN "Order Item Total" END) vẫn là tiền). Biểu thức khác thì chưa biết.
 fn read_unit(expr: &Expr, profile: &[ColumnProfile]) -> Option<String> {
     let column = read_value_column(expr)?;
     profile
