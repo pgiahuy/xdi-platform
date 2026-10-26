@@ -34,6 +34,10 @@ pub struct Config {
     /// Như gemini_timeout, nhưng mặc định dài hơn nhiều: mô hình chạy bằng CPU của máy thường chậm hơn Gemini nhiều
     /// lần, và lần gọi đầu còn phải nạp mô hình vào RAM.
     pub ollama_timeout: Duration,
+    /// Cửa sổ ngữ cảnh, tính bằng token, gửi trong options.num_ctx của mỗi request tới Ollama (OLLAMA_NUM_CTX).
+    /// Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM), và prompt dài hơn bị bỏ phần
+    /// đầu, tức phần luật, mà không báo lỗi.
+    pub ollama_num_ctx: u32,
     /// Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB (QUERY_TIMEOUT_SECS); quá thì câu bị dừng, trừ phần
     /// DuckDB tính lúc chuẩn bị câu (engine/query.rs).
     pub query_timeout: Duration,
@@ -75,6 +79,11 @@ impl Config {
             ollama_url: var_or("OLLAMA_URL", "http://localhost:11434"),
             ollama_model: var_or("OLLAMA_MODEL", "qwen2.5-coder:7b"),
             ollama_timeout: timeout_secs("OLLAMA_TIMEOUT_SECS", 300),
+            ollama_num_ctx: positive_number(
+                "OLLAMA_NUM_CTX",
+                env::var("OLLAMA_NUM_CTX").ok().as_deref(),
+                OLLAMA_NUM_CTX_DEFAULT,
+            ),
             query_timeout: timeout_secs("QUERY_TIMEOUT_SECS", 30),
             ask_max_rows: u64::from(positive_number(
                 "ASK_MAX_ROWS",
@@ -114,8 +123,23 @@ impl Config {
                 "PUBLIC_URL should start with https:// or http://; session cookies are sent without the Secure flag"
             );
         }
+        // Đặt nhỏ hơn mặc định để tiết kiệm RAM là hợp lệ với dataset ít cột, nên chỉ cảnh báo: người quản trị cần biết
+        // vì sao câu trả lời tệ đi khi prompt dài, vì Ollama cắt prompt mà không báo lỗi.
+        if self.llm_provider == "ollama" && self.ollama_num_ctx < OLLAMA_NUM_CTX_DEFAULT {
+            tracing::warn!(
+                value = self.ollama_num_ctx,
+                recommended = OLLAMA_NUM_CTX_DEFAULT,
+                "OLLAMA_NUM_CTX is below the default: Ollama silently drops the start of longer prompts (the rules); \
+                 raise OLLAMA_NUM_CTX if answers ignore the rules (docs/INSTALL.md, section 1)"
+            );
+        }
     }
 }
+
+/// Mặc định của OLLAMA_NUM_CTX. Prompt dài nhất (PROMPT_MAX_CHARS, 24 000 ký tự) khoảng 7 200 đến 8 000 token theo
+/// tokenizer của qwen2.5-coder, cộng prompt sửa và câu trả lời thì vượt 8192; 12 288 còn dư khoảng 3 000 token. Cách đo
+/// ở docs/INSTALL.md, mục 1.
+const OLLAMA_NUM_CTX_DEFAULT: u32 = 12_288;
 
 /// Mật khẩu mẫu trong docker-compose.yml và .env.example.
 const SAMPLE_DB_PASSWORD: &str = "xdi";

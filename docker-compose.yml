@@ -51,6 +51,7 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:7b}
       OLLAMA_TIMEOUT_SECS: ${OLLAMA_TIMEOUT_SECS:-300}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-12288}
       QUERY_TIMEOUT_SECS: ${QUERY_TIMEOUT_SECS:-30}
       ASK_MAX_ROWS: ${ASK_MAX_ROWS:-100000}
     ports:

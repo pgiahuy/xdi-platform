@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/llm/ollama.rs - gọi Ollama chạy trên máy hoặc mạng nội bộ, cho chế độ offline.
 Dùng POST /api/generate với stream false: một request, một response JSON có trường response. Gửi đúng một chuỗi
-prompt như Gemini; /api/chat chỉ cần khi có hội thoại nhiều lượt. */
+prompt như Gemini; /api/chat chỉ cần khi có hội thoại nhiều lượt. Mỗi request gửi options.num_ctx (OLLAMA_NUM_CTX,
+config.rs): không gửi thì Ollama dùng cửa sổ mặc định của nó và cắt phần đầu prompt dài mà không báo. */
 
 use std::time::Duration;
 
@@ -18,12 +19,14 @@ pub struct Ollama {
     log_url: String,
     model: String,
     timeout: Duration,
+    /// Cửa sổ ngữ cảnh tính bằng token, gồm cả prompt lẫn câu trả lời.
+    num_ctx: u32,
     /// Như ở gemini.rs: lỗi dựng client giữ lại để báo khi có câu hỏi.
     client: Result<reqwest::Client, String>,
 }
 
 impl Ollama {
-    pub fn new(url: &str, model: String, timeout: Duration) -> Self {
+    pub fn new(url: &str, model: String, timeout: Duration, num_ctx: u32) -> Self {
         let client = http::build_client(timeout, http::CONNECT_TIMEOUT);
         if let Err(err) = &client {
             tracing::error!(error = %err, "cannot build HTTP client for Ollama");
@@ -33,6 +36,7 @@ impl Ollama {
             log_url: http::build_log_url(url),
             model,
             timeout,
+            num_ctx,
             client,
         }
     }
@@ -104,6 +108,7 @@ impl LlmProvider for Ollama {
             "model": self.model,
             "prompt": request.prompt,
             "stream": false,
+            "options": { "num_ctx": self.num_ctx },
         });
         // format nhận cả "json" (JSON bất kỳ) lẫn một JSON Schema; gửi schema thì Ollama ép mô hình theo đúng các trường.
         if let Some(schema) = &request.json_schema {
@@ -173,12 +178,14 @@ mod tests {
     use crate::engine::llm::LlmTask;
 
     const PROMPT: &str = "Viết SQL: số đơn theo khu vực";
+    // Khác mặc định của config.rs, để test thấy giá trị đi từ tham số chứ không phải từ một hằng ghi cứng.
+    const NUM_CTX: u32 = 6144;
 
     // Body theo định dạng response thật của Ollama /api/generate khi stream false.
     const OK_BODY: &str = r#"{"model":"qwen2.5-coder:7b","created_at":"2026-10-22T08:00:00.000000Z","response":"SELECT 1","done":true,"done_reason":"stop","context":[1,2,3],"total_duration":5000000000,"load_duration":3000000000,"prompt_eval_count":12,"prompt_eval_duration":1000000000,"eval_count":3,"eval_duration":1000000000}"#;
 
     fn ollama(url: &str, timeout: Duration) -> Ollama {
-        Ollama::new(url, "qwen2.5-coder:7b".to_string(), timeout)
+        Ollama::new(url, "qwen2.5-coder:7b".to_string(), timeout, NUM_CTX)
     }
 
     async fn ask(provider: &Ollama) -> Result<String, AppError> {
@@ -213,6 +220,7 @@ mod tests {
         assert_eq!(received.body["model"], "qwen2.5-coder:7b");
         assert_eq!(received.body["prompt"], PROMPT);
         assert_eq!(received.body["stream"], false);
+        assert_eq!(received.body["options"]["num_ctx"], NUM_CTX);
         assert!(received.body.get("format").is_none());
     }
 

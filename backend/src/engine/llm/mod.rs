@@ -86,6 +86,7 @@ pub fn from_config(config: &Config) -> Arc<dyn LlmProvider> {
             &config.ollama_url,
             config.ollama_model.clone(),
             config.ollama_timeout,
+            config.ollama_num_ctx,
         )),
         other => {
             if other != "mock" {

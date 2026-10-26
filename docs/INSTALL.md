@@ -128,6 +128,29 @@ Mô hình ngôn ngữ:
   Chạy compose mà để trống `OLLAMA_URL` thì backend gọi `http://host.docker.internal:11434`, tức Ollama trên máy host.
   Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới được: chạy Ollama với
   `OLLAMA_HOST=0.0.0.0`, và chặn cổng 11434 từ bên ngoài bằng tường lửa vì Ollama không có đăng nhập.
+- Cửa sổ ngữ cảnh của Ollama: `OLLAMA_NUM_CTX` (mặc định 12288 token), gửi trong `options.num_ctx` của mỗi request.
+  Cửa sổ gồm cả prompt lẫn câu trả lời. Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM,
+  theo [tài liệu Ollama](https://docs.ollama.com/context-length)), và prompt dài hơn bị bỏ phần đầu, tức phần luật,
+  mà không báo lỗi. Số token của prompt trên DataCo (53 cột và cột `_source_file`, hồ sơ viết sẵn của chế độ mock), đếm bằng tokenizer của
+  Qwen2.5-Coder (`tokenizer.json` của `Qwen/Qwen2.5-Coder-7B-Instruct` trên Hugging Face, thư viện Python
+  `tokenizers`), trên chữ prompt backend gửi tới một server giả thay cho Ollama:
+
+  | Prompt | Ký tự | Token |
+  |---|---|---|
+  | SQL, câu "Doanh thu theo thị trường" | 10 497 | 3 050 |
+  | Sửa SQL sau lần trả lời không đọc được | 10 891 | 3 145 |
+  | Form câu "tại sao", câu "Vì sao doanh thu quý 3 năm 2017 giảm?" | 10 191 | 3 020 |
+  | Prompt dài nhất backend gửi (trần 24 000 ký tự, lặp các dòng cột thật) | 24 000 | 7 180 |
+
+  Danh sách giá trị của cột là phần tốn token nhất (0,33 token mỗi ký tự); prompt ở trần mà toàn danh sách giá trị thì
+  khoảng 8 000 token. Mặc định 12288 đủ cho prompt đó cộng phần sửa và câu trả lời. Đếm với mô hình khác thì dùng
+  tokenizer của mô hình đó; Ollama ghi số token đã đọc của mỗi lần gọi trong trường `prompt_eval_count`.
+  Tăng `num_ctx` thì Ollama cần thêm RAM (hoặc VRAM) cho bộ nhớ đệm K/V, tăng theo số token. Với `qwen2.5-coder:7b`
+  (28 lớp, 4 đầu K/V, mỗi đầu 128 chiều, theo `config.json` của mô hình) và bộ đệm `f16` mặc định, mỗi token cần
+  2 x 28 x 4 x 128 x 2 byte = 56 KiB: 4096 token khoảng 224 MiB, 12288 token khoảng 672 MiB. Đây là số tính từ cấu
+  hình mô hình, chưa đo trên Ollama; số thật xem bằng `ollama ps`. RAM nhân thêm theo `OLLAMA_NUM_PARALLEL`, và giảm
+  khoảng một nửa với `OLLAMA_KV_CACHE_TYPE=q8_0` ([FAQ của Ollama](https://docs.ollama.com/faq)). Đặt nhỏ hơn mặc định
+  thì backend ghi cảnh báo vào log lúc khởi động.
 - Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,
   vì mô hình chạy bằng CPU chậm hơn nhiều).
 
