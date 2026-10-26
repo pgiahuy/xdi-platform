@@ -2,28 +2,34 @@
 /* components/ask/ResultTable.tsx - bảng kết quả: phân trang trong các dòng backend đã gửi (tối đa 1000), dòng ghi số
 dòng, nút tải CSV. Số dòng ghi theo hợp đồng (ARCHITECTURE mục 8): bị cắt thì "N trên M dòng", chạm trần của guard thì
 "ít nhất M dòng", để không nói sai tổng. Trang gắn key theo response để về trang 1 khi có kết quả mới.
-Tab Dòng nguồn của pane bằng chứng dùng lại bảng này với tiêu đề riêng, không có nút tải CSV (ngoài phạm vi #52). */
+Tab Dòng nguồn của pane bằng chứng dùng lại bảng này với tiêu đề riêng, không có nút tải CSV (ngoài phạm vi #52).
+Có cellDrill thì ô của cột số đo là nút: bấm thì gửi DrillTarget dựng từ giá trị gốc các cột khóa của dòng đó (#34), để
+backend so đúng giá trị ô đã gửi, kể cả chuỗi decimal và null. */
 
 import { useId, useState } from 'react'
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCell } from './cellFormat'
+import { describeDrillTarget } from './drillTarget'
+import type { CellDrill, DrillTarget } from './evidenceTypes'
 import { buildResultCsv, downloadCsv } from './resultCsv'
-import type { CellKind, ResultView } from './types'
+import type { Cell, CellKind, ResultView } from './types'
 
 type Props = {
   result: ResultView
   /** Tên file CSV khi tải; không có thì không có nút tải. */
   fileName?: string
   heading?: string
+  /** Ô số đo bấm được để xem dòng nguồn; không có thì bảng chỉ để đọc. */
+  cellDrill?: CellDrill
 }
 
 // 50 dòng vừa một hai lần cuộn trên màn laptop; 1000 dòng là 20 trang.
 const pageSize = 50
 const countFormat = new Intl.NumberFormat('vi-VN')
 
-export function ResultTable({ result, fileName, heading = 'Kết quả' }: Props) {
+export function ResultTable({ result, fileName, heading = 'Kết quả', cellDrill }: Props) {
   // id theo từng bảng: trang có thể có hai bảng cùng lúc (kết quả và dòng nguồn), id trùng thì nhãn trỏ sai bảng.
   const headingId = useId()
   const [page, setPage] = useState(0)
@@ -73,10 +79,15 @@ export function ResultTable({ result, fileName, heading = 'Kết quả' }: Props
               <tr key={page * pageSize + r} className="border-t">
                 {row.map((cell, c) => (
                   <td key={c} className={cn('px-3 py-1.5', alignClass(result.columns[c].kind))}>
-                    {cell === null ? (
-                      <span className="text-muted-foreground">trống</span>
+                    {cellDrill?.measures.includes(c) ? (
+                      <DrillCell
+                        cell={cell}
+                        kind={result.columns[c].kind}
+                        target={buildTarget(result, cellDrill, row, c)}
+                        onDrill={cellDrill.onDrill}
+                      />
                     ) : (
-                      formatCell(cell, result.columns[c].kind)
+                      <CellText cell={cell} kind={result.columns[c].kind} />
                     )}
                   </td>
                 ))}
@@ -115,6 +126,38 @@ export function ResultTable({ result, fileName, heading = 'Kết quả' }: Props
       )}
     </section>
   )
+}
+
+function CellText({ cell, kind }: { cell: Cell; kind: CellKind }) {
+  if (cell === null) return <span className="text-muted-foreground">trống</span>
+  return formatCell(cell, kind)
+}
+
+type DrillCellProps = { cell: Cell; kind: CellKind; target: DrillTarget; onDrill: (target: DrillTarget) => void }
+
+// Button của shadcn là thẻ button thật: Tab đi tới được, Enter và Space bấm được, không cần tự bắt phím. Màu primary
+// của theme gần như đen, nên gạch chân chấm là dấu duy nhất cho biết ô bấm được trước khi rê chuột.
+function DrillCell({ cell, kind, target, onDrill }: DrillCellProps) {
+  return (
+    <Button
+      variant="link"
+      size="xs"
+      className="h-auto px-0 tabular-nums underline decoration-dotted"
+      aria-label={`Xem dòng nguồn: ${describeDrillTarget(target)}`}
+      onClick={() => onDrill(target)}
+    >
+      <CellText cell={cell} kind={kind} />
+    </Button>
+  )
+}
+
+function buildTarget(result: ResultView, cellDrill: CellDrill, row: Cell[], column: number): DrillTarget {
+  const keys = cellDrill.keys.map((k) => ({
+    column: result.columns[k].name,
+    value: row[k],
+    kind: result.columns[k].kind,
+  }))
+  return { from: 'cell', keys, measure: result.columns[column].name }
 }
 
 function describeCount({ rows, totalRows, truncated, limitReached }: ResultView): string {

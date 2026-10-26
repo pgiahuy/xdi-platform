@@ -11,6 +11,7 @@ import type { components } from './schema'
 
 type Schemas = components['schemas']
 export type BreakdownKey = Schemas['BreakdownKey']
+export type DrillKey = Schemas['DrillKey']
 export type DrillRequest = Schemas['DrillRequest']
 export type DrillResponse = Schemas['DrillResponse']
 
@@ -21,8 +22,9 @@ export type DrillVariables = {
   fromSamples?: boolean
 }
 
-// Cỡ trang mặc định của backend; tab Dòng nguồn chỉ hiện trang đầu.
-export const drillPageSize = 100
+// Cỡ một trang dòng nguồn xin từ backend, bằng cỡ trang của ResultTable: mỗi trang backend vừa một trang bảng, nên tab
+// Dòng nguồn chỉ có một hàng nút trang (theo offset), không lồng trang của bảng vào trong.
+export const drillPageSize = 50
 
 function drillPath(ws: string, datasetId: string): string {
   return `/workspaces/${encodeURIComponent(ws)}/datasets/${encodeURIComponent(datasetId)}/drill`

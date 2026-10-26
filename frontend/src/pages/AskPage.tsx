@@ -28,6 +28,7 @@ import { FormMessage } from '@/components/forms/FormMessage'
 import { AskDatasetStatus } from './AskDatasetStatus'
 import { AskEvidence } from './AskEvidence'
 import { AskOutcome, type Answer } from './AskOutcome'
+import { useEvidenceView } from './evidenceView'
 import { useStoredFlag } from './storedFlag'
 import { workspaceHref } from './workspaceNav'
 
@@ -48,6 +49,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   const [sampleMode, setSampleMode] = useState(false)
   const [answer, setAnswer] = useState<Answer>()
   const [evidenceOpen, setEvidenceOpen] = useStoredFlag(evidenceOpenKey, true)
+  const evidenceView = useEvidenceView(answer ? evidenceKey(answer) : '')
 
   // Chưa chọn thì hỏi dataset mới nhất (backend trả mới tạo trước).
   const datasetId = pickedDataset ?? datasets.data?.[0]?.id ?? ''
@@ -103,8 +105,14 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       evidence={
         answer &&
         !ask.error && (
-          // key theo câu trả lời: câu trả lời mới thì pane về tab mặc định, bỏ dòng phân rã đã bấm của câu trước.
-          <AskEvidence key={evidenceKey(answer)} ws={ws} answer={answer} pending={ask.isPending} />
+          // key theo câu trả lời: câu trả lời mới thì pane dựng lại từ đầu; evidenceView cũng bỏ chỗ đã bấm của câu trước.
+          <AskEvidence
+            key={evidenceKey(answer)}
+            ws={ws}
+            answer={answer}
+            pending={ask.isPending}
+            view={evidenceView}
+          />
         )
       }
     >
@@ -152,6 +160,11 @@ function WorkspaceAsk({ ws }: { ws: string }) {
         <AskOutcome
           answer={answer}
           pending={ask.isPending}
+          // Bấm ô thì mở lại pane nếu đang thu gọn: dòng nguồn hiện ở đó.
+          onCellDrill={(target) => {
+            evidenceView.drill(target)
+            setEvidenceOpen(true)
+          }}
           onChangeAssumption={(choiceId, optionId) => askAgainWith([{ choice_id: choiceId, option_id: optionId }])}
           onAnswerClarifications={(picks) =>
             askAgainWith(

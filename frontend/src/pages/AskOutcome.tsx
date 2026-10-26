@@ -21,12 +21,13 @@ import { AskWarnings } from '@/components/ask/AskWarnings'
 import { ClarificationForm } from '@/components/ask/ClarificationForm'
 import { SampleBadge } from '@/components/ask/SampleModeSwitch'
 import { ResultTable } from '@/components/ask/ResultTable'
+import type { DrillTarget } from '@/components/ask/evidenceTypes'
 import type { ChartView, ResultView, UnderstandingView } from '@/components/ask/types'
 import { UnderstandingCard } from '@/components/ask/UnderstandingCard'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { cn } from '@/lib/utils'
-import { buildResultView } from './resultView'
+import { buildCellDrill, buildResultView } from './resultView'
 
 const ResultChart = lazy(() => import('@/components/ask/ResultChart').then((m) => ({ default: m.ResultChart })))
 
@@ -40,6 +41,8 @@ type Props = {
   answer: Answer
   /** Đang hỏi lại: câu trả lời cũ vẫn hiện, mờ đi, không bấm được. */
   pending: boolean
+  /** Bấm một ô số đo của bảng kết quả: trang mở tab Dòng nguồn của ô đó. */
+  onCellDrill: (target: DrillTarget) => void
   onChangeAssumption: (choiceId: string, optionId: string) => void
   onAnswerClarifications: (picks: { choiceId: string; optionId: string }[]) => void
 }
@@ -51,7 +54,7 @@ const fallbackMessage = {
   failed: 'Không chạy được câu SQL.',
 }
 
-export function AskOutcome({ answer, pending, onChangeAssumption, onAnswerClarifications }: Props) {
+export function AskOutcome({ answer, pending, onCellDrill, onChangeAssumption, onAnswerClarifications }: Props) {
   const { response, variables } = answer
   return (
     <AskSection title={variables.question} prominent>
@@ -61,6 +64,7 @@ export function AskOutcome({ answer, pending, onChangeAssumption, onAnswerClarif
         <OutcomeBody
           answer={answer}
           pending={pending}
+          onCellDrill={onCellDrill}
           onChangeAssumption={onChangeAssumption}
           onAnswerClarifications={onAnswerClarifications}
         />
@@ -69,11 +73,18 @@ export function AskOutcome({ answer, pending, onChangeAssumption, onAnswerClarif
   )
 }
 
-function OutcomeBody({ answer, pending, onChangeAssumption, onAnswerClarifications }: Props) {
+function OutcomeBody({ answer, pending, onCellDrill, onChangeAssumption, onAnswerClarifications }: Props) {
   const { response, variables } = answer
   switch (response.status) {
     case 'answered':
-      return <AnsweredBody response={response} pending={pending} onChangeAssumption={onChangeAssumption} />
+      return (
+        <AnsweredBody
+          response={response}
+          pending={pending}
+          onCellDrill={onCellDrill}
+          onChangeAssumption={onChangeAssumption}
+        />
+      )
     case 'needs_choice': {
       const message = response.message ?? fallbackMessage.needs_choice
       if (isRepeatedClarification(variables.answered ?? [], response)) {
@@ -100,12 +111,13 @@ function OutcomeBody({ answer, pending, onChangeAssumption, onAnswerClarificatio
 type AnsweredProps = {
   response: AskResponse
   pending: boolean
+  onCellDrill: (target: DrillTarget) => void
   onChangeAssumption: (choiceId: string, optionId: string) => void
 }
 
 // Lời giải thích của câu "tại sao" là câu trả lời, nên đứng ngay sau thẻ "Đã hiểu là", trên bảng kết quả; bảng phân
 // rã và SQL đứng sau từng con số thuộc pane bằng chứng (#52).
-function AnsweredBody({ response, pending, onChangeAssumption }: AnsweredProps) {
+function AnsweredBody({ response, pending, onCellDrill, onChangeAssumption }: AnsweredProps) {
   const result = response.result && buildResultView(response.result)
   const chart = result && response.chart && buildChartView(response.chart, result)
   return (
@@ -141,6 +153,7 @@ function AnsweredBody({ response, pending, onChangeAssumption }: AnsweredProps) 
           key={`table-${response.query_id}`}
           result={result}
           fileName={`ket-qua-${(response.query_id ?? 'cau-hoi').slice(0, 8)}.csv`}
+          cellDrill={buildCellDrill(response, onCellDrill)}
         />
       )}
     </>

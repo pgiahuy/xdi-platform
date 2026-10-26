@@ -66,20 +66,41 @@ export type BreakdownView = {
 
 export type Slice = 'base' | 'compare'
 
-/** Chỗ được bấm trong bảng phân rã: một lát cắt, một cột, một giá trị nhóm. */
-export type DrillTarget = {
-  slice: Slice
+/** Một khóa của ô được bấm: giá trị gốc của một cột dimension hay time trong dòng đó, đúng như backend gửi. */
+export type DrillKeyView = {
   column: string
   value: Cell
   kind: CellKind
 }
 
-/** Tab dòng nguồn theo trạng thái lần truy gần nhất. */
+// Một kiểu chung cho hai chỗ bấm để tab Dòng nguồn, lần gọi drill và chữ "Đang xem" đi cùng một đường; from cho biết
+// request gửi breakdown hay cell (hợp đồng ở drill_contract.rs).
+/** Chỗ được bấm: một dòng phân rã (lát cắt, cột, giá trị nhóm) hoặc một ô số đo của bảng kết quả (khóa của dòng và tên
+ * cột số đo; không có khóa là toàn bộ dòng nguồn của câu hỏi). */
+export type DrillTarget =
+  | { from: 'breakdown'; slice: Slice; column: string; value: Cell; kind: CellKind }
+  | { from: 'cell'; keys: DrillKeyView[]; measure: string }
+
+/** Ô nào của bảng kết quả bấm được: chỉ số các cột số đo, chỉ số các cột khóa (dimension, time) của dòng. */
+export type CellDrill = {
+  measures: number[]
+  keys: number[]
+  onDrill: (target: DrillTarget) => void
+}
+
+/** Một trang dòng nguồn: vị trí dòng đầu, cỡ trang, tổng số dòng nguồn của chỗ được bấm. */
+export type RowsPage = {
+  offset: number
+  limit: number
+  total: number
+}
+
+/** Tab dòng nguồn theo trạng thái lần truy gần nhất; idle kèm lời nhắc bấm ở đâu. */
 export type RowsView =
-  | { state: 'idle' }
+  | { state: 'idle'; hint: string }
   | { state: 'loading'; target: DrillTarget }
   | { state: 'error'; target: DrillTarget; message: string }
-  | { state: 'ready'; target: DrillTarget; sql: string; result: ResultView; sample: boolean }
+  | { state: 'ready'; target: DrillTarget; sql: string; result: ResultView; page: RowsPage; sample: boolean }
 
 export type StepView = {
   /** Nhãn tiếng Việt do giao diện đặt cho tên bước. */
