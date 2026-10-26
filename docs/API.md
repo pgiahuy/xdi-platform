@@ -52,7 +52,7 @@ không dò được tên workspace. Id dataset của workspace khác cũng trả
 
 | Vai | Thuộc về | Gọi việc không đủ quyền |
 |---|---|---|
-| `admin`, `member` | Một tài khoản trong một workspace (trường `role` của `Membership`) | `member` gọi việc của admin (nạp file, liệt kê sheet, đổi tên hay xóa workspace, quản lý thành viên): 403 |
+| `admin`, `member` | Một tài khoản trong một workspace (trường `role` của `Membership`) | `member` gọi việc của admin (nạp file, liệt kê sheet, đổi tên hay xóa workspace, thêm, đổi vai hay xóa người khác): 403 |
 | Quản trị hệ thống | Tài khoản (`is_system_admin`), không theo workspace | Người khác gọi `/api/admin/...`: 403 |
 
 Thành viên thường nhận 403 thay vì 404 vì họ đã biết workspace có thật, chỉ thiếu quyền. Quản trị hệ thống không tự có
@@ -106,9 +106,10 @@ Enum lỗi nằm ở `backend/src/error.rs`.
 `POST /api/workspaces/{ws}/datasets/{id}/ask` trả lời một câu hỏi trên phiên bản đang dùng của dataset
 (`backend/src/service/ask.rs`): lấy ngữ cảnh từ hồ sơ cột, nhờ mô hình viết SQL, guard kiểm, DuckDB chạy, sửa một lần khi
 lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với `status` trong
-body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, dataset chưa có dữ liệu hay chưa lập hồ sơ xong, hoặc câu mock không
-có câu trả lời mẫu; 404 dataset không có; 502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào. Câu
-answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ. Câu "tại sao" (nhận bằng từ khóa) đi đường form: mô hình
+body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, body sai, dataset chưa có dữ liệu, hồ sơ chưa lập xong hay lập
+lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu mock không có câu trả lời mẫu; 404 dataset không có; 502, 503 khi mô
+hình lỗi hay chưa cấu hình trước khi có câu SQL nào. Câu answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ.
+Câu "tại sao" (nhận bằng từ khóa) đi đường form: mô hình
 điền form, code dựng SQL, `result` là bảng tổng theo kỳ hay theo nhóm, `explanation` là bảng phân rã; không phân rã
 được thì `explanation` null kèm cảnh báo `explanation_unavailable`, câu vẫn answered.
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả

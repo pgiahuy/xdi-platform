@@ -4,8 +4,9 @@ theo schema và cho tra cứu theo id. Engine chỉ biết hình dạng của m�
 
 Ba tầng tách riêng: engine không biết ngành; gói mô tả khái niệm chung của mọi doanh nghiệp cùng ngành (doanh thu, tỷ
 lệ giao trễ...) bằng lời, không ghi tên cột của dataset cụ thể; chỉ số của workspace (bảng metrics) mới quyết định
-công thức trên cột thật. Chưa có code gọi module này: chọn gói cho dataset lúc nạp (một dataset một gói) và đưa gói
-vào prompt (#29) làm ở issue sau. Schema của file ghi ở docs/DOMAINS.md. */
+công thức trên cột thật. Prompt sinh SQL và prompt form câu "tại sao" (service/ask_prompt.rs) gọi find_domain_package
+theo datasets.domain; chưa có chỗ nào đặt cột đó (chọn gói lúc nạp, một dataset một gói, làm ở issue sau), nên hiện
+chưa prompt nào có gói. Schema của file ghi ở docs/DOMAINS.md. */
 
 use serde::Deserialize;
 

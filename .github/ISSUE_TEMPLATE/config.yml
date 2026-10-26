@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Lỗ hổng bảo mật
+    url: https://github.com/pgiahuy/xdi-platform/blob/main/SECURITY.md
+    about: Không mở issue công khai; báo riêng theo SECURITY.md
   - name: Câu hỏi
     url: https://github.com/pgiahuy/xdi-platform/discussions/categories/q-a
     about: Hỏi về cài đặt, cách dùng, cách đọc kết quả

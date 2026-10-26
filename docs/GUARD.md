@@ -9,9 +9,11 @@ Code: `backend/src/engine/guard/mod.rs`, hàm `build_guarded_sql`. Test: `backen
 
 Trạng thái: guard đã có và có test. Endpoint hỏi dữ liệu ([#33](https://github.com/pgiahuy/xdi-platform/issues/33),
 `service/ask.rs`) gọi guard qua `service/ask_run.rs`, với một bảng là dataset đang hỏi và đủ mọi cột của phiên bản đang
-dùng; chưa nơi nào đọc chính sách lọc dòng và truyền vào guard
-([#45](https://github.com/pgiahuy/xdi-platform/issues/45)), nên `row_filters` còn rỗng. Tài liệu này mô tả đúng hàm hiện
-có.
+dùng. Endpoint hỏi, cả câu thường và câu "tại sao" (`load_row_filters` trong `service/ask.rs`), và truy dòng nguồn
+(`service/drill.rs`) đọc chính sách lọc dòng theo `data_role` của người hỏi hay người bấm
+(`engine/store/policies.rs`; admin không bị lọc) và truyền vào guard
+([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Chưa có API đặt `data_role` cho thành viên hay ghi
+`rls_policies`, nên ngoài test `row_filters` hiện luôn rỗng. Tài liệu này mô tả đúng hàm hiện có.
 
 ## Đầu vào và đầu ra
 
@@ -19,7 +21,7 @@ có.
 |---|---|
 | Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản, chính sách lọc dòng `row_filters`); `max_rows` |
 | Ra khi nhận | `GuardedSql` gồm hai bản của cùng một câu: `shown` và `runnable` (mục Bước 5), ghi chú `limit_note`, và `row_filters` là các điều kiện lọc dòng guard đã thêm (mục Bước 3) |
-| Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Oversized` khi câu có thể dựng giá trị quá lớn (luật kích thước, số tầng, mảnh ghép, độ rộng ở bước 2), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy hay chính sách lọc dòng sai (mục Bước 3) |
+| Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Oversized` khi câu có thể dựng giá trị quá lớn (luật kích thước, số tầng, mảnh ghép, độ rộng, gọi hàm dạng phương thức ở bước 2), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy hay chính sách lọc dòng sai (mục Bước 3) |
 
 Guard không đọc Postgres hay DuckDB: service đưa danh sách bảng vào, nên test chạy không cần database. Lý do từ chối
 viết để mô hình đọc và sửa ở vòng sau, nên nói rõ tên bảng, hàm hay cột bị từ chối. Trong luồng hỏi
@@ -74,7 +76,8 @@ Bí danh trùng tên bảng khác chỉ đổi tên gọi: `FROM customers AS sa
 sổ (`row_number`, `rank`, `lag`...), số, null và điều kiện (`coalesce`, `nullif`, `if`...), chuỗi, ngày giờ
 (`date_trunc`, `year`, `strftime`...). Hàm ngoài danh sách bị từ chối ở mọi chỗ có biểu thức: danh sách cột, `WHERE`,
 `GROUP BY`, `HAVING`, `ORDER BY`, `CASE`, `FILTER`, `OVER`, điều kiện `JOIN`. Ví dụ bị từ chối: `getenv`,
-`current_setting`, `read_text`, `COLUMNS(...)`, tên hàm kèm schema (`main.sum`). Chỉ thêm hàm vào danh sách sau khi chắc
+`current_setting`, `read_text`, `COLUMNS(...)`. Hàm trong danh sách mà viết kèm schema (`main.sum`) bị từ chối theo
+luật gọi hàm dạng phương thức bên dưới. Chỉ thêm hàm vào danh sách sau khi chắc
 nó không đọc file, cấu hình hay mạng, và không dựng được giá trị khổng lồ từ tham số.
 
 Vài hàm trong danh sách có luật riêng vì tham số quyết định kích thước kết quả (`engine/guard/sizes.rs`). DuckDB tính
@@ -163,7 +166,8 @@ Tên ba phần trở lên (`main.sales.region`) bị từ chối.
 ## Bước 3: lọc dòng theo vai dữ liệu
 
 Mỗi `AllowedTable` mang `row_filters`: các `RowFilter { column, allowed_values }` service lấy từ `rls_policies` theo
-`data_role` của người hỏi ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Rỗng thì bảng đó không lọc.
+`data_role` của người gọi (luồng hỏi và truy dòng nguồn,
+[#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Rỗng thì bảng đó không lọc.
 Guard không tự đọc chính sách và không quyết ai được thấy hết.
 
 Guard thay mỗi chỗ đọc bảng có chính sách bằng một câu con chỉ chứa dòng được phép, giữ bí danh của câu. Ví dụ chính
@@ -248,9 +252,9 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
 | Đọc câu | Câu sai cú pháp; câu rỗng, chỉ khoảng trắng, chỉ chú thích; hai câu; chú thích giấu câu thứ hai (`--`, `/* */`) bị bỏ khỏi `shown`; `;` trước chú thích rồi câu thứ hai bị từ chối; `SEL/**/ECT` |
 | Câu lệnh | `FOR UPDATE`, `FOR SHARE` ở câu ngoài cùng, câu con, bảng tạm; ghi, `ATTACH`, `COPY`, `PRAGMA`, `INSTALL`, `LOAD`, `DESCRIBE`, `SHOW`, `SUMMARIZE`, `EXPLAIN`, `SET`, `RESET`, `CALL`, `USE`, `DETACH`, `CREATE SECRET`, `EXPORT DATABASE`, `CHECKPOINT`; `DELETE` trong `WITH`; `SELECT INTO`; `TABLE x` kể cả trong `UNION` |
 | Bảng | `read_csv`, `glob`, `read_parquet`, `parquet_scan`, `read_json_auto`, `generate_series`, `range` ở chỗ bảng, kể cả trong `JOIN`, truy vấn con và `WITH`; bảng hệ thống (`duckdb_tables`, `duckdb_settings`, `pg_catalog.pg_tables`, `sqlite_master`, `information_schema`); vế `UNION` đọc nguồn ngoài danh sách; tên file trong nháy đơn và nháy kép; bảng lạ (lý do liệt kê bảng dùng được); tên kèm schema; chữ Unicode giống chữ Latin; bí danh trùng tên bảng khác; `WITH RECURSIVE`; bảng tạm trùng tên bảng dữ liệu |
-| Độ dài | Chuỗi 20 000 vế `UNION ALL` bị từ chối trước khi đọc; câu sát 32 KB vẫn qua mà không tràn stack 2 MB của luồng test |
+| Độ dài | Chuỗi 20 000 vế `UNION ALL` bị từ chối trước khi đọc; câu sát 32 KB không tràn stack 2 MB của luồng test (chuỗi `OR` qua, chuỗi `UNION ALL` bị luật số nhánh từ chối) |
 | Hàm | `current_setting`, `getenv` (cả trong nháy kép), `read_text`, `main.sum`, `COLUMNS`; hàm lạ trong `ORDER BY`, `HAVING`, `CASE`, `FILTER`, `OVER`, `JOIN ... ON`; `lpad`, `rpad` với độ dài hằng lớn, biểu thức, tên cột, câu con; `replace` làm chuỗi dài ra, tính theo byte (cả lồng nhau); `regexp_replace` với mẫu khớp được chuỗi rỗng hay chuỗi thay dài hơn một byte; `strftime` với định dạng từ cột, đảo thứ tự tham số hay dài hơn 100 byte; các cách dùng để làm sạch chuỗi (cả gộp khoảng trắng) vẫn qua |
-| Số tầng, mảnh, độ rộng | 4 tầng nhận, 5 tầng từ chối ở mọi chỗ (`FROM`, `WHERE`, cột, `WITH`, bảng tạm đọc bảng tạm); bảng tạm cùng tên trong `WITH` lồng không che số tầng; bảng tạm kèm câu con kiểu mô hình hay viết vẫn qua; 20 mảnh nhận, 21 từ chối (`||`, `concat`, `concat_ws`, cộng qua các tầng, danh sách và struct viết thẳng, bí danh dùng lại); tuple, mảng trong `IN`, `ANY`, `ALL` không tính; gọi hàm dạng phương thức bị từ chối; chuỗi hằng 1000 byte nhận, 1001 từ chối (tính theo byte, ở `IN`, đối số hàm); 200 cột nhận, 201 từ chối; `*` trên nhiều nguồn tính theo số cột thật, từ chối khi có bảng tạm; 4 nguồn trong `FROM` nhận, 5 từ chối; 10 nhánh `UNION`, `INTERSECT`, `EXCEPT` nhận, 11 từ chối, cộng qua các tầng; câu mẫu của mock và của `ask_examples.rs` vẫn qua |
+| Số tầng, mảnh, độ rộng | 4 tầng nhận, 5 tầng từ chối ở mọi chỗ (`FROM`, `WHERE`, cột, `WITH`, bảng tạm đọc bảng tạm); bảng tạm cùng tên trong `WITH` lồng không che số tầng; bảng tạm kèm câu con kiểu mô hình hay viết vẫn qua; 20 mảnh nhận, 21 từ chối (`||`, `concat`, `concat_ws`, cộng qua các tầng, danh sách và struct viết thẳng, bí danh dùng lại); tuple, mảng trong `IN`, `ANY`, `ALL` không tính; gọi hàm dạng phương thức bị từ chối; chuỗi hằng 1000 byte nhận, 1001 từ chối (tính theo byte, ở `IN`, đối số hàm); 200 cột nhận, 201 từ chối; `*` trên nhiều nguồn tính theo số cột thật, từ chối khi có bảng tạm; 4 nguồn trong `FROM` nhận, 5 từ chối; 10 nhánh `UNION`, `INTERSECT`, `EXCEPT` nhận, 11 từ chối, cộng qua các tầng; câu mẫu của mock và của `ask_examples.rs` vẫn qua (`service/ask_run_tests.rs`) |
 | Câu mẫu (`sample_tests.rs`) | 32 câu phân tích dạng mô hình hay viết, 25 qua; 7 bị từ chối có chủ ý: 3 câu 5 tầng (vào vòng sửa), bảng tạm 4 tầng không ai dùng, `strftime` đảo thứ tự tham số, hàm `list_contains` ngoài danh sách, nhãn 1200 byte. 18 câu tìm cách lách (B01 tới B16, kể cả B01b, B05b): các câu nhân giá trị bị chặn, các câu vô hại qua |
 | Cột | Cột không có (cả dạng `s.profit`); chữ Unicode giống chữ Latin; bí danh bảng không có; tên ba phần |
 | Lọc dòng | Các dạng câu so nguyên `shown`: một bảng, `WHERE`, `WHERE a OR b`, `GROUP BY` và `HAVING`, `JOIN` hai bảng chỉ một bảng có lọc, tự `JOIN`, `LEFT JOIN` chính bảng, `FROM a, b`, câu con ở `FROM` và `WHERE`, `IN`, `EXISTS`, `UNION ALL`, `WITH`, bảng tạm đọc bảng tạm, `LATERAL`; giữ bí danh, lọc theo bảng không theo bí danh, tên viết hoa; nhiều chính sách nối `AND`, danh sách rỗng, giá trị có dấu nháy, cột có khoảng trắng; hai bảng cùng có lọc và `row_filters`; không có chính sách thì `shown` như cũ; cột chính sách không có trong bảng; bước 3 tự chặn chỗ đọc không nhận ra; 17 câu lách (đọc file, bảng hệ thống, tên kèm schema, chữ Unicode giống chữ Latin, bảng tạm trùng tên bảng dữ liệu). Trên DuckDB thật: 15 câu cố lấy dòng ngoài phạm vi không lấy được; 90 câu (30 dạng câu nhân 3 cách viết tên bảng, cả hai bảng có lọc) qua guard ra đúng kết quả như khi chạy trên bảng chỉ còn dòng được phép (`row_filter_tests.rs`) |
@@ -276,6 +280,6 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
   (`engine/excel_worker.rs`). Refs [#119](https://github.com/pgiahuy/xdi-platform/issues/119).
 - `row_filters` rỗng là không lọc: guard không biết người hỏi có đáng bị lọc hay không. Service
   ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)) phải luôn truyền đủ chính sách của người hỏi; quên truyền
-  thì người đó thấy mọi dòng.
+  thì người đó thấy mọi dòng. Luồng hỏi và truy dòng nguồn lấy chính sách qua cùng một hàm (`load_row_filters`).
 - Trong luồng hỏi, câu bị guard từ chối (sau vòng sửa, nếu lý do sửa được) trả 200 với `status: rejected`
   ([Kiến trúc](ARCHITECTURE.md), mục 8), không trả lỗi 400.

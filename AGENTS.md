@@ -23,19 +23,22 @@ tắc làm việc; tài liệu khác trỏ về đây, không chép lại.
 backend/     một crate Rust: api/ -> service/ -> engine/ và auth/. Phụ thuộc một chiều, không gọi ngược.
 frontend/    React với Vite, build ra file tĩnh, backend phục vụ. Kiểu API sinh từ openapi.json, không viết tay.
 docs/        tài liệu, cũng là nguồn GitHub Pages.
-data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB.
+data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB (chưa có file), domains/ gói khái niệm ngành.
+scripts/     hook pre-push, kiểm số phiên bản, ghi chú phát hành, danh sách giấy phép.
 ```
 
-| Phần | Thư mục | Người phụ trách |
-|---|---|---|
-| Engine phân tích, guard SQL, giải thích | `backend/src/engine/`, `backend/src/service/explain.rs` | (chốt khi phân công) |
-| Service, auth, Postgres, CI, compose | `backend/src/service/`, `backend/src/auth/`, `backend/migrations/`, `.github/`, `Makefile` | |
-| Frontend, docs | `frontend/`, `docs/` | |
+| Phần | Thư mục |
+|---|---|
+| Engine phân tích, guard SQL, giải thích | `backend/src/engine/`, `backend/src/service/explain*.rs` |
+| Service, auth, Postgres, CI, compose | `backend/src/service/`, `backend/src/auth/`, `backend/migrations/`, `.github/`, `Makefile`, `scripts/`, `docker-compose*.yml`, `backend/Dockerfile` |
+| Frontend, docs | `frontend/`, `docs/` |
+| Dữ liệu mẫu, gói ngành | `data/` |
 
-- Chỉ sửa tệp thuộc phần của người đang nhờ. Cần sửa tệp của người khác thì dừng lại và báo.
+- Một PR chỉ đụng một phần: lõi, giao diện hoặc dữ liệu, như mục 4. Ai làm việc gì: xem người được gán issue.
 - Hợp đồng chung: `openapi.json` (API backend và frontend), schema Postgres trong `backend/migrations/`, kiểu dữ liệu
-  trong `backend/src/api/` và kiểu response của hỏi dữ liệu trong `backend/src/service/ask_contract.rs`. Đổi phải báo
-  cả đội trong PR.
+  trong `backend/src/api/`, kiểu request và response của hỏi dữ liệu và truy dòng nguồn trong
+  `backend/src/service/ask_contract.rs` và `backend/src/service/drill_contract.rs`. Đụng hợp đồng chung thì báo cả đội
+  trong PR.
 
 ## 3. Code
 
@@ -94,7 +97,8 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 - Một PR một việc, ứng với một issue. Nên dưới khoảng 500 dòng mã thay đổi, không tính file sinh tự động, test, dữ
   liệu. Lớn hơn thì tách theo lớp: lõi, giao diện, dữ liệu.
 - Thay đổi nhìn thấy được với người dùng: thêm một dòng vào `Unreleased` của `CHANGELOG.md` trong cùng PR.
-- Đổi API: chạy `make openapi`, commit `openapi.json` và kiểu TypeScript sinh ra trong cùng PR.
+- Đổi API: chạy `make openapi`, commit `openapi.json`, kiểu TypeScript sinh ra (`frontend/src/api/schema.ts`) và
+  response mẫu của hỏi dữ liệu (`frontend/src/api/examples/ask.json`) trong cùng PR.
 - Không commit khóa hay bí mật. `.env` trong `.gitignore`, mẫu ở `.env.example`. Ngoại lệ (nếu có) liệt kê đích danh
   ở đây kèm số issue gỡ.
 
@@ -113,11 +117,13 @@ data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB
 
 ## 6. Trước khi push: tự kiểm
 
-Sau khi clone, chạy `make hooks` một lần: hook pre-push tự chạy hai mục đầu dưới đây mỗi lần `git push` và chặn push
-nếu lỗi. Hook không nằm trong git nên mỗi người tự cài; chạy lại khi `scripts/pre-push` thay đổi.
+Sau khi clone, chạy `make hooks` một lần: mỗi lần `git push`, hook pre-push chạy mục đầu dưới đây, thêm mục thứ hai khi
+nhánh đổi `frontend/`, `openapi.json` hoặc `Makefile` so với `main`, và chặn push nếu lỗi. Hook không nằm trong git
+nên mỗi người tự cài; chạy lại khi `scripts/pre-push` thay đổi.
 
 - [ ] `make check-fast` qua: fmt, clippy không cảnh báo, test.
-- [ ] Đụng `frontend/` thì `make check-frontend` qua: lint, kiểm kiểu, build.
+- [ ] Đụng `frontend/`, `openapi.json` hoặc `Makefile` thì `make check-frontend` qua: lint, kiểu khớp `openapi.json`,
+  kiểm kiểu, build.
 - [ ] Chạy được bằng `make dev`, không lỗi trong log.
 - [ ] Đụng compose, Dockerfile hoặc biến môi trường thì `docker compose up` vẫn chạy được.
 - [ ] Các luồng chính ra đúng: nạp dataset, hỏi, xem bằng chứng, đổi role.

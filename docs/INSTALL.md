@@ -93,7 +93,7 @@ có byte hỏng bị từ chối kèm số dòng: lưu lại dạng UTF-8 rồi 
 một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200). Định dạng, giới hạn, phiên bản và tên cột: [Dữ liệu](DATA.md).
 
 File Excel (.xlsx) nạp từng file một. Xem tên sheet và cột, rồi chọn sheet cần nạp (lặp `-F sheet=` để gộp nhiều sheet
-cùng cột thành một bảng; file chỉ có một sheet thì không cần chọn):
+cùng cột thành một bảng; file chỉ có một sheet đang hiện thì không cần chọn):
 
 ```bash
 curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets/sheets -F file=@ban_hang.xlsx
@@ -513,11 +513,12 @@ Từ màn thiết lập tới câu trả lời đầu tiên, theo giao diện hi
 ### Bước 1. Chọn mô hình ngôn ngữ
 
 Chọn trước khi nạp dữ liệu. Sau mỗi lần nạp, backend gọi mô hình đang cấu hình để lập hồ sơ dataset (mô tả cột, bí
-danh, câu gợi ý), nên mô hình lúc nạp quyết định dataset có câu gợi ý hay không.
+danh, câu gợi ý), nên mô hình lúc nạp quyết định dataset có câu gợi ý ngay sau khi nạp hay không; đổi mô hình rồi khởi động lại
+backend thì backend lập lại (bước 4).
 
 | `LLM_PROVIDER` | Cần | Hỏi được |
 |---|---|---|
-| `mock` (mặc định) | Không cần gì, không gọi ra ngoài | Chỉ các câu hỏi mẫu viết sẵn cho dataset DataCo (bên dưới); câu khác, hay dataset khác, nhận lời báo `Chế độ mock chỉ trả lời các câu hỏi mẫu của dataset mẫu` |
+| `mock` (mặc định) | Không cần gì, không gọi ra ngoài | Chỉ các câu hỏi mẫu viết sẵn cho dataset DataCo (bên dưới); câu khác nhận lời báo `Chế độ mock chỉ trả lời các câu hỏi mẫu của dataset mẫu`; trên dataset khác, kể cả câu mẫu cũng lỗi (SQL viết cho bảng `dataco`) kèm lời báo đó |
 | `gemini` | `GEMINI_API_KEY`, khóa tạo trong Google AI Studio | Câu tự do trên dataset bất kỳ |
 | `ollama` | Ollama đang chạy và mô hình đã tải (mục 1, Cấu hình) | Câu tự do trên dataset bất kỳ |
 
@@ -528,7 +529,8 @@ dòng **Mô hình**, góc dưới thanh bên và dưới màn thiết lập.
 Thử với `mock`: thư mục `data/samples/` hiện chưa có file nào, nên cần tải DataCo Smart Supply Chain từ Mendeley Data
 (https://doi.org/10.17632/8gx2fvg2k6.5, giấy phép CC BY 4.0), lấy file `DataCoSupplyChainDataset.csv`. Khi nạp, đặt
 tên dataset là `DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên
-file và mock không trả lời. Danh sách câu mẫu nằm trong `backend/src/engine/llm/mock_answers.json`, ví dụ "Doanh thu
+file và câu mẫu chạy lỗi. Workspace đã có bảng `dataco` thì dataset thứ hai thành `dataco_2`, nên nạp DataCo vào
+workspace chưa có nó. Danh sách câu mẫu nằm trong `backend/src/engine/llm/mock_answers.json`, ví dụ "Doanh thu
 theo thị trường", "Doanh thu theo tháng", "Top 10 danh mục có doanh thu cao nhất".
 
 ### Bước 2. Tạo tài khoản quản trị
@@ -553,12 +555,12 @@ curl -b cookie.txt http://localhost:8000/api/workspaces \
 Mục **Dữ liệu** ở thanh bên, khung **Nạp dữ liệu** (chỉ `admin` của workspace thấy):
 
 1. **File**: chọn một hoặc nhiều file CSV hoặc Parquet cùng cột (gộp thành một bảng), hoặc một file Excel `.xlsx`. CSV
-   đọc được UTF-8, windows-1252 và latin-1. File `.xls` bị từ chối: mở bằng Excel rồi lưu lại dạng `.xlsx`.
+   đọc được UTF-8, windows-1252 và latin-1. Giao diện không cho chọn file `.xls`: mở bằng Excel rồi lưu lại dạng `.xlsx`.
 2. File Excel: giao diện đọc danh sách sheet rồi hiện **Chọn sheet cần nạp**, mỗi sheet kèm số cột và số dòng ước lượng.
    Các sheet chọn mà khác cột nhau thì thành nhiều dataset riêng, giao diện báo trước số dataset.
 3. **Tên dataset (không bắt buộc)**: để trống thì lấy tên file. Tên bảng dùng trong SQL đặt theo tên dataset: chữ
    thường, bỏ dấu, khoảng trắng thành `_`, ví dụ "Bán hàng 2024" thành `ban_hang_2024`.
-4. Bấm **Nạp**. Xong thì hiện `Đã nạp vào <tên>, phiên bản 1, <số> dòng.` và danh sách cột.
+4. Bấm **Nạp**. Xong thì hiện `Đã nạp vào <tên>, phiên bản 1, <số> dòng.` và số cột (bấm để xem danh sách cột).
 
 Tổng dung lượng một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200 MB); file Excel còn vài giới hạn riêng. Định dạng, giới
 hạn, phiên bản và tên cột: [Dữ liệu](DATA.md). Nạp lại đúng file đã có thì nhận `Đã có: dữ liệu này giống hệt phiên bản
@@ -582,7 +584,7 @@ hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi đ
 
 ### Bước 5. Hỏi
 
-Trang **Hỏi dữ liệu**: ô **Dataset** chọn sẵn dataset mới nạp nhất, đổi được. Gõ câu vào ô **Câu hỏi** rồi bấm **Hỏi**
+Trang **Hỏi dữ liệu**: ô **Dataset** chọn sẵn dataset tạo gần nhất, đổi được. Gõ câu vào ô **Câu hỏi** rồi bấm **Hỏi**
 (Enter để hỏi, Shift+Enter để xuống dòng), hoặc bấm một câu trong thẻ **Câu gợi ý** để hỏi ngay. Với `mock` trên DataCo,
 bấm "Doanh thu theo thị trường".
 
@@ -591,7 +593,12 @@ SQL bị từ chối hay chạy lỗi) hiện ngay dưới ô hỏi; lỗi của
 
 ### Bước 6. Đọc kết quả và bằng chứng
 
-Kết quả nằm trong một thẻ có tiêu đề là chính câu đã hỏi. Bảng **Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì
+Kết quả nằm trong một thẻ có tiêu đề là chính câu đã hỏi. Đầu thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu
+hỏi, đọc từ câu SQL đã chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời
+gian** (dòng nào không có thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Tiếp theo là
+biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu đồ cột khi cột nhóm duy nhất là một
+chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên DataCo ra biểu đồ cột); các dạng khác chỉ có bảng. Bảng
+**Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì
 `Hiện 1.000 trên <tổng> dòng.`), phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập
 phân). **Tải CSV** tải các dòng giao diện đã nhận, tối đa 1000 dòng, giữ giá trị gốc.
 
@@ -601,19 +608,26 @@ Bốn tab:
 - **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
   (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép
   nguyên văn. Guard là gì: [GUARD.md](GUARD.md).
-- **Phân rã**: bảng nhóm nào làm con số tăng hay giảm, chỉ có với câu hỏi "tại sao". Chưa có trên trang hỏi (xem dưới),
-  nên tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
-- **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm số trong bảng phân rã; vì vậy hiện cũng chưa
-  có.
+- **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: giá trị hai lát cắt và
+  **Chênh lệch**, mỗi chiều một bảng phần đóng góp của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách
+  được. Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
+- **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm số của một kỳ hay một nhóm trong bảng phân
+  rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
 - **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL
-  (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Lưu vào lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình
-  chỉ viết SQL, còn con số do DuckDB tính.
+  (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Tính phân rã và Mô hình viết lời giải thích (câu "tại sao"), Lưu vào
+  lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ viết SQL, điền form và viết lời, còn con số do
+  DuckDB và backend tính.
+
+Câu hỏi "tại sao" (backend nhận ra bằng các cụm "tại sao", "vì sao", "lý do", "nguyên nhân", "do đâu",
+gõ không dấu cũng được): mô hình không viết SQL mà điền một form (đo
+gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm form rồi tự dựng mọi câu SQL. Thẻ kết quả có khung
+**Giải thích** ngay dưới **Đã hiểu là**, rồi bảng tổng của hai kỳ hay hai nhóm; mọi số trong lời giải thích được kiểm là
+có trong bảng phân rã, mô hình viết sai thì backend dùng câu khuôn của mình và ghi rõ. Không phân rã được (ví dụ kỳ so
+sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
+năm 2017 giảm".
 
 Chưa có trên giao diện hiện tại (tiến độ ở mục Trạng thái của [ARCHITECTURE.md](ARCHITECTURE.md)):
 
-- Câu hỏi "tại sao": phần tính phân rã đã có trong backend nhưng trang hỏi chưa gọi. Gõ câu "tại sao" thì được xử lý
-  như câu thường; với `mock` thì nhận lời báo chỉ trả lời câu mẫu.
-- Thẻ "Đã hiểu là" (cách hệ thống hiểu câu hỏi) và biểu đồ: giao diện đã có chỗ, backend chưa gửi dữ liệu.
 - Bấm một ô của bảng kết quả để xem dòng nguồn: backend có route `drill` ([API.md](API.md)), giao diện chưa nối.
 
 ### Bước 7. Mời thành viên
