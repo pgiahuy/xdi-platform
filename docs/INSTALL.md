@@ -449,10 +449,10 @@ chạy trước (`docker compose down` giữ dữ liệu; `make dev` dùng chung
 không in nữa; quên mật khẩu thì dùng lệnh `reset-password` ở mục 5. Mã in ở mức `warn`, nên đặt `RUST_LOG=error` cũng
 làm mất dòng này.
 
-**Hỏi thì nhận `Chế độ mock chỉ trả lời các câu hỏi mẫu của dataset mẫu`, hoặc trang hỏi ghi "Đang lập hồ sơ dataset"
-mãi không xong.** Backend đang chạy với `LLM_PROVIDER=mock` (mặc định), mà mock chỉ có câu trả lời viết sẵn cho dataset
-DataCo (mục 7, bước 1). Đổi sang `gemini` hoặc `ollama` rồi khởi động lại backend; lúc khởi động, backend lập hồ sơ cho
-các dataset còn thiếu, không phải nạp lại file.
+**Hỏi thì nhận `Chế độ mock chỉ trả lời các câu hỏi mẫu của dataset mẫu`, hoặc trang hỏi ghi "Mô hình hiện tại không lập
+được câu gợi ý cho dataset này".** Backend đang chạy với `LLM_PROVIDER=mock` (mặc định), mà mock chỉ có câu trả lời
+viết sẵn cho dataset DataCo (mục 7, bước 1). Đổi sang `gemini` hoặc `ollama` rồi khởi động lại backend; lúc khởi động,
+backend lập hồ sơ cho các dataset còn thiếu, không phải nạp lại file.
 
 **Lỗi khi dùng Gemini.** Lời báo hiện dưới ô câu hỏi trên trang **Hỏi dữ liệu**. Log của backend có thêm dòng
 `gemini returned an error` kèm mã HTTP (`status`), mã của Google (`gemini_status`) và lời gốc của Google. Lỗi lúc lập
@@ -549,8 +549,10 @@ câu gợi ý) chạy nền sau đó, mỗi lúc một dataset. Trong lúc chờ
 "Đang lập hồ sơ dataset: câu gợi ý và mô tả cột sẽ có sau ít phút." Trang tự kiểm lại trong vài phút đầu; xong thì
 hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi được ngay cả khi hồ sơ chưa xong.
 
-- Với `mock`, chỉ dataset `dataco` có hồ sơ viết sẵn. Dataset khác giữ dòng "Đang lập hồ sơ" và không có câu gợi ý;
-  đổi sang `gemini` hoặc `ollama` rồi khởi động lại backend thì hồ sơ được lập (mục 6).
+- Với `mock`, chỉ dataset `dataco` có hồ sơ viết sẵn. Dataset khác không có câu gợi ý; sau lượt thử, dòng "Đang lập hồ
+  sơ" đổi thành "Mô hình hiện tại không lập được câu gợi ý cho dataset này; vẫn hỏi được bình thường." Dòng này cũng hiện
+  khi mô hình thật trả lời mà không dùng được (ví dụ JSON hỏng, hay chặn prompt vì nội dung). Đổi `LLM_PROVIDER` (hoặc
+  model) rồi khởi động lại backend thì trang lại ghi "Đang lập hồ sơ" trong lúc backend thử với mô hình mới (mục 6).
 - Mô hình lỗi lúc lập hồ sơ (khóa sai, quá tải, hết hạn mức) thì giao diện không báo, chỉ log ghi lỗi; backend thử lại
   ở lần khởi động sau.
 - "Lập hồ sơ dataset lỗi nên chưa hỏi được phiên bản này" nghĩa là phần cấu trúc lỗi: nạp lại file ở trang **Dữ liệu**.

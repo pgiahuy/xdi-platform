@@ -41,9 +41,12 @@ function datasetsKey(ws: string) {
 const PROFILE_POLL_MS = 10_000
 const PROFILE_POLL_LIMIT_MS = 5 * 60_000
 
-/** Phiên bản hiện hành chưa xong hồ sơ: pending (chưa có lớp cấu trúc) hoặc structure (chưa có lớp ngữ nghĩa). */
+/** Phiên bản hiện hành chưa xong hồ sơ: pending (chưa có lớp cấu trúc) hoặc structure (chưa có lớp ngữ nghĩa). Phiên
+ * bản structure mà lớp ngữ nghĩa đã thử với mô hình đang chạy và không dùng được (semantic_unavailable) thì không còn
+ * gì để chờ: tính là đang lập thì trang hỏi báo "đang lập" mãi và hỏi lại vô ích (#140). */
 export function isProfiling(dataset: Dataset): boolean {
-  return dataset.current_profile_status === 'pending' || dataset.current_profile_status === 'structure'
+  if (dataset.current_profile_status === 'pending') return true
+  return dataset.current_profile_status === 'structure' && !dataset.semantic_unavailable
 }
 
 type DatasetsOptions = {

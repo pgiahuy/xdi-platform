@@ -177,6 +177,7 @@ function evidenceKey({ variables, response }: Answer): string {
 function buildProfileProgress(dataset: Dataset | undefined): ProfileProgress {
   if (dataset && isProfiling(dataset)) return 'profiling'
   if (dataset?.current_profile_status === 'failed') return 'failed'
+  if (dataset?.semantic_unavailable) return 'no_suggestions'
   return 'ready'
 }
 

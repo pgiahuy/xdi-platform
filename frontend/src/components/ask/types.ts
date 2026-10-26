@@ -9,8 +9,9 @@ export type DatasetOption = {
 }
 
 /** Hồ sơ của phiên bản hiện hành: profiling khi chưa xong lớp ngữ nghĩa (chưa có câu gợi ý, mô tả cột), failed khi lập
- * hồ sơ lỗi, ready khi xong hoặc không có gì để báo. */
-export type ProfileProgress = 'profiling' | 'failed' | 'ready'
+ * hồ sơ lỗi, no_suggestions khi lớp cấu trúc xong mà mô hình đang chạy không lập được lớp ngữ nghĩa (vẫn hỏi được),
+ * ready khi xong hoặc không có gì để báo. */
+export type ProfileProgress = 'profiling' | 'failed' | 'no_suggestions' | 'ready'
 
 export type ChoiceOptionView = {
   id: string
