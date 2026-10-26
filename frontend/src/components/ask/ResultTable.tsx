@@ -23,13 +23,15 @@ type Props = {
   heading?: string
   /** Ô số đo bấm được để xem dòng nguồn; không có thì bảng chỉ để đọc. */
   cellDrill?: CellDrill
+  /** Ô không xuống dòng, chữ dài cắt bớt (đủ chữ ở title), bảng cuộn ngang: cho bảng nhiều cột trong khung hẹp. */
+  nowrap?: boolean
 }
 
 // 50 dòng vừa một hai lần cuộn trên màn laptop; 1000 dòng là 20 trang.
 const pageSize = 50
 const countFormat = new Intl.NumberFormat('vi-VN')
 
-export function ResultTable({ result, fileName, heading = 'Kết quả', cellDrill }: Props) {
+export function ResultTable({ result, fileName, heading = 'Kết quả', cellDrill, nowrap = false }: Props) {
   // id theo từng bảng: trang có thể có hai bảng cùng lúc (kết quả và dòng nguồn), id trùng thì nhãn trỏ sai bảng.
   const headingId = useId()
   const [page, setPage] = useState(0)
@@ -78,7 +80,10 @@ export function ResultTable({ result, fileName, heading = 'Kết quả', cellDri
             {rows.map((row, r) => (
               <tr key={page * pageSize + r} className="border-t">
                 {row.map((cell, c) => (
-                  <td key={c} className={cn('px-3 py-1.5', alignClass(result.columns[c].kind))}>
+                  <td
+                    key={c}
+                    className={cn('px-3 py-1.5', alignClass(result.columns[c].kind), nowrap && 'whitespace-nowrap')}
+                  >
                     {cellDrill?.measures.includes(c) ? (
                       <DrillCell
                         cell={cell}
@@ -86,6 +91,8 @@ export function ResultTable({ result, fileName, heading = 'Kết quả', cellDri
                         target={buildTarget(result, cellDrill, row, c)}
                         onDrill={cellDrill.onDrill}
                       />
+                    ) : nowrap ? (
+                      <TruncatedText cell={cell} kind={result.columns[c].kind} />
                     ) : (
                       <CellText cell={cell} kind={result.columns[c].kind} />
                     )}
@@ -131,6 +138,17 @@ export function ResultTable({ result, fileName, heading = 'Kết quả', cellDri
 function CellText({ cell, kind }: { cell: Cell; kind: CellKind }) {
   if (cell === null) return <span className="text-muted-foreground">trống</span>
   return formatCell(cell, kind)
+}
+
+// Dòng nguồn có cột chữ dài (địa chỉ, mô tả sản phẩm): xuống dòng thì mỗi dòng cao gấp mấy lần, nên cắt ở 16rem và
+// để đủ chữ trong title.
+function TruncatedText({ cell, kind }: { cell: Cell; kind: CellKind }) {
+  const text = cell === null ? undefined : formatCell(cell, kind)
+  return (
+    <span className="block max-w-64 truncate" title={text}>
+      <CellText cell={cell} kind={kind} />
+    </span>
+  )
 }
 
 type DrillCellProps = { cell: Cell; kind: CellKind; target: DrillTarget; onDrill: (target: DrillTarget) => void }

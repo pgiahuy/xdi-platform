@@ -62,7 +62,7 @@ function RowsBody({ rows, onPageChange }: BodyProps) {
               Dữ liệu mẫu: vài dòng minh họa để xem bố cục, không lấy từ dataset
             </p>
           )}
-          <ResultTable result={rows.result} heading="Dòng nguồn" />
+          <ResultTable result={rows.result} heading="Dòng nguồn" nowrap />
           <PageNav page={rows.page} onPageChange={onPageChange} />
           <details className="text-xs">
             <summary className="cursor-pointer text-muted-foreground">SQL đã chạy để lấy các dòng này</summary>

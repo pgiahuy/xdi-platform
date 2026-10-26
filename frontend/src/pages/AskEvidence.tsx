@@ -20,6 +20,7 @@ import type {
 } from '@/components/ask/evidenceTypes'
 import { cn } from '@/lib/utils'
 import type { Answer } from './AskOutcome'
+import { buildLeadFirst, buildLeadNames } from './drillColumns'
 import type { EvidenceView } from './evidenceView'
 import { buildCellIndexes, buildResultView } from './resultView'
 
@@ -70,7 +71,7 @@ export function AskEvidence({ ws, answer, pending, view }: Props) {
     const sample = import.meta.env.DEV && variables.fromSamples === true
     // result.total_rows của drill chỉ đếm dòng của trang này; tổng thật ở total_rows ngoài, nên bảng ghi "N trên M".
     const total = drill.data.total_rows
-    const page = buildResultView(drill.data.result)
+    const page = buildLeadFirst(buildResultView(drill.data.result), buildLeadNames(target, response))
     const result = { ...page, totalRows: total, truncated: page.rows.length < total }
     return {
       state: 'ready',
