@@ -120,7 +120,17 @@ pub struct UploadResult {
 }
 
 pub async fn list_datasets(state: &AppState, member: &Member) -> Result<Vec<Dataset>, AppError> {
-    state.store.list_datasets(&member.workspace).await
+    let mut datasets = state.store.list_datasets(&member.workspace).await?;
+    for dataset in &mut datasets {
+        apply_semantic_state(state, dataset);
+    }
+    Ok(datasets)
+}
+
+/// Mọi dataset trả qua API đi qua đây: store không biết provider đang chạy, nên semantic_unavailable chỉ đúng sau
+/// bước này. Thiếu bước này ở một đường trả thì trang hỏi lại hiện "đang lập" mãi với dataset mock không có hồ sơ.
+fn apply_semantic_state(state: &AppState, dataset: &mut Dataset) {
+    dataset.apply_semantic_unavailable(&state.llm.name());
 }
 
 /// Dataset của chính workspace này. Id của workspace khác trả 404 như id không tồn tại: store lọc theo WorkspaceId.
@@ -130,11 +140,13 @@ pub async fn dataset_detail(
     id: &str,
 ) -> Result<Dataset, AppError> {
     let id = parse_dataset_id(id)?;
-    state
+    let mut dataset = state
         .store
         .get_dataset(&member.workspace, id)
         .await?
-        .ok_or_else(dataset_not_found)
+        .ok_or_else(dataset_not_found)?;
+    apply_semantic_state(state, &mut dataset);
+    Ok(dataset)
 }
 
 pub async fn upload(
@@ -184,7 +196,7 @@ pub async fn upload(
         }
     };
     if let Some(version) = duplicate {
-        let dataset = state
+        let mut dataset = state
             .store
             .get_dataset(ws, version.dataset_id)
             .await?
@@ -192,6 +204,7 @@ pub async fn upload(
         // Nạp lại đúng bộ file cũ là đường thử lại tường minh của lớp ngữ nghĩa: phiên bản còn ở structure (lần
         // trước mô hình lỗi) thì gọi lại một lần nữa.
         respawn_semantic_profile(state, ws, &dataset, &version);
+        apply_semantic_state(state, &mut dataset);
         return Ok(UploadResult {
             created: false,
             dataset,
@@ -237,7 +250,7 @@ pub async fn upload(
     // Bước 4: dataset (nếu mới) và phiên bản. Đường dẫn lưu trong database là tương đối với DATA_DIR, để đổi chỗ thư
     // mục dữ liệu không phải sửa database.
     let is_new_dataset = existing_dataset.is_none();
-    let dataset = match existing_dataset {
+    let mut dataset = match existing_dataset {
         Some(d) => d,
         None => {
             let name = dataset_name(&upload)?;
@@ -273,6 +286,7 @@ pub async fn upload(
         Created::Duplicate(version) => {
             // Như nhánh trùng ở bước 2: phiên bản còn ở structure thì nạp lại là đường thử lại của lớp ngữ nghĩa.
             respawn_semantic_profile(state, ws, &dataset, &version);
+            apply_semantic_state(state, &mut dataset);
             return Ok(UploadResult {
                 created: false,
                 dataset,
@@ -305,11 +319,12 @@ pub async fn upload(
         }
         Err(e) => return Err(e),
     }
-    let dataset = state
+    let mut dataset = state
         .store
         .get_dataset(ws, dataset.id)
         .await?
         .ok_or_else(dataset_not_found)?;
+    apply_semantic_state(state, &mut dataset);
     tracing::info!(dataset_id = %dataset.id, version = version.version, rows = materialized.row_count, "dataset version created");
 
     // Lớp ngữ nghĩa (#23) chạy nền sau khi trả 201: gọi mô hình có thể chậm hoặc lỗi, không để chặn hay làm hỏng

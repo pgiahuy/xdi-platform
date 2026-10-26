@@ -654,6 +654,12 @@ export interface components {
             logical_table: string;
             name: string;
             /**
+             * @description True when the current version stays at `structure` because the semantic profile was already tried with the
+             *     running LLM provider and its answer was not usable: no suggested questions will come until the provider
+             *     changes. Asking still works.
+             */
+            semantic_unavailable: boolean;
+            /**
              * @description Suggested questions of the current version, written by the semantic profile; empty while that step has not
              *     finished.
              */

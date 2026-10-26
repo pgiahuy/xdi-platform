@@ -71,7 +71,31 @@ pub struct Dataset {
     // hiện hành để lấy; create_dataset (RETURNING không nối được) nhờ `default` mà có mảng rỗng.
     #[sqlx(json, default)]
     pub suggested_questions: Vec<String>,
+    /// True when the current version stays at `structure` because the semantic profile was already tried with the
+    /// running LLM provider and its answer was not usable: no suggested questions will come until the provider
+    /// changes. Asking still works.
+    // Store không biết provider đang chạy, nên luôn đọc ra false; service/ingest.rs đặt lại bằng
+    // apply_semantic_unavailable trước khi trả dataset qua API.
+    #[sqlx(skip)]
+    pub semantic_unavailable: bool,
+    // Tên provider của lần thử lớp ngữ nghĩa không dùng được (migration 0005). Không đưa ra API: người dùng chỉ cần
+    // biết có thử với provider hiện tại hay chưa, tên provider đã hiện ở chân thanh bên.
+    #[serde(skip)]
+    #[sqlx(default)]
+    pub semantic_attempted_with: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+impl Dataset {
+    /// Đặt semantic_unavailable theo provider đang chạy: chỉ đúng khi phiên bản hiện hành còn ở structure và lần thử
+    /// trước dùng đúng provider này. Đổi LLM_PROVIDER (hay đổi model Gemini, vì tên provider là tên model) thì ra
+    /// false, giao diện lại hiện "đang lập" trong lúc việc nền lúc khởi động thử lại.
+    pub fn apply_semantic_unavailable(&mut self, provider: &str) {
+        let at_structure =
+            self.current_profile_status.as_deref() == Some(ProfileStatus::Structure.as_str());
+        self.semantic_unavailable =
+            at_structure && self.semantic_attempted_with.as_deref() == Some(provider);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
@@ -122,7 +146,7 @@ const DATASET_COLUMNS: &str = "id, name, logical_table, domain, current_version_
 // hay phiên bản chưa qua lớp ngữ nghĩa thì ra mảng rỗng.
 const DATASET_COLUMNS_D: &str =
     "d.id, d.name, d.logical_table, d.domain, d.current_version_id, d.created_at, \
-    v.profile_status AS current_profile_status, \
+    v.profile_status AS current_profile_status, v.semantic_attempted_with, \
     COALESCE(v.suggested_questions, '[]'::jsonb) AS suggested_questions";
 const CURRENT_VERSION_JOIN: &str =
     "FROM datasets d LEFT JOIN dataset_versions v ON v.workspace_id = d.workspace_id \
@@ -566,6 +590,42 @@ mod tests {
             file_hash: hash,
             parquet_path: "/data/x.parquet",
             row_count: 10,
+        }
+    }
+
+    fn dataset_with(status: Option<&str>, attempted_with: Option<&str>) -> Dataset {
+        Dataset {
+            id: Uuid::nil(),
+            name: "Sales".to_string(),
+            logical_table: "sales".to_string(),
+            domain: None,
+            current_version_id: Some(Uuid::nil()),
+            current_profile_status: status.map(str::to_string),
+            suggested_questions: Vec::new(),
+            semantic_unavailable: false,
+            semantic_attempted_with: attempted_with.map(str::to_string),
+            created_at: Utc::now(),
+        }
+    }
+
+    /// semantic_unavailable chỉ đúng khi còn structure và đã thử với đúng provider đang chạy (#140).
+    #[test]
+    fn semantic_unavailable_needs_an_attempt_with_the_running_provider() {
+        let cases = [
+            (Some("structure"), Some("mock"), true),
+            (Some("structure"), None, false),
+            (Some("structure"), Some("gemini-3.5-flash-lite"), false),
+            // Đã semantic (lượt sau thành công) hay chưa có phiên bản thì không báo.
+            (Some("semantic"), Some("mock"), false),
+            (None, None, false),
+        ];
+        for (status, attempted_with, expected) in cases {
+            let mut dataset = dataset_with(status, attempted_with);
+            dataset.apply_semantic_unavailable("mock");
+            assert_eq!(
+                dataset.semantic_unavailable, expected,
+                "{status:?} {attempted_with:?}"
+            );
         }
     }
 

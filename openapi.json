@@ -2560,6 +2560,7 @@
           "current_version_id",
           "current_profile_status",
           "suggested_questions",
+          "semantic_unavailable",
           "created_at"
         ],
         "properties": {
@@ -2597,6 +2598,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "semantic_unavailable": {
+            "type": "boolean",
+            "description": "True when the current version stays at `structure` because the semantic profile was already tried with the\nrunning LLM provider and its answer was not usable: no suggested questions will come until the provider\nchanges. Asking still works."
           },
           "suggested_questions": {
             "type": "array",

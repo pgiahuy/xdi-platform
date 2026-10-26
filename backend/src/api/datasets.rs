@@ -738,6 +738,59 @@ mod tests {
             Some(5),
             "{detail}"
         );
+        assert_eq!(detail["semantic_unavailable"], false, "{detail}");
+
+        db.drop().await;
+    }
+
+    /// Mock không có hồ sơ cho dataset khác DataCo (#140): lượt ngữ nghĩa lỗi vĩnh viễn, phiên bản giữ structure, và
+    /// semantic_unavailable thành true (cả trong danh sách lẫn chi tiết) để trang hỏi thôi báo "đang lập". Cùng
+    /// database mà backend chạy với provider khác thì trường này lại false: việc nền lúc khởi động sẽ thử lại với
+    /// provider đó.
+    #[tokio::test]
+    async fn semantic_unavailable_follows_the_running_provider() {
+        let Some(db) = fresh_database().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let data = DataDir::new();
+        let app = app_with(db.store.clone(), Some(CODE), |c| {
+            c.data_dir = data.0.clone();
+            c.llm_provider = "mock".to_string();
+        });
+        let lan = setup(&app).await;
+        let csv: &[u8] = b"Region,Sales\nNorth,10\nSouth,20\n";
+        let (status, body) = upload(&app, &lan, &[("name", "Sales")], &[("s.csv", csv)]).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let dataset_id = body["dataset"]["id"].as_str().unwrap().to_string();
+        let url = format!("{URL}/{dataset_id}");
+
+        let mut detail = serde_json::Value::Null;
+        for _ in 0..100 {
+            let (_, _, body) = call(&app, "GET", &url, Some(&lan), None).await;
+            if body["semantic_unavailable"] == true {
+                detail = body;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(detail["semantic_unavailable"], true, "{detail}");
+        assert_eq!(detail["current_profile_status"], "structure", "{detail}");
+        // Tên provider không ra API.
+        assert!(detail.get("semantic_attempted_with").is_none(), "{detail}");
+        let (_, _, list) = call(&app, "GET", URL, Some(&lan), None).await;
+        assert_eq!(list[0]["semantic_unavailable"], true, "{list}");
+
+        // Cùng database, backend khởi động lại với provider khác: phiên bản chưa thử với provider này.
+        let other = app_with(db.store.clone(), None, |c| {
+            c.data_dir = data.0.clone();
+            c.llm_provider = "ollama".to_string();
+            c.ollama_url = "http://127.0.0.1:9".to_string();
+        });
+        let (status, _, detail) = call(&other, "GET", &url, Some(&lan), None).await;
+        assert_eq!(status, StatusCode::OK, "{detail}");
+        assert_eq!(detail["semantic_unavailable"], false, "{detail}");
+        assert_eq!(detail["current_profile_status"], "structure", "{detail}");
 
         db.drop().await;
     }
