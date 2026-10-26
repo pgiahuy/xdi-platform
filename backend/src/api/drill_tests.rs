@@ -192,8 +192,9 @@ async fn questions_that_cannot_be_drilled_are_refused() {
             "Câu hỏi này chưa truy được dòng nguồn: câu ghép nhiều câu SELECT",
         ),
         (
+            // Câu thường không có bảng phân rã.
             json!({"query_id": answered, "breakdown": breakdown}),
-            "Chưa truy được dòng nguồn của dòng phân rã",
+            "không có bảng phân rã",
         ),
         (
             json!({"query_id": answered, "cell": [], "breakdown": breakdown}),

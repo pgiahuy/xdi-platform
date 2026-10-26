@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain_run.rs - đường của câu "tại sao" (#38), từ câu hỏi tới bảng, phân rã và lời: mô hình điền form
 (ask_why_prompt.rs), code kiểm form (explain_check.rs), dựng SQL (explain_sql.rs), chạy qua guard, phân rã
-(explain_breakdown.rs) và nhờ mô hình viết lời (ask_narrate.rs). Endpoint hỏi (#33) gọi run_why khi
+(explain_breakdown.rs) và nhờ mô hình viết lời (ask_narrate.rs). Endpoint hỏi gọi run_why qua ask_why.rs khi
 build_question_kind ra Why, thay cho bước llm và run_with_repair của câu thường, rồi dựng AskResponse từ WhyOutcome.
 Nhận mô hình và dữ liệu đã đọc qua tham số, như run_with_repair, nên test chạy được với mô hình giả và Parquet tạm,
 không cần Postgres; test ở explain_run_tests.rs.
@@ -9,7 +9,9 @@ không cần Postgres; test ở explain_run_tests.rs.
 Vòng sửa: form sai (không đọc được, cột lạ, vai trò sai, giá trị không có, kỳ không có dòng) thì gửi lỗi từng trường
 cho mô hình sửa một lần. Sai lần hai thì chạy như câu thường (explain_plain.rs) kèm cảnh báo
 explanation_unavailable: người hỏi vẫn có bảng số, câu vẫn answered nếu SQL thường chạy được. Câu SQL do code dựng mà
-guard từ chối hay DuckDB lỗi thì không sửa: mô hình không viết câu đó, sửa form không đổi được nó.
+guard từ chối hay DuckDB lỗi thì không sửa: mô hình không viết câu đó, sửa form không đổi được nó. Cũng không sửa khi
+kỳ so sánh do người hỏi chọn (why:base) không có dòng nào: lựa chọn đè lên base của form, mô hình sửa form cũng không
+đổi được kỳ đó, nên trả ngay bảng tổng kèm explanation_unavailable; giả định why:base vẫn trên thẻ để chọn kỳ khác.
 
 Hỏi lại (needs_choice) trước khi gọi mô hình khi một cụm khớp nhiều cột gần nhau (AskContext::ambiguous, #28; endpoint
 có thể đã hỏi lại trước, kiểm lại ở đây để run_why đúng khi gọi riêng), và sau khi gọi khi form không nêu độ đo mà
@@ -34,7 +36,7 @@ use super::ask_why_prompt::{build_why_form_schema, build_why_prompt};
 use super::explain_breakdown::{
     build_breakdown, read_slice_totals, run_code_query, Breakdown, CodeQuery, QueryEnv,
 };
-use super::explain_check::{build_why_check, PlanSlices, WhyPlan, WhyProfile};
+use super::explain_check::{build_chosen_base, build_why_check, PlanSlices, WhyPlan, WhyProfile};
 use super::explain_choices::{build_why_assumptions, BASE_CHOICE_ID};
 use super::explain_form::{build_form_from_reply, build_why_repair_prompt, FieldError, ReadForm};
 use super::explain_plain::run_plain;
@@ -78,9 +80,15 @@ pub struct WhyOutcome {
     pub sql_guarded: Option<String>,
     pub result: Option<ResultTable>,
     pub explanation: Option<Explanation>,
-    /// Form đã chạy, nguyên object JSON của mô hình, để #33 lưu vào queries.explanation cùng Explanation (#34 đọc
-    /// filters của form và filter của hai lát cắt). None khi chạy như câu thường.
+    /// Form đã chạy, nguyên object JSON của mô hình, để ask_why.rs lưu vào queries.explanation cùng Explanation.
+    /// None khi chạy như câu thường.
     pub form: Option<serde_json::Value>,
+    /// Form đã kiểm, cho thẻ "Đã hiểu là" (understanding_why.rs). None khi chạy như câu thường.
+    pub plan: Option<WhyPlan>,
+    /// Như RunOutcome::limit_kept; câu do code dựng không có LIMIT nên luôn false.
+    pub limit_kept: bool,
+    /// Như RunOutcome::row_filters: điều kiện phân quyền guard thêm vào sql_guarded.
+    pub row_filters: Vec<String>,
     pub terms: Vec<Term>,
     /// Giả định đã chọn sẵn: kỳ so sánh (why:base), chỉ số chưa xác nhận.
     pub assumptions: Vec<Choice>,
@@ -178,17 +186,21 @@ async fn run_round(
         metrics: input.prompt.metrics,
         row_count: input.row_count,
     };
-    let base_choice = input
-        .prompt
-        .choices
-        .iter()
-        .find(|c| c.choice_id == BASE_CHOICE_ID)
-        .map(|c| c.option_id.as_str());
-    let plan = match build_why_check(&read.form, &profile, base_choice) {
+    let plan = match build_why_check(&read.form, &profile, find_base_choice(input)) {
         Ok(plan) => plan,
         Err(errors) => return Ok(Round::Invalid(errors)),
     };
     run_plan(llm, input, read, &plan, steps).await
+}
+
+/// Phương án người hỏi gửi cho lựa chọn kỳ so sánh (explain_choices.rs), nếu có.
+fn find_base_choice<'a>(input: &WhyInput<'a>) -> Option<&'a str> {
+    input
+        .prompt
+        .choices
+        .iter()
+        .find(|c| c.choice_id == BASE_CHOICE_ID)
+        .map(|c| c.option_id.as_str())
 }
 
 /// Chạy bảng tổng, rồi bước explain và narrate.
@@ -209,6 +221,7 @@ async fn run_plan(
     let mut outcome = WhyOutcome {
         sql_generated: Some(sql.total_sql.clone()),
         form: Some(read.json),
+        plan: Some(plan.clone()),
         assumptions: build_why_assumptions(
             input.prompt.context,
             input.prompt.metrics,
@@ -219,9 +232,14 @@ async fn run_plan(
         ..build_empty(AskStatus::Answered)
     };
     match run_code_query(&env, &sql.total_sql, Some(steps)).await? {
-        CodeQuery::Ran { shown, result } => {
+        CodeQuery::Ran {
+            shown,
+            result,
+            row_filters,
+        } => {
             outcome.sql_guarded = Some(shown);
             outcome.result = Some(result);
+            outcome.row_filters = row_filters;
         }
         CodeQuery::Refused(reason) => {
             outcome.status = AskStatus::Rejected;
@@ -236,7 +254,7 @@ async fn run_plan(
     }
     let started = Instant::now();
     let totals = match run_code_query(&env, &build_slices_sql(plan), None).await? {
-        CodeQuery::Ran { shown, result } => read_slice_totals(shown, &result),
+        CodeQuery::Ran { shown, result, .. } => read_slice_totals(shown, &result),
         CodeQuery::Refused(reason) | CodeQuery::Failed(reason) => {
             tracing::warn!(%reason, "slice totals query failed");
             None
@@ -253,6 +271,9 @@ async fn run_plan(
         totals.base_rows.is_zero(),
         totals.compare_rows.is_zero(),
     );
+    if let Some(reason) = build_chosen_base_empty(input, plan, &empty) {
+        return Ok(build_unavailable(outcome, steps, started, reason));
+    }
     if !empty.is_empty() {
         let detail = "Một lát cắt không có dòng dữ liệu nào";
         steps.push(build_step(StepName::Explain, started, false, Some(detail)));
@@ -321,6 +342,26 @@ fn build_empty_slice_errors(
     errors
 }
 
+/// Lý do cho cảnh báo khi lỗi duy nhất là kỳ so sánh trống và kỳ đó do người hỏi chọn (why:base đè base của form, xem
+/// build_why_check): gọi lại mô hình không đổi được kỳ đó. None khi phải để mô hình sửa form như mọi lỗi khác.
+fn build_chosen_base_empty(
+    input: &WhyInput<'_>,
+    plan: &WhyPlan,
+    errors: &[FieldError],
+) -> Option<String> {
+    let PlanSlices::Periods { base, compare, .. } = &plan.slices else {
+        return None;
+    };
+    let only_base = matches!(errors, [error] if error.field == "base");
+    let chosen = build_chosen_base(*compare, find_base_choice(input)) == Some(*base);
+    (only_base && chosen).then(|| {
+        format!(
+            "{}, kỳ so sánh đã chọn, không có dòng dữ liệu nào",
+            base.label()
+        )
+    })
+}
+
 /// Có bảng tổng mà không có phân rã: câu vẫn answered, cảnh báo nói lý do.
 fn build_unavailable(
     mut outcome: WhyOutcome,
@@ -350,6 +391,9 @@ pub(super) fn build_empty(status: AskStatus) -> WhyOutcome {
         result: None,
         explanation: None,
         form: None,
+        plan: None,
+        limit_kept: false,
+        row_filters: Vec::new(),
         terms: Vec::new(),
         assumptions: Vec::new(),
         clarifications: Vec::new(),

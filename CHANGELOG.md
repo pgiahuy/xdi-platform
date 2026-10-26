@@ -42,6 +42,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Hồ sơ cột có đơn vị của cột số đo (tiền, số lượng hàng, tỷ lệ, thời lượng), do mô hình đề xuất lúc lập hồ sơ ngữ nghĩa; để chọn biểu đồ biết hai số đo cùng hay khác đơn vị.
 - `OLLAMA_NUM_CTX` (mặc định 12288 token) đặt cửa sổ ngữ cảnh của Ollama, để prompt dài không bị cắt mất phần luật.
 - Câu hỏi đã trả lời có thẻ "Đã hiểu là" (đo gì, lọc gì, nhóm theo gì, khoảng thời gian, giả định) dựng từ câu SQL đã chạy, vai trò từng cột kết quả, và gợi ý biểu đồ: cột khi một chiều một độ đo, đường khi trục là thời gian.
+- Câu "tại sao" trên trang hỏi trả bảng tổng theo kỳ, bảng phân rã và lời giải thích; bấm một dòng phân rã để xem dòng nguồn.
 
 ### Changed
 

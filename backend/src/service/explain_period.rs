@@ -155,14 +155,6 @@ impl Period {
     }
 }
 
-/// Khoảng ngày [đầu, cuối) của một kỳ viết như trong form.
-pub fn build_period_range(grain: Grain, text: &str) -> Result<(NaiveDate, NaiveDate), String> {
-    let period = Period::parse(grain, text)?;
-    period
-        .range()
-        .ok_or_else(|| format!("\"{text}\" is outside the supported dates"))
-}
-
 // Đúng `len` chữ số ASCII; "+7", " 7", "７" (chữ số toàn khổ) đều không nhận, dù str::parse nhận vài dạng trong đó.
 fn parse_digits(text: &str, len: usize) -> Option<i32> {
     if text.len() != len || !text.bytes().all(|b| b.is_ascii_digit()) {

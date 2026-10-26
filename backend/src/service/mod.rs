@@ -21,12 +21,8 @@ pub mod ask_prompt;
 #[cfg(test)]
 mod ask_prompt_tests;
 mod ask_response_choices;
-// Prompt form của câu "tại sao" (#38); chỉ run_why gọi, nên gỡ allow cùng các module explain_* bên dưới.
-#[allow(dead_code)]
 pub mod ask_why_prompt;
-// Bước narrate của câu "tại sao" (#41): mô hình viết lời từ bảng phân rã, code kiểm số. Gỡ allow khi endpoint hỏi gọi
-// run_why, để clippy bắt lại mã thừa.
-#[allow(dead_code)]
+// Bước narrate của câu "tại sao" (#41): mô hình viết lời từ bảng phân rã, code kiểm số.
 pub mod ask_narrate;
 #[cfg(test)]
 mod ask_narrate_tests;
@@ -39,6 +35,8 @@ pub mod ask_run;
 mod ask_run_tests;
 pub mod ask_values;
 mod ask_view;
+// Nhánh câu "tại sao" của endpoint hỏi (#38): gọi run_why, ghi form và phân rã vào lịch sử.
+mod ask_why;
 // Truy dòng nguồn (#34): hợp đồng, dựng SQL từ câu đã chạy, ghép các bước.
 pub mod drill;
 pub mod drill_contract;
@@ -46,31 +44,20 @@ mod drill_sql;
 #[cfg(test)]
 mod drill_tests;
 pub mod excel;
-// Đường câu "tại sao" (#38, #39, #40): phần toán, form, kiểm form, SQL, phân rã; run_why ghép tất cả. Chỉ endpoint hỏi
-// gọi run_why; luồng hỏi của #33 mới có câu thường, nên gỡ allow khi service/ask.rs nối câu "tại sao" vào.
-#[allow(dead_code)]
+// Đường câu "tại sao" (#38, #39, #40): phần toán, form, kiểm form, SQL, phân rã; run_why ghép tất cả, ask_why.rs gọi.
 pub mod explain;
-#[allow(dead_code)]
 pub mod explain_breakdown;
-#[allow(dead_code)]
 pub mod explain_check;
 #[cfg(test)]
 mod explain_check_tests;
-#[allow(dead_code)]
 pub mod explain_choices;
-#[allow(dead_code)]
 pub mod explain_form;
-#[allow(dead_code)]
 pub mod explain_measure;
-#[allow(dead_code)]
 pub mod explain_period;
-#[allow(dead_code)]
 pub mod explain_plain;
-#[allow(dead_code)]
 pub mod explain_run;
 #[cfg(test)]
 mod explain_run_tests;
-#[allow(dead_code)]
 pub mod explain_sql;
 #[cfg(test)]
 mod explain_tests;
@@ -84,5 +71,6 @@ pub mod understanding;
 pub mod understanding_labels;
 #[cfg(test)]
 mod understanding_tests;
+pub mod understanding_why;
 pub mod users;
 pub mod workspaces;

@@ -108,7 +108,8 @@ async fn ask(
         (status = "4XX", body = ErrorBody, description = "400 invalid body, keys that do not match the result, a \
                                                          question that was rejected or failed, a question whose \
                                                          form cannot be traced yet (the message says why), a \
-                                                         breakdown row (not supported yet) or a deleted version; \
+                                                         breakdown row of a question without that breakdown, or a \
+                                                         deleted version; \
                                                          401; 404 not a member, or no such question in this dataset")
     )
 )]

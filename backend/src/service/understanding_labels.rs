@@ -375,7 +375,7 @@ fn build_aggregate_label(tree: &Expr, profile: &[ColumnProfile]) -> Option<Strin
 }
 
 /// Hạ chữ đầu để ghép giữa câu ("Quý của ngày đặt hàng"). Từ đầu viết hoa cả (SKU, EU) thì giữ nguyên.
-fn lower_first(text: &str) -> String {
+pub fn lower_first(text: &str) -> String {
     let mut chars = text.chars();
     match (chars.next(), chars.clone().next()) {
         (Some(first), second) if !second.is_some_and(char::is_uppercase) => {

@@ -50,6 +50,8 @@ pub enum CodeQuery {
         /// Bản đã qua guard, trên tên logic: hiện cho người dùng.
         shown: String,
         result: ResultTable,
+        /// Điều kiện phân quyền guard đã thêm (GuardedSql::row_filters), để thẻ "Đã hiểu là" gắn nhãn phân quyền.
+        row_filters: Vec<String>,
     },
     /// Guard từ chối; lý do tiếng Việt.
     Refused(String),
@@ -88,6 +90,7 @@ pub async fn run_code_query(
         Ok(output) => CodeQuery::Ran {
             shown: guarded.shown,
             result: build_result_table(output, env.max_rows),
+            row_filters: guarded.row_filters,
         },
         Err(QueryError::Sql(raw)) if mentions_data_files(&raw, env.tables) => {
             return Err(AppError::Internal(format!("read dataset files: {raw}")));
@@ -240,7 +243,7 @@ async fn run_dimension(
 ) -> Result<Option<(DimensionBreakdown, Vec<GroupValues>)>, AppError> {
     let (shown, result) =
         match run_code_query(env, &build_dimension_sql(plan, column), None).await? {
-            CodeQuery::Ran { shown, result } => (shown, result),
+            CodeQuery::Ran { shown, result, .. } => (shown, result),
             CodeQuery::Refused(reason) | CodeQuery::Failed(reason) => {
                 tracing::warn!(%column, %reason, "dimension query failed");
                 return Ok(None);

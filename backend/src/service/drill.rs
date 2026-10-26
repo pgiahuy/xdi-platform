@@ -7,22 +7,27 @@ api/query.rs. Test ở drill_tests.rs (không cần Postgres) và api/drill_test
 Quyền của người đang bấm, không của người đã hỏi: câu do admin hỏi, thành viên có vai dữ liệu bấm vào thì chỉ thấy dòng
 của vai đó. Chạy trên version_id đã lưu: nạp phiên bản mới sau đó không làm dòng nguồn lệch con số đã trả.
 
-Bấm dòng phân rã cần điều kiện hai lát cắt và bộ lọc của form lưu cùng câu hỏi. Cột queries.explanation đã có (migration
-0006) nhưng chỉ được ghi khi ask gọi run_why cho câu "tại sao" (#38), nên tới đó trả 400. */
+Bấm dòng phân rã của câu "tại sao": đọc queries.explanation (ask_why.rs ghi) lấy câu SQL của chiều được bấm
+(DimensionBreakdown.sql, đã qua guard khi hỏi) và điều kiện của lát cắt được bấm, rồi truy như một ô của câu chiều đó
+(drill_sql.rs). Request chỉ gửi tên lát cắt, cột và giá trị nhóm; SQL luôn lấy từ chỗ đã lưu. */
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use duckdb::types::Value;
+use serde::Deserialize;
 use tokio::sync::Semaphore;
 
+use super::ask::load_row_filters;
 use super::ask_repair::build_safe_error;
 use super::ask_result::build_result_table;
 use super::ask_run::{build_duration_text, run_query_in_turn};
-use super::drill_contract::{DrillKey, DrillRequest, DrillResponse, MAX_DRILL_LIMIT};
+use super::drill_contract::{
+    BreakdownKey, DrillKey, DrillRequest, DrillResponse, SliceName, MAX_DRILL_LIMIT,
+};
 use super::drill_sql::build_drill_plan;
 use super::ingest::{dataset_not_found, parse_dataset_id};
-use crate::auth::{Member, Role};
+use crate::auth::Member;
 use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError, GuardedSql};
 use crate::engine::query::{QueryError, QueryOutput};
 use crate::engine::store::QueryStatus;
@@ -51,11 +56,22 @@ pub async fn drill(
         }
         _ => return Err(no_number("chạy lỗi")),
     };
-    let Some(keys) = &req.cell else {
-        return Err(AppError::BadRequest(
-            "Chưa truy được dòng nguồn của dòng phân rã: lát cắt của câu \"tại sao\" chưa được lưu cùng câu hỏi"
-                .to_string(),
-        ));
+    // check_request đã bảo đảm có đúng một trong cell, breakdown.
+    let (sql, keys, slice_filter) = match (&req.cell, &req.breakdown) {
+        (Some(keys), _) => (sql_guarded, keys.clone(), None),
+        (None, Some(key)) => {
+            let (sql, filter) = find_breakdown(query.explanation, key)?;
+            let keys = vec![DrillKey {
+                column: key.column.clone(),
+                value: key.value.clone(),
+            }];
+            (sql, keys, Some(filter))
+        }
+        (None, None) => {
+            return Err(AppError::Internal(
+                "drill: no cell or breakdown".to_string(),
+            ))
+        }
     };
     let version_id = query.version_id.ok_or_else(version_gone)?;
     let dataset = state
@@ -73,25 +89,16 @@ pub async fn drill(
         .parquet_path
         .ok_or_else(|| AppError::Internal("version has no parquet path".to_string()))?;
     let columns = state.store.list_columns(ws, version_id).await?;
-    // Admin không bị lọc: họ tự sửa được chính sách, lọc với họ không bảo vệ được gì (#45).
-    let row_filters = match member.role {
-        Role::Admin => Vec::new(),
-        Role::Member => {
-            state
-                .store
-                .list_row_filters(ws, dataset_id, member.user.id)
-                .await?
-        }
-    };
     let tables = [AllowedTable {
         name: dataset.logical_table,
         columns: columns.into_iter().map(|c| c.name).collect(),
         parquet_dir: state.config.data_dir.join(relative),
-        row_filters,
+        row_filters: load_row_filters(state, member, dataset_id).await?,
     }];
     let input = DrillInput {
-        sql_guarded: &sql_guarded,
-        keys,
+        sql_guarded: &sql,
+        keys: &keys,
+        slice_filter: slice_filter.as_deref(),
         offset: req.offset,
         limit: req.limit,
         tables: &tables,
@@ -117,10 +124,70 @@ fn check_request(req: &DrillRequest) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Phần của queries.explanation (khuôn ở ask_why.rs) mà truy dòng phân rã cần.
+#[derive(Deserialize)]
+struct StoredWhy {
+    explanation: Option<StoredExplanation>,
+}
+
+#[derive(Deserialize)]
+struct StoredExplanation {
+    base: StoredSlice,
+    compare: StoredSlice,
+    dimensions: Vec<StoredDimension>,
+}
+
+#[derive(Deserialize)]
+struct StoredSlice {
+    filter: String,
+}
+
+#[derive(Deserialize)]
+struct StoredDimension {
+    column: String,
+    sql: String,
+}
+
+/// Câu SQL của chiều được bấm và điều kiện của lát cắt được bấm. 400 khi câu hỏi không có phân rã hay không có chiều đó.
+fn find_breakdown(
+    stored: Option<serde_json::Value>,
+    key: &BreakdownKey,
+) -> Result<(String, String), AppError> {
+    let no_breakdown = || {
+        AppError::BadRequest(
+            "Câu hỏi này không có bảng phân rã nên không có dòng phân rã để truy".to_string(),
+        )
+    };
+    let stored: StoredWhy = match stored {
+        Some(json) => serde_json::from_value(json)
+            .map_err(|e| AppError::Internal(format!("drill: stored explanation: {e}")))?,
+        None => return Err(no_breakdown()),
+    };
+    let explanation = stored.explanation.ok_or_else(no_breakdown)?;
+    let slice = match key.slice {
+        SliceName::Base => explanation.base,
+        SliceName::Compare => explanation.compare,
+    };
+    let dimension = explanation
+        .dimensions
+        .into_iter()
+        .find(|d| d.column == key.column)
+        .ok_or_else(|| {
+            AppError::BadRequest(format!(
+                "Bảng phân rã của câu hỏi này không có chiều {}",
+                key.column
+            ))
+        })?;
+    Ok((dimension.sql, slice.filter))
+}
+
 /// Đầu vào của run_drill, đã đọc xong từ Postgres; test dựng trực tiếp, không cần Postgres.
 pub(super) struct DrillInput<'a> {
+    /// Câu đã chạy được truy: sql_guarded của câu hỏi, hay câu của chiều phân rã được bấm.
     pub sql_guarded: &'a str,
     pub keys: &'a [DrillKey],
+    /// Điều kiện lát cắt khi bấm dòng phân rã (drill_sql.rs).
+    pub slice_filter: Option<&'a str>,
     pub offset: u64,
     pub limit: u32,
     /// Bảng của dataset, row_filters theo người đang bấm.
@@ -141,7 +208,13 @@ pub(super) async fn run_drill(input: DrillInput<'_>) -> Result<DrillResponse, Ap
         .into_iter()
         .map(|c| c.name)
         .collect();
-    let built = plan.build_sql(&names, input.keys, input.offset, input.limit)?;
+    let built = plan.build_sql(
+        &names,
+        input.keys,
+        input.slice_filter,
+        input.offset,
+        input.limit,
+    )?;
     let page = guard(&built.page, input.tables, max_rows)?;
     let count = guard(&built.count, input.tables, max_rows)?;
     let rows = run(&input, page.runnable).await?;

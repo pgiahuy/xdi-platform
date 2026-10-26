@@ -1855,7 +1855,7 @@
             }
           },
           "4XX": {
-            "description": "400 invalid body, keys that do not match the result, a question that was rejected or failed, a question whose form cannot be traced yet (the message says why), a breakdown row (not supported yet) or a deleted version; 401; 404 not a member, or no such question in this dataset",
+            "description": "400 invalid body, keys that do not match the result, a question that was rejected or failed, a question whose form cannot be traced yet (the message says why), a breakdown row of a question without that breakdown, or a deleted version; 401; 404 not a member, or no such question in this dataset",
             "content": {
               "application/json": {
                 "schema": {
@@ -2736,7 +2736,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/BreakdownKey",
-                "description": "A row of the breakdown in `AskResponse.explanation`. Not supported yet: the request gets 400."
+                "description": "A row of the breakdown in `AskResponse.explanation`: the source rows of that group in that slice."
               },
               {
                 "type": "null"

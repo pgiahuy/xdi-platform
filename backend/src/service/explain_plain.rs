@@ -53,6 +53,8 @@ fn build_plain_outcome(
         message: run.message,
         sql_guarded: run.sql_guarded,
         result: run.result,
+        limit_kept: run.limit_kept,
+        row_filters: run.row_filters,
         steps,
         ..build_empty(run.status)
     };
