@@ -219,9 +219,11 @@ async fn answers_a_question_and_records_it() {
     assert_eq!(understanding["measures"].as_array().unwrap().len(), 1);
     assert!(understanding["limit"].is_null(), "{understanding}");
     assert_eq!(understanding["assumptions"][0]["id"], "time:range");
+    // So sánh nhóm: thanh ngang (ask_chart.rs, luật 1).
     assert_eq!(
         response["chart"],
-        json!({"kind": "bar", "x": "market", "y": ["revenue"]})
+        json!({"kind": "bar", "x": "market", "y": ["revenue"], "layout": "single", "series": null,
+               "ratio": [], "top": null, "other_bucket": false})
     );
 }
 
@@ -242,11 +244,9 @@ async fn repairs_a_failed_run_once() {
         .as_str()
         .unwrap()
         .contains("%m/%d/%Y"));
-    // Trục x là ngày nên vẽ đường.
-    assert_eq!(
-        response["chart"],
-        json!({"kind": "line", "x": "ship_day", "y": ["revenue"]})
-    );
+    // Trục là ngày, chỉ 3 kỳ nên cột đứng (ask_chart.rs, luật 2: tới 10 kỳ là cột).
+    assert_eq!(response["chart"]["kind"], "column");
+    assert_eq!(response["chart"]["x"], "ship_day");
 }
 
 #[tokio::test]

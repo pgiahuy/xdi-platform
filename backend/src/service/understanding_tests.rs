@@ -181,8 +181,9 @@ fn mock_answers() -> Vec<(String, SqlAnswer)> {
 
 #[test]
 fn mock_answers_get_cards_and_roles() {
-    // Theo thứ tự trong mock_answers.json; câu 11 và 12, câu 13 và 14 là bước sql và bước sửa của cùng một câu hỏi.
-    let expected_roles: [&[ColumnRole]; 15] = [
+    // Theo thứ tự trong mock_answers.json; câu 11 và 12, câu 13 và 14 là bước sql và bước sửa của cùng một câu hỏi;
+    // câu 16 so từng tháng hai năm (hai số đo), câu 17 chia theo quý và thị trường (hai khóa).
+    let expected_roles: [&[ColumnRole]; 17] = [
         &[Dimension, Measure],
         &[Time, Measure],
         &[Dimension, Measure],
@@ -198,6 +199,8 @@ fn mock_answers_get_cards_and_roles() {
         &[Time, Measure],
         &[Time, Measure],
         &[Dimension, Measure],
+        &[Time, Measure, Measure],
+        &[Time, Dimension, Measure],
     ];
     let answers = mock_answers();
     assert_eq!(answers.len(), expected_roles.len());

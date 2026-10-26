@@ -197,6 +197,36 @@
     }
   },
   {
+    "task": "sql",
+    "question": "Doanh thu theo tháng giảm so với cùng kỳ năm trước",
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "tháng", "kind": "column", "column": "order date (DateOrders)" },
+        { "text": "cùng kỳ năm trước", "kind": "period" }
+      ],
+      "assumptions": [
+        { "kind": "time", "chosen": "latest_year", "alternatives": [], "label": "So từng tháng của năm mới nhất trong dữ liệu với cùng tháng năm liền trước" }
+      ],
+      "sql": "SELECT month(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS month, SUM(CASE WHEN year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) = (SELECT max(year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M'))) FROM dataco) THEN \"Order Item Total\" END) AS revenue_this_year, SUM(CASE WHEN year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) = (SELECT max(year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M'))) FROM dataco) - 1 THEN \"Order Item Total\" END) AS revenue_last_year FROM dataco GROUP BY month ORDER BY month"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Doanh thu theo quý của từng thị trường",
+    "answer": {
+      "terms": [
+        { "text": "doanh thu", "kind": "metric", "value": "doanh thu" },
+        { "text": "quý", "kind": "column", "column": "order date (DateOrders)" },
+        { "text": "thị trường", "kind": "column", "column": "Market" }
+      ],
+      "assumptions": [
+        { "kind": "time", "chosen": "all", "alternatives": [], "label": "Tính trên toàn bộ dữ liệu vì câu hỏi không nêu khoảng thời gian" }
+      ],
+      "sql": "SELECT date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY quarter, market ORDER BY quarter"
+    }
+  },
+  {
     "task": "profile",
     "question": "dataco",
     "answer": {

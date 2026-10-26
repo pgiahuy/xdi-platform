@@ -79,6 +79,11 @@ pub fn build_simple_example() -> AskResponse {
             kind: ChartKind::Bar,
             x: "market".to_string(),
             y: vec!["revenue".to_string()],
+            layout: ChartLayout::Single,
+            series: None,
+            ratio: vec![],
+            top: None,
+            other_bucket: false,
         }),
         steps: vec![
             build_step(StepName::Context, 15, true, None),
@@ -150,10 +155,16 @@ pub fn build_why_example() -> AskResponse {
             truncated: false,
             limit_reached: false,
         }),
+        // Hai quý nên cột đứng; doanh thu và số đơn khác đơn vị nên mỗi số đo một biểu đồ nhỏ (ask_chart.rs).
         chart: Some(ChartSuggestion {
-            kind: ChartKind::Line,
+            kind: ChartKind::Column,
             x: "quarter".to_string(),
-            y: vec!["revenue".to_string()],
+            y: vec!["revenue".to_string(), "orders".to_string()],
+            layout: ChartLayout::Panels,
+            series: None,
+            ratio: vec![],
+            top: None,
+            other_bucket: false,
         }),
         warnings: vec![Warning {
             code: WarningCode::UnusualMagnitude,

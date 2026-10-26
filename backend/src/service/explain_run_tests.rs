@@ -738,10 +738,14 @@ async fn why_card_names_the_two_periods() {
     assert_eq!(card.assumptions[0].id, "why:base");
     assert_eq!(view.roles, [ColumnRole::Time, ColumnRole::Measure]);
     let chart = view.chart.unwrap();
-    assert_eq!((chart.kind, chart.x.as_str()), (ChartKind::Line, "quarter"));
+    // Hai quý, tới 10 kỳ là cột đứng (ask_chart.rs, luật 2).
+    assert_eq!(
+        (chart.kind, chart.x.as_str()),
+        (ChartKind::Column, "quarter")
+    );
 }
 
-/// So hai nhóm: hai nhóm là một mục lọc có nhãn riêng; điều kiện phân quyền ở cuối; bảng theo Market vẽ cột.
+/// So hai nhóm: hai nhóm là một mục lọc có nhãn riêng; điều kiện phân quyền ở cuối; bảng theo Market vẽ thanh ngang.
 #[tokio::test]
 async fn why_card_names_the_two_groups() {
     let data = Dataco::new();

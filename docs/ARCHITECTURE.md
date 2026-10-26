@@ -229,11 +229,44 @@ Mọi thứ phụ thuộc cột được suy ra lúc nạp, không ghi cứng:
 | Phân quyền theo dòng | `rls_policies` theo dataset: role, cột, giá trị |
 | Câu "tại sao" | Vai trò cột từ hồ sơ: chuỗi ít giá trị là chiều, số là độ đo, ngày là thời gian |
 | Câu hỏi gợi ý | Sinh từ hồ sơ lúc nạp, lưu lại |
-| Biểu đồ | Theo kiểu kết quả: một chiều một độ đo thì cột, có thời gian thì đường |
+| Biểu đồ | Theo vai trò cột, loại số đo và đơn vị của kết quả; luật ở mục 6b |
 
 Mô hình ngôn ngữ sinh SQL trên tên bảng logic. Engine resolve tên logic thành nguồn vật lý: file Parquet, hoặc bảng
 trong database đã gắn. Nhờ đó nguồn database (Postgres, MySQL, SQLite qua extension của DuckDB) thêm vào mà không đổi
 guard, prompt hay lịch sử.
+
+## 6b. Chọn biểu đồ
+
+Biểu đồ là cách người đọc báo cáo tài chính so số, nên luật theo chuẩn của họ chứ không tự đặt: IBCS (International
+Business Communication Standards), cùng *Say It With Charts* của Gene Zelazny cho cách chia loại so sánh. Một luật duy
+nhất không đủ, vì chọn đúng phải biết bốn điều về kết quả: so sánh gì (các nhóm, theo thời gian, cơ cấu theo thời
+gian, chênh lệch hai kỳ), số đo cộng được hay không (tổng, đếm so với trung bình, tỷ lệ), có bao nhiêu nhóm hay kỳ, và
+các số đo cùng đơn vị không. Chọn sai làm người đọc hiểu sai: nối đường giữa các nhóm như thể chúng liên tục, cột
+không bắt đầu từ 0 làm chênh lệch nhỏ trông lớn, hai trục khác thang đo làm hai số đo trông cùng chiều hay ngược chiều
+tùy cách chọn thang.
+
+`service/ask_chart.rs` chọn từ vai trò cột (`understanding.rs`), cây SQL đã chạy (loại hàm tổng hợp) và đơn vị trong hồ
+sơ cột (`columns.unit`, [Dữ liệu](DATA.md)); giao diện vẽ từ chính các dòng của `result`.
+
+1. Một khóa là nhóm (doanh thu theo thị trường): thanh ngang, xếp lớn trước, vì IBCS đặt cấu trúc trên trục đứng và tên
+   nhóm dài vẫn đọc được. Quá 15 nhóm thì vẽ 15 nhóm lớn nhất; số đo cộng được và đủ dòng thì phần còn lại gộp "Khác".
+   IBCS không đặt số cho thanh đơn: 15 chọn ở đây.
+2. Một khóa là thời gian: thời gian luôn trên trục ngang (IBCS). Tới 10 kỳ là cột đứng, hơn 10 kỳ là đường có điểm
+   đánh dấu ở từng kỳ (mẫu C07 của IBCS: đường hợp khi hơn 10 kỳ).
+3. Một dòng: không vẽ, bảng đã hiện con số.
+4. Thời gian và một nhóm, một số đo: số đo cộng được và tới 25 kỳ thì cột chồng, tối đa 6 phần (5 nhóm lớn nhất cộng
+   "Khác"), theo mẫu C01 của IBCS. Số đo không cộng được (trung bình, đếm phân biệt) hay quá 25 kỳ thì mỗi nhóm một
+   đường, khi không quá 5 nhóm (số này chọn ở đây); nhiều hơn thì chỉ bảng. Không dùng biểu đồ tròn: IBCS không xếp nó
+   vào các loại chính, Zelazny khuyên dùng cho dưới 5% số biểu đồ.
+5. Câu "tại sao": thác nước (tổng kỳ trước, phần tăng giảm của từng nhóm, tổng kỳ sau), loại IBCS dùng cho phân tích
+   chênh lệch; vẽ từ `explanation`, không qua `chart`.
+6. Nhiều số đo khác đơn vị hay chưa biết đơn vị: mỗi số đo một biểu đồ nhỏ, chung trục nhóm hay thời gian, không dùng
+   hai trục.
+7. Nhiều số đo cùng đơn vị (số ngày giao thực tế và dự kiến; doanh thu năm nay và năm trước): cạnh nhau trên một thang
+   đo.
+
+Chung cho mọi biểu đồ: cột và thanh bắt đầu từ 0; số đo không cộng được vẽ cột hẹp (IBCS: rộng 1/3 thay vì 2/3) và
+không bao giờ gộp "Khác"; tối đa 4 số đo; hai khóa đều là nhóm, hay ba khóa trở lên, thì chỉ bảng.
 
 ## 7. Dữ liệu thay đổi
 
@@ -297,7 +330,7 @@ chưa có.
 | Thẻ "Đã hiểu là" | `understanding`: `measures`, `filters`, `group_by`, `order_by`, `limit`, `time_range`, mỗi mục có nhãn và đoạn SQL nó lấy ra; `filters` gồm cả điều kiện phân quyền guard thêm vào, nhãn nói rõ; `assumptions` là danh sách `Choice` đã chọn | [#35](https://github.com/pgiahuy/xdi-platform/issues/35) sinh từ cây cú pháp và kiểm từng mục khớp câu đã chạy; [#50](https://github.com/pgiahuy/xdi-platform/issues/50) vẽ chip từ `Choice`. Người dùng biết mình chỉ thấy một phần dữ liệu |
 | Đổi giả định, trả lời câu hỏi lại | Response nào cũng có `choices`: mọi lựa chọn đã áp dụng, kể cả mặc định và câu hỏi lại đã trả lời, cùng dạng `[{choice_id, option_id}]` của request. Hỏi lại thì gửi cùng câu hỏi kèm `choices` của response gần nhất, thay hoặc thêm mục vừa chọn. Người dùng sửa chữ câu hỏi thì đó là câu mới, giao diện gửi `choices` rỗng. Câu mơ hồ trả `clarifications`, cùng kiểu `Choice` nhưng chưa chọn. Id của lựa chọn ổn định cho cùng câu hỏi trên cùng phiên bản dữ liệu: đặt từ loại lựa chọn và đối tượng của nó (một từ và các cột ứng viên, kỳ để so sánh), như `region_column`, `base_period` trong mẫu, không đặt từ chữ của SQL. Id không nhận ra thì bỏ qua, không có trong `choices` trả về, kèm cảnh báo `choice_not_applied`: giả định dùng mặc định, câu hỏi lại thì được hỏi lại. Nếu `needs_choice` quay lại đúng câu vừa trả lời kèm cảnh báo đó, giao diện hiện `message` thay vì hỏi lại y nguyên | Backend không giữ trạng thái giữa hai lần hỏi, và giao diện chỉ cần response gần nhất: thiếu một lựa chọn đã trả lời thì backend sẽ hỏi lại chỗ đó mãi. Id sinh từ SQL sẽ đổi khi mô hình viết SQL khác ở lần hỏi sau, và câu "tại sao" hỏi lại sau khi gọi mô hình sẽ lặp mãi. Bỏ qua thay vì 400 vì một giả định có thể thật sự không còn khi SQL đổi; trả 400 thì người dùng kẹt. Câu đã sửa mà giữ lựa chọn cũ thì lựa chọn hoặc áp dụng ngầm, hoặc sinh cảnh báo khó hiểu |
 | Phân rã | `explanation`, chỉ có ở câu "tại sao": hai lát cắt (`base`, `compare`, mỗi lát có nhãn, điều kiện SQL, giá trị), chênh lệch, mỗi chiều một bảng đóng góp của từng nhóm kèm SQL đã chạy sau guard (chiều giải thích tốt nhất trước), tách lượng và giá kèm SQL, đoạn tóm tắt và cờ `summary_by_model`. Không phân rã được thì cảnh báo `explanation_unavailable` nói lý do. Số là chuỗi chữ số thập phân; độ đo đổi sang DECIMAL ở từng dòng nguồn trước khi cộng, không làm tròn từng nhóm. Phần lượng và giá có một phép chia (giá = độ đo / lượng): giá làm tròn tới số chữ số cố định (#40 chọn) và là chỗ làm tròn duy nhất, `volume_effect` tính đúng từ giá đã làm tròn, `price_effect = change - volume_effect` nhận phần lệch do làm tròn. Bảng kết quả cộng theo kiểu cột (DOUBLE là số thực), nên giá trị hai lát cắt có thể lệch ô của bảng ở chữ số cuối; con số của phân rã lấy từ `explanation` | Mọi con số kiểm được trên giao diện bằng SQL đứng sau nó ([#52](https://github.com/pgiahuy/xdi-platform/issues/52)). Phép cộng trên DECIMAL là đúng, nên tổng đóng góp bằng đúng chênh lệch ([#39](https://github.com/pgiahuy/xdi-platform/issues/39), [#40](https://github.com/pgiahuy/xdi-platform/issues/40)) và [#41](https://github.com/pgiahuy/xdi-platform/issues/41) so số trong lời với đúng các chuỗi này |
-| Biểu đồ | `chart`: `bar` hoặc `line`, cột trục x và các cột vẽ; null thì chỉ hiện bảng | Luật ở mục 6, theo `role` của cột kết quả (`service/ask_view.rs`): đúng một cột `dimension` hay `time` làm trục x; `bar` khi trục là chiều và có đúng một độ đo, `line` khi trục là thời gian và vẽ độ đo đầu, vì các độ đo thường khác đơn vị; hai khóa trở lên hay không có độ đo thì null |
+| Biểu đồ | `chart`: `kind` (`bar` thanh ngang, `column` cột đứng, `line` đường, `stacked_column` cột chồng), `x` là trục nhóm hay thời gian, `y` các số đo, `layout` (`single`, `grouped` cạnh nhau, `panels` mỗi số đo một biểu đồ), `series` là cột chia phần hay chia đường, `ratio` các số đo không cộng được, `top` và `other_bucket` cho số nhóm vẽ và phần "Khác"; null thì chỉ hiện bảng | Luật ở mục 6b (`service/ask_chart.rs`). Gợi ý chỉ nêu tên cột, số liệu lấy từ `result` nên biểu đồ luôn khớp bảng |
 | Các bước | `steps`: tên bước, thời gian (ms), thành công hay không, chi tiết. `explain` (code tính phân rã) tách khỏi `narrate` (mô hình viết lời); `repair` là lần mô hình sửa SQL, tối đa một lần: sau `run` lỗi, sau `guard` từ chối vì không có bảng hay cột đó hay vì câu có thể dựng giá trị quá lớn, hoặc khi câu trả lời đầu của mô hình không đọc được (khi đó `repair` là bước đầu tiên; guard từ chối vì lý do khác, câu quá giờ hay quá bộ nhớ thì không sửa). Bước lỗi không nhất thiết dừng câu hỏi (`run` hay `guard` lỗi có thể theo sau là `repair`, `narrate` lỗi thì dùng câu khuôn); `status` cho biết câu hỏi có dừng không, và gọi theo bước đã dừng nó: guard thì `rejected`, chạy hay vòng sửa thì `failed` | Pane bằng chứng hiện timeline, thấy được mô hình chỉ tham gia ở đâu; giao diện tự đặt nhãn cho từng tên bước |
 
 Truy dòng nguồn ([#34](https://github.com/pgiahuy/xdi-platform/issues/34)): `POST .../datasets/{id}/drill`, hợp đồng
@@ -371,6 +404,7 @@ Cập nhật khi có thay đổi.
 | Đường câu "tại sao" (`service/explain_run.rs`, `explain_form.rs`, `explain_check.rs`, `explain_sql.rs`, `explain_breakdown.rs`): nhận câu bằng từ khóa, mô hình điền form (độ đo hoặc chỉ số, hai kỳ tháng, quý, năm hoặc hai nhóm, bộ lọc `=`), code kiểm form với hồ sơ, `column_values` và `metrics`, sửa form một lần theo lỗi từng trường, sai lần hai thì chạy như câu thường kèm `explanation_unavailable`; code dựng bảng tổng theo kỳ, điều kiện hai lát cắt, SQL từng chiều (tối đa 8 chiều tới 50 giá trị) và SQL lượng (một cột `key` lặp lại), mọi câu qua guard có lọc dòng theo vai dữ liệu | Có, kèm test trên Parquet tạm với mock và qua route; route hỏi gọi `run_why` và ghi form cùng `Explanation` vào `queries.explanation`; kỳ so sánh do người hỏi chọn mà không có dòng nào thì trả bảng tổng kèm `explanation_unavailable`, không gọi lại mô hình; lượng chưa lấy từ `metrics` vì bảng chưa có trường đánh dấu chỉ số lượng |
 | Diễn giải bảng phân rã bằng lời (`service/ask_narrate.rs`, phần chữ ở `service/explain.rs`): mô hình viết đoạn tóm tắt từ `Explanation`, code kiểm mọi số trong đoạn có nguyên văn trong bảng (số kèm `%`, `‰`, "phần trăm", "pct", "gấp", "x", "lần" luôn sai; nhãn và giá trị nhóm chép nguyên văn được miễn); mô hình lỗi, quá giờ hay sai số thì dùng câu khuôn của backend, câu hỏi vẫn `answered` và bước `narrate` có `ok = false` kèm lý do | Có, kèm test; mock trả lời câu "tại sao" mẫu; `run_why` gọi sau bước explain, qua route hỏi |
 | Thẻ "Đã hiểu là" và vai trò cột kết quả (`engine/sql_shape.rs`, `service/understanding.rs`, `service/understanding_labels.rs`): đọc `sql_guarded` bằng cây cú pháp ra cột kết quả, vế lọc, khóa nhóm, thứ tự, LIMIT, bảng (đọc xuyên hộp phân quyền của guard); thẻ có nhãn tiếng Việt và đoạn SQL nguyên văn cho từng mục, cụm vế thời gian liền nhau đầu tiên thành `time_range`, điều kiện phân quyền nhãn "Phân quyền: ...", giả định là danh sách `Choice` của `service/ask_choices.rs` | Có hàm kèm test trên 15 câu SQL của mock qua guard; endpoint hỏi (#33) gọi cho câu thường đã answered, đọc cây không được thì trả lời không kèm thẻ và ghi log; câu có CTE, câu con ở FROM chỉ đọc câu ngoài cùng, UNION chỉ có thứ tự và LIMIT, `SELECT *` thì mọi cột là `other`; câu "tại sao" dựng thẻ từ form đã kiểm (`service/understanding_why.rs`): hai kỳ là `time_range`, hai nhóm là một mục lọc, mỗi đoạn SQL vẫn nguyên văn trong `sql_guarded` |
+| Chọn biểu đồ theo IBCS (`service/ask_chart.rs`, mục 6b): loại số đo đọc từ hàm tổng hợp, đơn vị từ `columns.unit`, bảy luật kèm ngưỡng của IBCS | Có phía backend, kèm test; giao diện còn vẽ tạm: `bar` và `column` bằng cột đứng, chưa vẽ thanh ngang, cột chồng, mỗi nhóm một đường, cột hẹp cho số đo không cộng được, biểu đồ nhỏ theo số đo, phần "Khác", thác nước |
 | Pane bằng chứng của trang hỏi (`pages/AskEvidence.tsx`, `components/ask/Evidence*.tsx`): bốn tab SQL (trước và sau guard), Phân rã (bảng đóng góp từng chiều, lượng và giá), Dòng nguồn (bấm số của một kỳ trong bảng phân rã), Các bước; SQL hiện xuống dòng theo mệnh đề, nút chép chép nguyên văn; pane chỉ hiện khi có câu trả lời, thu gọn được (nhớ trong localStorage) | Có, dựng trên hợp đồng ask; tab Dòng nguồn gọi route drill với khóa dòng phân rã; bấm ô của bảng kết quả chưa gọi drill dù backend đã truy được dòng nguồn của ô; `npm run dev` có dòng mẫu; điều kiện phân quyền guard thêm chưa tách riêng trong response nên chưa chỉ ra từng điều kiện |
 | Chế độ demo (#46): route `POST /api/auth/demo-login` có trong đặc tả | Chưa có; route trả 501 (`not_implemented`) |
 | Dataset mẫu đóng gói sẵn (#25), màn xem lịch sử câu hỏi, xóa dataset, sửa mô tả cột và bí danh, chốt chỉ số, đánh dấu câu trả lời đúng, cảnh báo kiểm hợp lý (#36), bộ đánh giá câu hỏi mẫu (#37) | Chưa có; `data/samples/` còn trống, prompt đã đọc chỉ số (`metrics`) và câu đã đánh dấu đúng nhưng chưa có đường ghi chúng ngoài test |

@@ -1335,6 +1335,11 @@
                     "value": {
                       "chart": {
                         "kind": "bar",
+                        "layout": "single",
+                        "other_bucket": false,
+                        "ratio": [],
+                        "series": null,
+                        "top": null,
                         "x": "market",
                         "y": [
                           "revenue"
@@ -1493,10 +1498,16 @@
                     "summary": "Why question with a breakdown",
                     "value": {
                       "chart": {
-                        "kind": "line",
+                        "kind": "column",
+                        "layout": "panels",
+                        "other_bucket": false,
+                        "ratio": [],
+                        "series": null,
+                        "top": null,
                         "x": "quarter",
                         "y": [
-                          "revenue"
+                          "revenue",
+                          "orders"
                         ]
                       },
                       "choices": [
@@ -2394,34 +2405,80 @@
       },
       "ChartKind": {
         "type": "string",
-        "description": "`bar` for one dimension and one measure, `line` when the x axis is time.",
+        "description": "Kind of chart:\n- `bar`: horizontal bars, one per group of `x`, largest first; compares groups.\n- `column`: vertical columns over the periods of `x`; up to 10 periods.\n- `line`: a line with a marker on each period of `x`; more than 10 periods, or one line per group of `series`.\n- `stacked_column`: vertical columns over the periods of `x`, each split into the groups of `series`.",
         "enum": [
           "bar",
-          "line"
+          "column",
+          "line",
+          "stacked_column"
+        ]
+      },
+      "ChartLayout": {
+        "type": "string",
+        "description": "How the measures in `y` are drawn:\n- `single`: one measure.\n- `grouped`: side by side on one scale, because the measures share a unit.\n- `panels`: one small chart per measure sharing the axis of `x`, because the units differ or are unknown; two\n  scales in one chart are not used, since choosing them can make the same numbers look like anything.",
+        "enum": [
+          "single",
+          "grouped",
+          "panels"
         ]
       },
       "ChartSuggestion": {
         "type": "object",
-        "description": "Suggested chart; null in `AskResponse` when the result is better shown as a table only.",
+        "description": "Suggested chart; null in `AskResponse` when the result is better shown as a table only (one value, too many\ngroups, more than one grouping column without time). Every name is a name from `result.columns`.",
         "required": [
           "kind",
           "x",
-          "y"
+          "y",
+          "layout",
+          "series",
+          "ratio",
+          "top",
+          "other_bucket"
         ],
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/ChartKind"
           },
+          "layout": {
+            "$ref": "#/components/schemas/ChartLayout"
+          },
+          "other_bucket": {
+            "type": "boolean",
+            "description": "The groups after `top` can be summed into one entry labelled \"Khác\": every measure is a sum or a plain count,\nand `result` holds every row. False: they are left out, and the chart says how many."
+          },
+          "ratio": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Measures in `y` that are not totals (averages, ratios, minimum, maximum): drawn as narrow columns, and never\nsummed into a \"Khác\" entry."
+          },
+          "series": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `stacked_column`, and for `line` with one line per group: the group column whose values become the parts\nor the lines. Null otherwise."
+          },
+          "top": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Most groups to draw, largest first: bars for `bar`, parts for `stacked_column`. Null when every group is drawn.",
+            "minimum": 0
+          },
           "x": {
             "type": "string",
-            "description": "Column on the x axis: a dimension for `bar`, time for `line`. A name from `result.columns`."
+            "description": "Category axis: a group column for `bar`, a time column for the other kinds."
           },
           "y": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Columns drawn as series, names from `result.columns`."
+            "description": "Measures to draw, at most 4."
           }
         }
       },
