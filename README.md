@@ -33,6 +33,9 @@ trình duyệt ở http://localhost:8000/api/docs.
 `LLM_PROVIDER` chọn mô hình ngôn ngữ: `mock` (mặc định, không cần khóa API), `gemini` (cần khóa), `ollama` (cần một máy
 chạy Ollama).
 
+Từ màn thiết lập tới câu trả lời đầu tiên (chọn mô hình, nạp dataset, hỏi, đọc bằng chứng, mời thành viên): mục 7 của
+[docs/INSTALL.md](docs/INSTALL.md).
+
 ## Build từ nguồn
 
 Cần Rust stable (từ 1.89) kèm trình biên dịch C++, Node.js 24, Docker cho Postgres, và GNU Make.

@@ -6,7 +6,8 @@ Ba cách chạy, chọn một:
 2. Build từ mã nguồn (mục 2): để phát triển, hoặc chạy backend không dùng Docker.
 3. Đưa lên Internet (mục 3): một máy chủ có tên miền, HTTPS tự động bằng Caddy.
 
-Sao lưu và khôi phục ở mục 4, lệnh quản trị ở mục 5, lỗi hay gặp ở mục 6.
+Sao lưu và khôi phục ở mục 4, lệnh quản trị ở mục 5, lỗi hay gặp ở mục 6. Cài xong thì làm theo mục 7 (Dùng lần
+đầu): chọn mô hình ngôn ngữ, nạp dataset, hỏi câu đầu tiên, đọc bằng chứng, mời thành viên.
 
 Phần mềm đang phát triển. Phần nào đã có, xem mục Trạng thái trong [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -72,8 +73,8 @@ lập chỉ dùng được một lần. Khởi động lại backend mà vẫn c
 
 ### Nạp dữ liệu
 
-Trên giao diện: mục **Dữ liệu** ở thanh bên, chọn một hoặc nhiều file rồi bấm **Nạp**. Chỉ `admin` của workspace thấy
-phần nạp file. Tên dataset để trống thì lấy theo tên file.
+Trên giao diện: mục **Dữ liệu** ở thanh bên, chọn một hoặc nhiều file rồi bấm **Nạp** (từng bước ở mục 7). Chỉ
+`admin` của workspace thấy phần nạp file. Tên dataset để trống thì lấy theo tên file.
 
 Qua API, khi cần nạp bằng script: đăng nhập bằng lệnh để lấy cookie phiên vào `cookie.txt` (file này là chìa khóa
 phiên của bạn, xóa sau khi dùng xong), rồi nạp file. `<slug>` là slug của workspace, có trong kết quả lệnh đăng nhập,
@@ -121,7 +122,8 @@ Mô hình ngôn ngữ:
 - `gemini`: khóa lấy ở Google AI Studio, đặt vào `GEMINI_API_KEY`. Thiếu khóa thì backend vẫn chạy, ghi cảnh báo vào
   log lúc khởi động, và câu hỏi nhận lỗi nhắc đặt khóa. Khóa chỉ gửi tới Google trong header, không ghi vào log.
   Mô hình mặc định là `gemini-3.5-flash-lite` vì hạn mức miễn phí theo ngày của bản lite cao hơn nhiều so với bản
-  flash; đổi mô hình bằng `GEMINI_MODEL`. Hạn mức hiện tại của từng mô hình xem trong Google AI Studio.
+  flash; đổi mô hình bằng `GEMINI_MODEL`. Hạn mức hiện tại của từng mô hình xem trong Google AI Studio. Lỗi hay gặp
+  với Gemini (khóa bị từ chối, không có mô hình, quá tải, hết hạn mức) và cách xử lý ở mục 6.
 - `ollama`: cần Ollama đang chạy và mô hình đã tải (`ollama pull qwen2.5-coder:7b`, đổi mô hình bằng `OLLAMA_MODEL`).
   Chạy compose mà để trống `OLLAMA_URL` thì backend gọi `http://host.docker.internal:11434`, tức Ollama trên máy host.
   Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới được: chạy Ollama với
@@ -180,6 +182,8 @@ trên dòng lệnh. Ví dụ đã đổi `POSTGRES_PORT=5434` trong `.env` và m
 DATABASE_URL=postgres://xdi:xdi@localhost:5434/xdi BACKEND_PORT=8001 make dev
 BACKEND_URL=http://localhost:8001 make dev-frontend   # giao diện dev gọi /api sang đúng cổng đó
 ```
+
+Mô hình ngôn ngữ cũng đặt trên dòng lệnh như vậy, ví dụ `LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> make dev`.
 
 Lần chạy đầu mã thiết lập in ra terminal, tạo tài khoản như mục 1. File dữ liệu nằm ở `backend/data` (`DATA_DIR`
 mặc định `./data`, tính từ thư mục `backend`); git bỏ qua thư mục này nên dữ liệu nạp thử không lẫn vào commit.
@@ -445,9 +449,157 @@ chạy trước (`docker compose down` giữ dữ liệu; `make dev` dùng chung
 không in nữa; quên mật khẩu thì dùng lệnh `reset-password` ở mục 5. Mã in ở mức `warn`, nên đặt `RUST_LOG=error` cũng
 làm mất dòng này.
 
+**Hỏi thì nhận `Chế độ mock chỉ trả lời các câu hỏi mẫu của dataset mẫu`, hoặc trang hỏi ghi "Đang lập hồ sơ dataset"
+mãi không xong.** Backend đang chạy với `LLM_PROVIDER=mock` (mặc định), mà mock chỉ có câu trả lời viết sẵn cho dataset
+DataCo (mục 7, bước 1). Đổi sang `gemini` hoặc `ollama` rồi khởi động lại backend; lúc khởi động, backend lập hồ sơ cho
+các dataset còn thiếu, không phải nạp lại file.
+
+**Lỗi khi dùng Gemini.** Lời báo hiện dưới ô câu hỏi trên trang **Hỏi dữ liệu**. Log của backend có thêm dòng
+`gemini returned an error` kèm mã HTTP (`status`), mã của Google (`gemini_status`) và lời gốc của Google. Lỗi lúc lập
+hồ sơ dataset sau khi nạp thì không hiện trên giao diện, chỉ có trong log; sửa xong và khởi động lại backend thì backend
+lập lại hồ sơ. Đổi `.env` rồi chạy `docker compose up -d` là đủ để backend nhận giá trị mới.
+
+- `Thiếu khóa Gemini: đặt GEMINI_API_KEY trong .env rồi khởi động lại backend`: chưa đặt khóa. Đặt khóa rồi khởi động
+  lại.
+- `Gemini từ chối khóa API (mã 403): kiểm tra GEMINI_API_KEY` (có khi là mã 400 hoặc 401): khóa sai, chép thiếu ký tự,
+  hoặc không đúng loại (không phải khóa Gemini API tạo trong Google AI Studio). Tạo khóa trong Google AI Studio rồi
+  đặt lại `GEMINI_API_KEY`.
+- `Gemini không có mô hình gemini-2.5-flash: kiểm tra GEMINI_MODEL` (mã 404): khóa này không gọi được mô hình đó; đã
+  gặp với khóa mới tạo và mô hình cũ như `gemini-2.5-flash`. Bỏ dòng `GEMINI_MODEL` để dùng mặc định
+  `gemini-3.5-flash-lite`, hoặc chọn một mô hình có trong danh sách của Google AI Studio.
+- `Gemini đang lỗi hoặc quá tải (mã 503). Thử lại sau`: phía Google đang quá tải. Chờ một lúc rồi hỏi lại; lặp lại
+  nhiều lần thì thử một mô hình khác bằng `GEMINI_MODEL`.
+- `Đã hết hạn mức gọi Gemini của khóa này. Chờ một lúc rồi thử lại, hoặc xem hạn mức trong Google AI Studio` (mã 429):
+  đã dùng hết số lần gọi được phép của khóa. Hạn mức theo phút thì chờ một phút; hạn mức theo ngày thì chờ sang ngày,
+  hoặc xem hạn mức và gói trả phí của khóa trong Google AI Studio.
+- `Không kết nối được tới Gemini` hoặc `Gemini không trả lời trong 60 giây`: máy chủ không ra được Internet (tường lửa,
+  proxy) hoặc mô hình trả lời chậm; lời báo ghi cách xử lý, số giây theo `GEMINI_TIMEOUT_SECS`.
+
 **Hết dung lượng đĩa.** Bản build DuckDB nặng. `cargo clean` trong `backend/` xóa thư mục build; `docker image prune`
 xóa image cũ, `docker builder prune` xóa cache build của Docker, `docker buildx rm xdi-build` xóa builder riêng (nếu đã
 tạo theo mục trên) cùng cache của nó.
 
 **Caddy không khởi động, báo cổng 80 hoặc 443 đang bận.** Có web server khác (nginx, apache) đang dùng cổng đó. Tắt nó,
 hoặc cấu hình chính web server đó làm reverse proxy tới `localhost:8000`.
+
+## 7. Dùng lần đầu
+
+Từ màn thiết lập tới câu trả lời đầu tiên, theo giao diện hiện tại. Địa chỉ là http://localhost:8000 (cổng theo
+`BACKEND_PORT`); chạy giao diện bằng `make dev-frontend` thì là http://localhost:5173.
+
+### Bước 1. Chọn mô hình ngôn ngữ
+
+Chọn trước khi nạp dữ liệu. Sau mỗi lần nạp, backend gọi mô hình đang cấu hình để lập hồ sơ dataset (mô tả cột, bí
+danh, câu gợi ý), nên mô hình lúc nạp quyết định dataset có câu gợi ý hay không.
+
+| `LLM_PROVIDER` | Cần | Hỏi được |
+|---|---|---|
+| `mock` (mặc định) | Không cần gì, không gọi ra ngoài | Chỉ các câu hỏi mẫu viết sẵn cho dataset DataCo (bên dưới); câu khác, hay dataset khác, nhận lời báo `Chế độ mock chỉ trả lời các câu hỏi mẫu của dataset mẫu` |
+| `gemini` | `GEMINI_API_KEY`, khóa tạo trong Google AI Studio | Câu tự do trên dataset bất kỳ |
+| `ollama` | Ollama đang chạy và mô hình đã tải (mục 1, Cấu hình) | Câu tự do trên dataset bất kỳ |
+
+Chạy bằng Docker: sửa `.env`, ví dụ `LLM_PROVIDER=gemini` và `GEMINI_API_KEY=<khóa>`, rồi `docker compose up -d`. Build
+từ nguồn: đặt trên dòng lệnh, ví dụ `LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> make dev` (mục 2). Mô hình đang dùng ghi ở
+dòng **Mô hình**, góc dưới thanh bên và dưới màn thiết lập.
+
+Thử với `mock`: thư mục `data/samples/` hiện chưa có file nào, nên cần tải DataCo Smart Supply Chain từ Mendeley Data
+(https://doi.org/10.17632/8gx2fvg2k6.5, giấy phép CC BY 4.0), lấy file `DataCoSupplyChainDataset.csv`. Khi nạp, đặt
+tên dataset là `DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên
+file và mock không trả lời. Danh sách câu mẫu nằm trong `backend/src/engine/llm/mock_answers.json`, ví dụ "Doanh thu
+theo thị trường", "Doanh thu theo tháng", "Top 10 danh mục có doanh thu cao nhất".
+
+### Bước 2. Tạo tài khoản quản trị
+
+Lần đầu mở giao diện, màn **Thiết lập lần đầu** hiện ra. Lấy mã thiết lập trong log: chạy bằng Docker thì
+`docker compose logs backend | grep setup_code`, build từ nguồn thì tìm dòng có `setup_code=` trong terminal đang chạy
+`make dev`. Điền **Mã thiết lập**, **Email quản trị**, **Mật khẩu** và **Nhập lại mật khẩu** (8 đến 128 ký tự); **Tên
+hiển thị** và **Tên workspace đầu tiên** không bắt buộc (để trống thì workspace tên là "Workspace đầu tiên"). Bấm **Tạo
+tài khoản quản trị**: giao diện đăng nhập luôn và mở trang **Hỏi dữ liệu** của workspace vừa tạo. Chi tiết về mã thiết
+lập ở mục 1, Tạo tài khoản quản trị.
+
+Workspace thứ hai trở đi chưa có nút tạo trên giao diện. Tạo bằng API, với `cookie.txt` lấy như mục 1, Nạp dữ liệu;
+người tạo thành `admin` của workspace mới, tải lại trang thì workspace đó hiện trong ô chọn workspace ở đầu thanh bên:
+
+```bash
+curl -b cookie.txt http://localhost:8000/api/workspaces \
+  -H 'content-type: application/json' -d '{"name":"Kho"}'
+```
+
+### Bước 3. Nạp dataset
+
+Mục **Dữ liệu** ở thanh bên, khung **Nạp dữ liệu** (chỉ `admin` của workspace thấy):
+
+1. **File**: chọn một hoặc nhiều file CSV hoặc Parquet cùng cột (gộp thành một bảng), hoặc một file Excel `.xlsx`. CSV
+   đọc được UTF-8, windows-1252 và latin-1. File `.xls` bị từ chối: mở bằng Excel rồi lưu lại dạng `.xlsx`.
+2. File Excel: giao diện đọc danh sách sheet rồi hiện **Chọn sheet cần nạp**, mỗi sheet kèm số cột và số dòng ước lượng.
+   Các sheet chọn mà khác cột nhau thì thành nhiều dataset riêng, giao diện báo trước số dataset.
+3. **Tên dataset (không bắt buộc)**: để trống thì lấy tên file. Tên bảng dùng trong SQL đặt theo tên dataset: chữ
+   thường, bỏ dấu, khoảng trắng thành `_`, ví dụ "Bán hàng 2024" thành `ban_hang_2024`.
+4. Bấm **Nạp**. Xong thì hiện `Đã nạp vào <tên>, phiên bản 1, <số> dòng.` và danh sách cột.
+
+Tổng dung lượng một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200 MB); file Excel còn vài giới hạn riêng. Định dạng, giới
+hạn, phiên bản và tên cột: [Dữ liệu](DATA.md). Nạp lại đúng file đã có thì nhận `Đã có: dữ liệu này giống hệt phiên bản
+...`, không tạo bản mới. Dữ liệu tháng sau của cùng bảng thì bấm **Nạp phiên bản mới** ở dòng của dataset đó: phiên bản
+mới thành dữ liệu hiện hành, phiên bản cũ vẫn giữ.
+
+### Bước 4. Chờ hồ sơ dữ liệu
+
+Phần cấu trúc của hồ sơ (kiểu và vai trò từng cột) xong ngay trong lần nạp. Phần do mô hình viết (mô tả cột, bí danh,
+câu gợi ý) chạy nền sau đó, mỗi lúc một dataset. Trong lúc chờ, trang **Hỏi dữ liệu** ghi dưới ô **Dataset**:
+"Đang lập hồ sơ dataset: câu gợi ý và mô tả cột sẽ có sau ít phút." Trang tự kiểm lại trong vài phút đầu; xong thì
+hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi được ngay cả khi hồ sơ chưa xong.
+
+- Với `mock`, chỉ dataset `dataco` có hồ sơ viết sẵn. Dataset khác giữ dòng "Đang lập hồ sơ" và không có câu gợi ý;
+  đổi sang `gemini` hoặc `ollama` rồi khởi động lại backend thì hồ sơ được lập (mục 6).
+- Mô hình lỗi lúc lập hồ sơ (khóa sai, quá tải, hết hạn mức) thì giao diện không báo, chỉ log ghi lỗi; backend thử lại
+  ở lần khởi động sau.
+- "Lập hồ sơ dataset lỗi nên chưa hỏi được phiên bản này" nghĩa là phần cấu trúc lỗi: nạp lại file ở trang **Dữ liệu**.
+
+### Bước 5. Hỏi
+
+Trang **Hỏi dữ liệu**: ô **Dataset** chọn sẵn dataset mới nạp nhất, đổi được. Gõ câu vào ô **Câu hỏi** rồi bấm **Hỏi**
+(Enter để hỏi, Shift+Enter để xuống dòng), hoặc bấm một câu trong thẻ **Câu gợi ý** để hỏi ngay. Với `mock` trên DataCo,
+bấm "Doanh thu theo thị trường".
+
+Câu có cụm khớp nhiều cột thì backend hỏi lại trước khi viết SQL: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
+SQL bị từ chối hay chạy lỗi) hiện ngay dưới ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
+
+### Bước 6. Đọc kết quả và bằng chứng
+
+Kết quả nằm trong một thẻ có tiêu đề là chính câu đã hỏi. Bảng **Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì
+`Hiện 1.000 trên <tổng> dòng.`), phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập
+phân). **Tải CSV** tải các dòng giao diện đã nhận, tối đa 1000 dòng, giữ giá trị gốc.
+
+Pane **Bằng chứng** nằm bên phải trên màn rộng, dưới kết quả trên màn hẹp; nút **Thu gọn** và **Mở** ẩn hoặc hiện nó.
+Bốn tab:
+
+- **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
+  (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép
+  nguyên văn. Guard là gì: [GUARD.md](GUARD.md).
+- **Phân rã**: bảng nhóm nào làm con số tăng hay giảm, chỉ có với câu hỏi "tại sao". Chưa có trên trang hỏi (xem dưới),
+  nên tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
+- **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm số trong bảng phân rã; vì vậy hiện cũng chưa
+  có.
+- **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL
+  (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Lưu vào lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình
+  chỉ viết SQL, còn con số do DuckDB tính.
+
+Chưa có trên giao diện hiện tại (tiến độ ở mục Trạng thái của [ARCHITECTURE.md](ARCHITECTURE.md)):
+
+- Câu hỏi "tại sao": phần tính phân rã đã có trong backend nhưng trang hỏi chưa gọi. Gõ câu "tại sao" thì được xử lý
+  như câu thường; với `mock` thì nhận lời báo chỉ trả lời câu mẫu.
+- Thẻ "Đã hiểu là" (cách hệ thống hiểu câu hỏi) và biểu đồ: giao diện đã có chỗ, backend chưa gửi dữ liệu.
+- Bấm một ô của bảng kết quả để xem dòng nguồn: backend có route `drill` ([API.md](API.md)), giao diện chưa nối.
+
+### Bước 7. Mời thành viên
+
+Chưa có thư mời qua email hay tự đăng ký. Thành viên cần có tài khoản trước, rồi được thêm vào workspace:
+
+1. Quản trị hệ thống mở **Quản lý tài khoản** ở thanh bên, khung **Tạo tài khoản**: **Email**, **Tên hiển thị**,
+   **Mật khẩu ban đầu** (8 đến 128 ký tự), bấm **Tạo tài khoản**. Chuyển mật khẩu cho người đó; họ đổi lại ở **Tài khoản
+   và mật khẩu** trong menu tài khoản góc trên bên phải.
+2. `admin` của workspace mở **Thành viên**, khung **Thêm thành viên**: **Email** của tài khoản vừa tạo, **Vai** là
+   **Admin** hoặc **Thành viên**, bấm **Thêm**.
+
+**Thành viên** chọn dataset và hỏi, không nạp được file. **Admin** thêm nạp dữ liệu, thêm, xóa, đổi vai thành viên, đổi
+tên và xóa workspace. Người được thêm thấy workspace trong ô chọn workspace sau khi đăng nhập.
