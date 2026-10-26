@@ -10,10 +10,12 @@ Câu không trả lời được vẫn là Ok kèm status (ARCHITECTURE mục 8)
 chưa có câu SQL nào (502, 503; mock gặp câu lạ thì 400) và lỗi máy chủ. needs_choice không ghi lịch sử: câu chưa được
 trả lời, người hỏi sẽ gửi lại kèm lựa chọn.
 
-Chưa nối, các trường tương ứng của AskResponse để null hay rỗng: kiểm hợp lý (#36). */
+Cảnh báo kiểm hợp lý (rỗng, toàn null, giá trị lọc không có, độ lớn bất thường) dựng ở ask_checks.rs sau khi chạy;
+chúng không đổi status. */
 
 use std::time::Instant;
 
+use super::ask_checks::{build_result_warnings, CheckedQuery};
 use super::ask_choices::{build_assumption_choices, build_clarify_choice};
 use super::ask_context::{build_ask_context, AskContext};
 use super::ask_contract::{
@@ -141,7 +143,17 @@ pub async fn ask(
     let assumptions = build_assumption_choices(&answer, &context, &metrics);
     let used = build_used_choices(&context, &assumptions);
     let mut warnings = build_unapplied_warnings(choices, &used);
-    warnings.extend(build_value_warnings(&context, &outcome.terms));
+    // Gọi trước nhánh hỏi lại: câu chưa answered vẫn được báo giá trị mô hình nêu mà cột không có.
+    let checked = CheckedQuery {
+        status: outcome.status,
+        sql_guarded: outcome.sql_guarded.as_deref(),
+        result: outcome.result.as_ref(),
+        row_filters: &outcome.row_filters,
+        terms: &outcome.terms,
+        columns: &columns,
+        restricted: !tables[0].row_filters.is_empty(),
+    };
+    warnings.extend(build_result_warnings(state, ws, &version, &checked).await);
 
     if let Some(clarify) = &outcome.clarify {
         match build_clarify_choice(clarify, &context, &metrics) {

@@ -5,8 +5,11 @@ Gọi engine và auth; không bao giờ gọi ngược lên api. */
 pub mod accounts;
 pub mod ask;
 mod ask_chart;
-// build_metric_mismatches chờ #36 chọn cách báo chỉ số dùng sai công thức; phần còn lại endpoint hỏi đã gọi. Gỡ allow
-// khi #36 gọi hàm đó, để clippy bắt lại mã thừa.
+pub mod ask_checks;
+#[cfg(test)]
+mod ask_checks_tests;
+// build_metric_mismatches chờ cách báo chỉ số dùng sai công thức: bốn luật kiểm hợp lý (#36) không có mã cảnh báo hợp,
+// thêm mã mới là đổi API. Phần còn lại endpoint hỏi đã gọi. Gỡ allow khi hàm đó được gọi, để clippy bắt lại mã thừa.
 #[allow(dead_code)]
 pub mod ask_choices;
 pub mod ask_context;
@@ -16,6 +19,8 @@ pub mod ask_contract;
 pub mod ask_examples;
 #[cfg(test)]
 mod ask_examples_tests;
+pub mod ask_filter_values;
+pub mod ask_magnitude;
 pub mod ask_match;
 pub mod ask_phrases;
 pub mod ask_prompt;

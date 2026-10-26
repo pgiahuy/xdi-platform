@@ -132,7 +132,7 @@ fn build_part_label(part: &str, inner: &Expr, profile: &[ColumnProfile], mid: bo
 }
 
 /// Tham số thường của hàm (không tên, không `*`), theo thứ tự.
-fn build_plain_args(function: &Function) -> Vec<&Expr> {
+pub fn build_plain_args(function: &Function) -> Vec<&Expr> {
     let FunctionArguments::List(list) = &function.args else {
         return Vec::new();
     };

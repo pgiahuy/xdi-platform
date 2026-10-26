@@ -475,7 +475,7 @@ pub(crate) fn is_integer_type(data_type: &str) -> bool {
     )
 }
 
-fn is_number_type(data_type: &str) -> bool {
+pub(crate) fn is_number_type(data_type: &str) -> bool {
     // DuckDB ghi số thập phân cố định kèm độ chính xác, ví dụ DECIMAL(18,3).
     is_integer_type(data_type)
         || matches!(data_type, "FLOAT" | "DOUBLE")

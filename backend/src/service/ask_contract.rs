@@ -332,7 +332,8 @@ pub struct ChartSuggestion {
     pub other_bucket: bool,
 }
 
-// Kiểm hợp lý của #36, cộng hai loại báo của chính luồng hỏi. Thêm loại mới là đổi API: chạy make openapi.
+// Bốn loại đầu do kiểm hợp lý dựng (service/ask_checks.rs), hai loại sau do chính luồng hỏi. Thêm loại mới là đổi
+// API: chạy make openapi.
 /// Kind of note:
 /// - `empty_result`: no rows.
 /// - `all_null`: a result column holds only nulls.
@@ -342,9 +343,6 @@ pub struct ChartSuggestion {
 /// - `choice_not_applied`: a choice sent with the question was not recognized and the default was used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-// empty_result, all_null, unusual_magnitude do kiểm hợp lý (#36) dựng; luồng hỏi chưa có phần đó. Gỡ allow khi nó vào
-// luồng hỏi.
-#[allow(dead_code)]
 pub enum WarningCode {
     EmptyResult,
     AllNull,

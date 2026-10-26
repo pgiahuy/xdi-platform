@@ -44,6 +44,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - `OLLAMA_NUM_CTX` (mặc định 12288 token) đặt cửa sổ ngữ cảnh của Ollama, để prompt dài không bị cắt mất phần luật.
 - Câu hỏi đã trả lời có thẻ "Đã hiểu là" (đo gì, lọc gì, nhóm theo gì, khoảng thời gian, giả định) dựng từ câu SQL đã chạy, vai trò từng cột kết quả, và gợi ý biểu đồ: cột khi một chiều một độ đo, đường khi trục là thời gian.
 - Câu "tại sao" trên trang hỏi trả bảng tổng theo kỳ, bảng phân rã và lời giải thích; bấm một dòng phân rã để xem dòng nguồn.
+- Kết quả đáng ngờ có cảnh báo cạnh bảng: không ra dòng nào, cột toàn ô trống, giá trị lọc không có trong cột (kèm giá trị gần nhất), tỷ lệ hay trung bình ngoài khoảng hợp lý.
 
 ### Changed
 
