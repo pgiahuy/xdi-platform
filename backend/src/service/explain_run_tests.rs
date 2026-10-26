@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use rust_decimal::Decimal;
 use serde_json::json;
 use tokio::sync::Semaphore;
 
@@ -70,10 +71,16 @@ struct Dataco {
     metrics: Vec<MetricDefinition>,
     context: AskContext,
     jobs: Arc<Semaphore>,
+    rows: i64,
 }
 
 impl Dataco {
     fn new() -> Self {
+        Self::with_rows(&[], 0)
+    }
+
+    /// Bảng như new() cộng các câu SELECT trong extra (cùng năm cột), thêm extra_rows dòng.
+    fn with_rows(extra: &[String], extra_rows: i64) -> Self {
         let root = std::env::temp_dir().join(format!("xdi-why-{}", uuid::Uuid::new_v4()));
         let dir = root.join("ws").join("dataset").join("v1");
         std::fs::create_dir_all(&dir).unwrap();
@@ -100,6 +107,10 @@ impl Dataco {
             zeros(1, 101, "6/2/2017 08:00"),
             zeros(10_008, 14_401, "9/1/2017 08:00"),
         );
+        let rows = std::iter::once(rows)
+            .chain(extra.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(" UNION ALL ");
         let file = dir.join("part-0001.parquet");
         let conn = duckdb::Connection::open_in_memory().unwrap();
         conn.execute_batch(&format!(
@@ -114,7 +125,7 @@ impl Dataco {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, ROWS);
+        assert_eq!(count, ROWS + extra_rows);
         Dataco {
             root,
             dir,
@@ -128,6 +139,7 @@ impl Dataco {
                 picks: Vec::new(),
             },
             jobs: Arc::new(Semaphore::new(2)),
+            rows: count,
         }
     }
 
@@ -171,7 +183,7 @@ impl Dataco {
             },
             columns: &self.columns,
             values: &self.values,
-            row_count: Some(ROWS),
+            row_count: Some(self.rows),
             tables: &tables,
             max_rows: 100_000,
             timeout: Duration::from_secs(30),
@@ -346,6 +358,63 @@ async fn sample_question_gives_the_sample_breakdown() {
         .unwrap();
     assert_eq!(base.selected.as_deref(), Some("previous_quarter"));
     assert!(outcome.warnings.is_empty());
+}
+
+/// Bảng tổng theo kỳ bằng đúng tổng các nhóm phân rã của mỗi chiều, cả khi số tiền có phần lẻ mà cộng số thực sẽ ra
+/// khác: một nghìn dòng 0.1 (cộng DOUBLE ra 99.9999...), một nghìn dòng 0.004 (làm tròn ở từng dòng thành 0.00, cộng
+/// số thực rồi mới làm tròn thì thành 4.00).
+#[tokio::test]
+async fn period_totals_equal_the_breakdown_sums() {
+    let extra = |from: i64, market: &str, segment: &str, day: &str, amount: &str| {
+        format!(
+            "SELECT CAST(i AS INTEGER), '{market}', '{segment}', '{day}', CAST({amount} AS DOUBLE) \
+             FROM range({from}, {}) t(i)",
+            from + 1_000
+        )
+    };
+    let data = Dataco::with_rows(
+        &[
+            extra(30_000, "Europe", "Consumer", "6/3/2017 08:00", "0.1"),
+            extra(31_000, "LATAM", "Corporate", "9/2/2017 08:00", "0.004"),
+            extra(32_000, "USCA", "Home Office", "9/3/2017 08:00", "0.1"),
+        ],
+        3_000,
+    );
+    let outcome = data.ask(&Mock::new(), QUARTER_QUESTION, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let totals: Vec<String> = outcome
+        .result
+        .as_ref()
+        .unwrap()
+        .rows
+        .iter()
+        .map(|row| match &row[1] {
+            Some(CellValue::String(text)) => text.clone(),
+            other => panic!("total cell is not a decimal string: {other:?}"),
+        })
+        .collect();
+    assert_eq!(totals, ["9402600.00", "8119200.00"]);
+    let explanation = outcome.explanation.as_ref().unwrap();
+    assert_eq!(
+        [&explanation.base.value, &explanation.compare.value],
+        [&totals[0], &totals[1]]
+    );
+    let sum = |values: Vec<&String>| -> Decimal {
+        values
+            .into_iter()
+            .map(|v| v.parse::<Decimal>().unwrap())
+            .sum()
+    };
+    for dimension in &explanation.dimensions {
+        let base = sum(dimension.groups.iter().map(|g| &g.base_value).collect());
+        let compare = sum(dimension.groups.iter().map(|g| &g.compare_value).collect());
+        assert_eq!(
+            [base.to_string(), compare.to_string()],
+            [totals[0].clone(), totals[1].clone()],
+            "{}",
+            dimension.column
+        );
+    }
 }
 
 /// Người hỏi đổi kỳ so sánh sang cùng kỳ năm trước: quý 3/2016.
@@ -660,7 +729,10 @@ async fn why_card_names_the_two_periods() {
     );
     assert!(period.sql.starts_with('(') && period.sql.contains(" OR "));
     assert_eq!(card.measures[0].label, "doanh thu");
-    assert_eq!(card.measures[0].sql, "SUM(\"Order Item Total\")");
+    assert_eq!(
+        card.measures[0].sql,
+        "SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2)))"
+    );
     assert!(card.filters.is_empty() && card.limit.is_none());
     assert_eq!(card.group_by.len(), 1);
     assert_eq!(card.assumptions[0].id, "why:base");

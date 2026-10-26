@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask_narrate_tests.rs - test bước narrate (#41, service/ask_narrate.rs và phần chữ ở explain.rs): bước kiểm
-số nhận summary của mẫu why và câu khuôn, loại số lạ, số thiếu chữ số thập phân, cách viết có dấu ngăn, số trước ký
+số nhận summary của mẫu why và câu khuôn, loại số lạ, số thiếu chữ số thập phân, cách viết thô hay kiểu Anh, số trước ký
 hiệu hay chữ chỉ tỷ lệ (kể cả khi có khoảng trắng ở giữa), chữ số ngoài ASCII, và số lấy từ câu hỏi hay từ giá trị
 nhóm; mô hình lỗi, quá giờ, trả câu trống hay quá dài thì rơi về câu khuôn với bước narrate ok = false; chênh lệch
-bằng 0 không gọi mô hình. Mô hình giả trả câu viết sẵn; không cần DuckDB hay Postgres. */
+bằng 0 không gọi mô hình. Cách viết số kiểu Việt Nam (explain_number.rs) test ở cuối file. Mô hình giả trả câu viết
+sẵn; không cần DuckDB hay Postgres. */
 
 use std::time::Duration;
 
@@ -18,6 +19,7 @@ use super::ask_narrate::narrate;
 use super::explain::{
     build_narrate_prompt, build_number_check, build_template_summary, MAX_SUMMARY_CHARS,
 };
+use super::explain_number::{build_change_text, build_number_text};
 use crate::engine::llm::mock::Mock;
 use crate::engine::llm::{LlmProvider, LlmRequest};
 use crate::error::AppError;
@@ -162,7 +164,7 @@ fn template_works_without_dimensions_and_volume_price() {
     let template = build_template_summary(&explanation);
     assert_eq!(
         template,
-        "Doanh thu Quý 3/2017 giảm 1283400.00 so với Quý 2/2017, từ 9402500.00 xuống 8119100.00."
+        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00."
     );
     check(&template, &explanation).unwrap();
 }
@@ -170,22 +172,24 @@ fn template_works_without_dimensions_and_volume_price() {
 #[test]
 fn absolute_value_of_a_negative_change_is_accepted() {
     let explanation = example();
-    // change của mẫu là "-1283400.00"; nói "giảm 1283400.00" vẫn nhận.
+    // change của mẫu là "-1283400.00"; nói "giảm 1.283.400,00" vẫn nhận.
     check(
-        "Doanh thu quý 3/2017 giảm 1283400.00 so với quý 2/2017.",
+        "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017.",
         &explanation,
     )
     .unwrap();
 }
 
-/// Số sai, số thiếu chữ số thập phân và cách viết có dấu ngăn đều không qua.
+/// Số sai, số thiếu chữ số thập phân, cách viết thô của hợp đồng và cách viết kiểu Anh đều không qua: câu phải chép
+/// đúng số kiểu Việt Nam của prompt.
 #[test]
 fn wrong_numbers_are_rejected() {
     let explanation = example();
     for bad in [
-        "Doanh thu giảm 1283401.00 so với quý trước.",
-        "Doanh thu giảm 1283400 so với quý trước.",
-        "Doanh thu giảm 1.283.400,00 so với quý trước.",
+        "Doanh thu giảm 1.283.401,00 so với quý trước.",
+        "Doanh thu giảm 1.283.400 so với quý trước.",
+        "Doanh thu giảm 1283400.00 so với quý trước.",
+        "Doanh thu giảm 1,283,400.00 so với quý trước.",
     ] {
         assert!(check(bad, &explanation).is_err(), "should reject: {bad}");
     }
@@ -224,10 +228,10 @@ fn lan_luot_and_a_times_measure_are_not_ratios() {
         "-739.80",
         &[(Some("A"), "-639.25"), (Some("B"), "-100.55")],
     );
-    check("Nhóm A và B giảm 639.25 và 100.55 lần lượt.", &explanation).unwrap();
+    check("Nhóm A và B giảm 639,25 và 100,55 lần lượt.", &explanation).unwrap();
     let mut times = small_explanation("800.00", "700.00", "-100.00", &[(Some("A"), "-100.00")]);
     times.measure = "Số lần giao trễ".to_string();
-    check("Số lần giao trễ giảm 100.00 lần so với Quý 2/2017.", &times).unwrap();
+    check("Số lần giao trễ giảm 100,00 lần so với Quý 2/2017.", &times).unwrap();
 }
 
 /// Giá trị nhóm ngắn hay kiểu số không mở khóa số cho luật tỷ lệ: số của giá trị không có chữ cái chỉ vào tập được
@@ -237,7 +241,7 @@ fn group_values_do_not_unlock_ratio_numbers() {
     // Chiều kiểu số có nhóm "12": "giảm 12%" bị loại, nhưng nhắc nhóm 12 đúng nghĩa thì qua.
     let numeric = small_explanation("1000.00", "900.00", "-100.00", &[(Some("12"), "-100.00")]);
     assert!(check("Doanh thu giảm 12% so với quý 2/2017.", &numeric).is_err());
-    check("Nhóm 12 giảm 100.00.", &numeric).unwrap();
+    check("Nhóm 12 giảm 100,00.", &numeric).unwrap();
     // Nhóm "2": "giảm 2 lần" bị loại.
     assert!(check("Doanh thu giảm 2 lần.", &numeric_two()).is_err());
     // Nhóm "Giảm 10" (không có "%"): "Giảm 10%" bị loại.
@@ -316,7 +320,7 @@ fn numeric_group_values_use_the_same_text_everywhere() {
     }];
     let prompt = build_narrate_prompt(QUESTION, &explanation);
     assert!(prompt.contains("\"value\": \"1\""), "{prompt}");
-    check("Nhóm 1 giảm 50.00.", &explanation).unwrap();
+    check("Nhóm 1 giảm 50,00.", &explanation).unwrap();
 }
 
 /// Số nằm trong một nhãn hay giá trị nhóm chép nguyên văn ("Giảm 10%") không bị tính là số của mô hình.
@@ -338,7 +342,7 @@ fn template_for_an_increase() {
     let explanation = small_explanation("900.00", "1000.00", "100.00", &[(Some("A"), "100.00")]);
     let template = build_template_summary(&explanation);
     assert!(
-        template.contains("tăng 100.00 so với Quý 2/2017, từ 900.00 lên 1000.00"),
+        template.contains("tăng 100,00 so với Quý 2/2017, từ 900,00 lên 1.000,00"),
         "{template}"
     );
     check(&template, &explanation).unwrap();
@@ -368,7 +372,7 @@ fn template_names_a_group_in_the_same_direction_as_the_change() {
     );
     let template = build_template_summary(&explanation);
     assert!(
-        template.contains("nhóm B đóng góp nhiều nhất (-400.00)"),
+        template.contains("nhóm B đóng góp nhiều nhất (giảm 400,00)"),
         "{template}"
     );
     assert!(!template.contains("nhóm A"), "{template}");
@@ -382,7 +386,7 @@ fn template_with_an_unreadable_change_stays_neutral() {
     let template = build_template_summary(&explanation);
     assert_eq!(
         template,
-        "Doanh thu Quý 3/2017 là 900.00, so với 1000.00 ở Quý 2/2017."
+        "Doanh thu Quý 3/2017 là 900,00, so với 1.000,00 ở Quý 2/2017."
     );
 }
 
@@ -403,8 +407,9 @@ fn template_lowercases_labels_mid_sentence() {
     let explanation = example();
     let template = build_template_summary(&explanation);
     assert!(
-        template
-            .contains("Nếu số đơn giữ nguyên như Quý 2/2017, doanh thu Quý 3/2017 là 9226250.00."),
+        template.contains(
+            "Nếu số đơn giữ nguyên như Quý 2/2017, doanh thu Quý 3/2017 là 9.226.250,00."
+        ),
         "{template}"
     );
 }
@@ -416,7 +421,7 @@ fn template_keeps_all_caps_abbreviations() {
     explanation.measure = "GMV".to_string();
     let template = build_template_summary(&explanation);
     assert!(
-        template.contains("GMV Quý 3/2017 là 9226250.00"),
+        template.contains("GMV Quý 3/2017 là 9.226.250,00"),
         "{template}"
     );
 }
@@ -433,28 +438,32 @@ fn template_truncation_does_not_split_a_number() {
     let body = template.strip_suffix('…').expect("truncated");
     // Mỗi số hoặc đứng nguyên, hoặc bị bỏ hẳn, không bị cắt dở.
     assert!(
-        body.contains("(-100.00)") || !body.contains("(-100"),
+        body.contains("(giảm 100,00)") || !body.contains("(giảm 100"),
         "{template}"
     );
     assert!(
-        body.contains("1000.00") || !body.contains("1000"),
+        body.contains("1.000,00") || !body.contains("1.000"),
         "{template}"
     );
 }
 
 /// Prompt gửi đúng phần đã chốt: câu hỏi, độ đo, hai lát cắt, change, hai chiều đầu với ba nhóm mỗi chiều (chiều
-/// Market của mẫu có năm nhóm), và volume_price.
+/// Market của mẫu có năm nhóm), và volume_price. Số viết kiểu Việt Nam, chênh lệch là chiều và độ lớn không dấu.
 #[test]
 fn prompt_sends_two_dimensions_with_three_groups_each() {
     let explanation = example();
     let prompt = build_narrate_prompt(QUESTION, &explanation);
     assert!(prompt.contains(QUESTION));
     assert!(prompt.contains("\"measure\": \"Doanh thu\""));
-    assert!(prompt.contains("\"change\": \"-1283400.00\""));
+    let change =
+        "\"change\": {\n    \"amount\": \"1.283.400,00\",\n    \"direction\": \"giảm\"\n  }";
+    assert!(prompt.contains(change), "{prompt}");
+    assert!(prompt.contains("\"value\": \"9.402.500,00\""), "{prompt}");
+    assert!(!prompt.contains("-1283400.00"), "{prompt}");
     assert_eq!(prompt.matches("\"contribution\"").count(), 2 * 3);
     assert!(prompt.contains("\"column\": \"Market\""));
     assert!(prompt.contains("\"column\": \"Customer Segment\""));
-    assert!(prompt.contains("\"if_volume_unchanged\": \"9226250.00\""));
+    assert!(prompt.contains("\"if_volume_unchanged\": \"9.226.250,00\""));
     // Nhóm thứ tư và năm của Market không được gửi.
     assert!(!prompt.contains("USCA"));
 }
@@ -554,4 +563,41 @@ async fn zero_change_does_not_call_the_model() {
     assert!(outcome.step.ok);
     let detail = outcome.step.detail.expect("detail");
     assert!(detail.contains("không gọi mô hình"), "{detail}");
+}
+
+/// Số viết kiểu Việt Nam như bảng phân rã: nhóm nghìn bằng dấu chấm, thập phân sau dấu phẩy, giữ số chữ số lẻ tới hai,
+/// hơn hai thì làm tròn nửa xa số 0, số 0 không có dấu trừ, chuỗi không phải số giữ nguyên.
+#[test]
+fn numbers_are_written_the_vietnamese_way() {
+    for (raw, text) in [
+        ("2204819.34", "2.204.819,34"),
+        ("-1152666.24", "-1.152.666,24"),
+        ("663000.00", "663.000,00"),
+        ("5000", "5.000"),
+        ("999", "999"),
+        ("0.00", "0,00"),
+        ("2.495", "2,50"),
+        ("-2.495", "-2,50"),
+        ("-0.001", "0,00"),
+        ("1234567.5", "1.234.567,5"),
+        ("abc", "abc"),
+    ] {
+        assert_eq!(build_number_text(raw), text, "{raw}");
+    }
+}
+
+/// Chênh lệch đọc bằng chữ chiều và độ lớn không dấu.
+#[test]
+fn changes_read_as_a_direction_and_an_amount() {
+    assert_eq!(build_change_text("-1152666.24"), "giảm 1.152.666,24");
+    assert_eq!(build_change_text("1039598.96"), "tăng 1.039.598,96");
+    assert_eq!(build_change_text("0.00"), "không đổi");
+    assert_eq!(build_change_text("abc"), "abc");
+}
+
+/// Dấu phẩy chỉ thuộc số khi nằm giữa hai chữ số: liệt kê "3, 4" vẫn là các số riêng có trong nhãn.
+#[test]
+fn a_comma_between_numbers_does_not_join_them() {
+    let explanation = example();
+    check("Quý 3, quý 2 năm 2017: giảm 1.283.400,00.", &explanation).unwrap();
 }

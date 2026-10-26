@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/EvidenceBreakdown.tsx - tab Phân rã của pane bằng chứng: số của hai lát cắt và chênh lệch, lời giải
 thích, mỗi chiều một bảng đóng góp theo đúng thứ tự backend gửi (chiều giải thích tốt nhất trước, nhóm đóng góp lớn
-trước), rồi phần lượng và giá nếu có. Bấm số của một lát cắt trong bảng thì trang mở tab Dòng nguồn với đúng lát cắt,
-cột và giá trị nhóm đó (onDrill).
+trước; bảng của một chiều ở BreakdownDimension.tsx), rồi phần lượng và giá nếu có.
 Số là chuỗi chữ số của backend, chỉ nhóm nghìn trên chuỗi (formatDecimal), không qua Number() nên không làm tròn. */
 
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { formatCell, formatDecimal } from './cellFormat'
-import type { BreakdownView, DimensionView, DrillTarget, GroupView, Slice, VolumePriceView } from './evidenceTypes'
+import { BreakdownDimension } from './BreakdownDimension'
+import { formatDecimal } from './cellFormat'
+import type { BreakdownView, DrillTarget, VolumePriceView } from './evidenceTypes'
 
 type Props = {
   breakdown: BreakdownView
@@ -41,7 +39,7 @@ export function EvidenceBreakdown({ breakdown, onDrill }: Props) {
         </p>
       )}
       {breakdown.dimensions.map((dimension) => (
-        <DimensionTable
+        <BreakdownDimension
           key={dimension.column}
           dimension={dimension}
           baseLabel={breakdown.baseLabel}
@@ -59,75 +57,6 @@ export function EvidenceBreakdown({ breakdown, onDrill }: Props) {
       )}
     </div>
   )
-}
-
-type DimensionProps = {
-  dimension: DimensionView
-  baseLabel: string
-  compareLabel: string
-  onDrill: (target: DrillTarget) => void
-}
-
-function DimensionTable({ dimension, baseLabel, compareLabel, onDrill }: DimensionProps) {
-  const drillButton = (group: GroupView, slice: Slice) => {
-    const label = slice === 'base' ? baseLabel : compareLabel
-    const number = slice === 'base' ? group.baseValue : group.compareValue
-    const name = `${dimension.column} = ${groupName(group, dimension)}`
-    return (
-      <Button
-        variant="link"
-        size="xs"
-        className="h-auto px-0 tabular-nums"
-        aria-label={`Xem dòng nguồn: ${name}, ${label}`}
-        onClick={() => onDrill({ slice, column: dimension.column, value: group.value, kind: dimension.kind })}
-      >
-        {formatDecimal(number)}
-      </Button>
-    )
-  }
-
-  // Bốn cột số không vừa bề ngang hẹp thì cuộn ngang trong khung, trang không cuộn; khung nhận focus để cuộn bằng phím.
-  return (
-    <div tabIndex={0} role="region" aria-label={`Phân rã theo ${dimension.column}`} className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <caption className="pb-1 text-left text-sm font-semibold">Theo {dimension.column}</caption>
-        <thead className="bg-muted/50">
-          <tr>
-            <th scope="col" className="px-2 py-1.5 text-left font-medium">
-              Nhóm
-            </th>
-            <th scope="col" className="px-2 py-1.5 text-right font-medium">
-              {baseLabel}
-            </th>
-            <th scope="col" className="px-2 py-1.5 text-right font-medium">
-              {compareLabel}
-            </th>
-            <th scope="col" className="px-2 py-1.5 text-right font-medium">
-              Đóng góp
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {dimension.groups.map((group, index) => (
-            <tr key={index} className="border-t">
-              <th scope="row" className="px-2 py-1 text-left font-normal">
-                <span className={cn(group.value === null && 'text-muted-foreground')}>
-                  {groupName(group, dimension)}
-                </span>
-              </th>
-              <td className="px-2 py-1 text-right">{drillButton(group, 'base')}</td>
-              <td className="px-2 py-1 text-right">{drillButton(group, 'compare')}</td>
-              <td className="px-2 py-1 text-right tabular-nums">{formatDecimal(group.contribution)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function groupName(group: GroupView, dimension: DimensionView): string {
-  return group.value === null ? 'trống' : formatCell(group.value, dimension.kind)
 }
 
 type VolumePriceProps = {

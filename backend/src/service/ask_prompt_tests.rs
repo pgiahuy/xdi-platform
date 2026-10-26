@@ -446,11 +446,15 @@ fn why_prompt_has_metric_names_without_formulas() {
     assert!(prompt.ends_with(&format!("Question: {question}")));
 }
 
-/// Schema form: bắt buộc terms và filters, có các trường của form, chỉ dùng từ khóa cả Gemini lẫn Ollama nhận.
+/// Schema form: bắt buộc terms, compare và filters (compare bắt buộc để Gemini không bỏ trống kỳ ở lần điền đầu), có
+/// các trường của form, chỉ dùng từ khóa cả Gemini lẫn Ollama nhận.
 #[test]
 fn why_form_schema_has_the_form_fields() {
     let schema = build_why_form_schema();
-    assert_eq!(schema["required"], serde_json::json!(["terms", "filters"]));
+    assert_eq!(
+        schema["required"],
+        serde_json::json!(["terms", "compare", "filters"])
+    );
     for field in [
         "terms", "metric", "measure", "time", "compare", "base", "filters", "groups",
     ] {

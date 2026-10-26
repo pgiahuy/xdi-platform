@@ -18,7 +18,7 @@ use sqlparser::tokenizer::Token;
 use super::ask_phrases::build_key;
 use super::explain_check::{find_column, WhyProfile};
 use super::explain_form::{FieldError, FormAgg, WhyForm};
-use super::explain_sql::build_ident;
+use super::explain_sql::{build_ident, build_total_aggregate};
 use super::profile::is_integer_type;
 use crate::engine::store::{MetricDefinition, ProfileRole};
 
@@ -29,7 +29,9 @@ pub struct PlanMeasure {
     pub label: String,
     /// Tên chỉ số khi độ đo là chỉ số trong metrics.
     pub metric: Option<String>,
-    /// Biểu thức tổng hợp cho bảng tổng theo kỳ, đúng như chỉ số định nghĩa: SUM("Order Item Total").
+    /// Biểu thức tổng hợp cho bảng tổng theo kỳ, dựng từ additive như câu phân rã (build_total_aggregate):
+    /// SUM(CAST("Order Item Total" AS DECIMAL(18, 2))). Dùng thẳng công thức chỉ số SUM("Order Item Total") thì bảng
+    /// cộng số thực đủ chữ số còn phân rã làm tròn từng dòng, hai tổng trên cùng trang lệch ở chữ số lẻ.
     pub aggregate: Expr,
     /// Cách tính lại theo từng lát cắt và từng nhóm, cho phân rã.
     pub additive: Additive,
@@ -79,23 +81,31 @@ pub(super) fn check_measure(
                 ));
                 return None;
             }
-            Some(PlanMeasure {
-                label: format!("Tổng {}", column.name),
-                metric: None,
-                aggregate: parse_expr(&format!("SUM({ident})")).ok()?,
-                additive: Additive::Sum {
-                    decimal: !is_exact_type(&column.data_type),
-                    value: ident,
-                },
-            })
+            let additive = Additive::Sum {
+                decimal: !is_exact_type(&column.data_type),
+                value: ident,
+            };
+            build_plan_measure(format!("Tổng {}", column.name), None, additive)
         }
-        FormAgg::Count => Some(PlanMeasure {
-            label: format!("Số dòng có {}", column.name),
-            metric: None,
-            aggregate: parse_expr(&format!("COUNT({ident})")).ok()?,
-            additive: Additive::Count { value: Some(ident) },
-        }),
+        FormAgg::Count => build_plan_measure(
+            format!("Số dòng có {}", column.name),
+            None,
+            Additive::Count { value: Some(ident) },
+        ),
     }
+}
+
+fn build_plan_measure(
+    label: String,
+    metric: Option<String>,
+    additive: Additive,
+) -> Option<PlanMeasure> {
+    Some(PlanMeasure {
+        label,
+        metric,
+        aggregate: parse_expr(&build_total_aggregate(&additive)).ok()?,
+        additive,
+    })
 }
 
 fn check_metric(
@@ -141,12 +151,11 @@ fn check_metric(
         errors.push(not_additive());
         return None;
     };
-    Some(PlanMeasure {
-        label: build_capitalized(&metric.name),
-        metric: Some(metric.name.clone()),
-        aggregate,
+    build_plan_measure(
+        build_capitalized(&metric.name),
+        Some(metric.name.clone()),
         additive,
-    })
+    )
 }
 
 /// SUM(x), COUNT(*), COUNT(x) không DISTINCT, không FILTER, không OVER; dạng khác trả None.
