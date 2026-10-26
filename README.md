@@ -23,11 +23,11 @@ dữ liệu ([docs/PRIVACY.md](docs/PRIVACY.md)).
 - Câu "tại sao": mô hình điền form (đo gì, hai kỳ hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần đóng
   góp của từng nhóm theo từng chiều (tổng đóng góp bằng đúng chênh lệch) và tách lượng, giá; mô hình viết lời giải
   thích, code kiểm mọi số trong lời có trong bảng. Bấm một dòng phân rã để xem dòng nguồn.
+- Xem dòng nguồn: bấm một số của bảng kết quả hay của bảng phân rã để xem từng trang các dòng dữ liệu đứng sau số đó.
 - Mô hình ngôn ngữ: `mock` (không cần khóa, trả lời bộ câu hỏi mẫu trên dataset DataCo), Gemini, Ollama.
 
 Chưa có trên `main`:
 
-- Bấm một ô của bảng kết quả để xem dòng nguồn: API đã có, giao diện chưa gọi.
 - Gán vai dữ liệu cho thành viên: guard đã lọc dòng theo vai dữ liệu khi hỏi và khi xem dòng nguồn, nhưng chưa có API
   hay màn nào đặt `data_role` và chính sách lọc.
 - Chế độ demo, dataset mẫu đóng gói sẵn, màn xem lịch sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.

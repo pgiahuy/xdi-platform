@@ -34,7 +34,9 @@ export function BreakdownDimension({ dimension, baseLabel, compareLabel, onDrill
         size="xs"
         className="h-auto px-0 tabular-nums"
         aria-label={`Xem dòng nguồn: ${name}, ${label}`}
-        onClick={() => onDrill({ slice, column: dimension.column, value: group.value, kind: dimension.kind })}
+        onClick={() =>
+          onDrill({ from: 'breakdown', slice, column: dimension.column, value: group.value, kind: dimension.kind })
+        }
       >
         {formatDecimal(number)}
       </Button>
