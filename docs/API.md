@@ -108,7 +108,7 @@ Enum lỗi nằm ở `backend/src/error.rs`.
 lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với `status` trong
 body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, dataset chưa có dữ liệu hay chưa lập hồ sơ xong, hoặc câu mock không
 có câu trả lời mẫu; 404 dataset không có; 502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào. Câu
-"tại sao" (phân rã), thẻ "Đã hiểu là" và gợi ý biểu đồ chưa nối vào route này, các trường đó là null.
+answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ; câu "tại sao" chưa có phân rã (`explanation` null).
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).

@@ -27,7 +27,7 @@ use super::ask_reply::{
     Term,
 };
 use super::ask_result::{build_result_table, SENT_ROWS};
-use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError};
+use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError, GuardedSql};
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::query::{run_query, QueryError, QueryOutput};
 use crate::error::AppError;
@@ -63,6 +63,13 @@ pub struct RunOutcome {
     /// Bản `shown` của sql_generated; None khi câu đó không qua guard.
     pub sql_guarded: Option<String>,
     pub result: Option<ResultTable>,
+    /// Guard giữ nguyên LIMIT của câu mô hình viết (GuardedSql::limit_note là None), nên LIMIT trong sql_guarded là ý
+    /// của câu hỏi chứ không phải trần guard thêm; thẻ "Đã hiểu là" (understanding.rs) chỉ hiện mục limit khi đó. Chỉ có
+    /// nghĩa khi answered, còn lại là false.
+    pub limit_kept: bool,
+    /// Điều kiện phân quyền guard đã thêm vào sql_guarded (GuardedSql::row_filters), để thẻ gắn nhãn phân quyền; rỗng
+    /// khi không lọc hoặc khi chưa answered.
+    pub row_filters: Vec<String>,
     /// Cách hiểu của mô hình trong câu trả lời có sql_generated (câu sửa nếu đã sửa, vì câu sửa có thể hiểu lại câu
     /// hỏi). #33 kiểm terms với hồ sơ và dựng giả định từ assumptions.
     pub terms: Vec<Term>,
@@ -78,22 +85,15 @@ enum Attempt {
     Answered {
         shown: String,
         result: ResultTable,
+        limit_kept: bool,
+        row_filters: Vec<String>,
     },
     /// Guard từ chối. fixable khi lý do là sai tên bảng hay cột.
-    Refused {
-        reason: String,
-        fixable: bool,
-    },
+    Refused { reason: String, fixable: bool },
     /// DuckDB báo lỗi; error đã bỏ đường dẫn, gửi được cho mô hình.
-    RunFailed {
-        shown: String,
-        error: String,
-    },
+    RunFailed { shown: String, error: String },
     /// Quá giờ hay quá bộ nhớ: dừng câu hỏi, không sửa.
-    Stopped {
-        shown: String,
-        message: String,
-    },
+    Stopped { shown: String, message: String },
 }
 
 /// Err cho lỗi của máy chủ (không mở được DuckDB, file Parquet mất), và cho lỗi của mô hình khi chưa có câu SQL nào
@@ -190,7 +190,7 @@ async fn attempt(
         Ok(guarded) => {
             let note = guarded.limit_note.as_deref();
             steps.push(build_step(StepName::Guard, started, true, note));
-            return run_guarded(input, guarded.shown, guarded.runnable, steps).await;
+            return run_guarded(input, guarded, steps).await;
         }
         Err(GuardError::Internal(e)) => return Err(e),
         Err(GuardError::UnknownName(reason) | GuardError::Oversized(reason)) => (reason, true),
@@ -202,16 +202,26 @@ async fn attempt(
 
 async fn run_guarded(
     input: &RunInput<'_>,
-    shown: String,
-    runnable: String,
+    guarded: GuardedSql,
     steps: &mut Vec<AskStep>,
 ) -> Result<Attempt, AppError> {
+    let GuardedSql {
+        shown,
+        runnable,
+        limit_note,
+        row_filters,
+    } = guarded;
     // Thời gian của bước run gồm cả lúc chờ lượt: người hỏi chờ đúng chừng đó.
     let started = Instant::now();
     let (outcome, detail) = match run_in_turn(input, runnable).await {
         Ok(output) => {
-            let result = build_result_table(output, input.max_rows);
-            (Attempt::Answered { shown, result }, None)
+            let answered = Attempt::Answered {
+                shown,
+                result: build_result_table(output, input.max_rows),
+                limit_kept: limit_note.is_none(),
+                row_filters,
+            };
+            (answered, None)
         }
         // File Parquet hỏng: lỗi máy chủ như IO Error, không gửi mô hình (xem mentions_data_files).
         Err(QueryError::Sql(raw)) if mentions_data_files(&raw, input.tables) => {
@@ -292,12 +302,32 @@ fn internal(message: String) -> QueryError {
 /// RunOutcome từ lượt cuối cùng: lượt đầu khi không sửa, lượt sau khi đã sửa. Lượt đầu không bao giờ là RunFailed hay
 /// Refused sửa được (đã vào vòng sửa), nên RunFailed ở đây là câu đã sửa vẫn lỗi. answer là câu trả lời của lượt đó.
 fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> RunOutcome {
-    let (status, message, sql_guarded, result) = match attempt {
-        Attempt::Answered { shown, result } => (AskStatus::Answered, None, Some(shown), Some(result)),
+    // Nhánh answered dựng RunOutcome ngay vì chỉ nó có kết quả và ghi chú của guard; các nhánh còn lại chỉ khác nhau
+    // ở status, lời báo và câu đã qua guard.
+    let (status, message, sql_guarded) = match attempt {
+        Attempt::Answered {
+            shown,
+            result,
+            limit_kept,
+            row_filters,
+        } => {
+            return RunOutcome {
+                status: AskStatus::Answered,
+                message: None,
+                sql_generated: Some(answer.sql),
+                sql_guarded: Some(shown),
+                result: Some(result),
+                limit_kept,
+                row_filters,
+                terms: answer.terms,
+                assumptions: answer.assumptions,
+                clarify: None,
+                steps,
+            };
+        }
         Attempt::Refused { reason, .. } => (
             AskStatus::Rejected,
             Some(format!("Câu SQL bị từ chối: {reason}.")),
-            None,
             None,
         ),
         Attempt::RunFailed { shown, error } => (
@@ -307,10 +337,9 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
                 build_user_error(&error)
             )),
             Some(shown),
-            None,
         ),
         Attempt::Stopped { shown, message } => {
-            (AskStatus::Failed, Some(format!("{message}.")), Some(shown), None)
+            (AskStatus::Failed, Some(format!("{message}.")), Some(shown))
         }
     };
     RunOutcome {
@@ -318,7 +347,9 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
         message,
         sql_generated: Some(answer.sql),
         sql_guarded,
-        result,
+        result: None,
+        limit_kept: false,
+        row_filters: Vec::new(),
         terms: answer.terms,
         assumptions: answer.assumptions,
         clarify: None,
@@ -344,6 +375,8 @@ fn build_failed(
         sql_generated,
         sql_guarded,
         result: None,
+        limit_kept: false,
+        row_filters: Vec::new(),
         terms,
         assumptions,
         clarify: None,
@@ -360,6 +393,8 @@ fn build_clarify_outcome(terms: Vec<Term>, clarify: Clarify) -> RunOutcome {
         sql_generated: None,
         sql_guarded: None,
         result: None,
+        limit_kept: false,
+        row_filters: Vec::new(),
         terms,
         assumptions: Vec::new(),
         clarify: Some(clarify),

@@ -38,6 +38,7 @@ pub mod ask_run;
 #[cfg(test)]
 mod ask_run_tests;
 pub mod ask_values;
+mod ask_view;
 // Truy dòng nguồn (#34): hợp đồng, dựng SQL từ câu đã chạy, ghép các bước.
 pub mod drill;
 pub mod drill_contract;
@@ -79,11 +80,7 @@ pub mod semantic;
 pub mod semantic_schema;
 #[cfg(test)]
 mod semantic_tests;
-// Thẻ "Đã hiểu là" (#35): endpoint hỏi (service/ask.rs) sẽ gọi build_understanding và build_column_roles; luồng hỏi của
-// #33 chưa gọi. Gỡ allow khi đó, cùng allow trên GuardedSql::row_filters.
-#[allow(dead_code)]
 pub mod understanding;
-#[allow(dead_code)]
 pub mod understanding_labels;
 #[cfg(test)]
 mod understanding_tests;

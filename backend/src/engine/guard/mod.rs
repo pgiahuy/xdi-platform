@@ -57,8 +57,6 @@ pub struct GuardedSql {
     pub limit_note: Option<String>,
     /// Điều kiện lọc dòng guard đã thêm, in đúng như trong `shown`, để thẻ "Đã hiểu là" (#35) gắn nhãn điều kiện nào do
     /// phân quyền chứ không do câu hỏi. Mỗi điều kiện một lần dù bảng được đọc ở nhiều chỗ; rỗng khi không lọc.
-    // Chỉ thẻ "Đã hiểu là" đọc trường này; gỡ allow khi endpoint hỏi gọi build_understanding (#35).
-    #[allow(dead_code)]
     pub row_filters: Vec<String>,
 }
 

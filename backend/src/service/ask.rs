@@ -2,15 +2,15 @@
 /* service/ask.rs - luồng một câu hỏi thường (docs/ARCHITECTURE.md mục 2): dataset và phiên bản đang dùng, ngữ cảnh
 (ask_context.rs) cùng chỉ số, câu đã đúng và gói ngành, mô hình viết SQL (prompt ở ask_prompt.rs), guard, chạy và sửa
 một lần (ask_run.rs), ghi lịch sử (engine/store/queries.rs), rồi dựng AskResponse (ask_contract.rs). Mỗi bước đo thời
-gian thành một AskStep. Lựa chọn của response dựng ở ask_choices.rs và ask_response_choices.rs.
+gian thành một AskStep. Lựa chọn của response dựng ở ask_choices.rs và ask_response_choices.rs; thẻ "Đã hiểu là", vai
+trò cột và gợi ý biểu đồ ở ask_view.rs.
 
 Câu không trả lời được vẫn là Ok kèm status (ARCHITECTURE mục 8). Err chỉ cho request sai (400, 404), mô hình lỗi khi
 chưa có câu SQL nào (502, 503; mock gặp câu lạ thì 400) và lỗi máy chủ. needs_choice không ghi lịch sử: câu chưa được
 trả lời, người hỏi sẽ gửi lại kèm lựa chọn.
 
 Chưa nối, các trường tương ứng của AskResponse để null hay rỗng: câu "tại sao" đi như câu thường cho tới khi ask gọi
-run_why (explain_run.rs, #38), thẻ "Đã hiểu là" và vai trò cột (understanding.rs, #35), kiểm hợp lý (#36), gợi ý biểu
-đồ (cần vai trò cột), lọc dòng theo vai (row_filters rỗng tới #45). */
+run_why (explain_run.rs, #38), kiểm hợp lý (#36), lọc dòng theo vai (row_filters rỗng tới #45). */
 
 use std::time::Instant;
 
@@ -26,6 +26,7 @@ use super::ask_response_choices::{
     build_unapplied_warnings, build_used_choices,
 };
 use super::ask_run::{build_step, run_with_repair, RunInput, RunOutcome};
+use super::ask_view::build_answer_view;
 use super::ingest::{dataset_not_found, parse_dataset_id};
 use crate::auth::{Member, WorkspaceId};
 use crate::engine::domains::find_domain_package;
@@ -116,7 +117,7 @@ pub async fn ask(
     };
     let mut outcome = run_with_repair(state.llm.as_ref(), input).await?;
     steps.append(&mut outcome.steps);
-    // Giả định thành Choice; tới khi có thẻ "Đã hiểu là" (#35) chúng chỉ dùng để dựng AskResponse.choices.
+    // Giả định thành Choice một lần, dùng cho cả thẻ "Đã hiểu là" lẫn AskResponse.choices để hai chỗ cùng id.
     let answer = SqlAnswer {
         terms: outcome.terms.clone(),
         assumptions: outcome.assumptions.clone(),
@@ -147,6 +148,18 @@ pub async fn ask(
         }
     }
 
+    // Chỉ câu answered có thẻ, vai trò cột và biểu đồ; câu khác nhận None.
+    let view = build_answer_view(&outcome, &context.columns, &metrics, &assumptions);
+    if let (Some(view), Some(result)) = (&view, outcome.result.as_mut()) {
+        for (column, role) in result.columns.iter_mut().zip(&view.roles) {
+            column.role = *role;
+        }
+    }
+    let (understanding, chart) = match view {
+        Some(view) => (Some(view.understanding), view.chart),
+        None => (None, None),
+    };
+
     let started = Instant::now();
     let query_id = record_query(
         state, member, &dataset, &version, question, &outcome, &steps,
@@ -159,7 +172,9 @@ pub async fn ask(
         choices: used,
         sql_generated: outcome.sql_generated,
         sql_guarded: outcome.sql_guarded,
+        understanding,
         result: outcome.result,
+        chart,
         warnings,
         steps,
         ..build_base_response(state, &version, question, outcome.status)
