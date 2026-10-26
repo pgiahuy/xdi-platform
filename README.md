@@ -17,7 +17,9 @@ dữ liệu ([docs/PRIVACY.md](docs/PRIVACY.md)).
 - Hỏi dữ liệu: câu hỏi thành SQL, qua guard (một câu `SELECT` chỉ đọc trên bảng, cột, hàm được phép, có trần số dòng)
   rồi chạy trên DuckDB, mô hình sửa một lần khi câu lỗi; câu có chữ khớp nhiều cột thì hỏi lại để chọn. Kết quả có bảng
   phân trang, tải CSV, biểu đồ cột hoặc đường, thẻ "Đã hiểu là" (đo gì, lọc gì, nhóm theo gì, khoảng thời gian) và pane
-  bằng chứng với câu SQL trước và sau guard cùng các bước đã chạy. Mọi câu hỏi được ghi vào lịch sử trong database.
+  bằng chứng với câu SQL trước và sau guard cùng các bước đã chạy. Kết quả đáng ngờ (rỗng, cột toàn ô trống, giá trị
+  lọc không có trong cột, tỷ lệ ngoài 0 đến 1) có cảnh báo, kết quả vẫn hiện. Mọi câu hỏi được ghi vào lịch sử trong
+  database.
 - Câu "tại sao": mô hình điền form (đo gì, hai kỳ hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần đóng
   góp của từng nhóm theo từng chiều (tổng đóng góp bằng đúng chênh lệch) và tách lượng, giá; mô hình viết lời giải
   thích, code kiểm mọi số trong lời có trong bảng. Bấm một dòng phân rã để xem dòng nguồn.
@@ -28,8 +30,7 @@ Chưa có trên `main`:
 - Bấm một ô của bảng kết quả để xem dòng nguồn: API đã có, giao diện chưa gọi.
 - Gán vai dữ liệu cho thành viên: guard đã lọc dòng theo vai dữ liệu khi hỏi và khi xem dòng nguồn, nhưng chưa có API
   hay màn nào đặt `data_role` và chính sách lọc.
-- Cảnh báo kiểm hợp lý kết quả, chế độ demo, dataset mẫu đóng gói sẵn, màn xem lịch
-  sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.
+- Chế độ demo, dataset mẫu đóng gói sẵn, màn xem lịch sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.
 
 Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1), lịch sử thay đổi ở
 [CHANGELOG.md](CHANGELOG.md), bảng trạng thái chi tiết ở cuối [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái).

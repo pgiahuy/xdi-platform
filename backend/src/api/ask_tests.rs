@@ -473,7 +473,41 @@ async fn result_names_are_unique_and_unknown_values_are_flagged() {
         .map(|c| c["name"].as_str().unwrap())
         .collect();
     assert_eq!(names, ["Market", "Market_2"]);
-    assert_eq!(response["warnings"][0]["code"], "filter_value_not_found");
+    assert_eq!(
+        warning_codes(&response),
+        ["empty_result", "filter_value_not_found"]
+    );
+}
+
+/// Kiểm hợp lý (#36) qua route với mock: câu mẫu lọc Market = 'Asia' mà CSV không có, nên ra rỗng. Cảnh báo theo thứ
+/// tự luật, câu vẫn answered và vẫn ghi lịch sử như câu đúng.
+#[tokio::test]
+async fn suspicious_results_come_with_warnings_and_stay_answered() {
+    let Some(asking) = start(None).await else {
+        return;
+    };
+    let (status, response) = asking.ask("Doanh thu ở thị trường châu Á", json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    assert_eq!(response["result"]["total_rows"], 0);
+    assert_eq!(
+        warning_codes(&response),
+        ["empty_result", "filter_value_not_found"]
+    );
+    assert_eq!(
+        response["warnings"][1]["message"],
+        "Cột Market không có giá trị \"Asia\". Kiểm lại giá trị lọc: kết quả có thể rỗng hoặc thiếu dòng."
+    );
+    assert_eq!(asking.queries_with("ok").await, 1);
+}
+
+fn warning_codes(response: &Value) -> Vec<&str> {
+    response["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["code"].as_str().unwrap())
+        .collect()
 }
 
 #[tokio::test]

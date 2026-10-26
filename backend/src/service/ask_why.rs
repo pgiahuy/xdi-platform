@@ -13,6 +13,7 @@ Câu chạy như câu thường (form sai hai lần) không có form, nên cột
 use std::time::Duration;
 
 use super::ask::{build_base_response, build_value_warnings, record_query, Recorded};
+use super::ask_checks::build_empty_warning;
 use super::ask_contract::{AskResponse, AskStatus, AskStep, Explanation};
 use super::ask_prompt::PromptInput;
 use super::ask_response_choices::{build_unapplied_warnings, build_used_choices};
@@ -76,6 +77,12 @@ pub(super) async fn ask_why(
     let used = build_used_choices(context, &outcome.assumptions);
     let mut warnings = build_unapplied_warnings(choices, &used);
     warnings.extend(build_value_warnings(context, &outcome.terms));
+    // Trong các luật kiểm hợp lý (ask_checks.rs), câu "tại sao" chỉ nhận empty_result: SQL do code dựng từ form mà giá
+    // trị lọc đã được kiểm với danh sách giá trị (explain_check.rs), và phân rã không được thì đã có
+    // explanation_unavailable nói lý do. Bảng rỗng vẫn gặp được, nhất là khi câu chạy như câu thường.
+    if outcome.status == AskStatus::Answered {
+        warnings.extend(outcome.result.as_ref().and_then(build_empty_warning));
+    }
     warnings.append(&mut outcome.warnings);
 
     if outcome.status == AskStatus::NeedsChoice {
