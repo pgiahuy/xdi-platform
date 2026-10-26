@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/drillSamples.ts - chỉ dùng ở chế độ dev: vài dòng nguồn mẫu cho một dòng phân rã của mẫu why trong
-examples/ask.json, để thấy bố cục tab Dòng nguồn khi backend chưa truy được dòng phân rã (trả 400, chờ #38). Chỉ được
+examples/ask.json, để thấy bố cục tab Dòng nguồn khi không có backend hay dataset để hỏi. Chỉ được
 gọi sau điều kiện import.meta.env.DEV, nên bản build production không chứa file này.
 Dòng là số minh họa: chỉ giá trị nhóm và lát cắt khớp với chỗ được bấm, tổng các dòng không bằng số trong bảng phân
 rã. */

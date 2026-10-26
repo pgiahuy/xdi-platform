@@ -15,7 +15,7 @@ use super::explain_form::{
     WhyForm,
 };
 use super::explain_measure::Additive;
-use super::explain_period::{build_period_range, Grain, Period};
+use super::explain_period::{Grain, Period};
 use super::explain_sql::{build_dimension_sql, build_equals, build_slices_sql, build_why_sql};
 use crate::engine::store::{MetricDefinition, ProfileColumn, ValueRow};
 
@@ -231,6 +231,16 @@ fn other_questions_are_plain() {
             "{question}"
         );
     }
+}
+
+/// Khoảng ngày [đầu, cuối) của một kỳ viết như trong form; Err khi kỳ viết sai dạng.
+fn build_period_range(
+    grain: Grain,
+    text: &str,
+) -> Result<(chrono::NaiveDate, chrono::NaiveDate), String> {
+    Period::parse(grain, text)?
+        .range()
+        .ok_or_else(|| format!("{text} is outside the supported dates"))
 }
 
 #[test]

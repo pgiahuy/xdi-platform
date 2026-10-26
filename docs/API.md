@@ -108,20 +108,23 @@ Enum lỗi nằm ở `backend/src/error.rs`.
 lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với `status` trong
 body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, dataset chưa có dữ liệu hay chưa lập hồ sơ xong, hoặc câu mock không
 có câu trả lời mẫu; 404 dataset không có; 502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào. Câu
-answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ; câu "tại sao" chưa có phân rã (`explanation` null).
+answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ. Câu "tại sao" (nhận bằng từ khóa) đi đường form: mô hình
+điền form, code dựng SQL, `result` là bảng tổng theo kỳ hay theo nhóm, `explanation` là bảng phân rã; không phân rã
+được thì `explanation` null kèm cảnh báo `explanation_unavailable`, câu vẫn answered.
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).
 
 ## Truy dòng nguồn
 
-`POST /api/workspaces/{ws}/datasets/{id}/drill` trả một trang dòng nguồn của một ô trong bảng kết quả: request gửi
-`query_id` và `cell` (giá trị các cột `dimension`, `time` của dòng được bấm, theo tên trong `result.columns`), kèm
+`POST /api/workspaces/{ws}/datasets/{id}/drill` trả một trang dòng nguồn của một ô trong bảng kết quả hay của một dòng
+phân rã: request gửi `query_id` và đúng một trong `cell` (giá trị các cột `dimension`, `time` của dòng được bấm, theo tên
+trong `result.columns`) và `breakdown` (lát cắt, cột trong dataset, giá trị nhóm của câu "tại sao"), kèm
 `offset`, `limit` (mặc định 100, tối đa 1000); response có câu SQL đã chạy sau guard, các dòng (mọi cột của dataset,
 kể cả `_source_file`) và `total_rows` của mọi trang. Câu chạy trên phiên bản dữ liệu của câu hỏi, qua guard với vai
 dữ liệu của người đang bấm. Mã lỗi: 400 khi câu hỏi bị từ chối hay chạy lỗi, khóa không khớp cột nhóm, câu có dạng chưa
-truy được (lời báo nói lý do), phiên bản đã xóa, hay request gửi `breakdown` (dòng phân rã chưa truy được: cột `queries.explanation`
-đã có nhưng chỉ được ghi khi câu "tại sao" chạy qua route hỏi, [#38](https://github.com/pgiahuy/xdi-platform/issues/38)); 404 khi `query_id` không thuộc dataset
+truy được (lời báo nói lý do), phiên bản đã xóa, hay `breakdown` của câu không có phân rã hoặc chiều không có trong phân
+rã; 404 khi `query_id` không thuộc dataset
 và workspace trong đường dẫn. Cách dựng câu: [Kiến trúc](ARCHITECTURE.md), mục 8.
 
 ## Đổi API và sinh kiểu TypeScript

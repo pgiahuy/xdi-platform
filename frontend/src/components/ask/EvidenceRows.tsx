@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/EvidenceRows.tsx - tab Dòng nguồn của pane bằng chứng: các dòng dữ liệu đứng sau một dòng phân rã
 (một lát cắt, một cột, một giá trị nhóm), bảng dùng lại ResultTable. Trang truy dòng và truyền trạng thái vào; khi
-backend chưa truy được (dòng phân rã trả 400, chờ #38) trang truyền lời báo qua state error. */
+backend không truy được (trả 400 kèm lý do) trang truyền lời báo qua state error. */
 
 import { formatCell } from './cellFormat'
 import type { DrillTarget, RowsView } from './evidenceTypes'

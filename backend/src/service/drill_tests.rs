@@ -92,6 +92,7 @@ impl Orders {
         run_drill(DrillInput {
             sql_guarded,
             keys,
+            slice_filter: None,
             offset: page.0,
             limit: page.1,
             tables: &tables,

@@ -307,8 +307,8 @@ pub struct ChartSuggestion {
 /// - `choice_not_applied`: a choice sent with the question was not recognized and the default was used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-// empty_result, all_null, unusual_magnitude do kiểm hợp lý (#36) dựng, explanation_unavailable do câu "tại sao" (#38);
-// luồng hỏi chưa có hai phần đó. Gỡ allow khi chúng vào luồng hỏi.
+// empty_result, all_null, unusual_magnitude do kiểm hợp lý (#36) dựng; luồng hỏi chưa có phần đó. Gỡ allow khi nó vào
+// luồng hỏi.
 #[allow(dead_code)]
 pub enum WarningCode {
     EmptyResult,

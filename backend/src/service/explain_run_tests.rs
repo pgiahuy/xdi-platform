@@ -20,11 +20,13 @@ use tokio::sync::Semaphore;
 
 use super::ask_context::{AmbiguousWord, AskContext};
 use super::ask_contract::{
-    AskStatus, CellValue, ChosenOption, DimensionBreakdown, StepName, WarningCode,
+    AskStatus, CellValue, ChartKind, ChosenOption, ColumnRole, DimensionBreakdown, StepName,
+    Understanding, UnderstoodItem, WarningCode,
 };
 use super::ask_examples::build_why_example;
 use super::ask_prompt::PromptInput;
 use super::ask_values::ValueIndex;
+use super::ask_view::{build_answer_view, AnswerView, RanQuery};
 use super::explain_check_tests::{
     dataco_columns, dataco_values, quarter_form, revenue, DATE, TABLE,
 };
@@ -579,4 +581,122 @@ async fn model_error_before_any_form_is_an_error() {
         .await
         .unwrap_err();
     assert!(matches!(error, AppError::Upstream(_)), "{error:?}");
+}
+
+/// Kỳ so sánh do người hỏi chọn mà không có dòng nào (quý 1/2017 thủng): báo ngay bằng cảnh báo, không gọi lại mô hình,
+/// vì lựa chọn đè lên base của form và mô hình sửa form cũng không đổi được kỳ đó.
+#[tokio::test]
+async fn chosen_base_without_rows_is_reported_at_once() {
+    let data = Dataco::new();
+    let llm = ScriptedLlm::new(vec![quarter_form()]);
+    let choices = choose("why:base", "2017-Q1");
+    let outcome = data.ask(&llm, QUARTER_QUESTION, &choices).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    assert!(outcome.explanation.is_none());
+    assert!(outcome.result.is_some() && outcome.form.is_some());
+    assert_eq!(outcome.warnings.len(), 1);
+    assert_eq!(
+        outcome.warnings[0].code,
+        WarningCode::ExplanationUnavailable
+    );
+    assert!(
+        outcome.warnings[0].message.starts_with("Quý 1/2017"),
+        "{}",
+        outcome.warnings[0].message
+    );
+    assert_eq!(llm.tasks(), [LlmTask::Why]);
+    assert_eq!(steps(&outcome).last(), Some(&(StepName::Explain, false)));
+    // Giả định kỳ so sánh vẫn trên thẻ, đang ở kỳ đã chọn, để người hỏi đổi.
+    let base = outcome
+        .assumptions
+        .iter()
+        .find(|c| c.id == "why:base")
+        .unwrap();
+    assert_eq!(base.selected.as_deref(), Some("2017-Q1"));
+}
+
+fn view(outcome: &WhyOutcome, metrics: &[MetricDefinition]) -> AnswerView {
+    let ran = RanQuery {
+        status: outcome.status,
+        sql_guarded: outcome.sql_guarded.as_deref(),
+        result: outcome.result.as_ref(),
+        limit_kept: outcome.limit_kept,
+        row_filters: &outcome.row_filters,
+        plan: outcome.plan.as_ref(),
+    };
+    build_answer_view(&ran, &[], metrics, &outcome.assumptions).unwrap()
+}
+
+fn items(understanding: &Understanding) -> Vec<&UnderstoodItem> {
+    let lists = [
+        &understanding.measures,
+        &understanding.filters,
+        &understanding.group_by,
+        &understanding.order_by,
+    ];
+    lists
+        .into_iter()
+        .flatten()
+        .chain(understanding.time_range.as_ref())
+        .collect()
+}
+
+/// Thẻ "Đã hiểu là" dựng từ form: hai kỳ là khoảng thời gian, mỗi đoạn SQL là đoạn nguyên văn của sql_guarded; bảng tổng
+/// theo quý vẽ đường.
+#[tokio::test]
+async fn why_card_names_the_two_periods() {
+    let data = Dataco::new();
+    let outcome = data.ask(&Mock::new(), QUARTER_QUESTION, &[]).await;
+    let view = view(&outcome, &data.metrics);
+    let sql = outcome.sql_guarded.as_deref().unwrap();
+    for item in items(&view.understanding) {
+        assert!(sql.contains(&item.sql), "{} not in {sql}", item.sql);
+    }
+    let card = &view.understanding;
+    let period = card.time_range.as_ref().unwrap();
+    assert_eq!(
+        period.label,
+        format!("Quý 3/2017 so với quý 2/2017, theo {DATE}")
+    );
+    assert!(period.sql.starts_with('(') && period.sql.contains(" OR "));
+    assert_eq!(card.measures[0].label, "doanh thu");
+    assert_eq!(card.measures[0].sql, "SUM(\"Order Item Total\")");
+    assert!(card.filters.is_empty() && card.limit.is_none());
+    assert_eq!(card.group_by.len(), 1);
+    assert_eq!(card.assumptions[0].id, "why:base");
+    assert_eq!(view.roles, [ColumnRole::Time, ColumnRole::Measure]);
+    let chart = view.chart.unwrap();
+    assert_eq!((chart.kind, chart.x.as_str()), (ChartKind::Line, "quarter"));
+}
+
+/// So hai nhóm: hai nhóm là một mục lọc có nhãn riêng; điều kiện phân quyền ở cuối; bảng theo Market vẽ cột.
+#[tokio::test]
+async fn why_card_names_the_two_groups() {
+    let data = Dataco::new();
+    let filter = RowFilter {
+        column: "Customer Segment".to_string(),
+        allowed_values: vec!["Consumer".to_string(), "Corporate".to_string()],
+    };
+    let question = "Tại sao doanh thu Europe thấp hơn LATAM";
+    let outcome = data
+        .ask_as(&Mock::new(), question, &[], vec![filter])
+        .await
+        .unwrap();
+    let view = view(&outcome, &data.metrics);
+    let sql = outcome.sql_guarded.as_deref().unwrap();
+    for item in items(&view.understanding) {
+        assert!(sql.contains(&item.sql), "{} not in {sql}", item.sql);
+    }
+    let labels: Vec<&str> = view
+        .understanding
+        .filters
+        .iter()
+        .map(|f| f.label.as_str())
+        .collect();
+    assert_eq!(labels.len(), 2, "{labels:?}");
+    assert_eq!(labels[0], "Market: Europe so với LATAM");
+    assert!(labels[1].starts_with("Phân quyền"), "{labels:?}");
+    assert!(view.understanding.time_range.is_none());
+    assert_eq!(view.roles, [ColumnRole::Dimension, ColumnRole::Measure]);
+    assert_eq!(view.chart.unwrap().kind, ChartKind::Bar);
 }

@@ -50,6 +50,8 @@ pub struct StoredQuery {
     /// Chữ của QueryStatus::as_str.
     pub status: String,
     pub sql_guarded: Option<String>,
+    /// Form và phân rã của câu "tại sao" (khuôn ở service/ask_why.rs); None với câu thường.
+    pub explanation: Option<serde_json::Value>,
 }
 
 /// Một câu hỏi đã được đánh dấu trả lời đúng, làm ví dụ trong prompt sinh SQL.
@@ -90,7 +92,7 @@ impl Store {
         id: Uuid,
     ) -> Result<Option<StoredQuery>, AppError> {
         sqlx::query_as(
-            "SELECT dataset_id, version_id, status, sql_guarded FROM queries
+            "SELECT dataset_id, version_id, status, sql_guarded, explanation FROM queries
              WHERE workspace_id = $1 AND id = $2",
         )
         .bind(ws.as_uuid())

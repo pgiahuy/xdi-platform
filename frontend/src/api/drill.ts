@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/drill.ts - truy dòng nguồn: POST /workspaces/{ws}/datasets/{id}/drill (backend/src/api/query.rs), hợp đồng ở
 backend/src/service/drill_contract.rs. Request gửi query_id cùng khóa của chỗ được bấm, không bao giờ gửi SQL. Backend
-truy được ô của bảng kết quả (cell); dòng phân rã (breakdown) còn trả 400 tới khi câu "tại sao" ghi lát cắt vào
-queries.explanation (#38).
+truy được ô của bảng kết quả (cell) và dòng phân rã của câu "tại sao" (breakdown, lát cắt đọc từ queries.explanation).
 Ở chế độ dev có thể trả vài dòng mẫu (drillSamples.ts) thay vì gọi backend, như askSamples.ts. */
 
 import { useQuery } from '@tanstack/react-query'

@@ -55,7 +55,7 @@ pub fn build_why_sql(plan: &WhyPlan) -> WhySql {
     let total_sql = format!(
         "SELECT {key}, {aggregate} AS {label} FROM {} WHERE {} GROUP BY {group_by} ORDER BY {group_by}",
         build_ident(&plan.table),
-        build_where(plan, &base, &compare)
+        build_where(plan)
     );
     WhySql {
         total_sql,
@@ -90,7 +90,7 @@ pub fn build_slices_sql(plan: &WhyPlan) -> String {
         "SELECT {} FROM {} WHERE {}",
         items.join(", "),
         build_ident(&plan.table),
-        build_where(plan, &base, &compare)
+        build_where(plan)
     )
 }
 
@@ -103,7 +103,7 @@ pub fn build_dimension_sql(plan: &WhyPlan, column: &str) -> String {
         build_sliced_measure(plan, &base),
         build_sliced_measure(plan, &compare),
         build_ident(&plan.table),
-        build_where(plan, &base, &compare)
+        build_where(plan)
     )
 }
 
@@ -144,23 +144,45 @@ fn build_period_condition(time: &PlanTime, period: Period) -> Expr {
     )
 }
 
-/// Điều kiện WHERE chung của mọi câu: bộ lọc của câu hỏi và của chỉ số, kỳ của câu hỏi khi so hai nhóm, và dòng thuộc
-/// một trong hai lát cắt (đọc ít dòng hơn, kết quả không đổi vì dòng ngoài hai lát cắt không góp vào số nào).
-fn build_where(plan: &WhyPlan, base: &Expr, compare: &Expr) -> String {
-    let mut parts: Vec<Expr> = plan.filters.iter().cloned().map(build_grouped).collect();
-    if let PlanSlices::Groups {
-        period: Some((time, period)),
-        ..
-    } = &plan.slices
-    {
-        parts.push(build_period_condition(time, *period));
+/// Các vế WHERE chung của mọi câu, theo thứ tự trong câu. build_where ghép chúng bằng AND; thẻ "Đã hiểu là"
+/// (understanding_why.rs) đọc từng vế để mỗi mục có đoạn SQL nguyên văn của câu đã chạy.
+pub struct WhyConditions {
+    /// Bộ lọc của câu hỏi và của chỉ số; vế có OR đã bọc ngoặc.
+    pub filters: Vec<Expr>,
+    /// Kỳ của câu hỏi khi so hai nhóm.
+    pub period: Option<Expr>,
+    /// Dòng thuộc một trong hai lát cắt: `(<base> OR <compare>)`. Đọc ít dòng hơn, kết quả không đổi vì dòng ngoài
+    /// hai lát cắt không góp vào số nào.
+    pub slices: Expr,
+}
+
+pub fn build_why_conditions(plan: &WhyPlan) -> WhyConditions {
+    let (base, compare) = build_slice_conditions(plan);
+    let period = match &plan.slices {
+        PlanSlices::Groups {
+            period: Some((time, period)),
+            ..
+        } => Some(build_period_condition(time, *period)),
+        _ => None,
+    };
+    WhyConditions {
+        filters: plan.filters.iter().cloned().map(build_grouped).collect(),
+        period,
+        slices: Expr::Nested(Box::new(build_binary(base, BinaryOperator::Or, compare))),
     }
-    parts.push(Expr::Nested(Box::new(build_binary(
-        base.clone(),
-        BinaryOperator::Or,
-        compare.clone(),
-    ))));
-    let texts: Vec<String> = parts.iter().map(Expr::to_string).collect();
+}
+
+/// Điều kiện WHERE chung của mọi câu: bộ lọc của câu hỏi và của chỉ số, kỳ của câu hỏi khi so hai nhóm, và dòng thuộc
+/// một trong hai lát cắt.
+fn build_where(plan: &WhyPlan) -> String {
+    let conditions = build_why_conditions(plan);
+    let texts: Vec<String> = conditions
+        .filters
+        .iter()
+        .chain(conditions.period.iter())
+        .chain([&conditions.slices])
+        .map(Expr::to_string)
+        .collect();
     texts.join(" AND ")
 }
 

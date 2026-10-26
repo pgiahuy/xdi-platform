@@ -28,7 +28,7 @@ pub struct DrillRequest {
     /// column. An empty list is the one row of a query without grouping keys.
     #[serde(default)]
     pub cell: Option<Vec<DrillKey>>,
-    /// A row of the breakdown in `AskResponse.explanation`. Not supported yet: the request gets 400.
+    /// A row of the breakdown in `AskResponse.explanation`: the source rows of that group in that slice.
     #[serde(default)]
     pub breakdown: Option<BreakdownKey>,
     /// Number of source rows to skip. Default 0.
@@ -63,10 +63,8 @@ pub enum SliceName {
     Compare,
 }
 
-// Khai trong hợp đồng để giao diện gửi đúng dạng từ bây giờ; service đọc các trường khi lát cắt đã lưu cùng câu hỏi
-// (queries.explanation, ghi khi ask gọi run_why ở #38). Gỡ allow khi đó.
+// Backend lấy điều kiện lát cắt và câu SQL của chiều từ queries.explanation (service/drill.rs), không từ request.
 /// One group of a breakdown table in one slice.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct BreakdownKey {
     pub slice: SliceName,

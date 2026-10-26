@@ -17,6 +17,8 @@ Mọi response, cả giao diện và trang 404, đi qua security_headers.rs đ�
 mod admin;
 #[cfg(test)]
 mod ask_tests;
+#[cfg(test)]
+mod ask_why_tests;
 mod auth;
 mod datasets;
 #[cfg(test)]

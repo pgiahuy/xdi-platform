@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask.rs - luồng một câu hỏi thường (docs/ARCHITECTURE.md mục 2): dataset và phiên bản đang dùng, ngữ cảnh
+/* service/ask.rs - luồng một câu hỏi (docs/ARCHITECTURE.md mục 2): dataset và phiên bản đang dùng, ngữ cảnh
 (ask_context.rs) cùng chỉ số, câu đã đúng và gói ngành, mô hình viết SQL (prompt ở ask_prompt.rs), guard, chạy và sửa
 một lần (ask_run.rs), ghi lịch sử (engine/store/queries.rs), rồi dựng AskResponse (ask_contract.rs). Mỗi bước đo thời
 gian thành một AskStep. Lựa chọn của response dựng ở ask_choices.rs và ask_response_choices.rs; thẻ "Đã hiểu là", vai
-trò cột và gợi ý biểu đồ ở ask_view.rs.
+trò cột và gợi ý biểu đồ ở ask_view.rs. Câu "tại sao" (build_question_kind của explain_form.rs) rẽ sang ask_why.rs sau
+bước context, dùng chung ngữ cảnh, bảng được phép và cách ghi lịch sử ở đây.
 
 Câu không trả lời được vẫn là Ok kèm status (ARCHITECTURE mục 8). Err chỉ cho request sai (400, 404), mô hình lỗi khi
 chưa có câu SQL nào (502, 503; mock gặp câu lạ thì 400) và lỗi máy chủ. needs_choice không ghi lịch sử: câu chưa được
 trả lời, người hỏi sẽ gửi lại kèm lựa chọn.
 
-Chưa nối, các trường tương ứng của AskResponse để null hay rỗng: câu "tại sao" đi như câu thường cho tới khi ask gọi
-run_why (explain_run.rs, #38), kiểm hợp lý (#36), lọc dòng theo vai (row_filters rỗng tới #45). */
+Chưa nối, các trường tương ứng của AskResponse để null hay rỗng: kiểm hợp lý (#36). */
 
 use std::time::Instant;
 
 use super::ask_choices::{build_assumption_choices, build_clarify_choice};
 use super::ask_context::{build_ask_context, AskContext};
 use super::ask_contract::{
-    AskResponse, AskStatus, AskStep, ChosenOption, StepName, Warning, WarningCode,
+    AskResponse, AskStatus, AskStep, ChosenOption, ResultTable, StepName, Warning, WarningCode,
 };
 use super::ask_prompt::{build_sql_prompt, PromptInput};
 use super::ask_reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
@@ -25,14 +25,16 @@ use super::ask_response_choices::{
     build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
     build_unapplied_warnings, build_used_choices,
 };
-use super::ask_run::{build_step, run_with_repair, RunInput, RunOutcome};
-use super::ask_view::build_answer_view;
+use super::ask_run::{build_step, run_with_repair, RunInput};
+use super::ask_view::{apply_answer_view, build_answer_view, RanQuery};
+use super::ask_why::{ask_why, WhyAsk};
+use super::explain_form::{build_question_kind, QuestionKind};
 use super::ingest::{dataset_not_found, parse_dataset_id};
-use crate::auth::{Member, WorkspaceId};
+use crate::auth::{Member, Role, WorkspaceId};
 use crate::engine::domains::find_domain_package;
-use crate::engine::guard::AllowedTable;
+use crate::engine::guard::{AllowedTable, RowFilter};
 use crate::engine::llm::{LlmRequest, LlmTask};
-use crate::engine::store::{Dataset, DatasetVersion, NewQuery, QueryStatus};
+use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
 use crate::{error::AppError, state::AppState};
 
 /// Số câu đã đúng gần nhất đọc từ lịch sử; prompt chỉ lấy tối đa EXAMPLES_MAX câu có từ trùng câu hỏi trong số này
@@ -65,7 +67,7 @@ pub async fn ask(
         .store
         .list_correct_queries(ws, dataset.id, EXAMPLE_POOL)
         .await?;
-    let columns = list_column_names(state, ws, &version).await?;
+    let columns = state.store.list_columns(ws, version.id).await?;
     let detail = build_ambiguity_detail(&context);
     let mut steps = vec![build_step(
         StepName::Context,
@@ -86,7 +88,7 @@ pub async fn ask(
         });
     }
 
-    let prompt = build_sql_prompt(&PromptInput {
+    let input = PromptInput {
         table: &dataset.logical_table,
         question,
         context: &context,
@@ -94,7 +96,21 @@ pub async fn ask(
         examples: &examples,
         domain: dataset.domain.as_deref().and_then(find_domain_package),
         choices,
-    });
+    };
+    let tables = [build_allowed_table(state, member, &dataset, &version, &columns).await?];
+    if build_question_kind(question) == QuestionKind::Why {
+        let why = WhyAsk {
+            dataset: &dataset,
+            version: &version,
+            prompt: input,
+            columns: &columns,
+            tables: &tables,
+            steps,
+        };
+        return ask_why(state, member, why).await;
+    }
+
+    let prompt = build_sql_prompt(&input);
     let started = Instant::now();
     let request = LlmRequest {
         task: LlmTask::Sql,
@@ -105,7 +121,6 @@ pub async fn ask(
     let reply = state.llm.complete(&request).await?;
     steps.push(build_step(StepName::Llm, started, true, None));
 
-    let tables = [build_allowed_table(state, &dataset, &version, columns)?];
     let input = RunInput {
         question,
         prompt: &prompt,
@@ -149,23 +164,27 @@ pub async fn ask(
     }
 
     // Chỉ câu answered có thẻ, vai trò cột và biểu đồ; câu khác nhận None.
-    let view = build_answer_view(&outcome, &context.columns, &metrics, &assumptions);
-    if let (Some(view), Some(result)) = (&view, outcome.result.as_mut()) {
-        for (column, role) in result.columns.iter_mut().zip(&view.roles) {
-            column.role = *role;
-        }
-    }
-    let (understanding, chart) = match view {
-        Some(view) => (Some(view.understanding), view.chart),
-        None => (None, None),
+    let ran = RanQuery {
+        status: outcome.status,
+        sql_guarded: outcome.sql_guarded.as_deref(),
+        result: outcome.result.as_ref(),
+        limit_kept: outcome.limit_kept,
+        row_filters: &outcome.row_filters,
+        plan: None,
     };
+    let view = build_answer_view(&ran, &context.columns, &metrics, &assumptions);
+    let (understanding, chart) = apply_answer_view(view, outcome.result.as_mut());
 
-    let started = Instant::now();
-    let query_id = record_query(
-        state, member, &dataset, &version, question, &outcome, &steps,
-    )
-    .await?;
-    steps.push(build_step(StepName::Record, started, true, None));
+    let recorded = Recorded {
+        status: outcome.status,
+        message: outcome.message.as_deref(),
+        sql_generated: outcome.sql_generated.as_deref(),
+        sql_guarded: outcome.sql_guarded.as_deref(),
+        result: outcome.result.as_ref(),
+        explanation: None,
+    };
+    let target = (&dataset, &version);
+    let query_id = record_query(state, member, target, question, recorded, &mut steps).await?;
     Ok(AskResponse {
         message: outcome.message,
         query_id: Some(query_id),
@@ -203,23 +222,16 @@ async fn load_target(
     Ok((dataset, version))
 }
 
-/// Mọi cột của phiên bản, không chỉ cột ngữ cảnh gửi mô hình: dataset nhiều cột thì ngữ cảnh chỉ gửi cột khớp câu
-/// hỏi, mà guard từ chối cột không có trong danh sách nó nhận, nên câu SQL dùng một cột khác có thật sẽ bị chặn oan.
-async fn list_column_names(
+/// Bảng duy nhất câu hỏi được đọc: dataset đang hỏi, trên file Parquet của phiên bản đang dùng, lọc dòng theo vai dữ
+/// liệu của người hỏi. columns là mọi cột của phiên bản, không chỉ cột ngữ cảnh gửi mô hình: dataset nhiều cột thì ngữ
+/// cảnh chỉ gửi cột khớp câu hỏi, mà guard từ chối cột không có trong danh sách nó nhận, nên câu SQL dùng một cột khác
+/// có thật sẽ bị chặn oan.
+async fn build_allowed_table(
     state: &AppState,
-    ws: &WorkspaceId,
-    version: &DatasetVersion,
-) -> Result<Vec<String>, AppError> {
-    let columns = state.store.list_columns(ws, version.id).await?;
-    Ok(columns.into_iter().map(|c| c.name).collect())
-}
-
-/// Bảng duy nhất câu hỏi được đọc: dataset đang hỏi, trên file Parquet của phiên bản đang dùng.
-fn build_allowed_table(
-    state: &AppState,
+    member: &Member,
     dataset: &Dataset,
     version: &DatasetVersion,
-    columns: Vec<String>,
+    columns: &[ProfileColumn],
 ) -> Result<AllowedTable, AppError> {
     // Phiên bản nạp từ file luôn có đường dẫn; nguồn database (sau này) thì không, và cần cách chạy khác.
     let Some(relative) = &version.parquet_path else {
@@ -229,16 +241,34 @@ fn build_allowed_table(
     };
     Ok(AllowedTable {
         name: dataset.logical_table.clone(),
-        columns,
+        columns: columns.iter().map(|c| c.name.clone()).collect(),
         parquet_dir: state.config.data_dir.join(relative),
-        // Lọc dòng theo data_role của người hỏi do #45 đọc từ rls_policies; tới đó mọi thành viên thấy mọi dòng.
-        row_filters: vec![],
+        row_filters: load_row_filters(state, member, dataset.id).await?,
     })
+}
+
+/// Điều kiện lọc dòng theo vai dữ liệu (rls_policies) của một thành viên trên một dataset; luồng hỏi và truy dòng nguồn
+/// (drill.rs) cùng gọi để mọi SQL chạy trên dữ liệu bị lọc như nhau. Admin không bị lọc: họ tự sửa được chính sách,
+/// lọc với họ không bảo vệ được gì (#45).
+pub(super) async fn load_row_filters(
+    state: &AppState,
+    member: &Member,
+    dataset_id: uuid::Uuid,
+) -> Result<Vec<RowFilter>, AppError> {
+    match member.role {
+        Role::Admin => Ok(Vec::new()),
+        Role::Member => {
+            state
+                .store
+                .list_row_filters(&member.workspace, dataset_id, member.user.id)
+                .await
+        }
+    }
 }
 
 /// Giá trị mô hình nói là có trong một cột (terms kind value) mà danh sách đủ của cột đó không có: câu SQL lọc theo nó
 /// sẽ ra rỗng hay thiếu dòng. Chỉ xét cột ngữ cảnh gửi đủ giá trị; danh sách chỉ là mẫu thì không biết chắc.
-fn build_value_warnings(context: &AskContext, terms: &[Term]) -> Vec<Warning> {
+pub(super) fn build_value_warnings(context: &AskContext, terms: &[Term]) -> Vec<Warning> {
     let mut warnings = Vec::new();
     for term in terms.iter().filter(|t| t.kind == TermKind::Value) {
         let (Some(column_name), Some(value)) = (&term.column, &term.value) else {
@@ -263,18 +293,29 @@ fn build_value_warnings(context: &AskContext, terms: &[Term]) -> Vec<Warning> {
     warnings
 }
 
-/// Ghi câu hỏi đã có kết quả cuối (answered, rejected, failed). Lỗi ghi là lỗi máy chủ (500), kể cả khi đã có kết quả:
-/// answered bắt buộc có query_id để truy dòng nguồn (#34) và lịch sử dùng lại được.
-async fn record_query(
+/// Phần của một câu đã có kết quả cuối được ghi vào lịch sử: các trường cùng tên của RunOutcome hay WhyOutcome.
+pub(super) struct Recorded<'a> {
+    pub status: AskStatus,
+    pub message: Option<&'a str>,
+    pub sql_generated: Option<&'a str>,
+    pub sql_guarded: Option<&'a str>,
+    pub result: Option<&'a ResultTable>,
+    /// Form và Explanation của câu "tại sao" (ask_why.rs); None với câu thường.
+    pub explanation: Option<serde_json::Value>,
+}
+
+/// Ghi câu hỏi đã có kết quả cuối (answered, rejected, failed) rồi thêm bước record vào steps. Lỗi ghi là lỗi máy chủ
+/// (500), kể cả khi đã có kết quả: answered bắt buộc có query_id để truy dòng nguồn (#34) và lịch sử dùng lại được.
+pub(super) async fn record_query(
     state: &AppState,
     member: &Member,
-    dataset: &Dataset,
-    version: &DatasetVersion,
+    (dataset, version): (&Dataset, &DatasetVersion),
     question: &str,
-    outcome: &RunOutcome,
-    steps: &[AskStep],
+    recorded: Recorded<'_>,
+    steps: &mut Vec<AskStep>,
 ) -> Result<uuid::Uuid, AppError> {
-    let status = match outcome.status {
+    let started = Instant::now();
+    let status = match recorded.status {
         AskStatus::Answered => QueryStatus::Ok,
         AskStatus::Rejected => QueryStatus::Rejected,
         AskStatus::Failed => QueryStatus::Error,
@@ -284,30 +325,30 @@ async fn record_query(
             ))
         }
     };
-    let timings = serde_json::to_value(steps)
+    let timings = serde_json::to_value(&*steps)
         .map_err(|e| AppError::Internal(format!("serialize ask steps: {e}")))?;
-    let row_count = outcome
+    let row_count = recorded
         .result
-        .as_ref()
         .map(|r| i64::try_from(r.total_rows).unwrap_or(i64::MAX));
     let query = NewQuery {
         target: Some((dataset.id, version.id)),
         user_id: Some(member.user.id),
         question,
-        sql_generated: outcome.sql_generated.as_deref(),
-        sql_guarded: outcome.sql_guarded.as_deref(),
+        sql_generated: recorded.sql_generated,
+        sql_guarded: recorded.sql_guarded,
         status,
-        error: outcome.message.as_deref(),
+        error: recorded.message,
         timings,
         row_count,
-        // Câu "tại sao" (#38) ghi form và phân rã vào đây.
-        explanation: None,
+        explanation: recorded.explanation,
     };
-    state.store.record_query(&member.workspace, &query).await
+    let id = state.store.record_query(&member.workspace, &query).await?;
+    steps.push(build_step(StepName::Record, started, true, None));
+    Ok(id)
 }
 
 /// Phần chung của mọi response: mỗi nhánh của ask chỉ ghi các trường của nó.
-fn build_base_response(
+pub(super) fn build_base_response(
     state: &AppState,
     version: &DatasetVersion,
     question: &str,

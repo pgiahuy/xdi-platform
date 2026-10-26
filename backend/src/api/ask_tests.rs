@@ -25,7 +25,7 @@ const CSV: &str = "Market,Order Region,Order Item Total,shipping date (DateOrder
                    LATAM,South America,200,2/1/2018 10:00\n\
                    Europe,Northern Europe,50,2/15/2018 09:30\n";
 
-struct DataDir(PathBuf);
+pub(super) struct DataDir(PathBuf);
 
 impl DataDir {
     fn new() -> Self {
@@ -46,7 +46,7 @@ struct ScriptedLlm {
     replies: Mutex<VecDeque<String>>,
 }
 
-fn scripted(replies: &[Value]) -> Arc<dyn LlmProvider> {
+pub(super) fn scripted(replies: &[Value]) -> Arc<dyn LlmProvider> {
     let replies = replies.iter().map(Value::to_string).collect();
     Arc::new(ScriptedLlm {
         replies: Mutex::new(replies),
@@ -72,17 +72,17 @@ impl LlmProvider for ScriptedLlm {
     }
 }
 
-fn sql_reply(sql: &str) -> Value {
+pub(super) fn sql_reply(sql: &str) -> Value {
     json!({"terms": [], "assumptions": [], "clarify": null, "sql": sql})
 }
 
 /// Một workspace có dataset dataco đã nạp: database, thư mục dữ liệu, app, phiên đăng nhập, đường dẫn hỏi.
-struct Asking {
-    db: TestDb,
+pub(super) struct Asking {
+    pub db: TestDb,
     _data: DataDir,
-    app: axum::Router,
-    session: String,
-    ask_url: String,
+    pub app: axum::Router,
+    pub session: String,
+    pub ask_url: String,
 }
 
 /// llm None là mock của cấu hình.
@@ -92,6 +92,15 @@ async fn start(llm: Option<Arc<dyn LlmProvider>>) -> Option<Asking> {
 
 async fn start_with(
     llm: Option<Arc<dyn LlmProvider>>,
+    configure: impl FnOnce(&mut Config),
+) -> Option<Asking> {
+    start_on(llm, CSV, configure).await
+}
+
+/// Như start_with, trên một CSV khác (api/ask_why_tests.rs cần cột ngày và nhiều kỳ).
+pub(super) async fn start_on(
+    llm: Option<Arc<dyn LlmProvider>>,
+    csv: &str,
     configure: impl FnOnce(&mut Config),
 ) -> Option<Asking> {
     let Some(db) = fresh_database().await else {
@@ -115,7 +124,7 @@ async fn start_with(
     assert_eq!(status, StatusCode::OK);
     let session = session.unwrap();
     let (content_type, upload) =
-        multipart(&[("name", "dataco")], &[("dataco.csv", CSV.as_bytes())]);
+        multipart(&[("name", "dataco")], &[("dataco.csv", csv.as_bytes())]);
     let (status, uploaded) = send_raw(
         &app,
         "/api/workspaces/cua-hang/datasets",
@@ -137,7 +146,7 @@ async fn start_with(
 }
 
 impl Asking {
-    async fn ask(&self, question: &str, choices: Value) -> (StatusCode, Value) {
+    pub(super) async fn ask(&self, question: &str, choices: Value) -> (StatusCode, Value) {
         let body = json!({"question": question, "choices": choices});
         let (status, _, response) = call(
             &self.app,
@@ -156,7 +165,7 @@ impl Asking {
     }
 }
 
-fn step_names(response: &Value) -> Vec<&str> {
+pub(super) fn step_names(response: &Value) -> Vec<&str> {
     response["steps"]
         .as_array()
         .unwrap()

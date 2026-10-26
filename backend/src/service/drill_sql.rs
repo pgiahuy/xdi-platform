@@ -5,6 +5,10 @@ bấm, bỏ GROUP BY, ORDER BY, LIMIT, lấy mọi cột. Ra hai câu: một tra
 tổng. Cột khóa tìm theo tên cột DuckDB trả cho câu gốc (build_names_sql), vì đó là tên giao diện gửi lại.
 service/drill.rs đưa các câu qua guard với quyền của người đang bấm rồi chạy. Test ở drill_tests.rs.
 
+Dòng phân rã của câu "tại sao" dùng cùng cách trên câu của chiều được bấm (DimensionBreakdown.sql, nhóm theo cột chiều),
+cộng điều kiện của lát cắt được bấm (ExplanationSlice.filter): câu chiều đọc cả hai lát cắt, mỗi độ đo lọc một lát
+bằng CASE WHEN, nên thiếu điều kiện lát cắt thì trang ra dòng của cả hai kỳ.
+
 Đọc câu bằng QueryShape (engine/sql_shape.rs) như thẻ "Đã hiểu là", nên hai chỗ hiểu cột khóa và vế lọc giống nhau.
 Câu dạng chưa truy được thì báo rõ lý do (400) thay vì trả dòng có thể sai: phép tập hợp, nhiều bảng hay bảng tạm,
 HAVING, hàm cửa sổ, ROLLUP, `*`, khóa nhóm không có trong SELECT.
@@ -73,12 +77,14 @@ impl DrillPlan {
         query.to_string()
     }
 
-    /// names: tên cột DuckDB trả cho câu gốc (chạy build_names_sql), theo thứ tự. Err là BadRequest khi khóa gửi lên
-    /// không khớp các cột nhóm của câu.
+    /// names: tên cột DuckDB trả cho câu gốc (chạy build_names_sql), theo thứ tự. slice_filter: điều kiện lát cắt
+    /// của dòng phân rã, do code dựng và lưu cùng câu hỏi (không bao giờ từ request). Err là BadRequest khi khóa gửi
+    /// lên không khớp các cột nhóm của câu.
     pub fn build_sql(
         &self,
         names: &[String],
         keys: &[DrillKey],
+        slice_filter: Option<&str>,
         offset: u64,
         limit: u32,
     ) -> Result<DrillSql, AppError> {
@@ -89,7 +95,11 @@ impl DrillPlan {
                 self.shape.outputs.len()
             )));
         }
-        let conditions = build_key_conditions(&self.shape, names, keys)?;
+        let mut conditions = build_key_conditions(&self.shape, names, keys)?;
+        if let Some(filter) = slice_filter {
+            // Bọc ngoặc như điều kiện khóa: lát cắt là `a >= x AND a < y`, hay `"cột" = 'giá trị'`.
+            conditions.push(Expr::Nested(Box::new(parse_expr(filter)?)));
+        }
         let SetExpr::Select(select) = self.query.body.as_ref() else {
             return Err(unsupported("câu có dạng lồng ngoặc chưa đọc được"));
         };
@@ -309,6 +319,13 @@ fn parse_query(sql: &str) -> Result<Query, AppError> {
             "drill: sql is not a single query".to_string(),
         )),
     }
+}
+
+fn parse_expr(sql: &str) -> Result<Expr, AppError> {
+    Parser::new(&DuckDbDialect {})
+        .try_with_sql(sql)
+        .and_then(|mut parser| parser.parse_expr())
+        .map_err(|e| AppError::Internal(format!("drill: cannot parse slice filter: {e}")))
 }
 
 fn unsupported(reason: &str) -> AppError {
