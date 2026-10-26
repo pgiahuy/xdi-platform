@@ -1,10 +1,10 @@
 # xdi-platform
 
 Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên, đang phát triển, chưa có bản phát hành. Nạp một file CSV, Parquet
-hoặc Excel, hỏi bằng tiếng Việt, nhận bảng, biểu đồ và câu SQL đã chạy. Con số do engine phân tích (DuckDB) tính trên
-dữ liệu; mô hình ngôn ngữ chỉ viết SQL từ câu hỏi và mô tả cột từ hồ sơ dữ liệu, không nhận các dòng dữ liệu
-([docs/PRIVACY.md](docs/PRIVACY.md)). Mục tiêu của bản đầu còn hai phần đang làm: truy các dòng dữ liệu đứng sau
-mỗi con số trên giao diện, và với câu hỏi "tại sao", tính nhóm nào làm con số tăng hay giảm.
+hoặc Excel, hỏi bằng tiếng Việt, nhận bảng, biểu đồ và câu SQL đã chạy. Với câu hỏi "tại sao", hệ thống tính nhóm nào
+làm con số tăng hay giảm và cho xem các dòng dữ liệu đứng sau từng nhóm. Con số do engine phân tích (DuckDB) tính trên
+dữ liệu; mô hình ngôn ngữ chỉ viết SQL hay điền form từ câu hỏi, viết mô tả cột và lời giải thích, không nhận các dòng
+dữ liệu ([docs/PRIVACY.md](docs/PRIVACY.md)).
 
 ## Trạng thái
 
@@ -18,14 +18,17 @@ mỗi con số trên giao diện, và với câu hỏi "tại sao", tính nhóm 
   rồi chạy trên DuckDB, mô hình sửa một lần khi câu lỗi; câu có chữ khớp nhiều cột thì hỏi lại để chọn. Kết quả có bảng
   phân trang, tải CSV, biểu đồ cột hoặc đường, thẻ "Đã hiểu là" (đo gì, lọc gì, nhóm theo gì, khoảng thời gian) và pane
   bằng chứng với câu SQL trước và sau guard cùng các bước đã chạy. Mọi câu hỏi được ghi vào lịch sử trong database.
+- Câu "tại sao": mô hình điền form (đo gì, hai kỳ hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần đóng
+  góp của từng nhóm theo từng chiều (tổng đóng góp bằng đúng chênh lệch) và tách lượng, giá; mô hình viết lời giải
+  thích, code kiểm mọi số trong lời có trong bảng. Bấm một dòng phân rã để xem dòng nguồn.
 - Mô hình ngôn ngữ: `mock` (không cần khóa, trả lời bộ câu hỏi mẫu trên dataset DataCo), Gemini, Ollama.
 
 Chưa có trên `main`:
 
-- Câu "tại sao": phần tính phân rã chênh lệch và lời giải thích đã có trong backend nhưng chưa nối vào endpoint hỏi, nên
-  câu "tại sao" hiện được trả lời như câu thường.
-- Xem dòng nguồn trên giao diện: API truy dòng nguồn của một ô kết quả đã có, giao diện chưa gọi.
-- Lọc dòng theo vai dữ liệu khi hỏi, cảnh báo kiểm hợp lý kết quả, chế độ demo, dataset mẫu đóng gói sẵn, màn xem lịch
+- Bấm một ô của bảng kết quả để xem dòng nguồn: API đã có, giao diện chưa gọi.
+- Gán vai dữ liệu cho thành viên: guard đã lọc dòng theo vai dữ liệu khi hỏi và khi xem dòng nguồn, nhưng chưa có API
+  hay màn nào đặt `data_role` và chính sách lọc.
+- Cảnh báo kiểm hợp lý kết quả, chế độ demo, dataset mẫu đóng gói sẵn, màn xem lịch
   sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.
 
 Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1), lịch sử thay đổi ở

@@ -608,18 +608,26 @@ Bốn tab:
 - **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
   (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép
   nguyên văn. Guard là gì: [GUARD.md](GUARD.md).
-- **Phân rã**: bảng nhóm nào làm con số tăng hay giảm, chỉ có với câu hỏi "tại sao". Chưa có trên trang hỏi (xem dưới),
-  nên tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
-- **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm số trong bảng phân rã; vì vậy hiện cũng chưa
-  có.
+- **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: giá trị hai lát cắt và
+  **Chênh lệch**, mỗi chiều một bảng phần đóng góp của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách
+  được. Câu thường thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
+- **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm số của một kỳ hay một nhóm trong bảng phân
+  rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
 - **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL
-  (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Lưu vào lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình
-  chỉ viết SQL, còn con số do DuckDB tính.
+  (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Tính phân rã và Mô hình viết lời giải thích (câu "tại sao"), Lưu vào
+  lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ viết SQL, điền form và viết lời, còn con số do
+  DuckDB và backend tính.
+
+Câu hỏi "tại sao" (backend nhận ra bằng các cụm "tại sao", "vì sao", "lý do", "nguyên nhân", "do đâu",
+gõ không dấu cũng được): mô hình không viết SQL mà điền một form (đo
+gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm form rồi tự dựng mọi câu SQL. Thẻ kết quả có khung
+**Giải thích** ngay dưới **Đã hiểu là**, rồi bảng tổng của hai kỳ hay hai nhóm; mọi số trong lời giải thích được kiểm là
+có trong bảng phân rã, mô hình viết sai thì backend dùng câu khuôn của mình và ghi rõ. Không phân rã được (ví dụ kỳ so
+sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
+năm 2017 giảm".
 
 Chưa có trên giao diện hiện tại (tiến độ ở mục Trạng thái của [ARCHITECTURE.md](ARCHITECTURE.md)):
 
-- Câu hỏi "tại sao": phần tính phân rã đã có trong backend nhưng endpoint hỏi (`service/ask.rs`) chưa gọi tới. Gõ câu "tại sao" thì được xử lý
-  như câu thường; với `mock` thì nhận lời báo chỉ trả lời câu mẫu.
 - Bấm một ô của bảng kết quả để xem dòng nguồn: backend có route `drill` ([API.md](API.md)), giao diện chưa nối.
 
 ### Bước 7. Mời thành viên

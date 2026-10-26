@@ -40,7 +40,7 @@ và `src/api/schema.ts` (qua `npm run api:types`). Hook trong `src/api` lấy ki
 
 Trang hỏi dữ liệu khi chạy `npm run dev` có công tắc "Dữ liệu mẫu": trả lời bằng các response mẫu trong
 `src/api/examples/ask.json` và dòng nguồn mẫu (`src/api/drillSamples.ts`) thay vì gọi backend, để làm giao diện khi
-không có mô hình ngôn ngữ, hay để xem phân rã của câu "tại sao" mà backend chưa trả. Bản build không có công tắc này và
+không có mô hình ngôn ngữ hay dataset DataCo. Bản build không có công tắc này và
 không chứa file mẫu.
 
 Quy tắc chung của dự án ở [AGENTS.md](../AGENTS.md).

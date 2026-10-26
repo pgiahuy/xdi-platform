@@ -9,10 +9,11 @@ Code: `backend/src/engine/guard/mod.rs`, hàm `build_guarded_sql`. Test: `backen
 
 Trạng thái: guard đã có và có test. Endpoint hỏi dữ liệu ([#33](https://github.com/pgiahuy/xdi-platform/issues/33),
 `service/ask.rs`) gọi guard qua `service/ask_run.rs`, với một bảng là dataset đang hỏi và đủ mọi cột của phiên bản đang
-dùng. Truy dòng nguồn (`service/drill.rs`) đọc chính sách lọc dòng theo `data_role` của người đang bấm
-(`engine/store/policies.rs`; admin không bị lọc) và truyền vào guard; endpoint hỏi chưa truyền
-([#45](https://github.com/pgiahuy/xdi-platform/issues/45)), nên ở luồng hỏi `row_filters` còn rỗng. Chưa có API đặt
-`data_role` cho thành viên hay ghi `rls_policies`. Tài liệu này mô tả đúng hàm hiện có.
+dùng. Endpoint hỏi, cả câu thường và câu "tại sao" (`load_row_filters` trong `service/ask.rs`), và truy dòng nguồn
+(`service/drill.rs`) đọc chính sách lọc dòng theo `data_role` của người hỏi hay người bấm
+(`engine/store/policies.rs`; admin không bị lọc) và truyền vào guard
+([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Chưa có API đặt `data_role` cho thành viên hay ghi
+`rls_policies`, nên ngoài test `row_filters` hiện luôn rỗng. Tài liệu này mô tả đúng hàm hiện có.
 
 ## Đầu vào và đầu ra
 
@@ -165,7 +166,7 @@ Tên ba phần trở lên (`main.sales.region`) bị từ chối.
 ## Bước 3: lọc dòng theo vai dữ liệu
 
 Mỗi `AllowedTable` mang `row_filters`: các `RowFilter { column, allowed_values }` service lấy từ `rls_policies` theo
-`data_role` của người gọi (hiện chỉ truy dòng nguồn làm việc này; luồng hỏi chưa,
+`data_role` của người gọi (luồng hỏi và truy dòng nguồn,
 [#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Rỗng thì bảng đó không lọc.
 Guard không tự đọc chính sách và không quyết ai được thấy hết.
 
@@ -279,6 +280,6 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
   (`engine/excel_worker.rs`). Refs [#119](https://github.com/pgiahuy/xdi-platform/issues/119).
 - `row_filters` rỗng là không lọc: guard không biết người hỏi có đáng bị lọc hay không. Service
   ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)) phải luôn truyền đủ chính sách của người hỏi; quên truyền
-  thì người đó thấy mọi dòng. Hiện luồng hỏi chưa truyền, truy dòng nguồn thì đã truyền.
+  thì người đó thấy mọi dòng. Luồng hỏi và truy dòng nguồn lấy chính sách qua cùng một hàm (`load_row_filters`).
 - Trong luồng hỏi, câu bị guard từ chối (sau vòng sửa, nếu lý do sửa được) trả 200 với `status: rejected`
   ([Kiến trúc](ARCHITECTURE.md), mục 8), không trả lỗi 400.

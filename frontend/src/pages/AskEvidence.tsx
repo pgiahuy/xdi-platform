@@ -3,8 +3,8 @@
 backend/src/service/ask_contract.rs), giữ tab đang mở và dòng phân rã vừa bấm, gọi useDrill để lấy dòng nguồn. Phần
 hiện ở components/ask/EvidencePane.tsx. AskPage gắn key theo câu trả lời, nên câu trả lời mới thì về tab mặc định và
 bỏ lần truy cũ.
-Backend chưa truy được dòng phân rã (trả 400, chờ #38): tab Dòng nguồn hiện lời báo của backend; ở chế độ dữ liệu
-mẫu thì hiện vài dòng mẫu. */
+Tab Dòng nguồn gọi route drill với khóa của dòng phân rã vừa bấm (backend/src/service/drill.rs); lỗi thì hiện lời báo
+của backend; ở chế độ dữ liệu mẫu thì hiện vài dòng mẫu. */
 
 import { useState } from 'react'
 import type { AskResponse } from '@/api/ask'
