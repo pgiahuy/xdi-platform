@@ -36,6 +36,43 @@ impl ProfileRole {
     }
 }
 
+/// Đơn vị của một cột số đo, khớp CHECK của columns.unit (0007_column_unit.sql). Lớp ngữ nghĩa đề xuất; luật biểu đồ
+/// so đơn vị để biết vẽ hai số đo chung một thang đo hay tách thành hai biểu đồ (ARCHITECTURE mục 6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColumnUnit {
+    Money,
+    /// Số lượng hàng, sản phẩm.
+    Quantity,
+    Percent,
+    /// Thời lượng: số ngày, số giờ.
+    Duration,
+    /// Đơn vị khác danh sách (điểm, cân nặng...): không so được với cột nào, kể cả cột cũng là other.
+    Other,
+}
+
+impl ColumnUnit {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ColumnUnit::Money => "money",
+            ColumnUnit::Quantity => "quantity",
+            ColumnUnit::Percent => "percent",
+            ColumnUnit::Duration => "duration",
+            ColumnUnit::Other => "other",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<ColumnUnit> {
+        match text {
+            "money" => Some(ColumnUnit::Money),
+            "quantity" => Some(ColumnUnit::Quantity),
+            "percent" => Some(ColumnUnit::Percent),
+            "duration" => Some(ColumnUnit::Duration),
+            "other" => Some(ColumnUnit::Other),
+            _ => None,
+        }
+    }
+}
+
 /// Một giá trị của cột ít giá trị, kèm số dòng mang giá trị đó.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewColumnValue {
@@ -82,6 +119,8 @@ pub struct ProfileColumn {
     pub min_value: Option<String>,
     pub max_value: Option<String>,
     pub time_format: Option<String>,
+    /// Đơn vị của cột số đo (ColumnUnit::as_str); None khi lớp ngữ nghĩa chưa chạy hay không biết.
+    pub unit: Option<String>,
 }
 
 /// Một dòng của bảng column_values.
@@ -115,6 +154,8 @@ pub struct SemanticColumnUpdate {
     pub aliases: Vec<String>,
     /// Vai trò mới khi mô hình đề xuất và luật cho phép (xem service/semantic.rs); None là giữ vai trò cũ.
     pub role: Option<ProfileRole>,
+    /// Đơn vị mô hình đề xuất cho cột số đo; None khi không có hay không hợp lệ.
+    pub unit: Option<ColumnUnit>,
 }
 
 /// Bí danh của một giá trị đã qua kiểm tra (giá trị có thật trong column_values của cột).
@@ -174,7 +215,7 @@ impl Store {
     ) -> Result<Vec<ProfileColumn>, AppError> {
         sqlx::query_as(
             "SELECT id, position, name, data_type, role, description, aliases, is_sensitive,
-                 null_count, distinct_count, min_value, max_value, time_format
+                 null_count, distinct_count, min_value, max_value, time_format, unit
              FROM columns WHERE workspace_id = $1 AND version_id = $2 ORDER BY position",
         )
         .bind(ws.as_uuid())
@@ -312,8 +353,9 @@ impl Store {
 
         for column in columns {
             let role = column.role.map(|r| r.as_str());
+            let unit = column.unit.map(|u| u.as_str());
             sqlx::query(
-                "UPDATE columns SET description = $3, aliases = $4, role = COALESCE($5, role)
+                "UPDATE columns SET description = $3, aliases = $4, role = COALESCE($5, role), unit = $6
                  WHERE workspace_id = $1 AND id = $2",
             )
             .bind(ws.as_uuid())
@@ -321,6 +363,7 @@ impl Store {
             .bind(&column.description)
             .bind(&column.aliases)
             .bind(role)
+            .bind(unit)
             .execute(&mut *tx)
             .await
             .map_err(|e| db_error("update column semantics", e))?;
@@ -637,12 +680,14 @@ mod tests {
                 description: Some("Thị trường".to_string()),
                 aliases: vec!["thị trường".to_string()],
                 role: None,
+                unit: Some(ColumnUnit::Money),
             },
             SemanticColumnUpdate {
                 column_id: read[1].id,
                 description: None,
                 aliases: Vec::new(),
                 role: Some(ProfileRole::Key),
+                unit: None,
             },
         ];
         let values = vec![SemanticValueUpdate {
@@ -677,6 +722,7 @@ mod tests {
         let read = store.list_columns(&a, v.id).await.unwrap();
         assert_eq!(read[0].description.as_deref(), Some("Thị trường"));
         assert_eq!(read[0].aliases, ["thị trường"]);
+        assert_eq!(read[0].unit.as_deref(), Some("money"));
         assert_eq!(read[0].role, "dimension");
         assert!(!read[0].is_sensitive);
         assert_eq!(read[1].role, "key");

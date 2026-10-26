@@ -11,8 +11,8 @@ use crate::auth::WorkspaceId;
 use crate::engine::llm::{LlmProvider, LlmRequest};
 use crate::engine::store::test_support::{drop_workspace, store, temp_workspace};
 use crate::engine::store::{
-    ColumnValue, Dataset, DatasetVersion, NewColumn, NewColumnValue, NewVersion, ProfileColumn,
-    ProfileRole, SourceKind, Store,
+    ColumnUnit, ColumnValue, Dataset, DatasetVersion, NewColumn, NewColumnValue, NewVersion,
+    ProfileColumn, ProfileRole, SourceKind, Store,
 };
 use crate::error::AppError;
 use crate::service::semantic::*;
@@ -34,6 +34,7 @@ fn column(id: Uuid, name: &str, data_type: &str, role: ProfileRole) -> ProfileCo
         min_value: None,
         max_value: None,
         time_format: None,
+        unit: None,
     }
 }
 
@@ -389,6 +390,32 @@ fn answers_are_checked_item_by_item() {
         profile.suggested_questions,
         ["Câu một", "Câu 5", "Câu 6", "Câu 7", "Câu 8"]
     );
+}
+
+/// Đơn vị chỉ nhận cho cột measure và chỉ chữ trong danh sách ColumnUnit; sai thì bỏ riêng đơn vị, phần còn lại của mục
+/// vẫn giữ. Mục chỉ có đơn vị hợp lệ vẫn là mục hợp lệ.
+#[test]
+fn units_are_kept_only_for_measures_from_the_list() {
+    let sales = column(Uuid::new_v4(), "Sales", "DOUBLE", ProfileRole::Measure);
+    let days = column(Uuid::new_v4(), "Days", "BIGINT", ProfileRole::Measure);
+    let market = column(Uuid::new_v4(), "Market", "VARCHAR", ProfileRole::Dimension);
+    let columns = [sales.clone(), days.clone(), market.clone()];
+    let answer = r#"{"columns": [
+        {"name": "Sales", "aliases": [], "unit": "money"},
+        {"name": "Days", "aliases": ["số ngày"], "unit": "ngày"},
+        {"name": "Market", "aliases": ["thị trường"], "unit": "money"}
+    ], "values": [], "suggested_questions": []}"#;
+    let profile = build_profile_answer(answer, &columns, &[]).unwrap();
+    let unit_of = |id: Uuid| {
+        profile
+            .columns
+            .iter()
+            .find(|c| c.column_id == id)
+            .map(|c| c.unit)
+    };
+    assert_eq!(unit_of(sales.id), Some(Some(ColumnUnit::Money)));
+    assert_eq!(unit_of(days.id), Some(None));
+    assert_eq!(unit_of(market.id), Some(None));
 }
 
 #[test]

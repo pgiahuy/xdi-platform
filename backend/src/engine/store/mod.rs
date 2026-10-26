@@ -29,8 +29,8 @@ mod workspaces;
 
 pub use accounts::{Membership, NewAdmin, User};
 pub use columns::{
-    ColumnValue, NewColumn, NewColumnValue, ProfileColumn, ProfileRole, SemanticColumnUpdate,
-    SemanticValueUpdate, ValueRow,
+    ColumnUnit, ColumnValue, NewColumn, NewColumnValue, ProfileColumn, ProfileRole,
+    SemanticColumnUpdate, SemanticValueUpdate, ValueRow,
 };
 #[allow(unused_imports)]
 pub use datasets::{

@@ -44,6 +44,7 @@ fn profile(name: &str, role: &str, aliases: &[&str]) -> ColumnProfile {
         values: Vec::new(),
         values_complete: false,
         matched: false,
+        unit: None,
     }
 }
 

@@ -254,6 +254,7 @@ mod tests {
                 .collect(),
             values_complete: true,
             matched: true,
+            unit: None,
         }
     }
 

@@ -38,6 +38,7 @@ fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
         values: Vec::new(),
         values_complete: false,
         matched: false,
+        unit: None,
     }
 }
 

@@ -75,6 +75,8 @@ pub struct ColumnProfile {
     /// Có cụm của câu hỏi khớp tên, bí danh, mô tả, hoặc có gợi ý giá trị của cột. Prompt quá dài thì bỏ cột không khớp
     /// trước (#29).
     pub matched: bool,
+    /// Đơn vị của cột số đo (ColumnUnit::as_str), cho luật biểu đồ (ARCHITECTURE mục 6); None khi chưa biết.
+    pub unit: Option<String>,
 }
 
 /// Một cụm của câu hỏi bằng chính xác một giá trị hay bí danh ("southern europe" là Order Region = Southern Europe).
@@ -187,6 +189,7 @@ fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> {
             values: Vec::new(),
             values_complete: false,
             matched: false,
+            unit: c.unit,
         })
         .collect()
 }
