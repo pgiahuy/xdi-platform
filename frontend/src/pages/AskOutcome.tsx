@@ -148,15 +148,26 @@ function AnsweredBody({ response, pending, onChangeAssumption }: AnsweredProps) 
 }
 
 // Gợi ý trỏ tới cột không có trong kết quả thì bỏ biểu đồ, vẫn hiện bảng: vẽ sai cột còn tệ hơn không vẽ. Không có
-// dòng nào thì cũng bỏ, khỏi vẽ một trục trống. ResultChart hiện chỉ vẽ cột đứng và đường từ mỗi dòng một điểm: bar và
-// column vẽ bằng cột đứng; loại cần xoay dòng thành chuỗi (cột chồng, mỗi nhóm một đường) chưa vẽ được nên chỉ hiện
-// bảng, vì vẽ theo từng dòng sẽ ra nhiều điểm trùng một mốc.
+// dòng nào thì cũng bỏ, khỏi vẽ một trục trống.
 function buildChartView(chart: ChartSuggestion, result: ResultView): ChartView | null {
   if (result.rows.length === 0) return null
-  if (chart.kind === 'stacked_column' || chart.series !== null) return null
   const names = new Set(result.columns.map((column) => column.name))
-  if (!names.has(chart.x) || chart.y.length === 0 || !chart.y.every((name) => names.has(name))) return null
-  return { kind: chart.kind === 'line' ? 'line' : 'bar', x: chart.x, y: chart.y }
+  const columnsExist =
+    names.has(chart.x) &&
+    chart.y.length > 0 &&
+    chart.y.every((name) => names.has(name)) &&
+    (chart.series === null || names.has(chart.series))
+  if (!columnsExist) return null
+  return {
+    kind: chart.kind,
+    x: chart.x,
+    y: chart.y,
+    layout: chart.layout,
+    series: chart.series,
+    ratio: chart.ratio,
+    top: chart.top,
+    otherBucket: chart.other_bucket,
+  }
 }
 
 function buildUnderstandingView(understanding: Understanding): UnderstandingView {
