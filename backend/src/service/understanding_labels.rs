@@ -9,8 +9,8 @@ liệu của mình. */
 use std::ops::ControlFlow;
 
 use sqlparser::ast::{
-    BinaryOperator, DataType, DuplicateTreatment, Expr, Function, FunctionArg, FunctionArgExpr,
-    FunctionArguments, Value, Visit, Visitor,
+    BinaryOperator, DataType, DateTimeField, DuplicateTreatment, Expr, Function, FunctionArg,
+    FunctionArgExpr, FunctionArguments, Value, Visit, Visitor,
 };
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
@@ -19,7 +19,7 @@ use super::ask_context::ColumnProfile;
 use crate::engine::store::MetricDefinition;
 
 /// Hàm lấy một phần của thời gian, và chữ cho phần đó. Đọc ở nhãn khóa nhóm ("Quý của ngày đặt hàng") và để nhận biểu
-/// thức thời gian.
+/// thức thời gian. Cũng là bảng tên phần của EXTRACT(YEAR FROM x), date_part('year', x) và date_trunc('month', x).
 const TIME_PARTS: &[(&str, &str)] = &[
     ("year", "Năm"),
     ("quarter", "Quý"),
@@ -33,6 +33,9 @@ const TIME_PARTS: &[(&str, &str)] = &[
 
 /// Hàm đọc chữ thành thời gian: nhãn đọc xuyên qua chúng tới cột bên trong.
 const TIME_PARSERS: &[&str] = &["strptime", "to_timestamp"];
+
+/// Hàm nhận tên phần thời gian ở tham số đầu: date_trunc('month', x) và date_part('year', x).
+const TIME_PART_FUNCTIONS: &[&str] = &["date_trunc", "datetrunc", "date_part", "datepart"];
 
 pub fn build_column_label(name: &str, profile: &[ColumnProfile], mid_sentence: bool) -> String {
     let column = profile.iter().find(|c| c.name.eq_ignore_ascii_case(name));
@@ -64,6 +67,12 @@ pub fn build_subject_label(expr: &Expr, profile: &[ColumnProfile], mid_sentence:
             ..
         } => build_part_label("Ngày", inner, profile, mid_sentence),
         Expr::Cast { expr: inner, .. } => build_subject_label(inner, profile, mid_sentence),
+        Expr::Extract {
+            field, expr: inner, ..
+        } => match find_time_part(&build_field_name(field)) {
+            Some(part) => build_part_label(part, inner, profile, mid_sentence),
+            None => expr.to_string(),
+        },
         Expr::Function(function) => build_function_subject(expr, function, profile, mid_sentence),
         _ => expr.to_string(),
     }
@@ -83,15 +92,26 @@ fn build_function_subject(
         }
     }
     let part = match (name.as_str(), args.as_slice()) {
-        ("date_trunc" | "datetrunc", [unit, inner]) => build_literal_text(unit)
-            .and_then(|unit| find_time_part(&unit.to_lowercase()))
-            .map(|part| (part, *inner)),
+        (unit_function, [unit, inner]) if TIME_PART_FUNCTIONS.contains(&unit_function) => {
+            build_literal_text(unit)
+                .and_then(|unit| find_time_part(&unit.to_lowercase()))
+                .map(|part| (part, *inner))
+        }
         (_, [inner]) => find_time_part(&name).map(|part| (part, *inner)),
         _ => None,
     };
     match part {
         Some((part, inner)) => build_part_label(part, inner, profile, mid_sentence),
         None => expr.to_string(),
+    }
+}
+
+/// Tên phần của EXTRACT, chữ thường: YEAR thành year. DuckDB cũng nhận EXTRACT('year' FROM x), sqlparser giữ nó là
+/// Custom kèm nháy nên đọc thẳng chữ bên trong.
+fn build_field_name(field: &DateTimeField) -> String {
+    match field {
+        DateTimeField::Custom(ident) => ident.value.to_lowercase(),
+        other => other.to_string().to_lowercase(),
     }
 }
 
@@ -171,8 +191,9 @@ impl Visitor for TimeFinder<'_> {
                 let name = function.name.to_string().to_lowercase();
                 TIME_PARSERS.contains(&name.as_str())
                     || find_time_part(&name).is_some()
-                    || matches!(name.as_str(), "date_trunc" | "datetrunc")
+                    || TIME_PART_FUNCTIONS.contains(&name.as_str())
             }
+            Expr::Extract { .. } => true,
             Expr::Cast { data_type, .. } => matches!(
                 data_type,
                 DataType::Date | DataType::Timestamp(..) | DataType::Datetime(..)

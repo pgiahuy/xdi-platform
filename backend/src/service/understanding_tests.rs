@@ -291,6 +291,75 @@ fn year_filter_becomes_time_range() {
     assert!(u.filters.is_empty());
 }
 
+/// Nhãn khoảng thời gian của một câu có đúng một vế WHERE là `condition`.
+fn build_time_range(condition: &str) -> Option<UnderstoodItem> {
+    let sql = format!(
+        r#"SELECT "Market", SUM("Order Item Total") AS revenue FROM dataco WHERE {condition} GROUP BY "Market""#
+    );
+    build_card(&sql, vec![], &[]).understanding.time_range
+}
+
+#[test]
+fn extract_and_date_part_read_like_year() {
+    // Câu Gemini viết cho "Doanh số theo thị trường năm 2017".
+    let condition = format!("EXTRACT(YEAR FROM {DATE_SQL}) = 2017");
+    let label = format!("Năm của {ORDER_DATE} là 2017");
+    assert_eq!(
+        pair(&build_time_range(&condition)),
+        Some((label.as_str(), condition.as_str()))
+    );
+
+    let condition = format!("date_part('month', {DATE_SQL}) = 3");
+    let label = format!("Tháng của {ORDER_DATE} là 3");
+    assert_eq!(
+        pair(&build_time_range(&condition)),
+        Some((label.as_str(), condition.as_str()))
+    );
+
+    let condition = r#"EXTRACT(QUARTER FROM "order date (DateOrders)"::TIMESTAMP) = 2"#;
+    let label = format!("Quý của {ORDER_DATE} là 2");
+    assert_eq!(build_time_range(condition).unwrap().label, label);
+}
+
+#[test]
+fn cast_to_date_reads_through_to_the_column() {
+    let condition = r#"CAST("order date (DateOrders)" AS DATE) >= DATE '2017-01-01'"#;
+    let label = format!("Ngày của {ORDER_DATE} từ 2017-01-01");
+    assert_eq!(
+        pair(&build_time_range(condition)),
+        Some((label.as_str(), condition))
+    );
+}
+
+#[test]
+fn unknown_time_part_keeps_the_sql() {
+    // EPOCH không có trong bảng tên phần: nhãn là nguyên đoạn SQL như trước.
+    let subject = format!("EXTRACT(EPOCH FROM {DATE_SQL})");
+    let range = build_time_range(&format!("{subject} > 0")).unwrap();
+    assert_eq!(range.label, format!("{subject} sau 0"));
+}
+
+#[test]
+fn extract_in_group_key_and_filter() {
+    let sql = format!(
+        r#"SELECT EXTRACT(YEAR FROM {DATE_SQL}) AS y, COUNT(DISTINCT EXTRACT(MONTH FROM {DATE_SQL})) AS months FROM dataco WHERE EXTRACT(YEAR FROM {DATE_SQL}) <> 2015 GROUP BY 1"#
+    );
+    let card = build_card(&sql, vec![], &[]);
+    let u = &card.understanding;
+    // Phép khác không thành khoảng thời gian, ở lại filters với cùng nhãn.
+    assert!(u.time_range.is_none());
+    assert_eq!(
+        u.filters[0].label,
+        format!("Năm của {ORDER_DATE} khác 2015")
+    );
+    assert_eq!(u.group_by[0].label, format!("Năm của {ORDER_DATE}"));
+    assert_eq!(
+        u.measures[0].label,
+        format!("Số tháng của {ORDER_DATE} khác nhau")
+    );
+    assert_eq!(card.roles, [Time, Measure]);
+}
+
 #[test]
 fn value_filter_is_labelled_with_the_column() {
     let sql = mock_answers().remove(9).1.sql;
