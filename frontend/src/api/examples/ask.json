@@ -162,6 +162,11 @@
   "simple": {
     "chart": {
       "kind": "bar",
+      "layout": "single",
+      "other_bucket": false,
+      "ratio": [],
+      "series": null,
+      "top": null,
       "x": "market",
       "y": [
         "revenue"
@@ -317,10 +322,16 @@
   },
   "why": {
     "chart": {
-      "kind": "line",
+      "kind": "column",
+      "layout": "panels",
+      "other_bucket": false,
+      "ratio": [],
+      "series": null,
+      "top": null,
       "x": "quarter",
       "y": [
-        "revenue"
+        "revenue",
+        "orders"
       ]
     },
     "choices": [

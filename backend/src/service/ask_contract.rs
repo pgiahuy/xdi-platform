@@ -278,23 +278,58 @@ pub struct ResultTable {
     pub limit_reached: bool,
 }
 
-// Luật ở ARCHITECTURE mục 6: một chiều một độ đo thì cột, có thời gian thì đường.
-/// `bar` for one dimension and one measure, `line` when the x axis is time.
+// Bộ luật chọn biểu đồ theo IBCS ở ARCHITECTURE mục 6, dựng ở service/ask_chart.rs. Thời gian luôn nằm trên trục ngang,
+// nhóm (cấu trúc) nằm trên trục đứng, nên so sánh nhóm là thanh ngang.
+/// Kind of chart:
+/// - `bar`: horizontal bars, one per group of `x`, largest first; compares groups.
+/// - `column`: vertical columns over the periods of `x`; up to 10 periods.
+/// - `line`: a line with a marker on each period of `x`; more than 10 periods, or one line per group of `series`.
+/// - `stacked_column`: vertical columns over the periods of `x`, each split into the groups of `series`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ChartKind {
     Bar,
+    Column,
     Line,
+    StackedColumn,
 }
 
-/// Suggested chart; null in `AskResponse` when the result is better shown as a table only.
+/// How the measures in `y` are drawn:
+/// - `single`: one measure.
+/// - `grouped`: side by side on one scale, because the measures share a unit.
+/// - `panels`: one small chart per measure sharing the axis of `x`, because the units differ or are unknown; two
+///   scales in one chart are not used, since choosing them can make the same numbers look like anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ChartLayout {
+    Single,
+    Grouped,
+    Panels,
+}
+
+/// Suggested chart; null in `AskResponse` when the result is better shown as a table only (one value, too many
+/// groups, more than one grouping column without time). Every name is a name from `result.columns`.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ChartSuggestion {
     pub kind: ChartKind,
-    /// Column on the x axis: a dimension for `bar`, time for `line`. A name from `result.columns`.
+    /// Category axis: a group column for `bar`, a time column for the other kinds.
     pub x: String,
-    /// Columns drawn as series, names from `result.columns`.
+    /// Measures to draw, at most 4.
     pub y: Vec<String>,
+    pub layout: ChartLayout,
+    /// For `stacked_column`, and for `line` with one line per group: the group column whose values become the parts
+    /// or the lines. Null otherwise.
+    #[schema(required)]
+    pub series: Option<String>,
+    /// Measures in `y` that are not totals (averages, ratios, minimum, maximum): drawn as narrow columns, and never
+    /// summed into a "Khác" entry.
+    pub ratio: Vec<String>,
+    /// Most groups to draw, largest first: bars for `bar`, parts for `stacked_column`. Null when every group is drawn.
+    #[schema(required)]
+    pub top: Option<u32>,
+    /// The groups after `top` can be summed into one entry labelled "Khác": every measure is a sum or a plain count,
+    /// and `result` holds every row. False: they are left out, and the chart says how many.
+    pub other_bucket: bool,
 }
 
 // Kiểm hợp lý của #36, cộng hai loại báo của chính luồng hỏi. Thêm loại mới là đổi API: chạy make openapi.

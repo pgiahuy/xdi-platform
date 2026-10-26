@@ -4,6 +4,7 @@ Gọi engine và auth; không bao giờ gọi ngược lên api. */
 
 pub mod accounts;
 pub mod ask;
+mod ask_chart;
 // build_metric_mismatches chờ #36 chọn cách báo chỉ số dùng sai công thức; phần còn lại endpoint hỏi đã gọi. Gỡ allow
 // khi #36 gọi hàm đó, để clippy bắt lại mã thừa.
 #[allow(dead_code)]

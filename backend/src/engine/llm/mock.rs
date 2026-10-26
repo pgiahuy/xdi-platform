@@ -13,7 +13,10 @@ Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/n�
 đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask_run.rs) mà không cần mô hình thật. Ba câu nữa để thử các
 nhánh còn lại của luồng hỏi (service/ask.rs) trên giao diện: "Xóa các đơn hàng bị hủy" viết câu DELETE nên guard từ
 chối (rejected); "Doanh thu theo ngày đặt hàng" đọc sai định dạng ngày cả ở câu sửa (failed); "Doanh thu ở thị trường
-châu Á" lọc Market = 'Asia', giá trị DataCo không có (cảnh báo filter_value_not_found). Câu narrate cho câu
+châu Á" lọc Market = 'Asia', giá trị DataCo không có (cảnh báo filter_value_not_found). "Doanh thu theo tháng giảm so
+với cùng kỳ năm trước" so từng tháng của năm mới nhất trong dữ liệu với năm liền trước (câu con lấy năm lớn nhất, nên
+chạy được với cả DataCo đầy đủ lẫn bản nhỏ): hai tổng tiền theo 12 tháng, để thử luật biểu đồ vẽ hai đường trên một
+thang đo (service/ask_chart.rs). Câu narrate cho câu
 "tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask_examples.rs) nên qua
 được bước kiểm số của #41.
 Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask_reply.rs);
@@ -127,7 +130,7 @@ mod tests {
     fn answers_file_is_valid() {
         let answers = parse_answers(ANSWERS_JSON).unwrap();
         let count = |wanted: LlmTask| answers.keys().filter(|(task, _)| *task == wanted).count();
-        assert_eq!(count(LlmTask::Sql), 14);
+        assert_eq!(count(LlmTask::Sql), 15);
         assert_eq!(count(LlmTask::Repair), 2);
         assert_eq!(count(LlmTask::Narrate), 1);
         assert_eq!(count(LlmTask::Why), 3);
