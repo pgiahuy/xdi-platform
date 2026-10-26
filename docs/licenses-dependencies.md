@@ -3,7 +3,7 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-397 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 543 gói npm
+397 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 549 gói npm
 (từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 27.
 
 ## Không thuộc nhóm cho phép thông dụng
@@ -333,7 +333,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | tiny-keccak | 2.0.2 | CC0-1.0 |
 | tinystr | 0.8.4 | Unicode-3.0 |
 | tinyvec | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
-| tokio | 1.54.0 | MIT |
+| tokio | 1.54.1 | MIT |
 | tokio-macros | 2.7.2 | MIT |
 | tokio-rustls | 0.26.6 | MIT OR Apache-2.0 |
 | tokio-stream | 0.1.19 | MIT |
@@ -474,6 +474,9 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @babel/types | 7.29.8 | MIT | có |
 | @dotenvx/dotenvx | 1.75.1 | BSD-3-Clause | có |
 | @dotenvx/primitives | 0.8.0 | BSD-3-Clause | có |
+| @emnapi/core | 1.11.1 | MIT | có |
+| @emnapi/runtime | 1.11.1 | MIT | có |
+| @emnapi/wasi-threads | 1.2.2 | MIT | có |
 | @floating-ui/core | 1.8.0 | MIT |  |
 | @floating-ui/dom | 1.8.0 | MIT |  |
 | @floating-ui/react-dom | 2.1.9 | MIT |  |
@@ -486,6 +489,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @jridgewell/sourcemap-codec | 1.6.0 | MIT | có |
 | @jridgewell/trace-mapping | 0.3.31 | MIT | có |
 | @modelcontextprotocol/sdk | 1.32.1 | MIT | có |
+| @napi-rs/wasm-runtime | 1.1.4 | MIT | có |
 | @nodelib/fs.scandir | 2.1.5 | MIT | có |
 | @nodelib/fs.stat | 2.0.5 | MIT | có |
 | @nodelib/fs.walk | 1.2.8 | MIT | có |
@@ -613,6 +617,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @tanstack/query-core | 5.104.5 | MIT |  |
 | @tanstack/react-query | 5.104.5 | MIT |  |
 | @ts-morph/common | 0.27.0 | MIT | có |
+| @tybys/wasm-util | 0.10.2 | MIT | có |
 | @types/d3-array | 3.2.2 | MIT |  |
 | @types/d3-color | 3.1.3 | MIT |  |
 | @types/d3-ease | 3.0.2 | MIT |  |
@@ -644,7 +649,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | balanced-match | 1.0.2 | MIT | có |
 | balanced-match | 4.0.4 | MIT | có |
 | baseline-browser-mapping | 2.11.30 | Apache-2.0 | có |
-| body-parser | 2.3.0 | MIT | có |
+| body-parser | 2.4.0 | MIT | có |
 | brace-expansion | 2.1.7 | MIT | có |
 | brace-expansion | 5.0.12 | MIT | có |
 | braces | 3.0.3 | MIT | có |
@@ -956,6 +961,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | toidentifier | 1.0.1 | MIT | có |
 | ts-morph | 26.0.0 | MIT | có |
 | tsconfig-paths | 4.2.0 | MIT | có |
+| tslib | 2.8.1 | 0BSD | có |
 | tslib | 2.8.1 | 0BSD |  |
 | tw-animate-css | 1.4.0 | MIT |  |
 | type-fest | 4.41.0 | (MIT OR CC0-1.0) | có |
