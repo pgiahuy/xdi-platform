@@ -10,7 +10,8 @@ ghép chuỗi người dùng hay mô hình viết vào SQL: dấu nháy trong gi
 
 Độ đo của phân rã tính lại theo từng lát cắt bằng CASE WHEN, như mẫu why (ask_examples.rs): SUM(CASE WHEN <lát> THEN
 <giá trị> END). Số thực đổi sang DECIMAL(18, 2) ở từng dòng trước khi cộng, để tổng là phép cộng đúng và các nhóm cộng
-lại bằng đúng tổng lát cắt (quy tắc ở Explanation, ask_contract.rs). COALESCE(..., 0) cho nhóm chỉ có ở một lát cắt. */
+lại bằng đúng tổng lát cắt (quy tắc ở Explanation, ask_contract.rs). COALESCE(..., 0) cho nhóm chỉ có ở một lát cắt.
+Bảng tổng theo kỳ cộng cùng cách (build_total_aggregate), để số của mỗi kỳ trên bảng bằng tổng các nhóm phân rã. */
 
 use sqlparser::ast::{BinaryOperator, DataType, Expr, Ident, TimezoneInfo, TypedString, Value};
 use sqlparser::dialect::DuckDbDialect;
@@ -201,17 +202,32 @@ fn build_grouped(condition: Expr) -> Expr {
 fn build_sliced_measure(plan: &WhyPlan, condition: &Expr) -> String {
     match &plan.measure.additive {
         Additive::Sum { value, decimal } => {
-            let value = if *decimal {
-                format!("CAST({value} AS DECIMAL(18, 2))")
-            } else {
-                value.to_string()
-            };
+            let value = build_summand(value, *decimal);
             format!("COALESCE(SUM(CASE WHEN {condition} THEN {value} END), 0)")
         }
         Additive::Count { value: None } => format!("COUNT(CASE WHEN {condition} THEN 1 END)"),
         Additive::Count { value: Some(value) } => {
             format!("COUNT(CASE WHEN {condition} THEN {value} END)")
         }
+    }
+}
+
+/// Độ đo trên mọi dòng của câu, cho bảng tổng theo kỳ hay theo nhóm (PlanMeasure.aggregate). Không COALESCE như
+/// build_sliced_measure: mỗi dòng của bảng là một nhóm có dòng.
+pub fn build_total_aggregate(additive: &Additive) -> String {
+    match additive {
+        Additive::Sum { value, decimal } => format!("SUM({})", build_summand(value, *decimal)),
+        Additive::Count { value: None } => "COUNT(*)".to_string(),
+        Additive::Count { value: Some(value) } => format!("COUNT({value})"),
+    }
+}
+
+// Một chỗ duy nhất chọn kiểu DECIMAL cho cả bảng tổng và phân rã: hai nơi chọn khác nhau thì hai con số trên trang lệch.
+fn build_summand(value: &Expr, decimal: bool) -> String {
+    if decimal {
+        format!("CAST({value} AS DECIMAL(18, 2))")
+    } else {
+        value.to_string()
     }
 }
 

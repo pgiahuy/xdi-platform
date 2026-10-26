@@ -291,7 +291,7 @@ fn quarter_compares_with_the_quarter_before() {
         sql.total_sql,
         format!(
             "SELECT date_trunc('quarter', strptime(\"{DATE}\", '{DATE_FORMAT}')) AS \"quarter\", \
-             SUM(\"Order Item Total\") AS \"Doanh thu\" FROM \"dataco\" WHERE ({} OR {}) GROUP BY 1 ORDER BY 1",
+             SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2))) AS \"Doanh thu\" FROM \"dataco\" WHERE ({} OR {}) GROUP BY 1 ORDER BY 1",
             example.base.filter, example.compare.filter
         )
     );
@@ -392,7 +392,7 @@ fn two_groups_of_a_dimension() {
     assert_eq!(sql.compare_filter, "\"Market\" = 'Europe'");
     assert_eq!(
         sql.total_sql,
-        "SELECT \"Market\", SUM(\"Order Item Total\") AS \"Doanh thu\" FROM \"dataco\" WHERE (\"Market\" = 'LATAM' \
+        "SELECT \"Market\", SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2))) AS \"Doanh thu\" FROM \"dataco\" WHERE (\"Market\" = 'LATAM' \
          OR \"Market\" = 'Europe') GROUP BY 1 ORDER BY 1"
     );
     assert_eq!(plan.dimensions, ["Customer Segment"]);
@@ -560,7 +560,7 @@ fn metrics_insert_their_expression_and_filter() {
     let sql = build_why_sql(&plan);
     assert!(sql
         .total_sql
-        .contains("SUM(\"Order Item Total\") AS \"Doanh thu đã giao\""));
+        .contains("SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2))) AS \"Doanh thu đã giao\""));
     // Điều kiện có OR được bọc ngoặc trước khi ghép bằng AND.
     assert!(
         sql.total_sql.contains(
