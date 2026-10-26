@@ -59,9 +59,23 @@ export type ResultView = {
   limitReached: boolean
 }
 
-/** Gợi ý biểu đồ của backend: x và y là tên cột trong ResultView.columns. */
+/** Gợi ý biểu đồ của backend theo bộ luật ở ARCHITECTURE mục 6b; mọi tên là tên cột trong ResultView.columns. */
 export type ChartView = {
-  kind: 'bar' | 'line'
+  /** bar: thanh ngang so sánh nhóm; column: cột đứng theo thời gian; line: đường có điểm ở từng kỳ; stacked_column: cột
+   * chồng chia theo các nhóm của series. */
+  kind: 'bar' | 'column' | 'line' | 'stacked_column'
+  /** Trục nhóm (bar) hay trục thời gian (các loại khác). */
   x: string
+  /** Các số đo cần vẽ. */
   y: string[]
+  /** single: một số đo; grouped: cạnh nhau trên một thang đo vì cùng đơn vị; panels: mỗi số đo một biểu đồ nhỏ. */
+  layout: 'single' | 'grouped' | 'panels'
+  /** Cột nhóm thành các phần của cột chồng, hay các đường khi mỗi nhóm một đường; null với loại khác. */
+  series: string | null
+  /** Số đo không cộng được (trung bình, tỷ lệ): vẽ cột hẹp, không gộp "Khác". */
+  ratio: string[]
+  /** Số nhóm tối đa được vẽ, lớn trước; null là vẽ hết. */
+  top: number | null
+  /** Các nhóm sau top được cộng thành một mục "Khác"; false thì bỏ và ghi số nhóm đã bỏ. */
+  otherBucket: boolean
 }
