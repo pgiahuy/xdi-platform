@@ -182,7 +182,7 @@ fn bypasses() -> Vec<(&'static str, String)> {
     ]
 }
 
-/// Câu phân tích thường gặp qua guard; sáu câu bị từ chối có chủ ý, lý do ghi cạnh. Câu Oversized vào vòng sửa, mô
+/// Câu phân tích thường gặp qua guard; bảy câu bị từ chối có chủ ý, lý do ghi cạnh. Câu Oversized vào vòng sửa, mô
 /// hình viết lại; câu Rejected dừng.
 #[test]
 fn realistic_queries() {

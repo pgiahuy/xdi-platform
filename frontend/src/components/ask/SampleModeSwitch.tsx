@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/SampleModeSwitch.tsx - chỉ hiện ở chế độ dev: bật để trang hỏi trả lời bằng response mẫu thay vì gọi
-backend, khi route ask còn trả 501 (#33). Trang chỉ dựng component này sau điều kiện import.meta.env.DEV. */
+backend, để làm giao diện khi không có mô hình ngôn ngữ, hay xem phân rã của câu "tại sao" mà backend chưa trả (#38).
+Trang chỉ dựng component này sau điều kiện import.meta.env.DEV. */
 
 type Props = {
   checked: boolean

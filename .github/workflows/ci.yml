@@ -104,7 +104,7 @@ jobs:
       - if: steps.changes.outputs.frontend == 'true'
         uses: actions/setup-node@v4
         with:
-          # Vite 8 cần Node 20.19 hoặc 22.12 trở lên.
+          # react-router trong package-lock cần Node 22.22 trở lên (Vite 8 cần 20.19 hoặc 22.12).
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
