@@ -7,7 +7,7 @@ Một khung cho cả hai nhóm trang: đi từ workspace sang trang quản trị
 focus bàn phím ở lại mục vừa bấm trên thanh bên. Hai khung riêng thì mỗi lần chuyển focus rơi về đầu trang.
 Workspace nằm trong đường dẫn, không lưu trong phiên (#42): mỗi tab trình duyệt làm việc ở workspace riêng. */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, matchPath, Outlet, useLocation, useMatches, useParams } from 'react-router'
 import { useLogout, useMe, type Membership } from '@/api/auth'
 import { isUnauthorized } from '@/api/queryClient'
@@ -29,6 +29,11 @@ export function AppLayout() {
   const version = useVersion()
   const logout = useLogout(signOutTo)
   const matches = useMatches()
+  // Workspace mở gần nhất trong tab này. AppLayout không bị gỡ khi đi từ workspace sang trang quản trị, nên state giữ
+  // được slug; trang quản trị dùng nó để thanh bên vẫn có các mục của workspace đó thay vì biến mất.
+  // Cập nhật ngay lúc render khi đường dẫn đổi workspace (cách React khuyên cho state suy từ props), không qua effect.
+  const [lastWorkspace, setLastWorkspace] = useState<string | undefined>(ws)
+  if (ws !== undefined && ws !== lastWorkspace) setLastWorkspace(ws)
 
   // Thông báo đăng xuất lỗi thuộc về lúc bấm; chuyển trang thì bỏ, không để nó nằm lại mãi dưới thanh trên.
   const resetLogout = logout.reset
@@ -67,10 +72,15 @@ export function AppLayout() {
     )
   }
 
+  // Ngoài workspace (trang quản trị, /account) thanh bên vẫn giữ mục của workspace mở gần nhất, hoặc workspace đầu tiên
+  // khi vào thẳng trang quản trị; không mục nào sáng vì đường dẫn không thuộc workspace.
+  const navWorkspace =
+    current ?? workspaces.find((m) => m.slug === lastWorkspace) ?? workspaces.at(0)
+
   // Trang đầu của workspace chỉ sáng khi đúng là trang đầu; mục khác sáng cả ở trang con, ví dụ datasets/<id>.
-  const workspaceItems = current
+  const workspaceItems = navWorkspace
     ? workspaceNav.map((entry) => ({
-        ...buildNavItem(workspaceHref(current.slug, entry.path), entry.label, entry.path === '', pathname),
+        ...buildNavItem(workspaceHref(navWorkspace.slug, entry.path), entry.label, entry.path === '', pathname),
         icon: entry.icon,
         section: entry.section,
       }))
@@ -78,7 +88,7 @@ export function AppLayout() {
   const activeEntry = workspaceNav.find((_, i) => workspaceItems[i]?.active)
   // Ngoài workspace, người chưa thuộc workspace nào không có nút đổi workspace để quay về (ví dụ gõ thẳng /account):
   // cho họ một mục về trang đầu, nơi giải thích phải làm gì.
-  const homeItems = !current && workspaces.length === 0 ? [buildNavItem('/', 'Trang đầu', true, pathname)] : []
+  const homeItems = !navWorkspace ? [buildNavItem('/', 'Trang đầu', true, pathname)] : []
   // Mục quản trị hệ thống đứng cuối thanh bên, cả trong và ngoài workspace. Ẩn với người khác chỉ để gọn; quyền vẫn do
   // backend kiểm.
   const adminItems = user.is_system_admin
@@ -108,7 +118,7 @@ export function AppLayout() {
     <AppShell
       title={routeTitle ?? activeEntry?.label ?? current?.name ?? ''}
       navItems={[...homeItems, ...workspaceItems, ...adminItems]}
-      currentWorkspace={current && { ...toOption(current), href: workspaceHref(current.slug, '') }}
+      currentWorkspace={navWorkspace && { ...toOption(navWorkspace), href: workspaceHref(navWorkspace.slug, '') }}
       workspaces={workspaces.map(toOption)}
       user={{ name: user.display_name, email: user.email, isSystemAdmin: user.is_system_admin }}
       accountHref={current ? workspaceHref(current.slug, accountPath) : accountRoute}
