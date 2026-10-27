@@ -319,11 +319,11 @@
         { "name": "Product Image", "role": "text" }
       ],
       "suggested_questions": [
-        "Doanh thu theo thị trường",
-        "Doanh thu theo tháng",
+        "Vì sao doanh thu tháng 5 năm 2017 tăng",
+        "Vì sao doanh thu Europe cao hơn LATAM",
         "Tỷ lệ giao hàng trễ theo phương thức vận chuyển",
         "5 khu vực có tỷ lệ giao trễ cao nhất",
-        "5 danh mục có doanh thu cao nhất ở châu Âu"
+        "Doanh thu theo tháng"
       ]
     }
   },
@@ -387,6 +387,38 @@
   {
     "task": "why",
     "question": "Tại sao doanh thu Europe thấp hơn LATAM",
+    "answer": {
+      "terms": [
+        {
+          "text": "doanh thu",
+          "kind": "metric",
+          "value": "doanh thu"
+        },
+        {
+          "text": "Europe",
+          "kind": "value",
+          "column": "Market",
+          "value": "Europe"
+        },
+        {
+          "text": "LATAM",
+          "kind": "value",
+          "column": "Market",
+          "value": "LATAM"
+        }
+      ],
+      "metric": "doanh thu",
+      "groups": {
+        "column": "Market",
+        "compare": "Europe",
+        "base": "LATAM"
+      },
+      "filters": []
+    }
+  },
+  {
+    "task": "why",
+    "question": "Vì sao doanh thu Europe cao hơn LATAM",
     "answer": {
       "terms": [
         {

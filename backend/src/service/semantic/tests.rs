@@ -438,6 +438,20 @@ fn unusable_answers_are_rejected_as_a_whole() {
     assert!(build_profile_answer(&all_bad, columns, &values).is_err());
 }
 
+/// Câu gợi ý còn chỗ trống của khuôn "vì sao" trong prompt bị bỏ, câu đã điền đủ thì giữ.
+#[test]
+fn suggested_questions_with_unfilled_placeholders_are_dropped() {
+    let market = column(Uuid::new_v4(), "Market", "VARCHAR", ProfileRole::Dimension);
+    let columns = std::slice::from_ref(&market);
+    let answer = r#"{"suggested_questions": ["Vì sao <measure> khác nhau giữa Europe và LATAM",
+        "Vì sao doanh thu khác nhau giữa Europe và LATAM"]}"#;
+    let profile = build_profile_answer(answer, columns, &[]).unwrap();
+    assert_eq!(
+        profile.suggested_questions,
+        ["Vì sao doanh thu khác nhau giữa Europe và LATAM"]
+    );
+}
+
 /// Câu trả lời bị bỏ cả thì kèm lý do theo tên trường và vị trí, không chép giá trị hay chữ mô hình viết; tối đa 5
 /// lý do dù có nhiều mục sai hơn.
 #[test]
@@ -714,7 +728,10 @@ async fn mock_dataco_profile_is_applied() {
     let ds = store.get_dataset(&ws, ds.id).await.unwrap().unwrap();
     assert_eq!(ds.current_profile_status.as_deref(), Some("semantic"));
     assert_eq!(ds.suggested_questions.len(), 5);
-    assert_eq!(ds.suggested_questions[0], "Doanh thu theo thị trường");
+    assert_eq!(
+        ds.suggested_questions[0],
+        "Vì sao doanh thu tháng 5 năm 2017 tăng"
+    );
     // Danh sách dataset cũng có câu gợi ý của phiên bản hiện hành.
     let list = store.list_datasets(&ws).await.unwrap();
     assert_eq!(list[0].suggested_questions.len(), 5);
