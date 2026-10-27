@@ -1,8 +1,10 @@
 #!/usr/bin/env sh
 # Tải bản đầy đủ của các dataset mẫu vào data/downloads/ (git bỏ qua thư mục này). Nguồn, giấy phép: data/README.md.
-#   sh data/download.sh            tải cả hai
+#   sh data/download.sh            tải cả ba
 #   sh data/download.sh dataco     chỉ DataCo Smart Supply Chain (CSV, khoảng 96 MB)
 #   sh data/download.sh retail     chỉ Online Retail II (file .zip khoảng 46 MB, giải nén ra .xlsx)
+#   sh data/download.sh oulad      chỉ Open University Learning Analytics (file .zip khoảng 45 MB, giải nén ra 7 CSV
+#                                  trong oulad/, tổng khoảng 464 MB, riêng studentVle.csv 454 MB)
 # Mỗi file tải vào <tên>.part, kiểm SHA-256 rồi mới đổi tên; file đã có và đúng checksum thì bỏ qua. Tải không được
 # thì in trang nguồn để tải tay. Nạp file tải về ở trang Dữ liệu của giao diện (docs/INSTALL.md mục 7).
 set -eu
@@ -23,6 +25,13 @@ RETAIL_SHA256=572e36277c2390fbfde10664750731e0a86f55e33470d91919085f0408e67bfb
 RETAIL_ZIP=online_retail_ii.zip
 RETAIL_FILE=online_retail_II.xlsx
 RETAIL_PAGE=https://archive.ics.uci.edu/dataset/502/online+retail+ii
+
+# Cùng cách với Online Retail II: SHA-256 tính từ file tải về ngày 2026-10-27.
+OULAD_URL=https://archive.ics.uci.edu/static/public/349/open+university+learning+analytics+dataset.zip
+OULAD_SHA256=f2ed1902616c1fe8d2824d872c0b7d2d72be435bf0124d077044fe4be2c6d3e4
+OULAD_ZIP=oulad.zip
+OULAD_DIR=oulad
+OULAD_PAGE=https://archive.ics.uci.edu/dataset/349/open+university+learning+analytics+dataset
 
 sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then
@@ -68,6 +77,16 @@ retail() {
     echo "Online Retail II: CC BY 4.0, ghi công: Chen, Online Retail II, UCI Machine Learning Repository, https://doi.org/10.24432/C5CG6D"
 }
 
+oulad() {
+    fetch "$OULAD_URL" "$OULAD_SHA256" "$OULAD_ZIP" "$OULAD_PAGE" || return 1
+    if ! command -v unzip >/dev/null 2>&1; then
+        echo "Thiếu lệnh unzip: giải nén data/$OUT/$OULAD_ZIP bằng tay vào data/$OUT/$OULAD_DIR" >&2
+        return 1
+    fi
+    unzip -o -q "$OUT/$OULAD_ZIP" '*.csv' -d "$OUT/$OULAD_DIR"
+    echo "OULAD: CC BY 4.0, ghi công: Kuzilek, Hlosta, Zdrahal, Open University Learning Analytics dataset, UCI Machine Learning Repository, https://doi.org/10.24432/C5KK69"
+}
+
 command -v curl >/dev/null 2>&1 || { echo "Cần curl để tải dữ liệu" >&2; exit 1; }
 mkdir -p "$OUT"
 
@@ -75,10 +94,12 @@ status=0
 case "${1:-all}" in
     dataco) dataco || status=1 ;;
     retail) retail || status=1 ;;
+    oulad) oulad || status=1 ;;
     all)
         dataco || status=1
         retail || status=1
+        oulad || status=1
         ;;
-    *) echo "Dùng: sh data/download.sh [dataco|retail]" >&2; exit 2 ;;
+    *) echo "Dùng: sh data/download.sh [dataco|retail|oulad]" >&2; exit 2 ;;
 esac
 exit $status

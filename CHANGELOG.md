@@ -4,6 +4,10 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ## [Unreleased]
 
+### Added
+
+- `sh data/download.sh oulad` tải bộ dữ liệu giáo dục OULAD (Open University Learning Analytics, CC BY 4.0) để thử hỏi về kết quả học tập.
+
 ## [0.2.0] - 2026-10-27
 
 ### Added

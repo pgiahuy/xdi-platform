@@ -31,17 +31,20 @@ Mỗi chỉ số trong `dataco.metrics.json` có `name`, `description`, `express
 ## Tải bản đầy đủ
 
 Dataset đầy đủ không commit vào repo. `sh data/download.sh` tải vào `data/downloads/` (git bỏ qua), kiểm SHA-256 từng
-file, file đã có và đúng checksum thì bỏ qua; `sh data/download.sh dataco` hay `retail` để tải một bộ. Tải không được
+file, file đã có và đúng checksum thì bỏ qua; `sh data/download.sh dataco`, `retail` hay `oulad` để tải một bộ. Tải không được
 hay checksum lệch thì script in trang nguồn để tải tay. Nạp file tải về ở trang **Dữ liệu**.
 
 | Dataset | File trong `downloads/` | Nguồn | Giấy phép, ghi công |
 |---|---|---|---|
 | DataCo Smart Supply Chain for Big Data Analysis | `DataCoSupplyChainDataset.csv` (khoảng 96 MB, windows-1252) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0; Fabian Constante, Fernando Silva, António Pereira (2019) |
 | Online Retail II | `online_retail_ii.zip` và `online_retail_II.xlsx` giải nén từ đó (khoảng 46 MB) | UCI Machine Learning Repository, https://archive.ics.uci.edu/dataset/502/online+retail+ii | CC BY 4.0; Daqing Chen (2019), https://doi.org/10.24432/C5CG6D |
+| Open University Learning Analytics (OULAD) | `oulad.zip` (khoảng 45 MB) và 7 file CSV giải nén vào `oulad/` (tổng khoảng 464 MB, riêng `studentVle.csv` 454 MB) | UCI Machine Learning Repository, https://archive.ics.uci.edu/dataset/349/open+university+learning+analytics+dataset | CC BY 4.0; Jakub Kuzilek, Martin Hlosta, Zdenek Zdrahal (2015), https://doi.org/10.24432/C5KK69 |
 
 Câu mẫu và hồ sơ viết sẵn của mock (`backend/src/engine/llm/mock_answers.json`) viết cho bảng `dataco`: nạp bản đầy
 đủ của DataCo với tên dataset `DataCo` vào workspace chưa có dataset đó (đã có thì bảng mới thành `dataco_2`). Online
-Retail II chưa có chỉ số mẫu hay câu mẫu cho mock, hỏi trên đó cần Gemini hoặc Ollama; bản đầy đủ chưa được thử nạp
-qua trang **Dữ liệu**, giới hạn của file Excel ở [docs/DATA.md](../docs/DATA.md).
+Retail II và OULAD chưa có chỉ số mẫu hay câu mẫu cho mock, hỏi trên đó cần Gemini hoặc Ollama. OULAD là dữ liệu
+học tập: bảng dễ hỏi nhất là `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần, có giới tính,
+khu vực, trình độ, kết quả cuối khóa); đã nạp thử qua trang **Dữ liệu** và hỏi với Gemini. Online Retail II bản đầy
+đủ chưa được thử nạp qua trang **Dữ liệu**, giới hạn của file Excel ở [docs/DATA.md](../docs/DATA.md).
 
 Khi thêm dataset: ghi nguồn, giấy phép, và kiểm tra giấy phép cho phép phân phối lại trước khi đưa vào `samples/`.

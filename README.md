@@ -35,17 +35,18 @@ Hướng dẫn đầy đủ (build từ nguồn, đưa lên Internet, sao lưu, 
 
 ## Dữ liệu dùng trong repo
 
-Ba bộ, từ hai nguồn, đều giấy phép CC BY 4.0. Chỉ bộ mẫu nằm trong repo; hai bộ đầy đủ tải bằng `data/download.sh`
-(kiểm SHA-256) vào `data/downloads/`, git bỏ qua thư mục này.
+Bốn bộ, đều giấy phép CC BY 4.0: hai bộ bán hàng và chuỗi cung ứng, một bộ giáo dục. Chỉ bộ mẫu nằm trong repo; các
+bộ đầy đủ tải bằng `data/download.sh` (kiểm SHA-256) vào `data/downloads/`, git bỏ qua thư mục này.
 
 | Bộ | Lấy ở đâu | Dùng cho |
 |---|---|---|
 | DataCo mẫu, 1500 dòng | Có sẵn: `data/samples/dataco.csv`, kèm chỉ số mẫu `dataco.metrics.json` | Dataset nạp sẵn khi thiết lập lần đầu, câu mẫu của `mock`, bộ đánh giá `make eval` |
 | DataCo Smart Supply Chain đầy đủ, khoảng 96 MB CSV | `sh data/download.sh dataco` | Thử trên dữ liệu lớn; đặt tên dataset `DataCo` thì câu mẫu của `mock` vẫn chạy |
 | Online Retail II, khoảng 46 MB Excel | `sh data/download.sh retail` | Thử file Excel nhiều sheet; chưa có câu mẫu cho `mock`, cần Gemini hoặc Ollama |
+| OULAD (Open University Learning Analytics), 7 bảng CSV, khoảng 464 MB | `sh data/download.sh oulad` | Dữ liệu giáo dục: nạp `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần) để hỏi theo kết quả học tập; cần Gemini hoặc Ollama |
 
-DataCo từ Mendeley Data (Constante, Silva, Pereira, 2019), Online Retail II từ UCI Machine Learning Repository (Chen,
-2019). Đường dẫn nguồn, ghi công và cách nạp: [data/README.md](data/README.md).
+DataCo từ Mendeley Data (Constante, Silva, Pereira, 2019); Online Retail II (Chen, 2019) và OULAD (Kuzilek, Hlosta,
+Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, ghi công và cách nạp: [data/README.md](data/README.md).
 
 ## Đã có
 
