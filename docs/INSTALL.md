@@ -108,7 +108,10 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `BACKEND_PORT` | `8000` | Cổng của giao diện và API |
+| `BACKEND_BIND` | trống (mọi địa chỉ) | Địa chỉ backend nghe trên máy host khi chạy compose; đặt `127.0.0.1` khi có Caddy trên cùng máy để cổng HTTP thường không mở ra Internet (mục 3) |
 | `POSTGRES_PORT` | `5433` | Cổng Postgres mở ra máy host (để công cụ quản trị database kết nối) |
+| `DB_MAX_CONNECTIONS` | `10` | Số kết nối Postgres tối đa của backend |
+| `DB_ACQUIRE_TIMEOUT_SECS` | `5` | Số giây một request chờ lấy kết nối Postgres khi mọi kết nối đang bận; quá thì request nhận lỗi thay vì treo |
 | `LLM_PROVIDER` | `mock` | `mock` không gọi ra ngoài; `gemini` cần `GEMINI_API_KEY`; `ollama` cần máy chạy Ollama ở `OLLAMA_URL` |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini khi `LLM_PROVIDER=gemini` |
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
@@ -117,6 +120,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `RUST_LOG` | `info` | Mức log |
 | `SEED_SAMPLE` | `true` | Thiết lập lần đầu nạp dataset mẫu DataCo kèm chỉ số mẫu vào workspace đầu tiên (mục 7, bước 1); `false` để workspace trống |
 | `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | Để dành cho đăng nhập bằng Google, backend hiện chưa đọc; để trống |
 
 Mô hình ngôn ngữ:
 
