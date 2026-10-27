@@ -43,7 +43,13 @@ export function AskLayout(props: Props) {
       )}
     >
       {history && (
-        <div className={cn('hidden lg:flex lg:flex-col lg:gap-2', stickyColumn)}>
+        // Cột danh sách là một khung riêng như pane minh chứng, để không lẫn với câu gợi ý và khung trò chuyện bên cạnh.
+        <div
+          className={cn(
+            'hidden lg:flex lg:flex-col lg:gap-2 lg:rounded-xl lg:border lg:bg-card lg:p-3 lg:text-card-foreground lg:shadow-xs',
+            stickyColumn,
+          )}
+        >
           <Button
             variant="ghost"
             size="icon-sm"

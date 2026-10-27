@@ -32,6 +32,7 @@ import { isProfiling, useDatasets, type Dataset } from '@/api/datasets'
 import { AskIdle } from '@/components/ask/AskIdle'
 import { AskLayout } from '@/components/ask/AskLayout'
 import { ConversationList } from '@/components/ask/ConversationList'
+import { DatasetPicker } from '@/components/ask/DatasetPicker'
 import { QuestionForm } from '@/components/ask/QuestionForm'
 import { SampleModeSwitch } from '@/components/ask/SampleModeSwitch'
 import { SuggestedQuestions } from '@/components/ask/SuggestedQuestions'
@@ -224,6 +225,16 @@ function WorkspaceAsk({ ws }: { ws: string }) {
         )
       }
     >
+      {canAsk && (
+        <DatasetPicker
+          datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
+          datasetId={datasetId}
+          onDatasetChange={changeDataset}
+          // Dữ liệu mẫu không qua dataset thật, báo hồ sơ của dataset đang chọn ở đó chỉ gây nhầm.
+          profile={fromSamples ? 'ready' : buildProfileProgress(dataset)}
+          disabled={ask.isPending}
+        />
+      )}
       {import.meta.env.DEV && <SampleModeSwitch checked={sampleMode} onChange={setSampleMode} />}
       {hasDatasets && (
         // Dưới lg cột danh sách ẩn: hai nút này thay chỗ của nó.
@@ -295,11 +306,6 @@ function WorkspaceAsk({ ws }: { ws: string }) {
         <div className="sticky bottom-0 z-10 mt-auto bg-background pt-1 pb-4">
           <div className="rounded-xl border bg-card p-3 text-card-foreground shadow-sm">
             <QuestionForm
-              datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
-              datasetId={datasetId}
-              onDatasetChange={changeDataset}
-              // Dữ liệu mẫu không qua dataset thật, báo hồ sơ của dataset đang chọn ở đó chỉ gây nhầm.
-              profile={fromSamples ? 'ready' : buildProfileProgress(dataset)}
               question={question}
               onQuestionChange={setQuestion}
               onSubmit={() => askQuestion(question)}

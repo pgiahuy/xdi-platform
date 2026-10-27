@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/shell/SidebarContent.tsx - nội dung thanh bên: hàng thương hiệu, bộ chọn workspace, mục điều hướng, chân
-có nút thu gọn, tài khoản và phiên bản. AppShell dùng cùng nội dung này cho thanh bên cố định của màn rộng và cho ngăn
+/* components/shell/SidebarContent.tsx - nội dung thanh bên: hàng thương hiệu kèm nút thu gọn ở góc phải, bộ chọn
+workspace, mục điều hướng, chân có tài khoản và phiên bản. AppShell dùng cùng nội dung này cho thanh bên cố định của màn rộng và cho ngăn
 kéo của màn hẹp. compact chỉ dùng cho thanh bên cố định: dải icon, chữ chuyển vào aria-label và title. */
 
 import type { ReactNode } from 'react'
@@ -28,7 +28,7 @@ type Props = {
   closeButton?: ReactNode
   /** Dải icon: chỉ thanh bên cố định của màn rộng, không bao giờ là ngăn kéo. */
   compact?: boolean
-  /** Nút thu gọn hay mở rộng ở chân thanh bên; không có thì không có nút. */
+  /** Nút thu gọn hay mở rộng ở góc trên phải thanh bên; không có thì không có nút. */
   onToggleCompact?: () => void
 }
 
@@ -41,9 +41,24 @@ export function SidebarContent(props: Props) {
   return (
     <div className="flex h-full flex-col">
       {/* Hàng thương hiệu: cùng dấu hiệu với màn đăng nhập (favicon.svg). */}
-      <div className={cn('flex h-16 shrink-0 items-center gap-2.5', compact ? 'justify-center px-2' : 'px-5')}>
-        <img src="/favicon.svg" alt={compact ? 'xdi-platform' : ''} className="size-7" />
-        {!compact && <span className="text-[15px] font-semibold tracking-tight">xdi-platform</span>}
+      {/* Nút thu gọn ở góc trên phải, cạnh tên sản phẩm. Dải icon chỉ rộng một icon nên nút mở rộng thay chỗ logo. */}
+      <div className={cn('flex h-16 shrink-0 items-center gap-2.5', compact ? 'justify-center px-2' : 'pr-3 pl-5')}>
+        {!(compact && onToggleCompact) && (
+          <img src="/favicon.svg" alt={compact ? 'xdi-platform' : ''} className="size-7" />
+        )}
+        {!compact && <span className="flex-1 text-[15px] font-semibold tracking-tight">xdi-platform</span>}
+        {onToggleCompact && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            onClick={onToggleCompact}
+            className="text-sidebar-muted hover:bg-sidebar-raised hover:text-sidebar-foreground focus-visible:ring-sidebar-ring"
+          >
+            {compact ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+          </Button>
+        )}
       </div>
       <div className={cn('flex shrink-0 items-center gap-1 pb-2', compact ? 'px-2' : 'px-3')}>
         <div className="min-w-0 flex-1">
@@ -62,22 +77,6 @@ export function SidebarContent(props: Props) {
         <SidebarNav items={navItems} link={link} onNavigate={onNavigate} compact={compact} />
       </div>
       <div className={cn('border-t border-sidebar-border py-3', compact ? 'px-2' : 'px-3')}>
-        {onToggleCompact && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={toggleLabel}
-            title={toggleLabel}
-            onClick={onToggleCompact}
-            className={cn(
-              'mb-2 w-full text-sidebar-muted hover:bg-sidebar-raised hover:text-sidebar-foreground focus-visible:ring-sidebar-ring',
-              compact ? 'justify-center px-0' : 'justify-start',
-            )}
-          >
-            {compact ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
-            {!compact && 'Thu gọn'}
-          </Button>
-        )}
         <UserMenu
           wide
           compact={compact}
