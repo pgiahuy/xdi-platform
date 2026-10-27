@@ -23,7 +23,7 @@ const SSL_MODES = ['prefer', 'disable']
 const EMPTY: ConnectValues = { host: '', port: '5432', database: '', user: '', password: '', sslmode: 'prefer' }
 
 export function DatabaseSources({ ws }: { ws: string }) {
-  const sources = useSources(ws, true)
+  const sources = useSources(ws)
   const create = useCreateSource(ws)
   const [open, setOpen] = useState(false)
   const [values, setValues] = useState(EMPTY)

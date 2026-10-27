@@ -23,12 +23,11 @@ function sourcesKey(ws: string) {
   return ['workspaces', ws, 'sources']
 }
 
-/** enabled false với member: gọi chỉ nhận 403. */
-export function useSources(ws: string, enabled: boolean) {
+/** Chỉ gọi khi người xem là admin (trang chỉ dựng khung nguồn cho admin): member gọi chỉ nhận 403. */
+export function useSources(ws: string) {
   return useQuery({
     queryKey: sourcesKey(ws),
     queryFn: () => apiGet<Source[]>(sourcesPath(ws)),
-    enabled,
   })
 }
 
