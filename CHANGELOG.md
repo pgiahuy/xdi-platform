@@ -6,7 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
-- Trang hỏi: ô chọn dataset lên đầu trang, danh sách cuộc trò chuyện thành khung riêng, nút thu gọn thanh bên chuyển lên góc trên phải.
+- Trang hỏi rõ bố cục hơn: ô chọn dataset ở đầu khung chat và dính khi cuộn, khung chat có nền riêng, danh sách cuộc trò chuyện là khung riêng với phần đầu đứng yên, nút thu gọn thanh bên ở góc trên phải, lúc đang trả lời chỉ hiện ba chấm, thanh cuộn mảnh.
 - Dataset mẫu (#25): thiết lập lần đầu nạp sẵn DataCo (1500 dòng) kèm chỉ số mẫu vào workspace đầu tiên, tắt bằng `SEED_SAMPLE=false`; `data/download.sh` tải bản đầy đủ DataCo và Online Retail II.
 - Bộ đánh giá câu hỏi mẫu (#37): `make eval` chạy 14 câu mẫu trên dữ liệu DataCo thu nhỏ (`data/samples/dataco.csv`, CC BY 4.0), so kết quả với SQL đúng viết tay và báo accuracy; CI đỏ khi accuracy giảm dưới `eval/baseline.json`. Chạy được với mock (mặc định) và với mô hình thật qua `LLM_PROVIDER`.
 - Xóa dataset (#160): admin bấm **Xóa** ở trang Dữ liệu để xóa hẳn một dataset cùng mọi phiên bản, hồ sơ, lịch sử câu hỏi và file.
