@@ -784,3 +784,23 @@ fn repair_prompt_lists_each_field_error() {
         "- measure.column: \"Revenue\" is not a column of dataco\n- compare: \"Q3 2017\" is not a quarter such as 2017-Q3"
     ));
 }
+
+// Cột chiều đặt vào "time" (như cột kỳ học "2013J", "2014J"): lời báo chỉ đường sang so hai nhóm, để vòng sửa của mô
+// hình không bỏ "time" rồi quên "groups".
+#[test]
+fn dimension_as_time_points_to_groups() {
+    let fixture = Fixture::new();
+    let errors = fixture
+        .check(with(
+            quarter_form(),
+            "time",
+            json!({"column": "Market", "grain": "quarter"}),
+        ))
+        .unwrap_err();
+    assert_eq!(errors[0].field, "time.column");
+    assert!(
+        errors[0].message.contains("set \"groups\" to this column"),
+        "{}",
+        errors[0].message
+    );
+}
