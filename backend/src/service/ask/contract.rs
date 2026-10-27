@@ -109,6 +109,11 @@ pub struct UnderstoodItem {
     pub label: String,
     /// Fragment of `sql_guarded` this item comes from.
     pub sql: String,
+    /// True when the item is carried over from the previous turn of the conversation: the same as in that turn's card
+    /// (same SQL fragment or same label) and not named in this question. Omitted when false.
+    // Bỏ khi false để response của câu đơn lẻ không đổi; đánh dấu ở service/conversation/carryover.rs.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub from_previous: bool,
 }
 
 /// The "understood as" card, built from `sql_guarded`: what is measured, filtered, grouped, sorted, over which

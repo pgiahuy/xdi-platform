@@ -7,6 +7,7 @@ Chỉ người tạo đọc và hỏi tiếp được một cuộc, kể cả ad
 cũng như hiện chưa có màn nào cho xem lịch sử câu hỏi của người khác. Cuộc của người khác, của dataset khác hay của
 workspace khác đều trả 404 như id không có, để không lộ là id đó tồn tại. */
 
+pub mod carryover;
 pub mod contract;
 pub mod history;
 #[cfg(test)]
@@ -17,6 +18,7 @@ use uuid::Uuid;
 use crate::auth::Member;
 use crate::engine::store::{Conversation, StoredTurn};
 use crate::service::ask::contract::{AskResponse, AskStatus, ChosenOption};
+use crate::service::conversation::carryover::{apply_carryover, find_previous};
 use crate::service::conversation::contract::{
     ConversationItem, ConversationListResponse, ConversationResponse, TurnItem,
 };
@@ -72,6 +74,13 @@ pub async fn ask(
                 .await?
         }
     };
+    // Mục giống lượt trước mà câu này không nhắc tới thì ghi "từ câu trước"; đánh dấu trước khi lưu, nhưng phần lưu
+    // (build_understood_text) chỉ có nhãn nên không đổi.
+    if let (Some(understanding), Some(previous)) =
+        (response.understanding.as_mut(), find_previous(&turns))
+    {
+        apply_carryover(understanding, question, previous);
+    }
     // Câu needs_choice không ghi lịch sử nên không có lượt để gắn; người hỏi gửi lại kèm lựa chọn và conversation_id.
     if let Some(query_id) = response.query_id {
         let understood = response

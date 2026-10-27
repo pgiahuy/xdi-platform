@@ -3746,6 +3746,10 @@
           "sql"
         ],
         "properties": {
+          "from_previous": {
+            "type": "boolean",
+            "description": "True when the item is carried over from the previous turn of the conversation: the same as in that turn's card\n(same SQL fragment or same label) and not named in this question. Omitted when false."
+          },
           "label": {
             "type": "string",
             "description": "Text for the end user (Vietnamese) naming the measure, filter, grouping, order or period."

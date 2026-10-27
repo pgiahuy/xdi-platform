@@ -134,6 +134,11 @@ vắng thì backend mở cuộc mới; `AskResponse.conversation_id` luôn có, 
 tiếp nối của tối đa 4 lượt gần nhất (phần gửi cho mô hình: [Dữ liệu và quyền riêng tư](PRIVACY.md)). Câu `needs_choice`
 không thành lượt, nhưng gửi lại kèm lựa chọn và cùng `conversation_id` thì vào đúng cuộc.
 
+Ở câu tiếp nối, mục của `understanding` (độ đo, bộ lọc, nhóm, `time_range`) có `from_previous: true` khi nó giống một
+mục của lượt đã trả lời gần nhất (đoạn SQL có nguyên văn trong câu SQL lượt đó, hay cùng nhãn) và câu hỏi không nhắc
+tới nó (không chứa tên cột, giá trị, năm trong đoạn SQL hay tên chỉ số). Trường vắng khi false, kể cả khi không đọc
+được lượt trước.
+
 `GET /api/workspaces/{ws}/datasets/{id}/conversations` liệt kê các cuộc của người gọi trên dataset, mới nhất trước, bỏ
 cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả cuộc đó kèm các lượt theo thứ tự hỏi: `query_id`,
 câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Đã hiểu là" dạng chữ). Bảng kết quả không lưu; hỏi lại câu đó

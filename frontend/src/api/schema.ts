@@ -1094,6 +1094,11 @@ export interface components {
         };
         /** @description One thing the question was understood to mean. */
         UnderstoodItem: {
+            /**
+             * @description True when the item is carried over from the previous turn of the conversation: the same as in that turn's card
+             *     (same SQL fragment or same label) and not named in this question. Omitted when false.
+             */
+            from_previous?: boolean;
             /** @description Text for the end user (Vietnamese) naming the measure, filter, grouping, order or period. */
             label: string;
             /** @description Fragment of `sql_guarded` this item comes from. */

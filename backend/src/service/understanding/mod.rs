@@ -114,6 +114,7 @@ fn build_item(label: String, sql: &str) -> UnderstoodItem {
     UnderstoodItem {
         label,
         sql: sql.to_string(),
+        from_previous: false,
     }
 }
 

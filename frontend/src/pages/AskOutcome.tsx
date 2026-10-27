@@ -190,5 +190,13 @@ function buildUnderstandingView(understanding: Understanding): UnderstandingView
     limit: understanding.limit?.label ?? null,
     timeRange: understanding.time_range?.label ?? null,
     assumptions: understanding.assumptions,
+    fromPrevious: [
+      ...understanding.measures,
+      ...understanding.filters,
+      ...understanding.group_by,
+      ...(understanding.time_range ? [understanding.time_range] : []),
+    ]
+      .filter((item) => item.from_previous)
+      .map((item) => item.label),
   }
 }
