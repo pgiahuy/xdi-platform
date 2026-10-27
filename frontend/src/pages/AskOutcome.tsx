@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AskOutcome.tsx - phần dưới ô hỏi của trang hỏi: hiện một AskResponse theo status (hợp đồng ở
-backend/src/service/ask/contract.rs). answered: thẻ "Đã hiểu là", lời giải thích của câu "tại sao", biểu đồ nếu
-backend gợi ý, bảng kết quả; needs_choice: màn câu hỏi lại; rejected, failed: lời báo của backend. Cảnh báo hiện với mọi
+backend/src/service/ask/contract.rs). answered: lời trả lời (hay lời giải thích của câu "tại sao"), biểu đồ nếu
+backend gợi ý, bảng kết quả, thẻ "Đã hiểu là"; needs_choice: màn câu hỏi lại; rejected, failed: lời báo của backend. Cảnh báo hiện với mọi
 status. Khối này là phần trả lời của một lượt trong khung trò chuyện; bong bóng câu hỏi và thẻ bọc ngoài do
 ChatTurn (AskConversation.tsx). Dựng dữ liệu cho component từ response; việc gửi câu hỏi do AskPage.
 Biểu đồ tải riêng (lazy) vì Recharts nặng, lý do ở components/ask/ResultChart.tsx; nó nằm trong ErrorBoundary riêng
@@ -30,7 +30,11 @@ import { cn } from '@/lib/utils'
 import { buildBreakdown } from './breakdownView'
 import { buildCellDrill, buildResultView } from './resultView'
 
-const ResultChart = lazy(() => import('@/components/ask/ResultChart').then((m) => ({ default: m.ResultChart })))
+const ResultChart = lazy(() =>
+  import('@/components/ask/ResultChart').then((m) => ({
+    default: m.ResultChart,
+  })),
+)
 
 /** Một lần hỏi đã có response, kèm đúng request đã gửi: hỏi lại cần cả hai. */
 export type Answer = {
@@ -42,6 +46,8 @@ type Props = {
   answer: Answer
   /** Đang hỏi lại: câu trả lời cũ vẫn hiện, mờ đi, không bấm được. */
   pending: boolean
+  /** Lượt cuối của khung trò chuyện: thẻ "Đã hiểu là" mở sẵn; lượt cũ thì thu gọn. */
+  latest: boolean
   /** Bấm một ô số đo của bảng kết quả: trang mở tab Dòng nguồn của ô đó. */
   onCellDrill: (target: DrillTarget) => void
   onChangeAssumption: (choiceId: string, optionId: string) => void
@@ -55,7 +61,8 @@ const fallbackMessage = {
   failed: 'Không chạy được câu SQL.',
 }
 
-export function AskOutcome({ answer, pending, onCellDrill, onChangeAssumption, onAnswerClarifications }: Props) {
+export function AskOutcome(props: Props) {
+  const { answer, pending, latest, onCellDrill, onChangeAssumption, onAnswerClarifications } = props
   const { response, variables } = answer
   return (
     <div aria-busy={pending} className={cn('flex min-w-0 flex-col gap-5', pending && 'pointer-events-none opacity-60')}>
@@ -64,6 +71,7 @@ export function AskOutcome({ answer, pending, onCellDrill, onChangeAssumption, o
       <OutcomeBody
         answer={answer}
         pending={pending}
+        latest={latest}
         onCellDrill={onCellDrill}
         onChangeAssumption={onChangeAssumption}
         onAnswerClarifications={onAnswerClarifications}
@@ -72,7 +80,7 @@ export function AskOutcome({ answer, pending, onCellDrill, onChangeAssumption, o
   )
 }
 
-function OutcomeBody({ answer, pending, onCellDrill, onChangeAssumption, onAnswerClarifications }: Props) {
+function OutcomeBody({ answer, pending, latest, onCellDrill, onChangeAssumption, onAnswerClarifications }: Props) {
   const { response, variables } = answer
   switch (response.status) {
     case 'answered':
@@ -80,6 +88,7 @@ function OutcomeBody({ answer, pending, onCellDrill, onChangeAssumption, onAnswe
         <AnsweredBody
           response={response}
           pending={pending}
+          latest={latest}
           onCellDrill={onCellDrill}
           onChangeAssumption={onChangeAssumption}
         />
@@ -110,13 +119,15 @@ function OutcomeBody({ answer, pending, onCellDrill, onChangeAssumption, onAnswe
 type AnsweredProps = {
   response: AskResponse
   pending: boolean
+  latest: boolean
   onCellDrill: (target: DrillTarget) => void
   onChangeAssumption: (choiceId: string, optionId: string) => void
 }
 
-// Câu "tại sao": ba số lớn, lời giải thích và đóng góp theo chiều đầu tiên là câu trả lời, nên đứng ngay sau thẻ "Đã
-// hiểu là", trên bảng kết quả; bảng phân rã đủ mọi chiều và SQL đứng sau từng con số thuộc pane bằng chứng (#52).
-function AnsweredBody({ response, pending, onCellDrill, onChangeAssumption }: AnsweredProps) {
+// Thứ tự đọc: lời trả lời trước (answer_text, hay ba số lớn và lời giải thích của câu "tại sao"), rồi biểu đồ và bảng,
+// cuối cùng thẻ "Đã hiểu là": người hỏi cần con số trước, cách hệ thống hiểu câu hỏi là phần để kiểm lại. Bảng phân rã
+// đủ mọi chiều và SQL đứng sau từng con số thuộc pane minh chứng (#52).
+function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumption }: AnsweredProps) {
   const result = response.result && buildResultView(response.result)
   const chart = result && response.chart && buildChartView(response.chart, result)
   const breakdown = buildBreakdown(response).data
@@ -124,13 +135,6 @@ function AnsweredBody({ response, pending, onCellDrill, onChangeAssumption }: An
     <>
       {response.answer_text && (
         <AnswerText text={response.answer_text} byModel={response.answer_text_by_model ?? false} />
-      )}
-      {response.understanding && (
-        <UnderstandingCard
-          understanding={buildUnderstandingView(response.understanding)}
-          onChangeAssumption={onChangeAssumption}
-          disabled={pending}
-        />
       )}
       {breakdown && <WhyOverview breakdown={breakdown} />}
       {result && chart && (
@@ -152,6 +156,15 @@ function AnsweredBody({ response, pending, onCellDrill, onChangeAssumption }: An
           result={result}
           fileName={`ket-qua-${(response.query_id ?? 'cau-hoi').slice(0, 8)}.csv`}
           cellDrill={buildCellDrill(response, onCellDrill)}
+          collapsible
+        />
+      )}
+      {response.understanding && (
+        <UnderstandingCard
+          understanding={buildUnderstandingView(response.understanding)}
+          onChangeAssumption={onChangeAssumption}
+          disabled={pending}
+          defaultOpen={latest}
         />
       )}
     </>

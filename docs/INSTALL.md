@@ -7,7 +7,7 @@ Ba cách chạy, chọn một:
 3. Đưa lên Internet (mục 3): một máy chủ có tên miền, HTTPS tự động bằng Caddy.
 
 Sao lưu và khôi phục ở mục 4, lệnh quản trị ở mục 5, lỗi hay gặp ở mục 6. Cài xong thì làm theo mục 7 (Dùng lần
-đầu): chọn mô hình ngôn ngữ, nạp dataset, hỏi câu đầu tiên, đọc bằng chứng, mời thành viên.
+đầu): chọn mô hình ngôn ngữ, nạp dataset, hỏi câu đầu tiên, đọc minh chứng, mời thành viên.
 
 Phần mềm đang phát triển. Phần nào đã có, xem mục Trạng thái trong [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -601,27 +601,29 @@ dataset tạo gần nhất, đổi được (đổi dataset là bắt đầu cu�
 trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở châu Âu" trong cùng cuộc.
 
 Mỗi lượt là câu hỏi (căn phải) và câu trả lời (căn trái). Cột trái (màn hẹp: nút **Các cuộc trò chuyện**) liệt kê các cuộc
-đã hỏi trên dataset, mới trước, kèm nút **Cuộc trò chuyện mới**; bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó. Lượt cũ
+đã hỏi trên dataset, mới trước, kèm nút **Cuộc trò chuyện mới**; bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó. Nút
+ở đầu cột ẩn cột này cho khung trò chuyện rộng ra, nút **Hiện danh sách cuộc trò chuyện** hiện lại. Lượt cũ
 chỉ hiện câu hỏi và tóm tắt phần đã hiểu, vì bảng kết quả không được lưu; bấm **Hỏi lại** để chạy lại câu đó. Đường dẫn
 của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cuộc.
 
 Câu có cụm khớp nhiều cột thì backend hỏi lại trước khi viết SQL: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
 SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
 
-### Bước 6. Đọc kết quả và bằng chứng
+### Bước 6. Đọc kết quả và minh chứng
 
-Câu trả lời nằm trong một thẻ ngay dưới câu đã hỏi. Đầu thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu
-hỏi, đọc từ câu SQL đã chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời
-gian** (dòng nào không có thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Tiếp theo là
-biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu đồ cột khi cột nhóm duy nhất là một
-chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên DataCo ra biểu đồ cột); các dạng khác chỉ có bảng. Bảng
-**Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì
-`Hiện 1.000 trên <tổng> dòng.`), phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập
-phân). **Tải CSV** tải các dòng giao diện đã nhận, tối đa 1000 dòng, giữ giá trị gốc.
+Câu trả lời nằm trong thẻ **Trả lời** ngay dưới câu đã hỏi. Đầu thẻ là lời trả lời ngắn (câu "tại sao" thì ba số lớn
+và lời giải thích). Tiếp theo là biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu đồ cột
+khi cột nhóm duy nhất là một chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên DataCo ra biểu đồ cột); các
+dạng khác chỉ có bảng. Bảng **Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì `Hiện 1.000 trên <tổng> dòng.`),
+phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân). **Tải CSV** tải các dòng giao diện
+đã nhận, tối đa 1000 dòng, giữ giá trị gốc. Cuối thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu hỏi, đọc từ câu
+SQL đã chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời gian** (dòng nào
+không có thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Bấm tiêu đề **Kết quả** hay
+**Đã hiểu là** để thu gọn hoặc mở phần đó; khung **Đã hiểu là** mở sẵn ở lượt mới nhất, thu gọn ở các lượt trước.
 
-Pane **Bằng chứng** nằm bên phải trên màn rộng, dưới khung trò chuyện trên màn hẹp, và hiện bằng chứng của lượt đang
-chọn (mặc định lượt mới nhất); nút **Bằng chứng** ở cuối mỗi câu trả lời chọn lượt đó. Nút **Thu gọn** và **Mở** ẩn hoặc
-hiện pane. Bốn tab:
+Pane **Minh chứng** nằm bên phải trên màn rộng, dưới khung trò chuyện trên màn hẹp, và hiện minh chứng của lượt đang
+chọn (mặc định lượt mới nhất); nút **Minh chứng** ở cuối mỗi câu trả lời chọn lượt đó. Nút **Thu gọn** ẩn pane, chỉ
+còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**) để hiện lại. Bốn tab:
 
 - **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
   (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép

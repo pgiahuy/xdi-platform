@@ -19,7 +19,7 @@ dữ liệu ([docs/PRIVACY.md](docs/PRIVACY.md)).
 - Hỏi dữ liệu: câu hỏi thành SQL, qua guard (một câu `SELECT` chỉ đọc trên bảng, cột, hàm được phép, có trần số dòng)
   rồi chạy trên DuckDB, mô hình sửa một lần khi câu lỗi; câu có chữ khớp nhiều cột thì hỏi lại để chọn. Kết quả có bảng
   phân trang, tải CSV, biểu đồ cột hoặc đường, thẻ "Đã hiểu là" (đo gì, lọc gì, nhóm theo gì, khoảng thời gian) và pane
-  bằng chứng với câu SQL trước và sau guard cùng các bước đã chạy. Kết quả đáng ngờ (rỗng, cột toàn ô trống, giá trị
+  minh chứng với câu SQL trước và sau guard cùng các bước đã chạy. Kết quả đáng ngờ (rỗng, cột toàn ô trống, giá trị
   lọc không có trong cột, tỷ lệ ngoài 0 đến 1) có cảnh báo, kết quả vẫn hiện. Mọi câu hỏi được ghi vào lịch sử trong
   database.
 - Câu "tại sao": mô hình điền form (đo gì, hai kỳ hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần đóng
@@ -66,7 +66,7 @@ trình duyệt ở http://localhost:8000/api/docs.
 `LLM_PROVIDER` chọn mô hình ngôn ngữ: `mock` (mặc định, không cần khóa API), `gemini` (cần khóa), `ollama` (cần một máy
 chạy Ollama).
 
-Từ màn thiết lập tới câu trả lời đầu tiên (chọn mô hình, nạp dataset, hỏi, đọc bằng chứng, mời thành viên): mục 7 của
+Từ màn thiết lập tới câu trả lời đầu tiên (chọn mô hình, nạp dataset, hỏi, đọc minh chứng, mời thành viên): mục 7 của
 [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Build từ nguồn

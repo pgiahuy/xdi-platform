@@ -167,6 +167,24 @@ fn prompt_sends_at_most_ten_rows() {
     assert!(prompt.contains("\"total_rows\": \"15\""), "{prompt}");
 }
 
+// Mô hình từng mở bằng "Dạ" và kết bằng lời chúc; prompt phải đòi giọng báo cáo, không còn chữ "friendly".
+#[test]
+fn prompt_asks_for_a_neutral_report_tone() {
+    let result = table(&[("a", 1.0)]);
+    let input = SummaryInput {
+        question: "q",
+        understanding: None,
+        result: &result,
+    };
+    let prompt = build_summary_prompt(&input);
+    assert!(
+        prompt.contains("neutral tone of a written report"),
+        "{prompt}"
+    );
+    assert!(prompt.contains("no exclamation marks"), "{prompt}");
+    assert!(!prompt.contains("friendly"), "{prompt}");
+}
+
 struct StubLlm(&'static str);
 
 #[async_trait]

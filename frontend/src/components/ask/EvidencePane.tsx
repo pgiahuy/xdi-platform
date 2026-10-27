@@ -52,7 +52,7 @@ export function EvidencePane({ tab, onTabChange, sql, breakdown, rows, steps, on
   return (
     <Tabs value={tab} onValueChange={(value) => onTabChange(value as EvidenceTab)} className="min-w-0">
       {/* Tab gạch chân xanh ngọc: xanh ngọc là màu của trạng thái đang chọn trong giao diện. */}
-      <TabsList variant="line" className="h-10 w-full gap-0 rounded-none border-b p-0" aria-label="Bằng chứng">
+      <TabsList variant="line" className="h-10 w-full gap-0 rounded-none border-b p-0" aria-label="Minh chứng">
         {(Object.keys(tabLabels) as EvidenceTab[]).map((key) => (
           <TabsTrigger
             key={key}

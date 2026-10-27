@@ -46,6 +46,7 @@ import { useStoredFlag } from './storedFlag'
 import { workspaceHref } from './workspaceNav'
 
 const evidenceOpenKey = 'xdi.ask.evidenceOpen'
+const historyColumnKey = 'xdi.ask.historyOpen'
 
 export function AskPage() {
   const { ws = '' } = useParams()
@@ -69,6 +70,8 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   // Lượt đang được hỏi lại; null khi đang hỏi câu mới (hay không hỏi gì).
   const [pendingTurn, setPendingTurn] = useState<number | null>(null)
   const [evidenceOpen, setEvidenceOpen] = useStoredFlag(evidenceOpenKey, true)
+  // Cột danh sách cuộc trò chuyện (màn rộng) ẩn hay hiện: thói quen của người dùng như pane minh chứng.
+  const [historyColumn, setHistoryColumn] = useStoredFlag(historyColumnKey, true)
   const answer = turns[selected] as Answer | undefined
   const lastTurn = turns.at(-1)
   const evidenceView = useEvidenceView(answer ? evidenceKey(answer) : '')
@@ -84,11 +87,14 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   const isAdmin = me.data?.workspaces.find((m) => m.slug === ws)?.role === 'admin'
   const fromSamples = import.meta.env.DEV && sampleMode
 
-  // replace: thay lượt cuối thay vì thêm lượt mới. Lượt nhận được luôn là lượt đang chọn, để pane hiện bằng chứng của
+  // replace: thay lượt cuối thay vì thêm lượt mới. Lượt nhận được luôn là lượt đang chọn, để pane hiện minh chứng của
   // câu vừa hỏi.
   const send = (variables: AskVariables, replace: boolean) => {
     setPendingTurn(replace ? turns.length - 1 : null)
     ask.mutate(variables, {
+      // Ô hỏi đã xóa lúc gửi (askQuestion); lỗi mạng hay lỗi server thì trả lại câu vào ô để gửi lại, trừ khi người
+      // dùng đã gõ câu khác trong lúc chờ.
+      onError: () => setQuestion((current) => (current === '' ? variables.question : current)),
       onSuccess: (response) => {
         const turn = { variables, response }
         const next = replace ? [...turns.slice(0, -1), turn] : [...turns, turn]
@@ -96,8 +102,6 @@ function WorkspaceAsk({ ws }: { ws: string }) {
         setSelected(next.length - 1)
         // Ghi id cuộc vào đường dẫn để tải lại trang mở đúng cuộc; id cuộc của response mẫu là id giả.
         if (!variables.fromSamples) writeUrl(variables.datasetId, response.conversation_id, true)
-        // Ô hỏi xóa khi đã có câu trả lời, không xóa khi gửi: lỗi mạng thì người hỏi còn câu để gửi lại.
-        if (!replace) setQuestion('')
       },
       onSettled: () => setPendingTurn(null),
     })
@@ -120,6 +124,9 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       lastTurn.variables.question === trimmed &&
       lastTurn.variables.fromSamples === fromSamples
     const choices = same ? lastTurn.response.choices : []
+    // Xóa ô ngay khi gửi: câu đã hiện thành bong bóng của lượt đang chờ, để lại trong ô dễ tưởng chưa gửi. Hỏi lại một
+    // lượt đã lưu thì ô có thể đang chứa câu khác người dùng đang gõ: chỉ xóa khi ô chứa đúng câu vừa gửi.
+    setQuestion((current) => (current.trim() === trimmed ? '' : current))
     send({ datasetId, question: trimmed, choices, conversationId, fromSamples }, same)
   }
 
@@ -176,10 +183,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
     document.getElementById('evidence')?.scrollIntoView({ block: 'nearest' })
   }
 
-  const pickSuggestion = (text: string) => {
-    setQuestion(text)
-    askQuestion(text)
-  }
+  const pickSuggestion = (text: string) => askQuestion(text)
 
   const hasDatasets = (datasets.data?.length ?? 0) > 0
   const suggestions = fromSamples
@@ -203,6 +207,8 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   return (
     <AskLayout
       history={history}
+      historyOpen={historyColumn}
+      onHistoryOpenChange={setHistoryColumn}
       evidenceOpen={evidenceOpen}
       onEvidenceOpenChange={setEvidenceOpen}
       evidence={
