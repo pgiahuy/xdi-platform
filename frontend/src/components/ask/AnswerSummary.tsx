@@ -11,11 +11,12 @@ type Props = {
 
 export function AnswerSummary({ summary, byModel }: Props) {
   return (
-    <section aria-labelledby="answer-summary-heading" className="flex flex-col gap-1">
-      <h3 id="answer-summary-heading" className="text-sm font-semibold">
+    // Vạch hổ phách bên trái: lời giải thích là câu trả lời chính của câu "tại sao".
+    <section aria-labelledby="answer-summary-heading" className="flex flex-col gap-1 border-l-[3px] border-highlight pl-3.5">
+      <h3 id="answer-summary-heading" className="text-xs font-semibold tracking-wider text-label uppercase">
         Giải thích
       </h3>
-      <p className="text-sm">{summary}</p>
+      <p className="text-[15px] leading-relaxed tabular-nums">{summary}</p>
       {!byModel && (
         <p className="text-xs text-muted-foreground">Câu này viết theo khuôn từ các số đã tính, không phải lời của mô hình.</p>
       )}

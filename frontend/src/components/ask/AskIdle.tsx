@@ -14,5 +14,5 @@ export function AskIdle({ pending, hasSuggestions }: Props) {
     : hasSuggestions
       ? 'Chọn dataset, gõ câu hỏi rồi bấm Hỏi, hoặc bấm một câu gợi ý để hỏi ngay. Kết quả và bằng chứng hiện ở đây.'
       : 'Chọn dataset, gõ câu hỏi rồi bấm Hỏi. Kết quả và bằng chứng hiện ở đây.'
-  return <p className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground sm:px-5">{text}</p>
+  return <p className="rounded-xl border border-dashed border-input px-4 py-6 text-sm text-muted-foreground sm:px-6">{text}</p>
 }

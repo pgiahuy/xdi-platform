@@ -51,31 +51,36 @@ export function EvidencePane({ tab, onTabChange, sql, breakdown, rows, steps, on
 
   return (
     <Tabs value={tab} onValueChange={(value) => onTabChange(value as EvidenceTab)} className="min-w-0">
-      <TabsList className="w-full" aria-label="Bằng chứng">
+      {/* Tab gạch chân xanh ngọc: xanh ngọc là màu của trạng thái đang chọn trong giao diện. */}
+      <TabsList variant="line" className="h-10 w-full gap-0 rounded-none border-b p-0" aria-label="Bằng chứng">
         {(Object.keys(tabLabels) as EvidenceTab[]).map((key) => (
-          <TabsTrigger key={key} value={key} className="px-1 text-xs sm:text-sm">
+          <TabsTrigger
+            key={key}
+            value={key}
+            className="px-1 text-xs text-muted-foreground after:bg-label data-active:font-semibold data-active:text-label sm:text-sm"
+          >
             {tabLabels[key]}
           </TabsTrigger>
         ))}
       </TabsList>
-      <TabsContent value="sql" className="pt-2">
+      <TabsContent value="sql" className="pt-3">
         {sql.data ? <EvidenceSql sql={sql.data} /> : <Reason text={sql.reason} />}
       </TabsContent>
-      <TabsContent value="breakdown" className="pt-2">
+      <TabsContent value="breakdown" className="pt-3">
         {breakdown.data ? (
           <EvidenceBreakdown breakdown={breakdown.data} onDrill={onDrill} />
         ) : (
           <Reason text={breakdown.reason} />
         )}
       </TabsContent>
-      <TabsContent value="rows" ref={rowsPanel} className="pt-2">
+      <TabsContent value="rows" ref={rowsPanel} className="pt-3">
         {rows.data ? (
           <EvidenceRows rows={rows.data} sliceLabels={sliceLabels} onPageChange={onRowsPageChange} />
         ) : (
           <Reason text={rows.reason} />
         )}
       </TabsContent>
-      <TabsContent value="steps" className="pt-2">
+      <TabsContent value="steps" className="pt-3">
         {steps.data ? <EvidenceSteps steps={steps.data} /> : <Reason text={steps.reason} />}
       </TabsContent>
     </Tabs>
@@ -83,5 +88,9 @@ export function EvidencePane({ tab, onTabChange, sql, breakdown, rows, steps, on
 }
 
 function Reason({ text }: { text: string }) {
-  return <p className="text-sm text-muted-foreground">{text}</p>
+  return (
+    <p className="rounded-[10px] border border-dashed border-input px-4 py-5 text-center text-sm text-muted-foreground">
+      {text}
+    </p>
+  )
 }

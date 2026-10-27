@@ -99,9 +99,10 @@
     /* Viền focus xanh ngọc: khoảng 5,9:1 trên nền trắng, trên mức 3:1 của WCAG 2.2 mục 1.4.11. Hổ phách chỉ khoảng
        2,8:1 trên nền trắng nên chỉ dùng làm viền focus trên nền mực của thanh bên (--sidebar-ring). */
     --ring: #2b6f6a;
-    /* Biểu đồ: chart-1 hổ phách cho mục nổi bật, chart-2 xanh ngọc nhạt cho các mục còn lại, rồi đậm dần. */
+    /* Biểu đồ: chart-1 hổ phách cho mục nổi bật, chart-2 xanh ngọc vừa cho các mục còn lại, rồi đậm dần. chart-2 đậm hơn
+       #9CC3BE của mockup để thanh đạt 3:1 trên nền trắng (WCAG 2.2 mục 1.4.11). */
     --chart-1: #d98a1e;
-    --chart-2: #9cc3be;
+    --chart-2: #5e9c96;
     --chart-3: #2b6f6a;
     --chart-4: #5a6d72;
     --chart-5: #13262f;

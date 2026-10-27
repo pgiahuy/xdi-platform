@@ -4,6 +4,7 @@ trong thẻ "Câu gợi ý" (AskSection), nên ở đây không có tiêu đề 
 Danh sách rỗng thì không hiện gì: câu gợi ý do lớp hồ sơ ngữ nghĩa viết sau khi nạp (ARCHITECTURE mục 6), chưa xong
 hoặc mô hình không đề xuất câu nào thì dataset không có câu gợi ý. */
 
+import { Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 type Props = {
@@ -24,8 +25,9 @@ export function SuggestedQuestions({ questions, onPick, disabled }: Props) {
             size="sm"
             disabled={disabled}
             onClick={() => onPick(question)}
-            className="h-auto max-w-full py-1.5 text-left whitespace-normal"
+            className="h-auto max-w-full gap-2 rounded-full px-3 py-1.5 text-left font-normal whitespace-normal text-foreground/80 hover:border-label hover:bg-label-soft hover:text-label"
           >
+            <Lightbulb aria-hidden className="text-label" />
             {question}
           </Button>
         </li>
