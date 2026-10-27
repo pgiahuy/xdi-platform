@@ -46,6 +46,7 @@ import { useStoredFlag } from './storedFlag'
 import { workspaceHref } from './workspaceNav'
 
 const evidenceOpenKey = 'xdi.ask.evidenceOpen'
+const historyColumnKey = 'xdi.ask.historyOpen'
 
 export function AskPage() {
   const { ws = '' } = useParams()
@@ -69,6 +70,8 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   // Lượt đang được hỏi lại; null khi đang hỏi câu mới (hay không hỏi gì).
   const [pendingTurn, setPendingTurn] = useState<number | null>(null)
   const [evidenceOpen, setEvidenceOpen] = useStoredFlag(evidenceOpenKey, true)
+  // Cột danh sách cuộc trò chuyện (màn rộng) ẩn hay hiện: thói quen của người dùng như pane minh chứng.
+  const [historyColumn, setHistoryColumn] = useStoredFlag(historyColumnKey, true)
   const answer = turns[selected] as Answer | undefined
   const lastTurn = turns.at(-1)
   const evidenceView = useEvidenceView(answer ? evidenceKey(answer) : '')
@@ -204,6 +207,8 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   return (
     <AskLayout
       history={history}
+      historyOpen={historyColumn}
+      onHistoryOpenChange={setHistoryColumn}
       evidenceOpen={evidenceOpen}
       onEvidenceOpenChange={setEvidenceOpen}
       evidence={

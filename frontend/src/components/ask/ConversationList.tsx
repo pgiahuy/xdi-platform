@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/ConversationList.tsx - danh sách cuộc trò chuyện cũ của người dùng trên dataset đang chọn (#164):
 nút "Cuộc trò chuyện mới", rồi mỗi cuộc một dòng với tiêu đề (câu hỏi đầu, backend đã rút gọn) và thời gian bắt đầu;
-cuộc đang mở có nền nhấn và aria-current. Trang đặt danh sách ở cột trái trên màn rộng và trong ngăn kéo trên màn hẹp,
+cuộc đang mở có nền nhấn và aria-current. Chữ nhỏ, tiêu đề cắt ở hai dòng (đủ chữ ở title) để cột hẹp mà vẫn thấy
+nhiều cuộc. Trang đặt danh sách ở cột trái trên màn rộng và trong ngăn kéo trên màn hẹp,
 nên ở đây không quyết định chỗ đặt. */
 
 import { Plus } from 'lucide-react'
@@ -52,12 +53,16 @@ export function ConversationList({ conversations, activeId, loading, error, onOp
                   onClick={() => onOpen(item.id)}
                   disabled={disabled}
                   className={cn(
-                    'flex w-full flex-col gap-0.5 rounded-md px-2.5 py-2 text-left text-sm outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60',
+                    'flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-[13px] leading-snug outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60',
                     active && 'bg-secondary font-medium text-secondary-foreground',
                   )}
                 >
-                  <span className="line-clamp-2 wrap-break-word">{item.title}</span>
-                  <span className="text-xs text-muted-foreground">{dateFormat.format(new Date(item.createdAt))}</span>
+                  <span className="line-clamp-2 wrap-break-word" title={item.title}>
+                    {item.title}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {dateFormat.format(new Date(item.createdAt))}
+                  </span>
                 </button>
               </li>
             )

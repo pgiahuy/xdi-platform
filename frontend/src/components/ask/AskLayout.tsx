@@ -5,11 +5,12 @@ sách ẩn, trang mở danh sách trong ngăn kéo. Cột bằng chứng là ch�
 các bước); trang truyền nội dung vào khi đã có câu trả lời, không có thì cột không chiếm chỗ.
 Từ xl cột chính và cột bằng chứng chia 3:2, cột bằng chứng không hẹp hơn 26rem để bảng phân rã bốn cột số đọc được
 không cần cuộn ngang; giữa lg và xl cột bằng chứng xuống dưới cột chính. Thu gọn thì cột bằng chứng biến mất, chỉ còn
-nút "Mở minh chứng" dính mép phải màn hình, cột chính rộng ra; trang giữ trạng thái này. Cột danh sách và cột bằng chứng dính dưới thanh trên (h-16) khi
+nút "Mở minh chứng" dính mép phải màn hình, cột chính rộng ra; trang giữ trạng thái này. Cột danh sách ẩn được (nút ở đầu cột, trang nhớ trạng thái);
+ẩn thì đầu cột chính có nút hiện lại. Cột danh sách và cột bằng chứng dính dưới thanh trên (h-16) khi
 cuộn, cuộn riêng khi dài hơn màn: cuộc trò chuyện dài thì bằng chứng của lượt đang chọn vẫn ở trong tầm mắt. */
 
 import type { ReactNode } from 'react'
-import { PanelRightClose, PanelRightOpen, ShieldCheck } from 'lucide-react'
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -17,13 +18,19 @@ type Props = {
   children: ReactNode
   /** Danh sách cuộc trò chuyện, cột trái từ lg. */
   history?: ReactNode
+  /** Cột danh sách đang hiện (từ lg); ẩn thì chỉ còn nút hiện lại ở đầu cột chính. */
+  historyOpen: boolean
+  onHistoryOpenChange: (open: boolean) => void
   evidence?: ReactNode
   evidenceOpen: boolean
   onEvidenceOpenChange: (open: boolean) => void
 }
 
-export function AskLayout({ children, history, evidence, evidenceOpen, onEvidenceOpenChange }: Props) {
+export function AskLayout(props: Props) {
+  const { children, evidence, evidenceOpen, onEvidenceOpenChange, historyOpen, onHistoryOpenChange } = props
   const open = evidenceOpen && Boolean(evidence)
+  // Ẩn cột danh sách thì bố cục như trang không có danh sách; danh sách vẫn mở được trong ngăn kéo dưới lg.
+  const history = historyOpen ? props.history : undefined
   return (
     <div
       className={cn(
@@ -35,8 +42,35 @@ export function AskLayout({ children, history, evidence, evidenceOpen, onEvidenc
             : 'xl:grid-cols-[minmax(0,3fr)_minmax(26rem,2fr)]'),
       )}
     >
-      {history && <div className={cn('hidden lg:block', stickyColumn)}>{history}</div>}
-      <div className="flex min-w-0 flex-col gap-6">{children}</div>
+      {history && (
+        <div className={cn('hidden lg:flex lg:flex-col lg:gap-2', stickyColumn)}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Ẩn danh sách cuộc trò chuyện"
+            title="Ẩn danh sách cuộc trò chuyện"
+            onClick={() => onHistoryOpenChange(false)}
+            className="self-end"
+          >
+            <PanelLeftClose aria-hidden />
+          </Button>
+          {history}
+        </div>
+      )}
+      <div className="flex min-w-0 flex-col gap-6">
+        {props.history && !historyOpen && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onHistoryOpenChange(true)}
+            className="hidden self-start lg:inline-flex"
+          >
+            <PanelLeftOpen aria-hidden />
+            Hiện danh sách cuộc trò chuyện
+          </Button>
+        )}
+        {children}
+      </div>
       {evidence && (
         <aside
           id="evidence"
