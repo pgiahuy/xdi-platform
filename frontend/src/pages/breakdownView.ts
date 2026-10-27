@@ -26,7 +26,11 @@ export function buildBreakdown(response: AskResponse): TabData<BreakdownView> {
           baseValue: group.base_value,
           compareValue: group.compare_value,
           contribution: group.contribution,
+          mixEffect: group.mix_effect,
+          rateEffect: group.rate_effect,
         })),
+        mixEffect: dimension.mix_effect,
+        rateEffect: dimension.rate_effect,
       })),
       volumePrice: vp && {
         volumeLabel: vp.volume_label,

@@ -29,12 +29,18 @@ export type GroupView = {
   baseValue: string
   compareValue: string
   contribution: string
+  /** Chỉ có với độ đo tỷ lệ: phần do tỷ trọng của nhóm đổi (cơ cấu) và phần do tỷ lệ trong nhóm đổi (hiệu suất). */
+  mixEffect: string | null
+  rateEffect: string | null
 }
 
 export type DimensionView = {
   column: string
   kind: CellKind
   groups: GroupView[]
+  /** Chỉ có với độ đo tỷ lệ: tổng hai phần của mọi nhóm, cộng lại bằng chênh lệch. */
+  mixEffect: string | null
+  rateEffect: string | null
 }
 
 export type VolumePriceView = {

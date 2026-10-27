@@ -5,6 +5,7 @@ cùng một thang nên so được độ lớn bằng mắt. Nhóm như bảng p
 (breakdownGroups.ts).
 Mỗi dòng ghi số có dấu và chữ "tăng" hay "giảm", nên màu và hướng thanh chỉ giúp đọc nhanh; thanh ẩn với trình đọc màn
 hình. Độ dài thanh đổi số bằng Number(): chỉ để vẽ, chấp nhận làm tròn; chữ số hiện ra vẫn là chuỗi của backend.
+Độ đo tỷ lệ thêm một dòng tổng phần do cơ cấu và phần do hiệu suất của chiều này.
 Vẽ bằng thẻ div thay vì Recharts: chỉ là các thanh ngang, và file này nằm trong chunk chính, không phải chờ tải Recharts. */
 
 import { cn } from '@/lib/utils'
@@ -43,6 +44,13 @@ export function ContributionBars({ dimension, baseLabel, compareLabel }: Props) 
           {compareLabel} trừ {baseLabel}
         </p>
       </div>
+      {dimension.mixEffect !== null && dimension.rateEffect !== null && (
+        <p className="text-sm text-muted-foreground">
+          Do cơ cấu (tỷ trọng các nhóm đổi){' '}
+          <span className="font-semibold tabular-nums">{formatSigned(dimension.mixEffect)}</span>, do hiệu suất (tỷ lệ
+          trong từng nhóm đổi) <span className="font-semibold tabular-nums">{formatSigned(dimension.rateEffect)}</span>.
+        </p>
+      )}
       <ul className="flex flex-col tabular-nums">
         {bars.map((bar, index) => (
           <ContributionRow key={index} bar={bar} largest={largest} />
