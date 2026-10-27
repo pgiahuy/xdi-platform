@@ -119,6 +119,9 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; chạm trần thì giao diện ghi "ít nhất N dòng". Giao diện chỉ nhận 1000 dòng đầu |
 | `RUST_LOG` | `info` | Mức log |
 | `SEED_SAMPLE` | `true` | Thiết lập lần đầu nạp dataset mẫu DataCo kèm chỉ số mẫu vào workspace đầu tiên (mục 7, bước 1); `false` để workspace trống |
+| `SOURCE_SECRET_KEY` | trống (tắt) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`); để trống thì không thêm được nguồn database. Đổi khóa thì phải thêm lại các nguồn |
+| `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp |
+| `SOURCE_MAX_ROWS`, `SOURCE_TIMEOUT_SECS` | `1000000`, `300` | Trần số dòng và thời gian một lần chụp bảng; dung lượng theo `MAX_UPLOAD_MB` |
 | `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | Để dành cho đăng nhập bằng Google, backend hiện chưa đọc; để trống |
 

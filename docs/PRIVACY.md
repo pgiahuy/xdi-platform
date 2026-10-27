@@ -18,6 +18,8 @@ trong [ARCHITECTURE.md](ARCHITECTURE.md).
 | File bạn nạp lên | Chuyển sang Parquet, lưu trong thư mục dữ liệu (`DATA_DIR`, volume `xdidata` khi chạy compose), mỗi workspace một thư mục, trong đó mỗi dataset một thư mục, mỗi phiên bản một thư mục con. File gốc chỉ nằm trong thư mục tạm lúc nạp và bị xóa ngay sau đó; nếu backend dừng đột ngột giữa lúc nạp, lần khởi động sau xóa |
 | Hồ sơ dữ liệu: tên cột, kiểu, vai trò, min, max, số ô trống, giá trị và số dòng của cột tối đa 200 giá trị khác nhau, đơn vị, cờ nhạy cảm, mô tả, bí danh, câu hỏi gợi ý | Postgres |
 | Lịch sử câu hỏi: người hỏi, câu hỏi, SQL mô hình viết và SQL sau guard, trạng thái, lỗi (có thể chép một giá trị của dữ liệu), thời gian các bước, số dòng kết quả, cuộc trò chuyện chứa câu hỏi và phần "Đã hiểu là" dạng chữ ngắn; bảng kết quả không lưu | Postgres |
+| Bảng chụp từ nguồn database (Postgres) | Như file nạp lên: chép một lần thành Parquet trong `DATA_DIR`; bản CSV trung gian chỉ nằm trong thư mục tạm lúc chụp |
+| Thông tin kết nối của nguồn database: máy chủ, cổng, database, tài khoản, mật khẩu, sslmode | Postgres, bảng `sources`. Cả bộ (kể cả mật khẩu) mã hóa AES-256-GCM bằng `SOURCE_SECRET_KEY` trong cột `secret_encrypted`; máy chủ, cổng, database, tài khoản và sslmode còn một bản chữ thường để hiển thị cho admin. Mật khẩu không bao giờ trả qua API, không ghi log; cột `_source_file` chỉ ghi máy chủ, database và bảng |
 | Tài khoản: email, tên, mật khẩu đã băm (Argon2id) | Postgres; không lưu mật khẩu gốc |
 | Phiên đăng nhập: mã băm SHA-256, người dùng, hạn | Postgres; mã gốc chỉ nằm trong cookie của trình duyệt, xóa khi đăng xuất |
 
@@ -47,7 +49,8 @@ giá trị khác nhau được tính là cột phân loại; backend đánh dấ
 nhưng một cột không khớp luật (ví dụ tên khách hàng đặt tên khác thường) vẫn có thể được gửi cho tới khi mô hình
 đánh dấu thêm lúc lập hồ sơ ngữ nghĩa; chưa có màn để admin đánh dấu tay. Nếu dữ liệu nhạy cảm, dùng `mock` hoặc Ollama chạy nội bộ.
 
-Không bao giờ gửi: mật khẩu, khóa API của bạn cho nhà cung cấp khác, token đăng nhập.
+Không bao giờ gửi: mật khẩu, khóa API của bạn cho nhà cung cấp khác, token đăng nhập, thông tin kết nối của nguồn
+database. Dataset chụp từ database được đối xử như dataset nạp từ file: mô hình chỉ nhận hồ sơ như bảng trên.
 
 ## Xóa dữ liệu
 

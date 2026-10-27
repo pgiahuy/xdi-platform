@@ -233,9 +233,10 @@ Mọi thứ phụ thuộc cột được suy ra lúc nạp, không ghi cứng:
 | Câu hỏi gợi ý | Sinh từ hồ sơ lúc nạp, lưu lại |
 | Biểu đồ | Theo vai trò cột, loại số đo và đơn vị của kết quả; luật ở mục 6b |
 
-Mô hình ngôn ngữ sinh SQL trên tên bảng logic. Engine resolve tên logic thành nguồn vật lý: file Parquet, hoặc bảng
-trong database đã gắn. Nhờ đó nguồn database (Postgres, MySQL, SQLite qua extension của DuckDB) thêm vào mà không đổi
-guard, prompt hay lịch sử.
+Mô hình ngôn ngữ sinh SQL trên tên bảng logic. Engine resolve tên logic thành nguồn vật lý, hiện luôn là file Parquet
+của một phiên bản. Nguồn Postgres (#165) chụp bảng thành phiên bản Parquet như nạp file (đọc bằng sqlx `COPY`, không
+qua extension của DuckDB vì extension phải tải từ Internet lúc chạy), nên không đổi guard, prompt hay lịch sử. Truy
+vấn thẳng database ngoài lúc hỏi để sau, cần quyết định riêng.
 
 ## 6b. Chọn biểu đồ
 
@@ -370,7 +371,7 @@ Bản hiện tại nhắm dự án cỡ nhỏ và vừa, một instance. Các gi
 | Dataset trên đĩa local | Volume docker | S3 hoặc MinIO, chỉ đổi phần nạp file trong `engine/analytics.rs` |
 | Một crate | Chưa có gì để tách | Rút engine hoặc guard thành crate trong workspace khi cần dùng lại |
 | Không cache, không queue | Chưa có tải | Redis cho cache câu hỏi, queue cho nạp file lớn, cắm vào tầng service |
-| Nguồn chỉ là file | | Nối Postgres, MySQL, SQLite qua DuckDB; `sources` và `source_kind` đã có |
+| Nguồn là file hoặc bản chụp bảng Postgres | Chụp giữ được bằng chứng tái lập | MySQL, SQLite; truy vấn thẳng database ngoài lúc hỏi |
 
 Ba điều giữ cho các nâng cấp trên không phải viết lại: state đi qua `AppState`; hợp đồng API là tài liệu và kiểu dữ
 liệu; mọi lời gọi ra ngoài đi qua một chỗ để thêm retry, timeout, cache.
@@ -386,6 +387,7 @@ Cập nhật khi có thay đổi.
 | OpenAPI (mục 8): đặc tả sinh từ code ở `/api/openapi.json`, Swagger UI ở `/api/docs`, `openapi.json` và kiểu TypeScript `frontend/src/api/schema.ts` trong repo, test và CI báo khi lệch code | Có |
 | Trait `LlmProvider` và ba cài đặt; `complete` nhận loại việc, câu hỏi gốc, prompt và JSON Schema của câu trả lời nếu cần | Mock trả lời 14 câu mẫu trên DataCo (bảng logic `dataco`): một câu cố ý đọc sai định dạng ngày và có câu sửa để thử vòng sửa, ba câu để thử nhánh bị từ chối, chạy lỗi cả sau khi sửa và giá trị lọc không có trong cột; cùng hồ sơ viết sẵn của `dataco` (`engine/llm/mock_answers.json`); câu trả lời sinh SQL là object `{terms, assumptions, clarify, sql}` (`service/ask/reply.rs`), Gemini nhận schema qua `responseJsonSchema`, Ollama qua `format`; Gemini (`generateContent`) và Ollama (`/api/generate`, kèm `options.num_ctx` theo `OLLAMA_NUM_CTX`) gọi qua HTTP, có timeout theo cấu hình, không theo chuyển hướng; lỗi trả lời hướng dẫn tiếng Việt với mã 502 (`upstream`, dịch vụ mô hình lỗi) hoặc 503 (`unavailable`, máy chủ thiếu cấu hình); khóa Gemini không vào log; hồ sơ ngữ nghĩa (#23) gọi `complete` sau mỗi lần nạp, kèm JSON Schema của câu trả lời (`service/semantic/schema.rs`); endpoint hỏi (#33) gọi `complete` để sinh SQL và sửa; đã chạy với Gemini thật trên DataCo (hồ sơ ngữ nghĩa và một câu thường, #135), Ollama mới thử với server giả |
 | Nạp dataset: `POST /api/workspaces/{ws}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet, hoặc một file Excel kèm sheet đã chọn), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB`; liệt kê sheet của file Excel ở `POST .../datasets/sheets`; xóa dataset cùng mọi phiên bản, hồ sơ, chỉ số, lịch sử câu hỏi và file Parquet ở `DELETE .../datasets/{id}` (chỉ admin) | Có; sheet Excel khác cột nạp riêng từng lần; chưa xóa riêng một phiên bản hay chọn lại phiên bản cũ |
+| Nguồn database (`service/sources/`, `api/sources.rs`, [DATA.md](DATA.md)): admin thêm nguồn Postgres (thử kết nối trước khi lưu, máy chủ trong `SOURCE_ALLOWED_HOSTS`, thông tin kết nối mã hóa bằng `SOURCE_SECRET_KEY`), liệt kê bảng và view, chụp một bảng thành phiên bản Parquet qua đường nạp CSV, chụp lại thành phiên bản mới, xóa nguồn; trang Dữ liệu có khung "Kết nối database" | Có bản tối thiểu, chỉ Postgres (#165); chưa có TLS tới Postgres, MySQL, SQLite, truy vấn thẳng database ngoài lúc hỏi |
 | Route ask, drill | Có route dưới `/api/workspaces/{ws}/`, kiểm đăng nhập và thành viên. Ask chạy luồng hỏi câu thường (`service/ask/mod.rs`, #33) và câu "tại sao" (`service/ask/why.rs`, #38), trả thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ: câu mơ hồ hỏi lại trước khi gọi mô hình, câu cần thông tin không cột nào có thì mô hình báo `unanswerable` và trả `rejected` không chạy SQL (`service/ask/unanswerable.rs`), câu trả lời, câu bị từ chối và câu lỗi ghi vào `queries`; drill truy được dòng nguồn của một ô và của một dòng phân rã (mục 8). Hợp đồng request và response của ask (mục 8) có trong đặc tả, kèm response mẫu cho giao diện |
 | Trang hỏi dữ liệu (`pages/AskPage.tsx`): chọn dataset kèm dòng báo hồ sơ đang lập, không có câu gợi ý với mô hình hiện tại, hoặc lỗi, ô hỏi, câu gợi ý của dataset (tự tải lại khi hồ sơ đang lập), thẻ "Đã hiểu là" với giả định đổi được, lời giải thích của câu "tại sao", câu hỏi lại, lời báo khi bị từ chối, chạy lỗi, mô hình lỗi; bảng kết quả phân trang, tải CSV các dòng đã nhận, biểu đồ cột hoặc đường theo gợi ý của backend (Recharts, tải riêng khi có biểu đồ) | Có, dựng trên hợp đồng; trang gọi route ask thật; `npm run dev` có công tắc dữ liệu mẫu |
 | Hồ sơ cột lớp cấu trúc (`service/profile.rs`, `engine/profile.rs`, [DATA.md](DATA.md)): kiểu, số ô trống, số giá trị khác nhau, min, max, vai trò, định dạng của cột ngày dạng chữ, tần suất giá trị của cột tối đa 200 giá trị; đánh dấu cột nhạy cảm theo luật tên cột và dạng giá trị trong cùng giao dịch ghi hồ sơ; lập lúc nạp, phiên bản cũ lập nền và quét đánh dấu lại lúc khởi động | Có; chưa có API đọc |

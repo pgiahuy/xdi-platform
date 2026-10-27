@@ -98,13 +98,36 @@ Các trường hợp sau bị từ chối (400). Lời báo ghi tên file, trừ
 - Bảng đã gộp không có dòng dữ liệu nào, ví dụ file duy nhất chỉ có dòng tiêu đề. File chỉ có tiêu đề nạp cùng file có
   dữ liệu thì không bị báo.
 
+## Nguồn database (Postgres)
+
+`admin` của workspace thêm được một database Postgres làm nguồn (trang Dữ liệu, "Kết nối database", hay
+`POST /api/workspaces/{ws}/sources`), rồi chụp một bảng hay view thành dataset. Bản này chỉ có Postgres; MySQL, SQLite
+và truy vấn thẳng database ngoài lúc hỏi để sau ([#165](https://github.com/pgiahuy/xdi-platform/issues/165)).
+Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
+
+- Chụp là chép một lần: backend đọc bảng bằng `COPY (SELECT * FROM schema.bảng) TO STDOUT (FORMAT csv)` rồi đi đúng
+  đường nạp CSV ở trên (Parquet, hồ sơ cột, phiên bản). Hồ sơ, bằng chứng, dòng nguồn và câu hỏi cũ trỏ đúng phiên bản
+  đã chụp. "Chụp lại" tạo phiên bản mới của cùng dataset, đọc lại đúng bảng của lần trước; bảng không đổi thì trả
+  `created: false` như nạp trùng.
+- Kiểu cột: Postgres ghi mọi giá trị thành chữ, DuckDB dò lại kiểu như với file CSV. Số có phần thập phân cố định
+  (`numeric`) và ngày giờ đọc lại được; kiểu riêng của Postgres (mảng, `jsonb`, hình học) thành chữ.
+- Giới hạn: `SOURCE_MAX_ROWS` dòng (đếm trước, quá thì từ chối, không chụp thiếu), `MAX_UPLOAD_MB` dung lượng CSV,
+  `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
+- Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`). Máy chủ phải nằm trong
+  `SOURCE_ALLOWED_HOSTS`. Chưa có TLS tới Postgres: `sslmode` nhận `disable` hoặc `prefer`, máy chủ chỉ nhận TLS thì chưa
+  kết nối được.
+- Không dùng extension `postgres` của DuckDB vì `INSTALL postgres` tải extension từ Internet lúc chạy, đúng bản DuckDB
+  đã biên dịch; image Docker không có thư mục home cho user chạy backend, và máy cài có thể không ra được Internet.
+- Xóa nguồn chỉ được khi không còn dataset nào chụp từ nó; xóa dataset không xóa nguồn.
+
 ## Gộp nhiều file và cột `_source_file`
 
 Mỗi file (hay mỗi sheet Excel) ghi thành một phần `part-NNNN.parquet` trong thư mục của phiên bản, kèm cột
 `_source_file` ở cuối, ghi tên file gốc (hay tên sheet) của từng dòng. Khi đọc, DuckDB đọc cả thư mục như một bảng
 (`read_parquet('<thư mục>/*.parquet', union_by_name = true)`), ghép cột theo tên. Nhờ vậy nhiều file cùng cột (mỗi tháng
 một file) thành một bảng, và truy dòng nguồn ([#34](https://github.com/pgiahuy/xdi-platform/issues/34), route `.../drill`)
-trả cột này cùng mỗi dòng để chỉ dòng đến từ file nào. Guard SQL đổi bảng logic thành đúng biểu thức
+trả cột này cùng mỗi dòng để chỉ dòng đến từ file nào. Dataset chụp từ database ghi
+`postgres://máy/database/schema.bảng`, không có tài khoản hay mật khẩu. Guard SQL đổi bảng logic thành đúng biểu thức
 đọc này ([Guard SQL](GUARD.md)).
 
 ## Phiên bản và hash
@@ -260,4 +283,4 @@ hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và
 - Chọn lại phiên bản cũ làm hiện hành, xóa riêng một phiên bản.
 - Nạp nguyên tử: ghi phiên bản vào Postgres và chuyển file Parquet về chỗ cuối chưa nằm trong một giao dịch, lỗi giữa
   hai bước có thể để lại dòng thừa trong Postgres ([#79](https://github.com/pgiahuy/xdi-platform/issues/79)).
-- Nguồn dữ liệu là database (Postgres, MySQL, SQLite): mới có trong thiết kế.
+- Nguồn dữ liệu là MySQL, SQLite, hay truy vấn thẳng database ngoài lúc hỏi; TLS tới Postgres.
