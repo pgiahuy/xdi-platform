@@ -395,6 +395,9 @@ pub struct Explanation {
     pub measure: String,
     /// How the measure adds up over groups, which decides how to read the numbers below.
     pub measure_kind: MeasureKind,
+    /// What the two slices are, which decides the words for the change: up or down between two periods, higher or
+    /// lower between two groups.
+    pub comparison: Comparison,
     /// Slice compared against.
     pub base: ExplanationSlice,
     /// Slice being explained.
@@ -422,6 +425,17 @@ pub struct Explanation {
 pub enum MeasureKind {
     Total,
     Ratio,
+}
+
+// Hai nhóm (Pass và Withdrawn) không có trước sau: nói "Withdrawn tăng so với Pass" làm người đọc tưởng một nhóm đổi
+// theo thời gian. Lời viết theo khuôn, prompt của mô hình và giao diện chọn chữ theo trường này.
+/// - `periods`: the slices are two periods; `compare` is the later one.
+/// - `groups`: the slices are two values of one column, with no order in time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Comparison {
+    Periods,
+    Groups,
 }
 
 // filter là điều kiện SQL, chỉ để hiện và kiểm. Truy dòng nguồn từ một dòng phân rã gửi tên lát cắt (base, compare),

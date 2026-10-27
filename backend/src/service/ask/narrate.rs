@@ -14,10 +14,11 @@ use std::time::{Duration, Instant};
 use rust_decimal::Decimal;
 
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
-use crate::service::ask::contract::{AskStep, Explanation, StepName};
+use crate::service::ask::contract::{AskStep, Comparison, Explanation, StepName};
 use crate::service::ask::repair::build_user_text;
 use crate::service::explain::{
-    build_narrate_prompt, build_number_check, build_template_summary, MAX_SUMMARY_CHARS,
+    build_direction_check, build_narrate_prompt, build_number_check, build_template_summary,
+    MAX_SUMMARY_CHARS,
 };
 
 /// Kết quả bước narrate: lời diễn giải (của mô hình hoặc câu khuôn), cờ "do mô hình viết" và bước cho timeline.
@@ -38,6 +39,13 @@ pub async fn narrate(
     // change không đọc được thì cứ gọi mô hình: bảng phân rã do code dựng nên nhánh này chỉ là phòng hờ.
     if explanation.change.parse::<Decimal>() == Ok(Decimal::ZERO) {
         let detail = "Chênh lệch bằng 0 nên không gọi mô hình".to_string();
+        return fallback(explanation, build_step(started, true, Some(detail)));
+    }
+    // So hai nhóm: thử với Gemini, mô hình hay đảo nhóm nào cao hơn ("Pass thấp hơn Withdrawn" khi Pass cao hơn), mà
+    // câu đảo nhóm vẫn đúng chữ chiều nên bước kiểm chiều không bắt được. Câu khuôn nói đúng thứ tự, nên dùng luôn.
+    if explanation.comparison == Comparison::Groups {
+        let detail =
+            "So hai nhóm: dùng câu viết theo khuôn để không nhầm nhóm nào cao hơn".to_string();
         return fallback(explanation, build_step(started, true, Some(detail)));
     }
     let prompt = build_narrate_prompt(question, explanation);
@@ -72,6 +80,14 @@ pub async fn narrate(
     }
     if summary.chars().count() > MAX_SUMMARY_CHARS {
         let detail = format!("Câu của mô hình dài hơn {MAX_SUMMARY_CHARS} ký tự");
+        return fallback(explanation, build_step(started, false, Some(detail)));
+    }
+    if let Err(wrong) = build_direction_check(summary, explanation) {
+        tracing::warn!(numbers = ?wrong, "narrate summary states a change in the wrong direction");
+        let detail = format!(
+            "Câu của mô hình nói ngược chiều thay đổi ở: {}",
+            wrong.join(", ")
+        );
         return fallback(explanation, build_step(started, false, Some(detail)));
     }
     match build_number_check(summary, explanation) {

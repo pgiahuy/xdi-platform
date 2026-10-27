@@ -61,15 +61,6 @@ pub fn build_change_parts(text: &str, max_fraction_digits: u32) -> (Option<&'sta
     (direction, amount)
 }
 
-/// "giảm 1.152.666,24"; số 0 là "không đổi". Chuỗi không đọc được thì in như build_number_text.
-pub fn build_change_text(text: &str, max_fraction_digits: u32) -> String {
-    match build_change_parts(text, max_fraction_digits) {
-        (Some("không đổi"), _) => "không đổi".to_string(),
-        (Some(direction), amount) => format!("{direction} {amount}"),
-        (None, amount) => amount,
-    }
-}
-
 // "1152666" thành "1.152.666": chèn dấu chấm trước mỗi nhóm ba chữ số tính từ bên phải.
 fn build_grouped(whole: &str) -> String {
     let mut grouped = String::with_capacity(whole.len() + whole.len() / 3);

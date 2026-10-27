@@ -221,6 +221,7 @@ fn build_why_explanation() -> Explanation {
     Explanation {
         measure: "Doanh thu".to_string(),
         measure_kind: MeasureKind::Total,
+        comparison: Comparison::Periods,
         base: ExplanationSlice {
             label: "Quý 2/2017".to_string(),
             filter: base,

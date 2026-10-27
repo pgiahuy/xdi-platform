@@ -1618,6 +1618,7 @@
                           "label": "Quý 3/2017",
                           "value": "8119100.00"
                         },
+                        "comparison": "periods",
                         "dimensions": [
                           {
                             "column": "Market",
@@ -2843,6 +2844,14 @@
           "other"
         ]
       },
+      "Comparison": {
+        "type": "string",
+        "description": "- `periods`: the slices are two periods; `compare` is the later one.\n- `groups`: the slices are two values of one column, with no order in time.",
+        "enum": [
+          "periods",
+          "groups"
+        ]
+      },
       "ConversationItem": {
         "type": "object",
         "description": "One conversation on a dataset.",
@@ -3232,6 +3241,7 @@
         "required": [
           "measure",
           "measure_kind",
+          "comparison",
           "base",
           "compare",
           "change",
@@ -3252,6 +3262,10 @@
           "compare": {
             "$ref": "#/components/schemas/ExplanationSlice",
             "description": "Slice being explained."
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/Comparison",
+            "description": "What the two slices are, which decides the words for the change: up or down between two periods, higher or\nlower between two groups."
           },
           "dimensions": {
             "type": "array",

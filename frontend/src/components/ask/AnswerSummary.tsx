@@ -18,7 +18,7 @@ export function AnswerSummary({ summary, byModel }: Props) {
       </h3>
       <p className="text-[15px] leading-relaxed tabular-nums">{summary}</p>
       {!byModel && (
-        <p className="text-xs text-muted-foreground">Câu này viết theo khuôn từ các số đã tính, không phải lời của mô hình.</p>
+        <p className="text-xs text-muted-foreground">Câu viết theo khuôn từ số đã tính.</p>
       )}
     </section>
   )
