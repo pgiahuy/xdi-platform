@@ -150,13 +150,14 @@ Mô hình ngôn ngữ:
   Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới được: chạy Ollama với
   `OLLAMA_HOST=0.0.0.0`, và chặn cổng 11434 từ bên ngoài bằng tường lửa vì Ollama không có đăng nhập.
 - Cửa sổ ngữ cảnh của Ollama: `OLLAMA_NUM_CTX` (mặc định 12288 token), gửi trong `options.num_ctx` của mỗi request.
-  Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM, theo
-  [tài liệu Ollama](https://docs.ollama.com/context-length)) và lặng lẽ bỏ phần đầu của prompt dài hơn, tức phần luật.
-  Đếm bằng tokenizer của Qwen2.5-Coder trên DataCo: prompt SQL khoảng 3 050 token, prompt dài nhất backend gửi (trần
-  24 000 ký tự) khoảng 7 180 token, prompt ở trần mà toàn danh sách giá trị khoảng 8 000 token. Prompt SQL nay có thêm
-  mục luật của guard (khoảng 3 000 ký tự), chưa đếm lại. 12288 đủ cho prompt đó cộng phần sửa SQL và câu trả lời.
-  Mỗi token cần thêm bộ nhớ K/V: với `qwen2.5-coder:7b` và bộ đệm `f16` là 56 KiB, tức khoảng 672 MiB ở 12288 token
-  (tính từ `config.json` của mô hình, chưa đo; số thật xem bằng `ollama ps`). Đặt nhỏ hơn mặc định thì backend ghi cảnh báo lúc khởi động.
+  Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM, theo [tài liệu
+  Ollama](https://docs.ollama.com/context-length)) và lặng lẽ bỏ phần đầu của prompt dài hơn, tức phần luật. Đếm bằng
+  tokenizer của Qwen2.5-Coder trên DataCo: prompt SQL khoảng 3 050 token, prompt dài nhất backend gửi (trần 24 000 ký
+  tự) khoảng 7 180 token, prompt ở trần mà toàn danh sách giá trị khoảng 8 000 token. Prompt SQL nay có thêm mục luật
+  của guard (khoảng 3 000 ký tự), chưa đếm lại. 12288 đủ cho prompt đó cộng phần sửa SQL và câu trả lời. Mỗi token cần
+  thêm bộ nhớ K/V: với `qwen2.5-coder:7b` và bộ đệm `f16` là 56 KiB, tức khoảng 672 MiB ở 12288 token (tính từ
+  `config.json` của mô hình, chưa đo; số thật xem bằng `ollama ps`). Đặt nhỏ hơn mặc định thì backend ghi cảnh báo lúc
+  khởi động.
 - Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,
   vì mô hình chạy bằng CPU chậm hơn nhiều).
 
@@ -596,11 +597,11 @@ hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi đ
 
 ### Bước 5. Hỏi
 
-Trang **Hỏi dữ liệu** là một khung trò chuyện: ô **Dataset** ở đầu khung (dính khi cuộn) chọn sẵn dataset tạo gần
-nhất, đổi được (đổi dataset là bắt đầu cuộc mới); ô hỏi dính đáy màn. Gõ câu hỏi rồi bấm **Hỏi** (Enter để hỏi, Shift+Enter
-để xuống dòng), hoặc bấm một câu gợi ý khi cuộc còn trống để hỏi ngay. Câu gợi ý đặt câu khó lên trước, gồm hai câu
-"vì sao". Với `mock` trên DataCo, gõ "Doanh thu theo thị trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở
-châu Âu" trong cùng cuộc.
+Trang **Hỏi dữ liệu** là một khung trò chuyện: ô **Dataset** ở đầu khung (dính khi cuộn) chọn sẵn dataset tạo gần nhất,
+đổi được (đổi dataset là bắt đầu cuộc mới); ô hỏi dính đáy màn. Gõ câu hỏi rồi bấm **Hỏi** (Enter để hỏi, Shift+Enter để
+xuống dòng), hoặc bấm một câu gợi ý khi cuộc còn trống để hỏi ngay. Câu gợi ý đặt câu khó lên trước, gồm hai câu "vì
+sao". Với `mock` trên DataCo, gõ "Doanh thu theo thị trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở châu Âu"
+trong cùng cuộc.
 
 Mỗi lượt là câu hỏi (căn phải) và câu trả lời (căn trái). Cột trái (màn hẹp: nút **Các cuộc trò chuyện**) liệt kê các cuộc
 đã hỏi trên dataset, mới trước, kèm nút **Cuộc trò chuyện mới**; bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó. Nút
@@ -614,15 +615,15 @@ SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của G
 
 ### Bước 6. Đọc kết quả và minh chứng
 
-Câu trả lời nằm trong thẻ **Trả lời** ngay dưới câu đã hỏi. Đầu thẻ là lời trả lời ngắn (câu "tại sao" thì hàng ba
-số và lời giải thích, xem dưới). Tiếp theo là biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu đồ cột
-khi cột nhóm duy nhất là một chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên DataCo ra biểu đồ cột); các
-dạng khác chỉ có bảng. Bảng **Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì `Hiện 1.000 trên <tổng> dòng.`),
-phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân). **Tải CSV** tải các dòng giao diện
-đã nhận, tối đa 1000 dòng, giữ giá trị gốc. Cuối thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu hỏi, đọc từ câu
-SQL đã chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời gian** (dòng nào
-không có thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Bấm tiêu đề **Kết quả** hay
-**Đã hiểu là** để thu gọn hoặc mở phần đó; khung **Đã hiểu là** mở sẵn ở lượt mới nhất, thu gọn ở các lượt trước.
+Câu trả lời nằm trong thẻ **Trả lời** ngay dưới câu đã hỏi. Đầu thẻ là lời trả lời ngắn (câu "tại sao" thì hàng ba số và
+lời giải thích, xem dưới). Tiếp theo là biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu
+đồ cột khi cột nhóm duy nhất là một chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên DataCo ra biểu đồ cột);
+các dạng khác chỉ có bảng. Bảng **Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì `Hiện 1.000 trên <tổng> dòng.`),
+phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân). **Tải CSV** tải các dòng giao diện đã
+nhận, tối đa 1000 dòng, giữ giá trị gốc. Cuối thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu hỏi, đọc từ câu SQL đã
+chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời gian** (dòng nào không có
+thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Bấm tiêu đề **Kết quả** hay **Đã hiểu
+là** để thu gọn hoặc mở phần đó; khung **Đã hiểu là** mở sẵn ở lượt mới nhất, thu gọn ở các lượt trước.
 
 Pane **Minh chứng** nằm bên phải trên màn rộng, dưới khung trò chuyện trên màn hẹp, và hiện minh chứng của lượt đang
 chọn (mặc định lượt mới nhất); nút **Minh chứng** ở cuối mỗi câu trả lời chọn lượt đó. Nút **Thu gọn** ẩn pane, chỉ
@@ -632,7 +633,9 @@ còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**)
   (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép
   nguyên văn. Guard là gì: [GUARD.md](GUARD.md).
 - **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: mỗi chiều một bảng giá trị
-  hai kỳ (hay hai nhóm) và phần chênh lệch của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách được. Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
+  hai kỳ (hay hai nhóm) và phần chênh lệch của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách được.
+  Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường
+  thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
 - **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm một ô số đo của bảng **Kết quả**, hay số của
   một kỳ hay một nhóm trong bảng phân rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
 - **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL

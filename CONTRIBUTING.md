@@ -28,9 +28,10 @@ make eval           # hỏi các câu mẫu trên DataCo với mock, so với SQ
 make hooks          # cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/, openapi.json, Makefile
 ```
 
-CI chạy `make check-fast` và `make eval` khi PR đổi `backend/` hay file backend đọc lúc test (`data/domains/`,
-`eval/`, `openapi.json` và vài file khác, danh sách ở `.github/workflows/ci.yml`), và `make check-frontend` khi PR đổi
-`frontend/`, `openapi.json` hoặc `Makefile`. CI không build image Docker; workflow "Docker image" chạy tay ở tab Actions.
+CI chạy `make check-fast` và `make eval` khi PR đổi `backend/` hay file backend đọc lúc test (`data/domains/`, `eval/`,
+`openapi.json` và vài file khác, danh sách ở `.github/workflows/ci.yml`), và `make check-frontend` khi PR đổi
+`frontend/`, `openapi.json` hoặc `Makefile`. CI không build image Docker; workflow "Docker image" chạy tay ở tab
+Actions.
 
 Thay đổi schema Postgres là một file migration mới trong `backend/migrations/`, đánh số tiếp theo file mới nhất, ví dụ
 `0009_mo_ta.sql`. Không sửa file migration đã merge: mọi database đã áp nó sẽ từ chối khởi động vì checksum không khớp.

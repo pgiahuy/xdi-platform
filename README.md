@@ -31,9 +31,9 @@ DataCo (1500 dòng). Mô hình mặc định là `mock`: không cần khóa, ch�
 theo thị trường" hay "Vì sao doanh thu tháng 5 năm 2017 tăng". Hỏi câu tự do trên dữ liệu của bạn thì đặt
 `LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hoặc `ollama`) trong `.env`, rồi chạy lại `docker compose up -d`.
 
-Build lần đầu biên dịch Rust và DuckDB (đo trên máy 16 nhân: 8 phút) và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU;
-máy ít RAM thì đặt `CARGO_BUILD_JOBS`.
-Hướng dẫn đầy đủ (build từ nguồn, đưa lên Internet, sao lưu, lỗi hay gặp, dùng lần đầu): [docs/INSTALL.md](docs/INSTALL.md).
+Build lần đầu biên dịch Rust và DuckDB (đo trên máy 16 nhân: 8 phút) và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy
+ít RAM thì đặt `CARGO_BUILD_JOBS`. Hướng dẫn đầy đủ (build từ nguồn, đưa lên Internet, sao lưu, lỗi hay gặp, dùng lần
+đầu): [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Dữ liệu dùng trong repo
 
@@ -48,7 +48,8 @@ bộ đầy đủ tải bằng `data/download.sh` (kiểm SHA-256) vào `data/do
 | OULAD (Open University Learning Analytics), 7 bảng CSV, khoảng 464 MB | `sh data/download.sh oulad` | Dữ liệu giáo dục: nạp `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần) để hỏi theo kết quả học tập; cần Gemini hoặc Ollama |
 
 DataCo từ Mendeley Data (Constante, Silva, Pereira, 2019); Online Retail II (Chen, 2019) và OULAD (Kuzilek, Hlosta,
-Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, ghi công và cách nạp: [data/README.md](data/README.md).
+Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, ghi công và cách nạp:
+[data/README.md](data/README.md).
 
 ## Đã có
 

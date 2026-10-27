@@ -31,8 +31,8 @@ Mỗi chỉ số trong `dataco.metrics.json` có `name`, `description`, `express
 ## Tải bản đầy đủ
 
 Dataset đầy đủ không commit vào repo. `sh data/download.sh` tải vào `data/downloads/` (git bỏ qua), kiểm SHA-256 từng
-file, file đã có và đúng checksum thì bỏ qua; `sh data/download.sh dataco`, `retail` hay `oulad` để tải một bộ. Tải không được
-hay checksum lệch thì script in trang nguồn để tải tay. Nạp file tải về ở trang **Dữ liệu**.
+file, file đã có và đúng checksum thì bỏ qua; `sh data/download.sh dataco`, `retail` hay `oulad` để tải một bộ. Tải
+không được hay checksum lệch thì script in trang nguồn để tải tay. Nạp file tải về ở trang **Dữ liệu**.
 
 | Dataset | File trong `downloads/` | Nguồn | Giấy phép, ghi công |
 |---|---|---|---|
