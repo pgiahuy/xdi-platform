@@ -1,8 +1,9 @@
 # xdi-platform
 
-Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên, đang phát triển, chưa có bản phát hành. Nạp một file CSV, Parquet
-hoặc Excel, hỏi bằng tiếng Việt, nhận bảng, biểu đồ và câu SQL đã chạy. Với câu hỏi "tại sao", hệ thống tính nhóm nào
-làm con số tăng hay giảm và cho xem các dòng dữ liệu đứng sau từng nhóm. Con số do engine phân tích (DuckDB) tính trên
+Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên, đang phát triển; bản phát hành đầu tiên là
+[v0.1.0](https://github.com/pgiahuy/xdi-platform/releases). Nạp một file CSV, Parquet hoặc Excel, hỏi bằng tiếng Việt,
+nhận bảng, biểu đồ và câu SQL đã chạy. Với câu hỏi "tại sao", hệ thống tính nhóm nào làm con số tăng hay giảm và cho
+xem các dòng dữ liệu đứng sau từng nhóm. Con số do engine phân tích (DuckDB) tính trên
 dữ liệu; mô hình ngôn ngữ chỉ viết SQL hay điền form từ câu hỏi, viết mô tả cột và lời giải thích, không nhận các dòng
 dữ liệu ([docs/PRIVACY.md](docs/PRIVACY.md)).
 
@@ -10,10 +11,11 @@ dữ liệu ([docs/PRIVACY.md](docs/PRIVACY.md)).
 
 Đã có trên `main`:
 
-- Tài khoản và workspace: màn thiết lập lần đầu, đăng nhập, mỗi người nhiều workspace, hai vai `admin` (nạp dữ liệu,
-  quản lý thành viên) và `member` (xem, hỏi), trang quản trị tài khoản cho quản trị hệ thống.
-- Nạp dữ liệu: CSV (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet; mỗi lần nạp là một phiên bản. Hồ sơ
-  cột (kiểu, vai trò, giá trị) lập lúc nạp; mô hình ngôn ngữ thêm mô tả, bí danh, đơn vị của cột số đo và câu hỏi gợi ý.
+- Tài khoản và workspace: màn thiết lập lần đầu, đăng nhập, mỗi người nhiều workspace, hai vai `admin` (nạp và xóa dữ
+  liệu, quản lý thành viên) và `member` (xem, hỏi), trang quản trị tài khoản cho quản trị hệ thống.
+- Nạp dữ liệu: CSV (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet; mỗi lần nạp là một phiên bản, xóa
+  một dataset là xóa mọi phiên bản và file của nó. Hồ sơ cột (kiểu, vai trò, giá trị) lập lúc nạp; mô hình ngôn ngữ
+  thêm mô tả, bí danh, đơn vị của cột số đo và câu hỏi gợi ý.
 - Hỏi dữ liệu: câu hỏi thành SQL, qua guard (một câu `SELECT` chỉ đọc trên bảng, cột, hàm được phép, có trần số dòng)
   rồi chạy trên DuckDB, mô hình sửa một lần khi câu lỗi; câu có chữ khớp nhiều cột thì hỏi lại để chọn. Kết quả có bảng
   phân trang, tải CSV, biểu đồ cột hoặc đường, thẻ "Đã hiểu là" (đo gì, lọc gì, nhóm theo gì, khoảng thời gian) và pane
@@ -26,6 +28,8 @@ dữ liệu ([docs/PRIVACY.md](docs/PRIVACY.md)).
 - Xem dòng nguồn: bấm một số của bảng kết quả hay của bảng phân rã để xem từng trang các dòng dữ liệu đứng sau số đó.
 - Dataset mẫu: thiết lập lần đầu nạp sẵn 1500 dòng DataCo kèm vài chỉ số mẫu vào workspace đầu tiên, hỏi được ngay
   (tắt bằng `SEED_SAMPLE=false`); `data/download.sh` tải bản đầy đủ của DataCo và Online Retail II.
+- Bộ đánh giá câu hỏi mẫu: `make eval` hỏi 14 câu trên DataCo mẫu, so kết quả với SQL đúng viết tay; CI báo lỗi khi
+  tỷ lệ đúng giảm dưới mức chốt trong `eval/baseline.json`.
 - Mô hình ngôn ngữ: `mock` (không cần khóa, trả lời bộ câu hỏi mẫu trên dataset DataCo), Gemini, Ollama.
 
 Chưa có trên `main`:
@@ -34,7 +38,7 @@ Chưa có trên `main`:
   hay màn nào đặt `data_role` và chính sách lọc.
 - Chế độ demo, màn xem lịch sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.
 
-Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1), lịch sử thay đổi ở
+Tiến độ ở [milestones](https://github.com/pgiahuy/xdi-platform/milestones), lịch sử thay đổi ở
 [CHANGELOG.md](CHANGELOG.md), bảng trạng thái chi tiết ở cuối [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái).
 
 Backend Rust (Axum, DuckDB nhúng, Postgres), frontend React với Vite. Giấy phép Apache 2.0.
@@ -84,7 +88,7 @@ HTTPS, sao lưu, lỗi hay gặp): [docs/INSTALL.md](docs/INSTALL.md).
 backend/     crate Rust: api/ -> service/ -> engine/ và auth/, migrations/ cho Postgres
 frontend/    React, Vite, Tailwind, shadcn/ui; build ra file tĩnh
 docs/        tài liệu, cũng là nguồn GitHub Pages
-data/        nguồn và giấy phép dataset, download.sh và samples/ (chưa có dataset), domains/ (gói khái niệm ngành)
+data/        nguồn và giấy phép dataset, download.sh và samples/ (DataCo mẫu), domains/ (gói khái niệm ngành)
 Makefile     lối vào duy nhất cho build, test, chạy; CI gọi đúng các target này
 ```
 

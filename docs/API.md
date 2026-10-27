@@ -52,7 +52,7 @@ không dò được tên workspace. Id dataset của workspace khác cũng trả
 
 | Vai | Thuộc về | Gọi việc không đủ quyền |
 |---|---|---|
-| `admin`, `member` | Một tài khoản trong một workspace (trường `role` của `Membership`) | `member` gọi việc của admin (nạp file, liệt kê sheet, đổi tên hay xóa workspace, thêm, đổi vai hay xóa người khác): 403 |
+| `admin`, `member` | Một tài khoản trong một workspace (trường `role` của `Membership`) | `member` gọi việc của admin (nạp file, liệt kê sheet, xóa dataset, đổi tên hay xóa workspace, thêm, đổi vai hay xóa người khác): 403 |
 | Quản trị hệ thống | Tài khoản (`is_system_admin`), không theo workspace | Người khác gọi `/api/admin/...`: 403 |
 
 Thành viên thường nhận 403 thay vì 404 vì họ đã biết workspace có thật, chỉ thiếu quyền. Quản trị hệ thống không tự có
@@ -118,9 +118,9 @@ Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, ph
 
 ## Xóa dataset
 
-`DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, lịch sử câu hỏi (CASCADE)
-và file Parquet trên đĩa. Chỉ admin của workspace; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa
-xong. Không khôi phục được.
+`DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, chỉ số, lịch sử câu hỏi
+(CASCADE) và file Parquet trên đĩa (`delete_dataset` trong `backend/src/service/ingest.rs`). Chỉ admin của workspace,
+`member` nhận 403; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không khôi phục được.
 
 ## Truy dòng nguồn
 

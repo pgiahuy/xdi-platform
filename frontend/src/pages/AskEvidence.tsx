@@ -3,7 +3,7 @@
 backend/src/service/ask/contract.rs), gọi useDrill để lấy dòng nguồn của chỗ vừa bấm. Phần hiện ở
 components/ask/EvidencePane.tsx. Tab đang mở, chỗ vừa bấm và trang dòng nguồn do AskPage giữ (evidenceView.ts), vì ô
 của bảng kết quả nằm ngoài pane cũng mở tab Dòng nguồn.
-Tab Dòng nguồn gọi route drill (backend/src/service/drill.rs) với khóa của chỗ vừa bấm: breakdown cho dòng phân rã,
+Tab Dòng nguồn gọi route drill (backend/src/service/drill/mod.rs) với khóa của chỗ vừa bấm: breakdown cho dòng phân rã,
 cell cho ô số đo; lỗi thì hiện lời báo của backend; ở chế độ dữ liệu mẫu thì hiện vài dòng mẫu. */
 
 import type { AskResponse } from '@/api/ask'

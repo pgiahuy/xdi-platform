@@ -108,7 +108,10 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `BACKEND_PORT` | `8000` | Cổng của giao diện và API |
+| `BACKEND_BIND` | trống (mọi địa chỉ) | Địa chỉ backend nghe trên máy host khi chạy compose; đặt `127.0.0.1` khi có Caddy trên cùng máy để cổng HTTP thường không mở ra Internet (mục 3) |
 | `POSTGRES_PORT` | `5433` | Cổng Postgres mở ra máy host (để công cụ quản trị database kết nối) |
+| `DB_MAX_CONNECTIONS` | `10` | Số kết nối Postgres tối đa của backend |
+| `DB_ACQUIRE_TIMEOUT_SECS` | `5` | Số giây một request chờ lấy kết nối Postgres khi mọi kết nối đang bận; quá thì request nhận lỗi thay vì treo |
 | `LLM_PROVIDER` | `mock` | `mock` không gọi ra ngoài; `gemini` cần `GEMINI_API_KEY`; `ollama` cần máy chạy Ollama ở `OLLAMA_URL` |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini khi `LLM_PROVIDER=gemini` |
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
@@ -117,6 +120,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `RUST_LOG` | `info` | Mức log |
 | `SEED_SAMPLE` | `true` | Thiết lập lần đầu nạp dataset mẫu DataCo kèm chỉ số mẫu vào workspace đầu tiên (mục 7, bước 1); `false` để workspace trống |
 | `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | Để dành cho đăng nhập bằng Google, backend hiện chưa đọc; để trống |
 
 Mô hình ngôn ngữ:
 
@@ -406,7 +410,7 @@ Không dùng Makefile thì chạy tay đúng các lệnh trong target `backup` v
 
 Quên mật khẩu quản trị, không còn ai đăng nhập được: chạy trên máy chủ, lệnh in một mật khẩu tạm và đăng xuất mọi phiên
 của tài khoản đó. Đăng nhập bằng mật khẩu tạm rồi đổi ở **Tài khoản và mật khẩu** (menu
-tài khoản góc trên bên phải).
+tài khoản: tên người dùng ở chân thanh bên, hoặc góc phải thanh trên khi màn hẹp).
 
 ```bash
 docker compose exec backend xdi-backend reset-password --email ban@example.com
@@ -575,6 +579,9 @@ hạn, phiên bản và tên cột: [Dữ liệu](DATA.md). Nạp lại đúng f
 ...`, không tạo bản mới. Dữ liệu tháng sau của cùng bảng thì bấm **Nạp phiên bản mới** ở dòng của dataset đó: phiên bản
 mới thành dữ liệu hiện hành, phiên bản cũ vẫn giữ.
 
+Bỏ một dataset: bấm **Xóa** ở dòng của nó rồi xác nhận **Xóa dataset** (chỉ `admin`). Mọi phiên bản, hồ sơ cột, chỉ
+số, lịch sử câu hỏi và file Parquet của dataset bị xóa hẳn, không khôi phục được.
+
 ### Bước 4. Chờ hồ sơ dữ liệu
 
 Phần cấu trúc của hồ sơ (kiểu và vai trò từng cột) xong ngay trong lần nạp. Phần do mô hình viết (mô tả cột, bí danh,
@@ -619,8 +626,8 @@ Bốn tab:
 - **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: giá trị hai lát cắt và
   **Chênh lệch**, mỗi chiều một bảng phần đóng góp của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách
   được. Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
-- **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm số của một kỳ hay một nhóm trong bảng phân
-  rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
+- **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm một ô số đo của bảng **Kết quả**, hay số của
+  một kỳ hay một nhóm trong bảng phân rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
 - **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL
   (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Tính phân rã và Mô hình viết lời giải thích (câu "tại sao"), Lưu vào
   lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ viết SQL, điền form và viết lời, còn con số do
@@ -634,19 +641,15 @@ có trong bảng phân rã, mô hình viết sai thì backend dùng câu khuôn 
 sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
 năm 2017 giảm".
 
-Chưa có trên giao diện hiện tại (tiến độ ở mục Trạng thái của [ARCHITECTURE.md](ARCHITECTURE.md)):
-
-- Bấm một ô của bảng kết quả để xem dòng nguồn: backend có route `drill` ([API.md](API.md)), giao diện chưa nối.
-
 ### Bước 7. Mời thành viên
 
 Chưa có thư mời qua email hay tự đăng ký. Thành viên cần có tài khoản trước, rồi được thêm vào workspace:
 
 1. Quản trị hệ thống mở **Quản lý tài khoản** ở thanh bên, khung **Tạo tài khoản**: **Email**, **Tên hiển thị**,
    **Mật khẩu ban đầu** (8 đến 128 ký tự), bấm **Tạo tài khoản**. Chuyển mật khẩu cho người đó; họ đổi lại ở **Tài khoản
-   và mật khẩu** trong menu tài khoản góc trên bên phải.
+   và mật khẩu** trong menu tài khoản (tên người dùng ở chân thanh bên, hoặc góc phải thanh trên khi màn hẹp).
 2. `admin` của workspace mở **Thành viên**, khung **Thêm thành viên**: **Email** của tài khoản vừa tạo, **Vai** là
    **Admin** hoặc **Thành viên**, bấm **Thêm**.
 
-**Thành viên** chọn dataset và hỏi, không nạp được file. **Admin** thêm nạp dữ liệu, thêm, xóa, đổi vai thành viên, đổi
-tên và xóa workspace. Người được thêm thấy workspace trong ô chọn workspace sau khi đăng nhập.
+**Thành viên** chọn dataset và hỏi, không nạp được file. **Admin** thêm nạp và xóa dataset, thêm, xóa, đổi vai
+thành viên, đổi tên và xóa workspace. Người được thêm thấy workspace trong ô chọn workspace sau khi đăng nhập.

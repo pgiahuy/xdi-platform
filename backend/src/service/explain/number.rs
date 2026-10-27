@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/number.rs - cách viết số trong lời diễn giải của câu "tại sao" (#38): kiểu Việt Nam như bảng phân rã
-trên giao diện (cellFormat.ts), nhóm nghìn bằng dấu chấm, phần thập phân sau dấu phẩy, tối đa hai chữ số lẻ. explain.rs
+trên giao diện (cellFormat.ts), nhóm nghìn bằng dấu chấm, phần thập phân sau dấu phẩy, tối đa hai chữ số lẻ. explain/mod.rs
 dùng cùng một hàm cho prompt narrate, tập số được phép của bước kiểm và câu khuôn, nên số mô hình chép từ prompt khớp
 đúng chuỗi bước kiểm chờ. Hàm thuần, test ở ask/narrate_tests.rs.
 

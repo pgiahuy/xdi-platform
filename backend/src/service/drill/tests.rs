@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/drill/tests.rs - test truy dòng nguồn của một ô (drill.rs, drill/sql.rs) trên DuckDB thật với file Parquet
+/* service/drill/tests.rs - test truy dòng nguồn của một ô (drill/mod.rs, drill/sql.rs) trên DuckDB thật với file Parquet
 tạm; không cần Postgres. Mỗi test trả lời một câu như luồng hỏi (guard, chạy, ResultTable), lấy khóa từ đúng dòng kết
 quả đó rồi truy dòng nguồn, nên tên cột khóa là tên giao diện nhận được. Phần đọc Postgres, 404 và quyền của người bấm
-qua router ở api/drill/tests.rs.
+qua router ở api/drill_tests.rs.
 
 Dữ liệu: 240 đơn, mỗi ngày một đơn từ 2017-01-01; Market xoay vòng Europe, LATAM, (trống), USCA; Customer Segment
 xoay vòng ba giá trị; số tiền DECIMAL để tổng là phép cộng đúng, so được bằng chuỗi. */

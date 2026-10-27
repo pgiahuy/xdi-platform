@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask.rs - luồng một câu hỏi (docs/ARCHITECTURE.md mục 2): dataset và phiên bản đang dùng, ngữ cảnh
+/* service/ask/mod.rs - luồng một câu hỏi (docs/ARCHITECTURE.md mục 2): dataset và phiên bản đang dùng, ngữ cảnh
 (ask/context.rs) cùng chỉ số, câu đã đúng và gói ngành, mô hình viết SQL (prompt ở ask/prompt.rs), guard, chạy và sửa
 một lần (ask/run.rs), ghi lịch sử (engine/store/queries.rs), rồi dựng AskResponse (ask/contract.rs). Mỗi bước đo thời
 gian thành một AskStep. Lựa chọn của response dựng ở ask/choices.rs và ask/response_choices.rs; thẻ "Đã hiểu là", vai
@@ -298,7 +298,7 @@ async fn build_allowed_table(
 }
 
 /// Điều kiện lọc dòng theo vai dữ liệu (rls_policies) của một thành viên trên một dataset; luồng hỏi và truy dòng nguồn
-/// (drill.rs) cùng gọi để mọi SQL chạy trên dữ liệu bị lọc như nhau. Admin không bị lọc: họ tự sửa được chính sách,
+/// (drill/mod.rs) cùng gọi để mọi SQL chạy trên dữ liệu bị lọc như nhau. Admin không bị lọc: họ tự sửa được chính sách,
 /// lọc với họ không bảo vệ được gì (#45).
 pub(super) async fn load_row_filters(
     state: &AppState,

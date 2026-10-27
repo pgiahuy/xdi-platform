@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/contract.rs - hợp đồng của POST /workspaces/{ws}/datasets/{id}/ask: kiểu response và lựa chọn người
-hỏi gửi kèm request. service/ask.rs dựng AskResponse, api/query.rs trả nó ra JSON; đặt ở service chứ không ở api để
+hỏi gửi kèm request. service/ask/mod.rs dựng AskResponse, api/query.rs trả nó ra JSON; đặt ở service chứ không ở api để
 phụ thuộc vẫn đi một chiều (như UploadResult ở ingest.rs). Mẫu đúng kiểu ở ask/examples.rs. Quyết định và lý do ở
 docs/ARCHITECTURE.md mục 8.
 

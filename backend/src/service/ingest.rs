@@ -12,7 +12,7 @@ Các bước, sắp để lỗi ở bước đầu không để lại gì:
    lỗi thì xóa dataset vừa tạo, nên nạp lại cùng bộ file không vấp phiên bản trùng hash mà thiếu hồ sơ.
 5. Chuyển thư mục Parquet về chỗ cuối <DATA_DIR>/<workspace>/<dataset>/<thư mục phiên bản>, rồi mới đặt phiên bản
    hiện hành, để phiên bản hiện hành luôn có file và có hồ sơ.
-6. Trả 201 rồi lập hồ sơ lớp ngữ nghĩa nền (service/semantic.rs): mô tả, bí danh, câu hỏi gợi ý.
+6. Trả 201 rồi lập hồ sơ lớp ngữ nghĩa nền (service/semantic/mod.rs): mô tả, bí danh, câu hỏi gợi ý.
 Thư mục tạm xóa khi Staging ra khỏi phạm vi, kể cả khi lỗi; backend chết giữa chừng thì lần khởi động sau xóa
 (clear_staging). Bước 4 và 5 chưa nằm trong một giao dịch: lỗi giữa hai bước có thể để lại dòng thừa trong Postgres
 (#79).
@@ -582,7 +582,7 @@ fn source_kind(format: FileFormat) -> SourceKind {
     }
 }
 
-/// Id dataset trong đường dẫn; sai dạng UUID thì 404 như dataset không có. ask.rs dùng chung.
+/// Id dataset trong đường dẫn; sai dạng UUID thì 404 như dataset không có. ask/mod.rs dùng chung.
 pub(super) fn parse_dataset_id(id: &str) -> Result<Uuid, AppError> {
     Uuid::parse_str(id.trim()).map_err(|_| dataset_not_found())
 }

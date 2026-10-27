@@ -1,6 +1,6 @@
 # xdi-platform
 
-*Natural language data analysis, in development, not released yet. Upload a CSV, Parquet or Excel file, ask a question in Vietnamese, and get a table, a chart and the SQL that produced it, checked by a SQL guard before it runs. For "why" questions, the engine computes which groups drove the change and shows the source rows behind each group. Rust backend, DuckDB for analytics, Postgres for application data, React UI. Apache 2.0. Vietnamese documentation follows.*
+*Natural language data analysis, in development; the first release is v0.1.0. Upload a CSV, Parquet or Excel file, ask a question in Vietnamese, and get a table, a chart and the SQL that produced it, checked by a SQL guard before it runs. For "why" questions, the engine computes which groups drove the change and shows the source rows behind each group. Rust backend, DuckDB for analytics, Postgres for application data, React UI. Apache 2.0. Vietnamese documentation follows.*
 
 Nạp một file dữ liệu, hỏi bằng tiếng Việt, nhận bảng, biểu đồ và câu SQL đã chạy. Với câu hỏi "tại sao", hệ thống tính
 nhóm nào làm con số tăng hay giảm và cho xem các dòng dữ liệu đứng sau từng nhóm. Con số do engine phân tích tính trên
@@ -9,12 +9,12 @@ dữ liệu ([Dữ liệu và quyền riêng tư](PRIVACY.md)).
 
 ## Trạng thái
 
-Đã có: tài khoản, workspace và hai vai `admin`, `member`; nạp CSV, Parquet, Excel thành phiên bản, hồ sơ cột và câu hỏi
-gợi ý; hỏi dữ liệu ra SQL qua guard, bảng, biểu đồ cột hoặc đường, thẻ "Đã hiểu là", pane bằng chứng với câu SQL và các
-bước đã chạy; câu "tại sao" có bảng phân rã, lời giải thích và dòng nguồn của từng dòng phân rã; mô hình ngôn ngữ
-`mock`, Gemini, Ollama.
+Đã có: tài khoản, workspace và hai vai `admin`, `member`; nạp CSV, Parquet, Excel thành phiên bản, xóa dataset, hồ sơ
+cột và câu hỏi gợi ý; dataset mẫu DataCo nạp sẵn khi thiết lập lần đầu; hỏi dữ liệu ra SQL qua guard, bảng, biểu đồ cột
+hoặc đường, thẻ "Đã hiểu là", pane bằng chứng với câu SQL và các bước đã chạy; câu "tại sao" có bảng phân rã và lời
+giải thích; bấm một số của bảng kết quả hay bảng phân rã để xem dòng nguồn; mô hình ngôn ngữ `mock`, Gemini, Ollama.
 
-Chưa có: bấm một ô của bảng kết quả để xem dòng nguồn, gán vai dữ liệu để lọc dòng, chế độ demo, dataset mẫu. Danh
+Chưa có: gán vai dữ liệu để lọc dòng, chế độ demo, màn xem lịch sử câu hỏi, màn sửa hồ sơ cột và chỉ số. Danh
 sách đầy đủ ở [README](https://github.com/pgiahuy/xdi-platform#trạng-thái) và bảng Trạng thái của
 [Kiến trúc](ARCHITECTURE.md#trạng-thái).
 
@@ -30,7 +30,7 @@ docker compose up --build
 Mở http://localhost:8000; lần đầu, nhập mã thiết lập in trong log của backend
 (`docker compose logs backend | grep setup_code`) để tạo tài khoản quản trị và workspace đầu tiên.
 `curl localhost:8000/api/health` trả `{"status":"ok"}`. Từ màn thiết lập tới câu trả lời đầu tiên: mục 7 của
-[Cài đặt](INSTALL.md). Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1).
+[Cài đặt](INSTALL.md). Tiến độ ở [milestones](https://github.com/pgiahuy/xdi-platform/milestones).
 
 ## Tài liệu
 

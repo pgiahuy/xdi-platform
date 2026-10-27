@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/narrate.rs - bước narrate của câu "tại sao" (#41): nhờ mô hình viết lời diễn giải từ bảng phân rã
 (Explanation) đã tính, kiểm mọi số trong lời đó có trong bảng không, rơi về câu khuôn khi cần. Prompt, tập số được
-phép, bước kiểm và câu khuôn là hàm thuần ở explain.rs; file này ghép các bước và dựng AskStep, như ask/run.rs ghép
+phép, bước kiểm và câu khuôn là hàm thuần ở explain/mod.rs; file này ghép các bước và dựng AskStep, như ask/run.rs ghép
 guard, run, repair. #33/#38 gọi narrate sau bước explain rồi đưa summary, summary_by_model vào Explanation và step
 vào danh sách bước.
 

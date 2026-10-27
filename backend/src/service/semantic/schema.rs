@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/semantic/schema.rs - JSON Schema câu trả lời của task Profile (hồ sơ lớp ngữ nghĩa, #23), gửi kèm request
 qua LlmRequest::json_schema để Gemini (responseJsonSchema) và Ollama (format) bị ép trả đúng khuôn mà
-service/semantic.rs (build_profile_answer) đọc. Không có schema, khuôn chỉ nằm trong lời prompt; chạy thử với
+service/semantic/mod.rs (build_profile_answer) đọc. Không có schema, khuôn chỉ nằm trong lời prompt; chạy thử với
 gemini-3.5-flash-lite thì không mục nào của câu trả lời qua được build_profile_answer và cả hồ sơ bị bỏ. Schema không
 thay bước kiểm: mock và mô hình không theo schema vẫn đi qua build_profile_answer như cũ. */
 

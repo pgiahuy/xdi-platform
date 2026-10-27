@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/explain.rs - giải thích câu hỏi "tại sao": chọn hai lát cắt, tính chênh lệch độ đo, phân rã theo
+/* service/explain/mod.rs - giải thích câu hỏi "tại sao": chọn hai lát cắt, tính chênh lệch độ đo, phân rã theo
 từng chiều, xếp hạng đóng góp. Tổng các đóng góp phải bằng đúng chênh lệch. LLM chỉ diễn giải bảng số này.
 
 Hiện có phần toán, hàm thuần không đọc SQL, DuckDB hay mô hình: đóng góp của từng nhóm và xếp hạng chiều (#39), tách

@@ -23,7 +23,7 @@ tắc làm việc; tài liệu khác trỏ về đây, không chép lại.
 backend/     một crate Rust: api/ -> service/ -> engine/ và auth/. Phụ thuộc một chiều, không gọi ngược.
 frontend/    React với Vite, build ra file tĩnh, backend phục vụ. Kiểu API sinh từ openapi.json, không viết tay.
 docs/        tài liệu, cũng là nguồn GitHub Pages.
-data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB (chưa có file), domains/ gói khái niệm ngành.
+data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB (DataCo mẫu), domains/ gói khái niệm ngành.
 scripts/     hook pre-push, kiểm số phiên bản, ghi chú phát hành, danh sách giấy phép.
 ```
 

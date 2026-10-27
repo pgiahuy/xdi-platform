@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/why.rs - nhánh câu "tại sao" của endpoint hỏi (#38). ask.rs gọi ask_why sau bước context khi
+/* service/ask/why.rs - nhánh câu "tại sao" của endpoint hỏi (#38). ask/mod.rs gọi ask_why sau bước context khi
 build_question_kind (explain/form.rs) ra Why, thay cho bước llm và run_with_repair của câu thường. Ở đây: gọi run_why
 (explain/run.rs: form, kiểm form, SQL do code dựng, phân rã, lời), dựng thẻ "Đã hiểu là", vai trò cột và biểu đồ
 (ask/view.rs), ghi lịch sử kèm form và Explanation, rồi dựng AskResponse. Trạng thái và lỗi theo cùng quy tắc với câu
-thường (đầu file ask.rs); test qua route ở api/ask_why_tests.rs.
+thường (đầu file ask/mod.rs); test qua route ở api/ask_why_tests.rs.
 
-queries.explanation lưu object {"form": <form mô hình điền>, "explanation": <Explanation>}. drill.rs đọc điều kiện lát
+queries.explanation lưu object {"form": <form mô hình điền>, "explanation": <Explanation>}. drill/mod.rs đọc điều kiện lát
 cắt và câu SQL từng chiều trong "explanation" để truy dòng nguồn của một dòng phân rã; "form" giữ lại để xem câu hỏi
 đã được hiểu thế nào. "explanation" là null khi có bảng tổng mà không phân rã được (cảnh báo explanation_unavailable).
 Câu chạy như câu thường (form sai hai lần) không có form, nên cột để null như câu thường. */
@@ -26,7 +26,7 @@ use crate::service::ask::{build_base_response, build_value_warnings, record_quer
 use crate::service::explain::run::{run_why, WhyInput, WhyOutcome};
 use crate::{error::AppError, state::AppState};
 
-/// Những gì ask.rs đã đọc và dựng trước khi rẽ nhánh.
+/// Những gì ask/mod.rs đã đọc và dựng trước khi rẽ nhánh.
 pub(super) struct WhyAsk<'a> {
     pub dataset: &'a Dataset,
     pub version: &'a DatasetVersion,

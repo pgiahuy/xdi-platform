@@ -4,7 +4,7 @@ explain/check.rs) thay vì đoán nghĩa từ cây SQL: đọc theo cây thì v�
 điều kiện OR khó hiểu, còn plan biết đó là hai kỳ hay hai nhóm đang so. ask/view.rs gọi build_why_understanding khi
 câu "tại sao" đã có bảng tổng; test ở understanding/tests.rs.
 
-Mỗi UnderstoodItem.sql vẫn là đoạn nguyên văn của sql_guarded như ở understanding.rs: đoạn được in từ đúng cây mà
+Mỗi UnderstoodItem.sql vẫn là đoạn nguyên văn của sql_guarded như ở understanding/mod.rs: đoạn được in từ đúng cây mà
 explain/sql.rs dùng để dựng câu (build_why_conditions, aggregate của độ đo), và guard in lại câu bằng cùng sqlparser
 nên chữ của các vế đó không đổi. Khóa nhóm và thứ tự vẫn đọc từ câu đã chạy bằng build_understanding như câu thường.
 Các phần:

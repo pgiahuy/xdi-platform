@@ -11,7 +11,7 @@ VARCHAR) nên tự parse bằng strptime; hồ sơ (#22) hay bước seed (#25) 
 Tỷ lệ và số đếm về đơn tính theo đơn hàng (đếm "Order Id" phân biệt), không theo dòng: một đơn có nhiều dòng.
 Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/năm nên DuckDB báo lỗi, và có câu sửa (task repair)
 đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask/run.rs) mà không cần mô hình thật. Ba câu nữa để thử các
-nhánh còn lại của luồng hỏi (service/ask.rs) trên giao diện: "Xóa các đơn hàng bị hủy" viết câu DELETE nên guard từ
+nhánh còn lại của luồng hỏi (service/ask/mod.rs) trên giao diện: "Xóa các đơn hàng bị hủy" viết câu DELETE nên guard từ
 chối (rejected); "Doanh thu theo ngày đặt hàng" đọc sai định dạng ngày cả ở câu sửa (failed); "Doanh thu ở thị trường
 châu Á" lọc Market = 'Asia', giá trị DataCo không có (cảnh báo filter_value_not_found). "Doanh thu theo tháng giảm so
 với cùng kỳ năm trước" so từng tháng của năm mới nhất trong dữ liệu với năm liền trước (câu con lấy năm lớn nhất, nên

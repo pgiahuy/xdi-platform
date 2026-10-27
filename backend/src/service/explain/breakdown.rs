@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/breakdown.rs - bước explain của câu "tại sao": chạy các câu SQL do explain/sql.rs dựng (tổng hai lát
-cắt, từng chiều), đổi kết quả sang Decimal, gọi phần toán của explain.rs (#39 xếp chiều, #40 tách lượng và giá) và dựng
+cắt, từng chiều), đổi kết quả sang Decimal, gọi phần toán của explain/mod.rs (#39 xếp chiều, #40 tách lượng và giá) và dựng
 Explanation của hợp đồng. explain/run.rs gọi sau khi bảng tổng đã chạy, rồi nhờ ask/narrate.rs viết lời.
 
 Mọi câu đi qua guard với đúng bảng và bộ lọc dòng theo vai dữ liệu của người hỏi (AllowedTable::row_filters), như câu

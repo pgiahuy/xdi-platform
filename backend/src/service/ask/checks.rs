@@ -3,7 +3,7 @@
 ask/contract.rs) thay vì trả im lặng. Cảnh báo không chặn gì: status vẫn như cũ, kết quả vẫn hiện, giao diện hiện lời
 phía trên kết quả (frontend/src/components/ask/AskWarnings.tsx).
 
-service/ask.rs gọi build_result_warnings sau run_with_repair. Phần cần Postgres (danh sách giá trị của cột, qua cache
+service/ask/mod.rs gọi build_result_warnings sau run_with_repair. Phần cần Postgres (danh sách giá trị của cột, qua cache
 của ask/values.rs) làm ở đó, rồi build_warnings, hàm thuần, dựng cảnh báo theo thứ tự cố định của các luật:
 - empty_result: câu không ra dòng nào.
 - all_null: có cột kết quả chỉ toàn ô trống. Chỉ xét các dòng đã gửi; kết quả bị cắt thì lời ghi rõ "trong n dòng đầu".
