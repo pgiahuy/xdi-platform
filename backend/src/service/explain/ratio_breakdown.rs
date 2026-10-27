@@ -16,7 +16,7 @@ use crate::service::ask::contract::{
     DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
 };
 use crate::service::explain::breakdown::{
-    build_slice_labels, run_dimension_rows, Breakdown, QueryEnv, SliceTotals,
+    build_comparison, build_slice_labels, run_dimension_rows, Breakdown, QueryEnv, SliceTotals,
 };
 use crate::service::explain::check::WhyPlan;
 use crate::service::explain::ratio::{
@@ -113,6 +113,7 @@ pub(super) async fn build_ratio_breakdown(
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),
         measure_kind: MeasureKind::Ratio,
+        comparison: build_comparison(plan),
         base: ExplanationSlice {
             label: base_label,
             filter: filters.0,

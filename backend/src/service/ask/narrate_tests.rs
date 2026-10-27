@@ -14,12 +14,13 @@ use crate::engine::llm::mock::Mock;
 use crate::engine::llm::{LlmProvider, LlmRequest};
 use crate::error::AppError;
 use crate::service::ask::contract::{
-    CellValue, DimensionBreakdown, Explanation, ExplanationSlice, GroupContribution, MeasureKind,
-    StepName, ValueKind,
+    CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice, GroupContribution,
+    MeasureKind, StepName, ValueKind,
 };
 use crate::service::ask::examples::build_why_example;
 use crate::service::ask::narrate::narrate;
-use crate::service::explain::number::{build_change_text, build_number_text, MAX_FRACTION_DIGITS};
+use crate::service::explain::build_direction_text;
+use crate::service::explain::number::{build_number_text, MAX_FRACTION_DIGITS};
 use crate::service::explain::{
     build_narrate_prompt, build_number_check, build_template_summary, MAX_SUMMARY_CHARS,
 };
@@ -45,6 +46,7 @@ fn small_explanation(
     Explanation {
         measure: "Doanh thu".to_string(),
         measure_kind: MeasureKind::Total,
+        comparison: Comparison::Periods,
         base: ExplanationSlice {
             label: "Quý 2/2017".to_string(),
             filter: String::new(),
@@ -379,10 +381,39 @@ fn template_names_a_group_in_the_same_direction_as_the_change() {
     );
     let template = build_template_summary(&explanation);
     assert!(
-        template.contains("nhóm B đóng góp nhiều nhất (giảm 400,00)"),
+        template.contains("nhóm B góp nhiều nhất: riêng nhóm này doanh thu giảm 400,00"),
         "{template}"
     );
     assert!(!template.contains("nhóm A"), "{template}");
+    check(&template, &explanation).unwrap();
+}
+
+/// Hai nhóm không có trước sau: câu khuôn nói "cao hơn", "thấp hơn" và đặt tên nhóm gốc cạnh chữ chiều, không nói
+/// "tăng", "giảm" hay "từ ... lên ...".
+#[test]
+fn template_compares_two_groups_without_time_words() {
+    let mut explanation = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("A"), "500.00"), (Some("B"), "-400.00")],
+    );
+    explanation.comparison = Comparison::Groups;
+    explanation.base.label = "Pass".to_string();
+    explanation.compare.label = "Withdrawn".to_string();
+    let template = build_template_summary(&explanation);
+    assert!(
+        template.contains("của Withdrawn thấp hơn Pass 100,00 (900,00 so với 1.000,00)"),
+        "{template}"
+    );
+    assert!(
+        template
+            .contains("chênh lệch lớn nhất ở nhóm B: ở nhóm này Withdrawn thấp hơn Pass 400,00"),
+        "{template}"
+    );
+    for word in ["tăng", "giảm", " lên ", " xuống "] {
+        assert!(!template.contains(word), "{word}: {template}");
+    }
     check(&template, &explanation).unwrap();
 }
 
@@ -597,15 +628,30 @@ fn numbers_are_written_the_vietnamese_way() {
 #[test]
 fn changes_read_as_a_direction_and_an_amount() {
     assert_eq!(
-        build_change_text("-1152666.24", MAX_FRACTION_DIGITS),
+        build_direction_text("-1152666.24", MAX_FRACTION_DIGITS, Comparison::Periods),
         "giảm 1.152.666,24"
     );
     assert_eq!(
-        build_change_text("1039598.96", MAX_FRACTION_DIGITS),
+        build_direction_text("1039598.96", MAX_FRACTION_DIGITS, Comparison::Periods),
         "tăng 1.039.598,96"
     );
-    assert_eq!(build_change_text("0.00", MAX_FRACTION_DIGITS), "không đổi");
-    assert_eq!(build_change_text("abc", MAX_FRACTION_DIGITS), "abc");
+    assert_eq!(
+        build_direction_text("0.00", MAX_FRACTION_DIGITS, Comparison::Periods),
+        "không đổi"
+    );
+    assert_eq!(
+        build_direction_text("abc", MAX_FRACTION_DIGITS, Comparison::Periods),
+        "abc"
+    );
+    // Giữa hai nhóm không có trước sau: chữ chiều là cao hơn, thấp hơn, bằng.
+    assert_eq!(
+        build_direction_text("-400", MAX_FRACTION_DIGITS, Comparison::Groups),
+        "thấp hơn 400"
+    );
+    assert_eq!(
+        build_direction_text("0", MAX_FRACTION_DIGITS, Comparison::Groups),
+        "bằng"
+    );
 }
 
 /// Dấu phẩy chỉ thuộc số khi nằm giữa hai chữ số: liệt kê "3, 4" vẫn là các số riêng có trong nhãn.

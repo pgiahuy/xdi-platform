@@ -390,6 +390,7 @@
         "label": "Quý 3/2017",
         "value": "8119100.00"
       },
+      "comparison": "periods",
       "dimensions": [
         {
           "column": "Market",

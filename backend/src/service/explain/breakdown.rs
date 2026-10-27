@@ -23,7 +23,7 @@ use crate::engine::query::QueryError;
 use crate::error::AppError;
 use crate::service::ask::contract::StepName;
 use crate::service::ask::contract::{
-    AskStep, CellValue, DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
+    AskStep, CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
     ResultTable, ValueKind, VolumePrice,
 };
 use crate::service::ask::repair::{build_safe_error, build_user_error, mentions_data_files};
@@ -232,6 +232,7 @@ pub async fn build_breakdown(
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),
         measure_kind: MeasureKind::Total,
+        comparison: build_comparison(plan),
         base: ExplanationSlice {
             label: base_label,
             filter: filters.0,
@@ -328,6 +329,14 @@ pub(super) async fn run_dimension_rows(
 }
 
 /// Nhãn hai lát cắt cho người dùng: "Quý 2/2017" và "Quý 3/2017", hay hai giá trị nhóm.
+/// Hai kỳ hay hai nhóm, theo lát cắt của plan.
+pub(super) fn build_comparison(plan: &WhyPlan) -> Comparison {
+    match &plan.slices {
+        PlanSlices::Periods { .. } => Comparison::Periods,
+        PlanSlices::Groups { .. } => Comparison::Groups,
+    }
+}
+
 pub(super) fn build_slice_labels(plan: &WhyPlan) -> (String, String) {
     match &plan.slices {
         PlanSlices::Periods { base, compare, .. } => (base.label(), compare.label()),

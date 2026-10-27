@@ -3,26 +3,28 @@
 giải thích tốt nhất (chiều đầu tiên backend gửi). Thanh giảm sang trái màu hổ phách, thanh tăng sang phải màu xanh ngọc,
 cùng một thang nên so được độ lớn bằng mắt. Nhóm như bảng phân rã: các nhóm lớn nhất rồi một dòng "Còn lại"
 (breakdownGroups.ts).
-Mỗi dòng ghi số có dấu (+ hay -), nên màu và hướng thanh chỉ giúp đọc nhanh; chữ "tăng" hay "giảm" chỉ cho trình đọc
-màn hình (nhãn chữ ở mọi dòng làm bảng rối mà không thêm ý), thanh ẩn với trình đọc màn hình. Độ dài thanh đổi số bằng Number(): chỉ để vẽ, chấp nhận làm tròn; chữ số hiện ra vẫn là chuỗi của backend.
+Mỗi dòng ghi số có dấu (+ hay -), nên màu và hướng thanh chỉ giúp đọc nhanh; chữ chiều chỉ cho trình đọc màn hình
+(nhãn chữ ở mọi dòng làm bảng rối mà không thêm ý), thanh ẩn với trình đọc màn hình. Độ dài thanh đổi số bằng
+Number(): chỉ để vẽ, chấp nhận làm tròn; chữ số hiện ra vẫn là chuỗi của backend.
 Độ đo tỷ lệ thêm một dòng tổng phần do cơ cấu và phần do hiệu suất của chiều này.
 Vẽ bằng thẻ div thay vì Recharts: chỉ là các thanh ngang, và file này nằm trong chunk chính, không phải chờ tải Recharts. */
 
 import { cn } from '@/lib/utils'
 import { splitGroups } from './breakdownGroups'
 import { formatCell } from './cellFormat'
-import { changeDirection, formatSigned } from './changeFormat'
-import type { DimensionView } from './evidenceTypes'
+import { changeDirection, directionWord, formatSigned } from './changeFormat'
+import type { Comparison, DimensionView } from './evidenceTypes'
 
 type Props = {
   dimension: DimensionView
   baseLabel: string
   compareLabel: string
+  comparison: Comparison
 }
 
 type Bar = { name: string; contribution: string; muted: boolean }
 
-export function ContributionBars({ dimension, baseLabel, compareLabel }: Props) {
+export function ContributionBars({ dimension, baseLabel, compareLabel, comparison }: Props) {
   const { shown, rest } = splitGroups(dimension.groups)
   const bars: Bar[] = shown.map((group) => ({
     name: group.value === null ? 'trống' : formatCell(group.value, dimension.kind),
@@ -53,14 +55,14 @@ export function ContributionBars({ dimension, baseLabel, compareLabel }: Props) 
       )}
       <ul className="flex flex-col tabular-nums">
         {bars.map((bar, index) => (
-          <ContributionRow key={index} bar={bar} largest={largest} />
+          <ContributionRow key={index} bar={bar} largest={largest} comparison={comparison} />
         ))}
       </ul>
     </section>
   )
 }
 
-function ContributionRow({ bar, largest }: { bar: Bar; largest: number }) {
+function ContributionRow({ bar, largest, comparison }: { bar: Bar; largest: number; comparison: Comparison }) {
   const direction = changeDirection(bar.contribution)
   // Nửa thanh là 50% bề ngang: nhóm lớn nhất chạm mép, các nhóm khác theo tỷ lệ.
   const half = largest > 0 ? (Math.abs(Number(bar.contribution)) / largest) * 50 : 0
@@ -97,7 +99,7 @@ function ContributionRow({ bar, largest }: { bar: Bar; largest: number }) {
         <span className={cn('font-semibold', direction === 'down' ? 'text-highlight-text' : 'text-label')}>
           {formatSigned(bar.contribution)}
         </span>
-        <span className="sr-only">{direction === 'down' ? 'giảm' : direction === 'up' ? 'tăng' : 'không đổi'}</span>
+        <span className="sr-only">{directionWord(direction, comparison)}</span>
       </span>
     </li>
   )

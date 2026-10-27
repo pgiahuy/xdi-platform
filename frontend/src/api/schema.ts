@@ -732,6 +732,12 @@ export interface components {
          * @enum {string}
          */
         ColumnRole: "dimension" | "time" | "measure" | "other";
+        /**
+         * @description - `periods`: the slices are two periods; `compare` is the later one.
+         *     - `groups`: the slices are two values of one column, with no order in time.
+         * @enum {string}
+         */
+        Comparison: "periods" | "groups";
         /** @description One conversation on a dataset. */
         ConversationItem: {
             /** Format: date-time */
@@ -892,6 +898,11 @@ export interface components {
             change: string;
             /** @description Slice being explained. */
             compare: components["schemas"]["ExplanationSlice"];
+            /**
+             * @description What the two slices are, which decides the words for the change: up or down between two periods, higher or
+             *     lower between two groups.
+             */
+            comparison: components["schemas"]["Comparison"];
             /** @description One breakdown per dimension, the dimension that explains the change best first. */
             dimensions: components["schemas"]["DimensionBreakdown"][];
             /** @description Measure that changed, text for the end user (Vietnamese). */

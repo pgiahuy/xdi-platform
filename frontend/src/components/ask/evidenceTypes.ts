@@ -57,6 +57,8 @@ export type VolumePriceView = {
 
 export type BreakdownView = {
   measure: string
+  /** Hai kỳ hay hai nhóm: quyết định chữ chiều (tăng, giảm hay cao hơn, thấp hơn). */
+  comparison: Comparison
   baseLabel: string
   compareLabel: string
   baseValue: string
@@ -69,6 +71,8 @@ export type BreakdownView = {
   /** False: câu viết theo khuôn, không phải lời của mô hình. */
   summaryByModel: boolean
 }
+
+export type Comparison = 'periods' | 'groups'
 
 export type Slice = 'base' | 'compare'
 

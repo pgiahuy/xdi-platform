@@ -13,6 +13,7 @@ export function buildBreakdown(response: AskResponse): TabData<BreakdownView> {
   return {
     data: {
       measure: explanation.measure,
+      comparison: explanation.comparison,
       baseLabel: explanation.base.label,
       compareLabel: explanation.compare.label,
       baseValue: explanation.base.value,
