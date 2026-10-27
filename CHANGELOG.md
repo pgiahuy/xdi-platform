@@ -20,8 +20,9 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Câu "tại sao" cho chỉ số tỷ lệ và trung bình (ví dụ tỷ lệ giao trễ): chênh lệch tách thành phần do cơ cấu và phần do hiệu suất của từng nhóm.
 - Hỏi theo cuộc trò chuyện (#164): câu sau hiểu theo các câu trước trong cùng cuộc, mỗi lượt giữ câu trả lời và bằng chứng riêng, có nút "Cuộc trò chuyện mới".
 - Giao diện mới "Mực và hổ phách": thanh bên nền mực, màu nhấn hổ phách cho nút chính và số chênh lệch, font Be Vietnam Pro đóng gói sẵn, chạy không cần mạng.
+- Bảng kết quả: bấm vào bất kỳ chỗ nào trong ô số (và trên cả dòng khi bảng có một cột số đo) để xem dòng nguồn, không cần nhắm đúng con số.
 
-## [0.1.0] - 2026-10-26- Bảng kết quả: bấm vào bất kỳ chỗ nào trong ô số (và trên cả dòng khi bảng có một cột số đo) để xem dòng nguồn, không cần nhắm đúng con số.
+## [0.1.0] - 2026-10-26
 
 
 ### Added
