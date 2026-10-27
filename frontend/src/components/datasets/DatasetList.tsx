@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/datasets/DatasetList.tsx - danh sách dataset của workspace, mới tạo đứng đầu (backend sắp theo ngày tạo).
 Mỗi dataset một dòng xuống hàng được, không dùng bảng: màn 320px không đủ chỗ cho ba cột.
-onAddVersion và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. */
+onAddVersion, onSnapshotAgain và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. Dataset
+chụp từ database ghi bảng nguồn, lần chụp gần nhất, và có nút "Chụp lại" thay cho nạp phiên bản mới. */
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
@@ -10,13 +11,16 @@ import type { DatasetRow } from './types'
 type Props = {
   datasets: DatasetRow[]
   onAddVersion?: (dataset: DatasetRow) => void
+  onSnapshotAgain?: (dataset: DatasetRow) => void
+  snapshotPending?: boolean
   onDelete?: (dataset: DatasetRow) => void
   deletePending?: boolean
 }
 
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
-export function DatasetList({ datasets, onAddVersion, onDelete, deletePending }: Props) {
+export function DatasetList(props: Props) {
+  const { datasets, onAddVersion, onSnapshotAgain, snapshotPending, onDelete, deletePending } = props
   return (
     <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {datasets.map((dataset) => (
@@ -30,8 +34,30 @@ export function DatasetList({ datasets, onAddVersion, onDelete, deletePending }:
               Bảng <code className="break-all">{dataset.tableName}</code>, tạo lúc{' '}
               <span className="whitespace-nowrap">{dateFormat.format(new Date(dataset.createdAt))}</span>
             </p>
+            {dataset.snapshot && (
+              <p className="text-xs text-muted-foreground">
+                Chụp từ Postgres <code className="break-all">{dataset.snapshot.table}</code>
+                {dataset.snapshot.at && (
+                  <>
+                    , lần chụp gần nhất{' '}
+                    <span className="whitespace-nowrap">{dateFormat.format(new Date(dataset.snapshot.at))}</span>
+                  </>
+                )}
+              </p>
+            )}
           </div>
-          {onAddVersion && (
+          {dataset.snapshot && onSnapshotAgain && (
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`Chụp lại ${dataset.name}`}
+              aria-disabled={snapshotPending}
+              onClick={() => !snapshotPending && onSnapshotAgain(dataset)}
+            >
+              Chụp lại
+            </Button>
+          )}
+          {!dataset.snapshot && onAddVersion && (
             // Mỗi dòng một nút cùng chữ; aria-label thêm tên dataset để trình đọc màn hình phân biệt. Chữ hiện ra
             // đứng đầu aria-label, để người dùng điều khiển bằng giọng nói vẫn gọi được nút.
             <Button
