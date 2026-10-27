@@ -4,7 +4,9 @@ thanh trên nền trắng, vùng nội dung nền sáng với container max-w-7x
 Trang trong workspace truyền workspace đang mở; trang ngoài workspace (quản trị hệ thống, tài khoản) thì không.
 Từ 1024px trở lên thanh bên đứng cố định bên trái. Hẹp hơn thì thanh bên ẩn vào ngăn kéo mở từ nút menu trên thanh
 trên; cùng một nội dung thanh bên dùng cho cả hai chỗ, nên thêm mục điều hướng chỉ sửa một nơi.
-Tiêu đề trang là h1 trên thanh trên; nội dung trang bắt đầu từ h2. */
+Tiêu đề trang là h1 trên thanh trên; nội dung trang bắt đầu từ h2.
+Hộp tạo workspace đặt ở đây, một lần, ngoài thanh bên: mở từ ngăn kéo thì ngăn kéo đóng lại trước, và hộp không bị gỡ
+theo ngăn kéo. */
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { MenuIcon, XIcon } from 'lucide-react'
@@ -14,6 +16,7 @@ import { ServerInfo } from './ServerInfo'
 import { SidebarNav } from './SidebarNav'
 import { UserMenu } from './UserMenu'
 import { roleLabel } from './labels'
+import { CreateWorkspaceDialog } from './CreateWorkspaceDialog'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 import type { LinkComponent, NavItem, ServerInfo as ServerInfoData, SignedInUser, WorkspaceOption } from './types'
 
@@ -34,14 +37,30 @@ type Props = {
   notice?: string
   onDismissNotice?: () => void
   serverInfo?: ServerInfoData
+  /** Hộp tạo workspace; trang giữ trạng thái mở để đóng hộp khi tạo xong. Không có thì menu không có mục tạo. */
+  createWorkspace?: CreateWorkspaceControl
   link: LinkComponent
   children: ReactNode
+}
+
+export type CreateWorkspaceControl = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreate: (name: string) => void
+  pending: boolean
+  error?: string
 }
 
 export function AppShell(props: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const closeDrawer = () => setDrawerOpen(false)
-  const { title, currentWorkspace } = props
+  const { title, currentWorkspace, createWorkspace } = props
+  const openCreateWorkspace = createWorkspace
+    ? () => {
+        setDrawerOpen(false)
+        createWorkspace.onOpenChange(true)
+      }
+    : undefined
 
   // Ngăn kéo đang mở mà kéo cửa sổ rộng ra thì thanh bên cố định hiện lên, ngăn kéo đè lên nó; đóng ngăn kéo lúc đó.
   useEffect(() => {
@@ -67,7 +86,7 @@ export function AppShell(props: Props) {
       </a>
 
       <aside className="hidden bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col">
-        <SidebarContent {...props} />
+        <SidebarContent {...props} onCreateWorkspace={openCreateWorkspace} />
       </aside>
 
       <div className="flex min-w-0 flex-col">
@@ -88,6 +107,7 @@ export function AppShell(props: Props) {
               <SidebarContent
                 {...props}
                 onNavigate={closeDrawer}
+                onCreateWorkspace={openCreateWorkspace}
                 closeButton={
                   <SheetClose asChild>
                     <Button
@@ -149,17 +169,20 @@ export function AppShell(props: Props) {
           <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:px-8">{props.children}</div>
         </main>
       </div>
+
+      {createWorkspace && <CreateWorkspaceDialog {...createWorkspace} />}
     </div>
   )
 }
 
 type SidebarProps = Props & {
   onNavigate?: () => void
+  onCreateWorkspace?: () => void
   closeButton?: ReactNode
 }
 
 function SidebarContent(props: SidebarProps) {
-  const { navItems, currentWorkspace, workspaces, serverInfo, link, onNavigate, closeButton } = props
+  const { navItems, currentWorkspace, workspaces, serverInfo, link, onNavigate, onCreateWorkspace, closeButton } = props
   return (
     <div className="flex h-full flex-col">
       {/* Hàng thương hiệu: cùng dấu hiệu với màn đăng nhập (favicon.svg). */}
@@ -169,7 +192,13 @@ function SidebarContent(props: SidebarProps) {
       </div>
       <div className="flex shrink-0 items-center gap-1 px-3 pb-2">
         <div className="min-w-0 flex-1">
-          <WorkspaceSwitcher current={currentWorkspace} workspaces={workspaces} link={link} onNavigate={onNavigate} />
+          <WorkspaceSwitcher
+            current={currentWorkspace}
+            workspaces={workspaces}
+            link={link}
+            onNavigate={onNavigate}
+            onCreateWorkspace={onCreateWorkspace}
+          />
         </div>
         {closeButton}
       </div>

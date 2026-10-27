@@ -5,13 +5,15 @@ con hiện ở Outlet. Có :ws thì kiểm người dùng thuộc workspace đó
 nên quản trị hệ thống chưa thuộc workspace nào vẫn vào được trang quản trị (#99).
 Một khung cho cả hai nhóm trang: đi từ workspace sang trang quản trị và ngược lại thì AppShell không bị gỡ rồi dựng lại,
 focus bàn phím ở lại mục vừa bấm trên thanh bên. Hai khung riêng thì mỗi lần chuyển focus rơi về đầu trang.
-Workspace nằm trong đường dẫn, không lưu trong phiên (#42): mỗi tab trình duyệt làm việc ở workspace riêng. */
+Workspace nằm trong đường dẫn, không lưu trong phiên (#42): mỗi tab trình duyệt làm việc ở workspace riêng.
+Tạo workspace từ menu đổi workspace: tạo xong thì đóng hộp và mở trang đầu của workspace mới. */
 
 import { useEffect, useState } from 'react'
-import { Link, matchPath, Outlet, useLocation, useMatches, useParams } from 'react-router'
+import { Link, matchPath, Outlet, useLocation, useMatches, useNavigate, useParams } from 'react-router'
 import { useLogout, useMe, type Membership } from '@/api/auth'
 import { isUnauthorized } from '@/api/queryClient'
 import { useVersion } from '@/api/system'
+import { useCreateWorkspace } from '@/api/workspaces'
 import { AppShell } from '@/components/shell/AppShell'
 import type { NavItem, WorkspaceOption } from '@/components/shell/types'
 import { Button } from '@/components/ui/button'
@@ -29,6 +31,9 @@ export function AppLayout() {
   const version = useVersion()
   const logout = useLogout(signOutTo)
   const matches = useMatches()
+  const navigate = useNavigate()
+  const createWorkspace = useCreateWorkspace()
+  const [createOpen, setCreateOpen] = useState(false)
   // Workspace mở gần nhất trong tab này. AppLayout không bị gỡ khi đi từ workspace sang trang quản trị, nên state giữ
   // được slug; trang quản trị dùng nó để thanh bên vẫn có các mục của workspace đó thay vì biến mất.
   // Cập nhật ngay lúc render khi đường dẫn đổi workspace (cách React khuyên cho state suy từ props), không qua effect.
@@ -40,6 +45,21 @@ export function AppLayout() {
   useEffect(() => {
     resetLogout()
   }, [pathname, resetLogout])
+
+  // Mỗi lần mở hay đóng hộp tạo workspace thì bỏ lỗi của lần trước.
+  const handleCreateOpenChange = (open: boolean) => {
+    createWorkspace.reset()
+    setCreateOpen(open)
+  }
+  const handleCreate = (name: string) => {
+    if (createWorkspace.isPending) return
+    createWorkspace.mutate(name, {
+      onSuccess: (created) => {
+        setCreateOpen(false)
+        navigate(workspaceHref(created.slug, ''))
+      },
+    })
+  }
 
   // Kiểm 401 trước: phiên bị thu hồi thì bộ đệm vẫn còn người dùng cũ, chỉ nhìn data sẽ tưởng còn đăng nhập.
   if (!me.data || isUnauthorized(me.error)) {
@@ -127,6 +147,13 @@ export function AppLayout() {
       notice={logout.error ? `Đăng xuất không được: ${logout.error.message}` : undefined}
       onDismissNotice={resetLogout}
       serverInfo={version.data}
+      createWorkspace={{
+        open: createOpen,
+        onOpenChange: handleCreateOpenChange,
+        onCreate: handleCreate,
+        pending: createWorkspace.isPending,
+        error: createWorkspace.error?.message,
+      }}
       link={RouterLink}
     >
       <Outlet />

@@ -555,13 +555,8 @@ hiển thị** và **Tên workspace đầu tiên** không bắt buộc (để tr
 tài khoản quản trị**: giao diện đăng nhập luôn và mở trang **Hỏi dữ liệu** của workspace vừa tạo, đã có dataset mẫu
 `DataCo` (bước 1) trừ khi `SEED_SAMPLE=false`. Chi tiết về mã thiết lập ở mục 1, Tạo tài khoản quản trị.
 
-Workspace thứ hai trở đi chưa có nút tạo trên giao diện. Tạo bằng API, với `cookie.txt` lấy như mục 1, Nạp dữ liệu;
-người tạo thành `admin` của workspace mới, tải lại trang thì workspace đó hiện trong ô chọn workspace ở đầu thanh bên:
-
-```bash
-curl -b cookie.txt http://localhost:8000/api/workspaces \
-  -H 'content-type: application/json' -d '{"name":"Kho"}'
-```
+Workspace thứ hai trở đi: mở ô chọn workspace ở đầu thanh bên, chọn **Tạo workspace** ở cuối danh sách, nhập tên.
+Người tạo thành `admin` của workspace mới và giao diện mở trang đầu của nó. Tài khoản nào cũng tạo được workspace.
 
 ### Bước 3. Nạp dataset
 

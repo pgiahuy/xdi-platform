@@ -393,7 +393,7 @@ Cập nhật khi có thay đổi.
 | Gói khái niệm ngành (`data/domains/*.json`, `engine/domains.rs`, [DOMAINS.md](DOMAINS.md)): `build.rs` nhúng mọi file vào binary, hàm liệt kê mọi gói và tìm theo id | Có gói bán lẻ và chuỗi cung ứng (`retail`); prompt câu thường và form câu "tại sao" chèn gói theo `datasets.domain`, nhưng chưa có chỗ nào đặt cột này (lúc nạp hay qua API), nên hiện chưa dataset nào dùng gói |
 | Schema Postgres (migration `0001_init.sql` tới `0008_conversations.sql`), kết nối và tự migrate lúc khởi động | Có |
 | Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có; liệt kê, xem và xóa dataset đã dùng |
-| Workspace: liệt kê, tạo mới (người tạo là admin), đổi tên, xóa; mọi API dữ liệu kiểm thành viên; `WorkspaceId` chỉ tạo từ dòng memberships của người đăng nhập | Có |
+| Workspace: liệt kê, tạo mới (người tạo là admin), đổi tên, xóa; mọi API dữ liệu kiểm thành viên; `WorkspaceId` chỉ tạo từ dòng memberships của người đăng nhập | Có; giao diện tạo workspace từ ô chọn workspace, đổi tên và xóa ở trang Thành viên |
 | Vai `admin` và `member` (mục 4b): quản lý thành viên, luật còn ít nhất một admin, quản trị hệ thống xem mọi workspace và chỉ định admin | Có |
 | Khung giao diện React và Vite; bố cục chung: thanh bên có hàng thương hiệu và icon Lucide cho từng mục, vùng nội dung căn giữa với bề rộng tối đa, đổi workspace, hiện vai trong workspace đang mở, tài khoản và đăng xuất ở chân thanh bên (màn hẹp: góc thanh trên), dùng được ở bề ngang điện thoại; trang làm việc dưới `/w/<workspace>`, trang quản trị hệ thống và trang tài khoản ngoài workspace (`/admin/...`, `/account`) | Có |
 | Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
