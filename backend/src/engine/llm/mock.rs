@@ -134,7 +134,7 @@ mod tests {
         assert_eq!(count(LlmTask::Sql), 16);
         assert_eq!(count(LlmTask::Repair), 2);
         assert_eq!(count(LlmTask::Narrate), 1);
-        assert_eq!(count(LlmTask::Why), 3);
+        assert_eq!(count(LlmTask::Why), 4);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];
         let profile: serde_json::Value = serde_json::from_str(profile).unwrap();
         assert!(profile["columns"].is_array());
@@ -203,7 +203,8 @@ mod tests {
         }
     }
 
-    /// Cột trong form câu "tại sao" (time, measure, groups, filters, terms) cũng phải có trong hồ sơ dataco.
+    /// Cột trong form câu "tại sao" (time, measure, groups, filters, terms, unanswerable) cũng phải có trong hồ sơ
+    /// dataco.
     #[test]
     fn why_forms_use_only_profile_columns() {
         let entries = file_entries();
@@ -238,6 +239,9 @@ mod tests {
                     .iter()
                     .map(|t| &t["column"]),
             );
+            if let Some(related) = form["unanswerable"]["related_columns"].as_array() {
+                used.extend(related);
+            }
             for column in used.into_iter().filter_map(|c| c.as_str()) {
                 assert!(
                     columns.contains(&column),

@@ -5,7 +5,8 @@ lần khi lỗi sửa được. service/ask/mod.rs (#33) gọi run_with_repair v
 từ RunOutcome; nhận mô hình và đầu vào của guard qua tham số nên test chạy được với mô hình giả, không cần Postgres.
 
 Câu trả lời của mô hình là object JSON {terms, assumptions, clarify, sql} (ask/reply.rs). Mô hình hỏi lại ở lần đầu thì
-trả needs_choice, không chạy gì. Câu trả lời không đọc được (không phải JSON, thiếu sql) cũng vào vòng sửa.
+trả needs_choice, không chạy gì; báo dữ liệu không có thông tin (unanswerable, #164) thì trả rejected, không chạy gì,
+ask/mod.rs dựng lời. Câu trả lời không đọc được (không phải JSON, thiếu sql) cũng vào vòng sửa.
 
 Vào vòng sửa: DuckDB báo lỗi, hoặc guard từ chối vì bảng hay cột không có trong hồ sơ (GuardError::UnknownName) hay vì
 câu có thể dựng giá trị quá lớn (GuardError::Oversized: tham số kích thước, số tầng, mảnh ghép, độ rộng), hoặc câu trả
@@ -28,7 +29,7 @@ use crate::service::ask::repair::{
 };
 use crate::service::ask::reply::{
     build_answer_from_reply, build_sql_reply_schema, Assumption, Clarify, ModelAnswer, SqlAnswer,
-    Term,
+    Term, Unanswerable,
 };
 use crate::service::ask::result::{build_result_table, SENT_ROWS};
 
@@ -76,6 +77,8 @@ pub struct RunOutcome {
     pub assumptions: Vec<Assumption>,
     /// Câu hỏi lại; chỉ có khi needs_choice.
     pub clarify: Option<Clarify>,
+    /// Mô hình báo dữ liệu không có thông tin; status là rejected, message để ask/mod.rs dựng (cần tên cột).
+    pub unanswerable: Option<Unanswerable>,
     /// Các bước theo đúng thứ tự đã chạy, ví dụ guard, run (lỗi), repair, guard, run.
     pub steps: Vec<AskStep>,
 }
@@ -110,6 +113,10 @@ pub async fn run_with_repair(
         Ok(ModelAnswer::Clarify { terms, clarify }) => {
             return Ok(build_clarify_outcome(terms, clarify));
         }
+        Ok(ModelAnswer::Unanswerable {
+            terms,
+            unanswerable,
+        }) => return Ok(build_unanswerable_outcome(terms, unanswerable, steps)),
         Ok(ModelAnswer::Sql(answer)) => match attempt(&input, &answer.sql, &mut steps).await? {
             Attempt::Refused {
                 reason,
@@ -155,6 +162,15 @@ pub async fn run_with_repair(
     };
     let fixed = match build_answer_from_reply(&reply) {
         Ok(ModelAnswer::Sql(answer)) => answer,
+        // Lần sửa mới thấy dữ liệu không có thông tin: vẫn là câu trả lời dùng được, không phải lỗi.
+        Ok(ModelAnswer::Unanswerable {
+            terms,
+            unanswerable,
+        }) => {
+            let detail = "Mô hình báo dữ liệu không có thông tin để trả lời";
+            steps.push(build_step(StepName::Repair, started, true, Some(detail)));
+            return Ok(build_unanswerable_outcome(terms, unanswerable, steps));
+        }
         // Câu sửa không đọc được, hay hỏi lại thay vì sửa: đã hết vòng sửa nên câu hỏi dừng ở đây.
         other => {
             let reason = match other {
@@ -322,6 +338,7 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
                 terms: answer.terms,
                 assumptions: answer.assumptions,
                 clarify: None,
+                unanswerable: None,
                 steps,
             };
         }
@@ -353,6 +370,7 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
         terms: answer.terms,
         assumptions: answer.assumptions,
         clarify: None,
+        unanswerable: None,
         steps,
     }
 }
@@ -380,6 +398,7 @@ fn build_failed(
         terms,
         assumptions,
         clarify: None,
+        unanswerable: None,
         steps,
     }
 }
@@ -398,7 +417,30 @@ fn build_clarify_outcome(terms: Vec<Term>, clarify: Clarify) -> RunOutcome {
         terms,
         assumptions: Vec::new(),
         clarify: Some(clarify),
+        unanswerable: None,
         steps: Vec::new(),
+    }
+}
+
+/// Mô hình báo dữ liệu không có thông tin: rejected, không SQL. Lời do ask/mod.rs dựng bằng build_unanswerable_message.
+fn build_unanswerable_outcome(
+    terms: Vec<Term>,
+    unanswerable: Unanswerable,
+    steps: Vec<AskStep>,
+) -> RunOutcome {
+    RunOutcome {
+        status: AskStatus::Rejected,
+        message: None,
+        sql_generated: None,
+        sql_guarded: None,
+        result: None,
+        limit_kept: false,
+        row_filters: Vec::new(),
+        terms,
+        assumptions: Vec::new(),
+        clarify: None,
+        unanswerable: Some(unanswerable),
+        steps,
     }
 }
 

@@ -13,6 +13,7 @@ use crate::service::ask::contract::{AskStatus, AskStep, StepName, Warning, Warni
 use crate::service::ask::prompt::build_sql_prompt;
 use crate::service::ask::reply::SqlAnswer;
 use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
+use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::explain::run::{build_empty, complete, WhyInput, WhyOutcome};
 
 /// Form sai cả hai lần: hỏi như câu thường, kèm cảnh báo explanation_unavailable.
@@ -58,6 +59,10 @@ fn build_plain_outcome(
         steps,
         ..build_empty(run.status)
     };
+    if let Some(unanswerable) = &run.unanswerable {
+        let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
+        outcome.message = Some(build_unanswerable_message(unanswerable, &names));
+    }
     if let Some(clarify) = &run.clarify {
         // Phương án nào cũng không có thật thì câu hỏi lại vô dụng: coi như mô hình trả lời sai.
         match build_clarify_choice(clarify, context, metrics) {

@@ -15,7 +15,8 @@ kỳ so sánh do người hỏi chọn (why:base) không có dòng nào: lựa c
 
 Hỏi lại (needs_choice) trước khi gọi mô hình khi một cụm khớp nhiều cột gần nhau (AskContext::ambiguous, #28; endpoint
 có thể đã hỏi lại trước, kiểm lại ở đây để run_why đúng khi gọi riêng), và sau khi gọi khi form không nêu độ đo mà
-dataset có chỉ số để chọn. Giả định đổi được (kỳ so sánh, chỉ số chưa xác nhận) dựng ở explain/choices.rs. */
+dataset có chỉ số để chọn. Form báo dữ liệu không có thông tin (unanswerable, #164) thì trả rejected ngay, không kiểm
+form, không chạy SQL. Giả định đổi được (kỳ so sánh, chỉ số chưa xác nhận) dựng ở explain/choices.rs. */
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -35,6 +36,7 @@ use crate::service::ask::narrate::narrate;
 use crate::service::ask::prompt::PromptInput;
 use crate::service::ask::reply::{build_sql_reply_schema, ChoiceKind, Clarify, Term};
 use crate::service::ask::run::build_step;
+use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::values::ValueIndex;
 use crate::service::ask::why_prompt::{build_why_form_schema, build_why_prompt};
 use crate::service::explain::breakdown::{
@@ -48,6 +50,7 @@ use crate::service::explain::form::{
     build_form_from_reply, build_why_repair_prompt, FieldError, ReadForm,
 };
 use crate::service::explain::plain::run_plain;
+use crate::service::explain::premise::{build_premise_labels, build_premise_warning};
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
 
 /// Lời cho needs_choice, như mẫu needs_choice của ask/examples.rs.
@@ -180,6 +183,9 @@ async fn run_round(
         Ok(read) => read,
         Err(error) => return Ok(Round::Invalid(vec![error])),
     };
+    if let Some(outcome) = build_unanswerable_outcome(input, &read, steps) {
+        return Ok(Round::Done(Box::new(outcome)));
+    }
     if let Some(outcome) = build_measure_choice(input, &read, steps) {
         return Ok(Round::Done(Box::new(outcome)));
     }
@@ -283,6 +289,11 @@ async fn run_plan(
         steps.push(build_step(StepName::Explain, started, false, Some(detail)));
         return Ok(Round::Invalid(empty));
     }
+    // Kiểm tiền đề trước phân rã: chênh lệch bằng 0 thì không có phân rã, nhưng người hỏi "vì sao giảm" vẫn cần biết.
+    let labels = build_premise_labels(plan);
+    let premise =
+        build_premise_warning(input.prompt.question, &labels, totals.base, totals.compare);
+    outcome.warnings.extend(premise);
     let filters = (sql.base_filter, sql.compare_filter);
     let mut explanation = match build_breakdown(&env, plan, &totals, filters).await? {
         Breakdown::Ready(explanation) => *explanation,
@@ -435,6 +446,29 @@ fn build_ambiguous_outcome(input: &WhyInput<'_>) -> Option<WhyOutcome> {
         message: Some(NEEDS_CHOICE_MESSAGE.to_string()),
         clarifications,
         ..build_empty(AskStatus::NeedsChoice)
+    })
+}
+
+/// rejected khi form báo dữ liệu không có thông tin. form để None: không có form nào chạy, queries.explanation trống
+/// như câu bị từ chối của đường câu thường.
+fn build_unanswerable_outcome(
+    input: &WhyInput<'_>,
+    read: &ReadForm,
+    steps: &mut Vec<AskStep>,
+) -> Option<WhyOutcome> {
+    let unanswerable = read.form.unanswerable.as_ref().filter(|u| u.is_given())?;
+    let names: Vec<&str> = input
+        .prompt
+        .context
+        .columns
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    Some(WhyOutcome {
+        message: Some(build_unanswerable_message(unanswerable, &names)),
+        terms: read.form.terms.clone(),
+        steps: std::mem::take(steps),
+        ..build_empty(AskStatus::Rejected)
     })
 }
 

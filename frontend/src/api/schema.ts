@@ -523,7 +523,9 @@ export interface components {
          *       Not recorded in the history, so `query_id` is null.
          *     - `rejected`: the guard refused the SQL: the generated one for a reason a fix cannot change (for example it is not
          *       a read-only SELECT, or it calls a function that is not allowed), or the one fixed in the `repair` round. Set:
-         *       `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false.
+         *       `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false. Also when
+         *       the model finds that no column of the dataset holds the information the question needs (a rating that is not
+         *       there, a forecast): no SQL runs, `sql_generated` is null, and `message` gives the reason and the closest columns.
          *     - `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or
          *       because the model failed during the fix; or the SQL ran past the time or memory limit, which gets no fix round.
          *       Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or
@@ -1088,9 +1090,11 @@ export interface components {
          *     - `unusual_magnitude`: a value is far outside what the data makes likely, for example a ratio above 100%.
          *     - `explanation_unavailable`: a "why" question was answered without a breakdown; the message says why.
          *     - `choice_not_applied`: a choice sent with the question was not recognized and the default was used.
+         *     - `premise_mismatch`: a "why" question assumes a direction (a drop, a rise) that the computed change does not have;
+         *       the breakdown explains the actual change.
          * @enum {string}
          */
-        WarningCode: "empty_result" | "all_null" | "filter_value_not_found" | "unusual_magnitude" | "explanation_unavailable" | "choice_not_applied";
+        WarningCode: "empty_result" | "all_null" | "filter_value_not_found" | "unusual_magnitude" | "explanation_unavailable" | "choice_not_applied" | "premise_mismatch";
         /** @description A workspace as the system administrator sees it: name and members, none of its data. */
         WorkspaceOverview: {
             /** Format: date-time */

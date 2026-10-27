@@ -4,12 +4,12 @@ hình điền theo build_why_form_schema (ask/why_prompt.rs, #29), lỗi từng 
 explain/check.rs kiểm form với hồ sơ, explain/run.rs ghép các bước. Hàm thuần, test ở explain/check_tests.rs.
 
 Nhận câu "tại sao" bằng từ khóa chứ không nhờ mô hình phân loại: không tốn thêm một lượt gọi, cùng câu luôn đi cùng
-đường. Đổi lại câu không có từ khóa ("sao lại giảm") đi đường câu thường, vẫn có bảng nhưng không có phân rã. */
+đường. Đổi lại câu không có từ khóa nào ("thế nào mà giảm") đi đường câu thường, vẫn có bảng nhưng không có phân rã. */
 
 use serde::Deserialize;
 
 use crate::service::ask::phrases::fold;
-use crate::service::ask::reply::Term;
+use crate::service::ask::reply::{Term, Unanswerable};
 use crate::service::explain::period::Grain;
 
 /// Loại câu hỏi, quyết định prompt: câu "tại sao" điền form (ask/why_prompt.rs), câu thường viết SQL (ask/prompt.rs).
@@ -19,8 +19,20 @@ pub enum QuestionKind {
     Plain,
 }
 
-/// Cụm từ của câu "tại sao", đã bỏ dấu. So theo từ trọn vẹn: "lý do" khớp, "lý doanh" thì không.
-const WHY_PHRASES: [&str; 6] = ["tai sao", "vi sao", "ly do", "nguyen nhan", "do dau", "why"];
+/// Cụm từ của câu "tại sao", đã bỏ dấu. So theo từ trọn vẹn: "lý do" khớp, "lý doanh" thì không. Cụm dài hơn
+/// ("tại vì sao", "do đâu mà", "vì lý do gì") đã khớp nhờ cụm ngắn nằm trong nó. Không thêm "sao" đứng một mình:
+/// "sao chép", "sao lưu" là câu thường.
+const WHY_PHRASES: [&str; 9] = [
+    "tai sao",
+    "vi sao",
+    "sao lai",
+    "vi dau",
+    "ly do",
+    "nguyen nhan",
+    "do dau",
+    "why",
+    "how come",
+];
 
 /// Câu hỏi có một cụm của WHY_PHRASES thì là câu "tại sao". Bỏ dấu trước khi so nên "tai sao" gõ không dấu cũng nhận.
 pub fn build_question_kind(question: &str) -> QuestionKind {
@@ -61,6 +73,9 @@ pub struct WhyForm {
     /// Có khi so hai nhóm.
     #[serde(default)]
     pub groups: Option<FormGroups>,
+    /// Dữ liệu không có thông tin để trả lời (#164); có lý do thì không kiểm phần còn lại của form.
+    #[serde(default)]
+    pub unanswerable: Option<Unanswerable>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
