@@ -45,6 +45,8 @@ pub struct PromptInput<'a> {
     /// Lựa chọn người hỏi gửi kèm câu hỏi. Lựa chọn cột đã nằm trong context.picks (#28); ở đây chỉ thêm lựa chọn chỉ
     /// số và khoảng thời gian.
     pub choices: &'a [ChosenOption],
+    /// Khối "Hội thoại trước" (service/conversation/history.rs); chuỗi rỗng khi câu mở đầu cuộc trò chuyện.
+    pub history: &'a str,
 }
 
 /// Mức chi tiết của danh sách cột; prompt quá dài thì hạ dần theo thứ tự khai báo.
@@ -69,6 +71,7 @@ pub fn build_sql_prompt(input: &PromptInput) -> String {
             build_metrics_section(input.metrics, true),
             build_domain_section(input.domain),
             build_examples_section(input.question, input.examples),
+            input.history.to_string(),
             format!("Question: {}", input.question),
         ])
     })

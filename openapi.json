@@ -1228,6 +1228,7 @@
                         }
                       ],
                       "clarifications": [],
+                      "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
                       "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
                       "model": "gemini-2.5-flash",
@@ -1314,6 +1315,7 @@
                           "selected": null
                         }
                       ],
+                      "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
                       "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
                       "model": "gemini-2.5-flash",
@@ -1342,6 +1344,7 @@
                       "chart": null,
                       "choices": [],
                       "clarifications": [],
+                      "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
                       "message": "Câu SQL bị từ chối: Chỉ chạy được câu SELECT đọc dữ liệu.",
                       "model": "gemini-2.5-flash",
@@ -1408,6 +1411,7 @@
                         }
                       ],
                       "clarifications": [],
+                      "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
                       "message": null,
                       "model": "gemini-2.5-flash",
@@ -1573,6 +1577,7 @@
                         }
                       ],
                       "clarifications": [],
+                      "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": {
                         "base": {
                           "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01'",
@@ -1847,7 +1852,7 @@
             }
           },
           "4XX": {
-            "description": "400 empty question, invalid JSON body, dataset with no data or whose profile is not ready, or a question the mock model has no answer for; 401; 404 not a member or unknown dataset",
+            "description": "400 empty question, invalid JSON body, dataset with no data or whose profile is not ready, or a question the mock model has no answer for; 401; 404 not a member, unknown dataset, or a conversation that is not the caller's",
             "content": {
               "application/json": {
                 "schema": {
@@ -1878,6 +1883,137 @@
           },
           "503": {
             "description": "The language model is not configured on the server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/datasets/{id}/conversations": {
+      "get": {
+        "tags": [
+          "query"
+        ],
+        "summary": "Conversations of the caller on a dataset",
+        "description": "Newest first. Conversations with no recorded question are left out.",
+        "operationId": "listConversations",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationListResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 404 not a member or invalid dataset id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/datasets/{id}/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "query"
+        ],
+        "summary": "One conversation of the caller with its turns",
+        "description": "Turns oldest first, each with its question, status, SQL and the short text of what was understood. Results are not stored: ask a turn again to see its numbers.",
+        "operationId": "getConversation",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "description": "Conversation id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 404 not a member, or no such conversation of the caller on this dataset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
             "content": {
               "application/json": {
                 "schema": {
@@ -2222,6 +2358,14 @@
             },
             "description": "Choices for the question, empty the first time. To change an assumption or answer a clarification, send the\nsame question with `choices` of the previous answer, the changed entry replaced or added. A question whose text\nwas edited is a new question: send `choices` empty. The backend does not compare with earlier questions; it\napplies the choices it recognizes for this question and ignores the others with a warning\n`choice_not_applied`. Choices not listed use their default."
           },
+          "conversation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Conversation to continue, from `AskResponse.conversation_id` of the previous question; the model then reads the\nquestion as a follow-up of the last turns. Leave out to start a new conversation. A conversation of another\nuser or another dataset is 404."
+          },
           "question": {
             "type": "string"
           }
@@ -2235,6 +2379,7 @@
           "question",
           "message",
           "query_id",
+          "conversation_id",
           "version_id",
           "model",
           "choices",
@@ -2272,6 +2417,11 @@
               "$ref": "#/components/schemas/Choice"
             },
             "description": "Questions back to the user, only for `needs_choice`. Every entry has `selected` null."
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Conversation this question belongs to (`AskRequest.conversation_id`, or a new one when it was empty). Send it\nback with the next question so the model reads it as a follow-up."
           },
           "explanation": {
             "oneOf": [
@@ -2648,6 +2798,63 @@
           "measure",
           "other"
         ]
+      },
+      "ConversationItem": {
+        "type": "object",
+        "description": "One conversation on a dataset.",
+        "required": [
+          "id",
+          "title",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "The first question of the conversation, shortened."
+          }
+        }
+      },
+      "ConversationListResponse": {
+        "type": "object",
+        "description": "Conversations of the calling user on a dataset, newest first.",
+        "required": [
+          "conversations"
+        ],
+        "properties": {
+          "conversations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConversationItem"
+            }
+          }
+        }
+      },
+      "ConversationResponse": {
+        "type": "object",
+        "description": "A conversation and its recorded turns, oldest first.",
+        "required": [
+          "conversation",
+          "turns"
+        ],
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/ConversationItem"
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TurnItem"
+            }
+          }
+        }
       },
       "CreateUserRequest": {
         "type": "object",
@@ -3417,6 +3624,50 @@
           "narrate",
           "record"
         ]
+      },
+      "TurnItem": {
+        "type": "object",
+        "description": "One recorded question of a conversation. Questions waiting for a choice (`needs_choice`) are not recorded.",
+        "required": [
+          "query_id",
+          "question",
+          "status",
+          "sql",
+          "understood",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "query_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id of the question in the history; use it to trace source rows like a single question."
+          },
+          "question": {
+            "type": "string"
+          },
+          "sql": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SQL that ran (`sql_guarded`); null when the guard refused it."
+          },
+          "status": {
+            "$ref": "#/components/schemas/AskStatus",
+            "description": "`answered`, `rejected` or `failed`."
+          },
+          "understood": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Short text of the \"understood as\" card (measures, filters, grouping, period); null unless answered."
+          }
+        }
       },
       "Understanding": {
         "type": "object",

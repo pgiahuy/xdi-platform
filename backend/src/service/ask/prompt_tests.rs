@@ -169,6 +169,7 @@ fn input<'a>(
         examples,
         domain: None,
         choices,
+        history: "",
     }
 }
 

@@ -25,6 +25,7 @@ pub fn build_why_prompt(input: &PromptInput) -> String {
             build_choices_section(input.context, input.choices),
             build_metrics_section(input.metrics, false),
             build_domain_section(input.domain),
+            input.history.to_string(),
             format!("Question: {}", input.question),
         ])
     })

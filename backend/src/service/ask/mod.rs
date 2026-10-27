@@ -94,6 +94,7 @@ pub async fn ask(
     dataset_id: &str,
     question: &str,
     choices: &[ChosenOption],
+    history: &str,
 ) -> Result<AskResponse, AppError> {
     if question.trim().is_empty() {
         return Err(AppError::BadRequest("Câu hỏi đang trống".to_string()));
@@ -138,6 +139,7 @@ pub async fn ask(
         examples: &examples,
         domain: dataset.domain.as_deref().and_then(find_domain_package),
         choices,
+        history,
     };
     let tables = [build_allowed_table(state, member, &dataset, &version, &columns).await?];
     if build_question_kind(question) == QuestionKind::Why {
@@ -415,6 +417,9 @@ pub(super) fn build_base_response(
         question: question.to_string(),
         message: None,
         query_id: None,
+        // service/conversation/ điền id thật sau khi luồng hỏi trả về; luồng hỏi không biết gì về cuộc trò chuyện ngoài
+        // khối lịch sử trong prompt.
+        conversation_id: uuid::Uuid::nil(),
         version_id: version.id,
         model: state.llm.name(),
         choices: vec![],

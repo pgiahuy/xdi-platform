@@ -8,6 +8,7 @@ semantic/ (hồ sơ ngữ nghĩa). File lẻ còn lại là tài khoản, worksp
 
 pub mod accounts;
 pub mod ask;
+pub mod conversation;
 pub mod drill;
 pub mod eval;
 #[cfg(test)]

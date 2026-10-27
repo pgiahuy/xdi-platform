@@ -64,6 +64,9 @@ pub struct AskResponse {
     /// Id of the question in the history (`queries`); null for `needs_choice`.
     #[schema(required)]
     pub query_id: Option<Uuid>,
+    /// Conversation this question belongs to (`AskRequest.conversation_id`, or a new one when it was empty). Send it
+    /// back with the next question so the model reads it as a follow-up.
+    pub conversation_id: Uuid,
     /// Dataset version the question ran on.
     pub version_id: Uuid,
     /// Language model configured for the question, for example `gemini-2.5-flash` or `mock`.

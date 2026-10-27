@@ -380,6 +380,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/datasets/{id}/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversations of the caller on a dataset
+         * @description Newest first. Conversations with no recorded question are left out.
+         */
+        get: operations["listConversations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/datasets/{id}/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One conversation of the caller with its turns
+         * @description Turns oldest first, each with its question, status, SQL and the short text of what was understood. Results are not stored: ask a turn again to see its numbers.
+         */
+        get: operations["getConversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/datasets/{id}/drill": {
         parameters: {
             query?: never;
@@ -461,6 +501,13 @@ export interface components {
              *     `choice_not_applied`. Choices not listed use their default.
              */
             choices?: components["schemas"]["ChosenOption"][];
+            /**
+             * Format: uuid
+             * @description Conversation to continue, from `AskResponse.conversation_id` of the previous question; the model then reads the
+             *     question as a follow-up of the last turns. Leave out to start a new conversation. A conversation of another
+             *     user or another dataset is 404.
+             */
+            conversation_id?: string | null;
             question: string;
         };
         /** @description Answer to one question, with the evidence behind it. See `AskStatus` for which fields are set. */
@@ -474,6 +521,12 @@ export interface components {
             choices: components["schemas"]["ChosenOption"][];
             /** @description Questions back to the user, only for `needs_choice`. Every entry has `selected` null. */
             clarifications: components["schemas"]["Choice"][];
+            /**
+             * Format: uuid
+             * @description Conversation this question belongs to (`AskRequest.conversation_id`, or a new one when it was empty). Send it
+             *     back with the next question so the model reads it as a follow-up.
+             */
+            conversation_id: string;
             explanation: components["schemas"]["Explanation"] | null;
             /**
              * @description Text for the end user (Vietnamese): the reason for `rejected` and `failed`, the prompt for `needs_choice`;
@@ -667,6 +720,24 @@ export interface components {
          * @enum {string}
          */
         ColumnRole: "dimension" | "time" | "measure" | "other";
+        /** @description One conversation on a dataset. */
+        ConversationItem: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            /** @description The first question of the conversation, shortened. */
+            title: string;
+        };
+        /** @description Conversations of the calling user on a dataset, newest first. */
+        ConversationListResponse: {
+            conversations: components["schemas"]["ConversationItem"][];
+        };
+        /** @description A conversation and its recorded turns, oldest first. */
+        ConversationResponse: {
+            conversation: components["schemas"]["ConversationItem"];
+            turns: components["schemas"]["TurnItem"][];
+        };
         CreateUserRequest: {
             display_name?: string;
             email: string;
@@ -985,6 +1056,23 @@ export interface components {
          * @enum {string}
          */
         StepName: "context" | "llm" | "guard" | "run" | "repair" | "explain" | "narrate" | "record";
+        /** @description One recorded question of a conversation. Questions waiting for a choice (`needs_choice`) are not recorded. */
+        TurnItem: {
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: uuid
+             * @description Id of the question in the history; use it to trace source rows like a single question.
+             */
+            query_id: string;
+            question: string;
+            /** @description SQL that ran (`sql_guarded`); null when the guard refused it. */
+            sql: string | null;
+            /** @description `answered`, `rejected` or `failed`. */
+            status: components["schemas"]["AskStatus"];
+            /** @description Short text of the "understood as" card (measures, filters, grouping, period); null unless answered. */
+            understood: string | null;
+        };
         /**
          * @description The "understood as" card, built from `sql_guarded`: what is measured, filtered, grouped, sorted, over which
          *     period, and the assumptions made. Null in `AskResponse` unless the status is `answered`. `limit` is null when only
@@ -2130,7 +2218,93 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description 400 empty question, invalid JSON body, dataset with no data or whose profile is not ready, or a question the mock model has no answer for; 401; 404 not a member or unknown dataset */
+            /** @description 400 empty question, invalid JSON body, dataset with no data or whose profile is not ready, or a question the mock model has no answer for; 401; 404 not a member, unknown dataset, or a conversation that is not the caller's */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listConversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationListResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member or invalid dataset id */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+                /** @description Conversation id (UUID) */
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member, or no such conversation of the caller on this dataset */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

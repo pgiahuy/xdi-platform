@@ -12,6 +12,7 @@ use axum::{extract::State, Json};
 use serde::Deserialize;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
+use uuid::Uuid;
 
 use super::extract::{JsonBody, PathParams};
 use crate::auth::Member;
@@ -42,6 +43,11 @@ pub struct AskRequest {
     /// `choice_not_applied`. Choices not listed use their default.
     #[serde(default)]
     pub choices: Vec<ChosenOption>,
+    /// Conversation to continue, from `AskResponse.conversation_id` of the previous question; the model then reads the
+    /// question as a follow-up of the last turns. Leave out to start a new conversation. A conversation of another
+    /// user or another dataset is 404.
+    #[serde(default)]
+    pub conversation_id: Option<Uuid>,
 }
 
 #[utoipa::path(
@@ -70,8 +76,8 @@ pub struct AskRequest {
         ),
         (status = "4XX", body = ErrorBody, description = "400 empty question, invalid JSON body, dataset with no \
                                                          data or whose profile is not ready, or a question the mock \
-                                                         model has no answer for; 401; 404 not a member or unknown \
-                                                         dataset"),
+                                                         model has no answer for; 401; 404 not a member, unknown \
+                                                         dataset, or a conversation that is not the caller's"),
         (status = 502, body = ErrorBody, description = "The language model service failed or did not answer before \
                                                        any SQL was written"),
         (status = 503, body = ErrorBody, description = "The language model is not configured on the server")
@@ -83,7 +89,15 @@ async fn ask(
     PathParams((_ws, id)): PathParams<(String, String)>,
     JsonBody(req): JsonBody<AskRequest>,
 ) -> Result<Json<AskResponse>, AppError> {
-    let response = service::ask::ask(&state, &member, &id, &req.question, &req.choices).await?;
+    let response = service::conversation::ask(
+        &state,
+        &member,
+        &id,
+        &req.question,
+        &req.choices,
+        req.conversation_id,
+    )
+    .await?;
     Ok(Json(response))
 }
 
