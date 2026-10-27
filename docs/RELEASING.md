@@ -14,6 +14,8 @@ Quy trình ra một phiên bản mới. Số phiên bản theo Semantic Versioni
      DATA_DIR=backend/target/eval-data backend/target/debug/xdi-backend eval \
      --data data/samples/dataco.csv --cases eval/dataco.json
    ```
+
+   Đặt `CARGO_TARGET_DIR` thì binary nằm ở `$CARGO_TARGET_DIR/debug/xdi-backend` thay cho `backend/target/debug/`.
 2. Đổi số phiên bản ở hai chỗ, cùng một số: `backend/Cargo.toml`, `frontend/package.json`. Chạy `cargo build` trong
    `backend/` và `npm install` trong `frontend/` để `Cargo.lock`, `package-lock.json` mang số mới (build phát hành
    dùng `cargo build --locked`, `Cargo.lock` cũ làm nó lỗi). Rồi chạy `make openapi`: đặc tả OpenAPI lấy số phiên bản

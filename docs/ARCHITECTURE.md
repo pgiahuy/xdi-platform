@@ -83,8 +83,9 @@ Lúc hỏi, mô hình ngôn ngữ chỉ làm bốn việc:
 - Viết lời cho bảng phân rã mà code đã tính, chỉ khi so hai kỳ (bước 7).
 - Viết đoạn trả lời ngắn cho câu thường từ tối đa 10 dòng đầu của kết quả (bước 7, tắt bằng `ANSWER_TEXT=false`).
 
-Nó không nhận các dòng dữ liệu gốc. Khi viết SQL hay điền form, nó chỉ nhận siêu dữ liệu của cột và giá trị của cột
-phân loại; khi viết lời, nó nhận số đã tính. Nó không biết phân quyền của người hỏi (prompt chỉ nói chung rằng hệ thống
+Nó không nhận bảng dữ liệu. Khi viết SQL hay điền form, nó nhận siêu dữ liệu của cột và giá trị của cột phân loại; khi
+viết lời cho câu "tại sao", nó nhận số đã tính; khi viết đoạn trả lời của câu thường, nó nhận tối đa 10 dòng đầu của
+kết quả, là dòng gốc khi câu không gộp. Nó không biết phân quyền của người hỏi (prompt chỉ nói chung rằng hệ thống
 tự lọc theo quyền). Mọi bước đều được ghi lại và trả về cho giao diện hiển thị. Phần gửi cho mô hình, chi tiết từng
 lúc: [PRIVACY.md](PRIVACY.md).
 
@@ -174,9 +175,10 @@ workspace chỉ còn admin như vậy thì quản trị hệ thống chỉ đị
 | Thêm thành viên theo email, đổi vai, xóa thành viên | Có | Không (403) |
 | Xóa dataset (xóa cả file Parquet) | Có | Không (403) |
 | Sửa mô tả cột, bí danh; chốt định nghĩa chỉ số; đánh dấu câu trả lời đúng | Có | Không |
-| Lưu câu hỏi, xem lịch sử | Có | Có |
+| Xem lại câu hỏi của mình (qua cuộc trò chuyện) | Có | Có |
 
-Dòng sửa mô tả cột, chốt chỉ số chưa có endpoint. Câu đã trả lời, bị từ chối hay lỗi đều được ghi vào lịch sử; mỗi
+Dòng sửa mô tả cột, bí danh, chốt chỉ số, đánh dấu câu trả lời đúng chưa có endpoint; cũng chưa có lưu riêng một câu
+hỏi. Câu đã trả lời, bị từ chối hay lỗi đều được ghi vào lịch sử; mỗi
 người mới xem lại được câu hỏi của mình qua danh sách cuộc trò chuyện (mục 8), chưa có màn xem lịch sử chung. Khi
 thêm, việc chỉ admin làm được gọi `member.require_admin()` ở đầu service hoặc handler, kèm test cho cả hai vai.
 

@@ -6,9 +6,10 @@ Nạp file CSV, Parquet hoặc Excel rồi gõ câu hỏi. Hệ thống viết S
 bảng, biểu đồ cùng câu SQL đã chạy. Với câu "tại sao", hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một
 số để xem các dòng dữ liệu đứng sau nó.
 
-Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ chỉ viết SQL, điền form câu "tại sao" và viết lời; nó không
-nhận dữ liệu gốc. Riêng đoạn trả lời ngắn của câu hỏi thường gửi tối đa 10 dòng đầu của kết quả, tắt bằng
-`ANSWER_TEXT=false`. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
+Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, viết SQL, điền form câu "tại sao" và
+viết lời. Nó nhận tên cột và danh sách giá trị của cột phân loại, không nhận bảng dữ liệu. Riêng đoạn trả lời ngắn của
+câu hỏi thường gửi tối đa 10 dòng đầu của kết quả (với câu không gộp, đó là dòng gốc), tắt bằng `ANSWER_TEXT=false`.
+Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
 Tài liệu: https://pgiahuy.github.io/xdi-platform/
@@ -30,19 +31,20 @@ DataCo (1500 dòng). Mô hình mặc định là `mock`: không cần khóa, ch�
 theo thị trường" hay "Vì sao doanh thu tháng 5 năm 2017 tăng". Hỏi câu tự do trên dữ liệu của bạn thì đặt
 `LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hoặc `ollama`) trong `.env`, rồi chạy lại `docker compose up -d`.
 
-Build lần đầu mất vài phút và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy ít RAM thì đặt `CARGO_BUILD_JOBS`.
+Build lần đầu biên dịch Rust và DuckDB (đo trên máy 16 nhân: 8 phút) và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU;
+máy ít RAM thì đặt `CARGO_BUILD_JOBS`.
 Hướng dẫn đầy đủ (build từ nguồn, đưa lên Internet, sao lưu, lỗi hay gặp, dùng lần đầu): [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Dữ liệu dùng trong repo
 
-Bốn bộ, đều giấy phép CC BY 4.0: hai bộ bán hàng và chuỗi cung ứng, một bộ giáo dục. Chỉ bộ mẫu nằm trong repo; các
+Bốn bộ, đều giấy phép CC BY 4.0: ba bộ bán hàng và chuỗi cung ứng, một bộ giáo dục. Chỉ bộ mẫu nằm trong repo; các
 bộ đầy đủ tải bằng `data/download.sh` (kiểm SHA-256) vào `data/downloads/`, git bỏ qua thư mục này.
 
 | Bộ | Lấy ở đâu | Dùng cho |
 |---|---|---|
 | DataCo mẫu, 1500 dòng | Có sẵn: `data/samples/dataco.csv`, kèm chỉ số mẫu `dataco.metrics.json` | Dataset nạp sẵn khi thiết lập lần đầu, câu mẫu của `mock`, bộ đánh giá `make eval` |
-| DataCo Smart Supply Chain đầy đủ, khoảng 96 MB CSV | `sh data/download.sh dataco` | Thử trên dữ liệu lớn; đặt tên dataset `DataCo` thì câu mẫu của `mock` vẫn chạy |
-| Online Retail II, khoảng 46 MB Excel | `sh data/download.sh retail` | Thử file Excel nhiều sheet; chưa có câu mẫu cho `mock`, cần Gemini hoặc Ollama |
+| DataCo Smart Supply Chain đầy đủ, khoảng 96 MB CSV | `sh data/download.sh dataco` | Thử trên dữ liệu lớn; nạp với tên `DataCo` vào workspace chưa có DataCo thì câu mẫu của `mock` vẫn chạy (đã có thì bảng thành `dataco_2`) |
+| Online Retail II, khoảng 46 MB Excel | `sh data/download.sh retail` | Thử file Excel nhiều sheet (bản đầy đủ chưa thử nạp, giới hạn Excel ở [DATA.md](docs/DATA.md)); chưa có câu mẫu cho `mock`, cần Gemini hoặc Ollama |
 | OULAD (Open University Learning Analytics), 7 bảng CSV, khoảng 464 MB | `sh data/download.sh oulad` | Dữ liệu giáo dục: nạp `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần) để hỏi theo kết quả học tập; cần Gemini hoặc Ollama |
 
 DataCo từ Mendeley Data (Constante, Silva, Pereira, 2019); Online Retail II (Chen, 2019) và OULAD (Kuzilek, Hlosta,
@@ -58,9 +60,10 @@ Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, gh
   bảng, cột, hàm được phép, có trần số dòng) rồi chạy trên DuckDB; lỗi thì mô hình sửa một lần. Kết quả có bảng, biểu
   đồ, tải CSV, thẻ "Đã hiểu là" và cảnh báo khi kết quả đáng ngờ.
 - **Câu "tại sao":** mô hình điền form (đo gì, hai kỳ hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần
-  chênh lệch của từng nhóm (cộng lại bằng đúng chênh lệch). Lời giải thích nói bằng lời thường; mọi số và chữ "tăng",
-  "giảm" trong lời của mô hình được kiểm với bảng đã tính, sai thì dùng câu do code viết.
-- **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của bất kỳ số nào trong bảng.
+  chênh lệch của từng nhóm (cộng lại bằng đúng chênh lệch). Lời giải thích nói bằng lời thường; mọi số trong lời của
+  mô hình, và chữ "tăng", "giảm" đứng trước mỗi chênh lệch, được kiểm với bảng đã tính, sai thì dùng câu do code viết.
+- **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết quả
+  hay bảng phân rã (câu có CTE, HAVING, hàm cửa sổ hay nhiều bảng chưa truy được).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
 - **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên DataCo, so với SQL đúng viết tay; CI báo khi tỷ lệ đúng giảm.
 

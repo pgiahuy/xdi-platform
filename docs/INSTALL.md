@@ -153,8 +153,8 @@ Mô hình ngôn ngữ:
   Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM, theo
   [tài liệu Ollama](https://docs.ollama.com/context-length)) và lặng lẽ bỏ phần đầu của prompt dài hơn, tức phần luật.
   Đếm bằng tokenizer của Qwen2.5-Coder trên DataCo: prompt SQL khoảng 3 050 token, prompt dài nhất backend gửi (trần
-  24 000 ký tự) khoảng 7 180 token. Prompt SQL nay có thêm mục luật của guard (khoảng 3 000 ký tự), chưa đếm lại.
-  12288 đủ cho prompt dài nhất cộng câu trả lời. Mỗi token cần thêm bộ nhớ K/V: với `qwen2.5-coder:7b` và bộ đệm `f16`
+  24 000 ký tự) khoảng 7 180 token, prompt ở trần mà toàn danh sách giá trị khoảng 8 000 token. Prompt SQL nay có thêm
+  mục luật của guard (khoảng 3 000 ký tự), chưa đếm lại. 12288 đủ cho prompt đó cộng phần sửa SQL và câu trả lời. Mỗi token cần thêm bộ nhớ K/V: với `qwen2.5-coder:7b` và bộ đệm `f16`
   là 56 KiB, tức khoảng 672 MiB ở 12288 token (tính từ `config.json` của mô hình, chưa đo; số thật xem bằng
   `ollama ps`). Đặt nhỏ hơn mặc định thì backend ghi cảnh báo lúc khởi động.
 - Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,

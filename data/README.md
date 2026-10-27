@@ -38,7 +38,7 @@ hay checksum lệch thì script in trang nguồn để tải tay. Nạp file t�
 |---|---|---|---|
 | DataCo Smart Supply Chain for Big Data Analysis | `DataCoSupplyChainDataset.csv` (khoảng 96 MB, windows-1252) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0; Fabian Constante, Fernando Silva, António Pereira (2019) |
 | Online Retail II | `online_retail_ii.zip` và `online_retail_II.xlsx` giải nén từ đó (khoảng 46 MB) | UCI Machine Learning Repository, https://archive.ics.uci.edu/dataset/502/online+retail+ii | CC BY 4.0; Daqing Chen (2019), https://doi.org/10.24432/C5CG6D |
-| Open University Learning Analytics (OULAD) | `oulad.zip` (khoảng 45 MB) và 7 file CSV giải nén vào `oulad/` (tổng khoảng 464 MB, riêng `studentVle.csv` 454 MB) | UCI Machine Learning Repository, https://archive.ics.uci.edu/dataset/349/open+university+learning+analytics+dataset | CC BY 4.0; Jakub Kuzilek, Martin Hlosta, Zdenek Zdrahal (2015), https://doi.org/10.24432/C5KK69 |
+| Open University Learning Analytics (OULAD) | `oulad.zip` (khoảng 47 MB) và 7 file CSV giải nén vào `oulad/` (tổng khoảng 464 MB, riêng `studentVle.csv` 454 MB) | UCI Machine Learning Repository, https://archive.ics.uci.edu/dataset/349/open+university+learning+analytics+dataset | CC BY 4.0; Jakub Kuzilek, Martin Hlosta, Zdenek Zdrahal (2015), https://doi.org/10.24432/C5KK69 |
 
 Câu mẫu và hồ sơ viết sẵn của mock (`backend/src/engine/llm/mock_answers.json`) viết cho bảng `dataco`: nạp bản đầy
 đủ của DataCo với tên dataset `DataCo` vào workspace chưa có dataset đó (đã có thì bảng mới thành `dataco_2`). Online

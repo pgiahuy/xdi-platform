@@ -3,7 +3,7 @@
 #   sh data/download.sh            tải cả ba
 #   sh data/download.sh dataco     chỉ DataCo Smart Supply Chain (CSV, khoảng 96 MB)
 #   sh data/download.sh retail     chỉ Online Retail II (file .zip khoảng 46 MB, giải nén ra .xlsx)
-#   sh data/download.sh oulad      chỉ Open University Learning Analytics (file .zip khoảng 45 MB, giải nén ra 7 CSV
+#   sh data/download.sh oulad      chỉ Open University Learning Analytics (file .zip khoảng 47 MB, giải nén ra 7 CSV
 #                                  trong oulad/, tổng khoảng 464 MB, riêng studentVle.csv 454 MB)
 # Mỗi file tải vào <tên>.part, kiểm SHA-256 rồi mới đổi tên; file đã có và đúng checksum thì bỏ qua. Tải không được
 # thì in trang nguồn để tải tay. Nạp file tải về ở trang Dữ liệu của giao diện (docs/INSTALL.md mục 7).
@@ -73,7 +73,11 @@ retail() {
         echo "Thiếu lệnh unzip: giải nén data/$OUT/$RETAIL_ZIP bằng tay để lấy $RETAIL_FILE" >&2
         return 1
     fi
-    unzip -o -q "$OUT/$RETAIL_ZIP" "$RETAIL_FILE" -d "$OUT"
+    # Hàm chạy trong `retail || status=1` nên set -e không dừng ở đây: kiểm lỗi giải nén (đầy đĩa, file hỏng) tại chỗ.
+    unzip -o -q "$OUT/$RETAIL_ZIP" "$RETAIL_FILE" -d "$OUT" || {
+        echo "Giải nén data/$OUT/$RETAIL_ZIP lỗi" >&2
+        return 1
+    }
     echo "Online Retail II: CC BY 4.0, ghi công: Chen, Online Retail II, UCI Machine Learning Repository, https://doi.org/10.24432/C5CG6D"
 }
 
@@ -83,7 +87,10 @@ oulad() {
         echo "Thiếu lệnh unzip: giải nén data/$OUT/$OULAD_ZIP bằng tay vào data/$OUT/$OULAD_DIR" >&2
         return 1
     fi
-    unzip -o -q "$OUT/$OULAD_ZIP" '*.csv' -d "$OUT/$OULAD_DIR"
+    unzip -o -q "$OUT/$OULAD_ZIP" '*.csv' -d "$OUT/$OULAD_DIR" || {
+        echo "Giải nén data/$OUT/$OULAD_ZIP lỗi (bản giải nén cần khoảng 464 MB trống)" >&2
+        return 1
+    }
     echo "OULAD: CC BY 4.0, ghi công: Kuzilek, Hlosta, Zdrahal, Open University Learning Analytics dataset, UCI Machine Learning Repository, https://doi.org/10.24432/C5KK69"
 }
 
