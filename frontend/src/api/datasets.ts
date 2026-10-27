@@ -35,7 +35,7 @@ function datasetsKey(ws: string) {
   return ['workspaces', ws, 'datasets']
 }
 
-// Lớp ngữ nghĩa chạy nền sau khi nạp (backend/src/service/semantic.rs), mất bao lâu tùy mô hình và hàng đợi. Hỏi lại
+// Lớp ngữ nghĩa chạy nền sau khi nạp (backend/src/service/semantic/mod.rs), mất bao lâu tùy mô hình và hàng đợi. Hỏi lại
 // mỗi 10 giây để câu gợi ý hiện mà không phải tải lại trang; dừng sau 5 phút vì lớp đó lỗi thì phiên bản giữ structure
 // tới lần khởi động sau, hỏi mãi chỉ tốn request.
 const PROFILE_POLL_MS = 10_000

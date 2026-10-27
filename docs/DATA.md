@@ -6,7 +6,7 @@ mô hình ngôn ngữ: [Dữ liệu và quyền riêng tư](PRIVACY.md).
 
 Nạp file: `POST /api/workspaces/{ws}/datasets`, dạng `multipart/form-data`, chỉ `admin` của workspace gọi được
 ([API](API.md)). Các trường: `file` (lặp lại để gửi nhiều file), `name` (tên dataset mới), `dataset_id` (thêm phiên bản
-cho dataset có sẵn), `sheet` (sheet cần nạp của file Excel). Code: `backend/src/api/datasets.rs`,
+cho dataset có sẵn), `sheet` (sheet cần nạp của file Excel). Code: `backend/src/api/datasets/`,
 `backend/src/service/ingest.rs`, `backend/src/engine/analytics.rs`.
 
 ## Định dạng nhận
@@ -123,6 +123,16 @@ vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset
   giữa chừng thì lần khởi động sau xóa.
 - Phiên bản lưu số dòng (`row_count`) và trạng thái hồ sơ `profile_status`: `structure` khi đã có hồ sơ cột (mục
   dưới), `semantic` khi xong lớp ngữ nghĩa, `pending` khi chưa, `failed` khi lớp cấu trúc lỗi do dữ liệu.
+- Xóa dataset (`DELETE /api/workspaces/{ws}/datasets/{id}`, chỉ `admin`) xóa mọi phiên bản cùng hồ sơ cột, chỉ số và
+  lịch sử câu hỏi trong Postgres, rồi xóa thư mục Parquet của từng phiên bản trên đĩa ([API](API.md), mục Xóa
+  dataset). File xóa sau khi giao dịch Postgres xong: lỗi lúc xóa file chỉ để lại file thừa trên đĩa, không làm lệch
+  dữ liệu.
+
+## Dataset mẫu
+
+Thiết lập lần đầu tạo xong workspace đầu tiên thì nạp `dataco.csv` trong `SAMPLES_DIR` thành dataset `DataCo` qua đúng
+đường nạp file ở trên, kèm các chỉ số mẫu (`backend/src/service/samples.rs`); tắt bằng `SEED_SAMPLE=false`. Chi tiết,
+nguồn và giấy phép: [data/README.md](../data/README.md).
 
 ## Tên bảng và tên cột
 
@@ -247,7 +257,7 @@ hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và
 - API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm, mô tả, bí danh).
 - So hồ sơ giữa hai phiên bản (cột mất, thêm, đổi kiểu) trước khi chuyển phiên bản hiện hành, như thiết kế ở
   [Kiến trúc](ARCHITECTURE.md), mục 7.
-- Xóa dataset, chọn lại phiên bản cũ làm hiện hành.
+- Chọn lại phiên bản cũ làm hiện hành, xóa riêng một phiên bản.
 - Nạp nguyên tử: ghi phiên bản vào Postgres và chuyển file Parquet về chỗ cuối chưa nằm trong một giao dịch, lỗi giữa
   hai bước có thể để lại dòng thừa trong Postgres ([#79](https://github.com/pgiahuy/xdi-platform/issues/79)).
 - Nguồn dữ liệu là database (Postgres, MySQL, SQLite): mới có trong thiết kế.

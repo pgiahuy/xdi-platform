@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/drill/contract.rs - hợp đồng của POST /workspaces/{ws}/datasets/{id}/drill (truy dòng nguồn, #34): request
-gửi query_id cùng khóa của chỗ được bấm, không bao giờ gửi SQL (docs/ARCHITECTURE.md mục 8). service/drill.rs dựng
+gửi query_id cùng khóa của chỗ được bấm, không bao giờ gửi SQL (docs/ARCHITECTURE.md mục 8). service/drill/mod.rs dựng
 DrillResponse, api/query.rs trả nó ra JSON; đặt ở service vì cùng lý do với ask/contract.rs, và tách file vì ask_contract
 đã dài. Bảng dòng nguồn dùng lại ResultTable của ask, để giao diện vẽ bằng cùng component.
 
@@ -63,7 +63,7 @@ pub enum SliceName {
     Compare,
 }
 
-// Backend lấy điều kiện lát cắt và câu SQL của chiều từ queries.explanation (service/drill.rs), không từ request.
+// Backend lấy điều kiện lát cắt và câu SQL của chiều từ queries.explanation (service/drill/mod.rs), không từ request.
 /// One group of a breakdown table in one slice.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct BreakdownKey {

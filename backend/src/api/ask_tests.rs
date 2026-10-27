@@ -60,7 +60,7 @@ impl LlmProvider for ScriptedLlm {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        // Nạp file xong, lớp ngữ nghĩa (service/semantic.rs) chạy nền và cũng gọi mô hình. Lỗi tạm thì nó không ghi gì
+        // Nạp file xong, lớp ngữ nghĩa (service/semantic/mod.rs) chạy nền và cũng gọi mô hình. Lỗi tạm thì nó không ghi gì
         // vào hồ sơ, nên câu viết sẵn chỉ dành cho câu hỏi và bí danh test tự đặt không bị ghi đè.
         if request.task == LlmTask::Profile {
             return Err(AppError::Upstream(

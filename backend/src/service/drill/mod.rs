@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/drill.rs - truy dòng nguồn của một con số (#34): đọc câu hỏi đã lưu (queries) theo workspace và query_id,
+/* service/drill/mod.rs - truy dòng nguồn của một con số (#34): đọc câu hỏi đã lưu (queries) theo workspace và query_id,
 dựng câu đọc dòng nguồn từ sql_guarded (drill/sql.rs; tên cột kết quả lấy từ một lần chạy câu gốc với LIMIT 0), cho qua guard với quyền của người đang bấm, chạy trên đúng phiên
 bản dữ liệu câu hỏi đã dùng, rồi trả một trang dòng cùng tổng số dòng. Hợp đồng ở drill/contract.rs, route ở
-api/query.rs. Test ở drill/tests.rs (không cần Postgres) và api/drill/tests.rs (qua router).
+api/query.rs. Test ở drill/tests.rs (không cần Postgres) và api/drill_tests.rs (qua router).
 
 Quyền của người đang bấm, không của người đã hỏi: câu do admin hỏi, thành viên có vai dữ liệu bấm vào thì chỉ thấy dòng
 của vai đó. Chạy trên version_id đã lưu: nạp phiên bản mới sau đó không làm dòng nguồn lệch con số đã trả.

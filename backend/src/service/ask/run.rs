@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/run.rs - các bước guard, run, repair của luồng hỏi (docs/ARCHITECTURE.md mục 2, bước 5 và 6): kiểm câu SQL
 mô hình viết, chạy trên DuckDB (engine/query.rs), đổi kết quả sang ResultTable (ask/result.rs), và nhờ mô hình sửa một
-lần khi lỗi sửa được. service/ask.rs (#33) gọi run_with_repair với câu trả lời thô của bước llm rồi dựng AskResponse
+lần khi lỗi sửa được. service/ask/mod.rs (#33) gọi run_with_repair với câu trả lời thô của bước llm rồi dựng AskResponse
 từ RunOutcome; nhận mô hình và đầu vào của guard qua tham số nên test chạy được với mô hình giả, không cần Postgres.
 
 Câu trả lời của mô hình là object JSON {terms, assumptions, clarify, sql} (ask/reply.rs). Mô hình hỏi lại ở lần đầu thì
@@ -64,7 +64,7 @@ pub struct RunOutcome {
     pub sql_guarded: Option<String>,
     pub result: Option<ResultTable>,
     /// Guard giữ nguyên LIMIT của câu mô hình viết (GuardedSql::limit_note là None), nên LIMIT trong sql_guarded là ý
-    /// của câu hỏi chứ không phải trần guard thêm; thẻ "Đã hiểu là" (understanding.rs) chỉ hiện mục limit khi đó. Chỉ có
+    /// của câu hỏi chứ không phải trần guard thêm; thẻ "Đã hiểu là" (understanding/mod.rs) chỉ hiện mục limit khi đó. Chỉ có
     /// nghĩa khi answered, còn lại là false.
     pub limit_kept: bool,
     /// Điều kiện phân quyền guard đã thêm vào sql_guarded (GuardedSql::row_filters), để thẻ gắn nhãn phân quyền; rỗng

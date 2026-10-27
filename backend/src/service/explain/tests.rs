@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/explain/tests.rs - test cho phần toán của câu "tại sao" (explain.rs): đóng góp từng nhóm cộng đúng bằng
+/* service/explain/tests.rs - test cho phần toán của câu "tại sao" (explain/mod.rs): đóng góp từng nhóm cộng đúng bằng
 chênh lệch, thứ hạng chiều theo Adtributor (#39), tách lượng và giá với giá là chỗ làm tròn duy nhất (#40). Số của mẫu
 why (ask/examples.rs) phải tính lại ra đúng từ các hàm này. */
 

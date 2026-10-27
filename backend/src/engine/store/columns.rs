@@ -145,14 +145,14 @@ pub struct ValueRow {
     pub aliases: Vec<String>,
 }
 
-/// Phần ngữ nghĩa của một cột, đã qua kiểm tra của service/semantic.rs: tên cột đã đổi ra id, giới hạn độ dài đã áp.
+/// Phần ngữ nghĩa của một cột, đã qua kiểm tra của service/semantic/mod.rs: tên cột đã đổi ra id, giới hạn độ dài đã áp.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticColumnUpdate {
     pub column_id: Uuid,
     /// None khi mô hình không có mô tả hợp lệ cho cột này.
     pub description: Option<String>,
     pub aliases: Vec<String>,
-    /// Vai trò mới khi mô hình đề xuất và luật cho phép (xem service/semantic.rs); None là giữ vai trò cũ.
+    /// Vai trò mới khi mô hình đề xuất và luật cho phép (xem service/semantic/mod.rs); None là giữ vai trò cũ.
     pub role: Option<ProfileRole>,
     /// Đơn vị mô hình đề xuất cho cột số đo; None khi không có hay không hợp lệ.
     pub unit: Option<ColumnUnit>,
@@ -290,7 +290,7 @@ impl Store {
     }
 
     /// Bật cờ nhạy cảm cho các cột (chỉ chiều false -> true). Hai người gọi: lượt quét lúc khởi động cho phiên
-    /// bản cũ (service/profile.rs) và cột do mô hình đề xuất thêm trong câu trả lời ngữ nghĩa (service/semantic.rs,
+    /// bản cũ (service/profile.rs) và cột do mô hình đề xuất thêm trong câu trả lời ngữ nghĩa (service/semantic/mod.rs,
     /// qua apply_semantic_profile).
     pub async fn mark_columns_sensitive(
         &self,

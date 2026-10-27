@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/understanding.rs - thẻ "Đã hiểu là" (Understanding của ask/contract.rs) và vai trò từng cột kết quả, dựng
+/* service/understanding/mod.rs - thẻ "Đã hiểu là" (Understanding của ask/contract.rs) và vai trò từng cột kết quả, dựng
 bằng code từ câu đã chạy, không nhờ mô hình, nên thẻ luôn khớp sql_guarded. Endpoint hỏi (#33) đọc sql_guarded bằng
 engine/sql_shape.rs rồi gọi build_understanding và build_column_roles; nhãn tiếng Việt ở understanding/labels.rs. Test ở
 understanding/tests.rs.

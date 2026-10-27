@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/chart.rs - chọn biểu đồ cho bảng kết quả của một câu đã trả lời, theo bộ luật ở ARCHITECTURE mục 6b (dựa
 trên IBCS, International Business Communication Standards). service/ask/view.rs gọi build_chart sau khi có vai trò cột
-(understanding.rs), cho cả câu thường lẫn bảng tổng theo kỳ của câu "tại sao"; giao diện vẽ theo ChartSuggestion
+(understanding/mod.rs), cho cả câu thường lẫn bảng tổng theo kỳ của câu "tại sao"; giao diện vẽ theo ChartSuggestion
 (ask/contract.rs) từ chính các dòng của result.
 
 Luật cần biết bốn điều về kết quả: đang so sánh gì (các nhóm, theo thời gian, cơ cấu theo thời gian), số đo cộng được

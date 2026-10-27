@@ -3,7 +3,7 @@
 chỗ đọc bảng và WHERE của câu, thêm một điều kiện `(<biểu thức nhóm>) = <giá trị ô>` cho mỗi cột khóa của dòng được
 bấm, bỏ GROUP BY, ORDER BY, LIMIT, lấy mọi cột. Ra hai câu: một trang dòng (LIMIT, OFFSET) và một câu COUNT(*) đếm
 tổng. Cột khóa tìm theo tên cột DuckDB trả cho câu gốc (build_names_sql), vì đó là tên giao diện gửi lại.
-service/drill.rs đưa các câu qua guard với quyền của người đang bấm rồi chạy. Test ở drill/tests.rs.
+service/drill/mod.rs đưa các câu qua guard với quyền của người đang bấm rồi chạy. Test ở drill/tests.rs.
 
 Dòng phân rã của câu "tại sao" dùng cùng cách trên câu của chiều được bấm (DimensionBreakdown.sql, nhóm theo cột chiều),
 cộng điều kiện của lát cắt được bấm (ExplanationSlice.filter): câu chiều đọc cả hai lát cắt, mỗi độ đo lọc một lát

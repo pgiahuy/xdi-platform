@@ -30,7 +30,7 @@ pub struct AppState {
     /// Giá trị đã chuẩn hóa của các phiên bản dataset vừa được hỏi (service/ask/values.rs), để mỗi câu hỏi không phải
     /// tải và bỏ dấu lại mọi giá trị.
     pub value_cache: Arc<ValueCache>,
-    /// Chỉ một lượt lập hồ sơ ngữ nghĩa (service/semantic.rs) gọi mô hình mỗi lúc: nạp nhiều file liền hay việc nền
+    /// Chỉ một lượt lập hồ sơ ngữ nghĩa (service/semantic/mod.rs) gọi mô hình mỗi lúc: nạp nhiều file liền hay việc nền
     /// lúc khởi động cũng không dồn request lên nhà cung cấp (gói miễn phí dễ trả 429). Lượt sau chờ, không bị từ chối.
     pub semantic_jobs: Arc<Semaphore>,
 }

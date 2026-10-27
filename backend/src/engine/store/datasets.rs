@@ -617,7 +617,7 @@ impl Store {
     }
 
     /// profile_status và semantic_attempted_with hiện tại của một phiên bản; None khi không có (workspace khác hay
-    /// đã xóa). semantic.rs đọc lại sau khi lấy được permit, trước khi gọi mô hình: hai lượt xếp hàng cho cùng một
+    /// đã xóa). service/semantic/mod.rs đọc lại sau khi lấy được permit, trước khi gọi mô hình: hai lượt xếp hàng cho cùng một
     /// phiên bản thì lượt sau thấy semantic (hay, ở đường khởi động, thấy đã thử với provider này) và dừng, không gọi
     /// mô hình hai lần.
     pub async fn get_semantic_state(

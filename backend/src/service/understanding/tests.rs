@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/understanding/tests.rs - test của service/understanding.rs: câu SQL của mock (engine/llm/mock_answers.json)
+/* service/understanding/tests.rs - test của service/understanding/mod.rs: câu SQL của mock (engine/llm/mock_answers.json)
 đi qua guard thật rồi dựng thẻ và vai trò cột, như endpoint hỏi (#33) sẽ làm; cộng các dạng câu khó đọc (phân quyền,
 khoảng thời gian, OR, CTE, UNION, ORDER BY 2, SELECT *, không GROUP BY). Mọi test kiểm mỗi đoạn SQL của thẻ là đoạn
 nguyên văn của sql_guarded. Hồ sơ cột là hồ sơ viết sẵn của dataco trong mock_answers.json, cột ngày có vai trò time.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/response_choices.rs - phần lựa chọn của AskResponse mà endpoint hỏi (service/ask.rs) dựng: câu hỏi lại
+/* service/ask/response_choices.rs - phần lựa chọn của AskResponse mà endpoint hỏi (service/ask/mod.rs) dựng: câu hỏi lại
 khi một cụm khớp nhiều cột (hỏi trước khi gọi mô hình), danh sách lựa chọn đã dùng (AskResponse.choices) và cảnh báo
 choice_not_applied. Cách hiểu của mô hình thành Choice (giả định, câu hỏi lại của mô hình) ở ask/choices.rs; file này
 chỉ gom kết quả đó cùng ngữ cảnh (ask/context.rs) thành dạng của hợp đồng.

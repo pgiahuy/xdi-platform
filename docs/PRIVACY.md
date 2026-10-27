@@ -54,7 +54,8 @@ Không bao giờ gửi: mật khẩu, khóa API của bạn cho nhà cung cấp 
   và `xdidata` chứa file dữ liệu). `docker compose down` không có `-v` thì giữ dữ liệu.
 - Admin xóa workspace ở trang Thành viên (hoặc `DELETE /api/workspaces/{ws}`): xóa mọi dataset, hồ sơ, chỉ số, lịch
   sử câu hỏi và thành viên của nó trong Postgres (khóa ngoại `ON DELETE CASCADE`) và thư mục Parquet của workspace.
-- Xóa từng dataset từ giao diện: thiết kế, chưa có.
+- Admin xóa từng dataset ở trang Dữ liệu (hoặc `DELETE /api/workspaces/{ws}/datasets/{id}`): xóa mọi phiên bản, hồ
+  sơ cột, chỉ số và lịch sử câu hỏi của dataset trong Postgres và file Parquet của từng phiên bản trên đĩa.
 
 ## Bản demo công khai (thiết kế)
 

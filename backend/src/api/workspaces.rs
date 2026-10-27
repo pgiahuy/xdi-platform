@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/workspaces.rs - workspace của người đang đăng nhập: liệt kê, tạo, đổi tên, xóa; thành viên: xem, thêm, đổi vai,
 xóa hoặc tự rời. Logic và kiểm vai ở service/workspaces.rs.
-API dữ liệu nằm dưới /api/workspaces/{ws}/ (datasets.rs, query.rs) và đi qua kiểm thành viên ở extract.rs. */
+API dữ liệu nằm dưới /api/workspaces/{ws}/ (datasets/, query.rs) và đi qua kiểm thành viên ở extract.rs. */
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;

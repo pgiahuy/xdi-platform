@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/drill/tests.rs - test truy dòng nguồn (POST .../datasets/{id}/drill) qua router thật, với Postgres: đọc câu hỏi
+/* api/drill_tests.rs - test truy dòng nguồn (POST .../datasets/{id}/drill) qua router thật, với Postgres: đọc câu hỏi
 theo workspace và dataset, quyền của người đang bấm, phiên bản của câu hỏi, các lỗi 400 và 404. Phần dựng SQL và các
 dạng câu ở service/drill/tests.rs. Mỗi test dùng database riêng.
 

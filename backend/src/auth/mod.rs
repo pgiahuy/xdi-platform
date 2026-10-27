@@ -106,7 +106,7 @@ pub async fn pending_profiles(
 }
 
 /// Như pending_profiles nhưng cho lớp ngữ nghĩa: phiên bản ở structure chưa thử với provider này, kèm WorkspaceId dựng từ
-/// dòng đọc được. Việc nền lúc khởi động (service/semantic.rs) dùng, không gắn với người dùng nào.
+/// dòng đọc được. Việc nền lúc khởi động (service/semantic/mod.rs) dùng, không gắn với người dùng nào.
 pub async fn pending_semantic_profiles(
     store: &Store,
     provider: &str,

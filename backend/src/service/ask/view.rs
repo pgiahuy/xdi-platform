@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/view.rs - phần trình bày của một câu đã trả lời: thẻ "Đã hiểu là", vai trò từng cột kết quả và gợi ý
-biểu đồ. service/ask.rs gọi sau run_with_repair (ask/run.rs), ask/why.rs sau run_why (explain/run.rs). Thẻ và vai trò
-dựng bằng code từ sql_guarded (engine/sql_shape.rs, understanding.rs), không nhờ mô hình, nên luôn khớp câu đã chạy;
+biểu đồ. service/ask/mod.rs gọi sau run_with_repair (ask/run.rs), ask/why.rs sau run_why (explain/run.rs). Thẻ và vai trò
+dựng bằng code từ sql_guarded (engine/sql_shape.rs, understanding/mod.rs), không nhờ mô hình, nên luôn khớp câu đã chạy;
 biểu đồ theo bộ luật ở ask/chart.rs. Câu "tại sao" có form đã kiểm thì thẻ dựng từ form (understanding/why.rs), vai trò
 cột và biểu đồ vẫn theo cùng luật. */
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/narrate_tests.rs - test bước narrate (#41, service/ask/narrate.rs và phần chữ ở explain.rs): bước kiểm
+/* service/ask/narrate_tests.rs - test bước narrate (#41, service/ask/narrate.rs và phần chữ ở explain/mod.rs): bước kiểm
 số nhận summary của mẫu why và câu khuôn, loại số lạ, số thiếu chữ số thập phân, cách viết thô hay kiểu Anh, số trước ký
 hiệu hay chữ chỉ tỷ lệ (kể cả khi có khoảng trắng ở giữa), chữ số ngoài ASCII, và số lấy từ câu hỏi hay từ giá trị
 nhóm; mô hình lỗi, quá giờ, trả câu trống hay quá dài thì rơi về câu khuôn với bước narrate ok = false; chênh lệch

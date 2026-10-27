@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/query.rs - hỏi dữ liệu (ask) và truy dòng nguồn (drill). Toàn bộ luồng chín bước nằm ở service/ask.rs; kiểu
-response của ask ở service/ask/contract.rs, mẫu ở service/ask/examples.rs. Truy dòng nguồn ở service/drill.rs, hợp đồng
+/* api/query.rs - hỏi dữ liệu (ask) và truy dòng nguồn (drill). Toàn bộ luồng chín bước nằm ở service/ask/mod.rs; kiểu
+response của ask ở service/ask/contract.rs, mẫu ở service/ask/examples.rs. Truy dòng nguồn ở service/drill/mod.rs, hợp đồng
 ở service/drill/contract.rs.
 Route nằm dưới /workspaces/{ws}/ và nhận Member: chỉ thành viên workspace hỏi được dữ liệu của nó.
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/semantic/tests.rs - test cho service/semantic.rs: prompt (riêng tư, trần kích thước, escape), kiểm câu trả
+/* service/semantic/tests.rs - test cho service/semantic/mod.rs: prompt (riêng tư, trần kích thước, escape), kiểm câu trả
 lời của mô hình, đổi vai trò trong phạm vi hẹp, luật đánh dấu nhạy cảm, và hai ca end-to-end trên Postgres thật
-(mock dataco ghi đủ; provider lỗi giữ structure). Test đi qua đường nạp thật (spawn sau 201) ở api/datasets.rs. */
+(mock dataco ghi đủ; provider lỗi giữ structure). Test đi qua đường nạp thật (spawn sau 201) ở api/datasets/tests.rs. */
 
 use std::sync::Arc;
 
@@ -992,7 +992,7 @@ async fn startup_pass_takes_the_semaphore() {
     drop_workspace(&store, ws).await;
 }
 
-/// Hồ sơ kiểu DataCo qua khuôn prompt hiện tại: nguồn của số đo trong chú thích trần kích thước (semantic.rs) và
+/// Hồ sơ kiểu DataCo qua khuôn prompt hiện tại: nguồn của số đo trong chú thích trần kích thước (semantic/mod.rs) và
 /// một trần rộng chống khuôn prompt bị thổi lên mà không ai đo lại.
 #[test]
 fn measure_dataco_like_prompt() {
@@ -1044,7 +1044,7 @@ fn measure_dataco_like_prompt() {
         .split("Values of dimension columns")
         .nth(1)
         .map_or(0, |s| s.len());
-    // Số đo ghi trong chú thích của các trần ở semantic.rs đến từ test này; giữ một trần rộng để đổi khuôn prompt
+    // Số đo ghi trong chú thích của các trần ở semantic/mod.rs đến từ test này; giữ một trần rộng để đổi khuôn prompt
     // mà thổi kích thước lên nhiều lần thì test nhắc đo lại.
     assert!(prompt.len() < 20_000, "prompt len {}", prompt.len());
     assert!(values_part < 10_000, "values part {values_part}");

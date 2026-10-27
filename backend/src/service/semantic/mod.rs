@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/semantic.rs - hồ sơ cột lớp ngữ nghĩa (#23): mô tả, bí danh cột, bí danh giá trị, câu hỏi gợi ý, đánh dấu
+/* service/semantic/mod.rs - hồ sơ cột lớp ngữ nghĩa (#23): mô tả, bí danh cột, bí danh giá trị, câu hỏi gợi ý, đánh dấu
 cột nhạy cảm, và sửa vai trò cột trong phạm vi hẹp. Khác lớp cấu trúc (service/profile.rs, chạy trong request nạp),
 lớp này gọi mô hình ngôn ngữ, nên mọi lỗi của nó không được chặn lần nạp.
 
