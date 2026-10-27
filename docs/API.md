@@ -117,6 +117,9 @@ lệch thực tế; phân rã và lời giải thích vẫn trả như thường
 nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo `unanswerable`, không câu SQL nào
 chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các cột gần nhất có thể hỏi; câu
 vẫn ghi vào lịch sử như câu bị từ chối.
+`explanation.measure_kind` cho biết cách đọc số: `total` (tổng, đếm; đóng góp là hiệu hai lát cắt) hay `ratio` (chỉ số
+tỷ lệ hay trung bình; giá trị là tỷ lệ, đóng góp của nhóm là `mix_effect + rate_effect`, mỗi chiều có tổng
+`mix_effect`, `rate_effect`). Với `total` bốn trường này là null.
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).

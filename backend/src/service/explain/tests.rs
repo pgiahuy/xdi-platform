@@ -33,6 +33,8 @@ fn ranked(
             kind: ValueKind::Text,
             sql: String::new(),
             groups: build_group_contributions(groups).expect("contributions"),
+            mix_effect: None,
+            rate_effect: None,
         },
         score: build_dimension_score(groups, d(totals.0), d(totals.1), mode).expect("score"),
     }

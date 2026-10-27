@@ -7,6 +7,8 @@ Mọi câu đi qua guard với đúng bảng và bộ lọc dòng theo vai dữ 
 của mô hình: người chỉ được thấy Europe thì phân rã cũng chỉ tính trên dòng Europe, và tổng các chiều vẫn khớp tổng hai
 lát cắt vì mọi câu cùng bị lọc như nhau.
 
+Độ đo tỷ lệ đi nhánh riêng ở explain/ratio_breakdown.rs, dùng chung run_dimension_rows và build_slice_labels ở đây.
+
 Một chiều lỗi (guard từ chối, DuckDB báo lỗi, chạm trần dòng, các nhóm không cộng ra đúng tổng) thì bỏ chiều đó, ghi log,
 các chiều khác vẫn dùng; không còn chiều nào thì không có phân rã (cảnh báo explanation_unavailable). */
 
@@ -21,15 +23,17 @@ use crate::engine::query::QueryError;
 use crate::error::AppError;
 use crate::service::ask::contract::StepName;
 use crate::service::ask::contract::{
-    AskStep, CellValue, DimensionBreakdown, Explanation, ExplanationSlice, ResultTable, VolumePrice,
+    AskStep, CellValue, DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
+    ResultTable, ValueKind, VolumePrice,
 };
 use crate::service::ask::repair::{build_safe_error, build_user_error, mentions_data_files};
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::run::{build_duration_text, build_step, run_query_in_turn};
 use crate::service::explain::check::{PlanSlices, WhyPlan};
+use crate::service::explain::ratio_breakdown::build_ratio_breakdown;
 use crate::service::explain::sql::{
-    build_dimension_sql, BASE_ROWS, BASE_VALUE, BASE_VOLUME, COMPARE_ROWS, COMPARE_VALUE,
-    COMPARE_VOLUME,
+    build_dimension_sql, BASE_DENOMINATOR, BASE_ROWS, BASE_VALUE, BASE_VOLUME, COMPARE_DENOMINATOR,
+    COMPARE_ROWS, COMPARE_VALUE, COMPARE_VOLUME,
 };
 use crate::service::explain::{
     apply_dimension_order, build_decimal_text, build_dimension_score, build_group_contributions,
@@ -129,6 +133,8 @@ pub struct SliceTotals {
     pub compare_rows: Decimal,
     /// V0, V1 khi plan có lượng.
     pub volume: Option<(Decimal, Decimal)>,
+    /// Mẫu số của hai lát cắt khi độ đo là tỷ lệ; base, compare ở trên khi đó là tử số.
+    pub denominators: Option<(Decimal, Decimal)>,
 }
 
 /// None khi kết quả không có đúng một dòng hay một ô không đọc được thành số (số quá 28 chữ số của Decimal).
@@ -145,7 +151,12 @@ pub fn read_slice_totals(sql: String, result: &ResultTable) -> Option<SliceTotal
         (Some(base), Some(compare)) => Some((base, compare)),
         _ => None,
     };
+    let denominators = match (cell(BASE_DENOMINATOR), cell(COMPARE_DENOMINATOR)) {
+        (Some(base), Some(compare)) => Some((base, compare)),
+        _ => None,
+    };
     Some(SliceTotals {
+        denominators,
         base: cell(BASE_VALUE)?,
         compare: cell(COMPARE_VALUE)?,
         base_rows: cell(BASE_ROWS)?,
@@ -180,6 +191,9 @@ pub async fn build_breakdown(
     totals: &SliceTotals,
     filters: (String, String),
 ) -> Result<Breakdown, AppError> {
+    if let Some(denominators) = totals.denominators {
+        return build_ratio_breakdown(env, plan, totals, denominators, filters).await;
+    }
     let Some(change) = totals.compare.checked_sub(totals.base) else {
         return Ok(Breakdown::Unavailable(
             "Số quá lớn để tính chênh lệch".to_string(),
@@ -217,6 +231,7 @@ pub async fn build_breakdown(
     let (base_label, compare_label) = build_slice_labels(plan);
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),
+        measure_kind: MeasureKind::Total,
         base: ExplanationSlice {
             label: base_label,
             filter: filters.0,
@@ -241,6 +256,46 @@ async fn run_dimension(
     plan: &WhyPlan,
     column: &str,
 ) -> Result<Option<(DimensionBreakdown, Vec<GroupValues>)>, AppError> {
+    let Some(rows) = run_dimension_rows(env, plan, column, 2).await? else {
+        return Ok(None);
+    };
+    let groups: Vec<GroupValues> = rows
+        .groups
+        .into_iter()
+        .map(|(value, numbers)| GroupValues {
+            value,
+            base_value: numbers[0],
+            compare_value: numbers[1],
+        })
+        .collect();
+    let Some(contributions) = build_group_contributions(&groups) else {
+        tracing::warn!(%column, "dimension contributions overflow");
+        return Ok(None);
+    };
+    let breakdown = DimensionBreakdown {
+        column: column.to_string(),
+        kind: rows.kind,
+        sql: rows.shown,
+        groups: contributions,
+        mix_effect: None,
+        rate_effect: None,
+    };
+    Ok(Some((breakdown, groups)))
+}
+
+/// Các dòng của câu từng chiều: giá trị nhóm và `numbers` ô số đi sau nó, theo thứ tự của build_dimension_sql.
+pub(super) struct DimensionRows {
+    pub shown: String,
+    pub kind: ValueKind,
+    pub groups: Vec<(Option<CellValue>, Vec<Decimal>)>,
+}
+
+pub(super) async fn run_dimension_rows(
+    env: &QueryEnv<'_>,
+    plan: &WhyPlan,
+    column: &str,
+    numbers: usize,
+) -> Result<Option<DimensionRows>, AppError> {
     let (shown, result) =
         match run_code_query(env, &build_dimension_sql(plan, column), None).await? {
             CodeQuery::Ran { shown, result, .. } => (shown, result),
@@ -256,34 +311,24 @@ async fn run_dimension(
     }
     let mut groups = Vec::with_capacity(result.rows.len());
     for row in &result.rows {
-        let (Some(base_value), Some(compare_value)) = (
-            row.get(1).and_then(|c| read_decimal(c.as_ref())),
-            row.get(2).and_then(|c| read_decimal(c.as_ref())),
-        ) else {
+        let cells: Option<Vec<Decimal>> = (1..=numbers)
+            .map(|i| row.get(i).and_then(|c| read_decimal(c.as_ref())))
+            .collect();
+        let Some(cells) = cells else {
             tracing::warn!(%column, "dimension query returned a value that is not a decimal");
             return Ok(None);
         };
-        groups.push(GroupValues {
-            value: row.first().cloned().flatten(),
-            base_value,
-            compare_value,
-        });
+        groups.push((row.first().cloned().flatten(), cells));
     }
-    let Some(contributions) = build_group_contributions(&groups) else {
-        tracing::warn!(%column, "dimension contributions overflow");
-        return Ok(None);
-    };
-    let breakdown = DimensionBreakdown {
-        column: column.to_string(),
+    Ok(Some(DimensionRows {
+        shown,
         kind: result.columns[0].kind,
-        sql: shown,
-        groups: contributions,
-    };
-    Ok(Some((breakdown, groups)))
+        groups,
+    }))
 }
 
 /// Nhãn hai lát cắt cho người dùng: "Quý 2/2017" và "Quý 3/2017", hay hai giá trị nhóm.
-fn build_slice_labels(plan: &WhyPlan) -> (String, String) {
+pub(super) fn build_slice_labels(plan: &WhyPlan) -> (String, String) {
     match &plan.slices {
         PlanSlices::Periods { base, compare, .. } => (base.label(), compare.label()),
         PlanSlices::Groups { base, compare, .. } => (base.clone(), compare.clone()),

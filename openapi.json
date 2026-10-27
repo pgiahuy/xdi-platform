@@ -1593,34 +1593,46 @@
                                 "base_value": "2850120.40",
                                 "compare_value": "2210340.15",
                                 "contribution": "-639780.25",
+                                "mix_effect": null,
+                                "rate_effect": null,
                                 "value": "Europe"
                               },
                               {
                                 "base_value": "2640300.10",
                                 "compare_value": "2301250.60",
                                 "contribution": "-339049.50",
+                                "mix_effect": null,
+                                "rate_effect": null,
                                 "value": "LATAM"
                               },
                               {
                                 "base_value": "2105430.25",
                                 "compare_value": "1960120.00",
                                 "contribution": "-145310.25",
+                                "mix_effect": null,
+                                "rate_effect": null,
                                 "value": "Pacific Asia"
                               },
                               {
                                 "base_value": "1210500.00",
                                 "compare_value": "1090230.00",
                                 "contribution": "-120270.00",
+                                "mix_effect": null,
+                                "rate_effect": null,
                                 "value": "USCA"
                               },
                               {
                                 "base_value": "596149.25",
                                 "compare_value": "557159.25",
                                 "contribution": "-38990.00",
+                                "mix_effect": null,
+                                "rate_effect": null,
                                 "value": "Africa"
                               }
                             ],
                             "kind": "text",
+                            "mix_effect": null,
+                            "rate_effect": null,
                             "sql": "SELECT \"Market\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Market\" LIMIT 100000"
                           },
                           {
@@ -1630,26 +1642,35 @@
                                 "base_value": "4880200.15",
                                 "compare_value": "4150100.50",
                                 "contribution": "-730099.65",
+                                "mix_effect": null,
+                                "rate_effect": null,
                                 "value": "Consumer"
                               },
                               {
                                 "base_value": "2850000.10",
                                 "compare_value": "2480300.25",
                                 "contribution": "-369699.85",
+                                "mix_effect": null,
+                                "rate_effect": null,
                                 "value": "Corporate"
                               },
                               {
                                 "base_value": "1672299.75",
                                 "compare_value": "1488699.25",
                                 "contribution": "-183600.50",
+                                "mix_effect": null,
+                                "rate_effect": null,
                                 "value": "Home Office"
                               }
                             ],
                             "kind": "text",
+                            "mix_effect": null,
+                            "rate_effect": null,
                             "sql": "SELECT \"Customer Segment\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Customer Segment\" LIMIT 100000"
                           }
                         ],
                         "measure": "Doanh thu",
+                        "measure_kind": "total",
                         "summary": "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9.226.250,00.",
                         "summary_by_model": true,
                         "volume_price": {
@@ -2785,7 +2806,9 @@
           "column",
           "kind",
           "sql",
-          "groups"
+          "groups",
+          "mix_effect",
+          "rate_effect"
         ],
         "properties": {
           "column": {
@@ -2802,6 +2825,20 @@
           "kind": {
             "$ref": "#/components/schemas/ValueKind",
             "description": "How to read the group values, like the `kind` of a result column."
+          },
+          "mix_effect": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ratio measures only: sum of `mix_effect` of every group; `mix_effect + rate_effect` is `change`."
+          },
+          "rate_effect": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ratio measures only: sum of `rate_effect` of every group."
           },
           "sql": {
             "type": "string",
@@ -2943,6 +2980,7 @@
         "description": "Breakdown of a change between two slices (two periods or two groups); null in `AskResponse` unless an answered\n\"why\" question has one. Numbers are exact strings of decimal digits.",
         "required": [
           "measure",
+          "measure_kind",
           "base",
           "compare",
           "change",
@@ -2974,6 +3012,10 @@
           "measure": {
             "type": "string",
             "description": "Measure that changed, text for the end user (Vietnamese)."
+          },
+          "measure_kind": {
+            "$ref": "#/components/schemas/MeasureKind",
+            "description": "How the measure adds up over groups, which decides how to read the numbers below."
           },
           "summary": {
             "type": "string",
@@ -3025,7 +3067,9 @@
           "value",
           "base_value",
           "compare_value",
-          "contribution"
+          "contribution",
+          "mix_effect",
+          "rate_effect"
         ],
         "properties": {
           "base_value": {
@@ -3036,7 +3080,21 @@
           },
           "contribution": {
             "type": "string",
-            "description": "`compare_value - base_value` of this group."
+            "description": "Part of `change` from this group: `compare_value - base_value` for a total, `mix_effect + rate_effect` for a\nratio."
+          },
+          "mix_effect": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ratio measures only: part of `change` because this group's share of the denominator changed,\n`(compare_share - base_share) * (base_value + compare_value) / 2`. For a group with no denominator in one slice,\nthe ratio of that slice is taken equal to the other slice, so the whole contribution is a mix effect."
+          },
+          "rate_effect": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ratio measures only: part of `change` because the ratio inside this group changed,\n`(base_share + compare_share) / 2 * (compare_value - base_value)`."
           },
           "value": {
             "oneOf": [
@@ -3110,6 +3168,14 @@
             "description": "Workspaces the user belongs to, with their role in each, sorted by name."
           }
         }
+      },
+      "MeasureKind": {
+        "type": "string",
+        "description": "- `total`: a sum or a count; group values add up to the slice value, a contribution is `compare_value - base_value`.\n- `ratio`: a ratio or an average (numerator over denominator); slice and group values are ratios rounded to a fixed\n  number of decimals, a contribution is `mix_effect + rate_effect`.",
+        "enum": [
+          "total",
+          "ratio"
+        ]
       },
       "MemberRow": {
         "type": "object",

@@ -15,7 +15,7 @@ use crate::service::explain::form::{
     build_form_from_reply, build_question_kind, build_why_repair_prompt, FieldError, QuestionKind,
     WhyForm,
 };
-use crate::service::explain::measure::Additive;
+use crate::service::explain::measure::{parse_expr, Additive};
 use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::sql::{
     build_dimension_sql, build_equals, build_slices_sql, build_why_sql,
@@ -601,8 +601,9 @@ fn metrics_insert_their_expression_and_filter() {
         fixture.plan(form).measure.metric.as_deref(),
         Some("doanh thu")
     );
-    // Chỉ số không cộng được, hay có chữ thừa sau công thức, thì không đi đường form.
-    for name in ["giá trị đơn trung bình", "số đơn", "gài"] {
+    // Chỉ số không cộng được, không phải tỷ lệ của hai dạng cộng được, hay có chữ thừa sau công thức, thì không đi
+    // đường form.
+    for name in ["số đơn", "gài"] {
         assert_eq!(
             fixture.fields(with(quarter_form(), "metric", json!(name))),
             ["metric"],
@@ -611,6 +612,75 @@ fn metrics_insert_their_expression_and_filter() {
     }
     let plan = fixture.plan(with(quarter_form(), "metric", json!("số dòng")));
     assert_eq!(plan.measure.additive, Additive::Count { value: None });
+    assert_eq!(plan.measure.denominator, None);
+}
+
+/// AVG(x) và thương của hai dạng cộng được là độ đo tỷ lệ: tử và mẫu tính riêng theo từng lát cắt.
+#[test]
+fn ratio_metrics_split_into_numerator_and_denominator() {
+    let mut fixture = Fixture::new();
+    let plan = fixture.plan(with(
+        quarter_form(),
+        "metric",
+        json!("giá trị đơn trung bình"),
+    ));
+    let total = parse_expr("\"Order Item Total\"").unwrap();
+    assert_eq!(
+        plan.measure.additive,
+        Additive::Sum {
+            value: total.clone(),
+            decimal: true
+        }
+    );
+    assert_eq!(
+        plan.measure.denominator,
+        Some(Additive::Count { value: Some(total) })
+    );
+    let sql = build_why_sql(&plan);
+    assert!(
+        sql.total_sql.contains(
+            "ROUND(SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2))) / NULLIF(COUNT(\"Order Item Total\"), 0), 4)"
+        ),
+        "{}",
+        sql.total_sql
+    );
+    let dimension = build_dimension_sql(&plan, "Market");
+    assert!(
+        dimension.contains("COUNT(CASE WHEN ") && dimension.contains("AS compare_denominator"),
+        "{dimension}"
+    );
+    assert!(build_slices_sql(&plan).contains("AS base_denominator"));
+
+    fixture.metrics.push(metric(
+        "tỷ lệ giao trễ",
+        "COUNT(CASE WHEN \"Late_delivery_risk\" = 1 THEN 1 END) / (COUNT(*))",
+        None,
+    ));
+    fixture.metrics.push(metric(
+        "lãi trên doanh thu",
+        "SUM(\"Order Item Total\") / SUM(\"Order Item Quantity\")",
+        None,
+    ));
+    let late = fixture.plan(with(quarter_form(), "metric", json!("tỷ lệ giao trễ")));
+    assert_eq!(
+        late.measure.denominator,
+        Some(Additive::Count { value: None })
+    );
+    let margin = fixture.plan(with(quarter_form(), "metric", json!("lãi trên doanh thu")));
+    assert!(matches!(
+        margin.measure.denominator,
+        Some(Additive::Sum { .. })
+    ));
+    // Thương có tử không cộng được (đếm phân biệt) thì vẫn không phân rã được.
+    fixture.metrics.push(metric(
+        "doanh thu mỗi đơn",
+        "SUM(\"Order Item Total\") / COUNT(DISTINCT \"Order Id\")",
+        None,
+    ));
+    assert_eq!(
+        fixture.fields(with(quarter_form(), "metric", json!("doanh thu mỗi đơn"))),
+        ["metric"]
+    );
 }
 
 /// Số thực đổi sang DECIMAL(18, 2) ở từng dòng; số nguyên cộng thẳng; đếm không cần COALESCE.

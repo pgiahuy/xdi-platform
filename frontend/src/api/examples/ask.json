@@ -365,34 +365,46 @@
               "base_value": "2850120.40",
               "compare_value": "2210340.15",
               "contribution": "-639780.25",
+              "mix_effect": null,
+              "rate_effect": null,
               "value": "Europe"
             },
             {
               "base_value": "2640300.10",
               "compare_value": "2301250.60",
               "contribution": "-339049.50",
+              "mix_effect": null,
+              "rate_effect": null,
               "value": "LATAM"
             },
             {
               "base_value": "2105430.25",
               "compare_value": "1960120.00",
               "contribution": "-145310.25",
+              "mix_effect": null,
+              "rate_effect": null,
               "value": "Pacific Asia"
             },
             {
               "base_value": "1210500.00",
               "compare_value": "1090230.00",
               "contribution": "-120270.00",
+              "mix_effect": null,
+              "rate_effect": null,
               "value": "USCA"
             },
             {
               "base_value": "596149.25",
               "compare_value": "557159.25",
               "contribution": "-38990.00",
+              "mix_effect": null,
+              "rate_effect": null,
               "value": "Africa"
             }
           ],
           "kind": "text",
+          "mix_effect": null,
+          "rate_effect": null,
           "sql": "SELECT \"Market\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Market\" LIMIT 100000"
         },
         {
@@ -402,26 +414,35 @@
               "base_value": "4880200.15",
               "compare_value": "4150100.50",
               "contribution": "-730099.65",
+              "mix_effect": null,
+              "rate_effect": null,
               "value": "Consumer"
             },
             {
               "base_value": "2850000.10",
               "compare_value": "2480300.25",
               "contribution": "-369699.85",
+              "mix_effect": null,
+              "rate_effect": null,
               "value": "Corporate"
             },
             {
               "base_value": "1672299.75",
               "compare_value": "1488699.25",
               "contribution": "-183600.50",
+              "mix_effect": null,
+              "rate_effect": null,
               "value": "Home Office"
             }
           ],
           "kind": "text",
+          "mix_effect": null,
+          "rate_effect": null,
           "sql": "SELECT \"Customer Segment\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Customer Segment\" LIMIT 100000"
         }
       ],
       "measure": "Doanh thu",
+      "measure_kind": "total",
       "summary": "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9.226.250,00.",
       "summary_by_model": true,
       "volume_price": {

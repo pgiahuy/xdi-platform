@@ -4,12 +4,15 @@ hoặc một cột với sum, count, đổi thành PlanMeasure để explain/sql
 thức chỉ số bằng sqlparser là phần riêng: công thức do tổ chức viết, code phải tách được phần bên trong SUM để đặt điều
 kiện lát cắt vào. Test ở explain/check_tests.rs.
 
-Chỉ số chỉ nhận dạng cộng được theo nhóm: SUM(biểu thức) hay COUNT(*), COUNT(cột), không DISTINCT, không cửa sổ. Tỷ lệ,
-trung bình, đếm phân biệt không phân rã được bằng phép trừ từng nhóm (ngoài phạm vi của #38), nên báo lỗi rồi câu hỏi
-chạy như câu thường. */
+Chỉ số nhận hai dạng. Dạng cộng được theo nhóm: SUM(biểu thức) hay COUNT(*), COUNT(cột), không DISTINCT, không cửa sổ;
+phân rã bằng phép trừ từng nhóm (#39). Dạng tỷ lệ: AVG(x), hoặc thương của hai dạng cộng được như SUM(a) / SUM(b),
+COUNT(CASE WHEN ... THEN 1 END) / COUNT(*); tách thành tử và mẫu cộng được, phân rã thành phần cơ cấu và phần hiệu suất
+(explain/ratio.rs). AVG(x) là SUM(x) / COUNT(x): AVG bỏ dòng x trống ở cả tử và mẫu, COUNT(x) cũng vậy. Dạng khác (đếm
+phân biệt, NULLIF ở mẫu, biểu thức lồng nhiều tầng) không phân rã được, nên báo lỗi rồi câu hỏi chạy như câu thường. */
 
 use sqlparser::ast::{
-    DuplicateTreatment, Expr, FunctionArg, FunctionArgExpr, FunctionArguments, ObjectNamePart,
+    BinaryOperator, DuplicateTreatment, Expr, FunctionArg, FunctionArgExpr, FunctionArguments,
+    ObjectNamePart,
 };
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
@@ -33,8 +36,10 @@ pub struct PlanMeasure {
     /// SUM(CAST("Order Item Total" AS DECIMAL(18, 2))). Dùng thẳng công thức chỉ số SUM("Order Item Total") thì bảng
     /// cộng số thực đủ chữ số còn phân rã làm tròn từng dòng, hai tổng trên cùng trang lệch ở chữ số lẻ.
     pub aggregate: Expr,
-    /// Cách tính lại theo từng lát cắt và từng nhóm, cho phân rã.
+    /// Cách tính lại theo từng lát cắt và từng nhóm, cho phân rã. Với độ đo tỷ lệ đây là tử số.
     pub additive: Additive,
+    /// Mẫu số khi độ đo là tỷ lệ (AVG(x), SUM(a) / SUM(b)); None khi độ đo cộng được.
+    pub denominator: Option<Additive>,
 }
 
 /// Độ đo cộng được, tách thành phần bên trong để đặt điều kiện lát cắt vào: SUM(x) thành SUM(CASE WHEN lát THEN x END).
@@ -85,12 +90,13 @@ pub(super) fn check_measure(
                 decimal: !is_exact_type(&column.data_type),
                 value: ident,
             };
-            build_plan_measure(format!("Tổng {}", column.name), None, additive)
+            build_plan_measure(format!("Tổng {}", column.name), None, additive, None)
         }
         FormAgg::Count => build_plan_measure(
             format!("Số dòng có {}", column.name),
             None,
             Additive::Count { value: Some(ident) },
+            None,
         ),
     }
 }
@@ -99,12 +105,14 @@ fn build_plan_measure(
     label: String,
     metric: Option<String>,
     additive: Additive,
+    denominator: Option<Additive>,
 ) -> Option<PlanMeasure> {
     Some(PlanMeasure {
         label,
         metric,
-        aggregate: parse_expr(&build_total_aggregate(&additive)).ok()?,
+        aggregate: parse_expr(&build_total_aggregate(&additive, denominator.as_ref())).ok()?,
         additive,
+        denominator,
     })
 }
 
@@ -134,8 +142,8 @@ fn check_metric(
         FieldError::new(
             "metric",
             format!(
-                "the metric \"{}\" is not a plain SUM or COUNT, so its change cannot be broken down; set \"measure\" \
-                 to a column instead",
+                "the metric \"{}\" is not a plain SUM, COUNT, AVG or a ratio of two of them, so its change cannot be \
+                 broken down; set \"measure\" to a column instead",
                 metric.name
             ),
         )
@@ -147,7 +155,7 @@ fn check_metric(
             return None;
         }
     };
-    let Some(additive) = build_additive(&aggregate, profile) else {
+    let Some((additive, denominator)) = build_measure_parts(&aggregate, profile) else {
         errors.push(not_additive());
         return None;
     };
@@ -155,11 +163,78 @@ fn check_metric(
         build_capitalized(&metric.name),
         Some(metric.name.clone()),
         additive,
+        denominator,
     )
+}
+
+/// Tách công thức chỉ số thành tử và mẫu: (tử, None) cho dạng cộng được, (tử, Some(mẫu)) cho tỷ lệ. None khi công thức
+/// không thuộc dạng nào.
+fn build_measure_parts(
+    aggregate: &Expr,
+    profile: &WhyProfile,
+) -> Option<(Additive, Option<Additive>)> {
+    match build_unnested(aggregate) {
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::Divide,
+            right,
+        } => {
+            let numerator = build_additive(build_unnested(left), profile)?;
+            let denominator = build_additive(build_unnested(right), profile)?;
+            Some((numerator, Some(denominator)))
+        }
+        expr => {
+            if let Some(value) = build_average_arg(expr) {
+                let numerator = Additive::Sum {
+                    decimal: !is_exact_expr(value, profile),
+                    value: value.clone(),
+                };
+                let denominator = Additive::Count {
+                    value: Some(value.clone()),
+                };
+                return Some((numerator, Some(denominator)));
+            }
+            Some((build_additive(expr, profile)?, None))
+        }
+    }
+}
+
+// Bỏ ngoặc bao ngoài: "(SUM(a)) / (SUM(b))" đọc như "SUM(a) / SUM(b)".
+fn build_unnested(expr: &Expr) -> &Expr {
+    match expr {
+        Expr::Nested(inner) => build_unnested(inner),
+        other => other,
+    }
+}
+
+/// Đối số x của AVG(x) không DISTINCT, không FILTER, không OVER; None với hàm khác.
+fn build_average_arg(aggregate: &Expr) -> Option<&Expr> {
+    let (name, arg) = build_plain_call(aggregate)?;
+    match (name.as_str(), arg) {
+        ("avg" | "mean", FunctionArgExpr::Expr(value)) => Some(value),
+        _ => None,
+    }
 }
 
 /// SUM(x), COUNT(*), COUNT(x) không DISTINCT, không FILTER, không OVER; dạng khác trả None.
 fn build_additive(aggregate: &Expr, profile: &WhyProfile) -> Option<Additive> {
+    let (name, arg) = build_plain_call(aggregate)?;
+    match (name.as_str(), arg) {
+        ("sum", FunctionArgExpr::Expr(value)) => Some(Additive::Sum {
+            decimal: !is_exact_expr(value, profile),
+            value: value.clone(),
+        }),
+        ("count", FunctionArgExpr::Wildcard) => Some(Additive::Count { value: None }),
+        ("count", FunctionArgExpr::Expr(value)) => Some(Additive::Count {
+            value: Some(value.clone()),
+        }),
+        _ => None,
+    }
+}
+
+/// Tên hàm (viết thường) và đối số duy nhất của một lời gọi hàm tổng hợp trơn: không DISTINCT, không FILTER, không
+/// OVER, đúng một đối số không đặt tên. None với biểu thức khác.
+fn build_plain_call(aggregate: &Expr) -> Option<(String, &FunctionArgExpr)> {
     let Expr::Function(function) = aggregate else {
         return None;
     };
@@ -181,17 +256,7 @@ fn build_additive(aggregate: &Expr, profile: &WhyProfile) -> Option<Additive> {
     let FunctionArg::Unnamed(arg) = &list.args[0] else {
         return None;
     };
-    match (name.value.to_lowercase().as_str(), arg) {
-        ("sum", FunctionArgExpr::Expr(value)) => Some(Additive::Sum {
-            decimal: !is_exact_expr(value, profile),
-            value: value.clone(),
-        }),
-        ("count", FunctionArgExpr::Wildcard) => Some(Additive::Count { value: None }),
-        ("count", FunctionArgExpr::Expr(value)) => Some(Additive::Count {
-            value: Some(value.clone()),
-        }),
-        _ => None,
-    }
+    Some((name.value.to_lowercase(), arg))
 }
 
 // Biểu thức cộng đúng sẵn khi là đúng một cột số nguyên hay DECIMAL; biểu thức khác không biết kiểu nên đổi sang DECIMAL.

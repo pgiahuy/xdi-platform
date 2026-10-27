@@ -12,15 +12,21 @@ use rust_decimal::{Decimal, RoundingStrategy};
 /// Số chữ số lẻ tối đa khi viết số trong câu, như cột số của bảng kết quả (cellFormat.ts). Số có ít chữ số lẻ hơn giữ
 /// nguyên số chữ số của nó ("663000.00" thành "663.000,00", "5000" thành "5.000"), để câu và bảng phân rã in cùng một
 /// kiểu.
-const MAX_FRACTION_DIGITS: u32 = 2;
+pub const MAX_FRACTION_DIGITS: u32 = 2;
 
 /// "-1152666.24" thành "-1.152.666,24". Hơn hai chữ số lẻ thì làm tròn nửa xa số 0 (2.495 thành 2,50), như
 /// Intl.NumberFormat của giao diện. Chuỗi không đọc được thành số thì giữ nguyên, để câu vẫn có chữ của bảng.
 pub fn build_number_text(text: &str) -> String {
+    build_number_text_with(text, MAX_FRACTION_DIGITS)
+}
+
+/// Như build_number_text với số chữ số lẻ tối đa do bên gọi chọn: độ đo tỷ lệ giữ đủ RATE_SCALE chữ số
+/// (explain/ratio.rs), vì làm tròn hai chữ số thì tỷ lệ 0.0014 thành "0,00".
+pub fn build_number_text_with(text: &str, max_fraction_digits: u32) -> String {
     let Ok(value) = text.parse::<Decimal>() else {
         return text.to_string();
     };
-    let scale = value.scale().min(MAX_FRACTION_DIGITS);
+    let scale = value.scale().min(max_fraction_digits);
     let rounded = value.round_dp_with_strategy(scale, RoundingStrategy::MidpointAwayFromZero);
     // -0.001 làm tròn còn -0.00: không in dấu trừ cho số 0.
     let sign = if rounded.is_sign_negative() && !rounded.is_zero() {
@@ -42,21 +48,22 @@ pub fn build_number_text(text: &str) -> String {
 
 /// Một chênh lệch đọc tự nhiên: chữ chiều ("tăng", "giảm", "không đổi") và độ lớn không dấu, để câu nói "giảm
 /// 1.152.666,24" thay vì "-1.152.666,24". Chuỗi không đọc được thì chiều là None và độ lớn giữ nguyên chữ.
-pub fn build_change_parts(text: &str) -> (Option<&'static str>, String) {
+/// `max_fraction_digits` như build_number_text_with.
+pub fn build_change_parts(text: &str, max_fraction_digits: u32) -> (Option<&'static str>, String) {
     let direction = match text.parse::<Decimal>() {
         Ok(value) if value.is_zero() => Some("không đổi"),
         Ok(value) if value < Decimal::ZERO => Some("giảm"),
         Ok(_) => Some("tăng"),
         Err(_) => None,
     };
-    let number = build_number_text(text);
+    let number = build_number_text_with(text, max_fraction_digits);
     let amount = number.strip_prefix('-').unwrap_or(&number).to_string();
     (direction, amount)
 }
 
 /// "giảm 1.152.666,24"; số 0 là "không đổi". Chuỗi không đọc được thì in như build_number_text.
-pub fn build_change_text(text: &str) -> String {
-    match build_change_parts(text) {
+pub fn build_change_text(text: &str, max_fraction_digits: u32) -> String {
+    match build_change_parts(text, max_fraction_digits) {
         (Some("không đổi"), _) => "không đổi".to_string(),
         (Some(direction), amount) => format!("{direction} {amount}"),
         (None, amount) => amount,

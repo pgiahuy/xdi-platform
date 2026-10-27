@@ -375,6 +375,8 @@ pub struct Warning {
 pub struct Explanation {
     /// Measure that changed, text for the end user (Vietnamese).
     pub measure: String,
+    /// How the measure adds up over groups, which decides how to read the numbers below.
+    pub measure_kind: MeasureKind,
     /// Slice compared against.
     pub base: ExplanationSlice,
     /// Slice being explained.
@@ -390,6 +392,18 @@ pub struct Explanation {
     /// False when the model's text failed the number check, or the model was not reached, and `summary` is a template
     /// sentence written by the backend.
     pub summary_by_model: bool,
+}
+
+// Tỷ lệ không cộng được theo nhóm nên phân rã khác (explain/ratio.rs): giá trị của lát cắt và của nhóm là tỷ lệ, đóng
+// góp của nhóm tách thành phần cơ cấu và phần hiệu suất.
+/// - `total`: a sum or a count; group values add up to the slice value, a contribution is `compare_value - base_value`.
+/// - `ratio`: a ratio or an average (numerator over denominator); slice and group values are ratios rounded to a fixed
+///   number of decimals, a contribution is `mix_effect + rate_effect`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MeasureKind {
+    Total,
+    Ratio,
 }
 
 // filter là điều kiện SQL, chỉ để hiện và kiểm. Truy dòng nguồn từ một dòng phân rã gửi tên lát cắt (base, compare),
@@ -416,6 +430,12 @@ pub struct DimensionBreakdown {
     pub sql: String,
     /// Every group of the column, largest contribution (by absolute value) first.
     pub groups: Vec<GroupContribution>,
+    /// Ratio measures only: sum of `mix_effect` of every group; `mix_effect + rate_effect` is `change`.
+    #[schema(required)]
+    pub mix_effect: Option<String>,
+    /// Ratio measures only: sum of `rate_effect` of every group.
+    #[schema(required)]
+    pub rate_effect: Option<String>,
 }
 
 // value cùng column của DimensionBreakdown là khóa nhóm, để bấm một dòng thì truy được dòng nguồn (#34, #52).
@@ -427,8 +447,18 @@ pub struct GroupContribution {
     pub value: Option<CellValue>,
     pub base_value: String,
     pub compare_value: String,
-    /// `compare_value - base_value` of this group.
+    /// Part of `change` from this group: `compare_value - base_value` for a total, `mix_effect + rate_effect` for a
+    /// ratio.
     pub contribution: String,
+    /// Ratio measures only: part of `change` because this group's share of the denominator changed,
+    /// `(compare_share - base_share) * (base_value + compare_value) / 2`. For a group with no denominator in one slice,
+    /// the ratio of that slice is taken equal to the other slice, so the whole contribution is a mix effect.
+    #[schema(required)]
+    pub mix_effect: Option<String>,
+    /// Ratio measures only: part of `change` because the ratio inside this group changed,
+    /// `(base_share + compare_share) / 2 * (compare_value - base_value)`.
+    #[schema(required)]
+    pub rate_effect: Option<String>,
 }
 
 // Shapley hai nhân tố (#40): phần tương tác chia đôi. Giá là phép chia duy nhất và là chỗ duy nhất làm tròn: giá giữ

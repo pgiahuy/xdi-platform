@@ -211,6 +211,7 @@ fn build_why_explanation() -> Explanation {
     );
     Explanation {
         measure: "Doanh thu".to_string(),
+        measure_kind: MeasureKind::Total,
         base: ExplanationSlice {
             label: "Quý 2/2017".to_string(),
             filter: base,
@@ -403,8 +404,12 @@ fn build_breakdown(
                 base_value: base.to_string(),
                 compare_value: compare.to_string(),
                 contribution: contribution.to_string(),
+                mix_effect: None,
+                rate_effect: None,
             })
             .collect(),
+        mix_effect: None,
+        rate_effect: None,
     }
 }
 
