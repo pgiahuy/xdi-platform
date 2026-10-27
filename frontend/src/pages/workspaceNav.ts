@@ -10,6 +10,8 @@ export type WorkspaceNavEntry = {
   path: string
   label: string
   icon: LucideIcon
+  /** Nhãn nhóm trên thanh bên (mục quản trị là nhóm riêng). */
+  section?: string
 }
 
 export const workspaceRoute = '/w/:ws'
@@ -23,7 +25,7 @@ export const workspaceNav: WorkspaceNavEntry[] = [
   { path: '', label: 'Hỏi dữ liệu', icon: MessageSquareText },
   { path: 'datasets', label: 'Dữ liệu', icon: Database },
   { path: membersPath, label: 'Thành viên', icon: Users },
-]
+].map((entry) => ({ ...entry, section: 'Workspace' }))
 
 /** Đường dẫn tới một trang của workspace; path rỗng là trang đầu. Mọi chỗ dựng link tới workspace đi qua hàm này. */
 export function workspaceHref(slug: string, path: string): string {

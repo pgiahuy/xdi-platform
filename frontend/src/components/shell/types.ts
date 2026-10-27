@@ -15,6 +15,8 @@ export type NavItem = {
   active: boolean
   /** Icon Lucide đứng trước chữ, giúp quét nhanh các mục chức năng. Không bắt buộc. */
   icon?: LucideIcon
+  /** Nhóm của mục; đổi nhóm thì thanh bên vẽ một nhãn nhóm phía trên. */
+  section?: string
 }
 
 /** Một workspace trong danh sách đổi workspace. href đã trỏ sẵn tới đúng mục đang xem của workspace đó. */

@@ -11,6 +11,8 @@ export type GlobalNavEntry = {
   href: string
   label: string
   icon: LucideIcon
+  /** Nhãn nhóm trên thanh bên. */
+  section?: string
 }
 
 /** Trang tài khoản cho người đang ở ngoài workspace. Trong workspace, menu tài khoản trỏ tới trang tài khoản của
@@ -26,4 +28,4 @@ export const adminWorkspacesRoute = '/admin/workspaces'
 export const adminNav: GlobalNavEntry[] = [
   { href: adminAccountsRoute, label: 'Quản lý tài khoản', icon: UserCog },
   { href: adminWorkspacesRoute, label: 'Mọi workspace', icon: LayoutGrid },
-]
+].map((entry) => ({ ...entry, section: 'Quản trị hệ thống' }))

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/shell/AppShell.tsx - bố cục chung của mọi trang sau khi đăng nhập: thanh bên (có hàng thương hiệu),
-thanh trên, vùng nội dung nền muted với container max-w-7xl căn giữa.
+thanh trên, vùng nội dung nền muted với container max-w-7xl căn giữa. Màn rộng: tài khoản và phiên bản ở chân thanh bên; màn hẹp: tài khoản ở góc thanh trên.
 Trang trong workspace truyền workspace đang mở; trang ngoài workspace (quản trị hệ thống, tài khoản) thì không.
 Từ 1024px trở lên thanh bên đứng cố định bên trái. Hẹp hơn thì thanh bên ẩn vào ngăn kéo mở từ nút menu trên thanh
 trên; cùng một nội dung thanh bên dùng cho cả hai chỗ, nên thêm mục điều hướng chỉ sửa một nơi.
@@ -114,7 +114,7 @@ export function AppShell(props: Props) {
             )}
           </div>
 
-          <div className="ml-auto">
+          <div className="ml-auto lg:hidden">
             <UserMenu
               user={props.user}
               accountHref={props.accountHref}
@@ -171,11 +171,21 @@ function SidebarContent(props: SidebarProps) {
       <div className="flex-1 overflow-y-auto p-2">
         <SidebarNav items={navItems} link={link} onNavigate={onNavigate} />
       </div>
-      {serverInfo && (
-        <div className="border-t px-4 py-3">
-          <ServerInfo info={serverInfo} />
-        </div>
-      )}
+      <div className="border-t px-2 py-2">
+        <UserMenu
+          wide
+          user={props.user}
+          accountHref={props.accountHref}
+          link={link}
+          onLogout={props.onLogout}
+          logoutPending={props.logoutPending}
+        />
+        {serverInfo && (
+          <div className="px-2 pt-1 pb-0.5">
+            <ServerInfo info={serverInfo} />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
