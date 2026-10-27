@@ -908,9 +908,7 @@ async fn question_without_period_explains_the_latest_period() {
 /// Mười dòng ở quý 4/2017, ít hơn hẳn 4400 dòng của quý 3: dữ liệu dừng giữa quý, code lùi về quý 3.
 #[tokio::test]
 async fn partial_last_period_is_skipped() {
-    let extra = vec![format!(
-        "SELECT CAST(i AS INTEGER), 'Europe', 'Consumer', '10/2/2017 08:00', CAST(5 AS DOUBLE) FROM range(30001, 30011) t(i)"
-    )];
+    let extra = vec!["SELECT CAST(i AS INTEGER), 'Europe', 'Consumer', '10/2/2017 08:00', CAST(5 AS DOUBLE) FROM range(30001, 30011) t(i)".to_string()];
     let mut data = Dataco::with_rows(&extra, 10);
     data.columns = dataco_columns("2016-08-01", "2017-10-02");
     let llm = ScriptedLlm::new(vec![no_period_form()]);
@@ -930,9 +928,7 @@ async fn partial_last_period_is_skipped() {
 /// Người hỏi chọn chip quý 4/2017: code dùng kỳ đó, nhãn đổi sang "Kỳ đã chọn".
 #[tokio::test]
 async fn chosen_compare_period_is_used() {
-    let extra = vec![format!(
-        "SELECT CAST(i AS INTEGER), 'Europe', 'Consumer', '10/2/2017 08:00', CAST(5 AS DOUBLE) FROM range(30001, 30011) t(i)"
-    )];
+    let extra = vec!["SELECT CAST(i AS INTEGER), 'Europe', 'Consumer', '10/2/2017 08:00', CAST(5 AS DOUBLE) FROM range(30001, 30011) t(i)".to_string()];
     let mut data = Dataco::with_rows(&extra, 10);
     data.columns = dataco_columns("2016-08-01", "2017-10-02");
     let llm = ScriptedLlm::new(vec![no_period_form()]);
