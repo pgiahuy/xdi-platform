@@ -599,16 +599,22 @@ hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi đ
 
 ### Bước 5. Hỏi
 
-Trang **Hỏi dữ liệu**: ô **Dataset** chọn sẵn dataset tạo gần nhất, đổi được. Gõ câu vào ô **Câu hỏi** rồi bấm **Hỏi**
-(Enter để hỏi, Shift+Enter để xuống dòng), hoặc bấm một câu trong thẻ **Câu gợi ý** để hỏi ngay. Với `mock` trên DataCo,
-bấm "Doanh thu theo thị trường".
+Trang **Hỏi dữ liệu** là một khung trò chuyện: ô hỏi dính đáy màn, ô **Dataset** ở hàng trên của ô hỏi chọn sẵn
+dataset tạo gần nhất, đổi được (đổi dataset là bắt đầu cuộc mới). Gõ câu hỏi rồi bấm **Hỏi** (Enter để hỏi, Shift+Enter
+để xuống dòng), hoặc bấm một câu gợi ý khi cuộc còn trống để hỏi ngay. Với `mock` trên DataCo, bấm "Doanh thu theo thị
+trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở châu Âu" trong cùng cuộc.
+
+Mỗi lượt là câu hỏi (căn phải) và câu trả lời (căn trái). Cột trái (màn hẹp: nút **Các cuộc trò chuyện**) liệt kê các cuộc
+đã hỏi trên dataset, mới trước, kèm nút **Cuộc trò chuyện mới**; bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó. Lượt cũ
+chỉ hiện câu hỏi và tóm tắt phần đã hiểu, vì bảng kết quả không được lưu; bấm **Hỏi lại** để chạy lại câu đó. Đường dẫn
+của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cuộc.
 
 Câu có cụm khớp nhiều cột thì backend hỏi lại trước khi viết SQL: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
-SQL bị từ chối hay chạy lỗi) hiện ngay dưới ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
+SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
 
 ### Bước 6. Đọc kết quả và bằng chứng
 
-Kết quả nằm trong một thẻ có tiêu đề là chính câu đã hỏi. Đầu thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu
+Câu trả lời nằm trong một thẻ ngay dưới câu đã hỏi. Đầu thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu
 hỏi, đọc từ câu SQL đã chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời
 gian** (dòng nào không có thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Tiếp theo là
 biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu đồ cột khi cột nhóm duy nhất là một
@@ -617,8 +623,9 @@ chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên D
 `Hiện 1.000 trên <tổng> dòng.`), phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập
 phân). **Tải CSV** tải các dòng giao diện đã nhận, tối đa 1000 dòng, giữ giá trị gốc.
 
-Pane **Bằng chứng** nằm bên phải trên màn rộng, dưới kết quả trên màn hẹp; nút **Thu gọn** và **Mở** ẩn hoặc hiện nó.
-Bốn tab:
+Pane **Bằng chứng** nằm bên phải trên màn rộng, dưới khung trò chuyện trên màn hẹp, và hiện bằng chứng của lượt đang
+chọn (mặc định lượt mới nhất); nút **Bằng chứng** ở cuối mỗi câu trả lời chọn lượt đó. Nút **Thu gọn** và **Mở** ẩn hoặc
+hiện pane. Bốn tab:
 
 - **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
   (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép

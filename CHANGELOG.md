@@ -13,6 +13,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") giải thích kỳ gần nhất có dữ liệu, đổi được sang kỳ khác trên thẻ "Đã hiểu là" (#164).
 - Thẻ "Đã hiểu là" của câu tiếp nối ghi "từ câu trước" cạnh độ đo, bộ lọc, nhóm hay kỳ lấy từ lượt trước (#164).
 - Câu hỏi cần thông tin dataset không có (mức hài lòng, dự báo) được báo rõ kèm các cột gần nhất có thể hỏi, thay vì chạy một câu SQL lạc đề (#164).
+- Trang hỏi thành khung trò chuyện, kèm danh sách cuộc trò chuyện cũ để mở lại và hỏi tiếp (#164).
 
 ### Changed
 
