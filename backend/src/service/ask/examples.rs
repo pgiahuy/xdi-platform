@@ -12,6 +12,7 @@ rã được chọn để cộng khớp đúng như #39 và #40 đòi hỏi (tes
 use uuid::Uuid;
 
 use crate::service::ask::contract::*;
+use crate::service::ask::run::REFUSED_MESSAGE;
 
 const MODEL: &str = "gemini-2.5-flash";
 const CONVERSATION_ID: Uuid = Uuid::from_u128(0x7d4a2e91_3b6c_4f10_a5d8_6e2c1b0f9a01);
@@ -290,15 +291,22 @@ pub fn build_needs_choice_example() -> AskResponse {
     }
 }
 
-/// "Xóa các đơn hàng bị hủy": mô hình viết câu DELETE, guard từ chối.
+/// "Xóa các đơn hàng bị hủy": mô hình viết câu DELETE, guard từ chối, câu sửa vẫn là DELETE và bị từ chối lần nữa.
 pub fn build_rejected_example() -> AskResponse {
     let reason = "Chỉ chạy được câu SELECT đọc dữ liệu";
     AskResponse {
-        message: Some(format!("Câu SQL bị từ chối: {reason}.")),
+        message: Some(REFUSED_MESSAGE.to_string()),
         sql_generated: Some(r#"DELETE FROM dataco WHERE "Order Status" = 'CANCELED'"#.to_string()),
         steps: vec![
             build_step(StepName::Context, 14, true, None),
             build_step(StepName::Llm, 980, true, None),
+            build_step(StepName::Guard, 2, false, Some(reason)),
+            build_step(
+                StepName::Repair,
+                1150,
+                true,
+                Some("Mô hình sửa SQL theo lý do guard từ chối"),
+            ),
             build_step(StepName::Guard, 2, false, Some(reason)),
             build_step(StepName::Record, 5, true, None),
         ],

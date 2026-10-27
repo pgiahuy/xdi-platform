@@ -160,6 +160,17 @@
     }
   },
   {
+    "task": "repair",
+    "question": "Xóa các đơn hàng bị hủy",
+    "answer": {
+      "terms": [
+        { "text": "đơn hàng bị hủy", "kind": "value", "column": "Delivery Status", "value": "Shipping canceled" }
+      ],
+      "assumptions": [],
+      "sql": "DELETE FROM dataco WHERE \"Delivery Status\" = 'Shipping canceled'"
+    }
+  },
+  {
     "task": "sql",
     "question": "Doanh thu theo ngày đặt hàng",
     "answer": {

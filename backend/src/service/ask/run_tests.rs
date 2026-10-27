@@ -22,7 +22,7 @@ use crate::service::ask::other_text::build_other_text;
 use crate::service::ask::repair::{build_safe_error, build_user_error};
 use crate::service::ask::reply::{ChoiceKind, Term, TermKind};
 use crate::service::ask::result::{build_result_table, SENT_ROWS};
-use crate::service::ask::run::{run_with_repair, RunInput, RunOutcome};
+use crate::service::ask::run::{run_with_repair, RunInput, RunOutcome, REFUSED_MESSAGE};
 
 const MAX_ROWS: u64 = 100_000;
 const PROMPT: &str = "Schema: table sales (region, amount, ship_date)";
@@ -331,16 +331,32 @@ async fn unknown_column_is_fixed_once() {
     assert!(llm.prompts()[0].contains("Không có cột revenue"));
 }
 
-/// Câu ghi bị từ chối ngay, không gọi mô hình (ScriptedLlm không có câu trả lời nào, gọi là panic).
+/// Mọi lý do guard từ chối đều vào vòng sửa, không riêng sai tên: câu ghi, hàm bị cấm, hàm ở chỗ bảng (mô hình đọc file
+/// thay cho bảng, như Gemini viết `FROM read_csv_auto('data.csv')` cho bảng data). Lý do của guard gửi cho mô hình.
 #[tokio::test]
-async fn other_guard_refusals_are_not_fixed() {
-    let llm = ScriptedLlm::new(vec![]);
-    let outcome = run_scripted(&llm, "DELETE FROM sales").await;
-    assert_eq!(outcome.status, AskStatus::Rejected);
-    assert_eq!(steps(&outcome), [(StepName::Guard, false)]);
-    assert!(outcome.sql_guarded.is_none());
-    let message = outcome.message.unwrap();
-    assert!(message.starts_with("Câu SQL bị từ chối: "), "{message}");
+async fn every_guard_refusal_is_fixed_once() {
+    for (sql, reason) in [
+        ("DELETE FROM sales", "SELECT"),
+        ("SELECT getenv('HOME') AS home", "getenv"),
+        (
+            "SELECT region, SUM(amount) AS total FROM read_csv_auto('sales.csv') GROUP BY region",
+            "read_csv_auto",
+        ),
+    ] {
+        let llm = ScriptedLlm::new(vec![Ok(reply(GOOD_SQL))]);
+        let outcome = run_scripted(&llm, sql).await;
+        assert_eq!(outcome.status, AskStatus::Answered, "{sql}: {outcome:?}");
+        assert_eq!(
+            steps(&outcome),
+            [
+                (StepName::Guard, false),
+                (StepName::Repair, true),
+                (StepName::Guard, true),
+                (StepName::Run, true),
+            ]
+        );
+        assert!(llm.prompts()[0].contains(reason), "{sql}");
+    }
 }
 
 #[tokio::test]
@@ -362,6 +378,13 @@ async fn fixed_sql_refused_by_the_guard_is_rejected() {
         Some("SELECT getenv('HOME')")
     );
     assert!(outcome.sql_guarded.is_none());
+    // Người hỏi nhận lời của hệ thống; lý do kỹ thuật chỉ ở chi tiết bước guard.
+    assert_eq!(outcome.message.as_deref(), Some(REFUSED_MESSAGE));
+    let guard = outcome.steps.last().unwrap();
+    assert!(
+        guard.detail.as_deref().unwrap().contains("getenv"),
+        "{guard:?}"
+    );
 }
 
 /// Mô hình lỗi khi sửa: failed kèm các bước, không phải lỗi 502 của cả request.
@@ -623,7 +646,12 @@ async fn fixed_sql_refused_as_oversized_is_rejected() {
             (StepName::Guard, false),
         ]
     );
-    assert!(outcome.message.unwrap().contains("tối đa 4"));
+    assert_eq!(outcome.message.as_deref(), Some(REFUSED_MESSAGE));
+    let guard = outcome.steps.last().unwrap();
+    assert!(
+        guard.detail.as_deref().unwrap().contains("tối đa 4"),
+        "{guard:?}"
+    );
 }
 
 /// Hết lượt chạy (AppState::query_jobs có hai lượt) thì câu thứ ba chờ, không chạy, không bị từ chối. Test giữ cả hai

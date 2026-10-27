@@ -148,6 +148,10 @@ Mô hình ngôn ngữ:
   | Form câu "tại sao", câu "Vì sao doanh thu quý 3 năm 2017 giảm?" | 10 191 | 3 020 |
   | Prompt dài nhất backend gửi (trần 24 000 ký tự, lặp các dòng cột thật) | 24 000 | 7 180 |
 
+  Ba dòng đầu đo trước khi prompt SQL có mục luật của guard (`engine/guard/prompt_rules.rs`). Mục đó thêm 3 041 ký tự
+  (đếm trên prompt mẫu `backend/src/service/testdata/sql_prompt.txt`, bảng `dataco`) vào prompt SQL và prompt sửa SQL,
+  không thêm vào form câu "tại sao"; số token sau thay đổi chưa đếm lại. Dòng cuối không đổi vì là trần độ dài.
+
   Danh sách giá trị của cột là phần tốn token nhất (0,33 token mỗi ký tự); prompt ở trần mà toàn danh sách giá trị thì
   khoảng 8 000 token. Mặc định 12288 đủ cho prompt đó cộng phần sửa và câu trả lời. Đếm với mô hình khác thì dùng
   tokenizer của mô hình đó; Ollama ghi số token đã đọc của mỗi lần gọi trong trường `prompt_eval_count`.
