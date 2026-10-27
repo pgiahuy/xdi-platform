@@ -1,8 +1,8 @@
 # Giấy phép
 
-xdi-platform phát hành theo [Apache License 2.0](https://github.com/pgiahuy/xdi-platform/blob/main/LICENSE). Mỗi file mã nguồn ghi giấy phép ở dòng đầu
-(`SPDX-License-Identifier`). Trang này liệt kê giấy phép của các thành phần bên thứ ba và đánh giá khả năng dùng chung
-với Apache 2.0.
+xdi-platform phát hành theo [Apache License 2.0](https://github.com/pgiahuy/xdi-platform/blob/main/LICENSE). Mỗi
+file mã nguồn ghi giấy phép ở dòng đầu (`SPDX-License-Identifier`). Trang này liệt kê giấy phép của các thành phần bên
+thứ ba và đánh giá khả năng dùng chung với Apache 2.0.
 
 Danh sách đầy đủ từng crate và gói npm, đúng phiên bản đã khóa: [licenses-dependencies.md](licenses-dependencies.md),
 sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lock` hoặc `package-lock.json`.
@@ -19,10 +19,11 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 Không có thành phần nào chỉ có giấy phép GPL, LGPL hay AGPL. Crate `r-efi` cho chọn `MIT OR Apache-2.0 OR
 LGPL-2.1-or-later`; dự án dùng nó theo MIT, và nó chỉ được biên dịch cho nền tảng UEFI, không có trong binary Linux.
 
-DuckDB (MIT) được biên dịch từ mã nguồn vào binary backend (crate `duckdb` với `bundled`, gói sẵn extension Parquet; tự cài và tự nạp
-extension bị tắt trong `engine/analytics.rs`, nên không tải gì lúc chạy). Mã nguồn DuckDB kèm các thư viện C/C++ trong thư mục `third_party` của nó (re2, zstd, lz4,
-snappy, brotli, thrift, mbedtls, libpg_query, fmt, utf8proc và các thư viện nhỏ khác), theo giấy phép cho phép như
-MIT, BSD, Apache-2.0, Boost, zlib; zstd cho chọn thêm GPL, dự án dùng theo nhánh BSD.
+DuckDB (MIT) được biên dịch từ mã nguồn vào binary backend (crate `duckdb` với `bundled`, gói sẵn extension Parquet;
+tự cài và tự nạp extension bị tắt trong `engine/analytics.rs`, nên không tải gì lúc chạy). Mã nguồn DuckDB kèm các thư
+viện C/C++ trong thư mục `third_party` của nó (re2, zstd, lz4, snappy, brotli, thrift, mbedtls, libpg_query, fmt,
+utf8proc và các thư viện nhỏ khác), theo giấy phép cho phép như MIT, BSD, Apache-2.0, Boost, zlib; zstd cho chọn thêm
+GPL, dự án dùng theo nhánh BSD.
 
 `webpki-roots` (CDLA-Permissive-2.0, danh sách chứng chỉ gốc) chỉ là phụ thuộc lúc build của `libduckdb-sys`, cho nhánh
 tải thư viện DuckDB dựng sẵn; dự án biên dịch DuckDB từ mã nguồn kèm trong crate nên nhánh đó không chạy, và crate
@@ -93,7 +94,8 @@ Không được đóng gói vào phần mềm; người cài chọn và chịu �
 
 Mặc định (`LLM_PROVIDER=mock`) phần mềm chạy hoàn toàn không cần dịch vụ hay khóa API đóng.
 
-Dữ liệu mẫu: nguồn và giấy phép từng dataset ghi ở [data/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/data/README.md).
+Dữ liệu mẫu: nguồn và giấy phép từng dataset ghi ở
+[data/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/data/README.md).
 
 ## Văn bản MIT cho mã shadcn/ui
 

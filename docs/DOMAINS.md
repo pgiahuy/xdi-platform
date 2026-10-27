@@ -1,8 +1,8 @@
 # Gói khái niệm ngành
 
 Một gói khái niệm ngành (domain package) mô tả các khái niệm kinh doanh chung của mọi doanh nghiệp cùng ngành: doanh
-thu, số đơn, tỷ lệ giao trễ... Mỗi ngành một file `data/domains/<id>.json`. Gói giúp mô hình ngôn ngữ hiểu thuật ngữ trong
-câu hỏi; đề xuất chỉ số và kiểm hợp lý theo gói là thiết kế, chưa có code dùng.
+thu, số đơn, tỷ lệ giao trễ... Mỗi ngành một file `data/domains/<id>.json`. Gói giúp mô hình ngôn ngữ hiểu thuật ngữ
+trong câu hỏi; đề xuất chỉ số và kiểm hợp lý theo gói là thiết kế, chưa có code dùng.
 
 Ba tầng tách riêng:
 
@@ -13,9 +13,10 @@ Ba tầng tách riêng:
 3. **Chỉ số của workspace** (bảng `metrics`) mới quyết định công thức trên cột thật của dataset.
 
 Hiện tại có một gói: `retail` (bán lẻ và chuỗi cung ứng), áp dụng được cho dữ liệu đơn hàng như DataCo hay Online
-Retail. Prompt sinh SQL và prompt form câu "tại sao" chèn tên gói và
-`name`, `synonyms`, `description` của từng khái niệm khi cột `datasets.domain` có giá trị (`service/ask/prompt.rs`).
-Chưa có cách gắn gói cho dataset (lúc nạp hay qua API), nên hiện chưa prompt nào có phần này. Thiết kế: người dùng
+Retail. Prompt sinh SQL và prompt form câu "tại sao" chèn tên gói và `name`, `synonyms`, `description` của từng khái
+niệm khi cột `datasets.domain` có giá trị (`build_domain_section` trong `service/ask/prompt.rs`, dùng cả ở
+`service/ask/why_prompt.rs`). Chưa có cách gắn gói cho dataset (lúc nạp hay qua API), nên hiện chưa prompt nào có phần
+này. Thiết kế: người dùng
 chọn một gói lúc nạp, một dataset một gói. `calculations`, `dimensions`, `sanity_checks` chưa được code nào đọc ngoài
 test.
 
@@ -55,7 +56,9 @@ biên dịch và nhúng mọi file vào binary (image Docker và binary của `m
 do `engine/llm/mock.rs` nhúng câu trả lời mẫu). Thêm hay sửa file gói thì `cargo build` tự nhúng lại; với
 `CARGO_TARGET_DIR` dùng chung giữa nhiều bản checkout, chạy `touch backend/src/main.rs data/domains` trước để chắc
 chắn build script chạy lại (phải touch cả thư mục `data/domains`, không chỉ `main.rs`: một bản checkout khác thêm file
-gói thì thư mục của bản này không đổi, cargo không tự chạy lại build script). Test của `engine/domains.rs` chặn gói sai: mọi file đọc được theo schema, `id` trùng tên
-file, id không trùng giữa các gói, mỗi khái niệm có hai đến ba cách tính, có từ đồng nghĩa và chiều phân rã, từ đồng
-nghĩa không rỗng và không trùng trong một gói, luật kiểm nhất quán (`non_negative` không có `min`/`max`,
-`value_range` có ít nhất một đầu và `min` không quá `max`). CI chạy các test này cả khi PR chỉ đổi `data/domains/`.
+gói thì thư mục của bản này không đổi, cargo không tự chạy lại build script).
+
+Test của `engine/domains.rs` chặn gói sai: mọi file đọc được theo schema, `id` trùng tên file, id không trùng giữa các
+gói, mỗi khái niệm có hai đến ba cách tính, có từ đồng nghĩa và chiều phân rã, từ đồng nghĩa không rỗng và không
+trùng trong một gói, luật kiểm nhất quán (`non_negative` không có `min`, `max`; `value_range` có ít nhất một đầu và
+`min` không quá `max`), trường lạ bị từ chối. CI chạy các test này cả khi PR chỉ đổi `data/domains/`.

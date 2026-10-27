@@ -8,12 +8,14 @@ Code: `backend/src/engine/guard/mod.rs`, hàm `build_guarded_sql`. Test: `backen
 `sample_tests.rs`, `row_filter_tests.rs`.
 
 Trạng thái: guard đã có và có test. Endpoint hỏi dữ liệu ([#33](https://github.com/pgiahuy/xdi-platform/issues/33),
-`service/ask/mod.rs`) gọi guard qua `service/ask/run.rs`, với một bảng là dataset đang hỏi và đủ mọi cột của phiên bản đang
-dùng. Endpoint hỏi, cả câu thường và câu "tại sao" (`load_row_filters` trong `service/ask/mod.rs`), và truy dòng nguồn
-(`service/drill/mod.rs`) đọc chính sách lọc dòng theo `data_role` của người hỏi hay người bấm
-(`engine/store/policies.rs`; admin không bị lọc) và truyền vào guard
-([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Chưa có API đặt `data_role` cho thành viên hay ghi
-`rls_policies`, nên ngoài test `row_filters` hiện luôn rỗng. Tài liệu này mô tả đúng hàm hiện có.
+`service/ask/mod.rs`) gọi guard với một bảng là dataset đang hỏi và đủ mọi cột của phiên bản đang dùng: câu thường qua
+`service/ask/run.rs`, các câu SQL của câu "tại sao" qua `service/explain/breakdown.rs`. Truy dòng nguồn
+(`service/drill/mod.rs`), dataset mẫu (`service/samples.rs`) và `make eval` (`service/eval.rs`) cũng chạy SQL qua guard.
+Endpoint hỏi, cả câu thường và câu "tại sao", và truy dòng nguồn đọc chính sách lọc dòng theo `data_role` của người
+hỏi hay người bấm (`load_row_filters` trong `service/ask/mod.rs`, đọc `engine/store/policies.rs`; admin không bị lọc)
+và truyền vào guard ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Store đã có hàm gán `data_role` cho
+thành viên và thay `rls_policies` của một dataset (`set_data_role`, `replace_row_policies`), nhưng chưa có API hay màn
+nào gọi, nên ngoài test `row_filters` hiện luôn rỗng.
 
 ## Đầu vào và đầu ra
 
@@ -28,7 +30,7 @@ viết để mô hình đọc và sửa ở vòng sau, nên nói rõ tên bảng
 (`service/ask/run.rs`), mọi lý do từ chối, trừ lỗi máy chủ (`Internal`), được gửi lại cho mô hình sửa một lần. Guard
 từ chối là lỗi của câu hệ thống viết, không phải của người hỏi, và câu sửa qua guard lại từ đầu, nên gửi lý do không mở
 thêm đường nào tới dữ liệu. Câu sửa vẫn bị từ chối thì người hỏi nhận lời của hệ thống (`REFUSED_MESSAGE`); lý do của
-guard nằm ở chi tiết bước `guard` trong pane bằng chứng. Loại `GuardError` chỉ cho biết lỗi thuộc nhóm nào.
+guard nằm ở chi tiết bước `guard` trong pane Minh chứng. Loại `GuardError` chỉ cho biết lỗi thuộc nhóm nào.
 
 ## Luật viết vào prompt
 
@@ -39,8 +41,8 @@ have no exceptions". Prompt chỉ hướng mô hình; guard vẫn kiểm lại m
 
 | Nhóm | Gồm | Có trong prompt | Vì sao |
 |---|---|---|---|
-| Luật mô hình tự đáp ứng được | Một câu `SELECT` chỉ đọc; chỉ đọc từ các bảng trong danh sách, không đọc file, không hàm ở chỗ bảng; chỉ cột có trong hồ sơ; danh sách hàm và cách gọi; luật riêng của `lpad`, `rpad`, `strftime`, `replace`, `regexp_replace`; trần số tầng, mảnh ghép, chuỗi hằng, cột, nguồn, nhánh; viết `LIMIT` thay cho `FETCH FIRST` | Có | Không chứa dữ liệu hay thông tin máy chủ |
-| Phần guard tự thêm sau khi kiểm | Điều kiện lọc dòng theo vai dữ liệu (bước 3), trần số dòng (bước 4), đường dẫn file Parquet và tên bảng tạm của bản chạy (bước 5) | Không, chỉ một câu chung "hệ thống tự giới hạn số dòng và tự lọc theo quyền" | Lọc dòng lộ phạm vi dữ liệu của người hỏi và không được để mô hình tự viết; đường dẫn lộ cách lưu trên máy chủ ([Quyền riêng tư](PRIVACY.md)) |
+| Luật mô hình tự đáp ứng được | Một câu `SELECT` chỉ đọc, tối đa 32 KB; chỉ đọc từ các bảng trong danh sách, không đọc file, không hàm ở chỗ bảng; chỉ cột có trong hồ sơ; danh sách hàm và cách gọi; luật riêng của `lpad`, `rpad`, `strftime`, `replace`, `regexp_replace`; trần số tầng, mảnh ghép, chuỗi hằng, cột, nguồn, nhánh; chỉ viết `LIMIT` khi câu hỏi nêu số dòng, không viết `FETCH FIRST` hay `LIMIT BY` | Có | Không chứa dữ liệu hay thông tin máy chủ |
+| Phần guard tự thêm sau khi kiểm | Điều kiện lọc dòng theo vai dữ liệu (bước 3), trần số dòng (bước 4), đường dẫn file Parquet và tên bảng tạm của bản chạy (bước 5) | Không. Prompt chỉ nói hệ thống tự giới hạn số dòng và tự lọc theo quyền, nên mô hình không tự viết hai phần này | Lọc dòng lộ phạm vi dữ liệu của người hỏi và không được để mô hình tự viết; đường dẫn lộ cách lưu trên máy chủ ([Quyền riêng tư](PRIVACY.md)) |
 
 Guard kiểm trên cây cú pháp, không dò chữ: dò chữ `DROP` thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Cây
 do crate `sqlparser` (0.63, cách đọc của DuckDB) dựng. Cả `shown` và `runnable` đều in lại từ cây đã kiểm, không dùng
