@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/EvidenceBreakdown.tsx - tab Phân rã của pane bằng chứng: số của hai lát cắt và chênh lệch, lời giải
-thích, mỗi chiều một bảng đóng góp theo đúng thứ tự backend gửi (chiều giải thích tốt nhất trước, nhóm đóng góp lớn
-trước; bảng của một chiều ở BreakdownDimension.tsx), rồi phần lượng và giá nếu có.
+/* components/ask/EvidenceBreakdown.tsx - tab Phân rã của pane bằng chứng: mỗi chiều một bảng đóng góp theo đúng thứ tự backend gửi (chiều giải thích tốt nhất trước, nhóm đóng góp lớn
+trước; bảng của một chiều ở BreakdownDimension.tsx), rồi phần lượng và giá nếu có. Hai kỳ, chênh lệch và lời giải
+thích đã ở thẻ trả lời (WhyOverview) ngay bên cạnh; nhắc lại ở đây làm hai cột nói cùng một điều.
 Số là chuỗi chữ số của backend, chỉ nhóm nghìn trên chuỗi (formatDecimal), không qua Number() nên không làm tròn. */
 
 import { BreakdownDimension } from './BreakdownDimension'
 import { formatDecimal } from './cellFormat'
-import { formatSigned } from './changeFormat'
 import type { BreakdownView, DrillTarget, VolumePriceView } from './evidenceTypes'
 
 type Props = {
@@ -17,27 +16,8 @@ type Props = {
 export function EvidenceBreakdown({ breakdown, onDrill }: Props) {
   return (
     <div className="flex flex-col gap-4">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-[10px] border bg-background px-3.5 py-2.5 text-sm">
-        <dt className="text-muted-foreground">{breakdown.baseLabel}</dt>
-        <dd className="text-right tabular-nums">{formatDecimal(breakdown.baseValue)}</dd>
-        <dt className="text-muted-foreground">{breakdown.compareLabel}</dt>
-        <dd className="text-right tabular-nums">{formatDecimal(breakdown.compareValue)}</dd>
-        <dt className="text-muted-foreground">Chênh lệch</dt>
-        <dd className="text-right font-semibold text-highlight-text tabular-nums">{formatSigned(breakdown.change)}</dd>
-      </dl>
-      <div className="flex flex-col gap-1">
-        <p>{breakdown.summary}</p>
-        {!breakdown.summaryByModel && (
-          <p className="text-xs text-muted-foreground">
-            Câu này viết theo khuôn từ các số đã tính, không phải lời của mô hình.
-          </p>
-        )}
-      </div>
       {breakdown.dimensions.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {breakdown.measure} theo từng nhóm; chiều đầu tiên giải thích chênh lệch tốt nhất. Bấm số của một kỳ để xem
-          dòng nguồn của nhóm đó.
-        </p>
+        <p className="text-xs text-muted-foreground">Bấm số của một kỳ để xem dòng nguồn của nhóm đó.</p>
       )}
       {breakdown.dimensions.map((dimension) => (
         <BreakdownDimension

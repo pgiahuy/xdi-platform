@@ -3,8 +3,8 @@
 giải thích tốt nhất (chiều đầu tiên backend gửi). Thanh giảm sang trái màu hổ phách, thanh tăng sang phải màu xanh ngọc,
 cùng một thang nên so được độ lớn bằng mắt. Nhóm như bảng phân rã: các nhóm lớn nhất rồi một dòng "Còn lại"
 (breakdownGroups.ts).
-Mỗi dòng ghi số có dấu và chữ "tăng" hay "giảm", nên màu và hướng thanh chỉ giúp đọc nhanh; thanh ẩn với trình đọc màn
-hình. Độ dài thanh đổi số bằng Number(): chỉ để vẽ, chấp nhận làm tròn; chữ số hiện ra vẫn là chuỗi của backend.
+Mỗi dòng ghi số có dấu (+ hay -), nên màu và hướng thanh chỉ giúp đọc nhanh; chữ "tăng" hay "giảm" chỉ cho trình đọc
+màn hình (nhãn chữ ở mọi dòng làm bảng rối mà không thêm ý), thanh ẩn với trình đọc màn hình. Độ dài thanh đổi số bằng Number(): chỉ để vẽ, chấp nhận làm tròn; chữ số hiện ra vẫn là chuỗi của backend.
 Độ đo tỷ lệ thêm một dòng tổng phần do cơ cấu và phần do hiệu suất của chiều này.
 Vẽ bằng thẻ div thay vì Recharts: chỉ là các thanh ngang, và file này nằm trong chunk chính, không phải chờ tải Recharts. */
 
@@ -97,16 +97,7 @@ function ContributionRow({ bar, largest }: { bar: Bar; largest: number }) {
         <span className={cn('font-semibold', direction === 'down' ? 'text-highlight-text' : 'text-label')}>
           {formatSigned(bar.contribution)}
         </span>
-        <span
-          className={cn(
-            'rounded-full border px-2 text-xs font-semibold',
-            direction === 'down'
-              ? 'border-highlight-border bg-highlight-soft text-highlight-text'
-              : 'border-label-border bg-label-soft text-label',
-          )}
-        >
-          {direction === 'down' ? 'giảm' : direction === 'up' ? 'tăng' : 'không đổi'}
-        </span>
+        <span className="sr-only">{direction === 'down' ? 'giảm' : direction === 'up' ? 'tăng' : 'không đổi'}</span>
       </span>
     </li>
   )

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/WhyOverview.tsx - phần đầu câu trả lời của câu "tại sao": ba số lớn (kỳ gốc, kỳ so sánh, chênh lệch),
+/* components/ask/WhyOverview.tsx - phần đầu câu trả lời của câu "tại sao": một hàng ba số (kỳ gốc, kỳ so sánh, chênh
+lệch) không khung riêng, để thẻ trả lời không thành nhiều khung lồng nhau,
 lời giải thích, rồi đóng góp của từng nhóm theo chiều giải thích tốt nhất (ContributionBars.tsx). Mọi số lấy từ
 explanation của response, cùng dữ liệu với tab Phân rã của pane bằng chứng; ở đây chỉ hiện gọn để đọc câu trả lời mà
 không phải mở pane. Số là chuỗi chữ số của backend, chỉ nhóm nghìn (formatDecimal), không làm tròn.
@@ -21,9 +22,9 @@ export function WhyOverview({ breakdown: b }: Props) {
   const first = b.dimensions[0]
   return (
     <>
-      <dl className="grid grid-cols-1 gap-3 tabular-nums sm:grid-cols-3">
-        <Stat label={b.baseLabel} value={formatDecimal(b.baseValue)} note="Kỳ gốc" />
-        <Stat label={b.compareLabel} value={formatDecimal(b.compareValue)} note="Kỳ so sánh" />
+      <dl className="flex flex-wrap gap-x-8 gap-y-3 tabular-nums">
+        <Stat label={b.baseLabel} value={formatDecimal(b.baseValue)} />
+        <Stat label={b.compareLabel} value={formatDecimal(b.compareValue)} />
         <ChangeStat change={b.change} baseLabel={b.baseLabel} />
       </dl>
       <AnswerSummary summary={b.summary} byModel={b.summaryByModel} />
@@ -34,12 +35,11 @@ export function WhyOverview({ breakdown: b }: Props) {
   )
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col rounded-[10px] border bg-card px-4 py-3">
+    <div className="flex flex-col">
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-xl font-bold tracking-tight break-all">{value}</dd>
-      <dd className="text-xs text-muted-foreground">{note}</dd>
+      <dd className="text-lg font-semibold tracking-tight break-all">{value}</dd>
     </div>
   )
 }
@@ -49,16 +49,14 @@ function ChangeStat({ change, baseLabel }: { change: string; baseLabel: string }
   const Icon = direction === 'down' ? TrendingDown : TrendingUp
   const word = direction === 'down' ? 'giảm' : direction === 'up' ? 'tăng' : 'không đổi'
   return (
-    <div className="flex flex-col rounded-[10px] border border-highlight-border bg-highlight-soft px-4 py-3">
+    <div className="flex flex-col">
       <dt className="text-xs font-medium text-muted-foreground">Chênh lệch</dt>
-      <dd className="mt-1 text-xl font-bold tracking-tight break-all text-highlight-text">{formatSigned(change)}</dd>
-      <dd className="mt-1">
+      <dd className="flex flex-wrap items-baseline gap-x-2">
+        <span className="text-lg font-semibold tracking-tight break-all text-highlight-text">{formatSigned(change)}</span>
         <span
           className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-2 text-xs font-semibold',
-            direction === 'down'
-              ? 'border-highlight-border bg-card text-highlight-text'
-              : 'border-label-border bg-card text-label',
+            'inline-flex items-center gap-1 text-xs',
+            direction === 'down' ? 'text-highlight-text' : 'text-label',
           )}
         >
           {direction !== 'flat' && <Icon aria-hidden className="size-3.5" />}
