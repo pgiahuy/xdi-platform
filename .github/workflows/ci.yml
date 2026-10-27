@@ -50,6 +50,9 @@ jobs:
               - 'backend/**'
               # Gói khái niệm ngành được build.rs nhúng vào backend; PR chỉ sửa gói vẫn phải chạy test.
               - 'data/domains/**'
+              # Bộ đánh giá câu hỏi mẫu và dữ liệu mẫu của nó (#37).
+              - 'eval/**'
+              - 'data/samples/**'
               # Test so openapi.json và response mẫu của ask với code.
               - 'openapi.json'
               - 'frontend/src/api/examples/**'
@@ -82,6 +85,8 @@ jobs:
           workspaces: backend
       - if: steps.work.outputs.run == 'true'
         run: make check-fast
+      - if: steps.work.outputs.run == 'true'
+        run: make eval
 
   frontend:
     # Luôn chạy để check "frontend" có kết quả; chỉ cài Node và build khi đổi frontend/ (trên PR hay khi push lên main).

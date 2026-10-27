@@ -34,3 +34,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Kết quả của make eval
+backend/eval/
+eval/result.json
