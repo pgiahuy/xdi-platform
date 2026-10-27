@@ -10,7 +10,6 @@ import type { AskResponse } from '@/api/ask'
 import { drillPageSize, useDrill, type DrillRequest, type DrillVariables } from '@/api/drill'
 import { EvidencePane } from '@/components/ask/EvidencePane'
 import type {
-  BreakdownView,
   DrillTarget,
   EvidenceTab,
   RowsView,
@@ -20,6 +19,7 @@ import type {
 } from '@/components/ask/evidenceTypes'
 import { cn } from '@/lib/utils'
 import type { Answer } from './AskOutcome'
+import { buildBreakdown } from './breakdownView'
 import { buildLeadFirst, buildLeadNames } from './drillColumns'
 import type { EvidenceView } from './evidenceView'
 import { buildCellIndexes, buildResultView } from './resultView'
@@ -156,55 +156,6 @@ function buildGuardedMissing(response: AskResponse, lastGuard: AskResponse['step
   if (lastGuard && !lastGuard.ok) return `Guard từ chối câu này: ${lastGuard.detail ?? response.message ?? ''}`
   if (response.status === 'needs_choice') return 'Chưa qua guard: cần chọn cách hiểu câu hỏi trước.'
   return 'Câu SQL chưa qua guard.'
-}
-
-function buildBreakdown(response: AskResponse): TabData<BreakdownView> {
-  const explanation = response.explanation
-  if (!explanation) return { data: null, reason: buildBreakdownReason(response) }
-  const vp = explanation.volume_price
-  return {
-    data: {
-      measure: explanation.measure,
-      baseLabel: explanation.base.label,
-      compareLabel: explanation.compare.label,
-      baseValue: explanation.base.value,
-      compareValue: explanation.compare.value,
-      change: explanation.change,
-      dimensions: explanation.dimensions.map((dimension) => ({
-        column: dimension.column,
-        kind: dimension.kind,
-        groups: dimension.groups.map((group) => ({
-          value: group.value,
-          baseValue: group.base_value,
-          compareValue: group.compare_value,
-          contribution: group.contribution,
-        })),
-      })),
-      volumePrice: vp && {
-        volumeLabel: vp.volume_label,
-        priceLabel: vp.price_label,
-        baseVolume: vp.base_volume,
-        compareVolume: vp.compare_volume,
-        basePrice: vp.base_price,
-        comparePrice: vp.compare_price,
-        volumeEffect: vp.volume_effect,
-        priceEffect: vp.price_effect,
-        ifVolumeUnchanged: vp.if_volume_unchanged,
-      },
-      summary: explanation.summary,
-      summaryByModel: explanation.summary_by_model,
-    },
-  }
-}
-
-function buildBreakdownReason(response: AskResponse): string {
-  if (response.status === 'answered') {
-    // Câu "tại sao" không dựng được phân rã thì backend gửi cảnh báo kèm lý do; không có cảnh báo là câu thường.
-    const unavailable = response.warnings.find((warning) => warning.code === 'explanation_unavailable')
-    return unavailable?.message ?? 'Câu này không phải câu hỏi "tại sao", nên không có phân rã.'
-  }
-  if (response.status === 'needs_choice') return 'Chưa có phân rã: cần chọn cách hiểu câu hỏi trước.'
-  return 'Không có phân rã: câu SQL không chạy ra kết quả.'
 }
 
 function buildSteps(response: AskResponse): TabData<StepView[]> {

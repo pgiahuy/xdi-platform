@@ -21,7 +21,7 @@ type Props = {
 
 export function AccountList({ accounts, currentUserId, busyId, message, ...props }: Props) {
   return (
-    <ul className="divide-y rounded-lg border">
+    <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {accounts.map((account) => {
         const name = account.name || account.email
         const busy = account.id === busyId

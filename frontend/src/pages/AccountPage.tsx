@@ -28,8 +28,8 @@ export function AccountPage() {
   return (
     <div className="flex flex-col gap-8">
       {user && (
-        <section aria-labelledby="account-info" className="flex flex-col gap-3">
-          <h2 id="account-info" className="text-sm font-semibold">
+        <section aria-labelledby="account-info" className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs sm:px-6 sm:py-5">
+          <h2 id="account-info" className="text-[15px] font-semibold tracking-tight">
             Thông tin đăng nhập
           </h2>
           <dl className="grid max-w-sm grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
@@ -40,9 +40,9 @@ export function AccountPage() {
           </dl>
         </section>
       )}
-      <section aria-labelledby="account-password" className="flex flex-col gap-3">
+      <section aria-labelledby="account-password" className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs sm:px-6 sm:py-5">
         <div>
-          <h2 id="account-password" className="text-sm font-semibold">
+          <h2 id="account-password" className="text-[15px] font-semibold tracking-tight">
             Đổi mật khẩu
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">

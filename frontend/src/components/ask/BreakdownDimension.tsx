@@ -49,7 +49,7 @@ export function BreakdownDimension({ dimension, baseLabel, compareLabel, onDrill
       <div tabIndex={0} role="region" aria-label={`Phân rã theo ${dimension.column}`} className="w-full overflow-x-auto">
         <table className="w-full text-xs">
           <caption className="pb-1 text-left text-sm font-semibold">Theo {dimension.column}</caption>
-          <thead className="bg-muted/50">
+          <thead className="bg-background text-muted-foreground">
             <tr>
               <th scope="col" className="px-2 py-1.5 text-left font-medium">
                 Nhóm

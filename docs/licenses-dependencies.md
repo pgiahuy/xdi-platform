@@ -3,14 +3,15 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-397 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 549 gói npm
-(từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 27.
+397 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 550 gói npm
+(từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 28.
 
 ## Không thuộc nhóm cho phép thông dụng
 
 | Gói | Phiên bản | Giấy phép | Chỉ lúc build |
 | --- | --- | --- | --- |
-| @fontsource-variable/geist | 5.3.0 | OFL-1.1 |  |
+| @fontsource-variable/jetbrains-mono | 5.3.0 | OFL-1.1 |  |
+| @fontsource/be-vietnam-pro | 5.3.0 | OFL-1.1 |  |
 | lightningcss | 1.32.0 | MPL-2.0 | có |
 | lightningcss | 1.33.0 | MPL-2.0 | có |
 | lightningcss-android-arm64 | 1.32.0 | MPL-2.0 | có |
@@ -481,7 +482,8 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | @floating-ui/dom | 1.8.0 | MIT |  |
 | @floating-ui/react-dom | 2.1.9 | MIT |  |
 | @floating-ui/utils | 0.2.12 | MIT |  |
-| @fontsource-variable/geist | 5.3.0 | OFL-1.1 |  |
+| @fontsource-variable/jetbrains-mono | 5.3.0 | OFL-1.1 |  |
+| @fontsource/be-vietnam-pro | 5.3.0 | OFL-1.1 |  |
 | @hono/node-server | 2.1.5 | MIT | có |
 | @jridgewell/gen-mapping | 0.3.13 | MIT | có |
 | @jridgewell/remapping | 2.3.5 | MIT | có |

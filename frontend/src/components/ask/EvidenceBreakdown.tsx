@@ -6,6 +6,7 @@ Số là chuỗi chữ số của backend, chỉ nhóm nghìn trên chuỗi (for
 
 import { BreakdownDimension } from './BreakdownDimension'
 import { formatDecimal } from './cellFormat'
+import { formatSigned } from './changeFormat'
 import type { BreakdownView, DrillTarget, VolumePriceView } from './evidenceTypes'
 
 type Props = {
@@ -16,13 +17,13 @@ type Props = {
 export function EvidenceBreakdown({ breakdown, onDrill }: Props) {
   return (
     <div className="flex flex-col gap-4">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-[10px] border bg-background px-3.5 py-2.5 text-sm">
         <dt className="text-muted-foreground">{breakdown.baseLabel}</dt>
         <dd className="text-right tabular-nums">{formatDecimal(breakdown.baseValue)}</dd>
         <dt className="text-muted-foreground">{breakdown.compareLabel}</dt>
         <dd className="text-right tabular-nums">{formatDecimal(breakdown.compareValue)}</dd>
         <dt className="text-muted-foreground">Chênh lệch</dt>
-        <dd className="text-right font-medium tabular-nums">{formatDecimal(breakdown.change)}</dd>
+        <dd className="text-right font-semibold text-highlight-text tabular-nums">{formatSigned(breakdown.change)}</dd>
       </dl>
       <div className="flex flex-col gap-1">
         <p>{breakdown.summary}</p>
@@ -72,7 +73,7 @@ function VolumePriceTable({ volumePrice: vp, measure, baseLabel, compareLabel }:
       <div tabIndex={0} role="region" aria-label="Lượng và giá" className="overflow-x-auto">
         <table className="w-full text-xs">
           <caption className="pb-1 text-left text-sm font-semibold">Lượng và giá</caption>
-          <thead className="bg-muted/50">
+          <thead className="bg-background text-muted-foreground">
             <tr>
               <th scope="col" className="px-2 py-1.5 text-left font-medium">
                 <span className="sr-only">Chỉ số</span>

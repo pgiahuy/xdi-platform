@@ -8,13 +8,16 @@ KB sau gzip, còn JS lần tải đầu của cả giao diện khoảng 166 KB, 
 đồ để vẽ: mở trang hỏi không phải chờ nó. Đo bằng gzip -c | wc -c trên các file JS mà dist/index.html nạp (script
 và modulepreload) và trên chunk ResultChart, sau npm run build.
 Trang bọc file này trong ErrorBoundary: chunk tải lỗi hay Recharts ném lỗi thì chỉ mất biểu đồ, bảng vẫn còn.
-Màu là thang xám của theme, như IBCS dùng màu trung tính và chỉ làm nổi số cần nhấn: chuỗi đầu đậm nhất, phần "Khác"
-nhạt nhất; nhiều đường còn phân biệt bằng nét đứt và chú giải, và bảng bên dưới có đủ số. */
+Màu lấy từ token biểu đồ của theme (index.css), như IBCS dùng màu trung tính và chỉ làm nổi số cần nhấn: biểu đồ thanh
+hay cột một số đo tô mọi thanh xanh ngọc, riêng thanh lớn nhất tô hổ phách (màu nhấn duy nhất của giao diện), và chú
+thích ghi bằng chữ thanh nào được tô; phần "Khác" nhạt nhất. Nhiều chuỗi thì mỗi chuỗi một màu, đường còn phân biệt bằng
+nét đứt và chú giải, và bảng bên dưới có đủ số. */
 
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   Line,
   LineChart,
@@ -23,7 +26,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { buildChartData, type ChartData } from './chartData'
+import { buildChartData, OTHER_LABEL, type ChartData } from './chartData'
 import type { ChartView, ResultView } from './types'
 
 type Props = {
@@ -31,9 +34,12 @@ type Props = {
   chart: ChartView
 }
 
-// Thứ tự cố định, chuỗi thứ i luôn cùng màu và cùng nét. --chart-1 gần màu nền sáng nên chỉ dành cho phần "Khác".
-const seriesColors = ['var(--chart-5)', 'var(--chart-3)', 'var(--chart-2)', 'var(--chart-4)', 'var(--muted-foreground)']
-const otherColor = 'var(--chart-1)'
+// Thứ tự cố định, chuỗi thứ i luôn cùng màu và cùng nét. --chart-1 (hổ phách) không có ở đây: nó chỉ dành cho thanh nổi
+// bật của biểu đồ một số đo, dùng cho một chuỗi thì người đọc tưởng chuỗi đó được nhấn.
+const seriesColors = ['var(--chart-3)', 'var(--chart-5)', 'var(--chart-2)', 'var(--chart-4)', 'var(--code-identifier)']
+const otherColor = 'var(--input)'
+const plainBarColor = 'var(--chart-2)'
+const highlightBarColor = 'var(--chart-1)'
 const seriesDashes = [undefined, '6 3', '2 3', '8 3 2 3', '4 4']
 const axisTick = { fill: 'var(--muted-foreground)', fontSize: 12 }
 const compactFormat = new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 })
@@ -60,7 +66,9 @@ export function ResultChart({ result, chart }: Props) {
   // Khác đơn vị thì mỗi số đo một biểu đồ nhỏ, không dùng hai trục: hai thang đo chọn tùy ý làm số trông như bất kỳ.
   const groups = chart.layout === 'panels' ? chart.y.map((name) => [name]) : [chart.y]
   const panels = groups.map((measures) => ({ measures, data: buildChartData(result, chart, measures) }))
-  const notes = buildNotes(panels[0].data)
+  const notes = [buildNotes(panels[0].data), highlightIndex(chart, panels[0].data) !== null && 'thanh hổ phách là giá trị lớn nhất']
+    .filter(Boolean)
+    .join('; ')
 
   return (
     <figure className="flex flex-col gap-3">
@@ -92,6 +100,17 @@ type PanelProps = {
 function ChartPanel({ title, chart, data, small }: PanelProps) {
   const showLegend = data.series.length > 1
   const allRatio = data.series.every((s) => s.ratio)
+  const highlighted = highlightIndex(chart, data)
+  // Biểu đồ một số đo: tô từng thanh, thanh lớn nhất hổ phách. Nhiều chuỗi thì cả chuỗi một màu như cũ.
+  const barCells =
+    highlighted === null
+      ? null
+      : data.points.map((point, j) => (
+          <Cell
+            key={j}
+            fill={j === highlighted ? highlightBarColor : point.x === OTHER_LABEL ? otherColor : plainBarColor}
+          />
+        ))
   const tooltip = (
     <Tooltip
       formatter={(_value, name, item) => [item.payload[`${String(item.dataKey)}_text`], name]}
@@ -135,7 +154,9 @@ function ChartPanel({ title, chart, data, small }: PanelProps) {
                   fill={colorOf(s.key, i)}
                   radius={[0, 4, 4, 0]}
                   isAnimationActive={false}
-                />
+                >
+                  {barCells}
+                </Bar>
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -197,7 +218,9 @@ function ChartPanel({ title, chart, data, small }: PanelProps) {
                   stroke={stacked ? 'var(--background)' : undefined}
                   radius={stacked ? undefined : [4, 4, 0, 0]}
                   isAnimationActive={false}
-                />
+                >
+                  {barCells}
+                </Bar>
               ),
             )}
           </Chart>
@@ -205,6 +228,23 @@ function ChartPanel({ title, chart, data, small }: PanelProps) {
       </div>
     </div>
   )
+}
+
+/** Vị trí thanh lớn nhất khi biểu đồ là thanh hay cột của một số đo; null khi không tô thanh nào. Hai thanh bằng nhau
+ * thì tô thanh đầu. */
+function highlightIndex(chart: ChartView, data: ChartData): number | null {
+  if ((chart.kind !== 'bar' && chart.kind !== 'column') || data.series.length !== 1 || data.points.length < 2) {
+    return null
+  }
+  const key = data.series[0].key
+  let best: number | null = null
+  data.points.forEach((point, j) => {
+    const value = point[key]
+    if (typeof value !== 'number' || point.x === OTHER_LABEL) return
+    const current = best === null ? null : data.points[best][key]
+    if (typeof current !== 'number' || value > current) best = j
+  })
+  return best
 }
 
 function colorOf(key: string, index: number): string {

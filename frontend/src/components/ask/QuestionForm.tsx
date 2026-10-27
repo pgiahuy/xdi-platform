@@ -7,6 +7,7 @@ Enter gửi, Shift+Enter xuống dòng, như ô chat quen thuộc. Bỏ qua Ente
 Việt bằng bộ gõ kiểu IBus, Enter lúc đó là chốt chữ, gửi luôn thì câu hỏi bị cắt giữa chừng. */
 
 import type { FormEvent, KeyboardEvent } from 'react'
+import { SendHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -76,14 +77,24 @@ export function QuestionForm(props: Props) {
             rows={2}
             className="min-h-16 flex-1"
           />
-          <Button type="submit" size="lg" disabled={!canSubmit} className="sm:w-24">
+          <Button type="submit" size="lg" disabled={!canSubmit} className="px-4 sm:min-w-24">
+            {/* Icon cạnh chữ chỉ để nhận ra nút gửi nhanh hơn; chữ đã đủ nghĩa nên trình đọc màn hình bỏ qua icon. */}
+            <SendHorizontal aria-hidden />
             {pending ? 'Đang hỏi...' : 'Hỏi'}
           </Button>
         </div>
         <p id="ask-question-hint" className="text-xs text-muted-foreground">
-          Enter để hỏi, Shift+Enter để xuống dòng.
+          <Kbd>Enter</Kbd> để hỏi, <Kbd>Shift+Enter</Kbd> để xuống dòng.
         </p>
       </div>
     </form>
+  )
+}
+
+function Kbd({ children }: { children: string }) {
+  return (
+    <kbd className="rounded border border-b-2 border-input bg-background px-1 font-mono text-[11px] text-foreground">
+      {children}
+    </kbd>
   )
 }

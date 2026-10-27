@@ -20,12 +20,12 @@ export function EvidenceSql({ sql }: Props) {
       <SqlBlock title={sql.repaired ? 'Mô hình viết (bản đã sửa)' : 'Mô hình viết'} text={sql.generated} />
       {sql.guarded ? (
         <div className="flex flex-col gap-2">
-          <SqlBlock title="Sau guard (bản đã chạy)" text={sql.guarded} />
+          <SqlBlock title="Sau guard (bản đã chạy)" text={sql.guarded} compareTo={sql.generated} />
           <GuardNotes notes={sql.guardNotes} />
         </div>
       ) : (
         <section className="flex flex-col gap-1">
-          <h3 className="text-xs font-semibold">Sau guard</h3>
+          <h3 className="text-xs font-semibold tracking-wider text-label uppercase">Sau guard</h3>
           <p className="text-sm text-muted-foreground">{sql.guardedMissing}</p>
         </section>
       )}
@@ -50,7 +50,9 @@ function GuardNotes({ notes }: { notes: string[] }) {
   )
 }
 
-function SqlBlock({ title, text }: { title: string; text: string | null }) {
+type SqlBlockProps = { title: string; text: string | null; compareTo?: string | null }
+
+function SqlBlock({ title, text, compareTo }: SqlBlockProps) {
   const [copyStatus, setCopyStatus] = useState('')
 
   // Clipboard có thể bị chặn (trang không chạy trên https, trình duyệt từ chối quyền): báo để người dùng chọn chữ
@@ -65,15 +67,15 @@ function SqlBlock({ title, text }: { title: string; text: string | null }) {
   return (
     <section className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold">{title}</h3>
+        <h3 className="text-xs font-semibold tracking-wider text-label uppercase">{title}</h3>
         {text && (
-          <Button variant="ghost" size="icon-sm" aria-label={`Chép SQL: ${title}`} onClick={() => copy(text)}>
+          <Button variant="outline" size="icon-sm" aria-label={`Chép SQL: ${title}`} onClick={() => copy(text)}>
             <Copy aria-hidden />
           </Button>
         )}
       </div>
       {text ? (
-        <SqlCode sql={text} />
+        <SqlCode sql={text} compareTo={compareTo} />
       ) : (
         <p className="text-sm text-muted-foreground">Mô hình chưa viết SQL cho câu này.</p>
       )}

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/ChoiceChips.tsx - các lựa chọn của một giả định, mỗi lựa chọn một chip; chip đang dùng được tô đậm.
+/* components/ask/ChoiceChips.tsx - các lựa chọn của một giả định, mỗi lựa chọn một chip; chip đang dùng nền xanh ngọc
+kèm dấu chọn (trạng thái chọn của giao diện, không dùng hổ phách của nút chính).
 Bấm chip khác là hỏi lại ngay với lựa chọn đó (trang gửi), nên chip là nút có aria-pressed chứ không phải ô radio
 trong form cần thêm nút gửi. */
 
 import { useId } from 'react'
+import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import type { ChoiceView } from './types'
 
 type Props = {
@@ -30,13 +33,17 @@ export function ChoiceChips({ choice, onPick, disabled }: Props) {
               key={option.id}
               type="button"
               size="sm"
-              variant={selected ? 'default' : 'outline'}
+              variant="outline"
               aria-pressed={selected}
               disabled={disabled}
               // Bấm lại chip đang dùng thì không hỏi lại: kết quả sẽ y như cũ.
               onClick={() => !selected && onPick(choice.id, option.id)}
-              className="h-auto max-w-full py-1 text-left whitespace-normal"
+              className={cn(
+                'h-auto max-w-full rounded-full px-3 py-1 text-left font-normal whitespace-normal',
+                selected && 'border-label bg-label font-semibold text-white hover:border-label hover:bg-label hover:text-white',
+              )}
             >
+              {selected && <Check aria-hidden />}
               {option.label}
             </Button>
           )

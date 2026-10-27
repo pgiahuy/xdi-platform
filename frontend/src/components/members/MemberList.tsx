@@ -46,7 +46,7 @@ export function MemberList(props: Props) {
 
   return (
     <>
-      <ul className="divide-y rounded-lg border">
+      <ul className="divide-y rounded-xl border bg-card shadow-xs">
         {members.map((member) => {
           const isSelf = member.userId === currentUserId
           const name = member.name || member.email

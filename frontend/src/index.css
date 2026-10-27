@@ -1,13 +1,35 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+/* Font đóng gói kèm bản build (gói @fontsource, giấy phép OFL), chạy được không cần mạng. Be Vietnam Pro có đủ dấu
+   tiếng Việt; chỉ nạp bốn độ đậm giao diện dùng. JetBrains Mono cho SQL và tên cột. */
+@import "@fontsource/be-vietnam-pro/400.css";
+@import "@fontsource/be-vietnam-pro/500.css";
+@import "@fontsource/be-vietnam-pro/600.css";
+@import "@fontsource/be-vietnam-pro/700.css";
+@import "@fontsource-variable/jetbrains-mono";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Be Vietnam Pro', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+    --color-sidebar-muted: var(--sidebar-muted);
+    --color-sidebar-raised: var(--sidebar-raised);
+    --color-highlight: var(--highlight);
+    --color-highlight-soft: var(--highlight-soft);
+    --color-highlight-border: var(--highlight-border);
+    --color-highlight-text: var(--highlight-text);
+    --color-label: var(--label);
+    --color-label-soft: var(--label-soft);
+    --color-label-border: var(--label-border);
+    --color-code: var(--code);
+    --color-code-foreground: var(--code-foreground);
+    --color-code-keyword: var(--code-keyword);
+    --color-code-identifier: var(--code-identifier);
+    --color-code-muted: var(--code-muted);
+    --color-code-added: var(--code-added);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -33,9 +55,6 @@
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
     --color-primary: var(--primary);
-    --color-brand-foreground: var(--brand-foreground);
-    --color-brand-deep: var(--brand-deep);
-    --color-brand: var(--brand);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -52,47 +71,71 @@
 }
 
 :root {
-    /* Màu thương hiệu (cùng tông favicon.svg), dùng cho panel nhận diện của màn đăng nhập. */
-    --brand: oklch(0.51 0.21 263);
-    --brand-deep: oklch(0.42 0.19 263);
-    --brand-foreground: oklch(0.98 0 0);
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    /* Chữ phụ: shadcn để oklch(0.556 0 0), khoảng 4,7:1 trên nền trắng nhưng chỉ khoảng 4,3:1 trên nền bg-muted (khung
-       SQL, đầu bảng), dưới mức 4,5:1 của WCAG AA cho chữ thường. oklch(0.5 0 0) đạt khoảng 6:1 trên nền trắng và
-       5,5:1 trên bg-muted, tính theo công thức độ chói tương đối của WCAG. */
-    --muted-foreground: oklch(0.5 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    /* Viền focus: shadcn để oklch(0.708 0 0), chỉ đạt khoảng 2,6:1 trên nền trắng, dưới mức 3:1 của WCAG 2.2 mục
-       1.4.11. oklch(0.439 0 0) đạt 7,8:1 trên nền trắng, 7,5:1 trên nền thanh bên, đo trên trang đã render (#88). */
-    --ring: oklch(0.439 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.439 0 0);
+    /* Bảng màu "Mực và hổ phách". Ba vai, mỗi màu một vai để người đọc học nhanh:
+       - mực (#13262F): thanh bên, chữ chính, nền khối SQL;
+       - xanh ngọc (#2B6F6A): nhãn, trạng thái đang chọn, viền focus;
+       - hổ phách (#D98A1E): màu nhấn duy nhất, cho nút chính, mục nổi bật của biểu đồ, số chênh lệch.
+       Chữ hổ phách trên nền sáng dùng sắc đậm --highlight-text (#8F5309, khoảng 6:1 trên nền trắng); hổ phách thường
+       chỉ đạt khoảng 2,8:1, đủ cho mảng màu nhưng không đủ cho chữ. Tỷ lệ tính theo công thức độ chói của WCAG. */
+    --background: #f7f9f9;
+    --foreground: #13262f;
+    --card: #ffffff;
+    --card-foreground: #13262f;
+    --popover: #ffffff;
+    --popover-foreground: #13262f;
+    /* Nút chính hổ phách, chữ mực: khoảng 5,7:1. */
+    --primary: #d98a1e;
+    --primary-foreground: #13262f;
+    --secondary: #eaf3f2;
+    --secondary-foreground: #13262f;
+    --muted: #eef3f3;
+    /* Chữ phụ #5A6D72: khoảng 5,4:1 trên nền trắng, 4,8:1 trên bg-muted, trên mức 4,5:1 của WCAG AA. */
+    --muted-foreground: #5a6d72;
+    --accent: #eaf3f2;
+    --accent-foreground: #13262f;
+    --destructive: #b42318;
+    --border: #e1e8e8;
+    --input: #c9d5d5;
+    /* Viền focus xanh ngọc: khoảng 5,9:1 trên nền trắng, trên mức 3:1 của WCAG 2.2 mục 1.4.11. Hổ phách chỉ khoảng
+       2,8:1 trên nền trắng nên chỉ dùng làm viền focus trên nền mực của thanh bên (--sidebar-ring). */
+    --ring: #2b6f6a;
+    /* Biểu đồ: chart-1 hổ phách cho mục nổi bật, chart-2 xanh ngọc vừa cho các mục còn lại, rồi đậm dần. chart-2 đậm hơn
+       #9CC3BE của mockup để thanh đạt 3:1 trên nền trắng (WCAG 2.2 mục 1.4.11). */
+    --chart-1: #d98a1e;
+    --chart-2: #5e9c96;
+    --chart-3: #2b6f6a;
+    --chart-4: #5a6d72;
+    --chart-5: #13262f;
+    --radius: 0.75rem;
+    --sidebar: #13262f;
+    --sidebar-foreground: #e9f0f0;
+    /* Chữ phụ trên nền mực: khoảng 8:1. */
+    --sidebar-muted: #a9bdbf;
+    /* Nền nổi trên thanh bên (ô workspace, mục đang rê chuột). */
+    --sidebar-raised: #1b3440;
+    --sidebar-primary: #d98a1e;
+    --sidebar-primary-foreground: #13262f;
+    --sidebar-accent: #24414d;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #24414d;
+    /* Viền focus hổ phách trên nền mực: khoảng 5,7:1. */
+    --sidebar-ring: #d98a1e;
+    /* Màu nhấn hổ phách cho số chênh lệch, cảnh báo, dòng đang chọn. */
+    --highlight: #d98a1e;
+    --highlight-soft: #fcf3e6;
+    --highlight-border: #f6dfbc;
+    --highlight-text: #8f5309;
+    /* Xanh ngọc cho nhãn và khối "Đã hiểu là". */
+    --label: #2b6f6a;
+    --label-soft: #eaf3f2;
+    --label-border: #d2e5e2;
+    /* Khối SQL nền mực. Từ khóa hổ phách sáng khoảng 8:1, tên cột xanh nhạt khoảng 9:1 trên nền mực. */
+    --code: #13262f;
+    --code-foreground: #e9f0f0;
+    --code-keyword: #f2b45c;
+    --code-identifier: #9ed6cf;
+    --code-muted: #a9bdbf;
+    --code-added: rgb(217 138 30 / 0.18);
 }
 
 .dark {

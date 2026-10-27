@@ -129,7 +129,7 @@ function MembersContent({ ws }: { ws: string }) {
   return (
     <div className="flex max-w-3xl flex-col gap-10">
       <section aria-labelledby="members-heading" className="flex flex-col gap-3">
-        <h2 id="members-heading" className="text-sm font-semibold">
+        <h2 id="members-heading" className="text-[15px] font-semibold tracking-tight">
           Thành viên{members.data && ` (${members.data.length})`}
         </h2>
         {members.error ? (
@@ -169,8 +169,8 @@ function MembersContent({ ws }: { ws: string }) {
       </section>
 
       {isAdmin && (
-        <section aria-labelledby="add-member-heading" className="flex flex-col gap-3">
-          <h2 id="add-member-heading" className="text-sm font-semibold">
+        <section aria-labelledby="add-member-heading" className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs sm:px-6 sm:py-5">
+          <h2 id="add-member-heading" className="text-[15px] font-semibold tracking-tight">
             Thêm thành viên
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -187,8 +187,8 @@ function MembersContent({ ws }: { ws: string }) {
       )}
 
       {isAdmin && (
-        <section aria-labelledby="workspace-heading" className="flex flex-col gap-3">
-          <h2 id="workspace-heading" className="text-sm font-semibold">
+        <section aria-labelledby="workspace-heading" className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs sm:px-6 sm:py-5">
+          <h2 id="workspace-heading" className="text-[15px] font-semibold tracking-tight">
             Workspace
           </h2>
           <WorkspaceSettings

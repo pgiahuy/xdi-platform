@@ -6,6 +6,7 @@ Trên màn rộng hai cột chia 3:2, cột bằng chứng không hẹp hơn 26r
 ngang. Thu gọn thì cột bằng chứng chỉ còn tiêu đề và nút mở, cột chính rộng ra; trang giữ trạng thái này. */
 
 import type { ReactNode } from 'react'
+import { PanelRightClose, PanelRightOpen, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -29,19 +30,21 @@ export function AskLayout({ children, evidence, evidenceOpen, onEvidenceOpenChan
       {evidence && (
         <aside
           aria-labelledby="evidence-heading"
-          className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground sm:p-5"
+          className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground shadow-xs sm:p-5"
         >
           <div className="flex items-center justify-between gap-3">
-            <h2 id="evidence-heading" className="text-base font-semibold">
+            <h2 id="evidence-heading" className="flex items-center gap-2 text-[15px] font-semibold">
+              <ShieldCheck aria-hidden className="size-[18px] text-label" />
               Bằng chứng
             </h2>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               aria-expanded={open}
               aria-controls="evidence-body"
               onClick={() => onEvidenceOpenChange(!open)}
             >
+              {open ? <PanelRightClose aria-hidden /> : <PanelRightOpen aria-hidden />}
               {open ? 'Thu gọn' : 'Mở'}
             </Button>
           </div>

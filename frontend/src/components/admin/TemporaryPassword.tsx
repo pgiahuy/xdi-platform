@@ -27,7 +27,7 @@ export function TemporaryPassword({ email, password, onDismiss }: Props) {
   }
 
   return (
-    <div role="status" className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-4">
+    <div role="status" className="flex flex-col gap-3 rounded-xl border border-highlight-border bg-highlight-soft p-4">
       <p className="text-sm">
         Mật khẩu tạm của <span className="font-medium break-all">{email}</span>. Chuyển cho người dùng; ẩn đi rồi thì
         không xem lại được.

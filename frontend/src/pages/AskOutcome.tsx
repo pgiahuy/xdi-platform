@@ -15,7 +15,6 @@ import {
   type ChartSuggestion,
   type Understanding,
 } from '@/api/ask'
-import { AnswerSummary } from '@/components/ask/AnswerSummary'
 import { AskSection } from '@/components/ask/AskSection'
 import { AskWarnings } from '@/components/ask/AskWarnings'
 import { ClarificationForm } from '@/components/ask/ClarificationForm'
@@ -24,9 +23,11 @@ import { ResultTable } from '@/components/ask/ResultTable'
 import type { DrillTarget } from '@/components/ask/evidenceTypes'
 import type { ChartView, ResultView, UnderstandingView } from '@/components/ask/types'
 import { UnderstandingCard } from '@/components/ask/UnderstandingCard'
+import { WhyOverview } from '@/components/ask/WhyOverview'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { cn } from '@/lib/utils'
+import { buildBreakdown } from './breakdownView'
 import { buildCellDrill, buildResultView } from './resultView'
 
 const ResultChart = lazy(() => import('@/components/ask/ResultChart').then((m) => ({ default: m.ResultChart })))
@@ -57,7 +58,7 @@ const fallbackMessage = {
 export function AskOutcome({ answer, pending, onCellDrill, onChangeAssumption, onAnswerClarifications }: Props) {
   const { response, variables } = answer
   return (
-    <AskSection title={variables.question} prominent>
+    <AskSection title={variables.question} eyebrow="Câu trả lời" prominent>
       <div aria-busy={pending} className={cn('flex flex-col gap-5', pending && 'pointer-events-none opacity-60')}>
         {import.meta.env.DEV && variables.fromSamples && <SampleBadge />}
         <AskWarnings messages={response.warnings.map((warning) => warning.message)} />
@@ -115,11 +116,12 @@ type AnsweredProps = {
   onChangeAssumption: (choiceId: string, optionId: string) => void
 }
 
-// Lời giải thích của câu "tại sao" là câu trả lời, nên đứng ngay sau thẻ "Đã hiểu là", trên bảng kết quả; bảng phân
-// rã và SQL đứng sau từng con số thuộc pane bằng chứng (#52).
+// Câu "tại sao": ba số lớn, lời giải thích và đóng góp theo chiều đầu tiên là câu trả lời, nên đứng ngay sau thẻ "Đã
+// hiểu là", trên bảng kết quả; bảng phân rã đủ mọi chiều và SQL đứng sau từng con số thuộc pane bằng chứng (#52).
 function AnsweredBody({ response, pending, onCellDrill, onChangeAssumption }: AnsweredProps) {
   const result = response.result && buildResultView(response.result)
   const chart = result && response.chart && buildChartView(response.chart, result)
+  const breakdown = buildBreakdown(response).data
   return (
     <>
       {response.understanding && (
@@ -129,12 +131,7 @@ function AnsweredBody({ response, pending, onCellDrill, onChangeAssumption }: An
           disabled={pending}
         />
       )}
-      {response.explanation && (
-        <AnswerSummary
-          summary={response.explanation.summary}
-          byModel={response.explanation.summary_by_model}
-        />
-      )}
+      {breakdown && <WhyOverview breakdown={breakdown} />}
       {result && chart && (
         // key theo câu hỏi: câu trả lời mới thì thử vẽ lại. lazy() nhớ lần tải chunk đã lỗi, nên chunk lỗi chỉ hết
         // khi tải lại trang; bảng vẫn dùng được trong lúc đó.

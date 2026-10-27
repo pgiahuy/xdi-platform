@@ -7,7 +7,7 @@ Có cellDrill thì ô của cột số đo là nút: bấm thì gửi DrillTarge
 backend so đúng giá trị ô đã gửi, kể cả chuỗi decimal và null. */
 
 import { useId, useState } from 'react'
-import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
+import { ArrowUpRight, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCell } from './cellFormat'
@@ -61,15 +61,15 @@ export function ResultTable({ result, fileName, heading = 'Kết quả', cellDri
         </p>
       )}
       {/* Bảng rộng hơn màn thì cuộn ngang trong khung; khung nhận focus để người dùng bàn phím cuộn được. */}
-      <div tabIndex={0} role="region" aria-labelledby={headingId} className="overflow-x-auto rounded-lg border">
+      <div tabIndex={0} role="region" aria-labelledby={headingId} className="overflow-x-auto rounded-[10px] border">
         <table className="w-full text-sm">
-          <thead className="bg-muted/50">
+          <thead className="bg-background text-xs text-muted-foreground">
             <tr>
               {result.columns.map((column) => (
                 <th
                   key={column.name}
                   scope="col"
-                  className={cn('px-3 py-2 font-medium whitespace-nowrap', alignClass(column.kind))}
+                  className={cn('px-3.5 py-2.5 font-semibold whitespace-nowrap', alignClass(column.kind))}
                 >
                   {column.name}
                 </th>
@@ -78,11 +78,11 @@ export function ResultTable({ result, fileName, heading = 'Kết quả', cellDri
           </thead>
           <tbody>
             {rows.map((row, r) => (
-              <tr key={page * pageSize + r} className="border-t">
+              <tr key={page * pageSize + r} className="border-t hover:bg-background/60">
                 {row.map((cell, c) => (
                   <td
                     key={c}
-                    className={cn('px-3 py-1.5', alignClass(result.columns[c].kind), nowrap && 'whitespace-nowrap')}
+                    className={cn('px-3.5 py-2', alignClass(result.columns[c].kind), nowrap && 'whitespace-nowrap')}
                   >
                     {cellDrill?.measures.includes(c) ? (
                       <DrillCell
@@ -153,18 +153,22 @@ function TruncatedText({ cell, kind }: { cell: Cell; kind: CellKind }) {
 
 type DrillCellProps = { cell: Cell; kind: CellKind; target: DrillTarget; onDrill: (target: DrillTarget) => void }
 
-// Button của shadcn là thẻ button thật: Tab đi tới được, Enter và Space bấm được, không cần tự bắt phím. Màu primary
-// của theme gần như đen, nên gạch chân chấm là dấu duy nhất cho biết ô bấm được trước khi rê chuột.
+// Button của shadcn là thẻ button thật: Tab đi tới được, Enter và Space bấm được, không cần tự bắt phím. Chữ xanh ngọc
+// và gạch chân chấm cho biết ô bấm được trước khi rê chuột; mũi tên hiện khi rê chuột hoặc focus bằng bàn phím.
 function DrillCell({ cell, kind, target, onDrill }: DrillCellProps) {
   return (
     <Button
       variant="link"
       size="xs"
-      className="h-auto px-0 tabular-nums underline decoration-dotted"
+      className="group/drill h-auto gap-1 px-0 tabular-nums underline decoration-label/60 decoration-dotted underline-offset-4"
       aria-label={`Xem dòng nguồn: ${describeDrillTarget(target)}`}
       onClick={() => onDrill(target)}
     >
       <CellText cell={cell} kind={kind} />
+      <ArrowUpRight
+        aria-hidden
+        className="opacity-0 transition-opacity group-hover/drill:opacity-100 group-focus-visible/drill:opacity-100"
+      />
     </Button>
   )
 }
