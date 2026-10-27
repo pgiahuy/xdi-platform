@@ -50,7 +50,7 @@ pub struct StoredQuery {
     /// Chữ của QueryStatus::as_str.
     pub status: String,
     pub sql_guarded: Option<String>,
-    /// Form và phân rã của câu "tại sao" (khuôn ở service/ask_why.rs); None với câu thường.
+    /// Form và phân rã của câu "tại sao" (khuôn ở service/ask/why.rs); None với câu thường.
     pub explanation: Option<serde_json::Value>,
 }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/query.rs - chạy câu SQL đã qua guard trên DuckDB nhúng, trả tên cột, kiểu cột và các dòng. Tách khỏi
-analytics.rs (phần nạp file) vì chạy truy vấn có giới hạn riêng: thời gian, bộ nhớ, số dòng giữ lại. service/ask_run.rs
+analytics.rs (phần nạp file) vì chạy truy vấn có giới hạn riêng: thời gian, bộ nhớ, số dòng giữ lại. service/ask/run.rs
 gọi run_query trong spawn_blocking, đổi dòng sang ResultTable của hợp đồng và quyết định có nhờ mô hình sửa câu không.
 
 Ô giữ nguyên kiểu duckdb::types::Value. Kiểu cột trả kèm vì giá trị không đủ để biết kiểu: Value::Timestamp dùng cho
@@ -54,7 +54,7 @@ pub enum QueryError {
     /// DuckDB không chạy được câu: sai tên, sai kiểu, chuỗi ngày không đúng định dạng; hoặc cột có kiểu chưa đọc được.
     /// Mô hình thường sửa được. Lời báo nguyên văn của DuckDB, có thể chứa đường dẫn file Parquet: người gọi phải lọc
     /// trước khi đưa ra ngoài. File Parquet hỏng cũng ra loại này ("Invalid Input Error: No magic bytes found at end of
-    /// file '...'"): DuckDB không tách nó khỏi lỗi của câu, chỉ lời báo có đường dẫn file; service/ask_run.rs nhận ra
+    /// file '...'"): DuckDB không tách nó khỏi lỗi của câu, chỉ lời báo có đường dẫn file; service/ask/run.rs nhận ra
     /// qua đường dẫn đó và coi là lỗi máy chủ.
     Sql(String),
     /// Chạy quá thời gian cho phép và đã bị dừng. Sửa câu thường không làm nó nhanh hơn, nên không vào vòng sửa.
@@ -155,7 +155,7 @@ fn read_rows(conn: &Connection, sql: &str, keep_rows: usize) -> Result<QueryOutp
 
 /// Kiểu cột duckdb-rs không đọc được (TIME_NS làm nó panic) hoặc đọc ra mất thông tin (TIMETZ mất múi giờ, BIT và
 /// BIGNUM ra byte thô). Báo như lỗi của câu để mô hình đổi cột sang VARCHAR; khi đó DuckDB tự in giá trị, đúng dạng.
-/// Hạn chế: chỉ xét cột ngoài cùng; các kiểu này nằm trong danh sách hay struct thì vẫn in sai (service/ask_other_text.rs).
+/// Hạn chế: chỉ xét cột ngoài cùng; các kiểu này nằm trong danh sách hay struct thì vẫn in sai (service/ask/other_text.rs).
 fn check_column_types(columns: &[QueryColumn]) -> Result<(), QueryError> {
     use LogicalTypeId as T;
     for column in columns {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AskOutcome.tsx - phần dưới ô hỏi của trang hỏi: hiện một AskResponse theo status (hợp đồng ở
-backend/src/service/ask_contract.rs). answered: thẻ "Đã hiểu là", lời giải thích của câu "tại sao", biểu đồ nếu
+backend/src/service/ask/contract.rs). answered: thẻ "Đã hiểu là", lời giải thích của câu "tại sao", biểu đồ nếu
 backend gợi ý, bảng kết quả; needs_choice: màn câu hỏi lại; rejected, failed: lời báo của backend. Cảnh báo hiện với mọi
 status. Cả khối nằm trong một thẻ, tiêu đề là chính câu đã hỏi, để đọc kết quả mà không phải nhìn lại ô hỏi (câu trong ô
 có thể đã sửa). Dựng dữ liệu cho component từ response; việc gửi câu hỏi do AskPage.

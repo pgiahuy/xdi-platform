@@ -835,7 +835,7 @@ mod tests {
             .unwrap();
         let state =
             crate::state::AppState::new(crate::config::Config::from_env(), db.store.clone());
-        let context = crate::service::ask_context::build_ask_context(
+        let context = crate::service::ask::context::build_ask_context(
             &state,
             &ws,
             &version,

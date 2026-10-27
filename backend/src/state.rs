@@ -9,7 +9,7 @@ use tokio::sync::Semaphore;
 use crate::config::Config;
 use crate::engine::llm::{self, LlmProvider};
 use crate::engine::store::Store;
-use crate::service::ask_values::ValueCache;
+use crate::service::ask::values::ValueCache;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -27,7 +27,7 @@ pub struct AppState {
     /// có trần 1 GB cho phần bộ nhớ DuckDB quản lý (không chặn được mọi câu, xem đầu engine/query.rs). Câu sau chờ,
     /// không bị từ chối.
     pub query_jobs: Arc<Semaphore>,
-    /// Giá trị đã chuẩn hóa của các phiên bản dataset vừa được hỏi (service/ask_values.rs), để mỗi câu hỏi không phải
+    /// Giá trị đã chuẩn hóa của các phiên bản dataset vừa được hỏi (service/ask/values.rs), để mỗi câu hỏi không phải
     /// tải và bỏ dấu lại mọi giá trị.
     pub value_cache: Arc<ValueCache>,
     /// Chỉ một lượt lập hồ sơ ngữ nghĩa (service/semantic.rs) gọi mô hình mỗi lúc: nạp nhiều file liền hay việc nền

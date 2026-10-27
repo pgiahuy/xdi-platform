@@ -10,19 +10,19 @@ Các câu giả định cột ngày "order date (DateOrders)" là chữ dạng "
 VARCHAR) nên tự parse bằng strptime; hồ sơ (#22) hay bước seed (#25) đổi cột này sang kiểu ngày thì phải sửa các câu.
 Tỷ lệ và số đếm về đơn tính theo đơn hàng (đếm "Order Id" phân biệt), không theo dòng: một đơn có nhiều dòng.
 Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/năm nên DuckDB báo lỗi, và có câu sửa (task repair)
-đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask_run.rs) mà không cần mô hình thật. Ba câu nữa để thử các
+đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask/run.rs) mà không cần mô hình thật. Ba câu nữa để thử các
 nhánh còn lại của luồng hỏi (service/ask.rs) trên giao diện: "Xóa các đơn hàng bị hủy" viết câu DELETE nên guard từ
 chối (rejected); "Doanh thu theo ngày đặt hàng" đọc sai định dạng ngày cả ở câu sửa (failed); "Doanh thu ở thị trường
 châu Á" lọc Market = 'Asia', giá trị DataCo không có (cảnh báo filter_value_not_found). "Doanh thu theo tháng giảm so
 với cùng kỳ năm trước" so từng tháng của năm mới nhất trong dữ liệu với năm liền trước (câu con lấy năm lớn nhất, nên
 chạy được với cả DataCo đầy đủ lẫn bản nhỏ): hai tổng tiền theo 12 tháng, để thử luật biểu đồ vẽ hai đường trên một
-thang đo (service/ask_chart.rs). "Doanh thu theo quý của từng thị trường" ra thời gian, nhóm và một tổng, để thử
+thang đo (service/ask/chart.rs). "Doanh thu theo quý của từng thị trường" ra thời gian, nhóm và một tổng, để thử
 cột chồng. Câu narrate cho câu
-"tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask_examples.rs) nên qua
+"tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask/examples.rs) nên qua
 được bước kiểm số của #41.
-Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask_reply.rs);
+Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask/reply.rs);
 terms ghi cách hiểu từng cụm chữ ("châu Âu" là Market = Europe) để luồng hỏi có dữ liệu thử phần kiểm cách hiểu. Câu
-trả lời của task why là form câu "tại sao" (service/ask_why_prompt.rs); lần sửa form cũng là task why nên mock trả lại
+trả lời của task why là form câu "tại sao" (service/ask/why_prompt.rs); lần sửa form cũng là task why nên mock trả lại
 đúng form đó. */
 
 use std::collections::HashMap;

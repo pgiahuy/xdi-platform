@@ -29,7 +29,7 @@ scripts/     hook pre-push, kiểm số phiên bản, ghi chú phát hành, danh
 
 | Phần | Thư mục |
 |---|---|
-| Engine phân tích, guard SQL, giải thích | `backend/src/engine/`, `backend/src/service/explain*.rs` |
+| Engine phân tích, guard SQL, giải thích | `backend/src/engine/`, `backend/src/service/explain/` |
 | Service, auth, Postgres, CI, compose | `backend/src/service/`, `backend/src/auth/`, `backend/migrations/`, `.github/`, `Makefile`, `scripts/`, `docker-compose*.yml`, `backend/Dockerfile` |
 | Frontend, docs | `frontend/`, `docs/` |
 | Dữ liệu mẫu, gói ngành | `data/` |
@@ -37,7 +37,7 @@ scripts/     hook pre-push, kiểm số phiên bản, ghi chú phát hành, danh
 - Một PR chỉ đụng một phần: lõi, giao diện hoặc dữ liệu, như mục 4. Ai làm việc gì: xem người được gán issue.
 - Hợp đồng chung: `openapi.json` (API backend và frontend), schema Postgres trong `backend/migrations/`, kiểu dữ liệu
   trong `backend/src/api/`, kiểu request và response của hỏi dữ liệu và truy dòng nguồn trong
-  `backend/src/service/ask_contract.rs` và `backend/src/service/drill_contract.rs`. Đụng hợp đồng chung thì báo cả đội
+  `backend/src/service/ask/contract.rs` và `backend/src/service/drill/contract.rs`. Đụng hợp đồng chung thì báo cả đội
   trong PR.
 
 ## 3. Code

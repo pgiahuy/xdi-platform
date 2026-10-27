@@ -219,7 +219,7 @@ async fn answers_a_question_and_records_it() {
     assert_eq!(understanding["measures"].as_array().unwrap().len(), 1);
     assert!(understanding["limit"].is_null(), "{understanding}");
     assert_eq!(understanding["assumptions"][0]["id"], "time:range");
-    // So sánh nhóm: thanh ngang (ask_chart.rs, luật 1).
+    // So sánh nhóm: thanh ngang (ask/chart.rs, luật 1).
     assert_eq!(
         response["chart"],
         json!({"kind": "bar", "x": "market", "y": ["revenue"], "layout": "single", "series": null,
@@ -244,7 +244,7 @@ async fn repairs_a_failed_run_once() {
         .as_str()
         .unwrap()
         .contains("%m/%d/%Y"));
-    // Trục là ngày, chỉ 3 kỳ nên cột đứng (ask_chart.rs, luật 2: tới 10 kỳ là cột).
+    // Trục là ngày, chỉ 3 kỳ nên cột đứng (ask/chart.rs, luật 2: tới 10 kỳ là cột).
     assert_eq!(response["chart"]["kind"], "column");
     assert_eq!(response["chart"]["x"], "ship_day");
 }
@@ -343,7 +343,7 @@ async fn ambiguous_word_asks_back_until_the_user_picks() {
 }
 
 /// Mô hình hỏi lại: phương án không phải cột có thật bị bỏ; không còn phương án nào thì câu là failed và vẫn ghi lịch
-/// sử, như đường dự phòng của câu "tại sao" (explain_plain.rs).
+/// sử, như đường dự phòng của câu "tại sao" (explain/plain.rs).
 #[tokio::test]
 async fn model_clarify_keeps_only_real_columns() {
     let clarify = |options: Value| {

@@ -21,7 +21,7 @@ tower-http = { version = "0.7", features = ["fs"] }
 argon2 = "0.6.0"
 sha2 = "0.10"
 deunicode = "1.6.2"
-# Chuẩn hóa NFC chữ của câu hỏi và của hồ sơ cột trước khi so (service/ask_phrases.rs).
+# Chuẩn hóa NFC chữ của câu hỏi và của hồ sơ cột trước khi so (service/ask/phrases.rs).
 unicode-normalization = "0.1.26"
 encoding_rs = "0.8.42"
 axum-extra = { version = "0.12.6", features = ["cookie"] }

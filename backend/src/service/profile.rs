@@ -18,7 +18,7 @@ use crate::auth::WorkspaceId;
 use crate::engine::analytics::SOURCE_COLUMN;
 use crate::engine::profile::{self, ColumnStats, ValueCount};
 use crate::engine::store::{NewColumn, NewColumnValue, PendingVersion, ProfileRole, ProfileStatus};
-use crate::service::ask_phrases::fold;
+use crate::service::ask::phrases::fold;
 use crate::{error::AppError, state::AppState};
 
 /// Cột chữ có không quá ngần này giá trị khác nhau là chiều (dimension), nhiều hơn là chữ tự do (text). Cũng là ngưỡng

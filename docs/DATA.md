@@ -200,7 +200,7 @@ lẫn ngữ cảnh hỏi (#28), ngay từ khi phiên bản ở `structure`.
 ## Hồ sơ lớp ngữ nghĩa
 
 Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
-(`service/semantic.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, đơn vị của cột số đo, bí
+(`service/semantic/mod.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, đơn vị của cột số đo, bí
 danh giá trị, câu hỏi gợi ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì
 `profile_status` là `semantic`; người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Câu
 trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của provider (Gemini chặn prompt vì
