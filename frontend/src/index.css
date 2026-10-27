@@ -177,6 +177,10 @@
     /* Viền mặc định cho phần tử không có lớp ring riêng (ví dụ link bỏ qua điều hướng). shadcn để outline-ring/50:
        nửa độ đậm chỉ còn khoảng 2,4:1 kể cả với màu ring ở trên, nên dùng đủ độ đậm. */
     @apply border-border outline-ring;
+    /* Thanh cuộn mảnh cho mọi vùng cuộn (trang, cột danh sách, pane minh chứng, bảng): thanh mặc định dày chiếm chỗ
+       và nổi hơn nội dung. Màu lấy từ token nên theo cả chế độ tối. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-foreground) transparent;
     }
   body {
     @apply bg-background text-foreground;

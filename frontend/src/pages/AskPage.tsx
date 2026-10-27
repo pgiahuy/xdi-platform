@@ -210,6 +210,12 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       history={history}
       historyOpen={historyColumn}
       onHistoryOpenChange={setHistoryColumn}
+      historyHiddenActions={
+        <Button variant="outline" size="sm" onClick={startConversation} disabled={ask.isPending || empty}>
+          <Plus aria-hidden />
+          Cuộc trò chuyện mới
+        </Button>
+      }
       evidenceOpen={evidenceOpen}
       onEvidenceOpenChange={setEvidenceOpen}
       evidence={
@@ -302,8 +308,8 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       </p>
       {ask.error && <FormMessage kind="error">{ask.error.message}</FormMessage>}
       {canAsk ? (
-        // Ô hỏi dính đáy cột chính khi cuộn; nền đặc che phần trả lời trôi bên dưới.
-        <div className="sticky bottom-0 z-10 mt-auto bg-background pt-1 pb-4">
+        // Ô hỏi dính đáy khung trò chuyện khi cuộn; nền đặc cùng màu khung che phần trả lời trôi bên dưới.
+        <div className="sticky bottom-0 z-10 mt-auto bg-secondary pt-1">
           <div className="rounded-xl border bg-card p-3 text-card-foreground shadow-sm">
             <QuestionForm
               question={question}
