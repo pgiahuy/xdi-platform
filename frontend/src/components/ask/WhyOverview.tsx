@@ -68,7 +68,7 @@ function ChangeStat({ change, baseLabel, comparison }: ChangeStatProps) {
           )}
         >
           {direction !== 'flat' && <Icon aria-hidden className="size-3.5" />}
-          {word} so với {baseLabel}
+          {comparison === 'groups' ? `${word} ${baseLabel}` : `${word} so với ${baseLabel}`}
         </span>
       </dd>
     </div>

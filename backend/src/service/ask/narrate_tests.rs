@@ -498,7 +498,9 @@ fn prompt_sends_two_dimensions_with_three_groups_each() {
     assert!(prompt.contains(change), "{prompt}");
     assert!(prompt.contains("\"value\": \"9.402.500,00\""), "{prompt}");
     assert!(!prompt.contains("-1283400.00"), "{prompt}");
-    assert_eq!(prompt.matches("\"contribution\"").count(), 2 * 3);
+    // Hai chiều, ba nhóm mỗi chiều, cộng nhóm chính (main_group) mà câu thứ hai phải nói tới.
+    assert_eq!(prompt.matches("\"contribution\"").count(), 2 * 3 + 1);
+    assert!(prompt.contains("\"main_group\""), "{prompt}");
     assert!(prompt.contains("\"column\": \"Market\""));
     assert!(prompt.contains("\"column\": \"Customer Segment\""));
     assert!(prompt.contains("\"if_volume_unchanged\": \"9.226.250,00\""));

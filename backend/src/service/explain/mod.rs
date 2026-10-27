@@ -505,6 +505,11 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
         },
         "comparison": comparison_name(comparison),
         "change": build_change_json(&explanation.change, digits, comparison),
+        "main_group": find_main_group(explanation).map(|(dimension, group)| serde_json::json!({
+            "column": dimension.column,
+            "value": group.value.as_ref().map(build_value_text),
+            "contribution": build_change_json(&group.contribution, digits, comparison),
+        })),
         "dimensions": dimensions,
         "volume_price": volume_price,
     });
@@ -529,15 +534,15 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          - Vietnamese, at most three sentences, at most {MAX_SUMMARY_CHARS} characters.\n\
          - Sentence one: what is compared and the gap, with both values (\"Doanh thu Quý 3/2017 tăng 5.107,10 so với \
          Quý 2/2017, từ 15.602,19 lên 20.709,29\").\n\
-         - Sentence two: the group of the first dimension with the largest contribution in the same direction as the \
-         gap, said as what happened inside that group (\"Riêng nhóm Fishing, doanh thu tăng 4.231,78\"). Never use \
-         the words \"đóng góp\", \"chiều\" or \"phân rã\".\n\
+         - Sentence two: \"main_group\" only, said as what happened inside that group (\"Riêng nhóm Fishing, doanh \
+         thu tăng 4.231,78\"). Never use the words \"đóng góp\", \"chiều\" or \"phân rã\".\n\
          - A third sentence only when it adds something: a group that moved the other way, or the volume and price \
          split. Do not list more groups.\n\
          - \"comparison\" tells what the two slices are. \"periods\": two periods, the change is over time. \
          \"groups\": two groups at the same time, not two periods: never call them periods, never say \"tăng\" or \
-         \"giảm\" between them; use the direction words given (\"cao hơn\", \"thấp hơn\", \"bằng\"), such as \
-         \"Ở nhóm CCC, Withdrawn cao hơn Pass 85.185\".\n\
+         \"giảm\" between them, never write \"từ ... lên\" or \"từ ... xuống\"; use the direction words given \
+         (\"cao hơn\", \"thấp hơn\", \"bằng\") once per gap, such as \"Doanh thu của Corporate cao hơn Consumer \
+         2.892,80 (17.754,04 so với 14.861,24)\" and \"Ở nhóm CCC, Withdrawn cao hơn Pass 85.185\".\n\
          - Numbers in the JSON are written the Vietnamese way: a dot between groups of thousands and a comma before \
          the decimals, such as 1.152.666,24. Copy every number exactly as it appears, separators and decimal digits \
          included: never round, never add or remove digits, never change the separators, never compute a new number \
@@ -1046,6 +1051,18 @@ fn between(amount: &str, base: &str) -> String {
         return format!("bằng {base}");
     }
     format!("{amount} so với {base}")
+}
+
+/// Nhóm nói ở câu thứ hai: trong chiều đầu, nhóm có đóng góp lớn nhất cùng chiều với chênh lệch. Câu khuôn và prompt
+/// narrate cùng dùng, để mô hình không tự chọn nhóm ngược chiều rồi kể như nguyên nhân chính.
+fn find_main_group(explanation: &Explanation) -> Option<(&DimensionBreakdown, &GroupContribution)> {
+    let change = explanation.change.parse::<Decimal>().ok()?;
+    let dimension = explanation.dimensions.first()?;
+    let group = dimension
+        .groups
+        .iter()
+        .find(|group| same_direction(&group.contribution, change))?;
+    Some((dimension, group))
 }
 
 // Cùng chiều: cùng dấu, hoặc cùng bằng 0. contribution không đọc được coi như khác chiều.
