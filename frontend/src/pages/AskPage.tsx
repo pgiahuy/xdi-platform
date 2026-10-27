@@ -155,6 +155,9 @@ function WorkspaceAsk({ ws }: { ws: string }) {
 
   const openConversation = (id: string) => {
     clearTurns()
+    // Bấm lại đúng cuộc đang mở: khóa không đổi nên useConversation không tự tải, mà các lượt vừa hỏi đã bị xóa khỏi
+    // màn; tải lại để chúng hiện thành lượt đã lưu.
+    if (id === openedId) void opened.refetch()
     setOpenedId(id)
     writeUrl(datasetId, id)
   }

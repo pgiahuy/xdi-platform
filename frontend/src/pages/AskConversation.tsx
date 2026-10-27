@@ -15,6 +15,7 @@ import { ChatTurn } from '@/components/ask/ChatTurn'
 import type { DrillTarget } from '@/components/ask/evidenceTypes'
 import { SavedTurnBody } from '@/components/ask/SavedTurnBody'
 import { AskOutcome, type Answer } from './AskOutcome'
+import { buildUnderstoodLines } from './savedTurnView'
 
 type Props = {
   savedTurns: TurnItem[]
@@ -55,7 +56,7 @@ export function AskConversation(props: Props) {
         <ChatTurn key={turn.query_id} question={turn.question} ref={isLast(index) ? lastRef : undefined}>
           <SavedTurnBody
             status={turn.status}
-            understood={turn.understood}
+            understood={buildUnderstoodLines(turn.understood)}
             onAskAgain={() => props.onAskSaved(turn.question)}
             disabled={pending}
           />
