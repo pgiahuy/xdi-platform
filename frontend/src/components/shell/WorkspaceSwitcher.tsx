@@ -4,14 +4,17 @@ Vai gắn với từng workspace (docs/ARCHITECTURE.md mục 4b), nên đổi wo
 của từng workspace để người dùng biết trước mình sẽ làm được gì ở đó. Nút này không đổi vai của ai.
 Mỗi mục là một link: workspace nằm trong đường dẫn, đổi workspace là chuyển trang, mở được trong tab mới.
 Ở trang ngoài workspace (quản trị hệ thống, tài khoản) không có workspace đang mở: nút thành "Chọn workspace", và người
-chưa thuộc workspace nào thấy một dòng chữ thay cho nút, vì không có gì để chọn. */
+chưa thuộc workspace nào thấy một dòng chữ thay cho nút, vì không có gì để chọn.
+Mục cuối "Tạo workspace" chỉ báo cho trang qua onCreateWorkspace; hộp thoại nằm ngoài menu (AppShell), vì menu đóng
+lại ngay khi chọn mục và gỡ mọi thứ bên trong nó. */
 
-import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react'
+import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -24,9 +27,11 @@ type Props = {
   workspaces: WorkspaceOption[]
   link: LinkComponent
   onNavigate?: () => void
+  /** Không có thì menu không có mục tạo workspace. */
+  onCreateWorkspace?: () => void
 }
 
-export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate }: Props) {
+export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate, onCreateWorkspace }: Props) {
   if (workspaces.length === 0) {
     return <p className="truncate px-2 py-1.5 text-sm text-sidebar-muted">Chưa thuộc workspace nào</p>
   }
@@ -86,6 +91,15 @@ export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate 
             </DropdownMenuItem>
           )
         })}
+        {onCreateWorkspace && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className={menuItemFocus} onSelect={onCreateWorkspace}>
+              <PlusIcon aria-hidden="true" className="size-4 shrink-0" />
+              Tạo workspace
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
