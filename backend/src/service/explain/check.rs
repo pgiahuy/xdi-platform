@@ -424,10 +424,21 @@ pub(super) fn find_column<'a>(
 }
 
 fn wrong_role(column: &ProfileColumn, field: &str, wanted: &str) -> FieldError {
+    // Cột kỳ học dạng chữ ("2013J", "2014J") có vai trò chiều: mô hình hay đặt nó vào "time", sửa lần hai thì bỏ "time"
+    // mà quên "groups", form sai hai lần và câu rơi về câu thường. Chỉ luôn đường sửa đúng trong lời báo lỗi.
+    let hint = if field.starts_with("time") && column.role == "dimension" {
+        format!(
+            "; to compare two values of \"{}\", leave \"time\" out and set \"groups\" to this column with the two \
+             values: the one the question asks about as \"compare\", the other as \"base\"",
+            column.name
+        )
+    } else {
+        String::new()
+    };
     FieldError::new(
         field,
         format!(
-            "\"{}\" has role {}; this field needs a column of role {wanted}",
+            "\"{}\" has role {}; this field needs a column of role {wanted}{hint}",
             column.name, column.role
         ),
     )

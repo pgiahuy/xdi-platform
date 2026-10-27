@@ -462,6 +462,16 @@ fn build_unanswerable_outcome(
     steps: &mut Vec<AskStep>,
 ) -> Option<WhyOutcome> {
     let unanswerable = read.form.unanswerable.as_ref().filter(|u| u.is_given())?;
+    // Form đã nêu độ đo hay chỉ số thì câu trả lời được bằng phân rã: mô hình đôi khi vẫn báo unanswerable vì dữ liệu
+    // "không ghi lý do", trong khi câu "tại sao" ở đây không cần cột lý do. Bỏ qua để chạy phân rã như thường.
+    let has_metric = read
+        .form
+        .metric
+        .as_deref()
+        .is_some_and(|m| !m.trim().is_empty());
+    if has_metric || read.form.measure.is_some() {
+        return None;
+    }
     let names: Vec<&str> = input
         .prompt
         .context
