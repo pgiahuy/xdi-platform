@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/shell/AppShell.tsx - bố cục chung của mọi trang sau khi đăng nhập: thanh bên (có hàng thương hiệu),
-thanh trên nền trắng, vùng nội dung nền sáng với container max-w-7xl căn giữa. Thanh bên nền mực (màu sidebar trong index.css). Màn rộng: tài khoản và phiên bản ở chân thanh bên; màn hẹp: tài khoản ở góc thanh trên.
+thanh trên nền trắng, vùng nội dung nền sáng, rộng hết phần còn lại của màn. Thanh bên nền mực (màu sidebar trong index.css). Màn rộng: tài khoản và phiên bản ở chân thanh bên; màn hẹp: tài khoản ở góc thanh trên.
 Trang trong workspace truyền workspace đang mở; trang ngoài workspace (quản trị hệ thống, tài khoản) thì không.
 Từ 1024px trở lên thanh bên đứng cố định bên trái. Hẹp hơn thì thanh bên ẩn vào ngăn kéo mở từ nút menu trên thanh
 trên; cùng một nội dung thanh bên dùng cho cả hai chỗ, nên thêm mục điều hướng chỉ sửa một nơi.
@@ -181,8 +181,9 @@ export function AppShell(props: Props) {
         )}
 
         <main id="main" tabIndex={-1} className="flex-1 bg-background focus:outline-none">
-          {/* Container giới hạn chiều rộng: trên màn siêu rộng nội dung nằm giữa thay vì trải hết hai mép. */}
-          <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:px-8">{props.children}</div>
+          {/* Nội dung rộng hết vùng còn lại: trang hỏi có ba cột (danh sách, khung chat, minh chứng), giới hạn bề rộng thì
+          màn rộng bỏ trống hai bên còn các cột lại chật. */}
+          <div className="w-full px-4 py-6 lg:px-8">{props.children}</div>
         </main>
       </div>
 
