@@ -5,7 +5,7 @@ sách ẩn, trang mở danh sách trong ngăn kéo. Cột bằng chứng là ch�
 các bước); trang truyền nội dung vào khi đã có câu trả lời, không có thì cột không chiếm chỗ.
 Từ xl cột chính và cột bằng chứng chia 3:2, cột bằng chứng không hẹp hơn 26rem để bảng phân rã bốn cột số đọc được
 không cần cuộn ngang; giữa lg và xl cột bằng chứng xuống dưới cột chính. Thu gọn thì cột bằng chứng biến mất, chỉ còn
-nút "Mở minh chứng" (từ xl dính mép phải màn hình), cột chính rộng ra; trang giữ trạng thái này. Cột danh sách ẩn được (nút ở đầu cột, trang nhớ trạng thái);
+nút "Mở minh chứng" (từ xl dính mép phải màn hình, ngang đầu trang), cột chính rộng ra; trang giữ trạng thái này. Cột danh sách ẩn được (nút ở đầu cột, trang nhớ trạng thái);
 ẩn thì đầu cột chính có nút hiện lại. Cột danh sách và cột bằng chứng dính dưới thanh trên (h-16) khi
 cuộn, cuộn riêng khi dài hơn màn: cuộc trò chuyện dài thì bằng chứng của lượt đang chọn vẫn ở trong tầm mắt. */
 
@@ -21,6 +21,9 @@ type Props = {
   /** Cột danh sách đang hiện (từ lg); ẩn thì chỉ còn nút hiện lại ở đầu cột chính. */
   historyOpen: boolean
   onHistoryOpenChange: (open: boolean) => void
+  /** Nút đứng cạnh nút hiện lại danh sách khi cột đang ẩn (Cuộc trò chuyện mới): ẩn danh sách không làm mất lối tạo
+   * cuộc mới. */
+  historyHiddenActions?: ReactNode
   evidence?: ReactNode
   evidenceOpen: boolean
   onEvidenceOpenChange: (open: boolean) => void
@@ -43,31 +46,41 @@ export function AskLayout(props: Props) {
       )}
     >
       {history && (
-        <div className={cn('hidden lg:flex lg:flex-col lg:gap-2', stickyColumn)}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Ẩn danh sách cuộc trò chuyện"
-            title="Ẩn danh sách cuộc trò chuyện"
-            onClick={() => onHistoryOpenChange(false)}
-            className="self-end"
-          >
-            <PanelLeftClose aria-hidden />
-          </Button>
+        // Cột danh sách là một khung riêng như pane minh chứng, để không lẫn với câu gợi ý và khung trò chuyện bên cạnh.
+        <div
+          className={cn(
+            'hidden lg:flex lg:flex-col lg:gap-2 lg:rounded-xl lg:border lg:bg-card lg:p-3 lg:text-card-foreground lg:shadow-xs',
+            // Cột không tự cuộn: phần đầu cột đứng yên, danh sách bên trong cuộn riêng (ConversationList).
+            'lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-hidden',
+          )}
+        >
+          {/* Tên cột và nút ẩn cùng một hàng: nút đứng riêng một hàng thì đầu cột trống một khoảng. */}
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Cuộc trò chuyện</h2>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Ẩn danh sách cuộc trò chuyện"
+              title="Ẩn danh sách cuộc trò chuyện"
+              onClick={() => onHistoryOpenChange(false)}
+            >
+              <PanelLeftClose aria-hidden />
+            </Button>
+          </div>
           {history}
         </div>
       )}
-      <div className="flex min-w-0 flex-col gap-6">
+      {/* Khung trò chuyện có nền riêng (secondary), khác nền trang và nền thẻ trả lời, để nhìn ra ranh giới với cột
+      danh sách và cột minh chứng. */}
+      <div className="flex min-w-0 flex-col gap-6 rounded-xl border bg-secondary p-4 sm:p-5">
         {props.history && !historyOpen && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onHistoryOpenChange(true)}
-            className="hidden self-start lg:inline-flex"
-          >
-            <PanelLeftOpen aria-hidden />
-            Hiện danh sách cuộc trò chuyện
-          </Button>
+          <div className="hidden flex-wrap items-center gap-2 lg:flex">
+            <Button variant="outline" size="sm" onClick={() => onHistoryOpenChange(true)}>
+              <PanelLeftOpen aria-hidden />
+              Hiện danh sách cuộc trò chuyện
+            </Button>
+            {props.historyHiddenActions}
+          </div>
         )}
         {children}
       </div>
@@ -110,7 +123,7 @@ export function AskLayout(props: Props) {
           className={cn(
             'justify-self-start',
             history && 'lg:col-start-2',
-            'xl:fixed xl:top-1/2 xl:right-0 xl:z-20 xl:h-auto xl:-translate-y-1/2 xl:flex-col xl:gap-2 xl:rounded-r-none xl:border-r-0 xl:px-1.5 xl:py-3 xl:shadow-sm',
+            'xl:fixed xl:top-24 xl:right-0 xl:z-20 xl:h-auto xl:flex-col xl:gap-2 xl:rounded-r-none xl:border-r-0 xl:px-1.5 xl:py-3 xl:shadow-sm',
           )}
         >
           <PanelRightOpen aria-hidden />
@@ -122,5 +135,3 @@ export function AskLayout(props: Props) {
     </div>
   )
 }
-
-const stickyColumn = 'lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto'

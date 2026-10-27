@@ -30,7 +30,7 @@ const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeSt
 
 export function ConversationList({ conversations, activeId, loading, error, onOpen, onNew, disabled }: Props) {
   return (
-    <nav aria-label="Các cuộc trò chuyện" className="flex flex-col gap-3">
+    <nav aria-label="Các cuộc trò chuyện" className="flex min-h-0 flex-col gap-3">
       <Button variant="outline" size="sm" onClick={onNew} disabled={disabled} className="w-full justify-start">
         <Plus aria-hidden />
         Cuộc trò chuyện mới
@@ -42,7 +42,9 @@ export function ConversationList({ conversations, activeId, loading, error, onOp
         <p className="text-sm text-muted-foreground">Chưa có cuộc trò chuyện nào trên dataset này.</p>
       )}
       {conversations.length > 0 && (
-        <ul className="flex flex-col gap-1">
+        // Chỉ danh sách cuộn, nút "Cuộc trò chuyện mới" và nhãn ở trên đứng yên: danh sách dài thì vẫn tạo cuộc mới được
+        // mà không phải cuộn ngược lên. Trong ngăn kéo của màn hẹp không có giới hạn chiều cao nên ngăn kéo cuộn cả khối.
+        <ul className="-mr-1 flex min-h-0 flex-col gap-1 overflow-y-auto pr-1">
           {conversations.map((item) => {
             const active = item.id === activeId
             return (

@@ -17,11 +17,13 @@ type Props = {
   /** Pane bằng chứng đang hiện của lượt này: viền màu chính, nút bằng chứng ở trạng thái nhấn. */
   selected?: boolean
   onShowEvidence?: () => void
+  /** Khối trả lời vừa nội dung thay vì rộng hết cột: lượt đang chờ chỉ có ba chấm. */
+  compact?: boolean
   /** Trang cuộn tới lượt mới bằng ref của khung lượt (React 19 nhận ref như một prop thường). */
   ref?: Ref<HTMLElement>
 }
 
-export function ChatTurn({ question, children, selected = false, onShowEvidence, ref }: Props) {
+export function ChatTurn({ question, children, selected = false, onShowEvidence, compact = false, ref }: Props) {
   const headingId = useId()
   return (
     <article ref={ref} aria-labelledby={headingId} className="flex scroll-mt-20 flex-col gap-2">
@@ -36,7 +38,8 @@ export function ChatTurn({ question, children, selected = false, onShowEvidence,
       <p className="mt-1 text-xs font-semibold tracking-wider text-label uppercase">Trả lời</p>
       <div
         className={cn(
-          'flex min-w-0 flex-col gap-4 rounded-xl border bg-card p-4 text-card-foreground shadow-xs sm:px-6 sm:py-5',
+          'flex min-w-0 flex-col gap-4 rounded-xl border bg-card text-card-foreground shadow-xs',
+          compact ? 'self-start px-4 py-3' : 'p-4 sm:px-6 sm:py-5',
           selected && 'border-primary/60 ring-1 ring-primary/25',
         )}
       >

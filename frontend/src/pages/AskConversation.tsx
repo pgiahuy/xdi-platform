@@ -8,7 +8,6 @@ Số lượt hiện tăng (câu mới đang chờ, mở lại một cuộc) thì
 phần đầu trước. Câu trả lời về thay lượt đang chờ ở đúng chỗ, số lượt không đổi, nên không cuộn lần nữa. */
 
 import { useEffect, useRef } from 'react'
-import { Loader2 } from 'lucide-react'
 import type { ChosenOption } from '@/api/ask'
 import type { TurnItem } from '@/api/conversations'
 import { ChatTurn } from '@/components/ask/ChatTurn'
@@ -97,10 +96,17 @@ export function AskConversation(props: Props) {
         </div>
       ))}
       {pendingQuestion !== null && (
-        <ChatTurn question={pendingQuestion} ref={lastRef}>
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
-            Đang trả lời...
+        <ChatTurn question={pendingQuestion} ref={lastRef} compact>
+          {/* Ba chấm nhảy lệch nhịp như ô chat quen thuộc; chữ chỉ cho trình đọc màn hình. */}
+          <p className="flex h-5 items-center gap-1.5">
+            <span className="sr-only">Đang trả lời...</span>
+            {['[animation-delay:-0.3s]', '[animation-delay:-0.15s]', ''].map((delay) => (
+              <span
+                key={delay}
+                aria-hidden
+                className={`size-2 animate-bounce rounded-full bg-muted-foreground/70 motion-reduce:animate-none ${delay}`}
+              />
+            ))}
           </p>
         </ChatTurn>
       )}
