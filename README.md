@@ -1,7 +1,7 @@
 # xdi-platform
 
-Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên, đang phát triển; bản phát hành đầu tiên là
-[v0.1.0](https://github.com/pgiahuy/xdi-platform/releases). Nạp một file CSV, Parquet hoặc Excel, hỏi bằng tiếng Việt,
+Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên, đang phát triển; bản phát hành mới nhất là
+[v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Nạp một file CSV, Parquet hoặc Excel, hỏi bằng tiếng Việt,
 nhận bảng, biểu đồ và câu SQL đã chạy. Với câu hỏi "tại sao", hệ thống tính nhóm nào làm con số tăng hay giảm và cho
 xem các dòng dữ liệu đứng sau từng nhóm. Con số do engine phân tích (DuckDB) tính trên
 dữ liệu; mô hình ngôn ngữ chỉ viết SQL hay điền form từ câu hỏi, viết mô tả cột và lời giải thích, không nhận các dòng

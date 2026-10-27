@@ -1,6 +1,6 @@
 # xdi-platform
 
-*Natural language data analysis, in development; the first release is v0.1.0. Upload a CSV, Parquet or Excel file, ask a question in Vietnamese, and get a table, a chart and the SQL that produced it, checked by a SQL guard before it runs. For "why" questions, the engine computes which groups drove the change and shows the source rows behind each group. Rust backend, DuckDB for analytics, Postgres for application data, React UI. Apache 2.0. Vietnamese documentation follows.*
+*Natural language data analysis, in development; the latest release is v0.2.0. Upload a CSV, Parquet or Excel file, ask a question in Vietnamese, and get a table, a chart and the SQL that produced it, checked by a SQL guard before it runs. For "why" questions, the engine computes which groups drove the change and shows the source rows behind each group. Rust backend, DuckDB for analytics, Postgres for application data, React UI. Apache 2.0. Vietnamese documentation follows.*
 
 Nạp một file dữ liệu, hỏi bằng tiếng Việt, nhận bảng, biểu đồ và câu SQL đã chạy. Với câu hỏi "tại sao", hệ thống tính
 nhóm nào làm con số tăng hay giảm và cho xem các dòng dữ liệu đứng sau từng nhóm. Con số do engine phân tích tính trên
