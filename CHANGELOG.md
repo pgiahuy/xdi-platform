@@ -4,6 +4,8 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-27
+
 ### Added
 
 - Lời giải thích câu "tại sao" dễ đọc hơn: câu đầu nói so gì với gì và chênh bao nhiêu, câu sau nói nhóm nào tạo phần lớn chênh lệch bằng lời thường; so hai nhóm thì nói "cao hơn", "thấp hơn" thay cho "tăng", "giảm".
@@ -21,6 +23,8 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Trang hỏi thành khung trò chuyện, kèm danh sách cuộc trò chuyện cũ để mở lại và hỏi tiếp (#164).
 - Trang hỏi gọn hơn: phần "Đã hiểu là" và bảng thu gọn được, pane đổi tên thành Minh chứng và thu về mép phải, thanh bên và danh sách cuộc trò chuyện ẩn được, lời trả lời giọng báo cáo (#164).
 - Nút **Tạo workspace** ở cuối ô chọn workspace và ở màn của người chưa thuộc workspace nào.
+- Câu "tại sao" cho chỉ số tỷ lệ và trung bình (ví dụ tỷ lệ giao trễ): chênh lệch tách thành phần do cơ cấu và phần do hiệu suất của từng nhóm.
+- Hỏi theo cuộc trò chuyện (#164): câu sau hiểu theo các câu trước trong cùng cuộc, mỗi lượt giữ câu trả lời và bằng chứng riêng, có nút "Cuộc trò chuyện mới".
 
 ### Changed
 
@@ -28,8 +32,6 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Màn đăng nhập và thiết lập lần đầu (#159): form nằm cạnh panel giới thiệu sản phẩm, phiên bản máy chủ ở dưới form.
 - Khung ứng dụng (#161): thanh bên có logo và icon cho từng mục, tài khoản chuyển xuống chân thanh bên, nội dung căn giữa trên màn rộng.
 - Ở trang quản trị hệ thống, thanh bên vẫn giữ các mục của workspace đang làm việc thay vì ẩn đi.
-- Câu "tại sao" cho chỉ số tỷ lệ và trung bình (ví dụ tỷ lệ giao trễ): chênh lệch tách thành phần do cơ cấu và phần do hiệu suất của từng nhóm.
-- Hỏi theo cuộc trò chuyện (#164): câu sau hiểu theo các câu trước trong cùng cuộc, mỗi lượt giữ câu trả lời và bằng chứng riêng, có nút "Cuộc trò chuyện mới".
 - Giao diện mới "Mực và hổ phách": thanh bên nền mực, màu nhấn hổ phách cho nút chính và số chênh lệch, font Be Vietnam Pro đóng gói sẵn, chạy không cần mạng.
 - Bảng kết quả: bấm vào bất kỳ chỗ nào trong ô số (và trên cả dòng khi bảng có một cột số đo) để xem dòng nguồn, không cần nhắm đúng con số.
 
