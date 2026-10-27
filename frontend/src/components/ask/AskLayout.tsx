@@ -72,7 +72,7 @@ export function AskLayout(props: Props) {
       )}
       {/* Khung trò chuyện có nền riêng (secondary), khác nền trang và nền thẻ trả lời, để nhìn ra ranh giới với cột
       danh sách và cột minh chứng. */}
-      <div className="flex min-w-0 flex-col gap-6 rounded-xl border bg-secondary p-4 sm:p-5">
+      <div className="flex min-w-0 flex-col gap-6 border bg-secondary p-4 sm:p-5">
         {props.history && !historyOpen && (
           <div className="hidden flex-wrap items-center gap-2 lg:flex">
             <Button variant="outline" size="sm" onClick={() => onHistoryOpenChange(true)}>

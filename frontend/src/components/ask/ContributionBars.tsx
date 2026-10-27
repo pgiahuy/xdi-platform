@@ -85,7 +85,7 @@ function ContributionRow({ bar, largest }: { bar: Bar; largest: number }) {
         {direction !== 'flat' && (
           <span
             className={cn(
-              'absolute inset-y-0.5 rounded-sm',
+              'absolute inset-y-0.5',
               direction === 'down' ? 'bg-highlight' : 'bg-label',
               bar.muted && 'opacity-60',
             )}
