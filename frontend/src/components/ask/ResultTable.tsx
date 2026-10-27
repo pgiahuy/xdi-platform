@@ -37,6 +37,8 @@ export function ResultTable({ result, fileName, heading = 'Kết quả', cellDri
   const [page, setPage] = useState(0)
   const pageCount = Math.max(1, Math.ceil(result.rows.length / pageSize))
   const rows = result.rows.slice(page * pageSize, (page + 1) * pageSize)
+  // Cột số đo duy nhất của bảng, nếu có: cả dòng bấm được để xem dòng nguồn của ô đó.
+  const rowDrill = cellDrill?.measures.length === 1 ? cellDrill.measures[0] : undefined
   const partial = result.truncated || result.limitReached
 
   return (
@@ -78,11 +80,25 @@ export function ResultTable({ result, fileName, heading = 'Kết quả', cellDri
           </thead>
           <tbody>
             {rows.map((row, r) => (
-              <tr key={page * pageSize + r} className="border-t hover:bg-background/60">
+              <tr
+                key={page * pageSize + r}
+                className={cn('border-t hover:bg-background/60', rowDrill !== undefined && 'cursor-pointer')}
+                // Bảng chỉ có một cột số đo: bấm chỗ nào trên dòng cũng mở dòng nguồn của ô đó, không phải nhắm đúng con
+                // số. Bàn phím vẫn đi qua nút trong ô, nên dòng không cần tabIndex hay role riêng.
+                onClick={
+                  rowDrill === undefined || cellDrill === undefined
+                    ? undefined
+                    : () => cellDrill.onDrill(buildTarget(result, cellDrill, row, rowDrill))
+                }
+              >
                 {row.map((cell, c) => (
                   <td
                     key={c}
-                    className={cn('px-3.5 py-2', alignClass(result.columns[c].kind), nowrap && 'whitespace-nowrap')}
+                    className={cn(
+                      cellDrill?.measures.includes(c) ? 'p-0' : 'px-3.5 py-2',
+                      alignClass(result.columns[c].kind),
+                      nowrap && 'whitespace-nowrap',
+                    )}
                   >
                     {cellDrill?.measures.includes(c) ? (
                       <DrillCell
@@ -160,9 +176,14 @@ function DrillCell({ cell, kind, target, onDrill }: DrillCellProps) {
     <Button
       variant="link"
       size="xs"
-      className="group/drill h-auto gap-1 px-0 tabular-nums underline decoration-label/60 decoration-dotted underline-offset-4"
+      // Nút phủ cả ô (đệm của ô chuyển vào nút): bấm vào khoảng trống trong ô cũng mở dòng nguồn.
+      className="group/drill flex h-auto w-full justify-end gap-1 rounded-none px-3.5 py-2 tabular-nums underline decoration-label/60 decoration-dotted underline-offset-4"
       aria-label={`Xem dòng nguồn: ${describeDrillTarget(target)}`}
-      onClick={() => onDrill(target)}
+      onClick={(event) => {
+        // Dòng cũng bắt click khi bảng có một cột số đo; chặn để không mở hai lần.
+        event.stopPropagation()
+        onDrill(target)
+      }}
     >
       <CellText cell={cell} kind={kind} />
       <ArrowUpRight
