@@ -51,7 +51,8 @@ export function AskConversation(props: Props) {
   const marked = turns.length > 1
   const isLast = (position: number) => position === count - 1
   return (
-    <div className="flex flex-col gap-6">
+    // Khoảng cách giữa hai lượt lớn hơn hẳn khoảng trong một lượt, để mắt nhóm câu hỏi với đúng câu trả lời của nó.
+    <div className="flex flex-col gap-10">
       {savedTurns.map((turn, index) => (
         <ChatTurn key={turn.query_id} question={turn.question} ref={isLast(index) ? lastRef : undefined}>
           <SavedTurnBody
@@ -79,6 +80,7 @@ export function AskConversation(props: Props) {
             <AskOutcome
               answer={turn}
               pending={pendingTurn === index}
+              latest={index === turns.length - 1}
               onCellDrill={(target) => props.onCellDrill(index, target)}
               onChangeAssumption={(choiceId, optionId) =>
                 props.onAskAgain(index, [{ choice_id: choiceId, option_id: optionId }])
