@@ -51,13 +51,13 @@ export function UploadForm(props: Props) {
 
   return (
     <form
-      className="flex flex-col gap-4 rounded-lg border p-4"
+      className="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-xs sm:px-6 sm:py-5"
       onSubmit={(event) => {
         event.preventDefault()
         props.onSubmit()
       }}
     >
-      <h2 ref={headingRef} tabIndex={-1} className="text-sm font-semibold focus:outline-none">
+      <h2 ref={headingRef} tabIndex={-1} className="text-[15px] font-semibold tracking-tight focus:outline-none">
         {target ? `Nạp phiên bản mới cho ${target.name}` : 'Nạp dữ liệu'}
       </h2>
       {target && (
@@ -82,7 +82,7 @@ export function UploadForm(props: Props) {
           disabled={busy}
           onChange={(event) => props.onFilesChange([...(event.target.files ?? [])])}
           aria-describedby={`${fileInputId}-hint`}
-          className="max-w-full text-sm file:mr-3 file:rounded-md file:border file:bg-background file:px-2.5 file:py-1 file:text-sm file:font-medium"
+          className="max-w-full text-sm file:mr-3 file:rounded-md file:border file:border-input file:bg-card file:px-2.5 file:py-1 file:text-sm file:font-medium"
         />
         <p id={`${fileInputId}-hint`} className="text-xs text-muted-foreground">
           Một hoặc nhiều file CSV hoặc Parquet cùng cột (gộp thành một bảng), hoặc một file Excel.

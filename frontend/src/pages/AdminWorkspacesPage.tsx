@@ -76,7 +76,7 @@ export function AdminWorkspacesPage() {
 
   return (
     <section aria-labelledby="workspaces-heading" className="flex max-w-3xl flex-col gap-3">
-      <h2 id="workspaces-heading" className="text-sm font-semibold">
+      <h2 id="workspaces-heading" className="text-[15px] font-semibold tracking-tight">
         Workspace ({workspaces.length})
       </h2>
       <p className="text-sm text-muted-foreground">

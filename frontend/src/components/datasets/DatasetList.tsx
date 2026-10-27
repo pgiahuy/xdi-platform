@@ -18,7 +18,7 @@ const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeSt
 
 export function DatasetList({ datasets, onAddVersion, onDelete, deletePending }: Props) {
   return (
-    <ul className="divide-y rounded-lg border">
+    <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {datasets.map((dataset) => (
         <li key={dataset.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           <div className="min-w-0 flex-1 basis-56">

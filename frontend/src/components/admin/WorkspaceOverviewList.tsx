@@ -28,7 +28,7 @@ export function WorkspaceOverviewList({ workspaces, busyId, error, success, onAs
   return (
     <ul className="flex flex-col gap-4">
       {workspaces.map((workspace) => (
-        <li key={workspace.id} className="flex flex-col gap-3 rounded-lg border p-3">
+        <li key={workspace.id} className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs">
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold" title={workspace.name}>
               {workspace.name}

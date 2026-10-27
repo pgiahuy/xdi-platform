@@ -59,7 +59,7 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
       )}
 
       <section aria-labelledby="dataset-list-heading" className="flex flex-col gap-3">
-        <h2 id="dataset-list-heading" className="text-sm font-semibold">
+        <h2 id="dataset-list-heading" className="text-[15px] font-semibold tracking-tight">
           Dataset của workspace
         </h2>
         <ListBody

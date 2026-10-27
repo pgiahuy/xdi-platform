@@ -17,7 +17,7 @@ export function UploadResults({ entries }: { entries: UploadEntry[] }) {
       {entries.length > 0 && (
         <ul className="mt-3 flex flex-col gap-2">
           {entries.map((entry) => (
-            <li key={entry.id} className="rounded-md border px-3 py-2 text-sm">
+            <li key={entry.id} className="rounded-lg border bg-card px-3 py-2 text-sm">
               <p className="font-medium break-words">{entry.label}</p>
               <StatusLine status={entry.status} />
             </li>

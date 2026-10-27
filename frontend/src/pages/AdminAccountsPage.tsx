@@ -122,7 +122,7 @@ export function AdminAccountsPage() {
   return (
     <div className="flex max-w-3xl flex-col gap-10">
       <section aria-labelledby="accounts-heading" className="flex flex-col gap-3">
-        <h2 id="accounts-heading" className="text-sm font-semibold">
+        <h2 id="accounts-heading" className="text-[15px] font-semibold tracking-tight">
           Tài khoản ({accounts.length})
         </h2>
         {temporary && temporaryFor && (
@@ -142,8 +142,8 @@ export function AdminAccountsPage() {
         />
       </section>
 
-      <section aria-labelledby="create-account-heading" className="flex flex-col gap-3">
-        <h2 id="create-account-heading" className="text-sm font-semibold">
+      <section aria-labelledby="create-account-heading" className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs sm:px-6 sm:py-5">
+        <h2 id="create-account-heading" className="text-[15px] font-semibold tracking-tight">
           Tạo tài khoản
         </h2>
         <CreateAccountForm
