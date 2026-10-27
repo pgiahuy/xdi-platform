@@ -4,6 +4,7 @@ Component không dùng router (AGENTS.md mục 3), nên trang truyền vào sẵ
 bọc router. Đổi router sau này chỉ cần đổi component Link đó, không sửa khung. */
 
 import type { ComponentProps, ComponentType } from 'react'
+import type { LucideIcon } from 'lucide-react'
 
 /** Link do trang cung cấp: nhận mọi thuộc tính của thẻ a, đường dẫn đặt ở href. */
 export type LinkComponent = ComponentType<ComponentProps<'a'> & { href: string }>
@@ -12,6 +13,8 @@ export type NavItem = {
   href: string
   label: string
   active: boolean
+  /** Icon Lucide đứng trước chữ, giúp quét nhanh các mục chức năng. Không bắt buộc. */
+  icon?: LucideIcon
 }
 
 /** Một workspace trong danh sách đổi workspace. href đã trỏ sẵn tới đúng mục đang xem của workspace đó. */

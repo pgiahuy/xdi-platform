@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/shell/AppShell.tsx - bố cục chung của mọi trang sau khi đăng nhập: thanh bên, thanh trên, vùng nội dung.
+/* components/shell/AppShell.tsx - bố cục chung của mọi trang sau khi đăng nhập: thanh bên (có hàng thương hiệu),
+thanh trên, vùng nội dung nền muted với container max-w-7xl căn giữa.
 Trang trong workspace truyền workspace đang mở; trang ngoài workspace (quản trị hệ thống, tài khoản) thì không.
 Từ 1024px trở lên thanh bên đứng cố định bên trái. Hẹp hơn thì thanh bên ẩn vào ngăn kéo mở từ nút menu trên thanh
 trên; cùng một nội dung thanh bên dùng cho cả hai chỗ, nên thêm mục điều hướng chỉ sửa một nơi.
@@ -138,8 +139,9 @@ export function AppShell(props: Props) {
           </div>
         )}
 
-        <main id="main" tabIndex={-1} className="flex-1 px-4 py-6 focus:outline-none lg:px-8">
-          {props.children}
+        <main id="main" tabIndex={-1} className="flex-1 bg-muted/30 focus:outline-none">
+          {/* Container giới hạn chiều rộng: trên màn siêu rộng nội dung nằm giữa thay vì trải hết hai mép. */}
+          <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:px-8">{props.children}</div>
         </main>
       </div>
     </div>
@@ -155,8 +157,12 @@ function SidebarContent(props: SidebarProps) {
   const { navItems, currentWorkspace, workspaces, serverInfo, link, onNavigate, closeButton } = props
   return (
     <div className="flex h-full flex-col">
-      {/* Cùng chiều cao h-14 với thanh trên, để hai đường kẻ dưới nằm trên một hàng. */}
-      <div className="flex h-14 shrink-0 items-center gap-1 border-b px-2">
+      {/* Hàng thương hiệu: cùng dấu hiệu với màn đăng nhập (favicon.svg), bấm về trang đầu. */}
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
+        <img src="/favicon.svg" alt="" className="size-6" />
+        <span className="text-sm font-semibold tracking-tight">xdi-platform</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
         <div className="min-w-0 flex-1">
           <WorkspaceSwitcher current={currentWorkspace} workspaces={workspaces} link={link} onNavigate={onNavigate} />
         </div>
