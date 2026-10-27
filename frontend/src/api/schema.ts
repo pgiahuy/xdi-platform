@@ -729,6 +729,10 @@ export interface components {
             groups: components["schemas"]["GroupContribution"][];
             /** @description How to read the group values, like the `kind` of a result column. */
             kind: components["schemas"]["ValueKind"];
+            /** @description Ratio measures only: sum of `mix_effect` of every group; `mix_effect + rate_effect` is `change`. */
+            mix_effect: string | null;
+            /** @description Ratio measures only: sum of `rate_effect` of every group. */
+            rate_effect: string | null;
             /** @description SQL that computed the groups of both slices, after the guard. */
             sql: string;
         };
@@ -809,6 +813,8 @@ export interface components {
             dimensions: components["schemas"]["DimensionBreakdown"][];
             /** @description Measure that changed, text for the end user (Vietnamese). */
             measure: string;
+            /** @description How the measure adds up over groups, which decides how to read the numbers below. */
+            measure_kind: components["schemas"]["MeasureKind"];
             /** @description Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown. */
             summary: string;
             /**
@@ -831,8 +837,22 @@ export interface components {
         GroupContribution: {
             base_value: string;
             compare_value: string;
-            /** @description `compare_value - base_value` of this group. */
+            /**
+             * @description Part of `change` from this group: `compare_value - base_value` for a total, `mix_effect + rate_effect` for a
+             *     ratio.
+             */
             contribution: string;
+            /**
+             * @description Ratio measures only: part of `change` because this group's share of the denominator changed,
+             *     `(compare_share - base_share) * (base_value + compare_value) / 2`. For a group with no denominator in one slice,
+             *     the ratio of that slice is taken equal to the other slice, so the whole contribution is a mix effect.
+             */
+            mix_effect: string | null;
+            /**
+             * @description Ratio measures only: part of `change` because the ratio inside this group changed,
+             *     `(base_share + compare_share) / 2 * (compare_value - base_value)`.
+             */
+            rate_effect: string | null;
             value: components["schemas"]["CellValue"] | null;
         };
         HealthResponse: {
@@ -856,6 +876,13 @@ export interface components {
             /** @description Workspaces the user belongs to, with their role in each, sorted by name. */
             workspaces: components["schemas"]["Membership"][];
         };
+        /**
+         * @description - `total`: a sum or a count; group values add up to the slice value, a contribution is `compare_value - base_value`.
+         *     - `ratio`: a ratio or an average (numerator over denominator); slice and group values are ratios rounded to a fixed
+         *       number of decimals, a contribution is `mix_effect + rate_effect`.
+         * @enum {string}
+         */
+        MeasureKind: "total" | "ratio";
         /** @description A member of a workspace. */
         MemberRow: {
             display_name: string;

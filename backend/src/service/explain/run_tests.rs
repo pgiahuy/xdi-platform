@@ -26,15 +26,16 @@ use crate::engine::store::{MetricDefinition, ProfileColumn};
 use crate::error::AppError;
 use crate::service::ask::context::{AmbiguousWord, AskContext};
 use crate::service::ask::contract::{
-    AskStatus, CellValue, ChartKind, ChosenOption, ColumnRole, DimensionBreakdown, StepName,
-    Understanding, UnderstoodItem, WarningCode,
+    AskStatus, CellValue, ChartKind, ChosenOption, ColumnRole, DimensionBreakdown, MeasureKind,
+    StepName, Understanding, UnderstoodItem, WarningCode,
 };
 use crate::service::ask::examples::build_why_example;
 use crate::service::ask::prompt::PromptInput;
 use crate::service::ask::values::ValueIndex;
 use crate::service::ask::view::{build_answer_view, AnswerView, RanQuery};
+use crate::service::explain::build_number_check;
 use crate::service::explain::check_tests::{
-    dataco_columns, dataco_values, quarter_form, revenue, DATE, TABLE,
+    dataco_columns, dataco_values, metric, quarter_form, revenue, DATE, TABLE,
 };
 use crate::service::explain::run::{run_why, WhyInput, WhyOutcome};
 
@@ -775,4 +776,77 @@ async fn why_card_names_the_two_groups() {
     assert!(view.understanding.time_range.is_none());
     assert_eq!(view.roles, [ColumnRole::Dimension, ColumnRole::Measure]);
     assert_eq!(view.chart.unwrap().kind, ChartKind::Bar);
+}
+
+/// Độ đo tỷ lệ đi trọn đường: tử và mẫu theo từng lát cắt và từng chiều, ba số lớn là tỷ lệ bốn chữ số, mỗi chiều tách
+/// cơ cấu và hiệu suất cộng ra đúng chênh lệch, câu khuôn qua được bước kiểm số. Quý 2/2017 có 7 dòng có tiền trên 5100
+/// dòng (0.00137... làm tròn 0.0014), quý 3/2017 có 7 trên 4400 (0.00159... làm tròn 0.0016).
+#[tokio::test]
+async fn ratio_metric_splits_into_mix_and_rate() {
+    let mut data = Dataco::new();
+    let name = "tỷ lệ dòng có tiền";
+    data.metrics.push(metric(
+        name,
+        "COUNT(CASE WHEN \"Order Item Total\" > 0 THEN 1 END) / COUNT(*)",
+        None,
+    ));
+    let mut form = quarter_form();
+    form["metric"] = json!(name);
+    form["terms"] = json!([{"text": name, "kind": "metric", "value": name}]);
+    let llm = ScriptedLlm::new(vec![form]);
+    let outcome = data
+        .ask(&llm, "Tại sao tỷ lệ dòng có tiền quý 3 năm 2017 tăng", &[])
+        .await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let explanation = outcome.explanation.as_ref().expect("explanation");
+    assert_eq!(explanation.measure_kind, MeasureKind::Ratio);
+    assert_eq!(
+        (
+            explanation.base.value.as_str(),
+            explanation.compare.value.as_str(),
+            explanation.change.as_str()
+        ),
+        ("0.0014", "0.0016", "0.0002")
+    );
+    assert!(explanation.volume_price.is_none());
+    assert!(!explanation.dimensions.is_empty());
+    let change = Decimal::from_str_exact(&explanation.change).unwrap();
+    for dimension in &explanation.dimensions {
+        assert!(
+            dimension.sql.contains("compare_denominator"),
+            "{}",
+            dimension.sql
+        );
+        let parse =
+            |text: &Option<String>| Decimal::from_str_exact(text.as_deref().unwrap()).unwrap();
+        assert_eq!(
+            parse(&dimension.mix_effect) + parse(&dimension.rate_effect),
+            change,
+            "{}",
+            dimension.column
+        );
+        let sum: Decimal = dimension
+            .groups
+            .iter()
+            .map(|g| Decimal::from_str_exact(&g.contribution).unwrap())
+            .sum();
+        assert_eq!(sum, change, "{}", dimension.column);
+    }
+    // Bảng tổng theo kỳ làm tròn như phân rã.
+    let result = outcome.result.as_ref().unwrap();
+    assert_eq!(result.rows.len(), 2);
+    // Mô hình giả hết câu ở bước narrate nên lời là câu khuôn; câu khuôn qua bước kiểm số.
+    assert!(!explanation.summary_by_model);
+    assert!(
+        explanation.summary.contains("phần do cơ cấu"),
+        "{}",
+        explanation.summary
+    );
+    assert_eq!(
+        build_number_check(&explanation.summary, explanation),
+        Ok(()),
+        "{}",
+        explanation.summary
+    );
+    assert!(llm.prompt(1).contains("\"measure_kind\": \"ratio\""));
 }

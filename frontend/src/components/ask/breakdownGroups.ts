@@ -9,12 +9,15 @@ import type { GroupView } from './evidenceTypes'
 /** Số nhóm hiện khi bảng thu gọn: đủ thấy các nhóm làm nên chênh lệch, vẫn vừa một màn hình cùng các chiều khác. */
 export const SHOWN_GROUPS = 8
 
-/** Dòng gộp các nhóm không hiện; số là tổng của các nhóm đó, chuỗi chữ số như backend gửi. */
+/** Dòng gộp các nhóm không hiện; số là tổng của các nhóm đó, chuỗi chữ số như backend gửi. Với độ đo tỷ lệ, tỷ lệ của
+ * các nhóm không cộng được nên baseValue, compareValue là null; đóng góp và hai phần của nó vẫn cộng được. */
 export type RestGroups = {
   count: number
   baseValue: string | null
   compareValue: string | null
   contribution: string | null
+  mixEffect: string | null
+  rateEffect: string | null
 }
 
 /** Chia nhóm thành phần hiện và dòng "Còn lại". Chỉ gộp khi bớt được ít nhất hai nhóm: gộp một nhóm thành "Còn lại (1
@@ -22,13 +25,16 @@ export type RestGroups = {
 export function splitGroups(groups: GroupView[]): { shown: GroupView[]; rest: RestGroups | null } {
   if (groups.length <= SHOWN_GROUPS + 1) return { shown: groups, rest: null }
   const hidden = groups.slice(SHOWN_GROUPS)
+  const ratio = hidden.some((group) => group.mixEffect !== null)
   return {
     shown: groups.slice(0, SHOWN_GROUPS),
     rest: {
       count: hidden.length,
-      baseValue: sumDecimals(hidden.map((group) => group.baseValue)),
-      compareValue: sumDecimals(hidden.map((group) => group.compareValue)),
+      baseValue: ratio ? null : sumDecimals(hidden.map((group) => group.baseValue)),
+      compareValue: ratio ? null : sumDecimals(hidden.map((group) => group.compareValue)),
       contribution: sumDecimals(hidden.map((group) => group.contribution)),
+      mixEffect: ratio ? sumDecimals(hidden.map((group) => group.mixEffect ?? '')) : null,
+      rateEffect: ratio ? sumDecimals(hidden.map((group) => group.rateEffect ?? '')) : null,
     },
   }
 }

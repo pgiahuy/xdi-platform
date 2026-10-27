@@ -2,13 +2,15 @@
 /* components/ask/BreakdownDimension.tsx - bảng đóng góp của một chiều trong tab Phân rã (EvidenceBreakdown.tsx). Chiều
 nhiều nhóm hiện SHOWN_GROUPS nhóm đầu và một dòng "Còn lại" có tổng (breakdownGroups.ts), nút "Xem tất cả" mở đủ mọi
 nhóm. Bấm số của một lát cắt ở một nhóm thì trang mở tab Dòng nguồn với đúng lát cắt, cột và giá trị nhóm (onDrill);
-dòng "Còn lại" gộp nhiều nhóm nên số của nó không bấm được. */
+dòng "Còn lại" gộp nhiều nhóm nên số của nó không bấm được.
+Độ đo tỷ lệ (dimension.mixEffect khác null) thêm hai cột "Do cơ cấu" và "Do hiệu suất", dòng "Tổng" của hai phần, và một
+câu giải thích hai phần; ô tỷ lệ của dòng "Còn lại" để trống vì tỷ lệ các nhóm không cộng được. */
 
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { splitGroups, type RestGroups } from './breakdownGroups'
+import { splitGroups, sumDecimals, type RestGroups } from './breakdownGroups'
 import { formatCell, formatDecimal } from './cellFormat'
 import type { DimensionView, DrillTarget, GroupView, Slice } from './evidenceTypes'
 
@@ -23,6 +25,7 @@ export function BreakdownDimension({ dimension, baseLabel, compareLabel, onDrill
   const [expanded, setExpanded] = useState(false)
   const { shown, rest } = splitGroups(dimension.groups)
   const groups = expanded ? dimension.groups : shown
+  const ratio = dimension.mixEffect !== null && dimension.rateEffect !== null
 
   const drillButton = (group: GroupView, slice: Slice) => {
     const label = slice === 'base' ? baseLabel : compareLabel
@@ -63,6 +66,16 @@ export function BreakdownDimension({ dimension, baseLabel, compareLabel, onDrill
               <th scope="col" className="px-2 py-1.5 text-right font-medium">
                 Đóng góp
               </th>
+              {ratio && (
+                <>
+                  <th scope="col" className="px-2 py-1.5 text-right font-medium">
+                    Do cơ cấu
+                  </th>
+                  <th scope="col" className="px-2 py-1.5 text-right font-medium">
+                    Do hiệu suất
+                  </th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -76,12 +89,25 @@ export function BreakdownDimension({ dimension, baseLabel, compareLabel, onDrill
                 <td className="px-2 py-1 text-right">{drillButton(group, 'base')}</td>
                 <td className="px-2 py-1 text-right">{drillButton(group, 'compare')}</td>
                 <td className="px-2 py-1 text-right tabular-nums">{formatDecimal(group.contribution)}</td>
+                {ratio && (
+                  <>
+                    <td className="px-2 py-1 text-right tabular-nums">{formatDecimal(group.mixEffect ?? '')}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{formatDecimal(group.rateEffect ?? '')}</td>
+                  </>
+                )}
               </tr>
             ))}
-            {rest && !expanded && <RestRow rest={rest} />}
+            {rest && !expanded && <RestRow rest={rest} ratio={ratio} />}
+            {ratio && <TotalRow mix={dimension.mixEffect ?? ''} rate={dimension.rateEffect ?? ''} />}
           </tbody>
         </table>
       </div>
+      {ratio && (
+        <p className="text-xs text-muted-foreground">
+          Số của hai kỳ là tỷ lệ của từng nhóm. Do cơ cấu: phần chênh lệch vì tỷ trọng của nhóm đổi. Do hiệu suất: phần
+          chênh lệch vì tỷ lệ trong nhóm đổi. Hai phần cộng lại bằng đóng góp.
+        </p>
+      )}
       {rest && (
         <Button
           variant="link"
@@ -97,18 +123,43 @@ export function BreakdownDimension({ dimension, baseLabel, compareLabel, onDrill
   )
 }
 
-function RestRow({ rest }: { rest: RestGroups }) {
-  const number = (value: string | null) => (value === null ? '' : formatDecimal(value))
+function RestRow({ rest, ratio }: { rest: RestGroups; ratio: boolean }) {
   return (
     <tr className="border-t text-muted-foreground">
       <th scope="row" className="px-2 py-1 text-left font-normal">
         Còn lại ({rest.count} nhóm)
       </th>
-      <td className="px-2 py-1 text-right tabular-nums">{number(rest.baseValue)}</td>
-      <td className="px-2 py-1 text-right tabular-nums">{number(rest.compareValue)}</td>
-      <td className="px-2 py-1 text-right tabular-nums">{number(rest.contribution)}</td>
+      <td className="px-2 py-1 text-right tabular-nums">{formatOptional(rest.baseValue)}</td>
+      <td className="px-2 py-1 text-right tabular-nums">{formatOptional(rest.compareValue)}</td>
+      <td className="px-2 py-1 text-right tabular-nums">{formatOptional(rest.contribution)}</td>
+      {ratio && (
+        <>
+          <td className="px-2 py-1 text-right tabular-nums">{formatOptional(rest.mixEffect)}</td>
+          <td className="px-2 py-1 text-right tabular-nums">{formatOptional(rest.rateEffect)}</td>
+        </>
+      )}
     </tr>
   )
+}
+
+// Dòng tổng của độ đo tỷ lệ: tổng hai phần do backend tính; đóng góp là tổng của hai phần, bằng chênh lệch.
+function TotalRow({ mix, rate }: { mix: string; rate: string }) {
+  return (
+    <tr className="border-t font-semibold">
+      <th scope="row" className="px-2 py-1 text-left">
+        Tổng
+      </th>
+      <td />
+      <td />
+      <td className="px-2 py-1 text-right tabular-nums">{formatOptional(sumDecimals([mix, rate]))}</td>
+      <td className="px-2 py-1 text-right tabular-nums">{formatOptional(mix)}</td>
+      <td className="px-2 py-1 text-right tabular-nums">{formatOptional(rate)}</td>
+    </tr>
+  )
+}
+
+function formatOptional(value: string | null): string {
+  return value === null ? '' : formatDecimal(value)
 }
 
 function groupName(group: GroupView, dimension: DimensionView): string {

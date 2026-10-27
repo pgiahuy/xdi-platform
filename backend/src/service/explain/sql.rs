@@ -11,7 +11,11 @@ ghép chuỗi người dùng hay mô hình viết vào SQL: dấu nháy trong gi
 Độ đo của phân rã tính lại theo từng lát cắt bằng CASE WHEN, như mẫu why (ask/examples.rs): SUM(CASE WHEN <lát> THEN
 <giá trị> END). Số thực đổi sang DECIMAL(18, 2) ở từng dòng trước khi cộng, để tổng là phép cộng đúng và các nhóm cộng
 lại bằng đúng tổng lát cắt (quy tắc ở Explanation, ask/contract.rs). COALESCE(..., 0) cho nhóm chỉ có ở một lát cắt.
-Bảng tổng theo kỳ cộng cùng cách (build_total_aggregate), để số của mỗi kỳ trên bảng bằng tổng các nhóm phân rã. */
+Bảng tổng theo kỳ cộng cùng cách (build_total_aggregate), để số của mỗi kỳ trên bảng bằng tổng các nhóm phân rã.
+
+Độ đo tỷ lệ (PlanMeasure.denominator) thêm hai cột mẫu số bên cạnh hai cột tử số: base_value, compare_value là tử,
+base_denominator, compare_denominator là mẫu, cùng cách dựng CASE WHEN. Phép chia không làm trong SQL mà ở
+explain/ratio.rs bằng Decimal, vì phân rã cần tử và mẫu của từng nhóm chứ không chỉ thương. */
 
 use sqlparser::ast::{BinaryOperator, DataType, Expr, Ident, TimezoneInfo, TypedString, Value};
 use sqlparser::dialect::DuckDbDialect;
@@ -30,6 +34,12 @@ pub const BASE_VOLUME: &str = "base_volume";
 pub const COMPARE_VOLUME: &str = "compare_volume";
 pub const BASE_ROWS: &str = "base_rows";
 pub const COMPARE_ROWS: &str = "compare_rows";
+pub const BASE_DENOMINATOR: &str = "base_denominator";
+pub const COMPARE_DENOMINATOR: &str = "compare_denominator";
+
+/// Số chữ số thập phân của tỷ lệ trên bảng tổng theo kỳ, bằng RATE_SCALE của explain/ratio.rs để số của mỗi kỳ trên
+/// bảng trùng với số của phân rã.
+const TOTAL_RATE_SCALE: u32 = crate::service::explain::ratio::RATE_SCALE;
 
 /// SQL của bảng kết quả và điều kiện hai lát cắt, trên tên bảng và tên cột logic, trước guard.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,15 +79,11 @@ pub fn build_why_sql(plan: &WhyPlan) -> WhySql {
 /// #39, số dòng để biết lát cắt có dữ liệu, và V0, V1 của #40.
 pub fn build_slices_sql(plan: &WhyPlan) -> String {
     let (base, compare) = build_slice_conditions(plan);
-    let mut items = vec![
-        format!("{} AS {BASE_VALUE}", build_sliced_measure(plan, &base)),
-        format!(
-            "{} AS {COMPARE_VALUE}",
-            build_sliced_measure(plan, &compare)
-        ),
-        format!("COUNT(CASE WHEN {base} THEN 1 END) AS {BASE_ROWS}"),
-        format!("COUNT(CASE WHEN {compare} THEN 1 END) AS {COMPARE_ROWS}"),
-    ];
+    let mut items = build_sliced_items(plan, &base, &compare);
+    items.push(format!("COUNT(CASE WHEN {base} THEN 1 END) AS {BASE_ROWS}"));
+    items.push(format!(
+        "COUNT(CASE WHEN {compare} THEN 1 END) AS {COMPARE_ROWS}"
+    ));
     if let Some(volume) = &plan.volume {
         let key = build_ident(volume);
         items.push(format!(
@@ -100,12 +106,35 @@ pub fn build_dimension_sql(plan: &WhyPlan, column: &str) -> String {
     let (base, compare) = build_slice_conditions(plan);
     let column = build_ident(column);
     format!(
-        "SELECT {column}, {} AS {BASE_VALUE}, {} AS {COMPARE_VALUE} FROM {} WHERE {} GROUP BY {column}",
-        build_sliced_measure(plan, &base),
-        build_sliced_measure(plan, &compare),
+        "SELECT {column}, {} FROM {} WHERE {} GROUP BY {column}",
+        build_sliced_items(plan, &base, &compare).join(", "),
         build_ident(&plan.table),
         build_where(plan)
     )
+}
+
+/// Độ đo của hai lát cắt: tử base, tử compare, rồi mẫu base, mẫu compare khi độ đo là tỷ lệ. explain/breakdown.rs đọc
+/// các cột của câu từng chiều theo đúng thứ tự này.
+fn build_sliced_items(plan: &WhyPlan, base: &Expr, compare: &Expr) -> Vec<String> {
+    let measure = &plan.measure;
+    let mut items = vec![
+        format!("{} AS {BASE_VALUE}", build_sliced(&measure.additive, base)),
+        format!(
+            "{} AS {COMPARE_VALUE}",
+            build_sliced(&measure.additive, compare)
+        ),
+    ];
+    if let Some(denominator) = &measure.denominator {
+        items.push(format!(
+            "{} AS {BASE_DENOMINATOR}",
+            build_sliced(denominator, base)
+        ));
+        items.push(format!(
+            "{} AS {COMPARE_DENOMINATOR}",
+            build_sliced(denominator, compare)
+        ));
+    }
+    items
 }
 
 /// Điều kiện của lát cắt base và compare.
@@ -198,9 +227,9 @@ fn build_grouped(condition: Expr) -> Expr {
     }
 }
 
-/// Độ đo chỉ tính trên các dòng thỏa condition.
-fn build_sliced_measure(plan: &WhyPlan, condition: &Expr) -> String {
-    match &plan.measure.additive {
+/// Một độ đo cộng được (tử hay mẫu) chỉ tính trên các dòng thỏa condition.
+fn build_sliced(additive: &Additive, condition: &Expr) -> String {
+    match additive {
         Additive::Sum { value, decimal } => {
             let value = build_summand(value, *decimal);
             format!("COALESCE(SUM(CASE WHEN {condition} THEN {value} END), 0)")
@@ -213,8 +242,20 @@ fn build_sliced_measure(plan: &WhyPlan, condition: &Expr) -> String {
 }
 
 /// Độ đo trên mọi dòng của câu, cho bảng tổng theo kỳ hay theo nhóm (PlanMeasure.aggregate). Không COALESCE như
-/// build_sliced_measure: mỗi dòng của bảng là một nhóm có dòng.
-pub fn build_total_aggregate(additive: &Additive) -> String {
+/// build_sliced: mỗi dòng của bảng là một nhóm có dòng. Tỷ lệ là tử chia mẫu, làm tròn như phân rã; NULLIF cho kỳ có
+/// mẫu bằng 0 ra ô trống thay vì lỗi chia cho 0.
+pub fn build_total_aggregate(additive: &Additive, denominator: Option<&Additive>) -> String {
+    let numerator = build_additive_aggregate(additive);
+    match denominator {
+        Some(denominator) => format!(
+            "ROUND({numerator} / NULLIF({}, 0), {TOTAL_RATE_SCALE})",
+            build_additive_aggregate(denominator)
+        ),
+        None => numerator,
+    }
+}
+
+fn build_additive_aggregate(additive: &Additive) -> String {
     match additive {
         Additive::Sum { value, decimal } => format!("SUM({})", build_summand(value, *decimal)),
         Additive::Count { value: None } => "COUNT(*)".to_string(),

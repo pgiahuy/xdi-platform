@@ -14,12 +14,12 @@ use crate::engine::llm::mock::Mock;
 use crate::engine::llm::{LlmProvider, LlmRequest};
 use crate::error::AppError;
 use crate::service::ask::contract::{
-    CellValue, DimensionBreakdown, Explanation, ExplanationSlice, GroupContribution, StepName,
-    ValueKind,
+    CellValue, DimensionBreakdown, Explanation, ExplanationSlice, GroupContribution, MeasureKind,
+    StepName, ValueKind,
 };
 use crate::service::ask::examples::build_why_example;
 use crate::service::ask::narrate::narrate;
-use crate::service::explain::number::{build_change_text, build_number_text};
+use crate::service::explain::number::{build_change_text, build_number_text, MAX_FRACTION_DIGITS};
 use crate::service::explain::{
     build_narrate_prompt, build_number_check, build_template_summary, MAX_SUMMARY_CHARS,
 };
@@ -44,6 +44,7 @@ fn small_explanation(
 ) -> Explanation {
     Explanation {
         measure: "Doanh thu".to_string(),
+        measure_kind: MeasureKind::Total,
         base: ExplanationSlice {
             label: "Quý 2/2017".to_string(),
             filter: String::new(),
@@ -66,8 +67,12 @@ fn small_explanation(
                     base_value: "0.00".to_string(),
                     compare_value: "0.00".to_string(),
                     contribution: contribution.to_string(),
+                    mix_effect: None,
+                    rate_effect: None,
                 })
                 .collect(),
+            mix_effect: None,
+            rate_effect: None,
         }],
         volume_price: None,
         summary: String::new(),
@@ -317,6 +322,8 @@ fn numeric_group_values_use_the_same_text_everywhere() {
         base_value: "100.00".to_string(),
         compare_value: "50.00".to_string(),
         contribution: "-50.00".to_string(),
+        mix_effect: None,
+        rate_effect: None,
     }];
     let prompt = build_narrate_prompt(QUESTION, &explanation);
     assert!(prompt.contains("\"value\": \"1\""), "{prompt}");
@@ -589,10 +596,16 @@ fn numbers_are_written_the_vietnamese_way() {
 /// Chênh lệch đọc bằng chữ chiều và độ lớn không dấu.
 #[test]
 fn changes_read_as_a_direction_and_an_amount() {
-    assert_eq!(build_change_text("-1152666.24"), "giảm 1.152.666,24");
-    assert_eq!(build_change_text("1039598.96"), "tăng 1.039.598,96");
-    assert_eq!(build_change_text("0.00"), "không đổi");
-    assert_eq!(build_change_text("abc"), "abc");
+    assert_eq!(
+        build_change_text("-1152666.24", MAX_FRACTION_DIGITS),
+        "giảm 1.152.666,24"
+    );
+    assert_eq!(
+        build_change_text("1039598.96", MAX_FRACTION_DIGITS),
+        "tăng 1.039.598,96"
+    );
+    assert_eq!(build_change_text("0.00", MAX_FRACTION_DIGITS), "không đổi");
+    assert_eq!(build_change_text("abc", MAX_FRACTION_DIGITS), "abc");
 }
 
 /// Dấu phẩy chỉ thuộc số khi nằm giữa hai chữ số: liệt kê "3, 4" vẫn là các số riêng có trong nhãn.
