@@ -10,6 +10,8 @@ Câu trả lời là một object:
   đã chọn và các phương án khác; id của giả định do code dựng từ loại và cụm chữ, vì mô hình tự đặt id thì cùng một câu
   mỗi lần ra một id và lựa chọn người dùng gửi lại không áp được.
 - clarify: câu hỏi lại, chỉ khi không có cách hiểu mặc định hợp lý; khi đó sql rỗng.
+- unanswerable: dữ liệu không có cột nào chứa thông tin câu hỏi cần (#164), ví dụ hỏi mức hài lòng mà không có cột
+  đánh giá, hay hỏi dự báo; khi đó sql rỗng.
 - sql: một câu SELECT trên tên bảng logic.
 
 Ở đây không sửa hay kiểm SQL: câu đọc ra đi thẳng vào guard (engine/guard/). Sửa ở đây thì guard kiểm câu khác với câu
@@ -82,6 +84,25 @@ pub struct Clarify {
     pub options: Vec<String>,
 }
 
+/// Mô hình báo câu hỏi không trả lời được từ các cột của dataset. Dùng chung cho câu trả lời SQL và form câu "tại
+/// sao" (explain/form.rs). reason để trống thì coi như không có: mô hình bị ép bằng schema có thể điền object rỗng.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Unanswerable {
+    /// Lý do, tiếng Việt, cho người dùng.
+    #[serde(default)]
+    pub reason: String,
+    /// Các cột gần nhất có thể hỏi; ask/unanswerable.rs bỏ tên không có trong dữ liệu.
+    #[serde(default)]
+    pub related_columns: Vec<String>,
+}
+
+impl Unanswerable {
+    /// Có lý do thật thì mới là lối ra; object rỗng hay lý do toàn dấu cách thì bỏ qua.
+    pub fn is_given(&self) -> bool {
+        !self.reason.trim().is_empty()
+    }
+}
+
 /// Câu trả lời có SQL.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SqlAnswer {
@@ -97,6 +118,11 @@ pub enum ModelAnswer {
     Clarify {
         terms: Vec<Term>,
         clarify: Clarify,
+    },
+    /// Dữ liệu không có thông tin để trả lời; không chạy SQL.
+    Unanswerable {
+        terms: Vec<Term>,
+        unanswerable: Unanswerable,
     },
 }
 
@@ -117,6 +143,8 @@ struct Reply {
     assumptions: Vec<Assumption>,
     #[serde(default)]
     clarify: Option<Clarify>,
+    #[serde(default)]
+    unanswerable: Option<Unanswerable>,
     #[serde(default)]
     sql: String,
 }
@@ -139,6 +167,14 @@ pub fn build_answer_from_reply(reply: &str) -> Result<ModelAnswer, UnreadableRep
         }
         None => return Err(unreadable("the reply contains no JSON object")),
     };
+    // Mô hình nói dữ liệu không có thông tin thì không chạy SQL, kể cả khi nó vẫn viết một câu: câu đó trả lời một câu
+    // hỏi khác (ví dụ đếm đơn thay cho mức hài lòng), người hỏi sẽ tưởng là câu trả lời.
+    if let Some(unanswerable) = parsed.unanswerable.filter(Unanswerable::is_given) {
+        return Ok(ModelAnswer::Unanswerable {
+            terms: parsed.terms,
+            unanswerable,
+        });
+    }
     let sql = parsed.sql.trim();
     // Có cả SQL lẫn câu hỏi lại thì dùng SQL: người hỏi có ngay kết quả, và cách hiểu đã ghi trong assumptions.
     if !sql.is_empty() {
@@ -187,6 +223,28 @@ pub fn build_terms_schema() -> serde_json::Value {
     })
 }
 
+/// Schema của trường unanswerable, dùng chung cho câu trả lời SQL và form câu "tại sao" (ask/why_prompt.rs).
+pub fn build_unanswerable_schema() -> serde_json::Value {
+    json!({
+        "type": "object",
+        "description": "Only when no listed column holds the information the question needs, for example a question \
+                        about satisfaction with no rating column, or a forecast of the future; never when the question \
+                        is only vague",
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": "One sentence in Vietnamese telling the user what information the data does not have"
+            },
+            "related_columns": {
+                "type": "array",
+                "description": "Up to five listed column names closest to what the question asks, which the user could ask about instead",
+                "items": { "type": "string" }
+            }
+        },
+        "required": ["reason", "related_columns"]
+    })
+}
+
 /// JSON Schema của câu trả lời, gửi kèm request ở bước sinh SQL và bước sửa. Chỉ dùng các từ khóa cả Gemini
 /// (responseJsonSchema) lẫn Ollama (format) nhận: type, properties, required, items, enum, description. Trường không bắt
 /// buộc thì để ngoài required thay vì cho kiểu null, vì kiểu ["string", "null"] chưa chắc mọi mô hình trên Ollama theo
@@ -231,7 +289,11 @@ pub fn build_sql_reply_schema() -> serde_json::Value {
                 },
                 "required": ["kind", "question", "options"]
             },
-            "sql": { "type": "string", "description": "One DuckDB SELECT statement, or an empty string with clarify" }
+            "unanswerable": build_unanswerable_schema(),
+            "sql": {
+                "type": "string",
+                "description": "One DuckDB SELECT statement, or an empty string with clarify or unanswerable"
+            }
         },
         "required": ["terms", "assumptions", "sql"]
     })
@@ -346,6 +408,30 @@ mod tests {
         let reply = r#"{"sql": "SELECT 1",
             "clarify": {"kind": "column", "question": "Cột nào?", "options": ["a", "b"]}}"#;
         assert_eq!(sql_of(reply), "SELECT 1");
+    }
+
+    #[test]
+    fn unanswerable_wins_over_sql_and_clarify() {
+        let reply = r#"{"terms": [], "assumptions": [], "sql": "SELECT COUNT(*) FROM dataco",
+            "clarify": {"kind": "column", "question": "Cột nào?", "options": ["a", "b"]},
+            "unanswerable": {"reason": "Dữ liệu không có cột đánh giá", "related_columns": ["Order Status"]}}"#;
+        let Ok(ModelAnswer::Unanswerable { unanswerable, .. }) = build_answer_from_reply(reply)
+        else {
+            panic!("expected an unanswerable answer");
+        };
+        assert_eq!(unanswerable.reason, "Dữ liệu không có cột đánh giá");
+        assert_eq!(unanswerable.related_columns, ["Order Status"]);
+    }
+
+    /// Object rỗng hay lý do toàn dấu cách (mô hình bị ép điền mọi trường của schema) không phải lối ra.
+    #[test]
+    fn empty_unanswerable_is_ignored() {
+        for unanswerable in [r#"{}"#, r#"{"reason": "  ", "related_columns": []}"#] {
+            let reply = format!(r#"{{"sql": "SELECT 1", "unanswerable": {unanswerable}}}"#);
+            assert_eq!(sql_of(&reply), "SELECT 1");
+        }
+        let reply = r#"{"sql": "", "unanswerable": {"reason": ""}}"#;
+        assert!(reason_of(reply).contains("no \"clarify\""));
     }
 
     #[test]

@@ -249,6 +249,60 @@ async fn repairs_a_failed_run_once() {
     assert_eq!(response["chart"]["x"], "ship_day");
 }
 
+/// Mô hình báo dữ liệu không có thông tin (#164): rejected, không chạy SQL, lời nêu lý do và chỉ các cột có thật, ghi
+/// lịch sử như câu bị từ chối.
+#[tokio::test]
+async fn unanswerable_question_is_rejected_without_sql() {
+    let reply = json!({"terms": [], "assumptions": [], "sql": "",
+        "unanswerable": {"reason": "dữ liệu chỉ có các ngày đã qua, không có dự báo.",
+                         "related_columns": ["Order Item Total", "Forecast"]}});
+    let Some(asking) = start(Some(scripted(&[reply]))).await else {
+        return;
+    };
+    let (status, response) = asking
+        .ask("Doanh thu năm tới là bao nhiêu?", json!([]))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "rejected", "{response}");
+    assert_eq!(
+        response["message"],
+        "Dữ liệu không có thông tin để trả lời câu này: dữ liệu chỉ có các ngày đã qua, không có dự báo. Có thể hỏi \
+         về các cột gần nhất: Order Item Total."
+    );
+    assert!(response["sql_generated"].is_null());
+    assert!(response["query_id"].is_string());
+    assert_eq!(step_names(&response), ["context", "llm", "record"]);
+    assert_eq!(asking.queries_with("rejected").await, 1);
+    assert!(response["understanding"].is_null());
+}
+
+/// Câu mẫu của mock: câu "tại sao" hỏi mức hài lòng mà dữ liệu không có cột đánh giá. Form báo unanswerable nên không
+/// kiểm form, không chạy SQL, không lưu form.
+#[tokio::test]
+async fn mock_why_question_without_data_is_rejected() {
+    let csv = "Market,Delivery Status,Order Status,Order Item Total\n\
+               Europe,Late delivery,COMPLETE,100.5\n\
+               LATAM,Shipping on time,PENDING,200\n";
+    let Some(asking) = start_on(None, csv, |_| {}).await else {
+        return;
+    };
+    let (status, response) = asking
+        .ask("Tại sao khách hàng không hài lòng?", json!([]))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "rejected", "{response}");
+    assert_eq!(
+        response["message"],
+        "Dữ liệu không có thông tin để trả lời câu này: dataset không có cột đánh giá hay mức hài lòng của khách \
+         hàng. Có thể hỏi về các cột gần nhất: Delivery Status, Order Status."
+    );
+    assert!(response["explanation"].is_null());
+    assert_eq!(step_names(&response), ["context", "llm", "record"]);
+    assert_eq!(asking.queries_with("rejected").await, 1);
+    let sql = "SELECT count(*) FROM queries WHERE explanation IS NULL";
+    assert_eq!(fetch_count(&asking.db.store, sql).await, 1);
+}
+
 #[tokio::test]
 async fn guard_refusal_is_recorded_as_rejected() {
     let llm = scripted(&[sql_reply("DELETE FROM dataco")]);

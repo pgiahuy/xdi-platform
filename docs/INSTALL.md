@@ -642,6 +642,10 @@ sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do
 đổi) thì kết quả có thêm một cảnh báo nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
 năm 2017 giảm".
 
+Câu hỏi cần thông tin dataset không có (ví dụ "Tại sao khách hàng không hài lòng?" khi không có cột đánh giá, hay hỏi
+dự báo) thì không có bảng số: kết quả báo dữ liệu không có thông tin này, nói lý do và gợi ý các cột gần nhất để hỏi.
+Với `mock`, thử đúng câu "Tại sao khách hàng không hài lòng?".
+
 ### Bước 7. Mời thành viên
 
 Chưa có thư mời qua email hay tự đăng ký. Thành viên cần có tài khoản trước, rồi được thêm vào workspace:

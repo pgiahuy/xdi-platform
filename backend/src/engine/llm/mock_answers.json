@@ -404,5 +404,18 @@
       },
       "filters": []
     }
+  },
+  {
+    "task": "why",
+    "question": "Tại sao khách hàng không hài lòng",
+    "answer": {
+      "terms": [],
+      "compare": "",
+      "filters": [],
+      "unanswerable": {
+        "reason": "dataset không có cột đánh giá hay mức hài lòng của khách hàng",
+        "related_columns": ["Delivery Status", "Late_delivery_risk", "Order Status", "Customer Segment"]
+      }
+    }
   }
 ]

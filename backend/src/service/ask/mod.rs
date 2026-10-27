@@ -46,6 +46,7 @@ pub mod result;
 pub mod run;
 #[cfg(test)]
 mod run_tests;
+pub mod unanswerable;
 pub mod values;
 pub(crate) mod view;
 mod why;
@@ -71,6 +72,7 @@ use crate::service::ask::response_choices::{
     build_unapplied_warnings, build_used_choices,
 };
 use crate::service::ask::run::{build_step, run_with_repair, RunInput};
+use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::why::{ask_why, WhyAsk};
 use crate::service::explain::form::{build_question_kind, QuestionKind};
@@ -172,6 +174,10 @@ pub async fn ask(
     };
     let mut outcome = run_with_repair(state.llm.as_ref(), input).await?;
     steps.append(&mut outcome.steps);
+    if let Some(unanswerable) = &outcome.unanswerable {
+        let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
+        outcome.message = Some(build_unanswerable_message(unanswerable, &names));
+    }
     // Giả định thành Choice một lần, dùng cho cả thẻ "Đã hiểu là" lẫn AskResponse.choices để hai chỗ cùng id.
     let answer = SqlAnswer {
         terms: outcome.terms.clone(),

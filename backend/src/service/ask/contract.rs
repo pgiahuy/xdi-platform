@@ -29,7 +29,9 @@ use uuid::Uuid;
 ///   Not recorded in the history, so `query_id` is null.
 /// - `rejected`: the guard refused the SQL: the generated one for a reason a fix cannot change (for example it is not
 ///   a read-only SELECT, or it calls a function that is not allowed), or the one fixed in the `repair` round. Set:
-///   `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false.
+///   `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false. Also when
+///   the model finds that no column of the dataset holds the information the question needs (a rating that is not
+///   there, a forecast): no SQL runs, `sql_generated` is null, and `message` gives the reason and the closest columns.
 /// - `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or
 ///   because the model failed during the fix; or the SQL ran past the time or memory limit, which gets no fix round.
 ///   Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or

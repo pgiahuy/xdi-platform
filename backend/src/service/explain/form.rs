@@ -9,7 +9,7 @@ Nhận câu "tại sao" bằng từ khóa chứ không nhờ mô hình phân lo�
 use serde::Deserialize;
 
 use crate::service::ask::phrases::fold;
-use crate::service::ask::reply::Term;
+use crate::service::ask::reply::{Term, Unanswerable};
 use crate::service::explain::period::Grain;
 
 /// Loại câu hỏi, quyết định prompt: câu "tại sao" điền form (ask/why_prompt.rs), câu thường viết SQL (ask/prompt.rs).
@@ -73,6 +73,9 @@ pub struct WhyForm {
     /// Có khi so hai nhóm.
     #[serde(default)]
     pub groups: Option<FormGroups>,
+    /// Dữ liệu không có thông tin để trả lời (#164); có lý do thì không kiểm phần còn lại của form.
+    #[serde(default)]
+    pub unanswerable: Option<Unanswerable>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
