@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/ask.ts - hỏi dữ liệu: POST /workspaces/{ws}/datasets/{id}/ask (backend/src/api/query.rs), kiểu response ở
-backend/src/service/ask/contract.rs. Quy tắc gửi lựa chọn ở docs/ARCHITECTURE.md mục 8: backend không giữ trạng thái
+backend/src/service/ask/contract.rs. Câu sau của cùng cuộc trò chuyện gửi kèm conversation_id để mô hình đọc nó như câu
+tiếp nối (backend/src/service/conversation/). Quy tắc gửi lựa chọn ở docs/ARCHITECTURE.md mục 8: backend không giữ trạng thái
 giữa hai lần hỏi, nên hỏi lại luôn gửi lại câu hỏi kèm choices của response gần nhất, thay hoặc thêm mục vừa chọn.
 Ở chế độ dev có thể trả lời bằng response mẫu (askSamples.ts) thay vì gọi backend; bản build production bỏ hẳn nhánh
 đó cùng file mẫu, vì import.meta.env.DEV là hằng false lúc build. */
@@ -25,6 +26,8 @@ export type AskVariables = {
   choices: ChosenOption[]
   /** Chỉ ở chế độ dev: trả lời bằng response mẫu, không gọi backend. */
   fromSamples?: boolean
+  /** Cuộc trò chuyện đang hỏi tiếp (AskResponse.conversation_id của lượt trước); vắng thì backend mở cuộc mới. */
+  conversationId?: string
   /** choice_id của các câu hỏi lại người dùng vừa trả lời trong lần gửi này; chỉ giao diện dùng, không gửi lên. */
   answered?: string[]
 }
@@ -37,9 +40,9 @@ function askPath(ws: string, datasetId: string): string {
  * bấm hỏi lại. Lỗi 501, 502, 503 có message tiếng Việt của backend trong ApiError. */
 export function useAsk(ws: string) {
   return useMutation({
-    mutationFn: ({ datasetId, question, choices, fromSamples }: AskVariables) => {
+    mutationFn: ({ datasetId, question, choices, conversationId, fromSamples }: AskVariables) => {
       if (import.meta.env.DEV && fromSamples) return answerFromSamples(question, choices)
-      const body: AskRequest = { question, choices }
+      const body: AskRequest = { question, choices, conversation_id: conversationId ?? null }
       return apiPost<AskResponse>(askPath(ws, datasetId), body)
     },
     retry: false,

@@ -22,8 +22,9 @@ export type EvidenceView = {
   /** Vị trí dòng đầu của trang dòng nguồn đang xem. */
   offset: number
   setTab: (tab: EvidenceTab) => void
-  /** Mở tab Dòng nguồn của chỗ vừa bấm, từ trang đầu. */
-  drill: (target: DrillTarget) => void
+  /** Mở tab Dòng nguồn của chỗ vừa bấm, từ trang đầu. key: khóa của câu trả lời chứa chỗ bấm khi nó khác câu đang
+   * hiện, như khi bấm ô của một lượt khác trong cuộc trò chuyện (AskPage chọn lượt đó cùng lúc). */
+  drill: (target: DrillTarget, key?: string) => void
   setOffset: (offset: number) => void
 }
 
@@ -35,7 +36,7 @@ export function useEvidenceView(answerKey: string): EvidenceView {
     target: current.target,
     offset: current.offset,
     setTab: (tab) => setState({ ...current, tab }),
-    drill: (target) => setState({ key: answerKey, tab: 'rows', target, offset: 0 }),
+    drill: (target, key = answerKey) => setState({ key, tab: 'rows', target, offset: 0 }),
     setOffset: (offset) => setState({ ...current, offset }),
   }
 }

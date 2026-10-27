@@ -11,6 +11,7 @@ phiên bản chờ lập hồ sơ lúc khởi động (datasets.rs, list_pending
 
 mod accounts;
 mod columns;
+mod conversations;
 mod members;
 mod policies;
 mod users;
@@ -32,6 +33,7 @@ pub use columns::{
     ColumnUnit, ColumnValue, NewColumn, NewColumnValue, ProfileColumn, ProfileRole,
     SemanticColumnUpdate, SemanticValueUpdate, ValueRow,
 };
+pub use conversations::{Conversation, StoredTurn};
 #[allow(unused_imports)]
 pub use datasets::{
     Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SemanticCandidate,

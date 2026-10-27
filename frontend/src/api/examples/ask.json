@@ -12,6 +12,7 @@
       }
     ],
     "clarifications": [],
+    "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
     "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
     "model": "gemini-2.5-flash",
@@ -95,6 +96,7 @@
         "selected": null
       }
     ],
+    "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
     "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
     "model": "gemini-2.5-flash",
@@ -120,6 +122,7 @@
     "chart": null,
     "choices": [],
     "clarifications": [],
+    "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
     "message": "Câu SQL bị từ chối: Chỉ chạy được câu SELECT đọc dữ liệu.",
     "model": "gemini-2.5-flash",
@@ -183,6 +186,7 @@
       }
     ],
     "clarifications": [],
+    "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
     "message": null,
     "model": "gemini-2.5-flash",
@@ -345,6 +349,7 @@
       }
     ],
     "clarifications": [],
+    "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": {
       "base": {
         "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01'",

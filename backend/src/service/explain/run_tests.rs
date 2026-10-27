@@ -181,6 +181,7 @@ impl Dataco {
                 examples: &[],
                 domain: None,
                 choices,
+                history: "",
             },
             columns: &self.columns,
             values: &self.values,

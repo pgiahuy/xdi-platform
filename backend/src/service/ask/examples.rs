@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::service::ask::contract::*;
 
 const MODEL: &str = "gemini-2.5-flash";
+const CONVERSATION_ID: Uuid = Uuid::from_u128(0x7d4a2e91_3b6c_4f10_a5d8_6e2c1b0f9a01);
 const VERSION_ID: Uuid = Uuid::from_u128(0x3c8e1d2a_9f4b_4a6c_8d7e_2b1f0a9c8d01);
 // Trần số dòng guard thêm vào SQL trong mẫu; con số thật do #33 chọn khi gọi guard.
 const GUARD_LIMIT: &str = " LIMIT 100000";
@@ -337,6 +338,7 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         question: question.to_string(),
         message: None,
         query_id: query_number.map(|n| Uuid::from_u128(0x5b2f0c1e_7a4d_4e8b_9c61_0d3e2f1a4b00 + n)),
+        conversation_id: CONVERSATION_ID,
         version_id: VERSION_ID,
         model: MODEL.to_string(),
         choices: vec![],

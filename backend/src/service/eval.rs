@@ -147,7 +147,8 @@ async fn run_case_inner(
     case: &EvalCase,
 ) -> Result<String, String> {
     let expected = expected_rows(state, member, dataset_id, case).await?;
-    let response = ask(state, member, dataset_id, &case.question, &[])
+    // Mỗi câu của bộ đánh giá là một câu độc lập, không có hội thoại trước.
+    let response = ask(state, member, dataset_id, &case.question, &[], "")
         .await
         .map_err(|e| format!("lỗi hệ thống khi hỏi: {e:?}"))?;
     if response.status != AskStatus::Answered {
