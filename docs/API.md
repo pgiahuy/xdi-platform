@@ -124,6 +124,19 @@ Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, ph
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).
 
+## Cuộc trò chuyện
+
+Câu hỏi thuộc một cuộc trò chuyện trên một dataset (`backend/src/service/conversation/`). `AskRequest.conversation_id`
+vắng thì backend mở cuộc mới; `AskResponse.conversation_id` luôn có, gửi lại ở câu sau để mô hình đọc câu đó như câu
+tiếp nối của tối đa 4 lượt gần nhất (phần gửi cho mô hình: [Dữ liệu và quyền riêng tư](PRIVACY.md)). Câu `needs_choice`
+không thành lượt, nhưng gửi lại kèm lựa chọn và cùng `conversation_id` thì vào đúng cuộc.
+
+`GET /api/workspaces/{ws}/datasets/{id}/conversations` liệt kê các cuộc của người gọi trên dataset, mới nhất trước, bỏ
+cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả cuộc đó kèm các lượt theo thứ tự hỏi: `query_id`,
+câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Đã hiểu là" dạng chữ). Bảng kết quả không lưu; hỏi lại câu đó
+để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, kể cả admin của workspace: cuộc của người khác, của dataset
+khác hay id không có đều trả 404.
+
 ## Xóa dataset
 
 `DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, chỉ số, lịch sử câu hỏi

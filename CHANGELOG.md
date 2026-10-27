@@ -18,6 +18,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Khung ứng dụng (#161): thanh bên có logo và icon cho từng mục, tài khoản chuyển xuống chân thanh bên, nội dung căn giữa trên màn rộng.
 - Ở trang quản trị hệ thống, thanh bên vẫn giữ các mục của workspace đang làm việc thay vì ẩn đi.
 - Câu "tại sao" cho chỉ số tỷ lệ và trung bình (ví dụ tỷ lệ giao trễ): chênh lệch tách thành phần do cơ cấu và phần do hiệu suất của từng nhóm.
+- Hỏi theo cuộc trò chuyện (#164): câu sau hiểu theo các câu trước trong cùng cuộc, mỗi lượt giữ câu trả lời và bằng chứng riêng, có nút "Cuộc trò chuyện mới".
 - Giao diện mới "Mực và hổ phách": thanh bên nền mực, màu nhấn hổ phách cho nút chính và số chênh lệch, font Be Vietnam Pro đóng gói sẵn, chạy không cần mạng.
 
 ## [0.1.0] - 2026-10-26
