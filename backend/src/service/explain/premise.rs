@@ -12,7 +12,8 @@ use rust_decimal::Decimal;
 use crate::service::ask::contract::{Warning, WarningCode};
 use crate::service::ask::phrases::fold;
 use crate::service::explain::check::{PlanSlices, WhyPlan};
-use crate::service::explain::number::build_change_parts;
+use crate::service::explain::number::{build_change_parts, MAX_FRACTION_DIGITS};
+use crate::service::explain::ratio::RATE_SCALE;
 
 /// Hướng người hỏi giả định.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +86,8 @@ pub struct PremiseLabels {
     pub compare: String,
     /// true khi so hai kỳ, false khi so hai nhóm.
     pub periods: bool,
+    /// Số chữ số lẻ khi viết chênh lệch: tỷ lệ giữ RATE_SCALE chữ số, độ đo khác hai chữ số như bảng kết quả.
+    pub fraction_digits: u32,
 }
 
 /// Nhãn như bảng phân rã: "Quý 2/2017" và "Quý 3/2017", hay hai giá trị nhóm.
@@ -93,11 +96,17 @@ pub fn build_premise_labels(plan: &WhyPlan) -> PremiseLabels {
         PlanSlices::Periods { base, compare, .. } => (base.label(), compare.label(), true),
         PlanSlices::Groups { base, compare, .. } => (base.clone(), compare.clone(), false),
     };
+    let fraction_digits = if plan.measure.denominator.is_some() {
+        RATE_SCALE
+    } else {
+        MAX_FRACTION_DIGITS
+    };
     PremiseLabels {
         measure: plan.measure.label.clone(),
         base,
         compare,
         periods,
+        fraction_digits,
     }
 }
 
@@ -132,6 +141,7 @@ fn build_premise_message(asked: AskedDirection, labels: &PremiseLabels, change: 
         base,
         compare,
         periods,
+        fraction_digits,
     } = labels;
     let asked_text = match (asked, periods) {
         (AskedDirection::Up, true) => "tăng",
@@ -144,7 +154,7 @@ fn build_premise_message(asked: AskedDirection, labels: &PremiseLabels, change: 
             "Bạn hỏi vì sao {asked_text}, nhưng {measure} {compare} bằng {base}, không có chênh lệch."
         );
     }
-    let (_, amount) = build_change_parts(&change.to_string());
+    let (_, amount) = build_change_parts(&change.to_string(), *fraction_digits);
     let actual = match (change > Decimal::ZERO, periods) {
         (true, true) => "tăng",
         (false, true) => "giảm",
@@ -196,6 +206,7 @@ mod tests {
             base: "Quý 2/2017".to_string(),
             compare: "Quý 3/2017".to_string(),
             periods: true,
+            fraction_digits: MAX_FRACTION_DIGITS,
         }
     }
 

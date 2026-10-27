@@ -40,7 +40,7 @@ use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::values::ValueIndex;
 use crate::service::ask::why_prompt::{build_why_form_schema, build_why_prompt};
 use crate::service::explain::breakdown::{
-    build_breakdown, read_slice_totals, run_code_query, Breakdown, CodeQuery, QueryEnv,
+    build_breakdown, read_slice_totals, run_code_query, Breakdown, CodeQuery, QueryEnv, SliceTotals,
 };
 use crate::service::explain::check::{
     build_chosen_base, build_why_check, PlanSlices, WhyPlan, WhyProfile,
@@ -291,8 +291,13 @@ async fn run_plan(
     }
     // Kiểm tiền đề trước phân rã: chênh lệch bằng 0 thì không có phân rã, nhưng người hỏi "vì sao giảm" vẫn cần biết.
     let labels = build_premise_labels(plan);
-    let premise =
-        build_premise_warning(input.prompt.question, &labels, totals.base, totals.compare);
+    // Độ đo tỷ lệ: base, compare của totals là tử số; so hướng phải trên tỷ lệ, vì tử số có thể tăng khi tỷ lệ giảm.
+    let premise = match build_premise_values(&totals) {
+        Some((base, compare)) => {
+            build_premise_warning(input.prompt.question, &labels, base, compare)
+        }
+        None => None,
+    };
     outcome.warnings.extend(premise);
     let filters = (sql.base_filter, sql.compare_filter);
     let mut explanation = match build_breakdown(&env, plan, &totals, filters).await? {
@@ -503,4 +508,63 @@ fn build_measure_choice(
         steps: std::mem::take(steps),
         ..build_empty(AskStatus::NeedsChoice)
     })
+}
+
+/// Giá trị hai lát cắt để kiểm tiền đề: tổng như đã đọc, hay tỷ lệ tử trên mẫu làm tròn RATE_SCALE chữ số khi độ đo là
+/// tỷ lệ. None khi một mẫu số bằng 0 (không có tỷ lệ để so).
+fn build_premise_values(
+    totals: &SliceTotals,
+) -> Option<(rust_decimal::Decimal, rust_decimal::Decimal)> {
+    match totals.denominators {
+        None => Some((totals.base, totals.compare)),
+        Some((d0, d1)) => {
+            let r0 = totals
+                .base
+                .checked_div(d0)?
+                .round_dp(crate::service::explain::ratio::RATE_SCALE);
+            let r1 = totals
+                .compare
+                .checked_div(d1)?
+                .round_dp(crate::service::explain::ratio::RATE_SCALE);
+            Some((r0, r1))
+        }
+    }
+}
+
+#[cfg(test)]
+mod premise_values_tests {
+    use super::*;
+    use rust_decimal::Decimal;
+
+    fn totals(base: &str, compare: &str, denominators: Option<(&str, &str)>) -> SliceTotals {
+        let d = |t: &str| t.parse::<Decimal>().unwrap();
+        SliceTotals {
+            sql: String::new(),
+            base: d(base),
+            compare: d(compare),
+            base_rows: d("1"),
+            compare_rows: d("1"),
+            volume: None,
+            denominators: denominators.map(|(a, b)| (d(a), d(b))),
+        }
+    }
+
+    #[test]
+    fn totals_are_compared_as_read() {
+        let values = build_premise_values(&totals("100", "150", None)).unwrap();
+        assert_eq!(values, ("100".parse().unwrap(), "150".parse().unwrap()));
+    }
+
+    // Tử số tăng (40 lên 45) nhưng tỷ lệ giảm (0.4 xuống 0.3): kiểm tiền đề phải thấy tỷ lệ giảm.
+    #[test]
+    fn ratios_are_compared_not_numerators() {
+        let (base, compare) =
+            build_premise_values(&totals("40", "45", Some(("100", "150")))).unwrap();
+        assert!(compare < base);
+    }
+
+    #[test]
+    fn zero_denominator_has_no_values() {
+        assert!(build_premise_values(&totals("1", "2", Some(("0", "5")))).is_none());
+    }
 }
