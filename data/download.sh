@@ -1,5 +1,84 @@
 #!/usr/bin/env sh
-# Tải dataset thật vào data/. Chưa có dataset nào được chốt; script này là chỗ để thêm.
+# Tải bản đầy đủ của các dataset mẫu vào data/downloads/ (git bỏ qua thư mục này). Nguồn, giấy phép: data/README.md.
+#   sh data/download.sh            tải cả hai
+#   sh data/download.sh dataco     chỉ DataCo Smart Supply Chain (CSV, khoảng 96 MB)
+#   sh data/download.sh retail     chỉ Online Retail II (file .zip khoảng 46 MB, giải nén ra .xlsx)
+# Mỗi file tải vào <tên>.part, kiểm SHA-256 rồi mới đổi tên; file đã có và đúng checksum thì bỏ qua. Tải không được
+# thì in trang nguồn để tải tay. Nạp file tải về ở trang Dữ liệu của giao diện (docs/INSTALL.md mục 7).
 set -eu
 cd "$(dirname "$0")"
-echo "Chưa có dataset nào để tải. Xem data/README.md."
+OUT=downloads
+
+# URL tải trực tiếp và SHA-256 lấy từ API công khai của Mendeley Data
+# (https://data.mendeley.com/public-api/datasets/8gx2fvg2k6/files?folder_id=root&version=5).
+DATACO_URL=https://data.mendeley.com/public-files/datasets/8gx2fvg2k6/files/72784be5-36d3-44fe-b75d-0edbf1999f65/file_downloaded
+DATACO_SHA256=fa6d022ed437155e1a2f0378710602848703c8a7f203f7ff5d77805bf8480aa6
+DATACO_FILE=DataCoSupplyChainDataset.csv
+DATACO_PAGE=https://doi.org/10.17632/8gx2fvg2k6.5
+
+# UCI không công bố checksum; SHA-256 dưới đây tính từ file tải về ngày 2026-10-27. UCI thay file thì checksum lệch và
+# script dừng, báo tải tay.
+RETAIL_URL=https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip
+RETAIL_SHA256=572e36277c2390fbfde10664750731e0a86f55e33470d91919085f0408e67bfb
+RETAIL_ZIP=online_retail_ii.zip
+RETAIL_FILE=online_retail_II.xlsx
+RETAIL_PAGE=https://archive.ics.uci.edu/dataset/502/online+retail+ii
+
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d ' ' -f 1
+    else
+        shasum -a 256 "$1" | cut -d ' ' -f 1
+    fi
+}
+
+# fetch <url> <sha256> <file trong downloads/> <trang nguồn>. Trả 0 khi file có và đúng checksum.
+fetch() {
+    url=$1 sum=$2 file=$OUT/$3 page=$4
+    if [ -f "$file" ] && [ "$(sha256_of "$file")" = "$sum" ]; then
+        echo "data/$file đã có, đúng checksum"
+        return 0
+    fi
+    echo "Tải data/$file"
+    if ! curl -fL --retry 3 -o "$file.part" "$url"; then
+        rm -f "$file.part"
+        echo "Không tải được $url. Tải tay từ $page rồi đặt vào data/$file" >&2
+        return 1
+    fi
+    if [ "$(sha256_of "$file.part")" != "$sum" ]; then
+        rm -f "$file.part"
+        echo "Checksum của data/$file không khớp: file nguồn đã đổi hoặc tải hỏng. Tải tay từ $page" >&2
+        return 1
+    fi
+    mv "$file.part" "$file"
+}
+
+dataco() {
+    fetch "$DATACO_URL" "$DATACO_SHA256" "$DATACO_FILE" "$DATACO_PAGE" || return 1
+    echo "DataCo: CC BY 4.0, ghi công: Constante, Silva, Pereira, DataCo Smart Supply Chain for Big Data Analysis, Mendeley Data, $DATACO_PAGE"
+}
+
+retail() {
+    fetch "$RETAIL_URL" "$RETAIL_SHA256" "$RETAIL_ZIP" "$RETAIL_PAGE" || return 1
+    if ! command -v unzip >/dev/null 2>&1; then
+        echo "Thiếu lệnh unzip: giải nén data/$OUT/$RETAIL_ZIP bằng tay để lấy $RETAIL_FILE" >&2
+        return 1
+    fi
+    unzip -o -q "$OUT/$RETAIL_ZIP" "$RETAIL_FILE" -d "$OUT"
+    echo "Online Retail II: CC BY 4.0, ghi công: Chen, Online Retail II, UCI Machine Learning Repository, https://doi.org/10.24432/C5CG6D"
+}
+
+command -v curl >/dev/null 2>&1 || { echo "Cần curl để tải dữ liệu" >&2; exit 1; }
+mkdir -p "$OUT"
+
+status=0
+case "${1:-all}" in
+    dataco) dataco || status=1 ;;
+    retail) retail || status=1 ;;
+    all)
+        dataco || status=1
+        retail || status=1
+        ;;
+    *) echo "Dùng: sh data/download.sh [dataco|retail]" >&2; exit 2 ;;
+esac
+exit $status

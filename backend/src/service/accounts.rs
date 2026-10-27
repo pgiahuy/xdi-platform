@@ -11,6 +11,7 @@ use chrono::{Duration, Utc};
 use crate::auth::{password, token};
 use crate::engine::store::{Membership, NewAdmin, User};
 use crate::error::AppError;
+use crate::service::samples;
 use crate::state::AppState;
 
 /// Phiên hết hạn sau 30 ngày; đăng xuất hay khóa tài khoản thì hết ngay.
@@ -55,6 +56,7 @@ pub async fn setup(state: &AppState, input: SetupInput) -> Result<(User, String)
         name => name,
     };
     let password_hash = hash_password(input.password).await?;
+    let workspace_slug = slug_from_name(workspace_name);
 
     let user = state
         .store
@@ -63,12 +65,16 @@ pub async fn setup(state: &AppState, input: SetupInput) -> Result<(User, String)
             display_name,
             password_hash: &password_hash,
             workspace_name,
-            workspace_slug: &slug_from_name(workspace_name),
+            workspace_slug: &workspace_slug,
         })
         .await?
         .ok_or_else(|| AppError::Forbidden("Bản cài này đã được thiết lập".to_string()))?;
     *state.setup_code.lock().expect("setup code lock") = None;
     tracing::info!(user_id = %user.id, "administrator account created");
+    // Dataset mẫu vào workspace vừa tạo (service/samples.rs). Chờ xong rồi mới trả lời, để trang đầu tiên người dùng
+    // thấy đã có dataset; chạy nền thì trang mở ra danh sách rỗng và phải tải lại. Đo với bản build debug trên máy dev:
+    // khoảng 4 giây cho 1500 dòng DataCo. Lỗi chỉ ghi log, không chặn thiết lập.
+    samples::seed_first_workspace(state, &user, &workspace_slug).await;
 
     let session = start_session(state, &user, &password_hash)
         .await?

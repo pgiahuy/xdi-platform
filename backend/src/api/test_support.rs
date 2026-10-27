@@ -50,6 +50,8 @@ fn build_state(
     config.static_dir = None;
     // Binary của test không phải xdi-backend, nên không chạy được tiến trình con excel-worker.
     config.excel_worker = crate::engine::excel_worker::ExcelWorker::InProcess;
+    // Test API đếm dataset sau thiết lập; dataset mẫu (service/samples.rs) có test riêng ở service/samples_tests.rs.
+    config.seed_sample = false;
     configure(&mut config);
     let state = AppState::new(config, store);
     *state.setup_code.lock().unwrap() = setup_code.map(str::to_string);

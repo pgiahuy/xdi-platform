@@ -24,13 +24,15 @@ dữ liệu ([docs/PRIVACY.md](docs/PRIVACY.md)).
   góp của từng nhóm theo từng chiều (tổng đóng góp bằng đúng chênh lệch) và tách lượng, giá; mô hình viết lời giải
   thích, code kiểm mọi số trong lời có trong bảng. Bấm một dòng phân rã để xem dòng nguồn.
 - Xem dòng nguồn: bấm một số của bảng kết quả hay của bảng phân rã để xem từng trang các dòng dữ liệu đứng sau số đó.
+- Dataset mẫu: thiết lập lần đầu nạp sẵn 1500 dòng DataCo kèm vài chỉ số mẫu vào workspace đầu tiên, hỏi được ngay
+  (tắt bằng `SEED_SAMPLE=false`); `data/download.sh` tải bản đầy đủ của DataCo và Online Retail II.
 - Mô hình ngôn ngữ: `mock` (không cần khóa, trả lời bộ câu hỏi mẫu trên dataset DataCo), Gemini, Ollama.
 
 Chưa có trên `main`:
 
 - Gán vai dữ liệu cho thành viên: guard đã lọc dòng theo vai dữ liệu khi hỏi và khi xem dòng nguồn, nhưng chưa có API
   hay màn nào đặt `data_role` và chính sách lọc.
-- Chế độ demo, dataset mẫu đóng gói sẵn, màn xem lịch sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.
+- Chế độ demo, màn xem lịch sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.
 
 Tiến độ ở [milestone v0.1.0](https://github.com/pgiahuy/xdi-platform/milestone/1), lịch sử thay đổi ở
 [CHANGELOG.md](CHANGELOG.md), bảng trạng thái chi tiết ở cuối [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái).

@@ -10,7 +10,6 @@ use std::path::Path;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::auth::{self, Member};
 use crate::engine::guard::{build_guarded_sql, AllowedTable};
@@ -19,7 +18,7 @@ use crate::error::AppError;
 use crate::service::ask::ask;
 use crate::service::ask::contract::{AskStatus, CellValue};
 use crate::service::ask::result::build_result_table;
-use crate::service::ingest::{self, StagedFile, Staging, Upload};
+use crate::service::samples::{upload_local_file, SAMPLE_NAME};
 use crate::service::workspaces;
 use crate::state::AppState;
 
@@ -86,30 +85,7 @@ async fn prepare(state: &AppState, data: &Path) -> Result<(Member, String), AppE
     let membership = workspaces::create(state, &user, "Eval").await?;
     let member = auth::member_of(&state.store, user, &membership.slug).await?;
 
-    let staging = Staging::new(&state.config.data_dir)?;
-    let path = staging.upload_path(0);
-    tokio::fs::copy(data, &path)
-        .await
-        .map_err(|e| AppError::Internal(format!("copy {}: {e}", data.display())))?;
-    let sha256 = Sha256::digest(
-        &tokio::fs::read(&path)
-            .await
-            .map_err(|e| AppError::Internal(format!("read {}: {e}", path.display())))?,
-    )
-    .iter()
-    .map(|b| format!("{b:02x}"))
-    .collect::<String>();
-    let name = data
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "sample.csv".to_string());
-    let upload = Upload {
-        name: Some("DataCo".to_string()),
-        dataset_id: None,
-        files: vec![StagedFile { path, name, sha256 }],
-        sheets: Vec::new(),
-    };
-    let result = ingest::upload(state, &member, staging, upload).await?;
+    let result = upload_local_file(state, &member, data, SAMPLE_NAME).await?;
 
     // Hồ sơ ngữ nghĩa chạy nền; hỏi khi chưa xong thì ngữ cảnh thiếu bí danh và câu gợi ý.
     let dataset_id = result.dataset.id.to_string();

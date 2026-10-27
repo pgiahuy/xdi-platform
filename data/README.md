@@ -7,16 +7,41 @@ thêm một file JSON.
 
 | File trong `samples/` | Nguồn | Giấy phép | Dùng cho |
 |---|---|---|---|
-| `dataco.csv` (1500 dòng lấy ngẫu nhiên) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0 | Bộ đánh giá câu hỏi mẫu (`make eval`, #37) và thử nhanh với mock |
+| `dataco.csv` (1500 dòng lấy ngẫu nhiên) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0 | Dataset mẫu nạp sẵn vào workspace đầu tiên, bộ đánh giá câu hỏi mẫu (`make eval`), thử nhanh với mock |
+| `dataco.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Chỉ số mẫu của dataset DataCo (bảng `metrics`) |
 
-Dataset thật không commit vào repo. `download.sh` là chỗ để thêm lệnh tải, hiện chưa tải dataset nào (chỉ in một dòng
-báo). Dataset mà các câu hỏi mẫu của `LLM_PROVIDER=mock` viết cho:
+## Dataset mẫu nạp sẵn
 
-| Dataset | Nguồn | Giấy phép | Dùng cho |
+Khi màn thiết lập lần đầu tạo xong workspace đầu tiên, backend nạp `<SAMPLES_DIR>/dataco.csv` thành dataset tên
+`DataCo` (bảng `dataco`, bảng mà các câu mẫu của `LLM_PROVIDER=mock` viết cho), qua đúng đường nạp file ở trang
+**Dữ liệu**, kể cả hồ sơ cột. Sau đó ghi các chỉ số trong `dataco.metrics.json` vào bảng `metrics` của dataset đó
+(`origin` là `sample`, đã xác nhận); chỉ số nào không qua guard hay không chạy được trên dữ liệu thì bỏ qua và ghi log.
+Prompt sinh SQL dùng các chỉ số này làm công thức của tổ chức.
+
+- `SEED_SAMPLE=false`: không nạp, workspace đầu tiên để trống.
+- `SAMPLES_DIR`: thư mục chứa hai file trên. Mặc định `../data/samples` tính từ `backend/` (nơi `make dev` chạy
+  `cargo run`); compose đặt `/samples`. Thư mục không có `dataco.csv` thì bỏ qua, không lỗi.
+- Chỉ chạy một lần, lúc thiết lập: khởi động lại không nạp thêm, và đã xóa dataset mẫu thì nó không quay lại. Bản cài
+  thiết lập trước khi có bước này thì nạp tay `data/samples/dataco.csv` với tên dataset `DataCo`.
+- Lỗi khi nạp mẫu chỉ ghi log mức cảnh báo, không chặn việc tạo tài khoản quản trị.
+
+Mỗi chỉ số trong `dataco.metrics.json` có `name`, `description`, `expression` (biểu thức tổng hợp trên cột thật),
+`filter`, `time_column`, `unit` (ba trường sau có thể là `null`), như cột cùng tên của bảng `metrics`.
+
+## Tải bản đầy đủ
+
+Dataset đầy đủ không commit vào repo. `sh data/download.sh` tải vào `data/downloads/` (git bỏ qua), kiểm SHA-256 từng
+file, file đã có và đúng checksum thì bỏ qua; `sh data/download.sh dataco` hay `retail` để tải một bộ. Tải không được
+hay checksum lệch thì script in trang nguồn để tải tay. Nạp file tải về ở trang **Dữ liệu**.
+
+| Dataset | File trong `downloads/` | Nguồn | Giấy phép, ghi công |
 |---|---|---|---|
-| DataCo Smart Supply Chain, file `DataCoSupplyChainDataset.csv` | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0 | Câu hỏi mẫu và hồ sơ viết sẵn của mock (`backend/src/engine/llm/mock_answers.json`), bảng logic `dataco` |
+| DataCo Smart Supply Chain for Big Data Analysis | `DataCoSupplyChainDataset.csv` (khoảng 96 MB, windows-1252) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0; Fabian Constante, Fernando Silva, António Pereira (2019) |
+| Online Retail II | `online_retail_ii.zip` và `online_retail_II.xlsx` giải nén từ đó (khoảng 46 MB) | UCI Machine Learning Repository, https://archive.ics.uci.edu/dataset/502/online+retail+ii | CC BY 4.0; Daqing Chen (2019), https://doi.org/10.24432/C5CG6D |
 
-Tải tay từ trang Mendeley Data, nạp ở trang **Dữ liệu** với tên dataset `DataCo` để tên bảng là `dataco`: mục 7 của
-[docs/INSTALL.md](../docs/INSTALL.md).
+Câu mẫu và hồ sơ viết sẵn của mock (`backend/src/engine/llm/mock_answers.json`) viết cho bảng `dataco`: nạp bản đầy
+đủ của DataCo với tên dataset `DataCo` vào workspace chưa có dataset đó (đã có thì bảng mới thành `dataco_2`). Online
+Retail II chưa có chỉ số mẫu hay câu mẫu cho mock, hỏi trên đó cần Gemini hoặc Ollama; bản đầy đủ chưa được thử nạp
+qua trang **Dữ liệu**, giới hạn của file Excel ở [docs/DATA.md](../docs/DATA.md).
 
 Khi thêm dataset: ghi nguồn, giấy phép, và kiểm tra giấy phép cho phép phân phối lại trước khi đưa vào `samples/`.
