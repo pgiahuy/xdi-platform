@@ -10,6 +10,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Bộ đánh giá câu hỏi mẫu (#37): `make eval` chạy 14 câu mẫu trên dữ liệu DataCo thu nhỏ (`data/samples/dataco.csv`, CC BY 4.0), so kết quả với SQL đúng viết tay và báo accuracy; CI đỏ khi accuracy giảm dưới `eval/baseline.json`. Chạy được với mock (mặc định) và với mô hình thật qua `LLM_PROVIDER`.
 - Xóa dataset (#160): admin bấm **Xóa** ở trang Dữ liệu để xóa hẳn một dataset cùng mọi phiên bản, hồ sơ, lịch sử câu hỏi và file.
 - Câu "tại sao" nhận thêm cách hỏi ("sao lại", "vì đâu") và cảnh báo khi câu hỏi nói giảm mà số thật tăng hay ngược lại (#164).
+- Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") giải thích kỳ gần nhất có dữ liệu, đổi được sang kỳ khác trên thẻ "Đã hiểu là" (#164).
 - Câu hỏi cần thông tin dataset không có (mức hài lòng, dự báo) được báo rõ kèm các cột gần nhất có thể hỏi, thay vì chạy một câu SQL lạc đề (#164).
 
 ### Changed

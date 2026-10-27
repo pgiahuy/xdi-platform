@@ -7,7 +7,7 @@ explain/check_tests.rs.
 Chỉ nhận đúng ba dạng viết, khớp với grain: mô hình viết dạng khác ("Q3 2017", "2017-7") thì kiểm form báo lỗi trường
 và mô hình sửa ở vòng sau, thay vì code đoán. Kỳ là khoảng ngày tùy ý thì chưa nhận (ngoài phạm vi của #38). */
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 /// Độ dài một kỳ.
@@ -97,6 +97,17 @@ impl Period {
             grain,
             first_month: year * 12 + month - 1,
         })
+    }
+
+    /// Kỳ chứa một ngày: ngày 15/11/2017 theo quý là quý 4/2017.
+    pub fn containing(grain: Grain, date: NaiveDate) -> Period {
+        let month = date.year() * 12 + date.month0() as i32;
+        let months = grain.months();
+        Period {
+            grain,
+            // Tháng đầu kỳ: lùi về bội số của độ dài kỳ tính từ tháng 1, nên quý bắt đầu ở tháng 1, 4, 7, 10.
+            first_month: month - month.rem_euclid(12) % months,
+        }
     }
 
     pub fn year(self) -> i32 {

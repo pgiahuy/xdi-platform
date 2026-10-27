@@ -21,6 +21,7 @@ pub mod check;
 pub(crate) mod check_tests;
 pub mod choices;
 pub mod form;
+pub mod latest;
 pub mod measure;
 pub mod number;
 pub mod period;

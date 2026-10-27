@@ -49,6 +49,7 @@ use crate::service::explain::choices::{build_why_assumptions, BASE_CHOICE_ID};
 use crate::service::explain::form::{
     build_form_from_reply, build_why_repair_prompt, FieldError, ReadForm,
 };
+use crate::service::explain::latest::{apply_latest, find_latest, LatestPeriod, COMPARE_CHOICE_ID};
 use crate::service::explain::plain::run_plain;
 use crate::service::explain::premise::{build_premise_labels, build_premise_warning};
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
@@ -179,7 +180,7 @@ async fn run_round(
     reply: &str,
     steps: &mut Vec<AskStep>,
 ) -> Result<Round, AppError> {
-    let read = match build_form_from_reply(reply) {
+    let mut read = match build_form_from_reply(reply) {
         Ok(read) => read,
         Err(error) => return Ok(Round::Invalid(vec![error])),
     };
@@ -196,21 +197,47 @@ async fn run_round(
         metrics: input.prompt.metrics,
         row_count: input.row_count,
     };
+    // Câu không nêu kỳ: code chọn kỳ gần nhất có dữ liệu và ghi vào form trước khi kiểm (explain/latest.rs).
+    let chosen_compare = find_chosen(input, COMPARE_CHOICE_ID);
+    let latest = find_latest(
+        &build_env(input),
+        input.prompt.table,
+        input.columns,
+        &read.form,
+        chosen_compare,
+    )
+    .await?;
+    if let Some(latest) = &latest {
+        apply_latest(&mut read, latest);
+    }
     let plan = match build_why_check(&read.form, &profile, find_base_choice(input)) {
         Ok(plan) => plan,
         Err(errors) => return Ok(Round::Invalid(errors)),
     };
-    run_plan(llm, input, read, &plan, steps).await
+    run_plan(llm, input, read, &plan, latest.as_ref(), steps).await
 }
 
 /// Phương án người hỏi gửi cho lựa chọn kỳ so sánh (explain/choices.rs), nếu có.
 fn find_base_choice<'a>(input: &WhyInput<'a>) -> Option<&'a str> {
+    find_chosen(input, BASE_CHOICE_ID)
+}
+
+fn find_chosen<'a>(input: &WhyInput<'a>, choice_id: &str) -> Option<&'a str> {
     input
         .prompt
         .choices
         .iter()
-        .find(|c| c.choice_id == BASE_CHOICE_ID)
+        .find(|c| c.choice_id == choice_id)
         .map(|c| c.option_id.as_str())
+}
+
+fn build_env<'a>(input: &WhyInput<'a>) -> QueryEnv<'a> {
+    QueryEnv {
+        tables: input.tables,
+        max_rows: input.max_rows,
+        timeout: input.timeout,
+        jobs: input.jobs,
+    }
 }
 
 /// Chạy bảng tổng, rồi bước explain và narrate.
@@ -219,14 +246,10 @@ async fn run_plan(
     input: &WhyInput<'_>,
     read: ReadForm,
     plan: &WhyPlan,
+    latest: Option<&LatestPeriod>,
     steps: &mut Vec<AskStep>,
 ) -> Result<Round, AppError> {
-    let env = QueryEnv {
-        tables: input.tables,
-        max_rows: input.max_rows,
-        timeout: input.timeout,
-        jobs: input.jobs,
-    };
+    let env = build_env(input);
     let sql = build_why_sql(plan);
     let mut outcome = WhyOutcome {
         sql_generated: Some(sql.total_sql.clone()),
@@ -237,6 +260,7 @@ async fn run_plan(
             input.prompt.metrics,
             &read.form.terms,
             plan,
+            latest,
         ),
         terms: read.form.terms,
         ..build_empty(AskStatus::Answered)

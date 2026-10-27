@@ -113,7 +113,10 @@ Câu "tại sao" (nhận bằng từ khóa) đi đường form: mô hình
 điền form, code dựng SQL, `result` là bảng tổng theo kỳ hay theo nhóm, `explanation` là bảng phân rã; không phân rã
 được thì `explanation` null kèm cảnh báo `explanation_unavailable`, câu vẫn answered. Câu nói một hướng ("vì sao
 giảm", "vì sao cao hơn") mà chênh lệch tính được ngược hướng hay bằng 0 thì kèm cảnh báo `premise_mismatch` nêu chênh
-lệch thực tế; phân rã và lời giải thích vẫn trả như thường, theo chênh lệch thực tế. Câu hỏi cần thông tin không cột
+lệch thực tế; phân rã và lời giải thích vẫn trả như thường, theo chênh lệch thực tế. Câu so hai kỳ không nêu kỳ thì
+code chọn kỳ gần nhất có dữ liệu (kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó thì lùi một kỳ) và ghi thành giả
+định `why:compare` trong `understanding.assumptions`, phương án là kỳ viết như `2017-Q4`; gửi lại `{choice_id:
+"why:compare", option_id: "2017-Q3"}` để giải thích kỳ khác. Câu hỏi cần thông tin không cột
 nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo `unanswerable`, không câu SQL nào
 chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các cột gần nhất có thể hỏi; câu
 vẫn ghi vào lịch sử như câu bị từ chối.

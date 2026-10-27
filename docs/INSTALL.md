@@ -642,6 +642,11 @@ sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do
 đổi) thì kết quả có thêm một cảnh báo nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
 năm 2017 giảm".
 
+Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") vẫn có phân rã: backend chọn kỳ gần nhất có dữ liệu (theo tháng
+nếu câu không nói tháng, quý hay năm) và so với kỳ liền trước. Kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó
+(dữ liệu dừng giữa kỳ) thì lùi một kỳ. Thẻ **Đã hiểu là** ghi giả định này, ví dụ "Kỳ gần nhất có dữ liệu: Quý 4/2017
+so với Quý 3/2017", kèm nút cho các kỳ gần nhất có dữ liệu; bấm một nút để hỏi lại với kỳ đó.
+
 Câu hỏi cần thông tin dataset không có (ví dụ "Tại sao khách hàng không hài lòng?" khi không có cột đánh giá, hay hỏi
 dự báo) thì không có bảng số: kết quả báo dữ liệu không có thông tin này, nói lý do và gợi ý các cột gần nhất để hỏi.
 Với `mock`, thử đúng câu "Tại sao khách hàng không hài lòng?".

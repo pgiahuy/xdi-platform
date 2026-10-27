@@ -36,7 +36,8 @@ pub fn build_why_prompt(input: &PromptInput) -> String {
 /// kỳ, metric và measure dùng một trong hai.
 // compare nằm trong required dù so hai nhóm có thể không cần kỳ: khi compare không bắt buộc, Gemini hay bỏ trống nó ở
 // lần điền đầu (kỳ chỉ ghi trong terms), kiểm form báo lỗi và tốn một vòng sửa. So hai nhóm không có kỳ thì ghi chuỗi
-// rỗng; check_slices bỏ qua compare khi form không có time.
+// rỗng; check_slices bỏ qua compare khi form không có time. Câu so hai kỳ không nêu kỳ cũng ghi chuỗi rỗng, code chọn
+// kỳ gần nhất có dữ liệu (explain/latest.rs).
 pub fn build_why_form_schema() -> serde_json::Value {
     let text = |description: &str| json!({ "type": "string", "description": description });
     json!({
@@ -64,7 +65,7 @@ pub fn build_why_form_schema() -> serde_json::Value {
             },
             "compare": text(
                 "The period being explained, such as 2017, 2017-Q3 or 2017-05, matching the grain; an empty string \
-                 only when comparing two groups with no period"
+                 when the question names no period"
             ),
             "base": text("The period to compare with; leave out to use the period just before"),
             "filters": {
@@ -106,8 +107,9 @@ fn build_why_rules(table: &str) -> String {
          a draft: use it only when no confirmed metric fits.\n\
          - To compare two periods, set \"time\" to a column of role time and a grain (month, quarter or year), and \
          write \"compare\" and \"base\" as 2017, 2017-Q3 or 2017-05 to match the grain. \"compare\" is the period the \
-         question asks about and is always required, also when the period is in \"terms\". Leave \"base\" out to \
-         compare with the period just before.\n\
+         question asks about, also when the period is in \"terms\"; when the question names no period, write \
+         \"compare\" as an empty string and do not pick one, the code uses the latest period with data. Leave \
+         \"base\" out to compare with the period just before.\n\
          - To compare two groups, leave \"time\" out and set \"groups\" to a column of role dimension and two of its \
          values. Write \"compare\" as the period of the question, or as an empty string when the question names no \
          period.\n\
