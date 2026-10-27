@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
 import { initials } from './labels'
 import { menuItemFocus } from './menuItemFocus'
 import type { LinkComponent, SignedInUser } from './types'
@@ -25,9 +26,11 @@ type Props = {
   logoutPending: boolean
   /** wide: nút full-width cho chân thanh bên (tên và email xếp dọc); mặc định là nút gọn trên thanh trên. */
   wide?: boolean
+  /** Thanh bên thu gọn: nút ở chân thanh bên chỉ còn ô chữ đầu; tên đọc qua aria-label và title. */
+  compact?: boolean
 }
 
-export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPending, wide }: Props) {
+export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPending, wide, compact = false }: Props) {
   const name = user.name || user.email
   const [open, setOpen] = useState(false)
 
@@ -41,6 +44,7 @@ export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPendin
           <button
             type="button"
             aria-label={`Tài khoản ${name}`}
+            title={compact ? name : undefined}
             className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-raised data-[state=open]:bg-sidebar-raised focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
           >
             <span
@@ -49,7 +53,7 @@ export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPendin
             >
               {initials(user.name, user.email)}
             </span>
-            <span className="flex min-w-0 flex-1 flex-col">
+            <span className={cn('flex min-w-0 flex-1 flex-col', compact && 'hidden')}>
               <span className="truncate text-sm font-medium">{name}</span>
               <span className="truncate text-xs text-sidebar-muted">{user.email}</span>
             </span>

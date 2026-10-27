@@ -22,6 +22,7 @@ import { accountRoute, adminNav } from './globalNav'
 import { RouterLink } from './RouterLink'
 import { SessionStatus } from './SessionStatus'
 import { SignedInScreen } from './SignedInScreen'
+import { useStoredFlag } from './storedFlag'
 import { accountPath, workspaceHref, workspaceNav } from './workspaceNav'
 
 export function AppLayout() {
@@ -34,6 +35,8 @@ export function AppLayout() {
   const navigate = useNavigate()
   const createWorkspace = useCreateWorkspace()
   const [createOpen, setCreateOpen] = useState(false)
+  // Thanh bên màn rộng thu gọn thành dải icon: thói quen của người dùng, nhớ qua các lần tải trang.
+  const [sidebarCollapsed, setSidebarCollapsed] = useStoredFlag('xdi.shell.sidebarCollapsed', false)
   // Workspace mở gần nhất trong tab này. AppLayout không bị gỡ khi đi từ workspace sang trang quản trị, nên state giữ
   // được slug; trang quản trị dùng nó để thanh bên vẫn có các mục của workspace đó thay vì biến mất.
   // Cập nhật ngay lúc render khi đường dẫn đổi workspace (cách React khuyên cho state suy từ props), không qua effect.
@@ -94,8 +97,7 @@ export function AppLayout() {
 
   // Ngoài workspace (trang quản trị, /account) thanh bên vẫn giữ mục của workspace mở gần nhất, hoặc workspace đầu tiên
   // khi vào thẳng trang quản trị; không mục nào sáng vì đường dẫn không thuộc workspace.
-  const navWorkspace =
-    current ?? workspaces.find((m) => m.slug === lastWorkspace) ?? workspaces.at(0)
+  const navWorkspace = current ?? workspaces.find((m) => m.slug === lastWorkspace) ?? workspaces.at(0)
 
   // Trang đầu của workspace chỉ sáng khi đúng là trang đầu; mục khác sáng cả ở trang con, ví dụ datasets/<id>.
   const workspaceItems = navWorkspace
@@ -154,6 +156,8 @@ export function AppLayout() {
         pending: createWorkspace.isPending,
         error: createWorkspace.error?.message,
       }}
+      sidebarCollapsed={sidebarCollapsed}
+      onSidebarCollapsedChange={setSidebarCollapsed}
       link={RouterLink}
     >
       <Outlet />
