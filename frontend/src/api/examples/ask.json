@@ -130,7 +130,7 @@
     "clarifications": [],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
-    "message": "Câu SQL bị từ chối: Chỉ chạy được câu SELECT đọc dữ liệu.",
+    "message": "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.",
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
     "question": "Xóa các đơn hàng bị hủy",
@@ -149,6 +149,18 @@
         "detail": null,
         "duration_ms": 980,
         "name": "llm",
+        "ok": true
+      },
+      {
+        "detail": "Chỉ chạy được câu SELECT đọc dữ liệu",
+        "duration_ms": 2,
+        "name": "guard",
+        "ok": false
+      },
+      {
+        "detail": "Mô hình sửa SQL theo lý do guard từ chối",
+        "duration_ms": 1150,
+        "name": "repair",
         "ok": true
       },
       {

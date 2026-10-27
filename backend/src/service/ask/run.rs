@@ -8,11 +8,13 @@ Câu trả lời của mô hình là object JSON {terms, assumptions, clarify, s
 trả needs_choice, không chạy gì; báo dữ liệu không có thông tin (unanswerable, #164) thì trả rejected, không chạy gì,
 ask/mod.rs dựng lời. Câu trả lời không đọc được (không phải JSON, thiếu sql) cũng vào vòng sửa.
 
-Vào vòng sửa: DuckDB báo lỗi, hoặc guard từ chối vì bảng hay cột không có trong hồ sơ (GuardError::UnknownName) hay vì
-câu có thể dựng giá trị quá lớn (GuardError::Oversized: tham số kích thước, số tầng, mảnh ghép, độ rộng), hoặc câu trả
-lời không đọc được. Không sửa: guard từ chối vì lý do khác (câu ghi, hàm bị cấm), câu chạy quá giờ hay quá bộ nhớ. Lỗi
-guard, lỗi DuckDB và câu trả lời không đọc được chung một vòng sửa, cả câu hỏi tối đa một vòng. Lời báo lỗi gửi mô hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ
-(ask/repair.rs, cùng prompt sửa). Test ở ask/run_tests.rs. */
+Vào vòng sửa: DuckDB báo lỗi, guard từ chối vì bất kỳ lý do nào (trừ lỗi máy chủ GuardError::Internal), hoặc câu trả
+lời không đọc được. Guard từ chối là lỗi của hệ thống chứ không phải của người hỏi: câu sửa lại qua guard từ đầu nên
+gửi mọi lý do cho mô hình không mở thêm đường nào tới dữ liệu. Không sửa: câu chạy quá giờ hay quá bộ nhớ. Lỗi guard,
+lỗi DuckDB và câu trả lời không đọc được chung một vòng sửa, cả câu hỏi tối đa một vòng. Câu sửa vẫn bị từ chối thì
+người hỏi nhận lời của hệ thống (REFUSED_MESSAGE); lý do của guard nằm trong chi tiết bước guard. Lời báo lỗi gửi mô
+hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ (ask/repair.rs, cùng prompt sửa). Test ở
+ask/run_tests.rs. */
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -32,6 +34,12 @@ use crate::service::ask::reply::{
     Term, Unanswerable,
 };
 use crate::service::ask::result::{build_result_table, SENT_ROWS};
+
+/// Lời cho người hỏi khi câu SQL của vòng sửa vẫn bị guard từ chối. Lỗi nằm ở câu hệ thống viết, không ở câu hỏi, nên
+/// lời không đưa lý do kỹ thuật mà gợi ý cách hỏi lại.
+pub const REFUSED_MESSAGE: &str =
+    "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một \
+     lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.";
 
 /// Đầu vào của run_with_repair, trừ mô hình.
 pub struct RunInput<'a> {
@@ -91,8 +99,8 @@ enum Attempt {
         limit_kept: bool,
         row_filters: Vec<String>,
     },
-    /// Guard từ chối. fixable khi lý do là sai tên bảng hay cột.
-    Refused { reason: String, fixable: bool },
+    /// Guard từ chối; reason là lý do của guard, gửi cho mô hình ở vòng sửa.
+    Refused { reason: String },
     /// DuckDB báo lỗi; error đã bỏ đường dẫn, gửi được cho mô hình.
     RunFailed { shown: String, error: String },
     /// Quá giờ hay quá bộ nhớ: dừng câu hỏi, không sửa.
@@ -118,10 +126,7 @@ pub async fn run_with_repair(
             unanswerable,
         }) => return Ok(build_unanswerable_outcome(terms, unanswerable, steps)),
         Ok(ModelAnswer::Sql(answer)) => match attempt(&input, &answer.sql, &mut steps).await? {
-            Attempt::Refused {
-                reason,
-                fixable: true,
-            } => (Some(answer), reason, None),
+            Attempt::Refused { reason } => (Some(answer), reason, None),
             Attempt::RunFailed { shown, error } => (Some(answer), error, Some(shown)),
             other => return Ok(build_outcome(other, answer, steps)),
         },
@@ -202,18 +207,21 @@ async fn attempt(
     steps: &mut Vec<AskStep>,
 ) -> Result<Attempt, AppError> {
     let started = Instant::now();
-    let (reason, fixable) = match build_guarded_sql(sql, input.tables, input.max_rows) {
+    let reason = match build_guarded_sql(sql, input.tables, input.max_rows) {
         Ok(guarded) => {
             let note = guarded.limit_note.as_deref();
             steps.push(build_step(StepName::Guard, started, true, note));
             return run_guarded(input, guarded, steps).await;
         }
         Err(GuardError::Internal(e)) => return Err(e),
-        Err(GuardError::UnknownName(reason) | GuardError::Oversized(reason)) => (reason, true),
-        Err(GuardError::Rejected(reason)) => (reason, false),
+        Err(
+            GuardError::UnknownName(reason)
+            | GuardError::Oversized(reason)
+            | GuardError::Rejected(reason),
+        ) => reason,
     };
     steps.push(build_step(StepName::Guard, started, false, Some(&reason)));
-    Ok(Attempt::Refused { reason, fixable })
+    Ok(Attempt::Refused { reason })
 }
 
 async fn run_guarded(
@@ -316,7 +324,8 @@ fn internal(message: String) -> QueryError {
 }
 
 /// RunOutcome từ lượt cuối cùng: lượt đầu khi không sửa, lượt sau khi đã sửa. Lượt đầu không bao giờ là RunFailed hay
-/// Refused sửa được (đã vào vòng sửa), nên RunFailed ở đây là câu đã sửa vẫn lỗi. answer là câu trả lời của lượt đó.
+/// Refused (cả hai đã vào vòng sửa), nên RunFailed và Refused ở đây là câu đã sửa vẫn lỗi. answer là câu trả lời của
+/// lượt đó.
 fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> RunOutcome {
     // Nhánh answered dựng RunOutcome ngay vì chỉ nó có kết quả và ghi chú của guard; các nhánh còn lại chỉ khác nhau
     // ở status, lời báo và câu đã qua guard.
@@ -342,11 +351,9 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
                 steps,
             };
         }
-        Attempt::Refused { reason, .. } => (
-            AskStatus::Rejected,
-            Some(format!("Câu SQL bị từ chối: {reason}.")),
-            None,
-        ),
+        // Đây luôn là câu của vòng sửa: guard từ chối câu đầu thì câu hỏi vào vòng sửa. Lý do của guard viết cho mô
+        // hình và đã nằm trong chi tiết bước guard; người hỏi không sửa được câu SQL nên nhận lời của hệ thống.
+        Attempt::Refused { .. } => (AskStatus::Rejected, Some(REFUSED_MESSAGE.to_string()), None),
         Attempt::RunFailed { shown, error } => (
             AskStatus::Failed,
             Some(format!(

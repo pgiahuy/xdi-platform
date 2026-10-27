@@ -11,8 +11,8 @@ VARCHAR) nên tự parse bằng strptime; hồ sơ (#22) hay bước seed (#25) 
 Tỷ lệ và số đếm về đơn tính theo đơn hàng (đếm "Order Id" phân biệt), không theo dòng: một đơn có nhiều dòng.
 Câu "Doanh thu theo ngày giao hàng" cố ý đọc ngày theo ngày/tháng/năm nên DuckDB báo lỗi, và có câu sửa (task repair)
 đọc đúng tháng/ngày/năm: để chạy thử vòng sửa (service/ask/run.rs) mà không cần mô hình thật. Ba câu nữa để thử các
-nhánh còn lại của luồng hỏi (service/ask/mod.rs) trên giao diện: "Xóa các đơn hàng bị hủy" viết câu DELETE nên guard từ
-chối (rejected); "Doanh thu theo ngày đặt hàng" đọc sai định dạng ngày cả ở câu sửa (failed); "Doanh thu ở thị trường
+nhánh còn lại của luồng hỏi (service/ask/mod.rs) trên giao diện: "Xóa các đơn hàng bị hủy" viết câu DELETE cả ở câu sửa nên
+guard từ chối cả hai lần (rejected); "Doanh thu theo ngày đặt hàng" đọc sai định dạng ngày cả ở câu sửa (failed); "Doanh thu ở thị trường
 châu Á" lọc Market = 'Asia', giá trị DataCo không có (cảnh báo filter_value_not_found). "Doanh thu theo tháng giảm so
 với cùng kỳ năm trước" so từng tháng của năm mới nhất trong dữ liệu với năm liền trước (câu con lấy năm lớn nhất, nên
 chạy được với cả DataCo đầy đủ lẫn bản nhỏ): hai tổng tiền theo 12 tháng, để thử luật biểu đồ vẽ hai đường trên một
@@ -132,7 +132,7 @@ mod tests {
         let answers = parse_answers(ANSWERS_JSON).unwrap();
         let count = |wanted: LlmTask| answers.keys().filter(|(task, _)| *task == wanted).count();
         assert_eq!(count(LlmTask::Sql), 16);
-        assert_eq!(count(LlmTask::Repair), 2);
+        assert_eq!(count(LlmTask::Repair), 3);
         assert_eq!(count(LlmTask::Narrate), 1);
         assert_eq!(count(LlmTask::Why), 4);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];

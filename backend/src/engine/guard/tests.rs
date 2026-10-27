@@ -72,7 +72,7 @@ fn assert_rejected(sql: &str) -> String {
     }
 }
 
-/// Như assert_rejected, nhưng phải là loại sai tên bảng hay cột, loại service gửi lại cho mô hình sửa.
+/// Như assert_rejected, nhưng phải là loại sai tên bảng hay cột (GuardError::UnknownName).
 fn assert_unknown_name(sql: &str) -> String {
     match guard(sql) {
         Err(GuardError::UnknownName(reason)) => reason,
@@ -88,7 +88,7 @@ fn assert_oversized(sql: &str) -> String {
     }
 }
 
-/// Loại từ chối mà sửa tên không giúp gì: service dừng câu hỏi, không nhờ mô hình sửa.
+/// Loại từ chối không phải sai tên hay quá lớn (GuardError::Rejected).
 fn assert_rejected_for_other_reason(sql: &str) {
     match guard(sql) {
         Err(GuardError::Rejected(_)) => {}
@@ -491,9 +491,10 @@ fn rejects_column_of_unknown_table_alias() {
     assert_unknown_name("SELECT x.region FROM sales s");
 }
 
-/// Chỉ sai tên bảng hay cột được gửi lại cho mô hình sửa; câu ghi, hàm bị cấm, nhiều câu thì dừng ngay.
+/// Các lý do ngoài sai tên và quá lớn (câu ghi, hàm bị cấm, nhiều câu, câu sai cú pháp, hàm ở chỗ bảng, WITH RECURSIVE,
+/// FETCH FIRST) ra loại Rejected.
 #[test]
-fn only_unknown_names_are_fixable() {
+fn other_refusals_are_rejected() {
     for sql in [
         "DELETE FROM sales",
         "SELECT getenv('HOME')",

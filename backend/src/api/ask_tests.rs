@@ -17,6 +17,7 @@ use crate::config::{Config, Secret};
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::store::test_support::{exec, fetch_count, fresh_database, TestDb};
 use crate::error::AppError;
+use crate::service::ask::run::REFUSED_MESSAGE;
 
 /// Đủ cột cho các câu mẫu của mock dùng ở đây. Ngày giao hàng ghi tháng/ngày/năm như DataCo, nên câu mẫu đọc
 /// ngày/tháng/năm lỗi ở dòng đầu (tháng 31) và câu sửa đọc đúng.
@@ -310,9 +311,14 @@ async fn mock_why_question_without_data_is_rejected() {
     assert_eq!(fetch_count(&asking.db.store, sql).await, 1);
 }
 
+/// Guard từ chối câu đầu thì mô hình được sửa một lần; câu sửa vẫn bị từ chối thì câu hỏi là rejected, người hỏi nhận
+/// lời của hệ thống còn lý do của guard ở bước guard.
 #[tokio::test]
 async fn guard_refusal_is_recorded_as_rejected() {
-    let llm = scripted(&[sql_reply("DELETE FROM dataco")]);
+    let llm = scripted(&[
+        sql_reply("DELETE FROM dataco"),
+        sql_reply("DELETE FROM dataco"),
+    ]);
     let Some(asking) = start(Some(llm)).await else {
         return;
     };
@@ -322,7 +328,18 @@ async fn guard_refusal_is_recorded_as_rejected() {
     assert_eq!(response["sql_generated"], "DELETE FROM dataco");
     assert!(response["sql_guarded"].is_null());
     assert!(response["query_id"].is_string());
-    assert_eq!(step_names(&response), ["context", "llm", "guard", "record"]);
+    assert_eq!(
+        step_names(&response),
+        ["context", "llm", "guard", "repair", "guard", "record"]
+    );
+    assert_eq!(response["message"], REFUSED_MESSAGE);
+    assert!(
+        response["steps"][4]["detail"]
+            .as_str()
+            .unwrap()
+            .contains("SELECT"),
+        "{response}"
+    );
     assert_eq!(asking.queries_with("rejected").await, 1);
     // Không có câu nào chạy nên không có thẻ hay biểu đồ.
     assert!(response["understanding"].is_null());

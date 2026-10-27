@@ -9,12 +9,15 @@ Prompt chỉ có tên bảng logic, tên cột, mô tả, bí danh, giá trị c
 có dòng dữ liệu, đường dẫn file hay read_parquet (docs/PRIVACY.md). Phần luật viết tiếng Anh vì là phần máy đọc, như
 prompt sửa (ask/repair.rs); câu hỏi, tên cột, mô tả, giá trị giữ nguyên văn.
 
-Thứ tự: luật, cột, gợi ý, lựa chọn đã có, chỉ số, khái niệm ngành, ví dụ, câu hỏi cuối cùng, để mô hình đọc câu hỏi khi
-đã có đủ ngữ cảnh. Chỉ số chưa xác nhận luôn ghi rõ là bản nháp. */
+Thứ tự: luật, luật của guard, cột, gợi ý, lựa chọn đã có, chỉ số, khái niệm ngành, ví dụ, các lượt hỏi trước của hội
+thoại, câu hỏi cuối cùng, để mô hình đọc câu hỏi khi đã có đủ ngữ cảnh. Luật của guard sinh từ chính guard
+(engine/guard/prompt_rules.rs), để mô hình viết được câu qua guard ngay lần đầu; guard vẫn kiểm lại mọi câu. Chỉ số
+chưa xác nhận luôn ghi rõ là bản nháp. */
 
 use std::collections::HashSet;
 
 use crate::engine::domains::DomainPackage;
+use crate::engine::guard::build_prompt_rules;
 use crate::engine::store::{MetricDefinition, ProfileRole, PromptExample};
 use crate::service::ask::choices::COLUMN_CHOICE_PREFIX;
 use crate::service::ask::context::{AskContext, ColumnProfile};
@@ -65,6 +68,7 @@ pub fn build_sql_prompt(input: &PromptInput) -> String {
     build_within_limit(|detail| {
         join_sections(vec![
             build_sql_rules(input.table),
+            build_prompt_rules(&[input.table]),
             build_columns_section(input.context, detail),
             build_hints_section(input.context),
             build_choices_section(input.context, input.choices),

@@ -7,10 +7,11 @@ vai dữ liệu của người hỏi; thêm LIMIT; đổi bảng logic sang file
 Kiểm trên cây cú pháp vì dò chữ "DROP" thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Hạn chế: cây do
 sqlparser dựng, không phải DuckDB, nên cú pháp hiếm có thể bị hai bên hiểu khác nhau.
 
-Lý do từ chối được gửi lại cho LLM tự sửa, nên phải chỉ đúng chỗ sai. Chỉ lý do sai tên bảng hay cột
-(GuardError::UnknownName) và câu có thể dựng giá trị quá lớn (GuardError::Oversized) được service gửi lại; lý do khác
-dừng câu hỏi ngay. Guard nhận hồ sơ bảng và chính sách lọc dòng từ service thay vì tự đọc Postgres, để test không cần
-cơ sở dữ liệu. */
+Lý do từ chối được gửi lại cho LLM tự sửa, nên phải chỉ đúng chỗ sai. Luồng hỏi (service/ask/run.rs) gửi mọi lý do
+từ chối, trừ lỗi máy chủ (GuardError::Internal), cho mô hình sửa một lần; loại GuardError cho biết lỗi thuộc nhóm nào.
+Các luật mô hình tự đáp ứng được cũng được viết vào prompt (guard/prompt_rules.rs), để mô hình ít bị từ chối ngay từ
+lần đầu. Guard nhận hồ sơ bảng và chính sách lọc dòng từ service thay vì tự đọc Postgres, để test không cần cơ sở dữ
+liệu. */
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
@@ -27,6 +28,8 @@ use sqlparser::parser::Parser;
 
 use crate::engine::analytics::parquet_glob;
 use crate::error::AppError;
+
+pub use prompt_rules::build_prompt_rules;
 
 /// Bảng logic mà SQL của LLM được phép đọc, ví dụ "sales".
 pub struct AllowedTable {
@@ -70,8 +73,8 @@ pub enum GuardError {
     /// guard/depth.rs, ghép quá số mảnh của guard/pieces.rs, chuỗi hằng quá dài hay quá nhiều cột (guard/width.rs).
     /// Mô hình viết lại được câu gọn hơn cho cùng câu hỏi, nên service cho vào vòng sửa.
     Oversized(String),
-    /// Câu bị chặn vì lý do khác: không đọc được, không phải một câu SELECT chỉ đọc, hàm không cho dùng, quá dài. Sửa
-    /// tên không làm câu qua được, nên service dừng câu hỏi ngay.
+    /// Câu bị chặn vì lý do khác: không đọc được, không phải một câu SELECT chỉ đọc, hàm ở chỗ bảng hay hàm không cho
+    /// dùng, quá dài. Luồng hỏi vẫn gửi lý do cho mô hình sửa một lần: câu viết lại theo đúng luật có thể qua.
     Rejected(String),
     /// Lỗi của máy chủ khi dựng bản chạy, không phải lỗi của câu.
     Internal(AppError),
@@ -834,6 +837,7 @@ fn unknown_name(reason: String) -> GuardError {
 
 mod depth;
 mod pieces;
+mod prompt_rules;
 #[cfg(test)]
 mod row_filter_tests;
 #[cfg(test)]

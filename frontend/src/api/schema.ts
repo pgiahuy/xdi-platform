@@ -585,9 +585,11 @@ export interface components {
          *       again. This can happen before the model is called (a word matches several columns) or after (the two slices of
          *       a "why" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.
          *       Not recorded in the history, so `query_id` is null.
-         *     - `rejected`: the guard refused the SQL: the generated one for a reason a fix cannot change (for example it is not
-         *       a read-only SELECT, or it calls a function that is not allowed), or the one fixed in the `repair` round. Set:
-         *       `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false. Also when
+         *     - `rejected`: the guard refused the SQL the model wrote in the `repair` round (when the guard refuses the model's
+         *       first SQL, for any reason, the question always gets that round), or the SQL the server built for a "why"
+         *       breakdown. Set: `message`, `query_id`, `sql_generated`. For the model's SQL, the `guard` step that stopped it has
+         *       `ok` false and the guard's reason in `detail`, and `message` is a fixed text asking to rephrase the question, since
+         *       the user cannot fix the SQL; for a breakdown, `message` gives the guard's reason. Also when
          *       the model finds that no column of the dataset holds the information the question needs (a rating that is not
          *       there, a forecast): no SQL runs, `sql_generated` is null, and `message` gives the reason and the closest columns.
          *     - `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or
@@ -595,11 +597,10 @@ export interface components {
          *       Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or
          *       `repair` step that stopped it has `ok` false.
          *
-         *     A fix round starts when the analytics engine fails on the SQL, or when the guard refuses it because a table or
-         *     column does not exist or because it could build a value too large (too deep, too many concatenated pieces, too
-         *     wide, a size argument over the limit); there is at most one round per question. The status names the step that stopped the
-         *     question: the guard gives `rejected`, the engine or the fix round gives `failed`. A model error before any SQL
-         *     exists is not a status: the request gets 502 or 503.
+         *     A fix round starts when the analytics engine fails on the SQL, when the guard refuses it for any reason, or when the
+         *     model's reply cannot be read; there is at most one round per question, and the fixed SQL goes through the guard
+         *     again. The status names the step that stopped the question: the guard gives `rejected`, the engine or the fix round
+         *     gives `failed`. A model error before any SQL exists is not a status: the request gets 502 or 503.
          * @enum {string}
          */
         AskStatus: "answered" | "needs_choice" | "rejected" | "failed";
