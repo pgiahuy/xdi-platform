@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/shell/AppShell.tsx - bố cục chung của mọi trang sau khi đăng nhập: thanh bên (có hàng thương hiệu),
-thanh trên, vùng nội dung nền muted với container max-w-7xl căn giữa. Màn rộng: tài khoản và phiên bản ở chân thanh bên; màn hẹp: tài khoản ở góc thanh trên.
+thanh trên nền trắng, vùng nội dung nền sáng với container max-w-7xl căn giữa. Thanh bên nền mực (màu sidebar trong index.css). Màn rộng: tài khoản và phiên bản ở chân thanh bên; màn hẹp: tài khoản ở góc thanh trên.
 Trang trong workspace truyền workspace đang mở; trang ngoài workspace (quản trị hệ thống, tài khoản) thì không.
 Từ 1024px trở lên thanh bên đứng cố định bên trái. Hẹp hơn thì thanh bên ẩn vào ngăn kéo mở từ nút menu trên thanh
 trên; cùng một nội dung thanh bên dùng cho cả hai chỗ, nên thêm mục điều hướng chỉ sửa một nơi.
@@ -66,12 +66,12 @@ export function AppShell(props: Props) {
         Bỏ qua điều hướng
       </a>
 
-      <aside className="hidden border-r bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col">
+      <aside className="hidden bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col">
         <SidebarContent {...props} />
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-4 lg:px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b bg-card px-4 lg:px-8">
           <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="-ml-1.5 lg:hidden" aria-label="Mở menu">
@@ -90,7 +90,12 @@ export function AppShell(props: Props) {
                 onNavigate={closeDrawer}
                 closeButton={
                   <SheetClose asChild>
-                    <Button variant="ghost" size="icon" aria-label="Đóng menu">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Đóng menu"
+                      className="text-sidebar-foreground hover:bg-sidebar-raised hover:text-sidebar-foreground focus-visible:ring-sidebar-ring"
+                    >
                       <XIcon aria-hidden="true" />
                     </Button>
                   </SheetClose>
@@ -100,7 +105,7 @@ export function AppShell(props: Props) {
           </Sheet>
 
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold">{title}</h1>
+            <h1 className="truncate text-lg font-semibold tracking-tight">{title}</h1>
             {/* Dưới lg thanh bên ẩn trong ngăn kéo; vẫn phải thấy mình đang ở workspace nào, với vai gì, trước khi
                 làm việc ghi dữ liệu như nạp file. */}
             {currentWorkspace && (
@@ -139,7 +144,7 @@ export function AppShell(props: Props) {
           </div>
         )}
 
-        <main id="main" tabIndex={-1} className="flex-1 bg-muted/30 focus:outline-none">
+        <main id="main" tabIndex={-1} className="flex-1 bg-background focus:outline-none">
           {/* Container giới hạn chiều rộng: trên màn siêu rộng nội dung nằm giữa thay vì trải hết hai mép. */}
           <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:px-8">{props.children}</div>
         </main>
@@ -157,21 +162,21 @@ function SidebarContent(props: SidebarProps) {
   const { navItems, currentWorkspace, workspaces, serverInfo, link, onNavigate, closeButton } = props
   return (
     <div className="flex h-full flex-col">
-      {/* Hàng thương hiệu: cùng dấu hiệu với màn đăng nhập (favicon.svg), bấm về trang đầu. */}
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
-        <img src="/favicon.svg" alt="" className="size-6" />
-        <span className="text-sm font-semibold tracking-tight">xdi-platform</span>
+      {/* Hàng thương hiệu: cùng dấu hiệu với màn đăng nhập (favicon.svg). */}
+      <div className="flex h-16 shrink-0 items-center gap-2.5 px-5">
+        <img src="/favicon.svg" alt="" className="size-7" />
+        <span className="text-[15px] font-semibold tracking-tight">xdi-platform</span>
       </div>
-      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
+      <div className="flex shrink-0 items-center gap-1 px-3 pb-2">
         <div className="min-w-0 flex-1">
           <WorkspaceSwitcher current={currentWorkspace} workspaces={workspaces} link={link} onNavigate={onNavigate} />
         </div>
         {closeButton}
       </div>
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto px-3 py-2">
         <SidebarNav items={navItems} link={link} onNavigate={onNavigate} />
       </div>
-      <div className="border-t px-2 py-2">
+      <div className="border-t border-sidebar-border px-3 py-3">
         <UserMenu
           wide
           user={props.user}
@@ -181,7 +186,7 @@ function SidebarContent(props: SidebarProps) {
           logoutPending={props.logoutPending}
         />
         {serverInfo && (
-          <div className="px-2 pt-1 pb-0.5">
+          <div className="px-2 pt-2 pb-0.5 text-sidebar-muted">
             <ServerInfo info={serverInfo} />
           </div>
         )}

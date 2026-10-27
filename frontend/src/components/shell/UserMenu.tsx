@@ -41,17 +41,17 @@ export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPendin
           <button
             type="button"
             aria-label={`Tài khoản ${name}`}
-            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-raised data-[state=open]:bg-sidebar-raised focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
           >
             <span
               aria-hidden="true"
-              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-foreground"
             >
               {initials(user.name, user.email)}
             </span>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-sm font-medium">{name}</span>
-              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+              <span className="truncate text-xs text-sidebar-muted">{user.email}</span>
             </span>
           </button>
         ) : (

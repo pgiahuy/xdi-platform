@@ -20,7 +20,7 @@ export function StatusScreen({ title, description, action, footer, busy = false 
       <title>{title}</title>
       <div className="mx-auto w-full max-w-md">
         <EmptyState heading="h1" title={title} description={description} action={action} />
-        {footer && <div className="mt-10 border-t pt-4">{footer}</div>}
+        {footer && <div className="mt-10 border-t pt-4 text-muted-foreground">{footer}</div>}
       </div>
     </main>
   )

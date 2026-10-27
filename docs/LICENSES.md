@@ -12,9 +12,9 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 | Nhóm | Số lượng | Giấy phép | Đánh giá |
 |---|---|---|---|
 | Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 397 | MIT, Apache-2.0, ISC, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
-| Gói npm | 543 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak, 0BSD, CC0-1.0, CC-BY-4.0 (dữ liệu `caniuse-lite`) | Cho phép, dùng chung được |
+| Gói npm | 550 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak, 0BSD, CC0-1.0, CC-BY-4.0 (dữ liệu `caniuse-lite`) | Cho phép, dùng chung được |
 | Gói npm `lightningcss` | 2 phiên bản, mỗi phiên bản kèm bản build cho từng nền tảng | MPL-2.0 | Xem bên dưới |
-| Font Geist (`@fontsource-variable/geist`) | 1 | OFL-1.1 | Xem bên dưới |
+| Font Be Vietnam Pro (`@fontsource/be-vietnam-pro`), JetBrains Mono (`@fontsource-variable/jetbrains-mono`) | 2 | OFL-1.1 | Xem bên dưới |
 
 Không có thành phần nào chỉ có giấy phép GPL, LGPL hay AGPL. Crate `r-efi` cho chọn `MIT OR Apache-2.0 OR
 LGPL-2.1-or-later`; dự án dùng nó theo MIT, và nó chỉ được biên dịch cho nền tảng UEFI, không có trong binary Linux.
@@ -61,9 +61,11 @@ có trong danh sách đầy đủ.
 file giao diện đã build, không nằm trong image Docker (chỉ có ở giai đoạn build). Dự án không sửa mã của nó. MPL-2.0
 chỉ ràng buộc với chính các file của lightningcss, nên dùng chung với Apache 2.0 được.
 
-**Font Geist, SIL Open Font License 1.1.** File font có trong giao diện đã build. OFL cho phép đóng gói font kèm phần
-mềm, với điều kiện giữ thông báo bản quyền và văn bản giấy phép, và không bán riêng font. Văn bản giấy phép đi kèm ở
-`frontend/public/licenses/geist-font-OFL.txt`, có trong bản build và được phục vụ ở `/licenses/geist-font-OFL.txt`.
+**Font Be Vietnam Pro và JetBrains Mono, SIL Open Font License 1.1.** File font có trong giao diện đã build (Be Vietnam
+Pro cho chữ giao diện, JetBrains Mono cho SQL). OFL cho phép đóng gói font kèm phần mềm, với điều kiện giữ thông báo
+bản quyền và văn bản giấy phép, và không bán riêng font. Văn bản giấy phép đi kèm ở
+`frontend/public/licenses/be-vietnam-pro-font-OFL.txt` và `frontend/public/licenses/jetbrains-mono-font-OFL.txt`, có
+trong bản build và được phục vụ dưới `/licenses/`.
 
 **Mã sinh từ shadcn/ui, MIT.** `frontend/src/components/ui/` và `frontend/src/lib/utils.ts` lấy từ
 [shadcn/ui](https://github.com/shadcn-ui/ui), ghi `SPDX-License-Identifier: MIT` ở đầu file.

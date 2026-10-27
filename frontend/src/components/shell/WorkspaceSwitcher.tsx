@@ -28,7 +28,7 @@ type Props = {
 
 export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate }: Props) {
   if (workspaces.length === 0) {
-    return <p className="truncate px-2 py-1.5 text-sm text-muted-foreground">Chưa thuộc workspace nào</p>
+    return <p className="truncate px-2 py-1.5 text-sm text-sidebar-muted">Chưa thuộc workspace nào</p>
   }
   const title = current?.name ?? 'Chọn workspace'
   const subtitle = current ? roleLabel(current.role) : 'Trang không thuộc workspace'
@@ -41,18 +41,27 @@ export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate 
         aria-label={current ? `${current.name}, ${roleLabel(current.role)}, đổi workspace` : title}
         className={cn(
           // Khung có viền và nền riêng để đọc ra đây là bộ chọn workspace, không phải chữ tĩnh.
-          'flex w-full items-center gap-2 rounded-lg border bg-card px-3 py-2 text-left shadow-xs transition-colors',
+          'flex w-full items-center gap-2.5 rounded-[10px] border border-sidebar-border bg-sidebar-raised px-2.5 py-2 text-left transition-colors',
           'hover:bg-sidebar-accent data-[state=open]:bg-sidebar-accent',
           'focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none',
         )}
       >
-        <span className="flex min-w-0 flex-1 flex-col">
+        {/* Ô chữ đầu của tên workspace, giúp nhận ra workspace khi có nhiều cái. */}
+        {current && (
+          <span
+            aria-hidden="true"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md bg-label text-[13px] font-semibold text-sidebar-foreground"
+          >
+            {current.name.charAt(0).toUpperCase()}
+          </span>
+        )}
+        <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-sm font-semibold" title={title}>
             {title}
           </span>
-          <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
+          <span className="truncate text-xs text-sidebar-muted">{subtitle}</span>
         </span>
-        <ChevronsUpDownIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+        <ChevronsUpDownIcon aria-hidden="true" className="size-4 shrink-0 text-sidebar-muted" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-60">
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Workspace của bạn</DropdownMenuLabel>
