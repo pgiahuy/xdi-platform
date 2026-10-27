@@ -5,7 +5,7 @@ sách ẩn, trang mở danh sách trong ngăn kéo. Cột bằng chứng là ch�
 các bước); trang truyền nội dung vào khi đã có câu trả lời, không có thì cột không chiếm chỗ.
 Từ xl cột chính và cột bằng chứng chia 3:2, cột bằng chứng không hẹp hơn 26rem để bảng phân rã bốn cột số đọc được
 không cần cuộn ngang; giữa lg và xl cột bằng chứng xuống dưới cột chính. Thu gọn thì cột bằng chứng biến mất, chỉ còn
-nút "Mở minh chứng" dính mép phải màn hình, cột chính rộng ra; trang giữ trạng thái này. Cột danh sách ẩn được (nút ở đầu cột, trang nhớ trạng thái);
+nút "Mở minh chứng" (từ xl dính mép phải màn hình), cột chính rộng ra; trang giữ trạng thái này. Cột danh sách ẩn được (nút ở đầu cột, trang nhớ trạng thái);
 ẩn thì đầu cột chính có nút hiện lại. Cột danh sách và cột bằng chứng dính dưới thanh trên (h-16) khi
 cuộn, cuộn riêng khi dài hơn màn: cuộc trò chuyện dài thì bằng chứng của lượt đang chọn vẫn ở trong tầm mắt. */
 
@@ -98,7 +98,8 @@ export function AskLayout(props: Props) {
         </aside>
       )}
       {evidence && !open && (
-        // Thu gọn thì pane chỉ còn nút nhỏ dính mép phải màn hình, không chiếm cột nào: khung trò chuyện rộng hết chỗ.
+        // Thu gọn thì từ xl pane chỉ còn nút nhỏ dính mép phải màn hình, không chiếm cột nào: khung trò chuyện rộng hết
+        // chỗ. Dưới xl pane vốn nằm dưới khung trò chuyện, nút dính mép sẽ đè lên thẻ trả lời; ở đó nút nằm đúng chỗ pane.
         <Button
           variant="outline"
           aria-label="Mở minh chứng"
@@ -106,10 +107,14 @@ export function AskLayout(props: Props) {
           aria-controls="evidence"
           title="Mở minh chứng"
           onClick={() => onEvidenceOpenChange(true)}
-          className="fixed top-1/2 right-0 z-20 h-auto -translate-y-1/2 flex-col gap-2 rounded-r-none border-r-0 px-1.5 py-3 shadow-sm"
+          className={cn(
+            'justify-self-start',
+            history && 'lg:col-start-2',
+            'xl:fixed xl:top-1/2 xl:right-0 xl:z-20 xl:h-auto xl:-translate-y-1/2 xl:flex-col xl:gap-2 xl:rounded-r-none xl:border-r-0 xl:px-1.5 xl:py-3 xl:shadow-sm',
+          )}
         >
           <PanelRightOpen aria-hidden />
-          <span aria-hidden className="text-xs font-semibold [writing-mode:vertical-rl]">
+          <span aria-hidden className="font-semibold xl:text-xs xl:[writing-mode:vertical-rl]">
             Minh chứng
           </span>
         </Button>

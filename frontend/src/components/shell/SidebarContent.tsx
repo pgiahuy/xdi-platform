@@ -35,6 +35,8 @@ type Props = {
 export function SidebarContent(props: Props) {
   const { navItems, currentWorkspace, workspaces, serverInfo, link, onNavigate, onCreateWorkspace, closeButton } = props
   const { compact = false, onToggleCompact } = props
+  // Nhãn đổi theo trạng thái nên không thêm aria-expanded: biến thể ghost tô nền khi aria-expanded, nút sẽ sáng bừng
+  // trên nền mực của thanh bên.
   const toggleLabel = compact ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên'
   return (
     <div className="flex h-full flex-col">
@@ -66,7 +68,6 @@ export function SidebarContent(props: Props) {
             size="sm"
             aria-label={toggleLabel}
             title={toggleLabel}
-            aria-expanded={!compact}
             onClick={onToggleCompact}
             className={cn(
               'mb-2 w-full text-sidebar-muted hover:bg-sidebar-raised hover:text-sidebar-foreground focus-visible:ring-sidebar-ring',
