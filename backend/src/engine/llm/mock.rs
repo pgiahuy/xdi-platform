@@ -134,7 +134,7 @@ mod tests {
         assert_eq!(count(LlmTask::Sql), 16);
         assert_eq!(count(LlmTask::Repair), 3);
         assert_eq!(count(LlmTask::Narrate), 1);
-        assert_eq!(count(LlmTask::Why), 4);
+        assert_eq!(count(LlmTask::Why), 5);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];
         let profile: serde_json::Value = serde_json::from_str(profile).unwrap();
         assert!(profile["columns"].is_array());

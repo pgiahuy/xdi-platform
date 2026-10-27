@@ -714,7 +714,10 @@ async fn mock_dataco_profile_is_applied() {
     let ds = store.get_dataset(&ws, ds.id).await.unwrap().unwrap();
     assert_eq!(ds.current_profile_status.as_deref(), Some("semantic"));
     assert_eq!(ds.suggested_questions.len(), 5);
-    assert_eq!(ds.suggested_questions[0], "Doanh thu theo thị trường");
+    assert_eq!(
+        ds.suggested_questions[0],
+        "Vì sao doanh thu tháng 5 năm 2017 tăng"
+    );
     // Danh sách dataset cũng có câu gợi ý của phiên bản hiện hành.
     let list = store.list_datasets(&ws).await.unwrap();
     assert_eq!(list[0].suggested_questions.len(), 5);
