@@ -115,6 +115,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB; quá thì câu bị dừng, trừ phần DuckDB tính trước khi chạy ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |
 | `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; chạm trần thì giao diện ghi "ít nhất N dòng". Giao diện chỉ nhận 1000 dòng đầu |
 | `RUST_LOG` | `info` | Mức log |
+| `SEED_SAMPLE` | `true` | Thiết lập lần đầu nạp dataset mẫu DataCo kèm chỉ số mẫu vào workspace đầu tiên (mục 7, bước 1); `false` để workspace trống |
 | `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
 
 Mô hình ngôn ngữ:
@@ -230,7 +231,9 @@ make uninstall PREFIX=$HOME/.local
 `make install` build bản release rồi chép binary từ `backend/target`, hoặc từ `CARGO_TARGET_DIR` nếu biến này được đặt.
 
 Binary cần một Postgres (`DATABASE_URL`), thư mục dữ liệu ghi được (`DATA_DIR`) và, nếu muốn có giao diện, thư mục
-giao diện đã build (`STATIC_DIR`). Gói binary trong mỗi bản phát hành trên GitHub chỉ có backend.
+giao diện đã build (`STATIC_DIR`). Gói binary trong mỗi bản phát hành trên GitHub chỉ có backend. Muốn có dataset mẫu
+lúc thiết lập lần đầu thì đặt `SAMPLES_DIR` trỏ tới thư mục `data/samples` của repo; không thấy file mẫu thì backend bỏ
+qua bước này.
 
 ## 3. Đưa lên Internet
 
@@ -526,12 +529,17 @@ Chạy bằng Docker: sửa `.env`, ví dụ `LLM_PROVIDER=gemini` và `GEMINI_A
 từ nguồn: đặt trên dòng lệnh, ví dụ `LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> make dev` (mục 2). Mô hình đang dùng ghi ở
 dòng **Mô hình**, góc dưới thanh bên và dưới màn thiết lập.
 
-Thử với `mock`: thư mục `data/samples/` hiện chưa có file nào, nên cần tải DataCo Smart Supply Chain từ Mendeley Data
-(https://doi.org/10.17632/8gx2fvg2k6.5, giấy phép CC BY 4.0), lấy file `DataCoSupplyChainDataset.csv`. Khi nạp, đặt
-tên dataset là `DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên
-file và câu mẫu chạy lỗi. Workspace đã có bảng `dataco` thì dataset thứ hai thành `dataco_2`, nên nạp DataCo vào
-workspace chưa có nó. Danh sách câu mẫu nằm trong `backend/src/engine/llm/mock_answers.json`, ví dụ "Doanh thu
-theo thị trường", "Doanh thu theo tháng", "Top 10 danh mục có doanh thu cao nhất".
+Thử với `mock`: không cần tải gì. Khi bước 2 tạo xong workspace đầu tiên, backend nạp sẵn dataset `DataCo` (bảng
+`dataco`, 1500 dòng lấy từ DataCo Smart Supply Chain, giấy phép CC BY 4.0) kèm vài chỉ số mẫu như "Doanh thu", "Lợi
+nhuận", "Tỷ lệ giao trễ"; nguồn, chỉ số và cách tắt (`SEED_SAMPLE=false`) ở
+[data/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/data/README.md). Danh sách câu mẫu nằm trong
+`backend/src/engine/llm/mock_answers.json`, ví dụ "Doanh thu theo thị trường", "Doanh thu theo tháng", "Top 10 danh
+mục có doanh thu cao nhất".
+
+Bản cài đã thiết lập trước khi có dataset mẫu, hay đặt `SEED_SAMPLE=false`, thì nạp tay ở bước 3: file
+`data/samples/dataco.csv` trong repo, hoặc bản đầy đủ tải bằng `sh data/download.sh dataco`. Đặt tên dataset là
+`DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên file và câu mẫu chạy
+lỗi. Workspace đã có bảng `dataco` thì dataset thứ hai thành `dataco_2`, nên nạp DataCo vào workspace chưa có nó.
 
 ### Bước 2. Tạo tài khoản quản trị
 
@@ -539,8 +547,8 @@ Lần đầu mở giao diện, màn **Thiết lập lần đầu** hiện ra. L�
 `docker compose logs backend | grep setup_code`, build từ nguồn thì tìm dòng có `setup_code=` trong terminal đang chạy
 `make dev`. Điền **Mã thiết lập**, **Email quản trị**, **Mật khẩu** và **Nhập lại mật khẩu** (8 đến 128 ký tự); **Tên
 hiển thị** và **Tên workspace đầu tiên** không bắt buộc (để trống thì workspace tên là "Workspace đầu tiên"). Bấm **Tạo
-tài khoản quản trị**: giao diện đăng nhập luôn và mở trang **Hỏi dữ liệu** của workspace vừa tạo. Chi tiết về mã thiết
-lập ở mục 1, Tạo tài khoản quản trị.
+tài khoản quản trị**: giao diện đăng nhập luôn và mở trang **Hỏi dữ liệu** của workspace vừa tạo, đã có dataset mẫu
+`DataCo` (bước 1) trừ khi `SEED_SAMPLE=false`. Chi tiết về mã thiết lập ở mục 1, Tạo tài khoản quản trị.
 
 Workspace thứ hai trở đi chưa có nút tạo trên giao diện. Tạo bằng API, với `cookie.txt` lấy như mục 1, Nạp dữ liệu;
 người tạo thành `admin` của workspace mới, tải lại trang thì workspace đó hiện trong ô chọn workspace ở đầu thanh bên:

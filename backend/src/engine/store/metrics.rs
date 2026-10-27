@@ -2,7 +2,9 @@
 /* engine/store/metrics.rs - định nghĩa chỉ số của dataset (bảng metrics), để prompt sinh SQL (service/ask/prompt.rs)
 dùng đúng công thức của tổ chức thay vì để mô hình tự đoán "doanh thu" là cột nào.
 Sửa một định nghĩa là thêm dòng cùng tên với version lớn hơn, không ghi đè (0001_init.sql), nên đọc chỉ lấy bản mới
-nhất của mỗi tên. Ghi định nghĩa là việc của bước seed (#25) và màn Thiết lập chỉ số, chưa có ở đây. */
+nhất của mỗi tên. Hiện chỉ bước nạp dataset mẫu (service/samples.rs) ghi định nghĩa; màn Thiết lập chỉ số chưa có. */
+
+use serde::Deserialize;
 
 use super::{db_error, Store};
 use crate::{auth::WorkspaceId, error::AppError};
@@ -22,7 +24,51 @@ pub struct MetricDefinition {
     pub confirmed: bool,
 }
 
+/// Một chỉ số để ghi, đọc từ file chỉ số mẫu (data/samples/<dataset>.metrics.json). Các trường như MetricDefinition.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NewMetric {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub expression: String,
+    pub filter: Option<String>,
+    pub time_column: Option<String>,
+    pub unit: Option<String>,
+}
+
 impl Store {
+    /// Ghi chỉ số mẫu cho một dataset: origin 'sample', đã xác nhận, version 1. Tên đã có version 1 thì bỏ qua (ON
+    /// CONFLICT), nên gọi lại không thêm dòng. Trả số dòng thực sự ghi.
+    pub async fn create_sample_metrics(
+        &self,
+        ws: &WorkspaceId,
+        dataset_id: uuid::Uuid,
+        metrics: &[NewMetric],
+    ) -> Result<u64, AppError> {
+        let mut written = 0;
+        for metric in metrics {
+            let result = sqlx::query(
+                "INSERT INTO metrics (workspace_id, dataset_id, name, description, expression, filter, time_column,
+                                      unit, status, origin, version)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'confirmed', 'sample', 1)
+                 ON CONFLICT (dataset_id, name, version) DO NOTHING",
+            )
+            .bind(ws.as_uuid())
+            .bind(dataset_id)
+            .bind(&metric.name)
+            .bind(&metric.description)
+            .bind(&metric.expression)
+            .bind(&metric.filter)
+            .bind(&metric.time_column)
+            .bind(&metric.unit)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| db_error("create sample metric", e))?;
+            written += result.rows_affected();
+        }
+        Ok(written)
+    }
+
     /// Chỉ số của một dataset, mỗi tên một dòng, xếp theo tên để prompt dựng ra luôn giống nhau với cùng dữ liệu.
     /// Mỗi tên lấy bản đã xác nhận mới nhất; chưa có bản nào được xác nhận mới lấy bản chưa xác nhận mới nhất. Một bản
     /// sửa đang chờ duyệt không được thay công thức đã duyệt: bản nháp chỉ dùng khi chưa có gì khác. Dataset của
@@ -54,7 +100,8 @@ mod tests {
     use super::super::test_support::{drop_workspace, exec, store, temp_workspace};
     use super::*;
 
-    /// Chèn thẳng bằng SQL vì store chưa có hàm ghi chỉ số (#25).
+    /// Chèn thẳng bằng SQL: create_sample_metrics chỉ ghi bản đã xác nhận version 1, còn test cần cả bản nháp và nhiều
+    /// version.
     async fn insert_metric(
         store: &Store,
         ws: &WorkspaceId,

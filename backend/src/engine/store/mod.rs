@@ -39,7 +39,7 @@ pub use datasets::{
 };
 pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]
-pub use metrics::MetricDefinition;
+pub use metrics::{MetricDefinition, NewMetric};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, PromptExample, QueryStatus, StoredQuery};
 pub use users::{Deactivated, UserSummary};

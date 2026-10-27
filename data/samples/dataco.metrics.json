@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Doanh thu",
+    "description": "Tổng tiền bán sau khi trừ giảm giá (Order Item Total); mỗi dòng là một mặt hàng trong đơn.",
+    "expression": "SUM(\"Order Item Total\")",
+    "filter": null,
+    "time_column": "order date (DateOrders)",
+    "unit": null
+  },
+  {
+    "name": "Doanh thu trước giảm giá",
+    "description": "Tổng giá trị bán trước giảm giá (Sales); dùng khi câu hỏi nói rõ trước giảm giá.",
+    "expression": "SUM(\"Sales\")",
+    "filter": null,
+    "time_column": "order date (DateOrders)",
+    "unit": null
+  },
+  {
+    "name": "Lợi nhuận",
+    "description": "Tổng lợi nhuận của các mặt hàng trong đơn; âm khi bán lỗ.",
+    "expression": "SUM(\"Order Profit Per Order\")",
+    "filter": null,
+    "time_column": "order date (DateOrders)",
+    "unit": null
+  },
+  {
+    "name": "Số đơn hàng",
+    "description": "Số đơn khác nhau; một đơn có thể gồm nhiều dòng mặt hàng.",
+    "expression": "COUNT(DISTINCT \"Order Id\")",
+    "filter": null,
+    "time_column": "order date (DateOrders)",
+    "unit": "đơn"
+  },
+  {
+    "name": "Tỷ lệ giao trễ",
+    "description": "Phần dòng mặt hàng mà bộ dữ liệu đánh dấu giao trễ (Late_delivery_risk = 1), từ 0 đến 1.",
+    "expression": "AVG(\"Late_delivery_risk\")",
+    "filter": null,
+    "time_column": "order date (DateOrders)",
+    "unit": null
+  }
+]

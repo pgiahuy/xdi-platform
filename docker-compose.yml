@@ -54,6 +54,9 @@ services:
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-12288}
       QUERY_TIMEOUT_SECS: ${QUERY_TIMEOUT_SECS:-30}
       ASK_MAX_ROWS: ${ASK_MAX_ROWS:-100000}
+      SEED_SAMPLE: ${SEED_SAMPLE:-true}
+      # Cố định, không lấy từ .env: dataset mẫu nằm ở volume chỉ đọc bên dưới.
+      SAMPLES_DIR: /samples
     ports:
       - "${BACKEND_BIND:+${BACKEND_BIND}:}${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
     # Cho backend gọi Ollama chạy trên máy host, kể cả trên Linux.

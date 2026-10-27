@@ -46,6 +46,10 @@ pub struct Config {
     pub ask_max_rows: u64,
     /// Thư mục giao diện đã build (frontend/dist). Không đặt thì backend chỉ phục vụ API.
     pub static_dir: Option<PathBuf>,
+    /// Nạp dataset mẫu vào workspace đầu tiên lúc thiết lập lần đầu (SEED_SAMPLE, service/samples.rs).
+    pub seed_sample: bool,
+    /// Thư mục chứa file mẫu (SAMPLES_DIR): data/samples của repo, compose gắn vào /samples.
+    pub samples_dir: PathBuf,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
     pub excel_worker: ExcelWorker,
 }
@@ -94,6 +98,9 @@ impl Config {
                 .ok()
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
+            seed_sample: flag("SEED_SAMPLE", env::var("SEED_SAMPLE").ok().as_deref(), true),
+            // Mặc định tính từ thư mục backend/, nơi make dev chạy cargo run, như DATA_DIR=./data là backend/data.
+            samples_dir: PathBuf::from(var_or("SAMPLES_DIR", "../data/samples")),
             excel_worker: ExcelWorker::Process(worker_binary()),
         }
     }
@@ -201,6 +208,27 @@ fn positive_number(key: &str, raw: Option<&str>, default: u32) -> u32 {
     }
 }
 
+/// Biến bật tắt: true, false, 1, 0, yes, no (không phân biệt hoa thường). Không đặt hoặc để trống thì dùng mặc định;
+/// giá trị khác thì cảnh báo và dùng mặc định như positive_number, để lỗi gõ không lặng lẽ đổi hành vi.
+fn flag(key: &str, raw: Option<&str>, default: bool) -> bool {
+    let Some(raw) = raw.filter(|v| !v.trim().is_empty()) else {
+        return default;
+    };
+    match raw.trim().to_lowercase().as_str() {
+        "true" | "1" | "yes" => true,
+        "false" | "0" | "no" => false,
+        _ => {
+            tracing::warn!(
+                variable = key,
+                value = raw,
+                default,
+                "invalid value, expected true or false; using default"
+            );
+            default
+        }
+    }
+}
+
 /// Timeout tính bằng giây từ biến môi trường, theo cùng quy tắc với positive_number: timeout 0 sẽ làm mọi lần gọi mô
 /// hình thất bại ngay.
 fn timeout_secs(key: &str, default: u32) -> Duration {
@@ -293,6 +321,23 @@ mod tests {
         assert_eq!(positive_number("X", Some(" 30 "), 5), 30);
         for bad in ["", "abc", "0", "-1", "1.5", "99999999999"] {
             assert_eq!(positive_number("X", Some(bad), 5), 5, "{bad}");
+        }
+    }
+
+    #[test]
+    fn flag_parsing() {
+        assert!(flag("X", None, true));
+        assert!(!flag("X", None, false));
+        assert!(flag("X", Some(""), true));
+        for on in ["true", "TRUE", " 1 ", "yes"] {
+            assert!(flag("X", Some(on), false), "{on}");
+        }
+        for off in ["false", "False", "0", "no"] {
+            assert!(!flag("X", Some(off), true), "{off}");
+        }
+        for bad in ["of", "2", "bật"] {
+            assert!(flag("X", Some(bad), true), "{bad}");
+            assert!(!flag("X", Some(bad), false), "{bad}");
         }
     }
 

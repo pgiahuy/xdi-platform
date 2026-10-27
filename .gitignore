@@ -18,8 +18,9 @@ frontend/dist/
 frontend/*.tsbuildinfo
 
 # Dữ liệu: chỉ commit samples/ nhỏ và domains/ (gói khái niệm ngành, docs/DOMAINS.md), dataset thật tải bằng
-# data/download.sh
+# data/download.sh vào data/downloads/
 data/*
+data/downloads/
 !data/README.md
 !data/download.sh
 !data/samples/
