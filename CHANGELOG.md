@@ -4,14 +4,11 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ## [Unreleased]
 
-### Added
-
-- `sh data/download.sh oulad` tải bộ dữ liệu giáo dục OULAD (Open University Learning Analytics, CC BY 4.0) để thử hỏi về kết quả học tập.
-
 ## [0.2.0] - 2026-10-27
 
 ### Added
 
+- `sh data/download.sh oulad` tải bộ dữ liệu giáo dục OULAD (Open University Learning Analytics, CC BY 4.0) để thử hỏi về kết quả học tập.
 - Lời giải thích câu "tại sao" dễ đọc hơn: câu đầu nói so gì với gì và chênh bao nhiêu, câu sau nói nhóm nào tạo phần lớn chênh lệch bằng lời thường; so hai nhóm thì nói "cao hơn", "thấp hơn" thay cho "tăng", "giảm".
 - Câu trả lời "tại sao" gọn hơn: hai kỳ và chênh lệch thành một hàng, bỏ nhãn tăng hay giảm ở từng thanh, tab Phân rã không nhắc lại số và lời giải thích đã có trong câu trả lời.
 - Trang hỏi rõ bố cục hơn: ô chọn dataset ở đầu khung chat và dính khi cuộn, khung chat có nền riêng, danh sách cuộc trò chuyện là khung riêng với phần đầu đứng yên, nút thu gọn thanh bên ở góc trên phải, lúc đang trả lời chỉ hiện ba chấm, thanh cuộn mảnh.
