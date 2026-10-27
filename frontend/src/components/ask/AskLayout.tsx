@@ -4,8 +4,8 @@ trò chuyện và ô hỏi) và cột bằng chứng bên phải trên màn rộ
 sách ẩn, trang mở danh sách trong ngăn kéo. Cột bằng chứng là chỗ của pane bằng chứng (#52: SQL, phân rã, dòng nguồn,
 các bước); trang truyền nội dung vào khi đã có câu trả lời, không có thì cột không chiếm chỗ.
 Từ xl cột chính và cột bằng chứng chia 3:2, cột bằng chứng không hẹp hơn 26rem để bảng phân rã bốn cột số đọc được
-không cần cuộn ngang; giữa lg và xl cột bằng chứng xuống dưới cột chính. Thu gọn thì cột bằng chứng chỉ còn tiêu đề và
-nút mở, cột chính rộng ra; trang giữ trạng thái này. Cột danh sách và cột bằng chứng dính dưới thanh trên (h-16) khi
+không cần cuộn ngang; giữa lg và xl cột bằng chứng xuống dưới cột chính. Thu gọn thì cột bằng chứng biến mất, chỉ còn
+nút "Mở minh chứng" dính mép phải màn hình, cột chính rộng ra; trang giữ trạng thái này. Cột danh sách và cột bằng chứng dính dưới thanh trên (h-16) khi
 cuộn, cuộn riêng khi dài hơn màn: cuộc trò chuyện dài thì bằng chứng của lượt đang chọn vẫn ở trong tầm mắt. */
 
 import type { ReactNode } from 'react'
@@ -29,14 +29,10 @@ export function AskLayout({ children, history, evidence, evidenceOpen, onEvidenc
       className={cn(
         'grid grid-cols-1 items-start gap-6',
         history && 'lg:grid-cols-[13rem_minmax(0,1fr)]',
-        evidence &&
+        open &&
           (history
-            ? open
-              ? 'xl:grid-cols-[13rem_minmax(0,3fr)_minmax(26rem,2fr)]'
-              : 'xl:grid-cols-[13rem_minmax(0,1fr)_auto]'
-            : open
-              ? 'xl:grid-cols-[minmax(0,3fr)_minmax(26rem,2fr)]'
-              : 'xl:grid-cols-[minmax(0,1fr)_auto]'),
+            ? 'xl:grid-cols-[13rem_minmax(0,3fr)_minmax(26rem,2fr)]'
+            : 'xl:grid-cols-[minmax(0,3fr)_minmax(26rem,2fr)]'),
       )}
     >
       {history && <div className={cn('hidden lg:block', stickyColumn)}>{history}</div>}
@@ -45,9 +41,11 @@ export function AskLayout({ children, history, evidence, evidenceOpen, onEvidenc
         <aside
           id="evidence"
           aria-labelledby="evidence-heading"
+          // Thu gọn chỉ ẩn, không bỏ nội dung: tab đang mở và dòng nguồn vừa truy vẫn còn khi mở lại.
+          hidden={!open}
           className={cn(
             'flex min-w-0 scroll-mt-20 flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground shadow-xs sm:p-5',
-            // Giữa lg và xl cột bằng chứng nằm dưới cột chính, đúng dưới khung trò chuyện, không dưới cột danh sách.
+            // Giữa lg và xl cột minh chứng nằm dưới cột chính, đúng dưới khung trò chuyện, không dưới cột danh sách.
             history && 'lg:col-start-2 xl:col-start-auto',
             'xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto',
           )}
@@ -55,24 +53,32 @@ export function AskLayout({ children, history, evidence, evidenceOpen, onEvidenc
           <div className="flex items-center justify-between gap-3">
             <h2 id="evidence-heading" className="flex items-center gap-2 text-[15px] font-semibold">
               <ShieldCheck aria-hidden className="size-[18px] text-label" />
-              Bằng chứng
+              Minh chứng
             </h2>
-            <Button
-              variant="outline"
-              size="sm"
-              aria-expanded={open}
-              aria-controls="evidence-body"
-              onClick={() => onEvidenceOpenChange(!open)}
-            >
-              {open ? <PanelRightClose aria-hidden /> : <PanelRightOpen aria-hidden />}
-              {open ? 'Thu gọn' : 'Mở'}
+            <Button variant="outline" size="sm" aria-expanded={open} onClick={() => onEvidenceOpenChange(false)}>
+              <PanelRightClose aria-hidden />
+              Thu gọn
             </Button>
           </div>
-          {/* Thu gọn chỉ ẩn, không bỏ nội dung: tab đang mở và dòng nguồn vừa truy vẫn còn khi mở lại. */}
-          <div id="evidence-body" hidden={!open} className="min-w-0">
-            {evidence}
-          </div>
+          <div className="min-w-0">{evidence}</div>
         </aside>
+      )}
+      {evidence && !open && (
+        // Thu gọn thì pane chỉ còn nút nhỏ dính mép phải màn hình, không chiếm cột nào: khung trò chuyện rộng hết chỗ.
+        <Button
+          variant="outline"
+          aria-label="Mở minh chứng"
+          aria-expanded={false}
+          aria-controls="evidence"
+          title="Mở minh chứng"
+          onClick={() => onEvidenceOpenChange(true)}
+          className="fixed top-1/2 right-0 z-20 h-auto -translate-y-1/2 flex-col gap-2 rounded-r-none border-r-0 px-1.5 py-3 shadow-sm"
+        >
+          <PanelRightOpen aria-hidden />
+          <span aria-hidden className="text-xs font-semibold [writing-mode:vertical-rl]">
+            Minh chứng
+          </span>
+        </Button>
       )}
     </div>
   )

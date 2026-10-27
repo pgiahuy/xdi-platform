@@ -17,7 +17,7 @@ type Props = {
 
 const highlights = [
   { icon: MessageSquareText, text: 'Hỏi dữ liệu bằng tiếng Việt tự nhiên' },
-  { icon: LineChart, text: 'Mọi con số kèm bằng chứng, bấm là thấy dòng nguồn' },
+  { icon: LineChart, text: 'Mọi con số kèm minh chứng, bấm là thấy dòng nguồn' },
   { icon: ShieldCheck, text: 'Guard SQL chỉ cho đọc, phân quyền tới từng dòng' },
 ]
 
@@ -35,7 +35,7 @@ export function AuthScreen({ title, description, children, footer }: Props) {
         </div>
         <div className="relative hidden px-10 pb-16 lg:block">
           <p className="max-w-md text-3xl leading-snug font-semibold tracking-tight">
-            Hỏi dữ liệu bằng ngôn ngữ thường, nhận câu trả lời có bằng chứng.
+            Hỏi dữ liệu bằng ngôn ngữ thường, nhận câu trả lời có minh chứng.
           </p>
           <ul className="mt-10 flex max-w-md flex-col gap-4">
             {highlights.map(({ icon: Icon, text }) => (

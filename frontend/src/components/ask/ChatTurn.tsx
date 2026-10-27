@@ -3,7 +3,7 @@
 căn phải, khối trả lời của hệ thống căn trái và rộng hết cột. Câu hỏi là tiêu đề h2 của lượt, để trình đọc màn hình đi
 từ lượt này sang lượt khác bằng phím tiêu đề như các thẻ khác của trang. Nội dung khối trả lời do trang truyền vào
 (câu trả lời, lượt đang chờ, lượt đã lưu).
-Nút "Bằng chứng" chỉ có ở lượt có câu trả lời của phiên này; lượt đang chọn có viền màu chính để biết pane bằng chứng
+Nút "Minh chứng" chỉ có ở lượt có câu trả lời của phiên này; lượt đang chọn có viền màu chính để biết pane bằng chứng
 đang nói về lượt nào. */
 
 import { useId, type ReactNode, type Ref } from 'react'
@@ -44,7 +44,7 @@ export function ChatTurn({ question, children, selected = false, onShowEvidence,
           <div className="flex justify-end">
             <Button variant="outline" size="sm" aria-pressed={selected} onClick={onShowEvidence}>
               <ShieldCheck aria-hidden />
-              Bằng chứng
+              Minh chứng
             </Button>
           </div>
         )}
