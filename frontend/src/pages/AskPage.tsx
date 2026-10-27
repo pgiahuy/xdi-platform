@@ -232,14 +232,17 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       }
     >
       {canAsk && (
-        <DatasetPicker
-          datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
-          datasetId={datasetId}
-          onDatasetChange={changeDataset}
-          // Dữ liệu mẫu không qua dataset thật, báo hồ sơ của dataset đang chọn ở đó chỉ gây nhầm.
-          profile={fromSamples ? 'ready' : buildProfileProgress(dataset)}
-          disabled={ask.isPending}
-        />
+        // Dòng dataset dính dưới thanh trên (h-16) khi cuộn cuộc trò chuyện dài: luôn thấy đang hỏi trên dataset nào.
+        <div className="sticky top-16 z-10 -mx-4 -mt-4 bg-secondary px-4 pt-4 pb-2 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5">
+          <DatasetPicker
+            datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
+            datasetId={datasetId}
+            onDatasetChange={changeDataset}
+            // Dữ liệu mẫu không qua dataset thật, báo hồ sơ của dataset đang chọn ở đó chỉ gây nhầm.
+            profile={fromSamples ? 'ready' : buildProfileProgress(dataset)}
+            disabled={ask.isPending}
+          />
+        </div>
       )}
       {import.meta.env.DEV && <SampleModeSwitch checked={sampleMode} onChange={setSampleMode} />}
       {hasDatasets && (

@@ -50,7 +50,8 @@ export function AskLayout(props: Props) {
         <div
           className={cn(
             'hidden lg:flex lg:flex-col lg:gap-2 lg:rounded-xl lg:border lg:bg-card lg:p-3 lg:text-card-foreground lg:shadow-xs',
-            stickyColumn,
+            // Cột không tự cuộn: phần đầu cột đứng yên, danh sách bên trong cuộn riêng (ConversationList).
+            'lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-hidden',
           )}
         >
           {/* Tên cột và nút ẩn cùng một hàng: nút đứng riêng một hàng thì đầu cột trống một khoảng. */}
@@ -134,5 +135,3 @@ export function AskLayout(props: Props) {
     </div>
   )
 }
-
-const stickyColumn = 'lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto'
