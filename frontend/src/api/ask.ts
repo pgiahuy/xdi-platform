@@ -6,9 +6,10 @@ giữa hai lần hỏi, nên hỏi lại luôn gửi lại câu hỏi kèm choic
 Ở chế độ dev có thể trả lời bằng response mẫu (askSamples.ts) thay vì gọi backend; bản build production bỏ hẳn nhánh
 đó cùng file mẫu, vì import.meta.env.DEV là hằng false lúc build. */
 
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { answerFromSamples } from './askSamples'
 import { apiPost } from './client'
+import { conversationsKey } from './conversations'
 import type { components } from './schema'
 
 type Schemas = components['schemas']
@@ -37,8 +38,10 @@ function askPath(ws: string, datasetId: string): string {
 }
 
 /** Gửi một câu hỏi. Không thử lại: mỗi lần hỏi gọi mô hình ngôn ngữ và ghi một dòng lịch sử, lỗi thì người dùng tự
- * bấm hỏi lại. Lỗi 501, 502, 503 có message tiếng Việt của backend trong ApiError. */
+ * bấm hỏi lại. Lỗi 501, 502, 503 có message tiếng Việt của backend trong ApiError. Hỏi xong thì làm mới danh sách
+ * cuộc trò chuyện của dataset: câu đầu của cuộc mới làm cuộc đó hiện trong danh sách. */
 export function useAsk(ws: string) {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ datasetId, question, choices, conversationId, fromSamples }: AskVariables) => {
       if (import.meta.env.DEV && fromSamples) return answerFromSamples(question, choices)
@@ -46,6 +49,9 @@ export function useAsk(ws: string) {
       return apiPost<AskResponse>(askPath(ws, datasetId), body)
     },
     retry: false,
+    onSuccess: (_response, { datasetId, fromSamples }) => {
+      if (!fromSamples) void queryClient.invalidateQueries({ queryKey: conversationsKey(ws, datasetId) })
+    },
   })
 }
 

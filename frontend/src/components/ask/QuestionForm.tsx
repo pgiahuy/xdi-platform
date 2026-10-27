@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/QuestionForm.tsx - ô hỏi: chọn dataset (kèm dòng báo hồ sơ chưa xong), gõ câu hỏi, bấm Hỏi. Câu gợi ý
-nằm ở thẻ riêng ngay dưới (SuggestedQuestions.tsx), trang đặt cả hai.
+/* components/ask/QuestionForm.tsx - ô hỏi ở đáy khung trò chuyện: chọn dataset gọn ở hàng trên (kèm dòng báo hồ sơ
+chưa xong), gõ câu hỏi, bấm Hỏi. Trang đặt ô này dính đáy cột chính, nên giữ thấp: nhãn "Câu hỏi" chỉ cho trình đọc
+màn hình (chữ gợi ý trong ô đã nói ô để làm gì), nút Hỏi đứng cạnh ô chữ ở mọi cỡ màn.
 Chọn dataset dùng Select của shadcn (Radix) thay cho select của trình duyệt, để giống các ô khác trên trang; Radix vẫn
 cho chọn bằng bàn phím và trình đọc màn hình đọc được như một combobox.
 Enter gửi, Shift+Enter xuống dòng, như ô chat quen thuộc. Bỏ qua Enter khi bộ gõ đang ghép chữ (isComposing): gõ tiếng
@@ -43,13 +44,15 @@ export function QuestionForm(props: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2">
       {datasets.length > 0 && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="ask-dataset">Dataset</Label>
+            <Label htmlFor="ask-dataset" className="text-xs text-muted-foreground">
+              Dataset
+            </Label>
             <Select value={datasetId} onValueChange={onDatasetChange} disabled={pending}>
-              <SelectTrigger id="ask-dataset" className="max-w-full min-w-40 flex-1 sm:flex-none">
+              <SelectTrigger id="ask-dataset" size="sm" className="max-w-full min-w-40 flex-1 sm:flex-none">
                 <SelectValue placeholder="Chọn dataset" />
               </SelectTrigger>
               <SelectContent>
@@ -65,8 +68,10 @@ export function QuestionForm(props: Props) {
         </div>
       )}
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="ask-question">Câu hỏi</Label>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+        <Label htmlFor="ask-question" className="sr-only">
+          Câu hỏi
+        </Label>
+        <div className="flex flex-row items-end gap-2">
           <Textarea
             id="ask-question"
             value={question}
@@ -75,7 +80,7 @@ export function QuestionForm(props: Props) {
             placeholder="Gõ câu hỏi về dữ liệu của dataset"
             aria-describedby="ask-question-hint"
             rows={2}
-            className="min-h-16 flex-1"
+            className="max-h-48 min-h-16 min-w-0 flex-1"
           />
           <Button type="submit" size="lg" disabled={!canSubmit} className="px-4 sm:min-w-24">
             {/* Icon cạnh chữ chỉ để nhận ra nút gửi nhanh hơn; chữ đã đủ nghĩa nên trình đọc màn hình bỏ qua icon. */}
@@ -83,7 +88,7 @@ export function QuestionForm(props: Props) {
             {pending ? 'Đang hỏi...' : 'Hỏi'}
           </Button>
         </div>
-        <p id="ask-question-hint" className="text-xs text-muted-foreground">
+        <p id="ask-question-hint" className="hidden text-xs text-muted-foreground sm:block">
           <Kbd>Enter</Kbd> để hỏi, <Kbd>Shift+Enter</Kbd> để xuống dòng.
         </p>
       </div>

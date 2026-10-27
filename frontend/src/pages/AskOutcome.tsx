@@ -2,8 +2,8 @@
 /* pages/AskOutcome.tsx - phần dưới ô hỏi của trang hỏi: hiện một AskResponse theo status (hợp đồng ở
 backend/src/service/ask/contract.rs). answered: thẻ "Đã hiểu là", lời giải thích của câu "tại sao", biểu đồ nếu
 backend gợi ý, bảng kết quả; needs_choice: màn câu hỏi lại; rejected, failed: lời báo của backend. Cảnh báo hiện với mọi
-status. Cả khối nằm trong một thẻ, tiêu đề là chính câu đã hỏi, để đọc kết quả mà không phải nhìn lại ô hỏi (câu trong ô
-có thể đã sửa). Dựng dữ liệu cho component từ response; việc gửi câu hỏi do AskPage.
+status. Khối này là phần trả lời của một lượt trong khung trò chuyện; bong bóng câu hỏi và thẻ bọc ngoài do
+ChatTurn (AskConversation.tsx). Dựng dữ liệu cho component từ response; việc gửi câu hỏi do AskPage.
 Biểu đồ tải riêng (lazy) vì Recharts nặng, lý do ở components/ask/ResultChart.tsx; nó nằm trong ErrorBoundary riêng
 để chunk tải lỗi hay lỗi khi vẽ chỉ làm mất biểu đồ, bảng kết quả vẫn còn. */
 
@@ -15,7 +15,6 @@ import {
   type ChartSuggestion,
   type Understanding,
 } from '@/api/ask'
-import { AskSection } from '@/components/ask/AskSection'
 import { AskWarnings } from '@/components/ask/AskWarnings'
 import { ClarificationForm } from '@/components/ask/ClarificationForm'
 import { SampleBadge } from '@/components/ask/SampleModeSwitch'
@@ -58,19 +57,17 @@ const fallbackMessage = {
 export function AskOutcome({ answer, pending, onCellDrill, onChangeAssumption, onAnswerClarifications }: Props) {
   const { response, variables } = answer
   return (
-    <AskSection title={variables.question} eyebrow="Câu trả lời" prominent>
-      <div aria-busy={pending} className={cn('flex flex-col gap-5', pending && 'pointer-events-none opacity-60')}>
-        {import.meta.env.DEV && variables.fromSamples && <SampleBadge />}
-        <AskWarnings messages={response.warnings.map((warning) => warning.message)} />
-        <OutcomeBody
-          answer={answer}
-          pending={pending}
-          onCellDrill={onCellDrill}
-          onChangeAssumption={onChangeAssumption}
-          onAnswerClarifications={onAnswerClarifications}
-        />
-      </div>
-    </AskSection>
+    <div aria-busy={pending} className={cn('flex min-w-0 flex-col gap-5', pending && 'pointer-events-none opacity-60')}>
+      {import.meta.env.DEV && variables.fromSamples && <SampleBadge />}
+      <AskWarnings messages={response.warnings.map((warning) => warning.message)} />
+      <OutcomeBody
+        answer={answer}
+        pending={pending}
+        onCellDrill={onCellDrill}
+        onChangeAssumption={onChangeAssumption}
+        onAnswerClarifications={onAnswerClarifications}
+      />
+    </div>
   )
 }
 
