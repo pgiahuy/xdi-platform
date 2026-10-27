@@ -50,16 +50,19 @@ export function AskLayout(props: Props) {
             stickyColumn,
           )}
         >
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Ẩn danh sách cuộc trò chuyện"
-            title="Ẩn danh sách cuộc trò chuyện"
-            onClick={() => onHistoryOpenChange(false)}
-            className="self-end"
-          >
-            <PanelLeftClose aria-hidden />
-          </Button>
+          {/* Tên cột và nút ẩn cùng một hàng: nút đứng riêng một hàng thì đầu cột trống một khoảng. */}
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Cuộc trò chuyện</h2>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Ẩn danh sách cuộc trò chuyện"
+              title="Ẩn danh sách cuộc trò chuyện"
+              onClick={() => onHistoryOpenChange(false)}
+            >
+              <PanelLeftClose aria-hidden />
+            </Button>
+          </div>
           {history}
         </div>
       )}
