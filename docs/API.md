@@ -116,6 +116,12 @@ Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, ph
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).
 
+## Xóa dataset
+
+`DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, lịch sử câu hỏi (CASCADE)
+và file Parquet trên đĩa. Chỉ admin của workspace; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa
+xong. Không khôi phục được.
+
 ## Truy dòng nguồn
 
 `POST /api/workspaces/{ws}/datasets/{id}/drill` trả một trang dòng nguồn của một ô trong bảng kết quả hay của một dòng

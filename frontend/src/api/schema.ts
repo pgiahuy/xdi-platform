@@ -353,7 +353,8 @@ export interface paths {
         get: operations["getDataset"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete a dataset with all its versions and files (admin only) */
+        delete: operations["deleteDataset"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1993,6 +1994,47 @@ export interface operations {
                 };
             };
             /** @description 401, 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteDataset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401, 403 not admin, 404 not a member or no such dataset */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

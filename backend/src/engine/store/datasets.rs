@@ -387,6 +387,64 @@ impl Store {
             .map_err(|e| db_error("commit delete dataset", e))
     }
 
+    /// Xóa hẳn một dataset cùng mọi phiên bản (CASCADE lấy phiên bản, cột, hồ sơ, lịch sử hỏi), trả đường dẫn
+    /// Parquet tương đối của các phiên bản để service xóa file sau khi commit. Dataset không có thì coi như đã xóa
+    /// (gọi lại nhiều lần không lỗi). Cùng kiểu khóa FOR UPDATE của delete_dataset_without_versions: một lần nạp đang
+    /// chèn phiên bản cho dataset này phải chờ giao dịch này xong, không thể vừa xóa vừa nạp lọt qua nhau.
+    pub async fn delete_dataset(
+        &self,
+        ws: &WorkspaceId,
+        dataset_id: Uuid,
+    ) -> Result<Vec<String>, AppError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| db_error("begin delete dataset", e))?;
+        let source: Option<Option<Uuid>> = sqlx::query_scalar(
+            "SELECT source_id FROM datasets WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+        )
+        .bind(ws.as_uuid())
+        .bind(dataset_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| db_error("lock dataset", e))?;
+        let Some(source) = source else {
+            return Ok(Vec::new());
+        };
+        let paths: Vec<String> = sqlx::query_scalar(
+            "SELECT parquet_path FROM dataset_versions WHERE workspace_id = $1 AND dataset_id = $2
+               AND parquet_path IS NOT NULL",
+        )
+        .bind(ws.as_uuid())
+        .bind(dataset_id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| db_error("list version paths", e))?;
+        sqlx::query("DELETE FROM datasets WHERE workspace_id = $1 AND id = $2")
+            .bind(ws.as_uuid())
+            .bind(dataset_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("delete dataset", e))?;
+        // Nguồn kiểu file tạo riêng cho từng dataset; khóa ngoại RESTRICT nên phải xóa sau dataset.
+        if let Some(source) = source {
+            sqlx::query(
+                "DELETE FROM sources s WHERE s.workspace_id = $1 AND s.id = $2
+                   AND NOT EXISTS (SELECT 1 FROM datasets d WHERE d.source_id = s.id)",
+            )
+            .bind(ws.as_uuid())
+            .bind(source)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error("delete source", e))?;
+        }
+        tx.commit()
+            .await
+            .map_err(|e| db_error("commit delete dataset", e))?;
+        Ok(paths)
+    }
+
     /// Đặt phiên bản hiện hành. Phiên bản phải thuộc đúng dataset này: khóa ngoại trong database chặn nếu sai, và lỗi
     /// đó trả về là "không tìm thấy" chứ không phải lỗi nội bộ, vì id sai đến từ người gọi.
     pub async fn set_current_version(

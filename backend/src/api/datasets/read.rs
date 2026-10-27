@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/datasets/read.rs - liệt kê và xem một dataset của workspace (route list, detail). */
+/* api/datasets/read.rs - liệt kê, xem và xóa một dataset của workspace (route list, detail, remove). */
 
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::Json;
 
 use super::super::extract::PathParams;
@@ -51,4 +52,28 @@ pub(super) async fn detail(
     PathParams((_ws, id)): PathParams<(String, String)>,
 ) -> Result<Json<Dataset>, AppError> {
     Ok(Json(ingest::dataset_detail(&state, &member, &id).await?))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/workspaces/{ws}/datasets/{id}",
+    tag = "datasets",
+    operation_id = "deleteDataset",
+    summary = "Delete a dataset with all its versions and files (admin only)",
+    params(
+        ("ws" = String, Path, description = "Workspace slug"),
+        ("id" = String, Path, description = "Dataset id (UUID)")
+    ),
+    responses(
+        (status = 204, description = "Deleted"),
+        (status = "4XX", body = ErrorBody, description = "401, 403 not admin, 404 not a member or no such dataset")
+    )
+)]
+pub(super) async fn remove(
+    State(state): State<AppState>,
+    member: Member,
+    PathParams((_ws, id)): PathParams<(String, String)>,
+) -> Result<StatusCode, AppError> {
+    ingest::delete_dataset(&state, &member, &id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

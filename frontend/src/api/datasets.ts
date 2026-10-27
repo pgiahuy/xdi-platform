@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/datasets.ts - hook cho dataset của một workspace: liệt kê, nạp file, liệt kê sheet của file Excel
-(backend/src/api/datasets.rs). Kiểu dữ liệu lấy từ schema.ts, sinh từ openapi.json; tên ở đây chỉ là bí danh để trang
+(backend/src/api/datasets/). Kiểu dữ liệu lấy từ schema.ts, sinh từ openapi.json; tên ở đây chỉ là bí danh để trang
 import gọn. */
 
 import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiUpload, type UploadOptions } from './client'
+import { apiDelete, apiGet, apiUpload, type UploadOptions } from './client'
 import type { components } from './schema'
 
 type Schemas = components['schemas']
@@ -100,5 +100,15 @@ export function useExcelSheets(ws: string) {
       form.append('file', file)
       return apiUpload<SheetSummary[]>(`${datasetsPath(ws)}/sheets`, form, options)
     },
+  })
+}
+
+/** Xóa hẳn một dataset cùng mọi phiên bản và file của nó (chỉ admin); không khôi phục được. */
+export function useDeleteDataset(ws: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (datasetId: string) =>
+      apiDelete<void>(`${datasetsPath(ws)}/${encodeURIComponent(datasetId)}`),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: datasetsKey(ws) }),
   })
 }

@@ -149,6 +149,24 @@ pub async fn dataset_detail(
     Ok(dataset)
 }
 
+/// Xóa hẳn một dataset (chỉ admin): dòng database rồi file Parquet của mọi phiên bản. File xóa sau commit; lỡ xóa
+/// file lỗi thì chỉ còn file mồ côi trên đĩa (dọn được bằng tay), không phải dữ liệu lệch giữa hai nơi.
+pub async fn delete_dataset(state: &AppState, member: &Member, id: &str) -> Result<(), AppError> {
+    member.require_admin()?;
+    let id = parse_dataset_id(id)?;
+    // get_dataset trước để id không có hoặc thuộc workspace khác nhận 404, chứ không xóa lặng lẽ như không có gì.
+    state
+        .store
+        .get_dataset(&member.workspace, id)
+        .await?
+        .ok_or_else(dataset_not_found)?;
+    let paths = state.store.delete_dataset(&member.workspace, id).await?;
+    for path in paths {
+        remove_version_files(&state.config.data_dir, &path);
+    }
+    Ok(())
+}
+
 pub async fn upload(
     state: &AppState,
     member: &Member,

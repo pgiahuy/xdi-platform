@@ -40,7 +40,7 @@ pub fn routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(read::list, upload::create))
         .routes(routes!(sheets::sheets))
-        .routes(routes!(read::detail))
+        .routes(routes!(read::detail, read::remove))
         .layer(DefaultBodyLimit::max(body_limit))
 }
 /// Nhận multipart: ghi từng file xuống thư mục tạm, đọc các trường chữ, đếm tổng dung lượng.
