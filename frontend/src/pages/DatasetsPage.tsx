@@ -7,10 +7,11 @@ Hồ sơ cột (kiểu, null, min, max, vai trò cột) chưa có endpoint (#22)
 import { useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { useMe } from '@/api/auth'
-import { useDatasets, type Dataset } from '@/api/datasets'
+import { useDatasets, useDeleteDataset, type Dataset } from '@/api/datasets'
 import { DatasetList } from '@/components/datasets/DatasetList'
 import type { DatasetRow } from '@/components/datasets/types'
 import { EmptyState } from '@/components/EmptyState'
+import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 import { DatasetUpload } from './DatasetUpload'
 
@@ -24,6 +25,8 @@ export function DatasetsPage() {
 function WorkspaceDatasets({ ws }: { ws: string }) {
   const me = useMe()
   const datasets = useDatasets(ws)
+  const deleteDataset = useDeleteDataset(ws)
+  const [deleteError, setDeleteError] = useState<string>()
   const [target, setTarget] = useState<Dataset>()
   const uploadHeading = useRef<HTMLHeadingElement>(null)
 
@@ -35,6 +38,13 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
     // dataset nào, và người dùng bàn phím không phải lần ngược lên.
     uploadHeading.current?.focus()
     uploadHeading.current?.scrollIntoView({ block: 'start' })
+  }
+
+  const remove = (row: DatasetRow) => {
+    deleteDataset.mutate(row.id, {
+      onError: (error) => setDeleteError(error.message),
+      onSuccess: () => setDeleteError(undefined),
+    })
   }
 
   return (
@@ -58,7 +68,10 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
           onRetry={() => datasets.refetch()}
           isAdmin={isAdmin}
           onAddVersion={addVersion}
+          onDelete={remove}
+          deletePending={deleteDataset.isPending}
         />
+        {deleteError && <FormMessage kind="error">{deleteError}</FormMessage>}
       </section>
     </div>
   )
@@ -70,9 +83,11 @@ type ListBodyProps = {
   onRetry: () => void
   isAdmin: boolean
   onAddVersion: (row: DatasetRow) => void
+  onDelete: (row: DatasetRow) => void
+  deletePending: boolean
 }
 
-function ListBody({ datasets, error, onRetry, isAdmin, onAddVersion }: ListBodyProps) {
+function ListBody({ datasets, error, onRetry, isAdmin, onAddVersion, onDelete, deletePending }: ListBodyProps) {
   if (error && !datasets) {
     return (
       <EmptyState
@@ -100,5 +115,12 @@ function ListBody({ datasets, error, onRetry, isAdmin, onAddVersion }: ListBodyP
     )
   }
   const rows = datasets.map((d) => ({ id: d.id, name: d.name, tableName: d.logical_table, createdAt: d.created_at }))
-  return <DatasetList datasets={rows} onAddVersion={isAdmin ? onAddVersion : undefined} />
+  return (
+    <DatasetList
+      datasets={rows}
+      onAddVersion={isAdmin ? onAddVersion : undefined}
+      onDelete={isAdmin ? onDelete : undefined}
+      deletePending={deletePending}
+    />
+  )
 }

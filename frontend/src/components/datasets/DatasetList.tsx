@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/datasets/DatasetList.tsx - danh sách dataset của workspace, mới tạo đứng đầu (backend sắp theo ngày tạo).
 Mỗi dataset một dòng xuống hàng được, không dùng bảng: màn 320px không đủ chỗ cho ba cột.
-onAddVersion chỉ truyền vào khi người xem là admin; member không thấy nút nạp. */
+onAddVersion và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. */
 
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import type { DatasetRow } from './types'
 
 type Props = {
   datasets: DatasetRow[]
   onAddVersion?: (dataset: DatasetRow) => void
+  onDelete?: (dataset: DatasetRow) => void
+  deletePending?: boolean
 }
 
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
-export function DatasetList({ datasets, onAddVersion }: Props) {
+export function DatasetList({ datasets, onAddVersion, onDelete, deletePending }: Props) {
   return (
     <ul className="divide-y rounded-lg border">
       {datasets.map((dataset) => (
@@ -39,6 +42,24 @@ export function DatasetList({ datasets, onAddVersion }: Props) {
             >
               Nạp phiên bản mới
             </Button>
+          )}
+          {onDelete && (
+            <ConfirmDialog
+              trigger={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={`Xóa ${dataset.name}`}
+                  aria-disabled={deletePending}
+                >
+                  Xóa
+                </Button>
+              }
+              title={`Xóa ${dataset.name}?`}
+              description="Dataset, mọi phiên bản và file của nó bị xóa. Không hoàn tác được."
+              confirmLabel="Xóa dataset"
+              onConfirm={() => onDelete(dataset)}
+            />
           )}
         </li>
       ))}

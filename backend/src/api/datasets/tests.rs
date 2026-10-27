@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/datasets/tests.rs - test endpoint nạp và xem dataset qua router thật, cần Postgres (bỏ qua khi không có
+/* api/datasets/tests.rs - test endpoint nạp, xem và xóa dataset qua router thật, cần Postgres (bỏ qua khi không có
 DATABASE_URL). */
 
 use std::path::{Path, PathBuf};
@@ -599,6 +599,56 @@ async fn llm_failure_does_not_block_the_upload() {
     let (status, body) = upload(&app, &lan, &[("name", "DataCo")], &[("d.csv", DATACO_CSV)]).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["created"], false);
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn admin_deletes_a_dataset_with_its_files_member_cannot() {
+    let Some(db) = fresh_database().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let data = DataDir::new();
+    let app = app_with(db.store.clone(), Some(CODE), |c| {
+        c.data_dir = data.0.clone()
+    });
+    let lan = setup(&app).await;
+
+    let (status, body) = upload(&app, &lan, &[("name", "Bán hàng")], &[("thang1.csv", T1)]).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let id = body["dataset"]["id"].as_str().unwrap().to_string();
+    assert!(parquet_files(&data.0) > 0);
+
+    // Member chỉ xem và hỏi, không xóa được.
+    let new_user = json!({"email": "minh@example.com", "password": "a long password"});
+    let (status, _, _) = call(&app, "POST", "/api/admin/users", Some(&lan), Some(new_user)).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let login = json!({"email": "minh@example.com", "password": "a long password"});
+    let (_, minh, _) = call(&app, "POST", "/api/auth/login", None, Some(login)).await;
+    let minh = minh.unwrap();
+    let add = json!({"email": "minh@example.com", "role": "member"});
+    let (status, _, _) = call(
+        &app,
+        "POST",
+        "/api/workspaces/cua-hang/members",
+        Some(&lan),
+        Some(add),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _, res) = call(&app, "DELETE", &format!("{URL}/{id}"), Some(&minh), None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{res}");
+
+    // Admin xóa: 204, danh sách trống, file Parquet đi theo; xóa lại thì 404.
+    let (status, _, res) = call(&app, "DELETE", &format!("{URL}/{id}"), Some(&lan), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{res}");
+    let (status, _, list) = call(&app, "GET", URL, Some(&lan), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list.as_array().unwrap().len(), 0, "{list}");
+    assert_eq!(parquet_files(&data.0), 0);
+    let (status, _, _) = call(&app, "DELETE", &format!("{URL}/{id}"), Some(&lan), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 
     db.drop().await;
 }
