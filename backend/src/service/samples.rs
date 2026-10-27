@@ -121,6 +121,7 @@ pub async fn upload_local_file(
             sha256,
         }],
         sheets: Vec::new(),
+        database_source: None,
     };
     ingest::upload(state, member, staging, upload).await
 }

@@ -111,6 +111,11 @@ pub async fn fresh_database() -> Option<TestDb> {
 }
 
 impl TestDb {
+    /// Tên database của test, để test nguồn Postgres (api/sources_tests.rs) kết nối vào chính nó như một database ngoài.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     /// Gọi ở cuối test. Đóng kết nối trước, vì Postgres không xóa database đang có người dùng.
     pub async fn drop(self) {
         self.store.pool.close().await;

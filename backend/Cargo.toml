@@ -44,6 +44,12 @@ sqlparser = { version = "0.63", features = ["visitor"] }
 # Số thập phân chính xác cho phân rã câu "tại sao" (service/explain/mod.rs): cộng trừ không qua f64. Tắt mặc định để không
 # kéo serde cho Decimal; số ra JSON là chuỗi do code dựng.
 rust_decimal = { version = "1.43", default-features = false, features = ["std"] }
+# Mã hóa thông tin kết nối của nguồn database trước khi lưu (service/sources/secret.rs); khóa đọc từ SOURCE_SECRET_KEY
+# dạng base64.
+aes-gcm = "0.10"
+base64 = "0.22"
+# Đọc luồng COPY ... TO STDOUT khi chụp bảng Postgres (service/sources/postgres.rs).
+futures-util = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

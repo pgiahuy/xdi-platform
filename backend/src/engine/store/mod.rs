@@ -23,6 +23,7 @@ mod metrics;
 mod queries;
 #[cfg(test)]
 mod schema_tests;
+mod sources;
 #[cfg(test)]
 pub mod test_support;
 #[allow(dead_code)]
@@ -44,6 +45,7 @@ pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 pub use metrics::{MetricDefinition, NewMetric};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, PromptExample, QueryStatus, StoredQuery};
+pub use sources::SourceRow;
 pub use users::{Deactivated, UserSummary};
 #[allow(unused_imports)]
 pub use workspaces::WorkspaceKind;

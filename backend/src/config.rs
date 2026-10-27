@@ -52,6 +52,16 @@ pub struct Config {
     pub samples_dir: PathBuf,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
     pub excel_worker: ExcelWorker,
+    /// Khóa mã hóa thông tin kết nối của nguồn database (SOURCE_SECRET_KEY, 32 byte dạng base64). Rỗng thì tính năng
+    /// nối database tắt; service/sources/secret.rs kiểm độ dài khóa.
+    pub source_secret_key: Secret,
+    /// Máy chủ database được phép thêm làm nguồn (SOURCE_ALLOWED_HOSTS, cách nhau bằng dấu phẩy). Rỗng thì không thêm
+    /// được nguồn nào: backend không bị dùng để dò máy trong mạng nội bộ.
+    pub source_allowed_hosts: Vec<String>,
+    /// Trần số dòng một lần chụp bảng (SOURCE_MAX_ROWS); bảng lớn hơn thì từ chối thay vì chụp thiếu.
+    pub source_max_rows: u64,
+    /// Thời gian tối đa một lần chụp bảng, kể cả kết nối (SOURCE_TIMEOUT_SECS).
+    pub source_timeout: Duration,
 }
 
 impl Config {
@@ -102,6 +112,14 @@ impl Config {
             // Mặc định tính từ thư mục backend/, nơi make dev chạy cargo run, như DATA_DIR=./data là backend/data.
             samples_dir: PathBuf::from(var_or("SAMPLES_DIR", "../data/samples")),
             excel_worker: ExcelWorker::Process(worker_binary()),
+            source_secret_key: Secret::new(var_or("SOURCE_SECRET_KEY", "")),
+            source_allowed_hosts: host_list(&var_or("SOURCE_ALLOWED_HOSTS", "")),
+            source_max_rows: u64::from(positive_number(
+                "SOURCE_MAX_ROWS",
+                env::var("SOURCE_MAX_ROWS").ok().as_deref(),
+                1_000_000,
+            )),
+            source_timeout: timeout_secs("SOURCE_TIMEOUT_SECS", 300),
         }
     }
 
@@ -274,6 +292,14 @@ fn var_or(key: &str, default: &str) -> String {
         .unwrap_or_else(|| default.to_string())
 }
 
+/// "db.example.com, 10.0.0.5" thành ["db.example.com", "10.0.0.5"]; chữ thường để so không phân biệt hoa thường.
+fn host_list(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|h| h.trim().to_lowercase())
+        .filter(|h| !h.is_empty())
+        .collect()
+}
+
 /// Binary chạy tiến trình con đọc Excel: chính binary đang chạy. Trên Linux dùng /proc/self/exe, trỏ đúng bản đang chạy
 /// kể cả khi file trên đĩa đã bị thay (cài bản mới mà chưa khởi động lại), để hai bên luôn cùng một phiên bản.
 fn worker_binary() -> PathBuf {
@@ -286,6 +312,15 @@ fn worker_binary() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_list_parsing() {
+        assert_eq!(
+            host_list(" DB.example.com ,10.0.0.5,,"),
+            vec!["db.example.com", "10.0.0.5"]
+        );
+        assert!(host_list("").is_empty());
+    }
 
     #[test]
     fn database_password_parsing() {
