@@ -113,10 +113,18 @@ Câu "tại sao" (nhận bằng từ khóa) đi đường form: mô hình
 điền form, code dựng SQL, `result` là bảng tổng theo kỳ hay theo nhóm, `explanation` là bảng phân rã; không phân rã
 được thì `explanation` null kèm cảnh báo `explanation_unavailable`, câu vẫn answered. Câu nói một hướng ("vì sao
 giảm", "vì sao cao hơn") mà chênh lệch tính được ngược hướng hay bằng 0 thì kèm cảnh báo `premise_mismatch` nêu chênh
-lệch thực tế; phân rã và lời giải thích vẫn trả như thường, theo chênh lệch thực tế. Câu hỏi cần thông tin không cột
+lệch thực tế; phân rã và lời giải thích vẫn trả như thường, theo chênh lệch thực tế. Câu so hai kỳ không nêu kỳ thì
+code chọn kỳ gần nhất có dữ liệu (kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó thì lùi một kỳ) và ghi thành giả
+định `why:compare` trong `understanding.assumptions`, phương án là kỳ viết như `2017-Q4`; gửi lại `{choice_id:
+"why:compare", option_id: "2017-Q3"}` để giải thích kỳ khác. Câu hỏi cần thông tin không cột
 nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo `unanswerable`, không câu SQL nào
 chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các cột gần nhất có thể hỏi; câu
 vẫn ghi vào lịch sử như câu bị từ chối.
+Câu thường answered có ít nhất một dòng kết quả thì có `answer_text`: một đến hai câu tiếng Việt trả lời câu hỏi, do mô
+hình viết từ tối đa 10 dòng đầu của kết quả (mọi số trong câu có nguyên văn trong các dòng đó, không thì backend thay
+bằng câu khuôn), và `answer_text_by_model` cho biết câu đó do mô hình viết (`true`) hay theo khuôn (`false`). Hai
+trường null với câu "tại sao" (đã có `explanation.summary`) và câu không answered. Bước này hiện trong `steps` dưới tên
+`narrate`. `ANSWER_TEXT=false` thì luôn là câu khuôn, không gọi mô hình.
 `explanation.measure_kind` cho biết cách đọc số: `total` (tổng, đếm; đóng góp là hiệu hai lát cắt) hay `ratio` (chỉ số
 tỷ lệ hay trung bình; giá trị là tỷ lệ, đóng góp của nhóm là `mix_effect + rate_effect`, mỗi chiều có tổng
 `mix_effect`, `rate_effect`). Với `total` bốn trường này là null.
@@ -130,6 +138,11 @@ Câu hỏi thuộc một cuộc trò chuyện trên một dataset (`backend/src/
 vắng thì backend mở cuộc mới; `AskResponse.conversation_id` luôn có, gửi lại ở câu sau để mô hình đọc câu đó như câu
 tiếp nối của tối đa 4 lượt gần nhất (phần gửi cho mô hình: [Dữ liệu và quyền riêng tư](PRIVACY.md)). Câu `needs_choice`
 không thành lượt, nhưng gửi lại kèm lựa chọn và cùng `conversation_id` thì vào đúng cuộc.
+
+Ở câu tiếp nối, mục của `understanding` (độ đo, bộ lọc, nhóm, `time_range`) có `from_previous: true` khi nó giống một
+mục của lượt đã trả lời gần nhất (đoạn SQL có nguyên văn trong câu SQL lượt đó, hay cùng nhãn) và câu hỏi không nhắc
+tới nó (không chứa tên cột, giá trị, năm trong đoạn SQL hay tên chỉ số). Trường vắng khi false, kể cả khi không đọc
+được lượt trước.
 
 `GET /api/workspaces/{ws}/datasets/{id}/conversations` liệt kê các cuộc của người gọi trên dataset, mới nhất trước, bỏ
 cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả cuộc đó kèm các lượt theo thứ tự hỏi: `query_id`,

@@ -94,6 +94,15 @@ pub struct AskResponse {
     pub warnings: Vec<Warning>,
     #[schema(required)]
     pub explanation: Option<Explanation>,
+    /// Short answer in Vietnamese for an `answered` question that is not a "why" question and has at least one row:
+    /// written by the language model from the first 10 rows of the result, every number checked against those rows,
+    /// or a template sentence written by the backend. Null otherwise; a "why" question has `explanation.summary`.
+    #[schema(required)]
+    pub answer_text: Option<String>,
+    /// True when `answer_text` was written by the language model, false for the template sentence (the model failed,
+    /// timed out, wrote a number that is not in the rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null.
+    #[schema(required)]
+    pub answer_text_by_model: Option<bool>,
     /// Questions back to the user, only for `needs_choice`. Every entry has `selected` null.
     pub clarifications: Vec<Choice>,
     /// What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a
@@ -109,6 +118,11 @@ pub struct UnderstoodItem {
     pub label: String,
     /// Fragment of `sql_guarded` this item comes from.
     pub sql: String,
+    /// True when the item is carried over from the previous turn of the conversation: the same as in that turn's card
+    /// (same SQL fragment or same label) and not named in this question. Omitted when false.
+    // Bỏ khi false để response của câu đơn lẻ không đổi; đánh dấu ở service/conversation/carryover.rs.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub from_previous: bool,
 }
 
 /// The "understood as" card, built from `sql_guarded`: what is measured, filtered, grouped, sorted, over which
@@ -501,7 +515,7 @@ pub struct VolumePrice {
 /// - `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column
 ///   does not exist or because it could build a value too large (at most once).
 /// - `explain`: compute the breakdown of a "why" question (code, no model).
-/// - `narrate`: the language model writes the summary of the breakdown.
+/// - `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.
 /// - `record`: save the question in the history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]

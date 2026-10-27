@@ -20,6 +20,8 @@ Câu "tại sao" (#38) không đọc cây cú pháp: thẻ dựng thẳng từ f
 
 pub mod labels;
 #[cfg(test)]
+mod labels_tests;
+#[cfg(test)]
 mod tests;
 pub mod why;
 
@@ -114,6 +116,7 @@ fn build_item(label: String, sql: &str) -> UnderstoodItem {
     UnderstoodItem {
         label,
         sql: sql.to_string(),
+        from_previous: false,
     }
 }
 

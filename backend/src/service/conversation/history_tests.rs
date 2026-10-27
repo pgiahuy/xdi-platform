@@ -26,6 +26,7 @@ fn item(label: &str, sql: &str) -> UnderstoodItem {
     UnderstoodItem {
         label: label.to_string(),
         sql: sql.to_string(),
+        from_previous: false,
     }
 }
 

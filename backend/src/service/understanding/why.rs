@@ -85,6 +85,7 @@ pub fn build_why_understanding(
     filters.extend(row_filters.iter().map(|sql| UnderstoodItem {
         label: build_row_filter_label(sql, profile),
         sql: sql.clone(),
+        from_previous: false,
     }));
     // Khóa nhóm (kỳ hay nhóm của bảng tổng) và thứ tự đọc từ câu đã chạy như câu thường; phần còn lại theo plan.
     let read = build_understanding(shape, false, profile, metrics, row_filters, assumptions);
@@ -137,5 +138,6 @@ fn build_item(label: String, expr: &Expr) -> UnderstoodItem {
     UnderstoodItem {
         label,
         sql: expr.to_string(),
+        from_previous: false,
     }
 }

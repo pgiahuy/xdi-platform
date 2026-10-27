@@ -512,6 +512,17 @@ export interface components {
         };
         /** @description Answer to one question, with the evidence behind it. See `AskStatus` for which fields are set. */
         AskResponse: {
+            /**
+             * @description Short answer in Vietnamese for an `answered` question that is not a "why" question and has at least one row:
+             *     written by the language model from the first 10 rows of the result, every number checked against those rows,
+             *     or a template sentence written by the backend. Null otherwise; a "why" question has `explanation.summary`.
+             */
+            answer_text: string | null;
+            /**
+             * @description True when `answer_text` was written by the language model, false for the template sentence (the model failed,
+             *     timed out, wrote a number that is not in the rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null.
+             */
+            answer_text_by_model: boolean | null;
             chart: components["schemas"]["ChartSuggestion"] | null;
             /**
              * @description Every choice this answer used, defaults included, in the shape of `AskRequest.choices`. To ask again with one
@@ -1051,7 +1062,7 @@ export interface components {
          *     - `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column
          *       does not exist or because it could build a value too large (at most once).
          *     - `explain`: compute the breakdown of a "why" question (code, no model).
-         *     - `narrate`: the language model writes the summary of the breakdown.
+         *     - `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.
          *     - `record`: save the question in the history.
          * @enum {string}
          */
@@ -1094,6 +1105,11 @@ export interface components {
         };
         /** @description One thing the question was understood to mean. */
         UnderstoodItem: {
+            /**
+             * @description True when the item is carried over from the previous turn of the conversation: the same as in that turn's card
+             *     (same SQL fragment or same label) and not named in this question. Omitted when false.
+             */
+            from_previous?: boolean;
             /** @description Text for the end user (Vietnamese) naming the measure, filter, grouping, order or period. */
             label: string;
             /** @description Fragment of `sql_guarded` this item comes from. */

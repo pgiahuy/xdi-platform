@@ -35,6 +35,8 @@ export type UnderstandingView = {
   limit: string | null
   timeRange: string | null
   assumptions: ChoiceView[]
+  /** Nhãn của các mục lấy từ lượt trước của cuộc trò chuyện; thẻ ghi "từ câu trước" cạnh chúng. */
+  fromPrevious?: string[]
 }
 
 /** Cách đọc ô của một cột, như ValueKind của hợp đồng: number là số JavaScript giữ đúng; decimal là chuỗi chữ số

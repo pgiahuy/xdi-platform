@@ -118,6 +118,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB; quá thì câu bị dừng, trừ phần DuckDB tính trước khi chạy ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |
 | `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; chạm trần thì giao diện ghi "ít nhất N dòng". Giao diện chỉ nhận 1000 dòng đầu |
 | `RUST_LOG` | `info` | Mức log |
+| `ANSWER_TEXT` | `true` | Câu hỏi thường có đoạn trả lời do mô hình viết từ tối đa 10 dòng đầu của kết quả ([PRIVACY.md](PRIVACY.md)); `false` để không gửi dòng kết quả nào cho mô hình, đoạn trả lời là câu khuôn |
 | `SEED_SAMPLE` | `true` | Thiết lập lần đầu nạp dataset mẫu DataCo kèm chỉ số mẫu vào workspace đầu tiên (mục 7, bước 1); `false` để workspace trống |
 | `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | Để dành cho đăng nhập bằng Google, backend hiện chưa đọc; để trống |
@@ -599,16 +600,22 @@ hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi đ
 
 ### Bước 5. Hỏi
 
-Trang **Hỏi dữ liệu**: ô **Dataset** chọn sẵn dataset tạo gần nhất, đổi được. Gõ câu vào ô **Câu hỏi** rồi bấm **Hỏi**
-(Enter để hỏi, Shift+Enter để xuống dòng), hoặc bấm một câu trong thẻ **Câu gợi ý** để hỏi ngay. Với `mock` trên DataCo,
-bấm "Doanh thu theo thị trường".
+Trang **Hỏi dữ liệu** là một khung trò chuyện: ô hỏi dính đáy màn, ô **Dataset** ở hàng trên của ô hỏi chọn sẵn
+dataset tạo gần nhất, đổi được (đổi dataset là bắt đầu cuộc mới). Gõ câu hỏi rồi bấm **Hỏi** (Enter để hỏi, Shift+Enter
+để xuống dòng), hoặc bấm một câu gợi ý khi cuộc còn trống để hỏi ngay. Với `mock` trên DataCo, bấm "Doanh thu theo thị
+trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở châu Âu" trong cùng cuộc.
+
+Mỗi lượt là câu hỏi (căn phải) và câu trả lời (căn trái). Cột trái (màn hẹp: nút **Các cuộc trò chuyện**) liệt kê các cuộc
+đã hỏi trên dataset, mới trước, kèm nút **Cuộc trò chuyện mới**; bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó. Lượt cũ
+chỉ hiện câu hỏi và tóm tắt phần đã hiểu, vì bảng kết quả không được lưu; bấm **Hỏi lại** để chạy lại câu đó. Đường dẫn
+của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cuộc.
 
 Câu có cụm khớp nhiều cột thì backend hỏi lại trước khi viết SQL: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
-SQL bị từ chối hay chạy lỗi) hiện ngay dưới ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
+SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
 
 ### Bước 6. Đọc kết quả và bằng chứng
 
-Kết quả nằm trong một thẻ có tiêu đề là chính câu đã hỏi. Đầu thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu
+Câu trả lời nằm trong một thẻ ngay dưới câu đã hỏi. Đầu thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu
 hỏi, đọc từ câu SQL đã chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời
 gian** (dòng nào không có thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Tiếp theo là
 biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu đồ cột khi cột nhóm duy nhất là một
@@ -617,8 +624,9 @@ chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên D
 `Hiện 1.000 trên <tổng> dòng.`), phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập
 phân). **Tải CSV** tải các dòng giao diện đã nhận, tối đa 1000 dòng, giữ giá trị gốc.
 
-Pane **Bằng chứng** nằm bên phải trên màn rộng, dưới kết quả trên màn hẹp; nút **Thu gọn** và **Mở** ẩn hoặc hiện nó.
-Bốn tab:
+Pane **Bằng chứng** nằm bên phải trên màn rộng, dưới khung trò chuyện trên màn hẹp, và hiện bằng chứng của lượt đang
+chọn (mặc định lượt mới nhất); nút **Bằng chứng** ở cuối mỗi câu trả lời chọn lượt đó. Nút **Thu gọn** và **Mở** ẩn hoặc
+hiện pane. Bốn tab:
 
 - **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
   (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép
@@ -641,6 +649,11 @@ có trong bảng phân rã, mô hình viết sai thì backend dùng câu khuôn 
 sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra tăng (hay không
 đổi) thì kết quả có thêm một cảnh báo nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
 năm 2017 giảm".
+
+Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") vẫn có phân rã: backend chọn kỳ gần nhất có dữ liệu (theo tháng
+nếu câu không nói tháng, quý hay năm) và so với kỳ liền trước. Kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó
+(dữ liệu dừng giữa kỳ) thì lùi một kỳ. Thẻ **Đã hiểu là** ghi giả định này, ví dụ "Kỳ gần nhất có dữ liệu: Quý 4/2017
+so với Quý 3/2017", kèm nút cho các kỳ gần nhất có dữ liệu; bấm một nút để hỏi lại với kỳ đó.
 
 Câu hỏi cần thông tin dataset không có (ví dụ "Tại sao khách hàng không hài lòng?" khi không có cột đánh giá, hay hỏi
 dự báo) thì không có bảng số: kết quả báo dữ liệu không có thông tin này, nói lý do và gợi ý các cột gần nhất để hỏi.

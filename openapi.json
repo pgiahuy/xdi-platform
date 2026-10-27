@@ -1216,6 +1216,8 @@
                   "failed": {
                     "summary": "SQL failed, also after one fix round",
                     "value": {
+                      "answer_text": null,
+                      "answer_text_by_model": null,
                       "chart": null,
                       "choices": [
                         {
@@ -1296,6 +1298,8 @@
                   "needs_choice": {
                     "summary": "Ambiguous question",
                     "value": {
+                      "answer_text": null,
+                      "answer_text_by_model": null,
                       "chart": null,
                       "choices": [],
                       "clarifications": [
@@ -1341,6 +1345,8 @@
                   "rejected": {
                     "summary": "SQL refused by the guard",
                     "value": {
+                      "answer_text": null,
+                      "answer_text_by_model": null,
                       "chart": null,
                       "choices": [],
                       "clarifications": [],
@@ -1388,6 +1394,8 @@
                   "simple": {
                     "summary": "One dimension, one measure",
                     "value": {
+                      "answer_text": "Europe có doanh thu cao nhất với 10.845.230,42, tiếp theo là LATAM (10.276.850,17) và Pacific Asia (8.124.900,80).",
+                      "answer_text_by_model": true,
                       "chart": {
                         "kind": "bar",
                         "layout": "single",
@@ -1486,6 +1494,12 @@
                         },
                         {
                           "detail": null,
+                          "duration_ms": 910,
+                          "name": "narrate",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
                           "duration_ms": 6,
                           "name": "record",
                           "ok": true
@@ -1553,6 +1567,8 @@
                   "why": {
                     "summary": "Why question with a breakdown",
                     "value": {
+                      "answer_text": null,
+                      "answer_text_by_model": null,
                       "chart": {
                         "kind": "column",
                         "layout": "panels",
@@ -2390,10 +2406,26 @@
           "chart",
           "warnings",
           "explanation",
+          "answer_text",
+          "answer_text_by_model",
           "clarifications",
           "steps"
         ],
         "properties": {
+          "answer_text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Short answer in Vietnamese for an `answered` question that is not a \"why\" question and has at least one row:\nwritten by the language model from the first 10 rows of the result, every number checked against those rows,\nor a template sentence written by the backend. Null otherwise; a \"why\" question has `explanation.summary`."
+          },
+          "answer_text_by_model": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True when `answer_text` was written by the language model, false for the template sentence (the model failed,\ntimed out, wrote a number that is not in the rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null."
+          },
           "chart": {
             "oneOf": [
               {
@@ -3613,7 +3645,7 @@
       },
       "StepName": {
         "type": "string",
-        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown.\n- `record`: save the question in the history.",
+        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.\n- `record`: save the question in the history.",
         "enum": [
           "context",
           "llm",
@@ -3746,6 +3778,10 @@
           "sql"
         ],
         "properties": {
+          "from_previous": {
+            "type": "boolean",
+            "description": "True when the item is carried over from the previous turn of the conversation: the same as in that turn's card\n(same SQL fragment or same label) and not named in this question. Omitted when false."
+          },
           "label": {
             "type": "string",
             "description": "Text for the end user (Vietnamese) naming the measure, filter, grouping, order or period."

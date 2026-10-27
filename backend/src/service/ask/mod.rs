@@ -46,6 +46,9 @@ pub mod result;
 pub mod run;
 #[cfg(test)]
 mod run_tests;
+pub mod summary;
+#[cfg(test)]
+mod summary_tests;
 pub mod unanswerable;
 pub mod values;
 pub(crate) mod view;
@@ -63,7 +66,8 @@ use crate::service::ask::checks::{build_result_warnings, CheckedQuery};
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
 use crate::service::ask::context::{build_ask_context, AskContext};
 use crate::service::ask::contract::{
-    AskResponse, AskStatus, AskStep, ChosenOption, ResultTable, StepName, Warning, WarningCode,
+    AskResponse, AskStatus, AskStep, ChosenOption, ResultTable, StepName, Understanding, Warning,
+    WarningCode,
 };
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput};
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
@@ -71,10 +75,11 @@ use crate::service::ask::response_choices::{
     build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
     build_unapplied_warnings, build_used_choices,
 };
-use crate::service::ask::run::{build_step, run_with_repair, RunInput};
+use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
+use crate::service::ask::summary::{summarize, SummaryInput, SummaryOutcome};
 use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
-use crate::service::ask::why::{ask_why, WhyAsk};
+use crate::service::ask::why::{ask_why, build_narrate_timeout, WhyAsk};
 use crate::service::explain::form::{build_question_kind, QuestionKind};
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
 use crate::{error::AppError, state::AppState};
@@ -232,6 +237,14 @@ pub async fn ask(
     };
     let view = build_answer_view(&ran, &context.columns, &metrics, &assumptions);
     let (understanding, chart) = apply_answer_view(view, outcome.result.as_mut());
+    let answer = build_answer_text(state, question, understanding.as_ref(), &outcome).await;
+    let (answer_text, answer_text_by_model) = match answer {
+        Some(answer) => {
+            steps.push(answer.step);
+            (Some(answer.text), Some(answer.by_model))
+        }
+        None => (None, None),
+    };
 
     let recorded = Recorded {
         status: outcome.status,
@@ -253,9 +266,37 @@ pub async fn ask(
         result: outcome.result,
         chart,
         warnings,
+        answer_text,
+        answer_text_by_model,
         steps,
         ..build_base_response(state, &version, question, outcome.status)
     })
+}
+
+/// Đoạn trả lời bằng lời (ask/summary.rs), chỉ cho câu answered có kết quả.
+async fn build_answer_text(
+    state: &AppState,
+    question: &str,
+    understanding: Option<&Understanding>,
+    outcome: &RunOutcome,
+) -> Option<SummaryOutcome> {
+    let result = outcome.result.as_ref()?;
+    if outcome.status != AskStatus::Answered {
+        return None;
+    }
+    let input = SummaryInput {
+        question,
+        understanding,
+        result,
+    };
+    let timeout = build_narrate_timeout(&state.config);
+    summarize(
+        state.llm.as_ref(),
+        &input,
+        state.config.answer_text,
+        timeout,
+    )
+    .await
 }
 
 /// Dataset của workspace người hỏi và phiên bản đang dùng. Id của workspace khác trả 404 như id không có.
@@ -430,6 +471,8 @@ pub(super) fn build_base_response(
         chart: None,
         warnings: vec![],
         explanation: None,
+        answer_text: None,
+        answer_text_by_model: None,
         clarifications: vec![],
         steps: vec![],
     }

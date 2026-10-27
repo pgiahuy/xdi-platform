@@ -156,7 +156,7 @@ struct StoredWhy<'a> {
 
 /// Mỗi lần gọi mô hình đã bị giới hạn bằng timeout của nhà cung cấp (engine/llm). Bước narrate dùng đúng mức đó, để lời
 /// diễn giải không bị cắt sớm hơn một lần gọi bình thường; quá giờ thì narrate dùng câu khuôn, câu hỏi vẫn answered.
-fn build_narrate_timeout(config: &Config) -> Duration {
+pub(super) fn build_narrate_timeout(config: &Config) -> Duration {
     match config.llm_provider.as_str() {
         "ollama" => config.ollama_timeout,
         _ => config.gemini_timeout,

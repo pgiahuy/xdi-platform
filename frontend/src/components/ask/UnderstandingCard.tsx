@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/UnderstandingCard.tsx - thẻ "Đã hiểu là": câu hỏi được hiểu thành đo gì, lọc gì, nhóm theo gì, sắp
 xếp, giới hạn, khoảng thời gian, và các giả định đổi được. Nhãn do backend viết từ câu SQL đã chạy (#35), nên thẻ luôn
-khớp với kết quả bên dưới; đoạn SQL của từng mục để pane bằng chứng (#52) hiện. Mục trống thì không hiện dòng.
+khớp với kết quả bên dưới; đoạn SQL của từng mục để pane bằng chứng (#52) hiện. Mục trống thì không hiện dòng. Mục lấy
+từ lượt trước của cuộc trò chuyện (#164) có nhãn chữ "từ câu trước", không chỉ đổi màu, để đọc được cả khi không phân
+biệt màu.
 Khối nền xanh ngọc nhạt: xanh ngọc là màu của nhãn và cách hiểu, tách khỏi hổ phách dành cho số cần nhấn. */
 
 import { CircleCheck } from 'lucide-react'
@@ -23,6 +25,7 @@ export function UnderstandingCard({ understanding: u, onChangeAssumption, disabl
     ['Giới hạn', u.limit ? [u.limit] : []],
     ['Khoảng thời gian', u.timeRange ? [u.timeRange] : []],
   ]
+  const fromPrevious = new Set(u.fromPrevious ?? [])
   return (
     <section
       aria-labelledby="understanding-heading"
@@ -41,7 +44,19 @@ export function UnderstandingCard({ understanding: u, onChangeAssumption, disabl
           .map(([title, items]) => (
             <div key={title} className="contents">
               <dt className="font-semibold text-label">{title}</dt>
-              <dd className="mb-1 font-medium sm:mb-0">{items.join('; ')}</dd>
+              <dd className="mb-1 font-medium sm:mb-0">
+                {items.map((item, i) => (
+                  <span key={`${i}-${item}`}>
+                    {i > 0 && '; '}
+                    {item}
+                    {fromPrevious.has(item) && (
+                      <span className="ml-1.5 rounded border border-label-border px-1 py-px text-xs font-normal text-muted-foreground">
+                        từ câu trước
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </dd>
             </div>
           ))}
       </dl>

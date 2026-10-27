@@ -86,11 +86,18 @@ pub fn build_simple_example() -> AskResponse {
             top: None,
             other_bucket: false,
         }),
+        answer_text: Some(
+            "Europe có doanh thu cao nhất với 10.845.230,42, tiếp theo là LATAM (10.276.850,17) và Pacific Asia \
+             (8.124.900,80)."
+                .to_string(),
+        ),
+        answer_text_by_model: Some(true),
         steps: vec![
             build_step(StepName::Context, 15, true, None),
             build_step(StepName::Llm, 1120, true, None),
             build_step(StepName::Guard, 3, true, Some("Thêm LIMIT 100000")),
             build_step(StepName::Run, 38, true, None),
+            build_step(StepName::Narrate, 910, true, None),
             build_step(StepName::Record, 6, true, None),
         ],
         ..build_base(AskStatus::Answered, "Doanh thu theo khu vực", Some(1))
@@ -349,6 +356,8 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         chart: None,
         warnings: vec![],
         explanation: None,
+        answer_text: None,
+        answer_text_by_model: None,
         clarifications: vec![],
         steps: vec![],
     }
@@ -419,6 +428,7 @@ fn build_item(label: &str, sql: &str) -> UnderstoodItem {
     UnderstoodItem {
         label: label.to_string(),
         sql: sql.to_string(),
+        from_previous: false,
     }
 }
 
