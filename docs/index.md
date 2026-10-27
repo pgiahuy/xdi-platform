@@ -7,6 +7,17 @@ nhóm nào làm con số tăng hay giảm và cho xem các dòng dữ liệu đ�
 dữ liệu; mô hình ngôn ngữ chỉ viết SQL hay điền form từ câu hỏi, viết mô tả cột và lời giải thích, không nhận các dòng
 dữ liệu ([Dữ liệu và quyền riêng tư](PRIVACY.md)).
 
+## Luồng câu "tại sao"
+
+Ảnh chụp trên dataset mẫu DataCo với mô hình `mock`. Hỏi "Vì sao doanh thu tháng 5 năm 2017 tăng": thẻ trả lời ghi hai
+kỳ, chênh lệch, lời giải thích và phần đóng góp của từng nhóm; pane Minh chứng bên phải có bảng phân rã theo từng chiều.
+
+![Câu "tại sao": hai kỳ, chênh lệch, đóng góp theo nhóm và bảng phân rã](images/why-answer.png)
+
+Bấm một số trong bảng phân rã (ở đây doanh thu của bang CA trong tháng 5/2017) để xem các dòng dữ liệu đứng sau số đó.
+
+![Dòng nguồn của một ô trong bảng phân rã](images/why-source.png)
+
 ## Trạng thái
 
 Đã có: tài khoản, workspace và hai vai `admin`, `member`; nạp CSV, Parquet, Excel thành phiên bản, xóa dataset, hồ sơ
