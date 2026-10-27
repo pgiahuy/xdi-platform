@@ -1088,9 +1088,11 @@ export interface components {
          *     - `unusual_magnitude`: a value is far outside what the data makes likely, for example a ratio above 100%.
          *     - `explanation_unavailable`: a "why" question was answered without a breakdown; the message says why.
          *     - `choice_not_applied`: a choice sent with the question was not recognized and the default was used.
+         *     - `premise_mismatch`: a "why" question assumes a direction (a drop, a rise) that the computed change does not have;
+         *       the breakdown explains the actual change.
          * @enum {string}
          */
-        WarningCode: "empty_result" | "all_null" | "filter_value_not_found" | "unusual_magnitude" | "explanation_unavailable" | "choice_not_applied";
+        WarningCode: "empty_result" | "all_null" | "filter_value_not_found" | "unusual_magnitude" | "explanation_unavailable" | "choice_not_applied" | "premise_mismatch";
         /** @description A workspace as the system administrator sees it: name and members, none of its data. */
         WorkspaceOverview: {
             /** Format: date-time */

@@ -633,12 +633,13 @@ Bốn tab:
   lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ viết SQL, điền form và viết lời, còn con số do
   DuckDB và backend tính.
 
-Câu hỏi "tại sao" (backend nhận ra bằng các cụm "tại sao", "vì sao", "lý do", "nguyên nhân", "do đâu",
-gõ không dấu cũng được): mô hình không viết SQL mà điền một form (đo
+Câu hỏi "tại sao" (backend nhận ra bằng các cụm "tại sao", "vì sao", "sao lại", "vì đâu", "lý do", "nguyên nhân",
+"do đâu", gõ không dấu cũng được): mô hình không viết SQL mà điền một form (đo
 gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm form rồi tự dựng mọi câu SQL. Thẻ kết quả có khung
 **Giải thích** ngay dưới **Đã hiểu là**, rồi bảng tổng của hai kỳ hay hai nhóm; mọi số trong lời giải thích được kiểm là
 có trong bảng phân rã, mô hình viết sai thì backend dùng câu khuôn của mình và ghi rõ. Không phân rã được (ví dụ kỳ so
-sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
+sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra tăng (hay không
+đổi) thì kết quả có thêm một cảnh báo nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
 năm 2017 giảm".
 
 ### Bước 7. Mời thành viên

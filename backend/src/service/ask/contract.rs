@@ -332,7 +332,7 @@ pub struct ChartSuggestion {
     pub other_bucket: bool,
 }
 
-// Bốn loại đầu do kiểm hợp lý dựng (service/ask/checks.rs), hai loại sau do chính luồng hỏi. Thêm loại mới là đổi
+// Bốn loại đầu do kiểm hợp lý dựng (service/ask/checks.rs), ba loại sau do chính luồng hỏi. Thêm loại mới là đổi
 // API: chạy make openapi.
 /// Kind of note:
 /// - `empty_result`: no rows.
@@ -341,6 +341,8 @@ pub struct ChartSuggestion {
 /// - `unusual_magnitude`: a value is far outside what the data makes likely, for example a ratio above 100%.
 /// - `explanation_unavailable`: a "why" question was answered without a breakdown; the message says why.
 /// - `choice_not_applied`: a choice sent with the question was not recognized and the default was used.
+/// - `premise_mismatch`: a "why" question assumes a direction (a drop, a rise) that the computed change does not have;
+///   the breakdown explains the actual change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum WarningCode {
@@ -350,6 +352,7 @@ pub enum WarningCode {
     UnusualMagnitude,
     ExplanationUnavailable,
     ChoiceNotApplied,
+    PremiseMismatch,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

@@ -48,6 +48,7 @@ use crate::service::explain::form::{
     build_form_from_reply, build_why_repair_prompt, FieldError, ReadForm,
 };
 use crate::service::explain::plain::run_plain;
+use crate::service::explain::premise::{build_premise_labels, build_premise_warning};
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
 
 /// Lời cho needs_choice, như mẫu needs_choice của ask/examples.rs.
@@ -283,6 +284,11 @@ async fn run_plan(
         steps.push(build_step(StepName::Explain, started, false, Some(detail)));
         return Ok(Round::Invalid(empty));
     }
+    // Kiểm tiền đề trước phân rã: chênh lệch bằng 0 thì không có phân rã, nhưng người hỏi "vì sao giảm" vẫn cần biết.
+    let labels = build_premise_labels(plan);
+    let premise =
+        build_premise_warning(input.prompt.question, &labels, totals.base, totals.compare);
+    outcome.warnings.extend(premise);
     let filters = (sql.base_filter, sql.compare_filter);
     let mut explanation = match build_breakdown(&env, plan, &totals, filters).await? {
         Breakdown::Ready(explanation) => *explanation,

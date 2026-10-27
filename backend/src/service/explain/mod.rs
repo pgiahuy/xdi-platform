@@ -25,6 +25,7 @@ pub mod measure;
 pub mod number;
 pub mod period;
 pub mod plain;
+pub mod premise;
 pub mod run;
 #[cfg(test)]
 mod run_tests;

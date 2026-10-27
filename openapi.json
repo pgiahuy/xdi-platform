@@ -3672,14 +3672,15 @@
       },
       "WarningCode": {
         "type": "string",
-        "description": "Kind of note:\n- `empty_result`: no rows.\n- `all_null`: a result column holds only nulls.\n- `filter_value_not_found`: the SQL filters on a value that does not occur in the column.\n- `unusual_magnitude`: a value is far outside what the data makes likely, for example a ratio above 100%.\n- `explanation_unavailable`: a \"why\" question was answered without a breakdown; the message says why.\n- `choice_not_applied`: a choice sent with the question was not recognized and the default was used.",
+        "description": "Kind of note:\n- `empty_result`: no rows.\n- `all_null`: a result column holds only nulls.\n- `filter_value_not_found`: the SQL filters on a value that does not occur in the column.\n- `unusual_magnitude`: a value is far outside what the data makes likely, for example a ratio above 100%.\n- `explanation_unavailable`: a \"why\" question was answered without a breakdown; the message says why.\n- `choice_not_applied`: a choice sent with the question was not recognized and the default was used.\n- `premise_mismatch`: a \"why\" question assumes a direction (a drop, a rise) that the computed change does not have;\n  the breakdown explains the actual change.",
         "enum": [
           "empty_result",
           "all_null",
           "filter_value_not_found",
           "unusual_magnitude",
           "explanation_unavailable",
-          "choice_not_applied"
+          "choice_not_applied",
+          "premise_mismatch"
         ]
       },
       "WorkspaceOverview": {

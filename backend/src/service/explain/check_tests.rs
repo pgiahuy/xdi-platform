@@ -207,6 +207,13 @@ fn why_questions_are_found_with_and_without_accents() {
         "Doanh thu giảm do đâu?",
         "Why did revenue drop in Q3?",
         "Tại sao doanh thu Europe thấp hơn LATAM",
+        "Sao lại giảm doanh thu quý 3?",
+        "doanh thu sao lai giam",
+        "Vì đâu lợi nhuận Europe thấp?",
+        "Tại vì sao số đơn giảm",
+        "Do đâu mà doanh thu tháng 5 tăng",
+        "Vì lý do gì doanh thu giảm",
+        "How come revenue fell?",
     ] {
         assert_eq!(
             build_question_kind(question),
@@ -224,8 +231,15 @@ fn other_questions_are_plain() {
         "Số đơn hàng theo trạng thái giao hàng",
         "Tài sản theo năm",
         "doanh thu whyte",
-        // Không có từ khóa: đi đường câu thường (giới hạn đã chấp nhận ở #38).
-        "sao lại giảm",
+        // "sao" đứng một mình, "đâu", "lại" không đủ để là câu "tại sao".
+        "Sao chép bảng doanh thu",
+        "Doanh số theo vùng",
+        "Doanh thu theo sao lưu",
+        "Đơn hàng giao tới đâu nhiều nhất",
+        "Doanh thu lại theo quý",
+        "Số sao đánh giá trung bình",
+        // Không có từ khóa: đi đường câu thường.
+        "thế nào mà giảm",
     ] {
         assert_eq!(
             build_question_kind(question),

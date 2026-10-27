@@ -111,7 +111,9 @@ lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu mock không có
 hình lỗi hay chưa cấu hình trước khi có câu SQL nào. Câu answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ.
 Câu "tại sao" (nhận bằng từ khóa) đi đường form: mô hình
 điền form, code dựng SQL, `result` là bảng tổng theo kỳ hay theo nhóm, `explanation` là bảng phân rã; không phân rã
-được thì `explanation` null kèm cảnh báo `explanation_unavailable`, câu vẫn answered.
+được thì `explanation` null kèm cảnh báo `explanation_unavailable`, câu vẫn answered. Câu nói một hướng ("vì sao
+giảm", "vì sao cao hơn") mà chênh lệch tính được ngược hướng hay bằng 0 thì kèm cảnh báo `premise_mismatch` nêu chênh
+lệch thực tế; phân rã và lời giải thích vẫn trả như thường, theo chênh lệch thực tế.
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).
