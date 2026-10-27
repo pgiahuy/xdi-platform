@@ -15,6 +15,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Câu hỏi thường có thêm một đoạn trả lời ngắn bằng lời trên thẻ "Đã hiểu là", mọi số trong đó lấy từ kết quả; tắt bằng `ANSWER_TEXT=false`.
 - Câu hỏi cần thông tin dataset không có (mức hài lòng, dự báo) được báo rõ kèm các cột gần nhất có thể hỏi, thay vì chạy một câu SQL lạc đề (#164).
 - Trang hỏi thành khung trò chuyện, kèm danh sách cuộc trò chuyện cũ để mở lại và hỏi tiếp (#164).
+- Trang hỏi gọn hơn: phần "Đã hiểu là" và bảng thu gọn được, pane đổi tên thành Minh chứng và thu về mép phải, thanh bên và danh sách cuộc trò chuyện ẩn được, lời trả lời giọng báo cáo (#164).
 - Nút **Tạo workspace** ở cuối ô chọn workspace và ở màn của người chưa thuộc workspace nào.
 
 ### Changed
