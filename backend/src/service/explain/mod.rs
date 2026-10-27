@@ -1053,6 +1053,83 @@ fn between(amount: &str, base: &str) -> String {
     format!("{amount} so với {base}")
 }
 
+/// Kiểm chữ chiều trong lời của mô hình: trước mỗi chênh lệch có trong bảng (chênh lệch tổng, đóng góp của nhóm, phần
+/// cơ cấu, hiệu suất, lượng, giá), chữ "tăng" hay "giảm" gần nhất trong cùng câu phải đúng dấu của chênh lệch đó. Bước
+/// kiểm số chỉ biết số có trong bảng; câu "doanh thu giảm 4.231,78" khi nhóm thật ra tăng 4.231,78 vẫn qua bước đó. Trả
+/// về các số bị nói ngược chiều. Chỉ dùng cho so hai kỳ: so hai nhóm thì narrate dùng câu khuôn.
+pub fn build_direction_check(summary: &str, explanation: &Explanation) -> Result<(), Vec<String>> {
+    let digits = build_fraction_digits(explanation);
+    let mut changes = vec![&explanation.change];
+    for dimension in &explanation.dimensions {
+        changes.extend(dimension.groups.iter().map(|group| &group.contribution));
+        changes.extend(
+            dimension
+                .mix_effect
+                .iter()
+                .chain(dimension.rate_effect.iter()),
+        );
+    }
+    if let Some(split) = &explanation.volume_price {
+        changes.push(&split.volume_effect);
+        changes.push(&split.price_effect);
+    }
+    let mut wrong = Vec::new();
+    for change in changes {
+        let (Some(expected @ ("tăng" | "giảm")), amount) = build_change_parts(change, digits)
+        else {
+            continue;
+        };
+        for (start, _) in summary.match_indices(&amount) {
+            if !stands_alone(summary, start, amount.len()) {
+                continue;
+            }
+            if let Some(said) = last_direction_word(&summary[..start]) {
+                if said != expected && !wrong.contains(&amount) {
+                    wrong.push(amount.clone());
+                }
+            }
+        }
+    }
+    if wrong.is_empty() {
+        Ok(())
+    } else {
+        Err(wrong)
+    }
+}
+
+// Số đứng riêng, để "85.185" không khớp giữa "185.185,00": ký tự liền trước không phải chữ số hay dấu ngăn của số,
+// liền sau không phải chữ số hay dấu phẩy rồi chữ số (phần thập phân). Dấu phẩy rồi khoảng trắng là ngắt câu.
+fn stands_alone(text: &str, start: usize, len: usize) -> bool {
+    let before = text[..start].chars().next_back();
+    let joins_before = before.is_some_and(|c| c.is_ascii_digit() || c == '.' || c == ',');
+    let mut after = text[start + len..].chars();
+    let joins_after = match after.next() {
+        Some(c) if c.is_ascii_digit() => true,
+        Some(',') => after.next().is_some_and(|c| c.is_ascii_digit()),
+        _ => false,
+    };
+    !joins_before && !joins_after
+}
+
+// Chữ chiều gần nhất phía trước, chỉ trong câu đang xét: sau ". ", "; ", "! " hay "? " cuối cùng. Dấu chấm ngăn nghìn
+// không có khoảng trắng theo sau nên không bị coi là hết câu.
+fn last_direction_word(before: &str) -> Option<&'static str> {
+    let sentence_start = [". ", "; ", "! ", "? "]
+        .iter()
+        .filter_map(|mark| before.rfind(mark).map(|i| i + mark.len()))
+        .max()
+        .unwrap_or(0);
+    let sentence = &before[sentence_start..];
+    let up = sentence.rfind("tăng");
+    let down = sentence.rfind("giảm");
+    match (up, down) {
+        (Some(u), Some(d)) => Some(if u > d { "tăng" } else { "giảm" }),
+        (Some(_), None) => Some("tăng"),
+        (None, Some(_)) => Some("giảm"),
+        (None, None) => None,
+    }
+}
+
 /// Nhóm nói ở câu thứ hai: trong chiều đầu, nhóm có đóng góp lớn nhất cùng chiều với chênh lệch. Câu khuôn và prompt
 /// narrate cùng dùng, để mô hình không tự chọn nhóm ngược chiều rồi kể như nguyên nhân chính.
 fn find_main_group(explanation: &Explanation) -> Option<(&DimensionBreakdown, &GroupContribution)> {

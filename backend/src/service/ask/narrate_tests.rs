@@ -22,7 +22,8 @@ use crate::service::ask::narrate::narrate;
 use crate::service::explain::build_direction_text;
 use crate::service::explain::number::{build_number_text, MAX_FRACTION_DIGITS};
 use crate::service::explain::{
-    build_narrate_prompt, build_number_check, build_template_summary, MAX_SUMMARY_CHARS,
+    build_direction_check, build_narrate_prompt, build_number_check, build_template_summary,
+    MAX_SUMMARY_CHARS,
 };
 
 const QUESTION: &str = "Tại sao doanh thu quý 3 năm 2017 giảm?";
@@ -661,4 +662,45 @@ fn changes_read_as_a_direction_and_an_amount() {
 fn a_comma_between_numbers_does_not_join_them() {
     let explanation = example();
     check("Quý 3, quý 2 năm 2017: giảm 1.283.400,00.", &explanation).unwrap();
+}
+
+/// Bước kiểm số không bắt được câu nói ngược chiều ("nhóm B tăng 400,00" khi nhóm B giảm 400,00); bước kiểm chiều thì
+/// bắt được, và không bắt nhầm câu đúng chiều.
+#[test]
+fn direction_check_catches_a_change_told_the_wrong_way() {
+    let explanation = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("A"), "300.00"), (Some("B"), "-400.00")],
+    );
+    let right =
+        "Doanh thu Quý 3/2017 giảm 100,00 so với Quý 2/2017. Riêng nhóm B, doanh thu giảm 400,00.";
+    build_direction_check(right, &explanation).unwrap();
+    let wrong =
+        "Doanh thu Quý 3/2017 giảm 100,00 so với Quý 2/2017. Riêng nhóm B, doanh thu tăng 400,00.";
+    check(wrong, &explanation).unwrap();
+    assert_eq!(
+        build_direction_check(wrong, &explanation).unwrap_err(),
+        ["400,00"]
+    );
+}
+
+/// So hai nhóm: không gọi mô hình, dùng câu khuôn; bước narrate vẫn ok vì đây là lựa chọn, không phải lỗi.
+#[tokio::test]
+async fn two_groups_use_the_template_without_the_model() {
+    let mut explanation = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("A"), "300.00"), (Some("B"), "-400.00")],
+    );
+    explanation.comparison = Comparison::Groups;
+    let llm = StubLlm {
+        reply: Reply::Text("Câu của mô hình.".to_string()),
+    };
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
+    assert_eq!(outcome.summary, build_template_summary(&explanation));
+    assert!(!outcome.summary_by_model);
+    assert!(outcome.step.ok);
 }
