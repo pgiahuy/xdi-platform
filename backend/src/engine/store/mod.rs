@@ -13,7 +13,12 @@ mod accounts;
 mod columns;
 mod conversations;
 mod members;
+// Phần ghi (set_data_role, list_row_policies, replace_row_policies) chờ service và API của #45 gọi; gỡ allow khi có
+// người gọi để clippy bắt lại.
+#[allow(dead_code)]
 mod policies;
+#[cfg(test)]
+mod policies_tests;
 mod users;
 // Khung: các hàm truy vấn dưới đây được gọi từ issue nạp dữ liệu (#20), endpoint hỏi (#33) và chế độ xác thực (#42).
 // Chưa có code gọi nên tạm cho phép "chưa dùng" ở đúng ba module này; gỡ khi có người gọi để clippy bắt lại.
@@ -42,6 +47,8 @@ pub use datasets::{
 pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]
 pub use metrics::{MetricDefinition, NewMetric};
+#[allow(unused_imports)]
+pub use policies::{DataRoleOutcome, PoliciesOutcome, RowPolicy};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, PromptExample, QueryStatus, StoredQuery};
 pub use users::{Deactivated, UserSummary};
