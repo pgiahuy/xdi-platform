@@ -62,9 +62,10 @@ impl LlmProvider for ScriptedLlm {
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
         // Nạp file xong, lớp ngữ nghĩa (service/semantic/mod.rs) chạy nền và cũng gọi mô hình. Lỗi tạm thì nó không ghi gì
         // vào hồ sơ, nên câu viết sẵn chỉ dành cho câu hỏi và bí danh test tự đặt không bị ghi đè.
-        if request.task == LlmTask::Profile {
+        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn.
+        if matches!(request.task, LlmTask::Profile | LlmTask::Summary) {
             return Err(AppError::Upstream(
-                "scripted model has no profile".to_string(),
+                "scripted model has no profile or summary".to_string(),
             ));
         }
         let reply = self.replies.lock().unwrap().pop_front();
@@ -196,8 +197,14 @@ async fn answers_a_question_and_records_it() {
     );
     assert_eq!(
         step_names(&response),
-        ["context", "llm", "guard", "run", "record"]
+        ["context", "llm", "guard", "run", "narrate", "record"]
     );
+    // Mock không có câu trả lời viết sẵn cho task summary nên đoạn trả lời là câu khuôn, không gọi mạng.
+    assert_eq!(
+        response["answer_text"],
+        "Có 2 dòng; cao nhất là LATAM với 200."
+    );
+    assert_eq!(response["answer_text_by_model"], false);
     // Giả định "toàn bộ thời gian" của mô hình thành một lựa chọn với id do code dựng.
     assert_eq!(
         response["choices"],
@@ -238,7 +245,7 @@ async fn repairs_a_failed_run_once() {
     assert_eq!(response["status"], "answered", "{response}");
     assert_eq!(
         step_names(&response),
-        ["context", "llm", "guard", "run", "repair", "guard", "run", "record"]
+        ["context", "llm", "guard", "run", "repair", "guard", "run", "narrate", "record"]
     );
     assert!(response["sql_generated"]
         .as_str()
@@ -444,9 +451,10 @@ impl LlmProvider for RecordingLlm {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        if request.task == LlmTask::Profile {
+        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn.
+        if matches!(request.task, LlmTask::Profile | LlmTask::Summary) {
             return Err(AppError::Upstream(
-                "recording model has no profile".to_string(),
+                "recording model has no profile or summary".to_string(),
             ));
         }
         self.prompts

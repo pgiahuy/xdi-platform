@@ -120,6 +120,11 @@ code chọn kỳ gần nhất có dữ liệu (kỳ cuối có chưa tới một
 nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo `unanswerable`, không câu SQL nào
 chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các cột gần nhất có thể hỏi; câu
 vẫn ghi vào lịch sử như câu bị từ chối.
+Câu thường answered có ít nhất một dòng kết quả thì có `answer_text`: một đến hai câu tiếng Việt trả lời câu hỏi, do mô
+hình viết từ tối đa 10 dòng đầu của kết quả (mọi số trong câu có nguyên văn trong các dòng đó, không thì backend thay
+bằng câu khuôn), và `answer_text_by_model` cho biết câu đó do mô hình viết (`true`) hay theo khuôn (`false`). Hai
+trường null với câu "tại sao" (đã có `explanation.summary`) và câu không answered. Bước này hiện trong `steps` dưới tên
+`narrate`. `ANSWER_TEXT=false` thì luôn là câu khuôn, không gọi mô hình.
 `explanation.measure_kind` cho biết cách đọc số: `total` (tổng, đếm; đóng góp là hiệu hai lát cắt) hay `ratio` (chỉ số
 tỷ lệ hay trung bình; giá trị là tỷ lệ, đóng góp của nhóm là `mix_effect + rate_effect`, mỗi chiều có tổng
 `mix_effect`, `rate_effect`). Với `total` bốn trường này là null.

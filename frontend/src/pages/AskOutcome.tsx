@@ -15,6 +15,7 @@ import {
   type ChartSuggestion,
   type Understanding,
 } from '@/api/ask'
+import { AnswerText } from '@/components/ask/AnswerText'
 import { AskWarnings } from '@/components/ask/AskWarnings'
 import { ClarificationForm } from '@/components/ask/ClarificationForm'
 import { SampleBadge } from '@/components/ask/SampleModeSwitch'
@@ -121,6 +122,9 @@ function AnsweredBody({ response, pending, onCellDrill, onChangeAssumption }: An
   const breakdown = buildBreakdown(response).data
   return (
     <>
+      {response.answer_text && (
+        <AnswerText text={response.answer_text} byModel={response.answer_text_by_model ?? false} />
+      )}
       {response.understanding && (
         <UnderstandingCard
           understanding={buildUnderstandingView(response.understanding)}

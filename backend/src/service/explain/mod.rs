@@ -613,8 +613,8 @@ fn build_fraction_digits(explanation: &Explanation) -> u32 {
     }
 }
 
-// Có chữ cái (mọi hệ chữ, không chỉ ASCII): "Europe", "Giảm 10%" có; "12", "0.25", "01/07/2017" không.
-fn has_letter(text: &str) -> bool {
+/// Có chữ cái (mọi hệ chữ, không chỉ ASCII): "Europe", "Giảm 10%" có; "12", "0.25", "01/07/2017" không.
+pub fn has_letter(text: &str) -> bool {
     text.chars().any(char::is_alphabetic)
 }
 
@@ -635,8 +635,8 @@ fn build_change_json(text: &str, digits: u32) -> serde_json::Value {
     serde_json::json!({ "direction": direction, "amount": amount })
 }
 
-// Mọi dãy chữ số trong một đoạn chữ, ví dụ "Quý 3/2017" cho "3" và "2017".
-fn allow_text(allowed: &mut HashSet<String>, text: &str) {
+/// Mọi dãy chữ số trong một đoạn chữ, ví dụ "Quý 3/2017" cho "3" và "2017".
+pub fn allow_text(allowed: &mut HashSet<String>, text: &str) {
     for number in scan_numbers(text, &RatioContext::default()) {
         allowed.insert(number.text);
     }
@@ -669,7 +669,7 @@ pub fn build_known_texts(explanation: &Explanation) -> Vec<String> {
     texts
 }
 
-fn push_known_text(texts: &mut Vec<String>, text: &str) {
+pub fn push_known_text(texts: &mut Vec<String>, text: &str) {
     if text.is_empty() || !has_letter(text) {
         return;
     }
@@ -691,13 +691,26 @@ fn push_known_text(texts: &mut Vec<String>, text: &str) {
 /// để ghi log và đưa vào detail của bước narrate.
 pub fn build_number_check(summary: &str, explanation: &Explanation) -> Result<(), Vec<String>> {
     let allowed = build_allowed_numbers(explanation);
+    let known = build_known_texts(explanation);
+    build_text_number_check(summary, &allowed, &known, &explanation.measure)
+}
+
+/// Phần chung của bước kiểm số, cho lời diễn giải câu "tại sao" (build_number_check) và đoạn trả lời câu thường
+/// (ask/summary.rs): allowed là tập số được phép, known là các đoạn chữ dữ liệu được miễn (đã qua push_known_text),
+/// measure là tên độ đo để biết "lần" là đơn vị đếm hay chữ tỷ lệ. Luật như build_number_check.
+pub fn build_text_number_check(
+    summary: &str,
+    allowed: &HashSet<String>,
+    known: &[String],
+    measure: &str,
+) -> Result<(), Vec<String>> {
     let context = RatioContext {
-        lan_is_unit: measure_counts_times(&explanation.measure),
+        lan_is_unit: measure_counts_times(measure),
     };
     // Vị trí (byte) của mọi lần xuất hiện nguyên văn của các đoạn chữ dữ liệu trong summary.
     let mut spans: Vec<(usize, usize)> = Vec::new();
-    for text in build_known_texts(explanation) {
-        for (start, _) in summary.match_indices(&text) {
+    for text in known {
+        for (start, _) in summary.match_indices(text.as_str()) {
             spans.push((start, start + text.len()));
         }
     }

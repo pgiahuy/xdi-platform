@@ -41,6 +41,7 @@ Nội dung gửi:
 | SQL chạy lỗi hoặc dùng bảng, cột không có, sửa một lần | Prompt của lần hỏi, SQL vừa sinh và thông báo lỗi của DuckDB hay lý do guard từ chối. Thông báo của DuckDB có thể chép một giá trị của dữ liệu, ví dụ chuỗi ngày không đọc được | Đường dẫn file trên máy chủ |
 | Form câu "tại sao" sai, sửa một lần | Prompt của lần hỏi, form vừa điền và lỗi của từng trường. Lỗi có thể kèm tối đa 20 giá trị của một cột phân loại (đã có trong prompt) và ngày đầu, ngày cuối của cột thời gian | Các dòng dữ liệu; đường dẫn file |
 | Diễn giải câu "tại sao" | Câu hỏi và bảng phân rã đã tính: độ đo, giá trị hai lát cắt và chênh lệch, hai chiều đầu, mỗi chiều ba nhóm đầu kèm giá trị nhóm, giá trị hai lát cắt và phần đóng góp, tách lượng và giá nếu có | Các dòng dữ liệu gốc |
+| Trả lời câu thường | Câu hỏi, phần "Đã hiểu là" (nhãn độ đo, nhóm, bộ lọc), tên cột kết quả, tối đa 10 dòng đầu của kết quả và tổng số dòng. Đây là dữ liệu kết quả thật: giá trị nhóm và con số đã tính, có thể chứa giá trị của mọi cột câu SQL chọn. Tắt bằng `ANSWER_TEXT=false`: không gửi dòng kết quả nào, đoạn trả lời là câu khuôn do backend viết | Các dòng dữ liệu gốc; dòng thứ 11 trở đi của kết quả; câu SQL |
 
 Lưu ý: giá trị mẫu và giá trị phân loại là dữ liệu thật của bạn, ví dụ tên khu vực hay tên sản phẩm. Cột chữ có ít
 giá trị khác nhau được tính là cột phân loại; backend đánh dấu cột nhạy cảm theo tên cột và dạng giá trị ngay khi nạp,

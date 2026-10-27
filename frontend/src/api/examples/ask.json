@@ -1,5 +1,7 @@
 {
   "failed": {
+    "answer_text": null,
+    "answer_text_by_model": null,
     "chart": null,
     "choices": [
       {
@@ -77,6 +79,8 @@
     "warnings": []
   },
   "needs_choice": {
+    "answer_text": null,
+    "answer_text_by_model": null,
     "chart": null,
     "choices": [],
     "clarifications": [
@@ -119,6 +123,8 @@
     "warnings": []
   },
   "rejected": {
+    "answer_text": null,
+    "answer_text_by_model": null,
     "chart": null,
     "choices": [],
     "clarifications": [],
@@ -163,6 +169,8 @@
     "warnings": []
   },
   "simple": {
+    "answer_text": "Europe có doanh thu cao nhất với 10.845.230,42, tiếp theo là LATAM (10.276.850,17) và Pacific Asia (8.124.900,80).",
+    "answer_text_by_model": true,
     "chart": {
       "kind": "bar",
       "layout": "single",
@@ -261,6 +269,12 @@
       },
       {
         "detail": null,
+        "duration_ms": 910,
+        "name": "narrate",
+        "ok": true
+      },
+      {
+        "detail": null,
         "duration_ms": 6,
         "name": "record",
         "ok": true
@@ -325,6 +339,8 @@
     "warnings": []
   },
   "why": {
+    "answer_text": null,
+    "answer_text_by_model": null,
     "chart": {
       "kind": "column",
       "layout": "panels",
