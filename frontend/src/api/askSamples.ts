@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/askSamples.ts - chỉ dùng ở chế độ dev: trả lời bằng năm response mẫu trong examples/ask.json (sinh từ
-backend/src/service/ask_examples.rs bằng make openapi), để dựng và kiểm trang hỏi khi route ask còn trả 501 (#33).
+backend/src/service/ask/examples.rs bằng make openapi), để dựng và kiểm trang hỏi khi route ask còn trả 501 (#33).
 Chỉ được gọi sau điều kiện import.meta.env.DEV, nên bản build production không chứa file này và ask.json.
 
 Số trong mẫu là số minh họa và không đổi theo lựa chọn; chỉ phần lựa chọn được áp dụng như backend sẽ làm (giả định
@@ -12,7 +12,7 @@ import examples from './examples/ask.json'
 
 type SampleName = keyof typeof examples
 
-/** Câu hỏi của từng mẫu, theo chú thích trong ask_examples.rs. Câu về khu vực cho mẫu needs_choice khi chưa chọn
+/** Câu hỏi của từng mẫu, theo chú thích trong ask/examples.rs. Câu về khu vực cho mẫu needs_choice khi chưa chọn
  * cột, mẫu simple khi đã chọn. */
 export const sampleQuestions: { question: string; sample: SampleName }[] = [
   { question: 'Tại sao doanh thu quý 3 năm 2017 giảm?', sample: 'why' },

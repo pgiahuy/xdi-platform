@@ -14,7 +14,7 @@ Ba tầng tách riêng:
 
 Hiện tại có một gói: `retail` (bán lẻ và chuỗi cung ứng), áp dụng được cho dữ liệu đơn hàng như DataCo hay Online
 Retail. Prompt sinh SQL và prompt form câu "tại sao" chèn tên gói và
-`name`, `synonyms`, `description` của từng khái niệm khi cột `datasets.domain` có giá trị (`service/ask_prompt.rs`).
+`name`, `synonyms`, `description` của từng khái niệm khi cột `datasets.domain` có giá trị (`service/ask/prompt.rs`).
 Chưa có cách gắn gói cho dataset (lúc nạp hay qua API), nên hiện chưa prompt nào có phần này. Thiết kế: người dùng
 chọn một gói lúc nạp, một dataset một gói. `calculations`, `dimensions`, `sanity_checks` chưa được code nào đọc ngoài
 test.

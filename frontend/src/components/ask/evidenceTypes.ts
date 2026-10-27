@@ -74,7 +74,7 @@ export type DrillKeyView = {
 }
 
 // Một kiểu chung cho hai chỗ bấm để tab Dòng nguồn, lần gọi drill và chữ "Đang xem" đi cùng một đường; from cho biết
-// request gửi breakdown hay cell (hợp đồng ở drill_contract.rs).
+// request gửi breakdown hay cell (hợp đồng ở drill/contract.rs).
 /** Chỗ được bấm: một dòng phân rã (lát cắt, cột, giá trị nhóm) hoặc một ô số đo của bảng kết quả (khóa của dòng và tên
  * cột số đo; không có khóa là toàn bộ dòng nguồn của câu hỏi). */
 export type DrillTarget =

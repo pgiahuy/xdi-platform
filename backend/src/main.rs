@@ -24,7 +24,7 @@ fn main() {
     // Response mẫu của ask cho giao diện (make openapi ghi ra frontend/src/api/examples/ask.json), cũng không cần
     // database.
     if args == ["ask-examples"] {
-        print!("{}", service::ask_examples::build_examples_json());
+        print!("{}", service::ask::examples::build_examples_json());
         return;
     }
 

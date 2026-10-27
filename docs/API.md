@@ -104,7 +104,7 @@ Enum lỗi nằm ở `backend/src/error.rs`.
 ## Hỏi dữ liệu
 
 `POST /api/workspaces/{ws}/datasets/{id}/ask` trả lời một câu hỏi trên phiên bản đang dùng của dataset
-(`backend/src/service/ask.rs`): lấy ngữ cảnh từ hồ sơ cột, nhờ mô hình viết SQL, guard kiểm, DuckDB chạy, sửa một lần khi
+(`backend/src/service/ask/mod.rs`): lấy ngữ cảnh từ hồ sơ cột, nhờ mô hình viết SQL, guard kiểm, DuckDB chạy, sửa một lần khi
 lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với `status` trong
 body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, body sai, dataset chưa có dữ liệu, hồ sơ chưa lập xong hay lập
 lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu mock không có câu trả lời mẫu; 404 dataset không có; 502, 503 khi mô

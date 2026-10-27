@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AskEvidence.tsx - pane bằng chứng của trang hỏi: dựng dữ liệu bốn tab từ một AskResponse (hợp đồng ở
-backend/src/service/ask_contract.rs), gọi useDrill để lấy dòng nguồn của chỗ vừa bấm. Phần hiện ở
+backend/src/service/ask/contract.rs), gọi useDrill để lấy dòng nguồn của chỗ vừa bấm. Phần hiện ở
 components/ask/EvidencePane.tsx. Tab đang mở, chỗ vừa bấm và trang dòng nguồn do AskPage giữ (evidenceView.ts), vì ô
 của bảng kết quả nằm ngoài pane cũng mở tab Dòng nguồn.
 Tab Dòng nguồn gọi route drill (backend/src/service/drill.rs) với khóa của chỗ vừa bấm: breakdown cho dòng phân rã,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/ask.ts - hỏi dữ liệu: POST /workspaces/{ws}/datasets/{id}/ask (backend/src/api/query.rs), kiểu response ở
-backend/src/service/ask_contract.rs. Quy tắc gửi lựa chọn ở docs/ARCHITECTURE.md mục 8: backend không giữ trạng thái
+backend/src/service/ask/contract.rs. Quy tắc gửi lựa chọn ở docs/ARCHITECTURE.md mục 8: backend không giữ trạng thái
 giữa hai lần hỏi, nên hỏi lại luôn gửi lại câu hỏi kèm choices của response gần nhất, thay hoặc thêm mục vừa chọn.
 Ở chế độ dev có thể trả lời bằng response mẫu (askSamples.ts) thay vì gọi backend; bản build production bỏ hẳn nhánh
 đó cùng file mẫu, vì import.meta.env.DEV là hằng false lúc build. */

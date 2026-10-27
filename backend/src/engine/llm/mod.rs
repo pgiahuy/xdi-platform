@@ -12,7 +12,7 @@ lời trả về bị thay bằng câu chung, người dùng không biết cách
 
 mod gemini;
 mod http;
-// pub(crate) để test ở tầng service dùng được mô hình giả (ask_narrate_tests.rs kiểm câu narrate mẫu qua bước kiểm số).
+// pub(crate) để test ở tầng service dùng được mô hình giả (ask/narrate_tests.rs kiểm câu narrate mẫu qua bước kiểm số).
 pub(crate) mod mock;
 mod ollama;
 
@@ -27,17 +27,17 @@ use crate::{config::Config, error::AppError};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmTask {
-    /// Sinh SQL cho một câu hỏi. Câu trả lời là object JSON có SQL bên trong (service/ask_reply.rs).
+    /// Sinh SQL cho một câu hỏi. Câu trả lời là object JSON có SQL bên trong (service/ask/reply.rs).
     Sql,
     /// Sửa câu trả lời vừa sinh, theo lời báo lỗi của guard hay DuckDB, hoặc vì câu trả lời không đọc được
-    /// (service/ask_run.rs). Câu hỏi là câu hỏi gốc; câu trả lời cùng dạng với Sql.
+    /// (service/ask/run.rs). Câu hỏi là câu hỏi gốc; câu trả lời cùng dạng với Sql.
     Repair,
     /// Viết mô tả, bí danh, câu hỏi gợi ý cho một dataset lúc nạp.
     Profile,
-    /// Viết lời diễn giải từ bảng phân rã đã tính (service/ask_narrate.rs). Câu hỏi là câu hỏi gốc.
+    /// Viết lời diễn giải từ bảng phân rã đã tính (service/ask/narrate.rs). Câu hỏi là câu hỏi gốc.
     Narrate,
-    /// Điền form của câu "tại sao" (service/ask_why_prompt.rs), cả lần đầu lẫn lần sửa theo lỗi từng trường
-    /// (service/explain_run.rs). Câu hỏi là câu hỏi gốc; câu trả lời là object JSON của form.
+    /// Điền form của câu "tại sao" (service/ask/why_prompt.rs), cả lần đầu lẫn lần sửa theo lỗi từng trường
+    /// (service/explain/run.rs). Câu hỏi là câu hỏi gốc; câu trả lời là object JSON của form.
     Why,
 }
 

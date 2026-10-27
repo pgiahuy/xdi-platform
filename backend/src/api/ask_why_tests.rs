@@ -86,7 +86,7 @@ async fn why_question_is_answered_recorded_and_drilled() {
         .collect();
     assert!(dimensions.contains(&"Market"), "{dimensions:?}");
 
-    // Bảng tổng theo quý: vai trò, biểu đồ cột đứng (hai kỳ, ask_chart.rs luật 2), thẻ dựng từ form.
+    // Bảng tổng theo quý: vai trò, biểu đồ cột đứng (hai kỳ, ask/chart.rs luật 2), thẻ dựng từ form.
     let roles: Vec<&str> = response["result"]["columns"]
         .as_array()
         .unwrap()

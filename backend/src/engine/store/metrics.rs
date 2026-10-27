@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* engine/store/metrics.rs - định nghĩa chỉ số của dataset (bảng metrics), để prompt sinh SQL (service/ask_prompt.rs)
+/* engine/store/metrics.rs - định nghĩa chỉ số của dataset (bảng metrics), để prompt sinh SQL (service/ask/prompt.rs)
 dùng đúng công thức của tổ chức thay vì để mô hình tự đoán "doanh thu" là cột nào.
 Sửa một định nghĩa là thêm dòng cùng tên với version lớn hơn, không ghi đè (0001_init.sql), nên đọc chỉ lấy bản mới
 nhất của mỗi tên. Ghi định nghĩa là việc của bước seed (#25) và màn Thiết lập chỉ số, chưa có ở đây. */

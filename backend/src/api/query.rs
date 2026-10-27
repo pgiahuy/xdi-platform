@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/query.rs - hỏi dữ liệu (ask) và truy dòng nguồn (drill). Toàn bộ luồng chín bước nằm ở service/ask.rs; kiểu
-response của ask ở service/ask_contract.rs, mẫu ở service/ask_examples.rs. Truy dòng nguồn ở service/drill.rs, hợp đồng
-ở service/drill_contract.rs.
+response của ask ở service/ask/contract.rs, mẫu ở service/ask/examples.rs. Truy dòng nguồn ở service/drill.rs, hợp đồng
+ở service/drill/contract.rs.
 Route nằm dưới /workspaces/{ws}/ và nhận Member: chỉ thành viên workspace hỏi được dữ liệu của nó.
 
 Ask trả JSON một lần, không SSE (#33). Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi, kể cả mô hình
@@ -16,12 +16,12 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use super::extract::{JsonBody, PathParams};
 use crate::auth::Member;
 use crate::error::ErrorBody;
-use crate::service::ask_contract::{AskResponse, ChosenOption};
-use crate::service::ask_examples::{
+use crate::service::ask::contract::{AskResponse, ChosenOption};
+use crate::service::ask::examples::{
     build_failed_example, build_needs_choice_example, build_rejected_example, build_simple_example,
     build_why_example,
 };
-use crate::service::drill_contract::{DrillRequest, DrillResponse};
+use crate::service::drill::contract::{DrillRequest, DrillResponse};
 use crate::{error::AppError, service, state::AppState};
 
 pub fn routes() -> OpenApiRouter<AppState> {

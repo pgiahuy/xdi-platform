@@ -3,7 +3,7 @@
 câu gợi ý với mô hình hiện tại, hoặc lỗi.
 Xong rồi thì không hiện gì: câu gợi ý hiện ra là đủ biết. Không có dòng này thì người vừa nạp file thấy trang hỏi không
 có câu gợi ý và không biết là chờ thêm hay dataset có vấn đề. Lời báo lỗi theo lời backend trả khi hỏi dataset lỗi hồ
-sơ (service/ask_context.rs): phiên bản đó không hỏi được, cần nạp lại file. no_suggestions không phải lỗi (hỏi vẫn
+sơ (service/ask/context.rs): phiên bản đó không hỏi được, cần nạp lại file. no_suggestions không phải lỗi (hỏi vẫn
 được), nên dùng màu chữ phụ như dòng đang lập, không dùng màu lỗi. */
 
 import type { ProfileProgress } from './types'

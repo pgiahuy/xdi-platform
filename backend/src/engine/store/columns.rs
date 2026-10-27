@@ -136,7 +136,7 @@ pub struct ColumnValue {
     pub frequency: Option<i64>,
 }
 
-/// Một giá trị của một cột chiều không nhạy cảm, kèm bí danh: thứ service/ask_values.rs so với câu hỏi.
+/// Một giá trị của một cột chiều không nhạy cảm, kèm bí danh: thứ service/ask/values.rs so với câu hỏi.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ValueRow {
     pub column_id: Uuid,
@@ -226,7 +226,7 @@ impl Store {
     }
 
     /// Mọi giá trị và bí danh của các cột chiều (role dimension) không nhạy cảm của một phiên bản, để so với câu hỏi
-    /// trong bộ nhớ (service/ask_values.rs giữ sẵn theo phiên bản). Rỗng khi phiên bản thuộc workspace khác.
+    /// trong bộ nhớ (service/ask/values.rs giữ sẵn theo phiên bản). Rỗng khi phiên bản thuộc workspace khác.
     ///
     /// Trả None khi chạy quá timeout (ghi log), không trả lỗi: khi đó prompt không có danh sách giá trị, mô hình chỉ thấy
     /// schema (tên cột, kiểu, mô tả, bí danh) mà câu hỏi vẫn trả lời được; trả lỗi thì chặn cả câu hỏi.

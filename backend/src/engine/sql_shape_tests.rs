@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/sql_shape_tests.rs - test của engine/sql_shape.rs: đọc cột kết quả, vế lọc, khóa nhóm, thứ tự, LIMIT và bảng
 từ câu thường, câu đã qua guard có phân quyền, CTE, phép tập hợp, `*`. Thẻ dựng từ hình dạng này test ở
-service/understanding_tests.rs. */
+service/understanding/tests.rs. */
 
 use std::path::PathBuf;
 
