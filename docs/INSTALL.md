@@ -1,15 +1,28 @@
 # Cài đặt
 
-Ba cách chạy, chọn một:
+Chạy nhanh trên một máy có Docker:
 
-1. Docker (mục 1): nhanh nhất, chỉ cần Docker.
-2. Build từ mã nguồn (mục 2): để phát triển, hoặc chạy backend không dùng Docker.
-3. Đưa lên Internet (mục 3): một máy chủ có tên miền, HTTPS tự động bằng Caddy.
+```bash
+git clone https://github.com/pgiahuy/xdi-platform.git && cd xdi-platform
+cp .env.example .env
+docker compose up -d --build                      # build lần đầu mất vài phút
+docker compose logs backend | grep setup_code     # mã để tạo tài khoản quản trị
+```
 
-Sao lưu và khôi phục ở mục 4, lệnh quản trị ở mục 5, lỗi hay gặp ở mục 6. Cài xong thì làm theo mục 7 (Dùng lần
-đầu): chọn mô hình ngôn ngữ, nạp dataset, hỏi câu đầu tiên, đọc minh chứng, mời thành viên.
+Mở http://localhost:8000, nhập mã thiết lập. Workspace đầu tiên có sẵn dataset mẫu DataCo, hỏi được ngay với mô hình
+`mock`. Tiếp theo: mục 7 (Dùng lần đầu).
 
-Phần mềm đang phát triển. Phần nào đã có, xem mục Trạng thái trong [ARCHITECTURE.md](ARCHITECTURE.md).
+| Mục | Khi nào cần |
+|---|---|
+| [1. Docker](#1-chạy-bằng-docker) | Cài, cấu hình `.env`, nạp dữ liệu qua API, cập nhật, gỡ |
+| [2. Build từ mã nguồn](#2-build-từ-mã-nguồn) | Phát triển, hoặc chạy backend không dùng Docker |
+| [3. Đưa lên Internet](#3-đưa-lên-internet) | Máy chủ có tên miền, HTTPS bằng Caddy hoặc nginx |
+| [4. Sao lưu và khôi phục](#4-sao-lưu-và-khôi-phục) | `make backup`, `make restore` |
+| [5. Quản trị](#5-quản-trị) | Quên mật khẩu quản trị |
+| [6. Lỗi hay gặp](#6-lỗi-hay-gặp) | Build hết RAM, trùng cổng, lỗi Gemini |
+| [7. Dùng lần đầu](#7-dùng-lần-đầu) | Chọn mô hình, nạp dataset, hỏi, đọc minh chứng, mời thành viên |
+
+Phần mềm đang phát triển; phần nào đã có xem bảng Trạng thái trong [ARCHITECTURE.md](ARCHITECTURE.md#trạng-thái).
 
 ## 1. Chạy bằng Docker
 
@@ -18,15 +31,17 @@ https://docs.docker.com/engine/install/. Trên Linux, để chạy `docker` khô
 theo https://docs.docker.com/engine/install/linux-postinstall/ (đăng xuất rồi đăng nhập lại). Trên Windows, chạy các
 lệnh dưới đây trong WSL2.
 
-Máy build image cần RAM trống khoảng 1 GiB cho mỗi nhân CPU, vì cargo biên dịch song song trên mọi nhân, và khoảng
-6 GB đĩa trống (cache build 4,8 GB theo `docker buildx du`, image backend 215 MB và image Postgres 640 MB theo
-`docker images`). Đo trên máy 16 nhân, 30 GiB RAM, build không dùng cache trong một builder buildx riêng, đọc bộ nhớ
-(không tính page cache) của container builder: build lần đầu mất 8 phút, các tiến trình build dùng tới 12,6 GiB RAM.
-Máy ít RAM hơn thì giới hạn số tiến trình biên dịch bằng `CARGO_BUILD_JOBS` trong `.env`, đặt bằng khoảng số GiB RAM
-còn trống, nếu không máy có thể đứng giữa chừng (cách đặt ở mục 6). Đo cùng cách trên máy đó với `CARGO_BUILD_JOBS=4`
-(`docker compose build --no-cache` qua một builder buildx riêng không giới hạn nhân): build mất 18 phút, dùng tới
-4,2 GiB RAM; đếm tiến trình trong container builder mỗi 2 giây, không lần nào thấy quá 4 tiến trình biên dịch Rust
-và C++ chạy cùng lúc.
+Máy build image cần khoảng 1 GiB RAM trống cho mỗi nhân CPU (cargo biên dịch song song trên mọi nhân) và khoảng
+6 GB đĩa trống. Máy ít RAM thì đặt `CARGO_BUILD_JOBS` trong `.env` bằng khoảng số GiB RAM còn trống, nếu không máy có
+thể đứng giữa chừng (mục 6).
+
+| Build không dùng cache, máy 16 nhân, 30 GiB RAM | Thời gian | RAM tối đa |
+|---|---|---|
+| Mặc định (mọi nhân) | 8 phút | 12,6 GiB |
+| `CARGO_BUILD_JOBS=4` | 18 phút | 4,2 GiB |
+
+Cách đo: build trong một builder buildx riêng, đọc bộ nhớ của container builder (không tính page cache). Đĩa: cache
+build 4,8 GB (`docker buildx du`), image backend 215 MB, image Postgres 640 MB (`docker images`).
 
 ```bash
 git clone https://github.com/pgiahuy/xdi-platform.git
@@ -135,32 +150,13 @@ Mô hình ngôn ngữ:
   Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới được: chạy Ollama với
   `OLLAMA_HOST=0.0.0.0`, và chặn cổng 11434 từ bên ngoài bằng tường lửa vì Ollama không có đăng nhập.
 - Cửa sổ ngữ cảnh của Ollama: `OLLAMA_NUM_CTX` (mặc định 12288 token), gửi trong `options.num_ctx` của mỗi request.
-  Cửa sổ gồm cả prompt lẫn câu trả lời. Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM,
-  theo [tài liệu Ollama](https://docs.ollama.com/context-length)), và prompt dài hơn bị bỏ phần đầu, tức phần luật,
-  mà không báo lỗi. Số token của prompt trên DataCo (53 cột và cột `_source_file`, hồ sơ viết sẵn của chế độ mock), đếm bằng tokenizer của
-  Qwen2.5-Coder (`tokenizer.json` của `Qwen/Qwen2.5-Coder-7B-Instruct` trên Hugging Face, thư viện Python
-  `tokenizers`), trên chữ prompt backend gửi tới một server giả thay cho Ollama:
-
-  | Prompt | Ký tự | Token |
-  |---|---|---|
-  | SQL, câu "Doanh thu theo thị trường" | 10 497 | 3 050 |
-  | Sửa SQL sau lần trả lời không đọc được | 10 891 | 3 145 |
-  | Form câu "tại sao", câu "Vì sao doanh thu quý 3 năm 2017 giảm?" | 10 191 | 3 020 |
-  | Prompt dài nhất backend gửi (trần 24 000 ký tự, lặp các dòng cột thật) | 24 000 | 7 180 |
-
-  Ba dòng đầu đo trước khi prompt SQL có mục luật của guard (`engine/guard/prompt_rules.rs`). Mục đó thêm 3 041 ký tự
-  (đếm trên prompt mẫu `backend/src/service/testdata/sql_prompt.txt`, bảng `dataco`) vào prompt SQL và prompt sửa SQL,
-  không thêm vào form câu "tại sao"; số token sau thay đổi chưa đếm lại. Dòng cuối không đổi vì là trần độ dài.
-
-  Danh sách giá trị của cột là phần tốn token nhất (0,33 token mỗi ký tự); prompt ở trần mà toàn danh sách giá trị thì
-  khoảng 8 000 token. Mặc định 12288 đủ cho prompt đó cộng phần sửa và câu trả lời. Đếm với mô hình khác thì dùng
-  tokenizer của mô hình đó; Ollama ghi số token đã đọc của mỗi lần gọi trong trường `prompt_eval_count`.
-  Tăng `num_ctx` thì Ollama cần thêm RAM (hoặc VRAM) cho bộ nhớ đệm K/V, tăng theo số token. Với `qwen2.5-coder:7b`
-  (28 lớp, 4 đầu K/V, mỗi đầu 128 chiều, theo `config.json` của mô hình) và bộ đệm `f16` mặc định, mỗi token cần
-  2 x 28 x 4 x 128 x 2 byte = 56 KiB: 4096 token khoảng 224 MiB, 12288 token khoảng 672 MiB. Đây là số tính từ cấu
-  hình mô hình, chưa đo trên Ollama; số thật xem bằng `ollama ps`. RAM nhân thêm theo `OLLAMA_NUM_PARALLEL`, và giảm
-  khoảng một nửa với `OLLAMA_KV_CACHE_TYPE=q8_0` ([FAQ của Ollama](https://docs.ollama.com/faq)). Đặt nhỏ hơn mặc định
-  thì backend ghi cảnh báo vào log lúc khởi động.
+  Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM, theo
+  [tài liệu Ollama](https://docs.ollama.com/context-length)) và lặng lẽ bỏ phần đầu của prompt dài hơn, tức phần luật.
+  Đếm bằng tokenizer của Qwen2.5-Coder trên DataCo: prompt SQL khoảng 3 050 token, prompt dài nhất backend gửi (trần
+  24 000 ký tự) khoảng 7 180 token. Prompt SQL nay có thêm mục luật của guard (khoảng 3 000 ký tự), chưa đếm lại.
+  12288 đủ cho prompt dài nhất cộng câu trả lời. Mỗi token cần thêm bộ nhớ K/V: với `qwen2.5-coder:7b` và bộ đệm `f16`
+  là 56 KiB, tức khoảng 672 MiB ở 12288 token (tính từ `config.json` của mô hình, chưa đo; số thật xem bằng
+  `ollama ps`). Đặt nhỏ hơn mặc định thì backend ghi cảnh báo lúc khởi động.
 - Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,
   vì mô hình chạy bằng CPU chậm hơn nhiều).
 
@@ -542,8 +538,8 @@ Thử với `mock`: không cần tải gì. Khi bước 2 tạo xong workspace �
 `dataco`, 1500 dòng lấy từ DataCo Smart Supply Chain, giấy phép CC BY 4.0) kèm vài chỉ số mẫu như "Doanh thu", "Lợi
 nhuận", "Tỷ lệ giao trễ"; nguồn, chỉ số và cách tắt (`SEED_SAMPLE=false`) ở
 [data/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/data/README.md). Danh sách câu mẫu nằm trong
-`backend/src/engine/llm/mock_answers.json`, ví dụ "Doanh thu theo thị trường", "Doanh thu theo tháng", "Top 10 danh
-mục có doanh thu cao nhất".
+`backend/src/engine/llm/mock_answers.json`, ví dụ "Doanh thu theo thị trường", "Top 10 danh mục có doanh thu cao
+nhất", "Vì sao doanh thu tháng 5 năm 2017 tăng".
 
 Bản cài đã thiết lập trước khi có dataset mẫu, hay đặt `SEED_SAMPLE=false`, thì nạp tay ở bước 3: file
 `data/samples/dataco.csv` trong repo, hoặc bản đầy đủ tải bằng `sh data/download.sh dataco`. Đặt tên dataset là
@@ -580,7 +576,8 @@ hạn, phiên bản và tên cột: [Dữ liệu](DATA.md). Nạp lại đúng f
 mới thành dữ liệu hiện hành, phiên bản cũ vẫn giữ.
 
 Bỏ một dataset: bấm **Xóa** ở dòng của nó rồi xác nhận **Xóa dataset** (chỉ `admin`). Mọi phiên bản, hồ sơ cột, chỉ
-số, lịch sử câu hỏi và file Parquet của dataset bị xóa hẳn, không khôi phục được.
+số, cuộc trò chuyện và file Parquet của dataset bị xóa hẳn, không khôi phục được. Lịch sử câu hỏi (câu hỏi, SQL, bảng
+phân rã của câu "tại sao") vẫn ở lại trong database, chỉ mất khi xóa cả workspace ([PRIVACY.md](PRIVACY.md)).
 
 ### Bước 4. Chờ hồ sơ dữ liệu
 
@@ -599,14 +596,16 @@ hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi đ
 
 ### Bước 5. Hỏi
 
-Trang **Hỏi dữ liệu** là một khung trò chuyện: ô hỏi dính đáy màn, ô **Dataset** ở hàng trên của ô hỏi chọn sẵn
-dataset tạo gần nhất, đổi được (đổi dataset là bắt đầu cuộc mới). Gõ câu hỏi rồi bấm **Hỏi** (Enter để hỏi, Shift+Enter
-để xuống dòng), hoặc bấm một câu gợi ý khi cuộc còn trống để hỏi ngay. Với `mock` trên DataCo, bấm "Doanh thu theo thị
-trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở châu Âu" trong cùng cuộc.
+Trang **Hỏi dữ liệu** là một khung trò chuyện: ô **Dataset** ở đầu khung (dính khi cuộn) chọn sẵn dataset tạo gần
+nhất, đổi được (đổi dataset là bắt đầu cuộc mới); ô hỏi dính đáy màn. Gõ câu hỏi rồi bấm **Hỏi** (Enter để hỏi, Shift+Enter
+để xuống dòng), hoặc bấm một câu gợi ý khi cuộc còn trống để hỏi ngay. Câu gợi ý đặt câu khó lên trước, gồm hai câu
+"vì sao". Với `mock` trên DataCo, gõ "Doanh thu theo thị trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở
+châu Âu" trong cùng cuộc.
 
 Mỗi lượt là câu hỏi (căn phải) và câu trả lời (căn trái). Cột trái (màn hẹp: nút **Các cuộc trò chuyện**) liệt kê các cuộc
 đã hỏi trên dataset, mới trước, kèm nút **Cuộc trò chuyện mới**; bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó. Nút
-ở đầu cột ẩn cột này cho khung trò chuyện rộng ra, nút **Hiện danh sách cuộc trò chuyện** hiện lại. Lượt cũ
+ở đầu cột ẩn cột này cho khung trò chuyện rộng ra, nút **Hiện danh sách cuộc trò chuyện** hiện lại. Nút ở góc trên
+phải thanh bên thu thanh bên thành dải icon. Lượt cũ
 chỉ hiện câu hỏi và tóm tắt phần đã hiểu, vì bảng kết quả không được lưu; bấm **Hỏi lại** để chạy lại câu đó. Đường dẫn
 của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cuộc.
 
@@ -615,8 +614,8 @@ SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của G
 
 ### Bước 6. Đọc kết quả và minh chứng
 
-Câu trả lời nằm trong thẻ **Trả lời** ngay dưới câu đã hỏi. Đầu thẻ là lời trả lời ngắn (câu "tại sao" thì ba số lớn
-và lời giải thích). Tiếp theo là biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu đồ cột
+Câu trả lời nằm trong thẻ **Trả lời** ngay dưới câu đã hỏi. Đầu thẻ là lời trả lời ngắn (câu "tại sao" thì hàng ba
+số và lời giải thích, xem dưới). Tiếp theo là biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu đồ cột
 khi cột nhóm duy nhất là một chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên DataCo ra biểu đồ cột); các
 dạng khác chỉ có bảng. Bảng **Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì `Hiện 1.000 trên <tổng> dòng.`),
 phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân). **Tải CSV** tải các dòng giao diện
@@ -632,9 +631,8 @@ còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**)
 - **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
   (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép
   nguyên văn. Guard là gì: [GUARD.md](GUARD.md).
-- **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: giá trị hai lát cắt và
-  **Chênh lệch**, mỗi chiều một bảng phần đóng góp của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách
-  được. Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
+- **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: mỗi chiều một bảng giá trị
+  hai kỳ (hay hai nhóm) và phần chênh lệch của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách được. Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
 - **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm một ô số đo của bảng **Kết quả**, hay số của
   một kỳ hay một nhóm trong bảng phân rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
 - **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL
@@ -644,12 +642,15 @@ còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**)
 
 Câu hỏi "tại sao" (backend nhận ra bằng các cụm "tại sao", "vì sao", "sao lại", "vì đâu", "lý do", "nguyên nhân",
 "do đâu", gõ không dấu cũng được): mô hình không viết SQL mà điền một form (đo
-gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm form rồi tự dựng mọi câu SQL. Thẻ kết quả có khung
-**Giải thích** ngay dưới **Đã hiểu là**, rồi bảng tổng của hai kỳ hay hai nhóm; mọi số trong lời giải thích được kiểm là
-có trong bảng phân rã, mô hình viết sai thì backend dùng câu khuôn của mình và ghi rõ. Không phân rã được (ví dụ kỳ so
-sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra tăng (hay không
-đổi) thì kết quả có thêm một cảnh báo nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Tại sao doanh thu quý 3
-năm 2017 giảm".
+gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm form rồi tự dựng mọi câu SQL. Đầu thẻ trả lời là một hàng
+ba số (hai kỳ hay hai nhóm và chênh lệch), khung **Giải thích**, rồi thanh chênh lệch của từng nhóm theo chiều giải
+thích tốt nhất. Lời giải thích nói so gì với gì, chênh bao nhiêu, rồi nhóm nào tạo ra phần lớn chênh lệch. So hai kỳ
+thì nói "tăng", "giảm"; so hai nhóm thì nói "cao hơn", "thấp hơn" và luôn là câu do backend viết. Lời của mô hình
+được kiểm: số nào không có trong bảng phân rã, hay chữ "tăng", "giảm" ngược dấu của số đứng sau, thì backend dùng câu
+của mình và ghi "Câu viết theo khuôn từ số đã tính". Không phân rã được (ví dụ kỳ so sánh không có dòng nào) thì vẫn
+có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra tăng (hay không đổi) thì kết quả có thêm một cảnh báo
+nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Vì sao doanh thu tháng 5 năm 2017 tăng", và "Tại sao doanh thu
+quý 3 năm 2017 giảm" để thấy cảnh báo đó.
 
 Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") vẫn có phân rã: backend chọn kỳ gần nhất có dữ liệu (theo tháng
 nếu câu không nói tháng, quý hay năm) và so với kỳ liền trước. Kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó

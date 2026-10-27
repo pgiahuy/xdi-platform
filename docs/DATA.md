@@ -200,45 +200,53 @@ Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order Ci
 **Cột nhạy cảm** (`is_sensitive`) được đánh dấu ngay trong lượt lập hồ sơ cấu trúc, cùng giao dịch ghi hồ sơ, trước
 khi phiên bản dùng được: tên cột có một cụm như email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên (danh
 sách ở `SENSITIVE_NAME_PHRASES`, service/profile.rs) hay bắt đầu bằng "điện thoại", hoặc phần lớn giá trị của cột
-(chỉ xét cột có tối đa 200 giá trị khác nhau, tức cột có danh sách giá trị) trông như email hay số điện thoại (dạng `0912 345 678`, `(028) 3823 4567`, `+84 912 345 678`, `+1 415 555 0100`,
-`84912345678`). Tên cột được bỏ dấu, chuyển chữ thường và tách từ (cả camelCase và chỗ chữ liền số, như `Address1`)
-rồi so theo từ, nên "Hotel" không khớp "tel", "Dòng điện thoại" không thành nhạy cảm. Luật cố ý đơn giản và nghiêng
-về đánh dấu nhầm còn hơn bỏ sót. Phiên bản nạp trước khi có luật này được quét đánh dấu lại mỗi lần khởi động (chỉ
-bật cờ, không tắt; đồng bộ trước khi server nhận request). Giá trị của cột nhạy cảm không vào prompt của lớp ngữ nghĩa
-lẫn ngữ cảnh hỏi (#28), ngay từ khi phiên bản ở `structure`.
+(chỉ xét cột có tối đa 200 giá trị khác nhau, tức cột có danh sách giá trị) trông như email hay số điện thoại (dạng
+`0912 345 678`, `(028) 3823 4567`, `+84 912 345 678`, `+1 415 555 0100`, `84912345678`). Tên cột được bỏ dấu,
+chuyển chữ thường và tách từ (cả camelCase và chỗ chữ liền số, như `Address1`) rồi so theo từ, nên "Hotel" không khớp
+"tel", "Dòng điện thoại" không thành nhạy cảm. Luật cố ý đơn giản và nghiêng về đánh dấu nhầm còn hơn bỏ sót. Phiên
+bản nạp trước khi có luật này được quét đánh dấu lại mỗi lần khởi động (chỉ bật cờ, không tắt; đồng bộ trước khi
+server nhận request). Giá trị của cột nhạy cảm không vào prompt của lớp ngữ nghĩa lẫn ngữ cảnh hỏi (#28), ngay từ khi
+phiên bản ở `structure`.
 
 ## Hồ sơ lớp ngữ nghĩa
 
 Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
 (`service/semantic/mod.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, đơn vị của cột số đo, bí
 danh giá trị, câu hỏi gợi ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì
-`profile_status` là `semantic`; người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột của phiên bản là dòng mới. Câu
-trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của provider (Gemini chặn prompt vì
-nội dung, mock không có bảng) thì đánh dấu đã thử kèm tên provider (`semantic_attempted_with`): việc khởi động không
-gọi lại với cùng provider, đổi `LLM_PROVIDER` thì thử lại, và nạp lại đúng bộ file cũ luôn là đường thử lại tường
-minh. Mọi lỗi khác (mô hình quá tải, timeout, thiếu cấu hình, Postgres lỗi) giữ `structure` và không đánh dấu gì:
-lần khởi động sau thử lại. Gemini báo câu trả lời bị cắt ở `MAX_TOKENS`, bị dừng vì `SAFETY` và mã 400 không phải
-khóa sai cũng bằng lỗi tạm, nên các lỗi này được thử lại mỗi lần khởi động dù gọi lại có thể vẫn hỏng.
+`profile_status` là `semantic`; người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột
+của phiên bản là dòng mới. Câu trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của
+provider (Gemini chặn prompt vì nội dung, mock không có bảng) thì đánh dấu đã thử kèm tên provider
+(`semantic_attempted_with`): việc khởi động không gọi lại với cùng provider, đổi `LLM_PROVIDER` thì thử lại, và nạp
+lại đúng bộ file cũ luôn là đường thử lại tường minh. Mọi lỗi khác (mô hình quá tải, timeout, thiếu cấu hình,
+Postgres lỗi) giữ `structure` và không đánh dấu gì: lần khởi động sau thử lại. Gemini báo câu trả lời bị cắt ở
+`MAX_TOKENS`, bị dừng vì `SAFETY` và mã 400 không phải khóa sai cũng bằng lỗi tạm, nên các lỗi này được thử lại mỗi
+lần khởi động dù gọi lại có thể vẫn hỏng.
 
-Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: tên dataset, tên bảng logic, số dòng; mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác
-nhau; min, max chỉ kèm cột `time` và `measure` số thực không nhạy cảm (min, max của cột chữ hay mã số nguyên như mã đơn, số điện
-thoại là dữ liệu thật); danh sách giá trị chỉ gửi cho cột `dimension` không nhạy cảm, mỗi giá trị kèm số dòng, tối đa 50 giá trị một cột (cột
-nhiều hơn gửi 20 giá trị nhiều dòng nhất), tổng tối đa 400 giá trị, bỏ giá trị dài quá 200 byte. Tên cột và giá trị
-in dạng chuỗi JSON nên dữ liệu không chèn được dòng giả vào prompt. Giá trị của cột `text`, `key` hay cột nhạy cảm
-không bao giờ vào prompt.
+Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: tên dataset, tên bảng logic, số dòng; mỗi cột gửi tên, kiểu,
+vai trò, tỷ lệ ô trống, số giá trị khác nhau; min, max chỉ kèm cột `time` và `measure` số thực không nhạy cảm (min, max
+của cột chữ hay mã số nguyên như mã đơn, số điện thoại là dữ liệu thật); danh sách giá trị chỉ gửi cho cột `dimension`
+không nhạy cảm, mỗi giá trị kèm số dòng, tối đa 50 giá trị một cột (cột nhiều hơn gửi 20 giá trị nhiều dòng nhất),
+tổng tối đa 400 giá trị, bỏ giá trị dài quá 200 byte. Tên cột và giá trị in dạng chuỗi JSON nên dữ liệu không chèn
+được dòng giả vào prompt. Giá trị của cột `text`, `key` hay cột nhạy cảm không bao giờ vào prompt.
+
+Câu hỏi gợi ý: prompt xin câu khó trước, gồm hai câu "vì sao" giải thích chênh lệch của một số đo giữa hai kỳ (trong
+khoảng min, max của cột thời gian) hay giữa hai giá trị có trong danh sách, rồi một câu tỷ lệ, trung bình hoặc top N,
+còn lại là câu tổng hay phân rã đơn giản. Mô hình không thấy số liệu nên câu "vì sao" không được nói chiều ("tăng",
+"giảm", "cao hơn"), và số đo của nó phải cộng được qua các dòng (tiền, số lượng hàng, số dòng).
 
 Cột nhạy cảm (`is_sensitive`) do lớp cấu trúc đánh dấu ngay lúc nạp (mục trên); trong câu trả lời của lớp ngữ nghĩa,
 mô hình đề xuất đánh dấu thêm qua `sensitive_columns` (chỉ chiều đặt, không bao giờ gỡ, có hiệu lực từ các lần sau).
 
 Câu trả lời được kiểm từng mục trước khi ghi, mục sai bỏ riêng: cột và giá trị phải có thật (giá trị phải nằm trong
 `column_values`), mô tả tối đa 300 ký tự, tối đa 8 bí danh mỗi mục và mỗi bí danh tối đa 60 ký tự, tối đa 5 câu gợi
-ý và mỗi câu tối đa 200 ký tự. Chuỗi rỗng sau trim hay có ký tự điều khiển (NUL, xuống dòng) bị bỏ: một chuỗi như
-vậy nếu qua sẽ làm Postgres từ chối cả giao dịch ghi. Bí danh không được trùng (sau khi bỏ dấu, chữ thường) với tên
-bất kỳ cột nào (kể cả chính cột đó), giá trị khác cùng cột, hay bí danh đã nhận của cùng mục. Đổi vai trò chỉ nhận hai chiều: cột số nguyên đang
-là `measure` thành `key` (mã lặp lại như `Order Id`) hoặc thành `dimension` khi có không quá 200 giá trị khác nhau
-(năm, tháng dạng số; nhiều hơn thì cột chiều mới sẽ không có danh sách giá trị), và cột `dimension` thành `text`
-(đường dẫn ảnh, mô tả dài). Mỗi đổi vai trò được ghi log (tên cột, vai trò cũ, mới). Cột thành `text` thì giá trị của
-nó không đi vào prompt về sau, vì các bước sau chọn giá trị theo vai trò.
+ý và mỗi câu tối đa 200 ký tự; câu gợi ý còn chỗ trống của khuôn trong prompt (có `<` hay `>`) bị bỏ. Chuỗi rỗng sau
+trim hay có ký tự điều khiển (NUL, xuống dòng) bị bỏ: một chuỗi như vậy nếu qua sẽ làm Postgres từ chối cả giao dịch
+ghi. Bí danh không được trùng (sau khi bỏ dấu, chữ thường) với tên bất kỳ cột nào (kể cả chính cột đó), giá trị khác
+cùng cột, hay bí danh đã nhận của cùng mục. Đổi vai trò chỉ nhận hai chiều: cột số nguyên đang là `measure` thành
+`key` (mã lặp lại như `Order Id`) hoặc thành `dimension` khi có không quá 200 giá trị khác nhau (năm, tháng dạng số;
+nhiều hơn thì cột chiều mới sẽ không có danh sách giá trị), và cột `dimension` thành `text` (đường dẫn ảnh, mô tả
+dài). Mỗi đổi vai trò được ghi log (tên cột, vai trò cũ, mới). Cột thành `text` thì giá trị của nó không đi vào
+prompt về sau, vì các bước sau chọn giá trị theo vai trò.
 
 Đơn vị (`columns.unit`) chỉ nhận cho cột `measure` và chỉ một trong năm chữ: `money` (tiền), `quantity` (số lượng
 hàng), `percent` (tỷ lệ), `duration` (số ngày, số giờ), `other`. Danh sách cố định để so được bằng dấu bằng: luật
