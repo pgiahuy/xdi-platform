@@ -23,9 +23,11 @@ type Props = {
   link: LinkComponent
   onLogout: () => void
   logoutPending: boolean
+  /** wide: nút full-width cho chân thanh bên (tên và email xếp dọc); mặc định là nút gọn trên thanh trên. */
+  wide?: boolean
 }
 
-export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPending }: Props) {
+export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPending, wide }: Props) {
   const name = user.name || user.email
   const [open, setOpen] = useState(false)
 
@@ -35,15 +37,34 @@ export function UserMenu({ user, accountHref, link: Link, onLogout, logoutPendin
   return (
     <DropdownMenu open={open || logoutPending} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-9 gap-2 px-1.5 sm:pr-2.5" aria-label={`Tài khoản ${name}`}>
-          <span
-            aria-hidden="true"
-            className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground"
+        {wide ? (
+          <button
+            type="button"
+            aria-label={`Tài khoản ${name}`}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
           >
-            {initials(user.name, user.email)}
-          </span>
-          <span className="hidden max-w-40 truncate text-sm sm:inline">{name}</span>
-        </Button>
+            <span
+              aria-hidden="true"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground"
+            >
+              {initials(user.name, user.email)}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm font-medium">{name}</span>
+              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+            </span>
+          </button>
+        ) : (
+          <Button variant="ghost" className="h-9 gap-2 px-1.5 sm:pr-2.5" aria-label={`Tài khoản ${name}`}>
+            <span
+              aria-hidden="true"
+              className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground"
+            >
+              {initials(user.name, user.email)}
+            </span>
+            <span className="hidden max-w-40 truncate text-sm sm:inline">{name}</span>
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex flex-col gap-0.5 font-normal">

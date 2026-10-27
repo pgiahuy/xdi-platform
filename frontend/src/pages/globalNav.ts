@@ -4,9 +4,15 @@ ngoài workspace. Các trang này hiện trong khung AppLayout mà không cần 
 thuộc workspace nào vẫn vào được để tự chỉ định mình làm admin một workspace. Thêm trang là thêm route con của
 AppLayout ở router.tsx và, nếu cần hiện trên thanh bên, một dòng ở adminNav. */
 
+import type { LucideIcon } from 'lucide-react'
+import { LayoutGrid, UserCog } from 'lucide-react'
+
 export type GlobalNavEntry = {
   href: string
   label: string
+  icon: LucideIcon
+  /** Nhãn nhóm trên thanh bên. */
+  section?: string
 }
 
 /** Trang tài khoản cho người đang ở ngoài workspace. Trong workspace, menu tài khoản trỏ tới trang tài khoản của
@@ -20,6 +26,6 @@ export const adminWorkspacesRoute = '/admin/workspaces'
  * gọn; quyền vẫn do backend kiểm. Tên mục khác "Tài khoản và mật khẩu" trong menu tài khoản (trang của chính mình), để
  * không nhầm hai trang. */
 export const adminNav: GlobalNavEntry[] = [
-  { href: adminAccountsRoute, label: 'Quản lý tài khoản' },
-  { href: adminWorkspacesRoute, label: 'Mọi workspace' },
-]
+  { href: adminAccountsRoute, label: 'Quản lý tài khoản', icon: UserCog },
+  { href: adminWorkspacesRoute, label: 'Mọi workspace', icon: LayoutGrid },
+].map((entry) => ({ ...entry, section: 'Quản trị hệ thống' }))

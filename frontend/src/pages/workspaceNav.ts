@@ -3,9 +3,15 @@
 path khớp với route con của workspaceRoute trong router.tsx; '' là trang đầu của workspace. Thêm trang là thêm route ở
 router.tsx và một dòng ở workspaceNav. Trang quản trị hệ thống không thuộc workspace nào, đường dẫn ở globalNav.ts. */
 
+import type { LucideIcon } from 'lucide-react'
+import { Database, MessageSquareText, Users } from 'lucide-react'
+
 export type WorkspaceNavEntry = {
   path: string
   label: string
+  icon: LucideIcon
+  /** Nhãn nhóm trên thanh bên (mục quản trị là nhóm riêng). */
+  section?: string
 }
 
 export const workspaceRoute = '/w/:ws'
@@ -16,10 +22,10 @@ export const accountPath = 'account'
 export const membersPath = 'members'
 
 export const workspaceNav: WorkspaceNavEntry[] = [
-  { path: '', label: 'Hỏi dữ liệu' },
-  { path: 'datasets', label: 'Dữ liệu' },
-  { path: membersPath, label: 'Thành viên' },
-]
+  { path: '', label: 'Hỏi dữ liệu', icon: MessageSquareText },
+  { path: 'datasets', label: 'Dữ liệu', icon: Database },
+  { path: membersPath, label: 'Thành viên', icon: Users },
+].map((entry) => ({ ...entry, section: 'Workspace' }))
 
 /** Đường dẫn tới một trang của workspace; path rỗng là trang đầu. Mọi chỗ dựng link tới workspace đi qua hàm này. */
 export function workspaceHref(slug: string, path: string): string {

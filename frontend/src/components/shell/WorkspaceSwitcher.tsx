@@ -40,7 +40,8 @@ export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate 
         // đứng đầu theo đúng thứ tự đang hiện, để người dùng điều khiển bằng giọng nói gọi được nút.
         aria-label={current ? `${current.name}, ${roleLabel(current.role)}, đổi workspace` : title}
         className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
+          // Khung có viền và nền riêng để đọc ra đây là bộ chọn workspace, không phải chữ tĩnh.
+          'flex w-full items-center gap-2 rounded-lg border bg-card px-3 py-2 text-left shadow-xs transition-colors',
           'hover:bg-sidebar-accent data-[state=open]:bg-sidebar-accent',
           'focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none',
         )}

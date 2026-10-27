@@ -69,9 +69,11 @@ export function AppLayout() {
 
   // Trang đầu của workspace chỉ sáng khi đúng là trang đầu; mục khác sáng cả ở trang con, ví dụ datasets/<id>.
   const workspaceItems = current
-    ? workspaceNav.map((entry) =>
-        buildNavItem(workspaceHref(current.slug, entry.path), entry.label, entry.path === '', pathname),
-      )
+    ? workspaceNav.map((entry) => ({
+        ...buildNavItem(workspaceHref(current.slug, entry.path), entry.label, entry.path === '', pathname),
+        icon: entry.icon,
+        section: entry.section,
+      }))
     : []
   const activeEntry = workspaceNav.find((_, i) => workspaceItems[i]?.active)
   // Ngoài workspace, người chưa thuộc workspace nào không có nút đổi workspace để quay về (ví dụ gõ thẳng /account):
@@ -80,7 +82,11 @@ export function AppLayout() {
   // Mục quản trị hệ thống đứng cuối thanh bên, cả trong và ngoài workspace. Ẩn với người khác chỉ để gọn; quyền vẫn do
   // backend kiểm.
   const adminItems = user.is_system_admin
-    ? adminNav.map((entry) => buildNavItem(entry.href, entry.label, false, pathname))
+    ? adminNav.map((entry) => ({
+        ...buildNavItem(entry.href, entry.label, false, pathname),
+        icon: entry.icon,
+        section: entry.section,
+      }))
     : []
 
   // Đổi workspace thì giữ mục đang xem (Dữ liệu sang Dữ liệu), nhưng bỏ phần sau đó: id dataset của workspace này
