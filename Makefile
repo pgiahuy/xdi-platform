@@ -12,7 +12,7 @@ BACKUP_DIR ?= $(HOME)/xdi-backups
 CARGO_TARGET := $(if $(filter /%,$(CARGO_TARGET_DIR)),$(CARGO_TARGET_DIR),backend/$(or $(CARGO_TARGET_DIR),target))
 BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
 
-.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean
+.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -91,6 +91,13 @@ restore: ## Khôi phục, THAY dữ liệu hiện có: make restore FROM=~/xdi-b
 	$(COMPOSE) run --rm --no-deps -T --user root backend \
 		sh -c 'find /data -mindepth 1 -delete && tar xzf - -C /data && chown -R 10001 /data' < "$(FROM)/data.tgz"
 	$(COMPOSE) up -d
+
+eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco.csv, thoát mã 1 khi accuracy dưới eval/baseline.json
+	@# Database riêng xdi_eval để không rác vào db dev; lệnh createdb bỏ qua lỗi khi compose chưa chạy (CI đặt sẵn DATABASE_URL).
+	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
+	cd backend && cargo build -q
+	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
+	  $(CARGO_TARGET)/debug/xdi-backend eval --data data/samples/dataco.csv --cases eval/dataco.json --baseline eval/baseline.json
 
 openapi: ## Sinh openapi.json, response mẫu của ask và kiểu TypeScript frontend/src/api/schema.ts từ code; commit cả ba
 	@# Lệnh openapi và ask-examples của backend không kết nối database, chạy được khi chưa có Postgres. Ghi ra file tạm

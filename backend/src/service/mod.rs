@@ -9,6 +9,9 @@ semantic/ (hồ sơ ngữ nghĩa). File lẻ còn lại là tài khoản, worksp
 pub mod accounts;
 pub mod ask;
 pub mod drill;
+pub mod eval;
+#[cfg(test)]
+mod eval_tests;
 pub mod excel;
 pub mod explain;
 pub mod ingest;

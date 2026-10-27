@@ -4,7 +4,8 @@ Quy trình ra một phiên bản mới. Số phiên bản theo Semantic Versioni
 
 ## Trước khi tag
 
-1. `main` xanh: `make check` qua trên máy và CI qua trên GitHub.
+1. `main` xanh: `make check` qua trên máy và CI qua trên GitHub; `make eval` đạt baseline (với mock). Trước bản
+   phát hành, chạy thêm một lượt eval với mô hình thật: `LLM_PROVIDER=gemini make eval` (cần GEMINI_API_KEY).
 2. Đổi số phiên bản ở hai chỗ, cùng một số: `backend/Cargo.toml`, `frontend/package.json`. Rồi chạy `make openapi`:
    đặc tả OpenAPI lấy số phiên bản từ `backend/Cargo.toml`, nên `openapi.json` đổi theo
    (thiếu bước này thì test `openapi_json_is_up_to_date` và `scripts/check-version.sh` báo lỗi).
