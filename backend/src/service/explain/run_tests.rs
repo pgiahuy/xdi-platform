@@ -770,7 +770,11 @@ async fn why_card_names_the_two_periods() {
         format!("Quý 3/2017 so với quý 2/2017, theo {DATE}")
     );
     assert!(period.sql.starts_with('(') && period.sql.contains(" OR "));
-    assert_eq!(card.measures[0].label, "doanh thu");
+    // Chỉ số không có mô tả: dòng "Đo" ghi cách tính bằng lời (#185).
+    assert_eq!(
+        card.measures[0].label,
+        "doanh thu: tổng cột Order Item Total"
+    );
     assert_eq!(
         card.measures[0].sql,
         "SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2)))"

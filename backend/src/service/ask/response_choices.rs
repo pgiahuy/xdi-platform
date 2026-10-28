@@ -255,6 +255,7 @@ mod tests {
             values_complete: true,
             matched: true,
             unit: None,
+            aggregation: crate::engine::store::ColumnAggregation::Sum,
         }
     }
 

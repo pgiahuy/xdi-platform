@@ -21,6 +21,7 @@ Câu "tại sao" (#38) không đọc cây cú pháp: thẻ dựng thẳng từ f
 pub mod labels;
 #[cfg(test)]
 mod labels_tests;
+pub mod metric_words;
 #[cfg(test)]
 mod tests;
 pub mod why;

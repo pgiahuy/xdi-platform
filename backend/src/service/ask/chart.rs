@@ -360,6 +360,7 @@ mod tests {
             values_complete: false,
             matched: false,
             unit: unit.map(str::to_string),
+            aggregation: crate::engine::store::ColumnAggregation::Sum,
         }
     }
 

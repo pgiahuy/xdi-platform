@@ -15,6 +15,12 @@ pub enum AppError {
     /// Tính năng có trong thiết kế nhưng chưa cài đặt. Tham số là tên tính năng.
     NotImplemented(&'static str),
     BadRequest(String),
+    /// Như BadRequest, lỗi nằm ở một trường của body (400): giao diện hiện lời báo ngay dưới ô đó. field là tên trường
+    /// JSON (tiếng Anh, như trong request), message là tiếng Việt.
+    InvalidField {
+        field: String,
+        message: String,
+    },
     /// Chưa đăng nhập, phiên hết hạn hoặc sai email, mật khẩu (401).
     Unauthorized(String),
     /// Đã đăng nhập nhưng không được làm việc này (403).
@@ -63,6 +69,10 @@ pub struct ErrorBody {
     code: ErrorCode,
     /// Human-readable explanation in Vietnamese, meant to be shown to the end user as is.
     message: String,
+    /// Name of the request field the error is about, when it is about one field. Omitted otherwise.
+    // Bỏ khi None để body lỗi của mọi endpoint khác không đổi.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    field: Option<String>,
 }
 
 impl AppError {
@@ -73,6 +83,7 @@ impl AppError {
                 ErrorBody {
                     code: ErrorCode::NotImplemented,
                     message: format!("Chưa cài đặt: {feature}"),
+                    field: None,
                 },
             ),
             AppError::BadRequest(msg) => (
@@ -80,6 +91,15 @@ impl AppError {
                 ErrorBody {
                     code: ErrorCode::BadRequest,
                     message: msg.clone(),
+                    field: None,
+                },
+            ),
+            AppError::InvalidField { field, message } => (
+                StatusCode::BAD_REQUEST,
+                ErrorBody {
+                    code: ErrorCode::BadRequest,
+                    message: message.clone(),
+                    field: Some(field.clone()),
                 },
             ),
             AppError::Unauthorized(msg) => (
@@ -87,6 +107,7 @@ impl AppError {
                 ErrorBody {
                     code: ErrorCode::Unauthorized,
                     message: msg.clone(),
+                    field: None,
                 },
             ),
             AppError::Forbidden(msg) => (
@@ -94,6 +115,7 @@ impl AppError {
                 ErrorBody {
                     code: ErrorCode::Forbidden,
                     message: msg.clone(),
+                    field: None,
                 },
             ),
             AppError::TooLarge(msg) => (
@@ -101,6 +123,7 @@ impl AppError {
                 ErrorBody {
                     code: ErrorCode::TooLarge,
                     message: msg.clone(),
+                    field: None,
                 },
             ),
             AppError::NotFound(msg) => (
@@ -108,6 +131,7 @@ impl AppError {
                 ErrorBody {
                     code: ErrorCode::NotFound,
                     message: msg.clone(),
+                    field: None,
                 },
             ),
             AppError::Upstream(msg) => (
@@ -115,6 +139,7 @@ impl AppError {
                 ErrorBody {
                     code: ErrorCode::Upstream,
                     message: msg.clone(),
+                    field: None,
                 },
             ),
             AppError::Unavailable(msg) => (
@@ -122,6 +147,7 @@ impl AppError {
                 ErrorBody {
                     code: ErrorCode::Unavailable,
                     message: msg.clone(),
+                    field: None,
                 },
             ),
             AppError::Internal(msg) => {
@@ -132,6 +158,7 @@ impl AppError {
                     ErrorBody {
                         code: ErrorCode::Internal,
                         message: "Lỗi nội bộ, xem log của backend".to_string(),
+                        field: None,
                     },
                 )
             }
