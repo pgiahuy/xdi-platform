@@ -6,6 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Changed
 
+- Mô hình nhận ra câu hỏi tìm nguyên nhân thay cho so từ khóa, kể cả cách hỏi như "Doanh thu giảm do gì?"; câu đếm theo cột "lý do" vẫn là câu thường. Mô hình lỗi thì dùng luật từ khóa như trước; tab Các bước có thêm bước Phân loại câu hỏi.
 - Câu hỏi tìm nguyên nhân có lời tóm tắt do code viết: câu trả lời chính rồi lý do chính (số dòng, lượng và giá, cơ cấu), nhóm khác thường hay "không có nơi nào đặc biệt", và cột lời tóm tắt bỏ qua vì chỉ là tên khác của hai nhóm đang so (như hình thức thanh toán khi so trạng thái đơn) hay trùng cột khác; tên cột kèm nghĩa tiếng Việt.
 - Thẻ trả lời câu hỏi tìm nguyên nhân hiện lời tóm tắt (câu chính in đậm và các ý ngắn), số dòng của hai bên, phần trăm thay đổi cạnh chênh lệch, và tên cột kèm nghĩa tiếng Việt ở tiêu đề biểu đồ chênh lệch.
 - Tab Phân rã của câu "tại sao" dễ đọc hơn với người dùng nghiệp vụ: thêm cột % Tác động (phần của chênh lệch do nhóm tạo ra) và % Thay đổi (bên so sánh so với bên gốc trong nhóm), in đậm nhóm khác thường so với mức chung, dòng Tổng cuối mỗi bảng và một thẻ xanh dương giải thích các cột tính thêm; số giảm màu đỏ, tăng màu xanh lá ở bảng phân rã, thanh đóng góp và số chênh lệch.
