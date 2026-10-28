@@ -728,7 +728,8 @@ fn sliced_measures_are_exact() {
 #[test]
 fn dimensions_and_volume_follow_the_profile() {
     let mut fixture = Fixture::new();
-    // Chín cột chiều ít giá trị: tối đa tám chiều, theo thứ tự cột.
+    // Chín cột chiều ít giá trị: mọi cột đều là ứng viên, theo thứ tự cột; bỏ chiều trùng và xếp theo điểm là việc của
+    // bước sau khi chạy (explain/dimension_pick.rs, explain/breakdown.rs), không cắt ở đây.
     for i in 0..9 {
         fixture
             .columns
@@ -740,9 +741,21 @@ fn dimensions_and_volume_follow_the_profile() {
                 4,
             ));
     }
+    // Cột chỉ một giá trị không chia được nhóm: không là ứng viên, khỏi tốn một câu SQL.
+    fixture
+        .columns
+        .push(crate::service::explain::check_tests::column(
+            29,
+            "Product Status",
+            "VARCHAR",
+            "dimension",
+            1,
+        ));
     let plan = fixture.plan(quarter_form());
-    assert_eq!(plan.dimensions.len(), 8);
+    assert_eq!(plan.dimensions.len(), 11);
+    assert!(!plan.dimensions.iter().any(|d| d == "Product Status"));
     assert_eq!(&plan.dimensions[..3], ["Market", "Customer Segment", "d0"]);
+    assert_eq!(plan.dimensions.last().map(String::as_str), Some("d8"));
 
     let mut fixture = Fixture::new();
     fixture

@@ -18,6 +18,17 @@ export function directionWord(direction: ChangeDirection, comparison: Comparison
   return direction === 'down' ? 'giảm' : direction === 'up' ? 'tăng' : 'không đổi'
 }
 
+/** Màu chữ theo chiều: giảm đỏ, tăng xanh lá (token --decrease, --increase ở index.css), bằng thì giữ màu chữ thường.
+ * Dùng chung cho số chênh lệch, thanh đóng góp và bảng phân rã để một chiều luôn một màu. */
+export function directionTextClass(direction: ChangeDirection): string {
+  return direction === 'down' ? 'text-decrease' : direction === 'up' ? 'text-increase' : ''
+}
+
+/** Màu nền của thanh đóng góp theo chiều, cùng cặp màu với directionTextClass. */
+export function directionFillClass(direction: ChangeDirection): string {
+  return direction === 'down' ? 'bg-decrease' : direction === 'up' ? 'bg-increase' : ''
+}
+
 /** Số có dấu: "+5.107,10" khi tăng, "-1.152,24" khi giảm, không dấu khi bằng 0. */
 export function formatSigned(value: string): string {
   return changeDirection(value) === 'up' ? `+${formatDecimal(value)}` : formatDecimal(value)

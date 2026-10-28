@@ -52,6 +52,11 @@ function formatNumber(value: number): string {
   return Math.abs(value) < 1 ? smallNumberFormat.format(value) : fractionFormat.format(value)
 }
 
+/** Như formatDecimal; null (ô không tính được, ví dụ tỷ lệ của dòng "Còn lại") thành chuỗi rỗng. */
+export function formatOptionalDecimal(value: string | null): string {
+  return value === null ? '' : formatDecimal(value)
+}
+
 /** "-1234567.50" thành "-1.234.567,50"; chuỗi không đúng dạng chữ số thì giữ nguyên. */
 export function formatDecimal(value: string): string {
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value)

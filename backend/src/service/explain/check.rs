@@ -22,8 +22,11 @@ use crate::service::explain::sql::{build_equals, build_time_expr};
 
 /// Chiều có tới ngần này giá trị khác nhau mới phân rã (#39): nhiều hơn thì bảng đóng góp dài mà mỗi nhóm nhỏ.
 pub const DIMENSION_MAX_VALUES: i64 = 50;
-/// Số chiều phân rã tối đa (#39): mỗi chiều một câu SQL.
-pub const DIMENSION_MAX: usize = 8;
+/// Số cột ứng viên tối đa chạy cho một câu hỏi: mỗi ứng viên một câu SQL, chạy lần lượt. Chọn ở đây: DataCo có 13 ứng
+/// viên (12 khi so hai phân khúc, vì cột đang so không là ứng viên), và phân rã 12 ứng viên đo một lần mất 199 ms (bản
+/// release, 180 nghìn dòng), nên 30 ứng viên ước còn dưới một giây trên cỡ dữ liệu đó. Bảng rộng hơn thì các cột sau ứng
+/// viên thứ 30 theo thứ tự trong file không được xét.
+pub const DIMENSION_CANDIDATES_MAX: usize = 30;
 /// Số giá trị đưa vào lời báo lỗi khi giá trị không có trong danh sách, đủ để mô hình thấy cách viết.
 const VALUES_IN_ERROR: usize = 20;
 
@@ -374,8 +377,11 @@ fn check_value(
     None
 }
 
-/// Cột chiều để phân rã (#39): vai trò dimension, không nhạy cảm (giá trị nhóm hiện ra và gửi cho mô hình viết lời),
-/// tới DIMENSION_MAX_VALUES giá trị, trừ cột làm lát cắt và cột đã lọc bằng một giá trị (chỉ còn một nhóm).
+/// Cột chiều ứng viên để phân rã (#39): vai trò dimension, không nhạy cảm (giá trị nhóm hiện ra và gửi cho mô hình viết
+/// lời), từ 2 tới DIMENSION_MAX_VALUES giá trị (một giá trị thì chỉ có một nhóm), trừ cột làm lát cắt và cột đã lọc bằng
+/// một giá trị. Chỉ cắt ở DIMENSION_CANDIDATES_MAX: explain/dimension_pick.rs bỏ chiều trùng, chiều không so được gì,
+/// rồi phần chấm điểm xếp các chiều còn lại. Cắt sớm hơn theo thứ tự cột ở đây thì cột đứng sau trong file không bao giờ
+/// được xét, dù giải thích tốt hơn.
 fn build_dimensions(form: &WhyForm, profile: &WhyProfile, slices: &PlanSlices) -> Vec<String> {
     let slice_column = match slices {
         PlanSlices::Groups { column, .. } => Some(column.as_str()),
@@ -385,10 +391,13 @@ fn build_dimensions(form: &WhyForm, profile: &WhyProfile, slices: &PlanSlices) -
         .columns
         .iter()
         .filter(|c| c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive)
-        .filter(|c| c.distinct_count.is_some_and(|n| n <= DIMENSION_MAX_VALUES))
+        .filter(|c| {
+            c.distinct_count
+                .is_some_and(|n| (2..=DIMENSION_MAX_VALUES).contains(&n))
+        })
         .filter(|c| slice_column != Some(c.name.as_str()))
         .filter(|c| !form.filters.iter().any(|f| f.column == c.name))
-        .take(DIMENSION_MAX)
+        .take(DIMENSION_CANDIDATES_MAX)
         .map(|c| c.name.clone())
         .collect()
 }

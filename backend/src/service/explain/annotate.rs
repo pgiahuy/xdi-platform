@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/annotate.rs - đọc bảng phân rã đã xếp (#186) cho lời tóm tắt do code viết: phần trăm của chênh lệch
 (% tác động) và phần trăm thay đổi trong nhóm (% thay đổi), cờ "khác thường", các chiều không giải thích được gì. Kết quả
-là ghi chú nội bộ (BreakdownNotes, trường `notes` của Explanation, không gửi qua API): bảng phân rã trả cho giao diện giữ
-nguyên mọi chiều theo thứ tự xếp hạng, chỉ explain/summary.rs và prompt narrate đọc ghi chú. breakdown.rs và
-ratio_breakdown.rs gọi sau khi xếp chiều. Hàm thuần trên số của hợp đồng (chuỗi chữ số), test ở
+là ghi chú nội bộ (BreakdownNotes, trường `notes` của Explanation, không gửi qua API): annotate không bỏ chiều nào khỏi
+bảng phân rã trả cho giao diện, chỉ explain/summary.rs và prompt narrate đọc ghi chú. breakdown.rs và
+ratio_breakdown.rs gọi sau khi xếp chiều, rồi thêm vào `dropped` các chiều explain/dimension_pick.rs đã bỏ khỏi bảng
+trước đó (trùng một chiều khác, có câu SQL xác nhận; hay tách hẳn hai nhóm đang so): các chiều đó annotate không thấy
+nữa, còn ở đây là phần chiều trùng hay tách hẳn mà dimension_pick.rs chưa bỏ (khi so hai kỳ, hay trùng số mà SQL
+không xác nhận). Hàm thuần trên số của hợp đồng (chuỗi chữ số), test ở
 explain/annotate_tests.rs.
 
 Hai loại chiều lời tóm tắt bỏ qua:

@@ -7,7 +7,9 @@ Mọi câu đi qua guard với đúng bảng và bộ lọc dòng theo vai dữ 
 của mô hình: người chỉ được thấy Europe thì phân rã cũng chỉ tính trên dòng Europe, và tổng các chiều vẫn khớp tổng hai
 lát cắt vì mọi câu cùng bị lọc như nhau.
 
-Độ đo tỷ lệ đi nhánh riêng ở explain/ratio_breakdown.rs, dùng chung run_dimension_rows và build_slice_labels ở đây.
+Mọi cột ứng viên đều chạy câu từng chiều (run_candidates); explain/dimension_pick.rs bỏ chiều trùng và chiều không so
+được gì, rồi phần chấm điểm xếp các chiều còn lại, chiều giải thích tốt nhất trước; không chiều nào bị bỏ vì xếp sau.
+Độ đo tỷ lệ đi nhánh riêng ở explain/ratio_breakdown.rs, dùng chung run_candidates và build_slice_labels ở đây.
 
 Một chiều lỗi (guard từ chối, DuckDB báo lỗi, chạm trần dòng, các nhóm không cộng ra đúng tổng) thì bỏ chiều đó, ghi log,
 các chiều khác vẫn dùng; không còn chiều nào thì không có phân rã (cảnh báo explanation_unavailable). */
@@ -33,6 +35,7 @@ use crate::service::explain::annotate::{
     annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
 };
 use crate::service::explain::check::{PlanSlices, WhyPlan};
+use crate::service::explain::dimension_pick::{pick_dimensions, Candidate, Presence};
 use crate::service::explain::measure::Additive;
 use crate::service::explain::ratio_breakdown::build_ratio_breakdown;
 use crate::service::explain::sql::{
@@ -172,7 +175,7 @@ pub fn read_slice_totals(sql: String, result: &ResultTable) -> Option<SliceTotal
 
 /// Ô của cột tổng hợp: DECIMAL, HUGEINT, BIGINT đều tới đây dạng chuỗi chữ số (ValueKind::Decimal), đổi sang Decimal
 /// không qua f64. Ô trống là 0, như COALESCE trong SQL.
-fn read_decimal(cell: Option<&CellValue>) -> Option<Decimal> {
+pub(super) fn read_decimal(cell: Option<&CellValue>) -> Option<Decimal> {
     match cell {
         None => Some(Decimal::ZERO),
         Some(CellValue::String(text)) => text.parse().ok(),
@@ -209,12 +212,17 @@ pub async fn build_breakdown(
             plan.measure.label
         )));
     }
-    let mut dimensions = Vec::new();
-    for column in &plan.dimensions {
-        if let Some(dimension) = run_dimension(env, plan, column).await? {
-            dimensions.push(dimension);
-        }
-    }
+    let candidates = run_candidates(env, plan, 2).await?;
+    let presence = Presence {
+        base: 0,
+        compare: 1,
+    };
+    let picked = pick_dimensions(env, plan, candidates, presence).await?;
+    let dimensions: Vec<_> = picked
+        .kept
+        .into_iter()
+        .filter_map(|candidate| build_dimension(plan, candidate))
+        .collect();
     let groups: Vec<Vec<GroupValues>> = dimensions.iter().map(|(_, g)| g.clone()).collect();
     let mode = build_ranking_mode(&groups, totals.base, totals.compare);
     let mut ranked = Vec::new();
@@ -239,7 +247,9 @@ pub async fn build_breakdown(
         compare: totals.compare,
         change,
     };
-    let notes = annotate_dimensions(&dimensions, &presences, slices);
+    let mut notes = annotate_dimensions(&dimensions, &presences, slices);
+    // Chiều dimension_pick đã bỏ không còn trong dimensions để annotate thấy; thêm vào để lời tóm tắt vẫn nói vì sao bỏ.
+    notes.dropped.extend(picked.dropped);
     let (base_label, compare_label) = build_slice_labels(plan);
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),
@@ -272,15 +282,31 @@ pub async fn build_breakdown(
     })))
 }
 
-/// Một chiều: chạy câu, đọc các nhóm. None (kèm log) khi chiều phải bỏ.
-async fn run_dimension(
+/// Câu từng chiều của mọi cột ứng viên (WhyPlan::dimensions), lần lượt; chiều lỗi thì bỏ (run_dimension_rows ghi log).
+/// numbers: số ô số sau giá trị nhóm, 2 với độ đo cộng được, 4 với độ đo tỷ lệ.
+pub(super) async fn run_candidates(
     env: &QueryEnv<'_>,
     plan: &WhyPlan,
-    column: &str,
-) -> Result<Option<(DimensionBreakdown, Vec<GroupValues>)>, AppError> {
-    let Some(rows) = run_dimension_rows(env, plan, column, 2).await? else {
-        return Ok(None);
-    };
+    numbers: usize,
+) -> Result<Vec<Candidate>, AppError> {
+    let mut candidates = Vec::new();
+    for column in &plan.dimensions {
+        if let Some(rows) = run_dimension_rows(env, plan, column, numbers).await? {
+            candidates.push(Candidate {
+                column: column.clone(),
+                rows,
+            });
+        }
+    }
+    Ok(candidates)
+}
+
+/// Một chiều của độ đo cộng được: đọc các nhóm, tính đóng góp. None (kèm log) khi chiều phải bỏ.
+fn build_dimension(
+    plan: &WhyPlan,
+    candidate: Candidate,
+) -> Option<(DimensionBreakdown, Vec<GroupValues>)> {
+    let Candidate { column, rows } = candidate;
     let groups: Vec<GroupValues> = rows
         .groups
         .into_iter()
@@ -292,18 +318,18 @@ async fn run_dimension(
         .collect();
     let Some(contributions) = build_group_contributions(&groups) else {
         tracing::warn!(%column, "dimension contributions overflow");
-        return Ok(None);
+        return None;
     };
     let breakdown = DimensionBreakdown {
-        column: column.to_string(),
-        label: plan.labels.get(column).cloned(),
+        label: plan.labels.get(&column).cloned(),
+        column,
         kind: rows.kind,
         sql: rows.shown,
         groups: contributions,
         mix_effect: None,
         rate_effect: None,
     };
-    Ok(Some((breakdown, groups)))
+    Some((breakdown, groups))
 }
 
 /// Các dòng của câu từng chiều: giá trị nhóm và `numbers` ô số đi sau nó, theo thứ tự của build_dimension_sql.

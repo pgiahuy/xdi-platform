@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/ContributionBars.tsx - biểu đồ thanh hai phía cho chênh lệch của từng nhóm (lát so sánh trừ lát gốc
 trong nhóm, cộng lại bằng chênh lệch chung), theo chiều đầu tiên backend gửi. Tiêu đề ghi tên cột kèm nghĩa tiếng Việt
-(columnText.ts). Thanh giảm sang trái màu hổ phách, thanh tăng sang phải màu xanh ngọc,
-cùng một thang nên so được độ lớn bằng mắt. Nhóm như bảng phân rã: các nhóm lớn nhất rồi một dòng "Còn lại"
-(breakdownGroups.ts).
+(columnText.ts). Thanh giảm sang trái màu đỏ, thanh tăng sang phải màu xanh lá (cùng cặp màu với bảng phân rã,
+changeFormat.directionTextClass), cùng một thang nên so được độ lớn bằng mắt. Nhóm như bảng phân rã: các nhóm lớn nhất
+rồi một dòng "Còn lại" (breakdownGroups.ts).
 Mỗi dòng ghi số có dấu (+ hay -), nên màu và hướng thanh chỉ giúp đọc nhanh; chữ chiều chỉ cho trình đọc màn hình
 (nhãn chữ ở mọi dòng làm bảng rối mà không thêm ý), thanh ẩn với trình đọc màn hình. Độ dài thanh đổi số bằng
 Number(): chỉ để vẽ, chấp nhận làm tròn; chữ số hiện ra vẫn là chuỗi của backend.
@@ -14,7 +14,13 @@ import { cn } from '@/lib/utils'
 import { splitGroups } from './breakdownGroups'
 import { columnText } from './columnText'
 import { formatCell } from './cellFormat'
-import { changeDirection, directionWord, formatSigned } from './changeFormat'
+import {
+  changeDirection,
+  directionFillClass,
+  directionTextClass,
+  directionWord,
+  formatSigned,
+} from './changeFormat'
 import type { Comparison, DimensionView } from './evidenceTypes'
 
 type Props = {
@@ -90,7 +96,7 @@ function ContributionRow({ bar, largest, comparison }: { bar: Bar; largest: numb
           <span
             className={cn(
               'absolute inset-y-0.5',
-              direction === 'down' ? 'bg-highlight' : 'bg-label',
+              directionFillClass(direction),
               bar.muted && 'opacity-60',
             )}
             style={direction === 'down' ? { right: '50%', width: `${half}%` } : { left: '50%', width: `${half}%` }}
@@ -98,7 +104,7 @@ function ContributionRow({ bar, largest, comparison }: { bar: Bar; largest: numb
         )}
       </span>
       <span className="col-start-2 row-start-1 flex items-center justify-end gap-2 text-sm sm:col-start-3">
-        <span className={cn('font-semibold', direction === 'down' ? 'text-highlight-text' : 'text-label')}>
+        <span className={cn('font-semibold', directionTextClass(direction))}>
           {formatSigned(bar.contribution)}
         </span>
         <span className="sr-only">{directionWord(direction, comparison)}</span>
