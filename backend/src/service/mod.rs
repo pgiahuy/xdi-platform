@@ -17,6 +17,8 @@ pub mod excel;
 pub mod explain;
 pub mod ingest;
 pub mod profile;
+#[cfg(test)]
+pub(crate) mod prompt_fixtures;
 pub mod samples;
 #[cfg(test)]
 mod samples_tests;

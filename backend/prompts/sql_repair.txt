@@ -1,0 +1,8 @@
+{{prompt}}
+
+{{problem}}
+
+Error:
+{{error}}
+
+Fix it so that it answers the same question. Use only the tables and columns given above. Reply with one JSON object in the same format as before: "terms", "assumptions", and the fixed SQL in "sql" as one SELECT statement. Do not use "clarify" and write nothing outside the JSON object.

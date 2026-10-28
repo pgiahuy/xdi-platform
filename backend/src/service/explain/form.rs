@@ -8,6 +8,7 @@ Nhận câu "tại sao" bằng từ khóa chứ không nhờ mô hình phân lo�
 
 use serde::Deserialize;
 
+use crate::engine::prompts::{self, fill};
 use crate::service::ask::phrases::fold;
 use crate::service::ask::reply::{Term, Unanswerable};
 use crate::service::explain::period::Grain;
@@ -162,16 +163,19 @@ pub fn build_form_from_reply(reply: &str) -> Result<ReadForm, FieldError> {
 }
 
 /// Prompt nhờ mô hình sửa form: prompt form đầy đủ như lần đầu (đủ cột, giá trị, chỉ số), rồi form cũ và lỗi từng
-/// trường. Mô hình gửi lại cả form, không chỉ phần sửa, để code đọc lại từ đầu bằng cùng một hàm.
+/// trường. Mô hình gửi lại cả form, không chỉ phần sửa, để code đọc lại từ đầu bằng cùng một hàm. Chữ ở
+/// backend/prompts/why_form_repair.txt.
 pub fn build_why_repair_prompt(prompt: &str, reply: &str, errors: &[FieldError]) -> String {
     let lines: Vec<String> = errors
         .iter()
         .map(|e| format!("- {}: {}", e.field, e.message))
         .collect();
-    format!(
-        "{prompt}\n\nYour previous reply:\n{}\n\nThe form has these errors. Reply with the whole form again, in the \
-         same JSON format, with them fixed:\n{}",
-        reply.trim(),
-        lines.join("\n")
+    fill(
+        &prompts::WHY_FORM_REPAIR,
+        &[
+            ("prompt", prompt),
+            ("reply", reply.trim()),
+            ("errors", &lines.join("\n")),
+        ],
     )
 }

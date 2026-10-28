@@ -1,0 +1,8 @@
+{{prompt}}
+
+{{problem}}
+
+Lỗi:
+{{error}}
+
+Sửa lại để câu trả lời vẫn đúng câu hỏi đó. Chỉ dùng các bảng và cột đã cho ở trên. Trả lời bằng một object JSON cùng dạng như trước: "terms", "assumptions", và câu SQL đã sửa trong "sql" dưới dạng một câu SELECT. Không dùng "clarify" và không viết gì ngoài object JSON.

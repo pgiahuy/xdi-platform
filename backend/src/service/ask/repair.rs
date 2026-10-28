@@ -5,24 +5,22 @@ ask/reply.rs như lần đầu. */
 
 use crate::engine::analytics::parquet_glob;
 use crate::engine::guard::AllowedTable;
+use crate::engine::prompts::{self, fill};
 use crate::error::AppError;
 
-/// Prompt của bước repair. Phần luật viết tiếng Anh như prompt sinh SQL (#29); prompt gốc đã có hồ sơ bảng và câu hỏi.
+/// Prompt của bước repair, chữ ở backend/prompts/sql_repair*.txt. Phần luật viết tiếng Anh như prompt sinh SQL (#29);
+/// prompt gốc đã có hồ sơ bảng và câu hỏi.
 /// sql là câu SQL của lần đầu; None khi câu trả lời lần đầu không đọc được, error khi đó là lý do của ask/reply.rs.
 /// Câu sửa phải cùng dạng JSON như lần đầu nhưng không được hỏi lại: hết vòng sửa thì không còn lượt nào để dùng câu
 /// trả lời của người dùng.
 pub fn build_repair_prompt(prompt: &str, sql: Option<&str>, error: &str) -> String {
     let problem = match sql {
-        Some(sql) => format!("The SQL you wrote for this question could not run.\nSQL:\n{sql}"),
-        None => "Your reply to this question could not be read.".to_string(),
+        Some(sql) => fill(&prompts::SQL_REPAIR_FAILED_SQL, &[("sql", sql)]),
+        None => fill(&prompts::SQL_REPAIR_UNREADABLE_REPLY, &[]),
     };
-    format!(
-        "{prompt}\n\n\
-         {problem}\n\n\
-         Error:\n{error}\n\n\
-         Fix it so that it answers the same question. Use only the tables and columns given above. \
-         Reply with one JSON object in the same format as before: \"terms\", \"assumptions\", and the fixed SQL in \
-         \"sql\" as one SELECT statement. Do not use \"clarify\" and write nothing outside the JSON object."
+    fill(
+        &prompts::SQL_REPAIR,
+        &[("prompt", prompt), ("problem", &problem), ("error", error)],
     )
 }
 

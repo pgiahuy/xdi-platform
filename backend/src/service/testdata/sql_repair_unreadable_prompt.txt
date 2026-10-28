@@ -1,0 +1,8 @@
+Question: Doanh thu theo thị trường
+
+Your reply to this question could not be read.
+
+Error:
+the reply is not a JSON object: expected value at line 1 column 1
+
+Fix it so that it answers the same question. Use only the tables and columns given above. Reply with one JSON object in the same format as before: "terms", "assumptions", and the fixed SQL in "sql" as one SELECT statement. Do not use "clarify" and write nothing outside the JSON object.

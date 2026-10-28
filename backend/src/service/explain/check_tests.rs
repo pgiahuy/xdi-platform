@@ -20,6 +20,7 @@ use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::sql::{
     build_dimension_sql, build_equals, build_slices_sql, build_why_sql,
 };
+use crate::service::prompt_fixtures::check_fixture;
 
 pub(super) const TABLE: &str = "dataco";
 pub(super) const DATE: &str = "order date (DateOrders)";
@@ -783,6 +784,22 @@ fn repair_prompt_lists_each_field_error() {
     assert!(prompt.ends_with(
         "- measure.column: \"Revenue\" is not a column of dataco\n- compare: \"Q3 2017\" is not a quarter such as 2017-Q3"
     ));
+}
+
+/// Prompt sửa form đầy đủ so với file mẫu (service/prompt_fixtures.rs). Prompt gốc thay bằng một dòng ngắn: prompt form
+/// đã có file mẫu riêng (why_prompt.txt).
+#[test]
+fn why_repair_prompt_matches_the_fixture() {
+    let errors = vec![
+        FieldError::new("measure.column", "\"Revenue\" is not a column of dataco"),
+        FieldError::new("compare", "\"Q3 2017\" is not a quarter such as 2017-Q3"),
+    ];
+    let prompt = build_why_repair_prompt(
+        "Question: Vì sao doanh thu quý 3 năm 2017 giảm?",
+        " {\"measure\": {\"column\": \"Revenue\", \"agg\": \"sum\"}, \"compare\": \"Q3 2017\"} ",
+        &errors,
+    );
+    check_fixture("why_repair_prompt.txt", &prompt);
 }
 
 // Cột chiều đặt vào "time" (như cột kỳ học "2013J", "2014J"): lời báo chỉ đường sang so hai nhóm, để vòng sửa của mô

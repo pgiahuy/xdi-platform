@@ -14,6 +14,7 @@ use crate::service::ask::contract::{
 use crate::service::ask::summary::{
     build_answer_check, build_summary_prompt, build_template_answer, summarize, SummaryInput,
 };
+use crate::service::prompt_fixtures::check_fixture;
 
 fn column(name: &str, kind: ValueKind, role: ColumnRole) -> ResultColumn {
     ResultColumn {
@@ -183,6 +184,19 @@ fn prompt_asks_for_a_neutral_report_tone() {
     );
     assert!(prompt.contains("no exclamation marks"), "{prompt}");
     assert!(!prompt.contains("friendly"), "{prompt}");
+}
+
+/// Prompt đầy đủ so với file mẫu (service/prompt_fixtures.rs): có thẻ "Đã hiểu là", ba dòng kết quả.
+#[test]
+fn summary_prompt_matches_the_fixture() {
+    let result = sales();
+    let u = understanding();
+    let input = SummaryInput {
+        question: "Danh mục nào bán chạy nhất?",
+        understanding: Some(&u),
+        result: &result,
+    };
+    check_fixture("summary_prompt.txt", &build_summary_prompt(&input));
 }
 
 struct StubLlm(&'static str);

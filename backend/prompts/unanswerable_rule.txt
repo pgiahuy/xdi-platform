@@ -1,0 +1,1 @@
+Set "unanswerable" only when no listed column holds the information the question needs, for example satisfaction with no rating column, or a forecast of the future: give the reason in Vietnamese and up to five listed columns closest to the question, and leave the other fields empty. Never use it when the question is only vague or a column fits only loosely.
