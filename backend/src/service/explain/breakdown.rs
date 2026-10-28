@@ -29,7 +29,9 @@ use crate::service::ask::contract::{
 use crate::service::ask::repair::{build_safe_error, build_user_error, mentions_data_files};
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::run::{build_duration_text, build_step, run_query_in_turn};
+use crate::service::explain::annotate::{annotate_dimensions, build_percent_text, Totals};
 use crate::service::explain::check::{PlanSlices, WhyPlan};
+use crate::service::explain::measure::Additive;
 use crate::service::explain::ratio_breakdown::build_ratio_breakdown;
 use crate::service::explain::sql::{
     build_dimension_sql, BASE_DENOMINATOR, BASE_ROWS, BASE_VALUE, BASE_VOLUME, COMPARE_DENOMINATOR,
@@ -228,25 +230,43 @@ pub async fn build_breakdown(
         ));
     }
     apply_dimension_order(&mut ranked, mode);
+    let annotated = annotate_dimensions(
+        ranked.into_iter().map(|d| d.breakdown).collect(),
+        Totals {
+            base: totals.base,
+            compare: totals.compare,
+            change,
+        },
+        &plan.labels,
+    );
     let (base_label, compare_label) = build_slice_labels(plan);
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),
         measure_kind: MeasureKind::Total,
         comparison: build_comparison(plan),
+        counts_rows: matches!(plan.measure.additive, Additive::Count { .. }),
+        slice_column: build_slice_column(plan),
+        slice_column_label: build_slice_column(plan).and_then(|c| plan.labels.get(&c).cloned()),
         base: ExplanationSlice {
             label: base_label,
             filter: filters.0,
             value: build_decimal_text(totals.base, totals.base.scale()),
+            rows: build_decimal_text(totals.base_rows, 0),
         },
         compare: ExplanationSlice {
             label: compare_label,
             filter: filters.1,
             value: build_decimal_text(totals.compare, totals.compare.scale()),
+            rows: build_decimal_text(totals.compare_rows, 0),
         },
         change: build_decimal_text(change, totals.base.scale().max(totals.compare.scale())),
-        dimensions: ranked.into_iter().map(|d| d.breakdown).collect(),
+        percent_change: annotated.percent_change.map(build_percent_text),
+        dimensions: annotated.dimensions,
+        dropped_dimensions: annotated.dropped,
         volume_price: build_volume(plan, totals),
         summary: String::new(),
+        summary_title: String::new(),
+        summary_points: Vec::new(),
         summary_by_model: false,
     })))
 }
@@ -275,6 +295,8 @@ async fn run_dimension(
     };
     let breakdown = DimensionBreakdown {
         column: column.to_string(),
+        label: None,
+        has_outliers: false,
         kind: rows.kind,
         sql: rows.shown,
         groups: contributions,
@@ -334,6 +356,14 @@ pub(super) fn build_comparison(plan: &WhyPlan) -> Comparison {
     match &plan.slices {
         PlanSlices::Periods { .. } => Comparison::Periods,
         PlanSlices::Groups { .. } => Comparison::Groups,
+    }
+}
+
+/// Cột có hai giá trị đang so, khi so hai nhóm.
+pub(super) fn build_slice_column(plan: &WhyPlan) -> Option<String> {
+    match &plan.slices {
+        PlanSlices::Groups { column, .. } => Some(column.clone()),
+        PlanSlices::Periods { .. } => None,
     }
 }
 

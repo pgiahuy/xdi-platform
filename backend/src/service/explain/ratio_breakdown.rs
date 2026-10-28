@@ -15,15 +15,17 @@ use crate::error::AppError;
 use crate::service::ask::contract::{
     DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
 };
+use crate::service::explain::annotate::{annotate_dimensions, build_percent_text, Totals};
 use crate::service::explain::breakdown::{
-    build_comparison, build_slice_labels, run_dimension_rows, Breakdown, QueryEnv, SliceTotals,
+    build_comparison, build_slice_column, build_slice_labels, run_dimension_rows, Breakdown,
+    QueryEnv, SliceTotals,
 };
 use crate::service::explain::check::WhyPlan;
 use crate::service::explain::ratio::{
     build_rate_text, build_ratio_change, build_ratio_split, RatioGroup, RatioParts,
 };
 use crate::service::explain::{
-    apply_dimension_order, build_dimension_score, RankedDimension, RankingMode,
+    apply_dimension_order, build_decimal_text, build_dimension_score, RankedDimension, RankingMode,
 };
 
 /// Phân rã của độ đo tỷ lệ: tỷ lệ hai lát cắt, rồi tách cơ cấu và hiệu suất theo từng chiều (explain/ratio.rs).
@@ -90,6 +92,8 @@ pub(super) async fn build_ratio_breakdown(
             Ok((split, score)) => ranked.push(RankedDimension {
                 breakdown: DimensionBreakdown {
                     column: column.to_string(),
+                    label: None,
+                    has_outliers: false,
                     kind: rows.kind,
                     sql: rows.shown,
                     groups: split.groups,
@@ -109,25 +113,44 @@ pub(super) async fn build_ratio_breakdown(
         ));
     }
     apply_dimension_order(&mut ranked, RankingMode::Effect);
+    // % thay đổi của tỷ lệ tính trên tỷ lệ của hai lát cắt, như % thay đổi của từng nhóm (tỷ lệ của nhóm).
+    let annotated = annotate_dimensions(
+        ranked.into_iter().map(|d| d.breakdown).collect(),
+        Totals {
+            base: change.base_rate,
+            compare: change.compare_rate,
+            change: change.change,
+        },
+        &plan.labels,
+    );
     let (base_label, compare_label) = build_slice_labels(plan);
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),
         measure_kind: MeasureKind::Ratio,
         comparison: build_comparison(plan),
+        counts_rows: false,
+        slice_column: build_slice_column(plan),
+        slice_column_label: build_slice_column(plan).and_then(|c| plan.labels.get(&c).cloned()),
         base: ExplanationSlice {
             label: base_label,
             filter: filters.0,
             value: build_rate_text(change.base_rate),
+            rows: build_decimal_text(totals.base_rows, 0),
         },
         compare: ExplanationSlice {
             label: compare_label,
             filter: filters.1,
             value: build_rate_text(change.compare_rate),
+            rows: build_decimal_text(totals.compare_rows, 0),
         },
         change: build_rate_text(change.change),
-        dimensions: ranked.into_iter().map(|d| d.breakdown).collect(),
+        percent_change: annotated.percent_change.map(build_percent_text),
+        dimensions: annotated.dimensions,
+        dropped_dimensions: annotated.dropped,
         volume_price: None,
         summary: String::new(),
+        summary_title: String::new(),
+        summary_points: Vec::new(),
         summary_by_model: false,
     })))
 }

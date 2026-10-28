@@ -398,18 +398,37 @@ pub struct Explanation {
     /// What the two slices are, which decides the words for the change: up or down between two periods, higher or
     /// lower between two groups.
     pub comparison: Comparison,
+    /// True when the measure counts rows (a count, not a sum): the measure is then itself the size of each slice.
+    pub counts_rows: bool,
+    /// Column whose two values are compared, for `groups`; null for `periods`.
+    #[schema(required)]
+    pub slice_column: Option<String>,
+    /// Vietnamese name of `slice_column` from the column profile; null when the profile has none.
+    #[schema(required)]
+    pub slice_column_label: Option<String>,
     /// Slice compared against.
     pub base: ExplanationSlice,
     /// Slice being explained.
     pub compare: ExplanationSlice,
     /// `compare.value - base.value`.
     pub change: String,
-    /// One breakdown per dimension, the dimension that explains the change best first.
+    /// `change / base.value * 100`, rounded to one decimal; null when `base.value` is zero or negative.
+    #[schema(required)]
+    pub percent_change: Option<String>,
+    /// One breakdown per dimension: dimensions with an outlier group first, then the others, each part in ranking
+    /// order (the dimension that explains the change best first).
     pub dimensions: Vec<DimensionBreakdown>,
+    /// Dimensions left out of `dimensions` because they explain nothing, with the reason.
+    pub dropped_dimensions: Vec<DroppedDimension>,
     #[schema(required)]
     pub volume_price: Option<VolumePrice>,
     /// Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown.
     pub summary: String,
+    /// Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese).
+    pub summary_title: String,
+    /// Points under the main answer, written by the backend from the numbers above; each is said only when the numbers
+    /// support it.
+    pub summary_points: Vec<SummaryPoint>,
     /// False when the model's text failed the number check, or the model was not reached, and `summary` is a template
     /// sentence written by the backend.
     pub summary_by_model: bool,
@@ -449,6 +468,76 @@ pub struct ExplanationSlice {
     pub filter: String,
     /// Value of the measure on the slice.
     pub value: String,
+    /// Number of rows of the slice.
+    pub rows: String,
+}
+
+/// One point of the summary: a short lead (shown in bold) and the sentence after it.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct SummaryPoint {
+    pub kind: SummaryPointKind,
+    /// Lead of the point (Vietnamese), for example "Lý do chính".
+    pub lead: String,
+    /// Rest of the point (Vietnamese).
+    pub text: String,
+}
+
+/// - `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the
+///   rate).
+/// - `outliers`: groups that changed much more or much less than the whole, or exist on one side only.
+/// - `even`: no group stands out; the largest contributions are the largest groups.
+/// - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow
+///   comparing groups with the whole (a base slice of zero or less, or a change too close to zero).
+/// - `against`: a group that moved the other way.
+/// - `dropped`: dimensions left out and why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SummaryPointKind {
+    Reason,
+    Outliers,
+    Even,
+    Largest,
+    Against,
+    Dropped,
+}
+
+/// A dimension left out of the breakdown.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct DroppedDimension {
+    pub column: String,
+    /// Vietnamese name of the column from the column profile; null when the profile has none.
+    #[schema(required)]
+    pub label: Option<String>,
+    pub reason: DropReason,
+    /// For `duplicates`: the kept dimension with the same groups.
+    #[schema(required)]
+    pub duplicate_of: Option<String>,
+    /// For `separates_slices`: the values found only in the base slice, as text.
+    pub base_only: Vec<String>,
+    /// For `separates_slices`: the values found only in the compare slice, as text.
+    pub compare_only: Vec<String>,
+}
+
+/// - `separates_slices`: every value of the column is found in one slice only, so the column is another name of the
+///   two slices (all orders of one status paid by card, all of the other by transfer).
+/// - `duplicates`: the column splits the rows into exactly the same groups as a kept dimension (an id and its name).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DropReason {
+    SeparatesSlices,
+    Duplicates,
+}
+
+/// - `both`: the group has rows in both slices.
+/// - `new`: no rows (or a zero value) in the base slice.
+/// - `gone`: no rows (or a zero value) in the compare slice.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupPresence {
+    #[default]
+    Both,
+    New,
+    Gone,
 }
 
 /// Contribution of every group of one dimension; the contributions add up to `change`.
@@ -456,6 +545,11 @@ pub struct ExplanationSlice {
 pub struct DimensionBreakdown {
     /// Dimension column, as named in the dataset (not a name from `result.columns`).
     pub column: String,
+    /// Vietnamese name of the column from the column profile; null when the profile has none.
+    #[schema(required)]
+    pub label: Option<String>,
+    /// True when at least one group of this dimension is an outlier.
+    pub has_outliers: bool,
     /// How to read the group values, like the `kind` of a result column.
     pub kind: ValueKind,
     /// SQL that computed the groups of both slices, after the guard.
@@ -482,6 +576,19 @@ pub struct GroupContribution {
     /// Part of `change` from this group: `compare_value - base_value` for a total, `mix_effect + rate_effect` for a
     /// ratio.
     pub contribution: String,
+    pub presence: GroupPresence,
+    /// `contribution / change * 100`, rounded to one decimal: the share of the change from this group. Negative when
+    /// the group moved the other way. Null when the change is too close to zero for a share to mean anything.
+    #[schema(required)]
+    pub share_of_change: Option<String>,
+    /// `(compare_value - base_value) / base_value * 100`, rounded to one decimal. Null when the group is not in both
+    /// slices or `base_value` is zero or negative.
+    #[schema(required)]
+    pub percent_change: Option<String>,
+    /// True when the group changed at least 10 percentage points more or less than the whole (`percent_change` against
+    /// `Explanation.percent_change`) and makes at least 1% of the change; or exists on one side only and makes at
+    /// least 1% of the change.
+    pub outlier: bool,
     /// Ratio measures only: part of `change` because this group's share of the denominator changed,
     /// `(compare_share - base_share) * (base_value + compare_value) / 2`. For a group with no denominator in one slice,
     /// the ratio of that slice is taken equal to the other slice, so the whole contribution is a mix effect.

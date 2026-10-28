@@ -53,6 +53,7 @@ use crate::service::explain::latest::{apply_latest, find_latest, LatestPeriod, C
 use crate::service::explain::plain::run_plain;
 use crate::service::explain::premise::{build_premise_labels, build_premise_warning};
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
+use crate::service::explain::summary::apply_summary_parts;
 
 /// Lời cho needs_choice, như mẫu needs_choice của ask/examples.rs.
 const NEEDS_CHOICE_MESSAGE: &str = "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.";
@@ -335,12 +336,24 @@ async fn run_plan(
         .iter()
         .map(|d| d.column.as_str())
         .collect();
-    let detail = format!(
+    let mut detail = format!(
         "Phân rã theo {} chiều: {}",
         columns.len(),
         columns.join(", ")
     );
+    if !explanation.dropped_dimensions.is_empty() {
+        let dropped: Vec<&str> = explanation
+            .dropped_dimensions
+            .iter()
+            .map(|d| d.column.as_str())
+            .collect();
+        detail.push_str(&format!(
+            "; bỏ {} vì chỉ là tên khác của hai lát cắt hay trùng chiều khác",
+            dropped.join(", ")
+        ));
+    }
     steps.push(build_step(StepName::Explain, started, true, Some(&detail)));
+    apply_summary_parts(&mut explanation);
     let narrated = narrate(
         llm,
         input.prompt.question,

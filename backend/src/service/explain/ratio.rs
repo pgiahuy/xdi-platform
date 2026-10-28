@@ -32,6 +32,7 @@ use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::{Decimal, RoundingStrategy};
 
 use crate::service::ask::contract::{CellValue, GroupContribution};
+use crate::service::explain::annotate::build_presence;
 use crate::service::explain::{build_decimal_text, compare_group_values, GroupValues, ScoreError};
 
 /// Số chữ số thập phân của mọi tỷ lệ và mọi phần đóng góp: đủ đọc tỷ lệ phần trăm tới hai chữ số lẻ (0.0123 là
@@ -153,6 +154,14 @@ pub fn build_ratio_split(
             base_value: build_rate_text(build_rounded(group.base_rate)),
             compare_value: build_rate_text(build_rounded(group.compare_rate)),
             contribution: build_rate_text(contribution),
+            // Không có mẫu số ở một lát cắt nghĩa là nhóm không có dòng nào ở lát đó.
+            presence: build_presence(
+                group.group.base.denominator.is_zero(),
+                group.group.compare.denominator.is_zero(),
+            ),
+            share_of_change: None,
+            percent_change: None,
+            outlier: false,
             mix_effect: Some(build_rate_text(mix)),
             rate_effect: Some(build_rate_text(rate)),
         });
