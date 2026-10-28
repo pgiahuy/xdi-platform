@@ -539,12 +539,15 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
         "The breakdown below was computed from the data; every number in it is exact. Explain it in Vietnamese to \
          the user who asked the question, a business user who does not know statistics.\n\
          Rules:\n\
-         - Vietnamese, at most four sentences, at most {MAX_SUMMARY_CHARS} characters.\n\
+         - Vietnamese, two or three short sentences, at most {MAX_SUMMARY_CHARS} characters. The reader sees the \
+         numbers and the points right below your text, so do not repeat them: tell in plain words what happened and \
+         what drove it, the way an analyst would say it to a manager, in the shape \"<measure> <what happened> chủ \
+         yếu nhờ <the groups that drove it>; <a group that went the other way> kéo lại một phần\", every <...> \
+         replaced with names from \"points\" (leave out the second half when no group went the other way).\n\
          - \"points\" is what the code found, already checked against the data: the main answer first, then each \
-         point with its lead. Say these points and nothing else, in plain words, in the same order: rephrase, keep \
-         every number, name and direction word as written. If \"points\" has no point after the main answer, say \
-         the main answer and \"main_group\" (\"Riêng nhóm Fishing, doanh thu tăng 4.231,78\"). Never use the \
-         words \"đóng góp\", \"chiều\" or \"phân rã\".\n\
+         point with its lead. Use only what is in \"points\" and \"main_group\", most important first; never copy \
+         a point word for word. Mention at most three numbers, copied exactly; names and direction words as \
+         written. Never use the words \"đóng góp\", \"chiều\" or \"phân rã\".\n\
          - Never add a cause, a reason or a group that is not in \"points\": a column that splits the two slices \
          (for example a payment type found only on one side) is not a cause.\n\
          - \"comparison\" tells what the two slices are. \"periods\": two periods, the change is over time. \
