@@ -1,0 +1,7 @@
+{{prompt}}
+
+Your previous reply:
+{{reply}}
+
+The form has these errors. Reply with the whole form again, in the same JSON format, with them fixed:
+{{errors}}
