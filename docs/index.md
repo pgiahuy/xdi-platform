@@ -6,14 +6,16 @@ SQL it ran. For "why" questions it computes which groups drove the change and sh
 numbers. Rust backend, DuckDB for analytics, Postgres for application data, React UI. Apache 2.0. Latest release:
 v0.2.0. Vietnamese documentation follows.*
 
-Hỏi dữ liệu bằng tiếng Việt, nhận câu trả lời kèm minh chứng cho từng con số. Nạp file, gõ câu hỏi, nhận bảng, biểu đồ
-và câu SQL đã chạy. Câu "tại sao" được tách thành phần chênh lệch của từng nhóm; bấm vào một số để xem các dòng dữ liệu
+Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên: hỏi bằng tiếng Việt, nhận câu trả lời kèm lời giải thích và minh
+chứng cho từng con số. Nạp file, gõ câu hỏi, nhận bảng, biểu đồ và câu SQL đã chạy. Câu "tại sao" được tách thành phần chênh lệch của từng nhóm; bấm vào một số để xem các dòng dữ liệu
 đứng sau nó.
 
 Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, viết SQL, điền form câu "tại sao" và
 viết lời; nó nhận tên cột và danh sách giá trị của cột phân loại, không nhận bảng dữ liệu. Riêng đoạn trả lời ngắn của
 câu hỏi thường gửi tối đa 10 dòng đầu của kết quả (với câu không gộp, đó là dòng gốc), tắt bằng `ANSWER_TEXT=false`
 ([Dữ liệu và quyền riêng tư](PRIVACY.md)).
+
+![Một câu hỏi đi qua xdi-platform: giao diện, API, guard SQL, DuckDB, mô hình ngôn ngữ, Postgres, theo thứ tự 12 bước](images/luong-cau-hoi.png)
 
 ## Chạy thử
 

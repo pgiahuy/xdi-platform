@@ -1,6 +1,7 @@
 # xdi-platform
 
-Hỏi dữ liệu bằng tiếng Việt, nhận câu trả lời kèm minh chứng cho từng con số.
+Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên: hỏi bằng tiếng Việt, nhận câu trả lời kèm lời giải thích và minh
+chứng cho từng con số.
 
 Nạp file CSV, Parquet hoặc Excel rồi gõ câu hỏi. Hệ thống viết SQL, kiểm SQL bằng guard, chạy trên DuckDB và trả về
 bảng, biểu đồ cùng câu SQL đã chạy. Với câu "tại sao", hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một
@@ -13,6 +14,8 @@ Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
 Tài liệu: https://pgiahuy.github.io/xdi-platform/
+
+![Một câu hỏi đi qua xdi-platform: giao diện, API, guard SQL, DuckDB, mô hình ngôn ngữ, Postgres, theo thứ tự 12 bước](docs/images/luong-cau-hoi.png)
 
 ## Chạy thử
 
@@ -77,7 +80,7 @@ Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, gh
 Bảng trạng thái chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái). Lịch sử thay đổi:
 [CHANGELOG.md](CHANGELOG.md). Tiến độ: [milestones](https://github.com/pgiahuy/xdi-platform/milestones).
 
-## Phát triển
+## Build từ nguồn và phát triển
 
 Cần Rust stable từ 1.89 kèm trình biên dịch C++, Node.js 24, Docker (cho Postgres) và GNU Make.
 
