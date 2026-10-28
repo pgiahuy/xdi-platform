@@ -132,7 +132,7 @@ async fn why_question_is_answered_recorded_and_drilled() {
 
     // Ô quý 3 của bảng tổng truy như ô của câu thường.
     let quarter = response["result"]["rows"][1][0].clone();
-    let cell = json!({"query_id": query_id, "cell": [{"column": "quarter", "value": quarter}]});
+    let cell = json!({"query_id": query_id, "cell": [{"column": "Quý", "value": quarter}]});
     let (status, page) = drill(&asking, cell).await;
     assert_eq!(status, StatusCode::OK, "{page}");
     assert_eq!(page["total_rows"], 3);

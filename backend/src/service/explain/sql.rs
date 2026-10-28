@@ -58,7 +58,9 @@ pub fn build_why_sql(plan: &WhyPlan) -> WhySql {
         // Kỳ là date_trunc của cột ngày: bảng có một dòng mỗi kỳ, trục thời gian vẽ được đường.
         PlanSlices::Periods { time, .. } => {
             let unit = build_string(time.grain.as_str());
-            let name = build_ident(time.grain.as_str());
+            // Tên cột kỳ hiện ra ở bảng kết quả và tiêu đề biểu đồ, nên dùng danh từ tiếng Việt ("Tháng"), không dùng
+            // đơn vị của date_trunc ("month").
+            let name = build_ident(time.grain.noun());
             (format!("date_trunc({unit}, {}) AS {name}", time.expr), "1")
         }
         PlanSlices::Groups { column, .. } => (build_ident(column).to_string(), "1"),
