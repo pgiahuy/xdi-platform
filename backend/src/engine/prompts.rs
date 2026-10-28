@@ -205,4 +205,49 @@ mod tests {
     fn fill_panics_with_the_file_name() {
         fill(&SQL, &[("unanswerable_rule", "")]);
     }
+
+    // Tên các chỗ trống `{{tên}}` trong một đoạn chữ, sắp xếp và bỏ trùng, để so bản dịch với bản gốc.
+    fn placeholder_names(text: &str) -> Vec<String> {
+        let mut names: Vec<String> = text
+            .split("{{")
+            .skip(1)
+            .filter_map(|rest| rest.split_once("}}").map(|(name, _)| name.to_string()))
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    /// backend/prompts/vi/ là bản dịch tiếng Việt chỉ để đọc (không nhúng vào binary). Mỗi prompt phải có bản dịch cùng
+    /// tên, cùng các chỗ trống; ngược lại không có bản dịch nào cho file đã bỏ. Nghĩa của câu dịch thì test không kiểm.
+    #[test]
+    fn vietnamese_mirrors_match_the_prompts() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("prompts");
+        let txt_names = |path: &std::path::Path| -> Vec<String> {
+            let mut names: Vec<String> = std::fs::read_dir(path)
+                .expect("read prompt directory")
+                .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                .filter(|name| name.ends_with(".txt"))
+                .collect();
+            names.sort();
+            names
+        };
+        let prompts = txt_names(&dir);
+        assert!(!prompts.is_empty());
+        assert_eq!(
+            prompts,
+            txt_names(&dir.join("vi")),
+            "every prompt needs a mirror in prompts/vi/ and no extra file"
+        );
+        for name in &prompts {
+            let english = std::fs::read_to_string(dir.join(name)).expect("read prompt");
+            let vietnamese =
+                std::fs::read_to_string(dir.join("vi").join(name)).expect("read mirror");
+            assert_eq!(
+                placeholder_names(&english),
+                placeholder_names(&vietnamese),
+                "placeholders differ between prompts/{name} and prompts/vi/{name}"
+            );
+        }
+    }
 }

@@ -1,0 +1,1 @@
+Chỉ đặt "unanswerable" khi không cột nào liệt kê chứa thông tin câu hỏi cần, ví dụ hỏi mức hài lòng mà không có cột đánh giá, hay hỏi dự báo tương lai: nêu lý do bằng tiếng Việt và tối đa năm cột liệt kê gần câu hỏi nhất, để trống các trường khác. Không bao giờ dùng khi câu hỏi chỉ mơ hồ hay một cột chỉ hợp lỏng lẻo.

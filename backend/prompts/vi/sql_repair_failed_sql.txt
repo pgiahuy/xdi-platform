@@ -1,0 +1,3 @@
+Câu SQL bạn viết cho câu hỏi này không chạy được.
+SQL:
+{{sql}}

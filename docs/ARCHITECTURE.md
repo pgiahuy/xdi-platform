@@ -93,6 +93,8 @@ Chữ cố định của các prompt (luật, khuôn câu) nằm trong `backend/
 nguyên văn những gì gửi cho mô hình. Chỗ trống viết `{{tên}}`, code điền phần dữ liệu (dòng cột, danh sách giá trị,
 JSON, lượt trước) qua `engine/prompts.rs`; file nhúng vào binary lúc biên dịch, và mỗi prompt có file mẫu so từng byte
 trong `backend/src/service/testdata/`. Riêng prompt diễn giải câu "tại sao" còn trong `service/explain/mod.rs`.
+Luật viết tiếng Anh vì là phần máy đọc; bản dịch tiếng Việt để cả đội đọc nằm ở `backend/prompts/vi/`, không gửi cho
+mô hình, và một test báo lỗi khi bản dịch thiếu hay khác chỗ trống với bản gốc.
 
 ## 3. Ba tầng, phụ thuộc một chiều
 

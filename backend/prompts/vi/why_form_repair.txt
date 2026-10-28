@@ -1,0 +1,7 @@
+{{prompt}}
+
+Câu trả lời trước của bạn:
+{{reply}}
+
+Form có các lỗi sau. Trả lời lại toàn bộ form, cùng dạng JSON, đã sửa các lỗi đó:
+{{errors}}
