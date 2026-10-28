@@ -82,6 +82,8 @@ export type BreakdownView = {
   /** Câu trả lời chính và các ý ngắn, do code viết từ số đã tính nên luôn khớp số. */
   summaryTitle: string
   summaryPoints: SummaryPointView[]
+  /** Lời giải thích do mô hình viết lại từ chính các ý trên, đã qua kiểm số và kiểm chiều; null khi dùng câu khuôn. */
+  modelSummary: string | null
 }
 
 export type SummaryPointView = {

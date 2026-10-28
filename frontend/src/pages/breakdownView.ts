@@ -51,10 +51,11 @@ export function buildBreakdown(response: AskResponse): TabData<BreakdownView> {
         priceEffect: vp.price_effect,
         ifVolumeUnchanged: vp.if_volume_unchanged,
       },
-      // Không dùng explanation.summary (lời của mô hình): các ý do code viết luôn khớp số, lời của mô hình chỉ diễn đạt
-      // lại các ý đó nên hiện cả hai là nói một điều hai lần.
       summaryTitle: explanation.summary_title,
       summaryPoints: explanation.summary_points.map((point) => ({ lead: point.lead, text: point.text })),
+      // explanation.summary là lời của mô hình chỉ khi summary_by_model; ngược lại nó là các ý trên nối lại, không hiện
+      // lần nữa.
+      modelSummary: explanation.summary_by_model ? explanation.summary : null,
     },
   }
 }

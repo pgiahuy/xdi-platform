@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/WhyOverview.tsx - phần đầu câu trả lời của câu "tại sao": lời tóm tắt do code viết (AnswerSummary.tsx),
+/* components/ask/WhyOverview.tsx - phần đầu câu trả lời của câu "tại sao": lời giải thích và căn cứ (AnswerSummary.tsx),
 một hàng ba số (lát gốc, lát so sánh kèm số dòng của từng lát, chênh lệch) không khung riêng, để thẻ trả lời không
 thành nhiều khung lồng nhau, rồi chênh lệch của từng nhóm theo chiều đầu tiên (ContributionBars.tsx). Mọi số lấy từ
 explanation của response, cùng dữ liệu với tab Phân rã của pane bằng chứng; ở đây chỉ hiện gọn để đọc câu trả lời mà
@@ -26,7 +26,7 @@ export function WhyOverview({ breakdown: b }: Props) {
   const rows = (value: string, count: string) => (b.countsRows && value === count ? null : count)
   return (
     <>
-      <AnswerSummary title={b.summaryTitle} points={b.summaryPoints} />
+      <AnswerSummary title={b.summaryTitle} points={b.summaryPoints} modelSummary={b.modelSummary} />
       <div className="flex flex-col gap-1">
         {b.sliceColumn && (
           <p className="text-xs text-muted-foreground">So theo {columnText(b.sliceColumn, b.sliceColumnLabel)}</p>
