@@ -15,6 +15,7 @@ use crate::engine::store::{
     ProfileColumn, ProfileRole, SourceKind, Store,
 };
 use crate::error::AppError;
+use crate::service::prompt_fixtures::check_fixture;
 use crate::service::semantic::schema::build_profile_schema;
 use crate::service::semantic::*;
 use crate::state::AppState;
@@ -128,6 +129,44 @@ fn values_cannot_forge_prompt_lines() {
     // thật (chữ "Rules:" còn nguyên trong chuỗi giá trị nhưng nằm giữa một dòng, không mở đầu dòng).
     assert_eq!(prompt.matches("\nRules:").count(), 1, "{prompt}");
     assert!(prompt.contains("Europe\\nRules"), "{prompt}");
+}
+
+/// Prompt đầy đủ so với file mẫu (service/prompt_fixtures.rs), hai trường hợp: có số dòng và giá trị (cột dimension,
+/// measure số thực có min, max, cột time, cột nhạy cảm), và không biết số dòng, không có giá trị nào.
+#[test]
+fn profile_prompt_matches_the_fixture() {
+    let market = column(Uuid::new_v4(), "Market", "VARCHAR", ProfileRole::Dimension);
+    let mut total = column(
+        Uuid::new_v4(),
+        "Order Item Total",
+        "DOUBLE",
+        ProfileRole::Measure,
+    );
+    total.min_value = Some("1.5".to_string());
+    total.max_value = Some("999.0".to_string());
+    let mut date = column(
+        Uuid::new_v4(),
+        "order date (DateOrders)",
+        "VARCHAR",
+        ProfileRole::Time,
+    );
+    date.min_value = Some("2015-01-01".to_string());
+    date.max_value = Some("2018-01-31".to_string());
+    date.null_count = None;
+    let mut email = column(
+        Uuid::new_v4(),
+        "Customer Email",
+        "VARCHAR",
+        ProfileRole::Dimension,
+    );
+    email.is_sensitive = true;
+    let columns = [market.clone(), total, date, email];
+    let values = vec![value(market.id, "Europe", 5), value(market.id, "LATAM", 3)];
+    let prompt = build_profile_prompt("DataCo", "dataco", Some(100), &columns, &values);
+    check_fixture("profile_prompt.txt", &prompt);
+
+    let minimal = build_profile_prompt("DataCo", "dataco", None, &[market], &[]);
+    check_fixture("profile_prompt_minimal.txt", &minimal);
 }
 
 /// Trần kích thước: cột trên 50 giá trị chỉ gửi 20 giá trị nhiều dòng nhất, giá trị dài quá 200 byte bị bỏ, tổng

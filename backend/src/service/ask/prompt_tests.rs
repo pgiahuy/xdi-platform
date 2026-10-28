@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/prompt_tests.rs - test hai prompt (ask/prompt.rs, ask/why_prompt.rs) và phần đổi cách hiểu thành lựa chọn (ask/choices.rs),
+/* service/ask/prompt_tests.rs - test hai prompt (ask/prompt.rs, ask/why_prompt.rs), prompt sửa SQL (ask/repair.rs) và phần đổi cách hiểu thành lựa chọn (ask/choices.rs),
 trên một ngữ cảnh DataCo dựng tay: hàm thuần, không cần mô hình, DuckDB hay Postgres. Mock bỏ qua prompt, nên ở đây
 kiểm chuỗi prompt dựng ra.
 
-Hai file mẫu trong testdata/ là prompt đầy đủ của câu mẫu: đổi prompt thì diff của PR hiện đúng chữ gửi cho mô hình.
-Đổi có chủ ý thì chạy `UPDATE_PROMPT_FIXTURES=1 cargo test prompt_matches_the_fixture` để ghi lại file rồi đọc diff. */
+Hai file mẫu trong testdata/ là prompt đầy đủ của câu mẫu, so bằng service/prompt_fixtures.rs: đổi prompt thì diff của
+PR hiện đúng chữ gửi cho mô hình. */
 
 use uuid::Uuid;
 
@@ -17,9 +17,11 @@ use crate::service::ask::choices::{
 use crate::service::ask::context::{AskContext, ColumnPick, ColumnProfile, ValueHint};
 use crate::service::ask::contract::ChosenOption;
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput, PROMPT_MAX_CHARS};
+use crate::service::ask::repair::build_repair_prompt;
 use crate::service::ask::reply::{Assumption, ChoiceKind, Clarify, SqlAnswer, Term, TermKind};
 use crate::service::ask::values::ValueEntry;
 use crate::service::ask::why_prompt::{build_why_form_schema, build_why_prompt};
+use crate::service::prompt_fixtures::check_fixture;
 
 const QUESTION: &str = "Doanh thu theo thị trường";
 
@@ -484,18 +486,6 @@ fn why_form_schema_has_the_form_fields() {
 
 // File mẫu
 
-fn check_fixture(name: &str, prompt: &str) {
-    let path = format!("{}/src/service/testdata/{name}", env!("CARGO_MANIFEST_DIR"));
-    if std::env::var("UPDATE_PROMPT_FIXTURES").is_ok() {
-        std::fs::write(&path, prompt).unwrap();
-    }
-    let expected = std::fs::read_to_string(&path).unwrap_or_default();
-    assert_eq!(
-        prompt, expected,
-        "prompt changed; run UPDATE_PROMPT_FIXTURES=1 cargo test prompt_matches_the_fixture and review the diff"
-    );
-}
-
 /// Prompt đầy đủ của câu mẫu, có chỉ số, ví dụ, gói ngành, so với file mẫu.
 #[test]
 fn prompt_matches_the_fixture() {
@@ -524,6 +514,26 @@ fn prompt_matches_the_fixture() {
     );
     why_input.domain = find_domain_package("retail");
     check_fixture("why_prompt.txt", &build_why_prompt(&why_input));
+}
+
+/// Prompt sửa SQL, cả hai trường hợp: câu SQL chạy lỗi, và câu trả lời lần đầu không đọc được. Prompt gốc thay bằng
+/// một dòng ngắn: phần đó đã có file mẫu riêng ở trên.
+#[test]
+fn repair_prompt_matches_the_fixture() {
+    let error = "Binder Error: Referenced column \"Revenue\" not found in FROM clause!\nCandidate bindings: \
+                 \"Order Item Total\"";
+    let failed = build_repair_prompt(
+        "Question: Doanh thu theo thị trường",
+        Some("SELECT \"Market\", SUM(\"Revenue\") FROM dataco GROUP BY 1"),
+        error,
+    );
+    check_fixture("sql_repair_prompt.txt", &failed);
+    let unreadable = build_repair_prompt(
+        "Question: Doanh thu theo thị trường",
+        None,
+        "the reply is not a JSON object: expected value at line 1 column 1",
+    );
+    check_fixture("sql_repair_unreadable_prompt.txt", &unreadable);
 }
 
 // Lựa chọn
