@@ -4,13 +4,13 @@ Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên: hỏi bằn
 chứng cho từng con số.
 
 Nạp file CSV, Parquet hoặc Excel rồi gõ câu hỏi. Hệ thống viết SQL, kiểm SQL bằng guard, chạy trên DuckDB và trả về
-bảng, biểu đồ cùng câu SQL đã chạy. Với câu "tại sao", hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một
-số để xem các dòng dữ liệu đứng sau nó.
+bảng, biểu đồ cùng câu SQL đã chạy. Với câu hỏi tìm nguyên nhân, như vì sao doanh thu tháng này giảm hay vì sao Europe
+cao hơn LATAM, hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một số để xem các dòng dữ liệu đứng sau nó.
 
-Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, viết SQL, điền form câu "tại sao" và
-viết lời. Nó nhận tên cột và danh sách giá trị của cột phân loại, không nhận bảng dữ liệu. Riêng đoạn trả lời ngắn của
-câu hỏi thường gửi tối đa 10 dòng đầu của kết quả (với câu không gộp, đó là dòng gốc), tắt bằng `ANSWER_TEXT=false`.
-Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
+Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, viết SQL, điền form cho câu hỏi tìm
+nguyên nhân và viết lời. Nó nhận tên cột và danh sách giá trị của cột phân loại, không nhận bảng dữ liệu. Riêng đoạn trả
+lời ngắn của câu hỏi thường gửi tối đa 10 dòng đầu của kết quả (với câu không gộp, đó là dòng gốc), tắt bằng
+`ANSWER_TEXT=false`. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
 Tài liệu: https://pgiahuy.github.io/xdi-platform/
@@ -59,13 +59,14 @@ Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, gh
 - **Tài khoản và workspace:** mỗi người nhiều workspace; vai `admin` (nạp, xóa dữ liệu, quản lý thành viên) và
   `member` (xem, hỏi); quản trị hệ thống quản lý tài khoản.
 - **Nạp dữ liệu:** CSV (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet. Mỗi lần nạp là một phiên bản. Hồ sơ
-  cột lập lúc nạp; mô hình thêm mô tả cột, bí danh và câu gợi ý, gồm cả câu "vì sao" cần giải thích.
+  cột lập lúc nạp; mô hình thêm mô tả cột, bí danh và câu gợi ý, gồm cả câu hỏi tìm nguyên nhân.
 - **Hỏi theo cuộc trò chuyện:** câu sau hiểu theo các câu trước. Câu hỏi qua guard (một câu `SELECT` chỉ đọc, trên
   bảng, cột, hàm được phép, có trần số dòng) rồi chạy trên DuckDB; lỗi thì mô hình sửa một lần. Kết quả có bảng, biểu
   đồ, tải CSV, thẻ "Đã hiểu là" và cảnh báo khi kết quả đáng ngờ.
-- **Câu "tại sao":** mô hình điền form (đo gì, hai kỳ hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần
-  chênh lệch của từng nhóm (cộng lại bằng đúng chênh lệch). Lời giải thích nói bằng lời thường; mọi số trong lời của
-  mô hình, và chữ "tăng", "giảm" đứng trước mỗi chênh lệch, được kiểm với bảng đã tính, sai thì dùng câu do code viết.
+- **Câu hỏi tìm nguyên nhân** (vì sao một số tăng, giảm hay khác nhau giữa hai nhóm): mô hình điền form (đo gì, hai kỳ
+  hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần chênh lệch của từng nhóm (cộng lại bằng đúng chênh
+  lệch). Lời giải thích nói bằng lời thường; mọi số trong lời của mô hình, và chữ "tăng", "giảm" đứng trước mỗi chênh
+  lệch, được kiểm với bảng đã tính, sai thì dùng câu do code viết.
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
   quả hay bảng phân rã (câu có CTE, HAVING, hàm cửa sổ hay nhiều bảng chưa truy được).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
@@ -75,7 +76,7 @@ Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, gh
 
 - Gán vai dữ liệu cho thành viên: guard đã lọc dòng theo vai dữ liệu, nhưng chưa có API hay màn để đặt.
 - Chế độ demo, màn xem lịch sử câu hỏi, màn sửa hồ sơ cột và định nghĩa chỉ số.
-- Câu "tại sao" theo trung bình mỗi dòng (ví dụ tín chỉ trung bình mỗi sinh viên): form mới có tổng và đếm.
+- Câu hỏi tìm nguyên nhân theo trung bình mỗi dòng (ví dụ tín chỉ trung bình mỗi sinh viên): form mới có tổng và đếm.
 
 Bảng trạng thái chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái). Lịch sử thay đổi:
 [CHANGELOG.md](CHANGELOG.md). Tiến độ: [milestones](https://github.com/pgiahuy/xdi-platform/milestones).
