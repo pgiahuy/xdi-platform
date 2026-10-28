@@ -9,6 +9,8 @@ thường, vì giá trị là điều kiện lọc trên dữ liệu thật và 
 
 Phần độ đo (chỉ số, cột với sum, count) ở explain/measure.rs. */
 
+use std::collections::HashMap;
+
 use sqlparser::ast::Expr;
 
 use crate::engine::store::{MetricDefinition, ProfileColumn, ProfileRole};
@@ -50,6 +52,9 @@ pub struct WhyPlan {
     pub dimensions: Vec<String>,
     /// Cột đếm phân biệt làm lượng (#40); None thì không tách lượng và giá.
     pub volume: Option<String>,
+    /// Tên tiếng Việt của cột (bí danh đầu tiên trong hồ sơ ngữ nghĩa), để lời tóm tắt ghi "Type (cách thanh toán)".
+    /// Cột chưa có bí danh thì không có mục nào.
+    pub labels: HashMap<String, String>,
 }
 
 /// Hai lát cắt.
@@ -111,6 +116,7 @@ pub fn build_why_check(
         table: profile.table.to_string(),
         dimensions: build_dimensions(form, profile, &slices),
         volume: build_volume(profile),
+        labels: build_labels(profile),
         measure,
         slices,
         filters,
@@ -402,6 +408,20 @@ fn build_volume(profile: &WhyProfile) -> Option<String> {
     let repeats =
         matches!((key.distinct_count, profile.row_count), (Some(d), Some(rows)) if d < rows);
     repeats.then(|| key.name.clone())
+}
+
+// Bí danh của hồ sơ ngữ nghĩa là tiếng Việt (luật của prompt lập hồ sơ); bí danh đầu là tên mô hình thấy hợp nhất.
+// Bí danh trùng tên cột (khác hoa thường) thì không thêm gì cho người đọc, nên bỏ.
+fn build_labels(profile: &WhyProfile) -> HashMap<String, String> {
+    profile
+        .columns
+        .iter()
+        .filter_map(|c| {
+            let alias = c.aliases.iter().map(|a| a.trim()).find(|a| !a.is_empty())?;
+            (alias.to_lowercase() != c.name.to_lowercase())
+                .then(|| (c.name.clone(), alias.to_string()))
+        })
+        .collect()
 }
 
 pub(super) fn find_column<'a>(

@@ -15,6 +15,9 @@ góp sẽ lệch chênh lệch. Phép tính tràn khoảng của Decimal trả N
 tính và so với ngưỡng bằng Decimal, để nhóm nằm đúng biên 0.1 hay 0.67 không bị loại; chỉ độ bất ngờ S là f64, vì cần
 logarit và chỉ dùng để so thứ tự, không so với ngưỡng nào. */
 
+pub mod annotate;
+#[cfg(test)]
+mod annotate_tests;
 pub mod breakdown;
 pub mod check;
 #[cfg(test)]
@@ -35,8 +38,13 @@ pub mod run;
 #[cfg(test)]
 mod run_tests;
 pub mod sql;
+pub mod summary;
+#[cfg(test)]
+mod summary_tests;
 #[cfg(test)]
 mod tests;
+
+pub use summary::build_template_summary;
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashSet;
@@ -123,7 +131,7 @@ pub(crate) fn compare_group_values(a: &Option<CellValue>, b: &Option<CellValue>)
     }
 }
 
-fn build_value_text(value: &CellValue) -> String {
+pub(crate) fn build_value_text(value: &CellValue) -> String {
     match value {
         CellValue::Number(number) => number.to_string(),
         CellValue::String(text) => text.clone(),
@@ -431,7 +439,7 @@ pub const MAX_SUMMARY_CHARS: usize = 1000;
 
 /// Giá trị nhóm dài quá thì cắt bớt khi đưa vào câu khuôn, để câu khuôn không vượt MAX_SUMMARY_CHARS và đoạn dữ liệu
 /// dài trong giá trị nhóm không lọt nguyên văn ra giao diện.
-const TEMPLATE_GROUP_CHARS: usize = 80;
+pub(crate) const TEMPLATE_GROUP_CHARS: usize = 80;
 
 // Gửi mô hình hai chiều đầu, mỗi chiều ba nhóm đầu: các nhóm đã xếp theo đóng góp giảm dần nên ba nhóm đầu là phần
 // đáng kể; gửi cả bảng thì prompt dài mà phần đuôi gần như không đổi.
@@ -446,9 +454,8 @@ const NARRATE_GROUPS: usize = 3;
 pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String {
     let digits = build_fraction_digits(explanation);
     let comparison = explanation.comparison;
-    let dimensions: Vec<serde_json::Value> = explanation
-        .dimensions
-        .iter()
+    let dimensions: Vec<serde_json::Value> = build_narrate_dimensions(explanation)
+        .into_iter()
         .take(NARRATE_DIMENSIONS)
         .map(|dimension| {
             let groups: Vec<serde_json::Value> = dimension
@@ -512,6 +519,7 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
         })),
         "dimensions": dimensions,
         "volume_price": volume_price,
+        "points": build_points_json(explanation),
     });
     let ratio = explanation.measure_kind == MeasureKind::Ratio;
     if ratio {
@@ -531,13 +539,17 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
         "The breakdown below was computed from the data; every number in it is exact. Explain it in Vietnamese to \
          the user who asked the question, a business user who does not know statistics.\n\
          Rules:\n\
-         - Vietnamese, at most three sentences, at most {MAX_SUMMARY_CHARS} characters.\n\
-         - Sentence one: what is compared and the gap, with both values (\"Doanh thu Quý 3/2017 tăng 5.107,10 so với \
-         Quý 2/2017, từ 15.602,19 lên 20.709,29\").\n\
-         - Sentence two: \"main_group\" only, said as what happened inside that group (\"Riêng nhóm Fishing, doanh \
-         thu tăng 4.231,78\"). Never use the words \"đóng góp\", \"chiều\" or \"phân rã\".\n\
-         - A third sentence only when it adds something: a group that moved the other way, or the volume and price \
-         split. Do not list more groups.\n\
+         - Vietnamese, two or three short sentences, at most {MAX_SUMMARY_CHARS} characters. The reader sees the \
+         numbers and the points right below your text, so do not repeat them: tell in plain words what happened and \
+         what drove it, the way an analyst would say it to a manager, in the shape \"<measure> <what happened> chủ \
+         yếu nhờ <the groups that drove it>; <a group that went the other way> kéo lại một phần\", every <...> \
+         replaced with names from \"points\" (leave out the second half when no group went the other way).\n\
+         - \"points\" is what the code found, already checked against the data: the main answer first, then each \
+         point with its lead. Use only what is in \"points\" and \"main_group\", most important first; never copy \
+         a point word for word. Mention at most three numbers, copied exactly; names and direction words as \
+         written. Never use the words \"đóng góp\", \"chiều\" or \"phân rã\".\n\
+         - Never add a cause, a reason or a group that is not in \"points\": a column that splits the two slices \
+         (for example a payment type found only on one side) is not a cause.\n\
          - \"comparison\" tells what the two slices are. \"periods\": two periods, the change is over time. \
          \"groups\": two groups at the same time, not two periods: never call them periods, never say \"tăng\" or \
          \"giảm\" between them, never write \"từ ... lên\" or \"từ ... xuống\"; use the direction words given \
@@ -546,7 +558,7 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          - Numbers in the JSON are written the Vietnamese way: a dot between groups of thousands and a comma before \
          the decimals, such as 1.152.666,24. Copy every number exactly as it appears, separators and decimal digits \
          included: never round, never add or remove digits, never change the separators, never compute a new number \
-         such as a percentage, never write a number in words.\n\
+         such as a percentage (percentages already in \"points\" may be copied), never write a number in words.\n\
          - A change is given as a direction (tăng, giảm, không đổi, or cao hơn, thấp hơn, bằng) and an amount \
          without sign: write the direction word before the amount, such as \"giảm 1.152.666,24\", and never write a \
          minus sign before a number.\n\
@@ -562,7 +574,7 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
 
 // Chữ chiều theo kiểu so sánh: giữa hai nhóm không có trước sau, nên "tăng" thành "cao hơn", "giảm" thành "thấp hơn",
 // "không đổi" thành "bằng". Câu khuôn, prompt narrate và bước kiểm số cùng dùng chữ này.
-fn build_direction_word(word: &'static str, comparison: Comparison) -> &'static str {
+pub(crate) fn build_direction_word(word: &'static str, comparison: Comparison) -> &'static str {
     match (comparison, word) {
         (Comparison::Groups, "tăng") => "cao hơn",
         (Comparison::Groups, "giảm") => "thấp hơn",
@@ -608,6 +620,11 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
     allow_number(&mut allowed, &explanation.change, digits);
     allow_number(&mut allowed, &explanation.base.value, digits);
     allow_number(&mut allowed, &explanation.compare.value, digits);
+    allow_number(&mut allowed, &explanation.base.rows, 0);
+    allow_number(&mut allowed, &explanation.compare.rows, 0);
+    if let Some(percent) = &explanation.percent_change {
+        allow_percent(&mut allowed, percent);
+    }
     for dimension in &explanation.dimensions {
         for text in dimension.mix_effect.iter().chain(&dimension.rate_effect) {
             allow_number(&mut allowed, text, digits);
@@ -624,6 +641,13 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
                 if !has_letter(&text) {
                     allow_text(&mut allowed, &text);
                 }
+            }
+        }
+    }
+    for dimension in &explanation.notes.dimensions {
+        for group in &dimension.groups {
+            for percent in group.share_of_change.iter().chain(&group.percent_change) {
+                allow_percent(&mut allowed, percent);
             }
         }
     }
@@ -655,7 +679,7 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
 
 /// Số chữ số lẻ khi viết số của bảng thành chữ: tỷ lệ giữ đủ RATE_SCALE chữ số, độ đo khác hai chữ số như bảng kết
 /// quả. Prompt, tập số được phép và câu khuôn cùng dùng, nên số mô hình chép từ prompt khớp chuỗi bước kiểm chờ.
-fn build_fraction_digits(explanation: &Explanation) -> u32 {
+pub(crate) fn build_fraction_digits(explanation: &Explanation) -> u32 {
     match explanation.measure_kind {
         MeasureKind::Ratio => ratio::RATE_SCALE,
         MeasureKind::Total => MAX_FRACTION_DIGITS,
@@ -669,6 +693,13 @@ pub fn has_letter(text: &str) -> bool {
 
 // Một chuỗi số của bảng, viết như prompt gửi: thêm chuỗi đó và trị tuyệt đối (bỏ dấu trừ đứng trước). So nguyên văn,
 // không chuẩn hóa: "1.283.400" và "1.283.400,00" là hai số khác nhau, và cách viết thô "1283400.00" không nhận.
+// Phần trăm do annotate.rs tính (% thay đổi, % tác động) là số được phép kèm dấu %: lưu thành "%41,5" để bước kiểm
+// phân biệt với "41,5" đứng một mình. Phần trăm mô hình tự tính thì không có trong tập này nên vẫn bị loại.
+fn allow_percent(allowed: &mut HashSet<String>, text: &str) {
+    let text = build_number_text_with(text, 1);
+    allowed.insert(format!("%{}", text.trim_start_matches('-')));
+}
+
 fn allow_number(allowed: &mut HashSet<String>, text: &str, digits: u32) {
     let text = build_number_text_with(text, digits);
     if let Some(abs) = text.strip_prefix('-') {
@@ -683,6 +714,16 @@ fn build_change_json(text: &str, digits: u32, comparison: Comparison) -> serde_j
     let (direction, amount) = build_change_parts(text, digits);
     let direction = direction.map(|word| build_direction_word(word, comparison));
     serde_json::json!({ "direction": direction, "amount": amount })
+}
+
+// Các ý của lời tóm tắt do code viết (explain/summary.rs), gửi để mô hình chỉ diễn đạt lại.
+fn build_points_json(explanation: &Explanation) -> serde_json::Value {
+    let (title, points) = summary::build_summary_parts(explanation);
+    let points: Vec<String> = points
+        .iter()
+        .map(|p| format!("{}: {}", p.lead, p.text))
+        .collect();
+    serde_json::json!({ "main": title, "points": points })
 }
 
 fn comparison_name(comparison: Comparison) -> &'static str {
@@ -711,8 +752,18 @@ pub fn build_known_texts(explanation: &Explanation) -> Vec<String> {
     push_known_text(&mut texts, &explanation.measure);
     push_known_text(&mut texts, &explanation.base.label);
     push_known_text(&mut texts, &explanation.compare.label);
+    for text in explanation
+        .slice_column
+        .iter()
+        .chain(&explanation.slice_column_label)
+    {
+        push_known_text(&mut texts, text);
+    }
     for dimension in &explanation.dimensions {
         push_known_text(&mut texts, &dimension.column);
+        if let Some(label) = &dimension.label {
+            push_known_text(&mut texts, label);
+        }
         for group in &dimension.groups {
             if let Some(value) = &group.value {
                 push_known_text(&mut texts, &build_value_text(value));
@@ -780,6 +831,13 @@ pub fn build_text_number_check(
             if number.end == end && number.derived && !wrong.contains(&number.text) {
                 wrong.push(number.text);
             }
+            continue;
+        }
+        // Chỉ "%" theo sau mới là phần trăm code đã tính; "gấp 3", "3 lần" vẫn là tỷ lệ mô hình tự nghĩ ra.
+        let is_percent = summary[number.end..].trim_start().starts_with(['%', '％']);
+        let allowed_percent =
+            number.derived && is_percent && allowed.contains(&format!("%{}", number.text));
+        if allowed_percent {
             continue;
         }
         if (number.derived || !allowed.contains(&number.text)) && !wrong.contains(&number.text) {
@@ -928,120 +986,9 @@ fn preceded_by_ratio(text: &str, start: usize) -> bool {
         .is_some_and(|head| !head.chars().last().is_some_and(char::is_alphanumeric))
 }
 
-/// Câu khuôn thay cho lời của mô hình khi mô hình lỗi, quá giờ, trả câu không dùng được, hoặc không cần gọi
-/// (chênh lệch bằng 0). Mọi số lấy từ bảng phân rã, viết kiểu Việt Nam như prompt (explain/number.rs), còn nhãn và giá trị nhóm được build_number_check
-/// miễn khi xuất hiện nguyên văn, nên câu khuôn thường qua được bước kiểm (test ở ask/narrate_tests.rs, theo tiêu chí
-/// của #41). Ngoại lệ: giá trị nhóm tự chứa số kèm chữ tỷ lệ ("10%", "Hàng gấp 3", "Giao 2 lần") hay bị cắt ngắn thì
-/// không được miễn; câu khuôn không đi qua bước kiểm lúc chạy nên người dùng vẫn thấy câu này.
-/// change không đọc được thì viết câu tối thiểu, trung tính, không đoán chiều.
-pub fn build_template_summary(explanation: &Explanation) -> String {
-    let digits = build_fraction_digits(explanation);
-    let comparison = explanation.comparison;
-    let change = explanation.change.parse::<Decimal>().ok();
-    let (measure, base, compare) = (
-        &explanation.measure,
-        &explanation.base,
-        &explanation.compare,
-    );
-    let (base_value, compare_value) = (
-        build_number_text_with(&base.value, digits),
-        build_number_text_with(&compare.value, digits),
-    );
-    // Câu đầu: so cái gì với cái gì, chênh bao nhiêu, kèm hai giá trị. Hai kỳ đọc "từ ... lên ...", hai nhóm không có
-    // trước sau nên đọc "... so với ...".
-    let mut text = match (change, comparison) {
-        (Some(change), Comparison::Periods) if change.is_zero() => format!(
-            "{measure} {} không đổi so với {}: {compare_value}.",
-            compare.label, base.label
-        ),
-        (Some(change), Comparison::Groups) if change.is_zero() => format!(
-            "{measure} của {} bằng {}: {compare_value}.",
-            compare.label, base.label
-        ),
-        (Some(change), Comparison::Periods) => {
-            let towards = if change < Decimal::ZERO {
-                "xuống"
-            } else {
-                "lên"
-            };
-            format!(
-                "{measure} {} {} so với {}, từ {base_value} {towards} {compare_value}.",
-                compare.label,
-                build_direction_text(&explanation.change, digits, comparison),
-                base.label
-            )
-        }
-        (Some(_), Comparison::Groups) => format!(
-            "{measure} của {} {} ({compare_value} so với {base_value}).",
-            compare.label,
-            between(
-                &build_direction_text(&explanation.change, digits, comparison),
-                &base.label
-            )
-        ),
-        (None, _) => format!(
-            "{measure} {} là {compare_value}, so với {base_value} ở {}.",
-            compare.label, base.label
-        ),
-    };
-    // Các nhóm đã xếp theo trị tuyệt đối của đóng góp, nên nhóm đầu có thể ngược chiều với change (chiều tổng giảm
-    // nhưng nhóm biến động mạnh nhất lại tăng). Chọn nhóm lớn nhất cùng chiều với change để câu thứ hai không nói
-    // ngược chiều biến động; một chiều luôn có nhóm cùng chiều vì các nhóm cộng lại bằng change.
-    if let Some(change) = change {
-        if let Some(dimension) = explanation.dimensions.first() {
-            let top = dimension
-                .groups
-                .iter()
-                .find(|group| same_direction(&group.contribution, change));
-            if let (Some(mix), Some(rate)) = (&dimension.mix_effect, &dimension.rate_effect) {
-                text.push_str(&format!(
-                    " Theo {}, phần do cơ cấu (tỷ trọng các nhóm đổi) {}, phần do tỷ lệ trong từng nhóm {}.",
-                    dimension.column,
-                    build_direction_text(mix, digits, comparison),
-                    build_direction_text(rate, digits, comparison)
-                ));
-            }
-            if let Some(top) = top {
-                let group = top
-                    .value
-                    .as_ref()
-                    .map(build_value_text)
-                    .unwrap_or_else(|| "giá trị trống".to_string());
-                let group = truncate_text(&group, TEMPLATE_GROUP_CHARS);
-                let amount = build_direction_text(&top.contribution, digits, comparison);
-                // Nói điều đã xảy ra trong nhóm đó thay cho chữ "đóng góp": người đọc không cần biết phân rã là gì.
-                text.push_str(&match comparison {
-                    Comparison::Periods => format!(
-                        " Theo {}, nhóm {group} góp nhiều nhất: riêng nhóm này {} {amount}.",
-                        dimension.column,
-                        lower_first(measure)
-                    ),
-                    Comparison::Groups => format!(
-                        " Theo {}, chênh lệch lớn nhất ở nhóm {group}: ở nhóm này {} {}.",
-                        dimension.column,
-                        compare.label,
-                        between(&amount, &base.label)
-                    ),
-                });
-            }
-        }
-    }
-    if let Some(split) = &explanation.volume_price {
-        text.push_str(&format!(
-            " Nếu {} giữ nguyên như {}, {} {} là {}.",
-            lower_first(&split.volume_label),
-            base.label,
-            lower_first(measure),
-            compare.label,
-            build_number_text_with(&split.if_volume_unchanged, digits)
-        ));
-    }
-    truncate_text(&text, MAX_SUMMARY_CHARS)
-}
-
 // "cao hơn 85.185" thành "cao hơn Pass 85.185": tên nhóm gốc đứng giữa chữ chiều và số, như cách nói thường. "bằng"
 // không có số đi kèm thì thành "bằng Pass".
-fn between(amount: &str, base: &str) -> String {
+pub(crate) fn between(amount: &str, base: &str) -> String {
     for word in ["cao hơn", "thấp hơn"] {
         if let Some(number) = amount.strip_prefix(word) {
             return format!("{word} {base}{number}");
@@ -1130,16 +1077,27 @@ fn last_direction_word(before: &str) -> Option<&'static str> {
     }
 }
 
-/// Nhóm nói ở câu thứ hai: trong chiều đầu, nhóm có đóng góp lớn nhất cùng chiều với chênh lệch. Câu khuôn và prompt
+/// Nhóm nói ở câu thứ hai: trong chiều đầu mà lời tóm tắt dùng, nhóm có đóng góp lớn nhất cùng chiều với chênh lệch. Câu khuôn và prompt
 /// narrate cùng dùng, để mô hình không tự chọn nhóm ngược chiều rồi kể như nguyên nhân chính.
 fn find_main_group(explanation: &Explanation) -> Option<(&DimensionBreakdown, &GroupContribution)> {
     let change = explanation.change.parse::<Decimal>().ok()?;
-    let dimension = explanation.dimensions.first()?;
+    let dimension = *build_narrate_dimensions(explanation).first()?;
     let group = dimension
         .groups
         .iter()
         .find(|group| same_direction(&group.contribution, change))?;
     Some((dimension, group))
+}
+
+// Chiều gửi cho mô hình, theo ghi chú của annotate.rs: chiều có nhóm khác thường trước, không có chiều lời tóm tắt bỏ
+// qua. Gửi chiều tách hẳn hai lát cắt (Type khi so COMPLETE với CANCELED) thì mô hình dễ kể nó như nguyên nhân.
+fn build_narrate_dimensions(explanation: &Explanation) -> Vec<&DimensionBreakdown> {
+    explanation
+        .notes
+        .dimensions
+        .iter()
+        .filter_map(|notes| explanation.dimensions.get(notes.index))
+        .collect()
 }
 
 // Cùng chiều: cùng dấu, hoặc cùng bằng 0. contribution không đọc được coi như khác chiều.
@@ -1152,7 +1110,7 @@ fn same_direction(contribution: &str, change: Decimal) -> bool {
 
 // Hạ chữ đầu khi một nhãn đứng giữa câu ("Số đơn" thành "số đơn"), để câu ghép đọc tự nhiên. Từ viết tắt toàn hoa
 // ("GMV") giữ nguyên: chỉ hạ khi ký tự thứ hai không phải chữ hoa.
-fn lower_first(text: &str) -> String {
+pub(crate) fn lower_first(text: &str) -> String {
     let mut chars = text.chars();
     let Some(first) = chars.next() else {
         return String::new();
@@ -1166,7 +1124,7 @@ fn lower_first(text: &str) -> String {
 // Cắt còn tối đa max ký tự, thêm "…" khi phải cắt. Lùi về khoảng trắng cuối trước mức cắt để không cắt ngang một số
 // hay một từ (một dãy chữ số không chứa khoảng trắng); chỉ khi không có khoảng trắng nào (một từ dài liền) mới cắt
 // cứng.
-fn truncate_text(text: &str, max: usize) -> String {
+pub(crate) fn truncate_text(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
     }

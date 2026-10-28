@@ -19,6 +19,7 @@ use crate::service::ask::contract::{
 };
 use crate::service::ask::examples::build_why_example;
 use crate::service::ask::narrate::narrate;
+use crate::service::explain::annotate::{annotate_dimensions, build_value_presences, Totals};
 use crate::service::explain::build_direction_text;
 use crate::service::explain::number::{build_number_text, MAX_FRACTION_DIGITS};
 use crate::service::explain::{
@@ -44,23 +45,30 @@ fn small_explanation(
     change: &str,
     groups: &[(Option<&str>, &str)],
 ) -> Explanation {
-    Explanation {
+    let mut explanation = Explanation {
         measure: "Doanh thu".to_string(),
         measure_kind: MeasureKind::Total,
         comparison: Comparison::Periods,
+        counts_rows: false,
+        slice_column: None,
+        slice_column_label: None,
         base: ExplanationSlice {
             label: "Quý 2/2017".to_string(),
             filter: String::new(),
             value: base_value.to_string(),
+            rows: "0".to_string(),
         },
         compare: ExplanationSlice {
             label: "Quý 3/2017".to_string(),
             filter: String::new(),
             value: compare_value.to_string(),
+            rows: "0".to_string(),
         },
         change: change.to_string(),
+        percent_change: None,
         dimensions: vec![DimensionBreakdown {
             column: "Market".to_string(),
+            label: None,
             kind: ValueKind::Text,
             sql: String::new(),
             groups: groups
@@ -79,8 +87,36 @@ fn small_explanation(
         }],
         volume_price: None,
         summary: String::new(),
+        summary_title: String::new(),
+        summary_points: Vec::new(),
         summary_by_model: false,
-    }
+        notes: Default::default(),
+    };
+    apply_notes(&mut explanation);
+    explanation
+}
+
+/// Ghi chú cho lời tóm tắt, tính lại từ bảng phân rã như bước explain; test sửa bảng thì gọi lại. Số không đọc được
+/// thì để ghi chú rỗng, như Explanation không có phân rã.
+fn apply_notes(explanation: &mut Explanation) {
+    let (Ok(base), Ok(compare), Ok(change)) = (
+        explanation.base.value.parse(),
+        explanation.compare.value.parse(),
+        explanation.change.parse(),
+    ) else {
+        return;
+    };
+    let totals = Totals {
+        base,
+        compare,
+        change,
+    };
+    let presences: Vec<_> = explanation
+        .dimensions
+        .iter()
+        .map(build_value_presences)
+        .collect();
+    explanation.notes = annotate_dimensions(&explanation.dimensions, &presences, totals);
 }
 
 /// Mô hình giả: trả câu viết sẵn hoặc một lỗi viết sẵn.
@@ -170,9 +206,12 @@ fn template_works_without_dimensions_and_volume_price() {
     explanation.dimensions = vec![];
     explanation.volume_price = None;
     let template = build_template_summary(&explanation);
+    // Không còn chiều nào, nhưng số dòng hai bên vẫn cho biết chênh lệch đến từ đâu.
     assert_eq!(
         template,
-        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00."
+        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Lý do chính: \
+         số dòng dữ liệu hai bên khác nhau: Quý 2/2017 có 6.200 dòng, Quý 3/2017 có 5.480 dòng, còn trung bình mỗi \
+         dòng hai bên gần như nhau."
     );
     check(&template, &explanation).unwrap();
 }
@@ -208,11 +247,13 @@ fn wrong_numbers_are_rejected() {
 #[test]
 fn ratios_are_always_rejected() {
     let explanation = example();
+    // 8% không phải phần trăm code đã tính cho mẫu; 3% thì có (phần của Africa), nhưng "gấp 3", "3x", "3 phần trăm"
+    // vẫn bị loại vì chỉ phần trăm viết bằng dấu % mới được đối chiếu với phần trăm đã tính.
     for bad in [
-        "Doanh thu giảm 3% so với quý 2/2017.",
-        "Doanh thu giảm 3 % so với quý 2/2017.",
-        "Doanh thu giảm 3\u{a0}% so với quý 2/2017.",
-        "Doanh thu giảm 3％ so với quý 2/2017.",
+        "Doanh thu giảm 8% so với quý 2/2017.",
+        "Doanh thu giảm 8 % so với quý 2/2017.",
+        "Doanh thu giảm 8\u{a0}% so với quý 2/2017.",
+        "Doanh thu giảm 8％ so với quý 2/2017.",
         "Doanh thu giảm 3‰ so với quý 2/2017.",
         "Doanh thu giảm 3 phần trăm so với quý 2/2017.",
         "Doanh thu giảm 3 phần\u{a0}trăm so với quý 2/2017.",
@@ -382,7 +423,7 @@ fn template_names_a_group_in_the_same_direction_as_the_change() {
     );
     let template = build_template_summary(&explanation);
     assert!(
-        template.contains("nhóm B góp nhiều nhất: riêng nhóm này doanh thu giảm 400,00"),
+        template.contains("Nhóm góp nhiều nhất: theo Market, riêng nhóm B, doanh thu giảm 400,00."),
         "{template}"
     );
     assert!(!template.contains("nhóm A"), "{template}");
@@ -408,8 +449,7 @@ fn template_compares_two_groups_without_time_words() {
         "{template}"
     );
     assert!(
-        template
-            .contains("chênh lệch lớn nhất ở nhóm B: ở nhóm này Withdrawn thấp hơn Pass 400,00"),
+        template.contains("theo Market, ở nhóm B, Withdrawn thấp hơn Pass 400,00."),
         "{template}"
     );
     for word in ["tăng", "giảm", " lên ", " xuống "] {
@@ -583,14 +623,15 @@ async fn empty_or_too_long_reply_falls_back_to_the_template() {
 async fn wrong_numbers_fall_back_to_the_template() {
     let explanation = example();
     let llm = StubLlm {
-        reply: Reply::Text("Doanh thu quý 3/2017 giảm 13,6% so với quý 2/2017.".to_string()),
+        // 13,6% là % thay đổi code đã tính nên được phép; 14% thì mô hình tự làm tròn, không có trong bảng.
+        reply: Reply::Text("Doanh thu quý 3/2017 giảm 14% so với quý 2/2017.".to_string()),
     };
     let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
     assert_eq!(outcome.summary, build_template_summary(&explanation));
     assert!(!outcome.summary_by_model);
     assert!(!outcome.step.ok);
     let detail = outcome.step.detail.expect("detail");
-    assert!(detail.contains("13"), "{detail}");
+    assert!(detail.contains("14"), "{detail}");
 }
 
 /// Chênh lệch bằng 0: không gọi mô hình, câu khuôn nói "không đổi", bước narrate vẫn ok kèm detail nói lý do.

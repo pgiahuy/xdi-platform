@@ -382,15 +382,18 @@
       "base": {
         "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01'",
         "label": "Quý 2/2017",
+        "rows": "6200",
         "value": "9402500.00"
       },
       "change": "-1283400.00",
       "compare": {
         "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01'",
         "label": "Quý 3/2017",
+        "rows": "5480",
         "value": "8119100.00"
       },
       "comparison": "periods",
+      "counts_rows": false,
       "dimensions": [
         {
           "column": "Market",
@@ -437,6 +440,7 @@
             }
           ],
           "kind": "text",
+          "label": "thị trường",
           "mix_effect": null,
           "rate_effect": null,
           "sql": "SELECT \"Market\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Market\" LIMIT 100000"
@@ -470,6 +474,7 @@
             }
           ],
           "kind": "text",
+          "label": "phân khúc khách hàng",
           "mix_effect": null,
           "rate_effect": null,
           "sql": "SELECT \"Customer Segment\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Customer Segment\" LIMIT 100000"
@@ -477,8 +482,24 @@
       ],
       "measure": "Doanh thu",
       "measure_kind": "total",
+      "percent_change": "-13.6",
+      "slice_column": null,
+      "slice_column_label": null,
       "summary": "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9.226.250,00.",
       "summary_by_model": true,
+      "summary_points": [
+        {
+          "kind": "reason",
+          "lead": "Lý do chính",
+          "text": "chủ yếu do số đơn: Quý 2/2017 có 5.000, Quý 3/2017 có 4.400. Phần do số đơn giảm 1.117.725,00, phần do giá trị đơn trung bình giảm 165.675,00. Nếu số đơn giữ nguyên như Quý 2/2017, doanh thu Quý 3/2017 là 9.226.250,00."
+        },
+        {
+          "kind": "even",
+          "lead": "Không có nơi nào đặc biệt",
+          "text": "theo Market (thị trường) và Customer Segment (phân khúc khách hàng), không nhóm nào lệch hẳn mức chung (giảm 13,6%). Chênh lệch lớn nhất ở Europe và LATAM chỉ vì đây là những nhóm có doanh thu lớn nhất."
+        }
+      ],
+      "summary_title": "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00.",
       "volume_price": {
         "base_price": "1880.50",
         "base_volume": "5000",

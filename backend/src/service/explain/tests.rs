@@ -30,6 +30,7 @@ fn ranked(
     RankedDimension {
         breakdown: DimensionBreakdown {
             column: column.to_string(),
+            label: None,
             kind: ValueKind::Text,
             sql: String::new(),
             groups: build_group_contributions(groups).expect("contributions"),

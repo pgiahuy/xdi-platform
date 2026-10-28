@@ -9,10 +9,15 @@ Mẫu dựng bằng code từ chính các struct; ask/examples_tests.rs báo khi
 Số liệu là số minh họa, không tính từ dữ liệu thật; thời gian các bước cũng vậy, không phải số đo. Các số trong phân
 rã được chọn để cộng khớp đúng như #39 và #40 đòi hỏi (test kiểm). */
 
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::service::ask::contract::*;
 use crate::service::ask::run::REFUSED_MESSAGE;
+use crate::service::explain::annotate::{
+    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
+};
+use crate::service::explain::summary::apply_summary_parts;
 
 const MODEL: &str = "gemini-2.5-flash";
 const CONVERSATION_ID: Uuid = Uuid::from_u128(0x7d4a2e91_3b6c_4f10_a5d8_6e2c1b0f9a01);
@@ -218,24 +223,31 @@ fn build_why_explanation() -> Explanation {
     let volume_sql = format!(
         r#"SELECT COUNT(DISTINCT CASE WHEN {base} THEN "Order Id" END) AS base_volume, COUNT(DISTINCT CASE WHEN {compare} THEN "Order Id" END) AS compare_volume, {both_slices} FROM dataco WHERE {period}{GUARD_LIMIT}"#
     );
-    Explanation {
+    let mut explanation = Explanation {
         measure: "Doanh thu".to_string(),
         measure_kind: MeasureKind::Total,
         comparison: Comparison::Periods,
+        counts_rows: false,
+        slice_column: None,
+        slice_column_label: None,
         base: ExplanationSlice {
             label: "Quý 2/2017".to_string(),
             filter: base,
             value: "9402500.00".to_string(),
+            rows: "6200".to_string(),
         },
         compare: ExplanationSlice {
             label: "Quý 3/2017".to_string(),
             filter: compare,
             value: "8119100.00".to_string(),
+            rows: "5480".to_string(),
         },
         change: "-1283400.00".to_string(),
+        percent_change: None,
         dimensions: vec![
             build_breakdown(
                 "Market",
+                Some("thị trường"),
                 by("Market"),
                 &[
                     ("Europe", "2850120.40", "2210340.15", "-639780.25"),
@@ -247,6 +259,7 @@ fn build_why_explanation() -> Explanation {
             ),
             build_breakdown(
                 "Customer Segment",
+                Some("phân khúc khách hàng"),
                 by("Customer Segment"),
                 &[
                     ("Consumer", "4880200.15", "4150100.50", "-730099.65"),
@@ -273,8 +286,26 @@ fn build_why_explanation() -> Explanation {
                   giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý \
                   3/2017 là 9.226.250,00."
             .to_string(),
+        summary_title: String::new(),
+        summary_points: Vec::new(),
         summary_by_model: true,
-    }
+        notes: Default::default(),
+    };
+    // % thay đổi, ghi chú và các ý tóm tắt tính bằng đúng hàm của bước explain, để mẫu khớp response thật.
+    let totals = Totals {
+        base: Decimal::new(940250000, 2),
+        compare: Decimal::new(811910000, 2),
+        change: Decimal::new(-128340000, 2),
+    };
+    let presences: Vec<_> = explanation
+        .dimensions
+        .iter()
+        .map(build_value_presences)
+        .collect();
+    explanation.percent_change = build_percent_change(totals).map(build_percent_text);
+    explanation.notes = annotate_dimensions(&explanation.dimensions, &presences, totals);
+    apply_summary_parts(&mut explanation);
+    explanation
 }
 
 /// "Doanh thu theo khu vực": "khu vực" khớp hai cột, nên hỏi lại trước khi gọi mô hình.
@@ -410,11 +441,13 @@ fn build_revenue_choice() -> Choice {
 
 fn build_breakdown(
     column: &str,
+    label: Option<&str>,
     sql: String,
     groups: &[(&str, &str, &str, &str)],
 ) -> DimensionBreakdown {
     DimensionBreakdown {
         column: column.to_string(),
+        label: label.map(str::to_string),
         kind: ValueKind::Text,
         sql,
         groups: groups

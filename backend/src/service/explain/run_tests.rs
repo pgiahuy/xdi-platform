@@ -33,11 +33,11 @@ use crate::service::ask::examples::build_why_example;
 use crate::service::ask::prompt::PromptInput;
 use crate::service::ask::values::ValueIndex;
 use crate::service::ask::view::{build_answer_view, AnswerView, RanQuery};
-use crate::service::explain::build_number_check;
 use crate::service::explain::check_tests::{
     dataco_columns, dataco_values, metric, quarter_form, revenue, DATE, TABLE,
 };
 use crate::service::explain::run::{run_why, WhyInput, WhyOutcome};
+use crate::service::explain::{build_number_check, build_template_summary};
 
 const QUARTER_QUESTION: &str = "Tại sao doanh thu quý 3 năm 2017 giảm";
 
@@ -477,6 +477,33 @@ async fn two_groups_are_compared() {
     assert_eq!(columns, ["Customer Segment"]);
     assert_eq!(outcome.result.unwrap().total_rows, 2);
     assert!(outcome.assumptions.iter().all(|c| c.id != "why:base"));
+}
+
+/// Hết đường câu "tại sao" (#186): Explanation có số dòng hai lát cắt, % thay đổi chung, % của từng nhóm, cột của hai
+/// nhóm, và câu chính cùng các ý do code viết; so hai nhóm thì summary chính là lời đó và qua bước kiểm số.
+#[tokio::test]
+async fn two_groups_get_a_plain_summary_from_the_code() {
+    let data = Dataco::new();
+    let outcome = data
+        .ask(&Mock::new(), "Tại sao doanh thu Europe thấp hơn LATAM", &[])
+        .await;
+    let explanation = outcome.explanation.unwrap();
+    assert_eq!(explanation.slice_column.as_deref(), Some("Market"));
+    assert!(explanation.base.rows.parse::<i64>().unwrap() > 0);
+    assert!(explanation.compare.rows.parse::<i64>().unwrap() > 0);
+    assert!(explanation.percent_change.is_some());
+    let segments = &explanation.notes.dimensions[0];
+    assert!(segments.groups.iter().all(|g| g.share_of_change.is_some()));
+    assert!(
+        explanation
+            .summary_title
+            .starts_with("Doanh thu của Market Europe cao hơn LATAM"),
+        "{}",
+        explanation.summary_title
+    );
+    assert!(!explanation.summary_points.is_empty());
+    assert_eq!(explanation.summary, build_template_summary(&explanation));
+    build_number_check(&explanation.summary, &explanation).unwrap();
 }
 
 /// Bộ lọc dòng theo vai dữ liệu của người hỏi nằm trong mọi câu, cả câu phân rã: người chỉ thấy Europe được phân rã

@@ -818,6 +818,8 @@ export interface components {
             groups: components["schemas"]["GroupContribution"][];
             /** @description How to read the group values, like the `kind` of a result column. */
             kind: components["schemas"]["ValueKind"];
+            /** @description Vietnamese name of the column from the column profile; null when the profile has none. */
+            label: string | null;
             /** @description Ratio measures only: sum of `mix_effect` of every group; `mix_effect + rate_effect` is `change`. */
             mix_effect: string | null;
             /** @description Ratio measures only: sum of `rate_effect` of every group. */
@@ -903,12 +905,20 @@ export interface components {
              *     lower between two groups.
              */
             comparison: components["schemas"]["Comparison"];
+            /** @description True when the measure counts rows (a count, not a sum): the measure is then itself the size of each slice. */
+            counts_rows: boolean;
             /** @description One breakdown per dimension, the dimension that explains the change best first. */
             dimensions: components["schemas"]["DimensionBreakdown"][];
             /** @description Measure that changed, text for the end user (Vietnamese). */
             measure: string;
             /** @description How the measure adds up over groups, which decides how to read the numbers below. */
             measure_kind: components["schemas"]["MeasureKind"];
+            /** @description `change / base.value * 100`, rounded to one decimal; null when `base.value` is zero or negative. */
+            percent_change: string | null;
+            /** @description Column whose two values are compared, for `groups`; null for `periods`. */
+            slice_column: string | null;
+            /** @description Vietnamese name of `slice_column` from the column profile; null when the profile has none. */
+            slice_column_label: string | null;
             /** @description Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown. */
             summary: string;
             /**
@@ -916,6 +926,13 @@ export interface components {
              *     sentence written by the backend.
              */
             summary_by_model: boolean;
+            /**
+             * @description Points under the main answer, written by the backend from the numbers above; each is said only when the numbers
+             *     support it.
+             */
+            summary_points: components["schemas"]["SummaryPoint"][];
+            /** @description Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese). */
+            summary_title: string;
             volume_price: components["schemas"]["VolumePrice"] | null;
         };
         /** @description One of the two slices. */
@@ -924,6 +941,8 @@ export interface components {
             filter: string;
             /** @description Text for the end user (Vietnamese) naming the slice, for example a quarter. */
             label: string;
+            /** @description Number of rows of the slice. */
+            rows: string;
             /** @description Value of the measure on the slice. */
             value: string;
         };
@@ -1079,6 +1098,26 @@ export interface components {
          * @enum {string}
          */
         StepName: "context" | "llm" | "guard" | "run" | "repair" | "explain" | "narrate" | "record";
+        /** @description One point of the summary: a short lead (shown in bold) and the sentence after it. */
+        SummaryPoint: {
+            kind: components["schemas"]["SummaryPointKind"];
+            /** @description Lead of the point (Vietnamese), for example "Lý do chính". */
+            lead: string;
+            /** @description Rest of the point (Vietnamese). */
+            text: string;
+        };
+        /**
+         * @description - `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the
+         *       rate).
+         *     - `outliers`: groups that changed much more or much less than the whole, or exist on one side only.
+         *     - `even`: no group stands out; the largest contributions are the largest groups.
+         *     - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow
+         *       comparing groups with the whole (a base slice of zero or less, or a change too close to zero).
+         *     - `against`: a group that moved the other way.
+         *     - `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.
+         * @enum {string}
+         */
+        SummaryPointKind: "reason" | "outliers" | "even" | "largest" | "against" | "dropped";
         /** @description One recorded question of a conversation. Questions waiting for a choice (`needs_choice`) are not recorded. */
         TurnItem: {
             /** Format: date-time */

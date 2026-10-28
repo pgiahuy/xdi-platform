@@ -53,6 +53,7 @@ use crate::service::explain::latest::{apply_latest, find_latest, LatestPeriod, C
 use crate::service::explain::plain::run_plain;
 use crate::service::explain::premise::{build_premise_labels, build_premise_warning};
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
+use crate::service::explain::summary::apply_summary_parts;
 
 /// Lời cho needs_choice, như mẫu needs_choice của ask/examples.rs.
 const NEEDS_CHOICE_MESSAGE: &str = "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.";
@@ -341,6 +342,7 @@ async fn run_plan(
         columns.join(", ")
     );
     steps.push(build_step(StepName::Explain, started, true, Some(&detail)));
+    apply_summary_parts(&mut explanation);
     let narrated = narrate(
         llm,
         input.prompt.question,

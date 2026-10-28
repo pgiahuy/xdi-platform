@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::service::explain::annotate::BreakdownNotes;
+
 // Kết quả bình thường của một câu hỏi, kể cả khi không có số. Câu không trả lời được vẫn là 200 có trạng thái trong
 // body: giao diện cần hiện SQL bị từ chối, các bước và lựa chọn, mà ErrorBody chỉ có code và message.
 /// Outcome of the question, and which fields of `AskResponse` are set:
@@ -398,21 +400,41 @@ pub struct Explanation {
     /// What the two slices are, which decides the words for the change: up or down between two periods, higher or
     /// lower between two groups.
     pub comparison: Comparison,
+    /// True when the measure counts rows (a count, not a sum): the measure is then itself the size of each slice.
+    pub counts_rows: bool,
+    /// Column whose two values are compared, for `groups`; null for `periods`.
+    #[schema(required)]
+    pub slice_column: Option<String>,
+    /// Vietnamese name of `slice_column` from the column profile; null when the profile has none.
+    #[schema(required)]
+    pub slice_column_label: Option<String>,
     /// Slice compared against.
     pub base: ExplanationSlice,
     /// Slice being explained.
     pub compare: ExplanationSlice,
     /// `compare.value - base.value`.
     pub change: String,
+    /// `change / base.value * 100`, rounded to one decimal; null when `base.value` is zero or negative.
+    #[schema(required)]
+    pub percent_change: Option<String>,
     /// One breakdown per dimension, the dimension that explains the change best first.
     pub dimensions: Vec<DimensionBreakdown>,
     #[schema(required)]
     pub volume_price: Option<VolumePrice>,
     /// Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown.
     pub summary: String,
+    /// Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese).
+    pub summary_title: String,
+    /// Points under the main answer, written by the backend from the numbers above; each is said only when the numbers
+    /// support it.
+    pub summary_points: Vec<SummaryPoint>,
     /// False when the model's text failed the number check, or the model was not reached, and `summary` is a template
     /// sentence written by the backend.
     pub summary_by_model: bool,
+    // Ghi chú nội bộ cho lời tóm tắt (% tác động, nhóm khác thường, chiều bỏ qua), không gửi qua API: annotate.rs
+    // tính, summary.rs và bước kiểm số của narrate đọc. Bảng `dimensions` ở trên không đổi vì ghi chú này.
+    #[serde(skip)]
+    pub notes: BreakdownNotes,
 }
 
 // Tỷ lệ không cộng được theo nhóm nên phân rã khác (explain/ratio.rs): giá trị của lát cắt và của nhóm là tỷ lệ, đóng
@@ -449,6 +471,37 @@ pub struct ExplanationSlice {
     pub filter: String,
     /// Value of the measure on the slice.
     pub value: String,
+    /// Number of rows of the slice.
+    pub rows: String,
+}
+
+/// One point of the summary: a short lead (shown in bold) and the sentence after it.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct SummaryPoint {
+    pub kind: SummaryPointKind,
+    /// Lead of the point (Vietnamese), for example "Lý do chính".
+    pub lead: String,
+    /// Rest of the point (Vietnamese).
+    pub text: String,
+}
+
+/// - `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the
+///   rate).
+/// - `outliers`: groups that changed much more or much less than the whole, or exist on one side only.
+/// - `even`: no group stands out; the largest contributions are the largest groups.
+/// - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow
+///   comparing groups with the whole (a base slice of zero or less, or a change too close to zero).
+/// - `against`: a group that moved the other way.
+/// - `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SummaryPointKind {
+    Reason,
+    Outliers,
+    Even,
+    Largest,
+    Against,
+    Dropped,
 }
 
 /// Contribution of every group of one dimension; the contributions add up to `change`.
@@ -456,6 +509,9 @@ pub struct ExplanationSlice {
 pub struct DimensionBreakdown {
     /// Dimension column, as named in the dataset (not a name from `result.columns`).
     pub column: String,
+    /// Vietnamese name of the column from the column profile; null when the profile has none.
+    #[schema(required)]
+    pub label: Option<String>,
     /// How to read the group values, like the `kind` of a result column.
     pub kind: ValueKind,
     /// SQL that computed the groups of both slices, after the guard.
