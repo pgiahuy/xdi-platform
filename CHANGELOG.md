@@ -4,6 +4,10 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ## [Unreleased]
 
+### Added
+
+- Khung "Tổng quan dữ liệu" ở trang hỏi và trang Dữ liệu: số dòng, khoảng thời gian, các cột theo nhóm kèm nhãn tiếng Việt, biểu đồ dựng sẵn và chỉ số; bấm một cột hay biểu đồ để điền câu hỏi.
+
 ### Changed
 
 - Câu hỏi tìm nguyên nhân có lời tóm tắt do code viết: câu trả lời chính rồi lý do chính (số dòng, lượng và giá, cơ cấu), nhóm khác thường hay "không có nơi nào đặc biệt", và cột lời tóm tắt bỏ qua vì chỉ là tên khác của hai nhóm đang so (như hình thức thanh toán khi so trạng thái đơn) hay trùng cột khác; tên cột kèm nghĩa tiếng Việt.

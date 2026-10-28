@@ -12,7 +12,6 @@ import {
   isRepeatedClarification,
   type AskResponse,
   type AskVariables,
-  type ChartSuggestion,
   type Understanding,
 } from '@/api/ask'
 import { AnswerText } from '@/components/ask/AnswerText'
@@ -21,14 +20,14 @@ import { ClarificationForm } from '@/components/ask/ClarificationForm'
 import { SampleBadge } from '@/components/ask/SampleModeSwitch'
 import { ResultTable } from '@/components/ask/ResultTable'
 import type { DrillTarget } from '@/components/ask/evidenceTypes'
-import type { ChartView, ResultView, UnderstandingView } from '@/components/ask/types'
+import type { UnderstandingView } from '@/components/ask/types'
 import { UnderstandingCard } from '@/components/ask/UnderstandingCard'
 import { WhyOverview } from '@/components/ask/WhyOverview'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { cn } from '@/lib/utils'
 import { buildBreakdown } from './breakdownView'
-import { buildCellDrill, buildResultView } from './resultView'
+import { buildCellDrill, buildChartView, buildResultView } from './resultView'
 
 const ResultChart = lazy(() =>
   import('@/components/ask/ResultChart').then((m) => ({
@@ -169,29 +168,6 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
       )}
     </>
   )
-}
-
-// Gợi ý trỏ tới cột không có trong kết quả thì bỏ biểu đồ, vẫn hiện bảng: vẽ sai cột còn tệ hơn không vẽ. Không có
-// dòng nào thì cũng bỏ, khỏi vẽ một trục trống.
-function buildChartView(chart: ChartSuggestion, result: ResultView): ChartView | null {
-  if (result.rows.length === 0) return null
-  const names = new Set(result.columns.map((column) => column.name))
-  const columnsExist =
-    names.has(chart.x) &&
-    chart.y.length > 0 &&
-    chart.y.every((name) => names.has(name)) &&
-    (chart.series === null || names.has(chart.series))
-  if (!columnsExist) return null
-  return {
-    kind: chart.kind,
-    x: chart.x,
-    y: chart.y,
-    layout: chart.layout,
-    series: chart.series,
-    ratio: chart.ratio,
-    top: chart.top,
-    otherBucket: chart.other_bucket,
-  }
 }
 
 function buildUnderstandingView(understanding: Understanding): UnderstandingView {

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/datasets/DatasetList.tsx - danh sách dataset của workspace, mới tạo đứng đầu (backend sắp theo ngày tạo).
 Mỗi dataset một dòng xuống hàng được, không dùng bảng: màn 320px không đủ chỗ cho ba cột.
-onAddVersion và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. */
+onAddVersion và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. onOverview mở khung tổng
+quan dữ liệu của dataset (#198), cho mọi vai. */
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import type { DatasetRow } from './types'
 
 type Props = {
   datasets: DatasetRow[]
+  onOverview?: (dataset: DatasetRow) => void
   onAddVersion?: (dataset: DatasetRow) => void
   onDelete?: (dataset: DatasetRow) => void
   deletePending?: boolean
@@ -16,7 +18,7 @@ type Props = {
 
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
-export function DatasetList({ datasets, onAddVersion, onDelete, deletePending }: Props) {
+export function DatasetList({ datasets, onOverview, onAddVersion, onDelete, deletePending }: Props) {
   return (
     <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {datasets.map((dataset) => (
@@ -31,6 +33,16 @@ export function DatasetList({ datasets, onAddVersion, onDelete, deletePending }:
               <span className="whitespace-nowrap">{dateFormat.format(new Date(dataset.createdAt))}</span>
             </p>
           </div>
+          {onOverview && (
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`Tổng quan dữ liệu của ${dataset.name}`}
+              onClick={() => onOverview(dataset)}
+            >
+              Tổng quan
+            </Button>
+          )}
           {onAddVersion && (
             // Mỗi dòng một nút cùng chữ; aria-label thêm tên dataset để trình đọc màn hình phân biệt. Chữ hiện ra
             // đứng đầu aria-label, để người dùng điều khiển bằng giọng nói vẫn gọi được nút.

@@ -5,6 +5,7 @@ trước khi đọc phần còn lại.
 Dùng Select của shadcn (Radix) thay cho select của trình duyệt, để giống các ô khác trên trang; Radix vẫn cho chọn
 bằng bàn phím và trình đọc màn hình đọc được như một combobox. */
 
+import type { ReactNode } from 'react'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ProfileNote } from './ProfileNote'
@@ -16,9 +17,11 @@ type Props = {
   onDatasetChange: (id: string) => void
   profile: ProfileProgress
   disabled: boolean
+  /** Nút đứng cạnh ô chọn, ví dụ mở khung tổng quan dữ liệu (#198). */
+  action?: ReactNode
 }
 
-export function DatasetPicker({ datasets, datasetId, onDatasetChange, profile, disabled }: Props) {
+export function DatasetPicker({ datasets, datasetId, onDatasetChange, profile, disabled, action }: Props) {
   if (datasets.length === 0) return null
   return (
     <div className="flex flex-col gap-1">
@@ -38,6 +41,7 @@ export function DatasetPicker({ datasets, datasetId, onDatasetChange, profile, d
             ))}
           </SelectContent>
         </Select>
+        {action}
       </div>
       <ProfileNote progress={profile} />
     </div>
