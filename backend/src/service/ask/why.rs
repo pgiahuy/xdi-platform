@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/why.rs - nhánh câu "tại sao" của endpoint hỏi (#38). ask/mod.rs gọi ask_why sau bước context khi
-build_question_kind (explain/form.rs) ra Why, thay cho bước llm và run_with_repair của câu thường. Ở đây: gọi run_why
+/* service/ask/why.rs - nhánh câu "tại sao" của endpoint hỏi (#38). ask/mod.rs gọi ask_why khi bước classify
+(ask/classify.rs) ra câu hỏi tìm nguyên nhân, thay cho bước llm và run_with_repair của câu thường. Ở đây: gọi run_why
 (explain/run.rs: form, kiểm form, SQL do code dựng, phân rã, lời), dựng thẻ "Đã hiểu là", vai trò cột và biểu đồ
 (ask/view.rs), ghi lịch sử kèm form và Explanation, rồi dựng AskResponse. Trạng thái và lỗi theo cùng quy tắc với câu
 thường (đầu file ask/mod.rs); test qua route ở api/ask_why_tests.rs.

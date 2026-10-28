@@ -262,6 +262,12 @@
         "ok": true
       },
       {
+        "detail": "Câu hỏi thường: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân.",
+        "duration_ms": 640,
+        "name": "classify",
+        "ok": true
+      },
+      {
         "detail": null,
         "duration_ms": 1120,
         "name": "llm",
@@ -559,6 +565,12 @@
         "detail": null,
         "duration_ms": 21,
         "name": "context",
+        "ok": true
+      },
+      {
+        "detail": "Câu hỏi tìm nguyên nhân: câu hỏi hỏi vì sao doanh thu quý 3 giảm.",
+        "duration_ms": 710,
+        "name": "classify",
         "ok": true
       },
       {

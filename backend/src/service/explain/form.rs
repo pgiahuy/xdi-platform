@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/explain/form.rs - đầu vào của đường câu "tại sao" (#38): nhận câu "tại sao" bằng từ khóa, đọc form JSON mô
+/* service/explain/form.rs - đầu vào của đường câu "tại sao" (#38): luật từ khóa nhận câu "tại sao", đọc form JSON mô
 hình điền theo build_why_form_schema (ask/why_prompt.rs, #29), lỗi từng trường và prompt nhờ mô hình sửa form một lần.
 explain/check.rs kiểm form với hồ sơ, explain/run.rs ghép các bước. Hàm thuần, test ở explain/check_tests.rs.
 
-Nhận câu "tại sao" bằng từ khóa chứ không nhờ mô hình phân loại: không tốn thêm một lượt gọi, cùng câu luôn đi cùng
-đường. Đổi lại câu không có từ khóa nào ("thế nào mà giảm") đi đường câu thường, vẫn có bảng nhưng không có phân rã. */
+Luật từ khóa chỉ còn là đường dự phòng của bước classify (ask/classify.rs, #197): mô hình phân loại câu hỏi, lỗi hay
+quá giờ thì dùng luật này. Luật bỏ sót câu không có cụm nào ("Doanh thu giảm do gì?") và bắt nhầm câu đếm theo một cột
+tên "lý do"; bộ câu eval/classify.json đo cả hai cách. */
 
 use serde::Deserialize;
 

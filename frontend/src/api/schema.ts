@@ -1087,6 +1087,8 @@ export interface components {
         /**
          * @description Step of the backend:
          *     - `context`: read the dataset profile and build the prompt.
+         *     - `classify`: the language model tells a plain question from a question that asks for a cause; when the model
+         *       fails, the keyword rule decides and the step is not ok.
          *     - `llm`: the language model writes SQL.
          *     - `guard`: check the SQL, add row-level filters and a row limit.
          *     - `run`: run the SQL on the analytics engine.
@@ -1097,7 +1099,7 @@ export interface components {
          *     - `record`: save the question in the history.
          * @enum {string}
          */
-        StepName: "context" | "llm" | "guard" | "run" | "repair" | "explain" | "narrate" | "record";
+        StepName: "context" | "classify" | "llm" | "guard" | "run" | "repair" | "explain" | "narrate" | "record";
         /** @description One point of the summary: a short lead (shown in bold) and the sentence after it. */
         SummaryPoint: {
             kind: components["schemas"]["SummaryPointKind"];

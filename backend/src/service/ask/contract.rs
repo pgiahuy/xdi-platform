@@ -575,11 +575,13 @@ pub struct VolumePrice {
     pub if_volume_unchanged: String,
 }
 
-// Tên bước theo luồng ở ARCHITECTURE mục 2, không khớp một-một với chín bước ở đó (repair và narrate là hai lần gọi mô
-// hình riêng); giao diện tự đặt nhãn tiếng Việt cho từng tên. explain (code tính) và
+// Tên bước theo luồng ở ARCHITECTURE mục 2, không khớp một-một với các bước ở đó (classify, repair và narrate là ba lần
+// gọi mô hình riêng); giao diện tự đặt nhãn tiếng Việt cho từng tên. explain (code tính) và
 // narrate (mô hình viết lời) tách riêng, để timeline cho thấy mô hình chỉ diễn giải số.
 /// Step of the backend:
 /// - `context`: read the dataset profile and build the prompt.
+/// - `classify`: the language model tells a plain question from a question that asks for a cause; when the model
+///   fails, the keyword rule decides and the step is not ok.
 /// - `llm`: the language model writes SQL.
 /// - `guard`: check the SQL, add row-level filters and a row limit.
 /// - `run`: run the SQL on the analytics engine.
@@ -592,6 +594,7 @@ pub struct VolumePrice {
 #[serde(rename_all = "snake_case")]
 pub enum StepName {
     Context,
+    Classify,
     Llm,
     Guard,
     Run,

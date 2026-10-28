@@ -3,8 +3,9 @@
 (ask/context.rs) cùng chỉ số, câu đã đúng và gói ngành, mô hình viết SQL (prompt ở ask/prompt.rs), guard, chạy và sửa
 một lần (ask/run.rs), ghi lịch sử (engine/store/queries.rs), rồi dựng AskResponse (ask/contract.rs). Mỗi bước đo thời
 gian thành một AskStep. Lựa chọn của response dựng ở ask/choices.rs và ask/response_choices.rs; thẻ "Đã hiểu là", vai
-trò cột và gợi ý biểu đồ ở ask/view.rs. Câu "tại sao" (build_question_kind của explain/form.rs) rẽ sang ask/why.rs sau
-bước context, dùng chung ngữ cảnh, bảng được phép và cách ghi lịch sử ở đây.
+trò cột và gợi ý biểu đồ ở ask/view.rs. Sau bước context, bước classify (ask/classify.rs) nhờ mô hình phân loại câu
+hỏi, mô hình lỗi thì dùng luật từ khóa; câu hỏi tìm nguyên nhân rẽ sang ask/why.rs, dùng chung ngữ cảnh, bảng được
+phép và cách ghi lịch sử ở đây.
 
 Câu không trả lời được vẫn là Ok kèm status (ARCHITECTURE mục 8). Err chỉ cho request sai (400, 404), mô hình lỗi khi
 chưa có câu SQL nào (502, 503; mock gặp câu lạ thì 400) và lỗi máy chủ. needs_choice không ghi lịch sử: câu chưa được
@@ -15,6 +16,9 @@ chúng không đổi status. */
 
 mod chart;
 pub mod checks;
+pub mod classify;
+#[cfg(test)]
+mod classify_tests;
 // build_metric_mismatches chờ cách báo chỉ số dùng sai công thức: bốn luật kiểm hợp lý (#36) không có mã cảnh báo hợp,
 // thêm mã mới là đổi API. Phần còn lại endpoint hỏi đã gọi. Gỡ allow khi hàm đó được gọi, để clippy bắt lại mã thừa.
 #[cfg(test)]
@@ -64,6 +68,7 @@ use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
 use crate::service::ask::checks::{build_result_warnings, CheckedQuery};
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
+use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
 use crate::service::ask::context::{build_ask_context, AskContext};
 use crate::service::ask::contract::{
     AskResponse, AskStatus, AskStep, ChosenOption, ResultTable, StepName, Understanding, Warning,
@@ -80,7 +85,7 @@ use crate::service::ask::summary::{summarize, SummaryInput, SummaryOutcome};
 use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::why::{ask_why, build_narrate_timeout, WhyAsk};
-use crate::service::explain::form::{build_question_kind, QuestionKind};
+use crate::service::explain::form::QuestionKind;
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
 use crate::{error::AppError, state::AppState};
 
@@ -93,13 +98,24 @@ const EXAMPLE_POOL: i64 = 50;
 const CLARIFY_WITHOUT_OPTIONS: &str =
     "Mô hình hỏi lại nhưng không đưa phương án nào có trong dữ liệu. Thử hỏi lại theo cách khác.";
 
+/// Các lượt trước của cuộc trò chuyện, do service/conversation/ dựng; bộ đánh giá và câu mở đầu cuộc dùng
+/// AskHistory::default().
+#[derive(Debug, Default)]
+pub struct AskHistory {
+    /// Khối "Hội thoại trước" của prompt SQL và prompt form (conversation/history.rs); chuỗi rỗng khi chưa có lượt nào.
+    pub section: String,
+    /// Câu hỏi của các lượt đó, cũ trước. Bước classify chỉ cần câu hỏi: SQL và phần đã hiểu làm prompt dài hơn mà
+    /// không giúp phân loại.
+    pub questions: Vec<String>,
+}
+
 pub async fn ask(
     state: &AppState,
     member: &Member,
     dataset_id: &str,
     question: &str,
     choices: &[ChosenOption],
-    history: &str,
+    history: &AskHistory,
 ) -> Result<AskResponse, AppError> {
     if question.trim().is_empty() {
         return Err(AppError::BadRequest("Câu hỏi đang trống".to_string()));
@@ -144,10 +160,20 @@ pub async fn ask(
         examples: &examples,
         domain: dataset.domain.as_deref().and_then(find_domain_package),
         choices,
-        history,
+        history: &history.section,
     };
     let tables = [build_allowed_table(state, member, &dataset, &version, &columns).await?];
-    if build_question_kind(question) == QuestionKind::Why {
+    // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
+    let classify_input = ClassifyInput {
+        table: &dataset.logical_table,
+        question,
+        columns: &context.columns,
+        earlier: &history.questions,
+    };
+    let timeout = build_classify_timeout(&state.config);
+    let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
+    steps.push(classified.step);
+    if classified.kind == QuestionKind::Why {
         let why = WhyAsk {
             dataset: &dataset,
             version: &version,
