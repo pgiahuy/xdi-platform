@@ -53,6 +53,11 @@ export const router = createBrowserRouter([
                 lazy: async () => ({ Component: (await import('@/pages/DatasetsPage')).DatasetsPage }),
               },
               {
+                path: 'datasets/:datasetId/metrics',
+                lazy: async () => ({ Component: (await import('@/pages/MetricsPage')).MetricsPage }),
+                handle: { title: 'Chỉ số' },
+              },
+              {
                 path: membersPath,
                 lazy: async () => ({ Component: (await import('@/pages/MembersPage')).MembersPage }),
               },

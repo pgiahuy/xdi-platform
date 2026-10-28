@@ -261,7 +261,7 @@ chỉ vẽ độ đo đầu.
 **Cách gộp mặc định** (`columns.aggregation`, migration `0010_column_aggregation.sql`, #185) là `sum` hay `avg`, mặc
 định `sum`. Mô hình đề xuất cho cột `measure`: `sum` khi tổng có nghĩa (tiền, số lượng hàng), `avg` khi mỗi giá trị mô
 tả chính dòng của nó (tuổi, điểm, giá, tỷ lệ, số tín chỉ, số ngày). Đề xuất sai hay cho cột khác vai trò thì bỏ riêng,
-giữ `sum`. Admin đổi qua API chỉ số ([API](API.md), mục Chỉ số và cách gộp) cho phiên bản hiện hành; phiên bản nạp sau
+giữ `sum`. Admin đổi ở màn **Chỉ số** ([API](API.md), mục Chỉ số và cách gộp) cho phiên bản hiện hành; phiên bản nạp sau
 nhận đề xuất mới của mô hình, không chép từ phiên bản trước. Ba nơi đọc cách gộp: prompt sinh SQL ghi "one value per row:
 aggregate it with AVG, never SUM" cạnh cột `avg` (cột `sum` không thêm chữ gì); form câu "tại sao" đổi `sum` trên cột
 `avg` thành trung bình mỗi dòng (tử `SUM(cột)`, mẫu `COUNT(cột)`, như `AVG`) và phân rã thành phần cơ cấu và phần hiệu
@@ -274,7 +274,7 @@ hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và
 
 ## Chưa có
 
-- API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm, mô tả, bí danh); API chỉ số mới sửa được cách gộp.
+- API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm, mô tả, bí danh); màn Chỉ số mới sửa được cách gộp.
 - Chép cách gộp admin đã đặt sang phiên bản nạp sau của cùng dataset.
 - So hồ sơ giữa hai phiên bản (cột mất, thêm, đổi kiểu) trước khi chuyển phiên bản hiện hành, như thiết kế ở
   [Kiến trúc](ARCHITECTURE.md), mục 7.

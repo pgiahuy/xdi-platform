@@ -2,16 +2,20 @@
 /* api/client.ts - một chỗ duy nhất gọi backend. Mọi hook trong src/api dùng các hàm này.
 Đường dẫn luôn bắt đầu bằng /api, cùng địa chỉ với trang, nên không cần cấu hình địa chỉ backend hay CORS.
 Cookie phiên đăng nhập là httpOnly, cùng địa chỉ nên fetch tự gửi kèm; JavaScript không đọc được nó.
-Lỗi từ backend có dạng {code, message}; message là tiếng Việt, hiện được thẳng cho người dùng. */
+Lỗi từ backend có dạng {code, message}, kèm field khi lỗi nằm ở một trường của body; message là tiếng Việt, hiện được
+thẳng cho người dùng. */
 
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
+  /** Tên trường của request gây lỗi (ví dụ expression), khi backend biết; form hiện lời báo ngay dưới ô đó. */
+  readonly field?: string
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, field?: string) {
     super(message)
     this.status = status
     this.code = code
+    this.field = field
   }
 }
 
@@ -25,6 +29,10 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
 
 export function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return request<T>('PATCH', path, body)
+}
+
+export function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>('PUT', path, body)
 }
 
 export function apiDelete<T>(path: string): Promise<T> {
@@ -120,9 +128,9 @@ function parseJson(text: string): unknown {
 
 function errorFromBody(status: number, body: unknown): ApiError {
   // Body đọc ra có kiểu unknown; ghi rõ dạng lỗi của backend để TypeScript kiểm phần dùng bên dưới.
-  const err = body as { code?: string; message?: string } | null
+  const err = body as { code?: string; message?: string; field?: string } | null
   if (err?.message) {
-    return new ApiError(status, err.code ?? 'unknown', err.message)
+    return new ApiError(status, err.code ?? 'unknown', err.message, err.field)
   }
   // 502, 503, 504 không kèm thông báo từ backend: lỗi đến từ proxy đứng trước (Vite khi dev, Caddy khi chạy thật),
   // tức là backend không trả lời được.
