@@ -113,15 +113,6 @@ pub fn build_group_contributions(groups: &[GroupValues]) -> Option<Vec<GroupCont
                 base_value: build_decimal_text(group.base_value, group.base_value.scale()),
                 compare_value: build_decimal_text(group.compare_value, group.compare_value.scale()),
                 contribution: build_decimal_text(contribution, scale),
-                // Độ đo cộng được: giá trị 0 ở một lát cắt coi như nhóm không có ở lát đó (tổng 0 mà có dòng, như
-                // lãi lỗ bù trừ nhau, hiếm và cũng không đổi cách đọc).
-                presence: annotate::build_presence(
-                    group.base_value.is_zero(),
-                    group.compare_value.is_zero(),
-                ),
-                share_of_change: None,
-                percent_change: None,
-                outlier: false,
                 mix_effect: None,
                 rate_effect: None,
             }
@@ -463,9 +454,8 @@ const NARRATE_GROUPS: usize = 3;
 pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String {
     let digits = build_fraction_digits(explanation);
     let comparison = explanation.comparison;
-    let dimensions: Vec<serde_json::Value> = explanation
-        .dimensions
-        .iter()
+    let dimensions: Vec<serde_json::Value> = build_narrate_dimensions(explanation)
+        .into_iter()
         .take(NARRATE_DIMENSIONS)
         .map(|dimension| {
             let groups: Vec<serde_json::Value> = dimension
@@ -640,9 +630,6 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
             allow_number(&mut allowed, &group.base_value, digits);
             allow_number(&mut allowed, &group.compare_value, digits);
             allow_number(&mut allowed, &group.contribution, digits);
-            for percent in group.share_of_change.iter().chain(&group.percent_change) {
-                allow_percent(&mut allowed, percent);
-            }
             for text in group.mix_effect.iter().chain(&group.rate_effect) {
                 allow_number(&mut allowed, text, digits);
             }
@@ -651,6 +638,13 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
                 if !has_letter(&text) {
                     allow_text(&mut allowed, &text);
                 }
+            }
+        }
+    }
+    for dimension in &explanation.notes.dimensions {
+        for group in &dimension.groups {
+            for percent in group.share_of_change.iter().chain(&group.percent_change) {
+                allow_percent(&mut allowed, percent);
             }
         }
     }
@@ -672,14 +666,6 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
     allow_text(&mut allowed, &explanation.compare.label);
     for dimension in &explanation.dimensions {
         allow_text(&mut allowed, &dimension.column);
-    }
-    for dropped in &explanation.dropped_dimensions {
-        allow_text(&mut allowed, &dropped.column);
-        for value in dropped.base_only.iter().chain(&dropped.compare_only) {
-            if !has_letter(value) {
-                allow_text(&mut allowed, value);
-            }
-        }
     }
     if let Some(split) = &explanation.volume_price {
         allow_text(&mut allowed, &split.volume_label);
@@ -769,15 +755,6 @@ pub fn build_known_texts(explanation: &Explanation) -> Vec<String> {
         .chain(&explanation.slice_column_label)
     {
         push_known_text(&mut texts, text);
-    }
-    for dropped in &explanation.dropped_dimensions {
-        push_known_text(&mut texts, &dropped.column);
-        for text in dropped.label.iter().chain(&dropped.duplicate_of) {
-            push_known_text(&mut texts, text);
-        }
-        for value in dropped.base_only.iter().chain(&dropped.compare_only) {
-            push_known_text(&mut texts, value);
-        }
     }
     for dimension in &explanation.dimensions {
         push_known_text(&mut texts, &dimension.column);
@@ -1097,16 +1074,27 @@ fn last_direction_word(before: &str) -> Option<&'static str> {
     }
 }
 
-/// Nhóm nói ở câu thứ hai: trong chiều đầu, nhóm có đóng góp lớn nhất cùng chiều với chênh lệch. Câu khuôn và prompt
+/// Nhóm nói ở câu thứ hai: trong chiều đầu mà lời tóm tắt dùng, nhóm có đóng góp lớn nhất cùng chiều với chênh lệch. Câu khuôn và prompt
 /// narrate cùng dùng, để mô hình không tự chọn nhóm ngược chiều rồi kể như nguyên nhân chính.
 fn find_main_group(explanation: &Explanation) -> Option<(&DimensionBreakdown, &GroupContribution)> {
     let change = explanation.change.parse::<Decimal>().ok()?;
-    let dimension = explanation.dimensions.first()?;
+    let dimension = *build_narrate_dimensions(explanation).first()?;
     let group = dimension
         .groups
         .iter()
         .find(|group| same_direction(&group.contribution, change))?;
     Some((dimension, group))
+}
+
+// Chiều gửi cho mô hình, theo ghi chú của annotate.rs: chiều có nhóm khác thường trước, không có chiều lời tóm tắt bỏ
+// qua. Gửi chiều tách hẳn hai lát cắt (Type khi so COMPLETE với CANCELED) thì mô hình dễ kể nó như nguyên nhân.
+fn build_narrate_dimensions(explanation: &Explanation) -> Vec<&DimensionBreakdown> {
+    explanation
+        .notes
+        .dimensions
+        .iter()
+        .filter_map(|notes| explanation.dimensions.get(notes.index))
+        .collect()
 }
 
 // Cùng chiều: cùng dấu, hoặc cùng bằng 0. contribution không đọc được coi như khác chiều.

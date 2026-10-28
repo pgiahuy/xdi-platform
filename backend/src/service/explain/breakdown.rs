@@ -29,7 +29,9 @@ use crate::service::ask::contract::{
 use crate::service::ask::repair::{build_safe_error, build_user_error, mentions_data_files};
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::run::{build_duration_text, build_step, run_query_in_turn};
-use crate::service::explain::annotate::{annotate_dimensions, build_percent_text, Totals};
+use crate::service::explain::annotate::{
+    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
+};
 use crate::service::explain::check::{PlanSlices, WhyPlan};
 use crate::service::explain::measure::Additive;
 use crate::service::explain::ratio_breakdown::build_ratio_breakdown;
@@ -230,15 +232,14 @@ pub async fn build_breakdown(
         ));
     }
     apply_dimension_order(&mut ranked, mode);
-    let annotated = annotate_dimensions(
-        ranked.into_iter().map(|d| d.breakdown).collect(),
-        Totals {
-            base: totals.base,
-            compare: totals.compare,
-            change,
-        },
-        &plan.labels,
-    );
+    let dimensions: Vec<DimensionBreakdown> = ranked.into_iter().map(|d| d.breakdown).collect();
+    let presences: Vec<_> = dimensions.iter().map(build_value_presences).collect();
+    let slices = Totals {
+        base: totals.base,
+        compare: totals.compare,
+        change,
+    };
+    let notes = annotate_dimensions(&dimensions, &presences, slices);
     let (base_label, compare_label) = build_slice_labels(plan);
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),
@@ -260,14 +261,14 @@ pub async fn build_breakdown(
             rows: build_decimal_text(totals.compare_rows, 0),
         },
         change: build_decimal_text(change, totals.base.scale().max(totals.compare.scale())),
-        percent_change: annotated.percent_change.map(build_percent_text),
-        dimensions: annotated.dimensions,
-        dropped_dimensions: annotated.dropped,
+        percent_change: build_percent_change(slices).map(build_percent_text),
+        dimensions,
         volume_price: build_volume(plan, totals),
         summary: String::new(),
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: false,
+        notes,
     })))
 }
 
@@ -295,8 +296,7 @@ async fn run_dimension(
     };
     let breakdown = DimensionBreakdown {
         column: column.to_string(),
-        label: None,
-        has_outliers: false,
+        label: plan.labels.get(column).cloned(),
         kind: rows.kind,
         sql: rows.shown,
         groups: contributions,

@@ -816,8 +816,6 @@ export interface components {
             column: string;
             /** @description Every group of the column, largest contribution (by absolute value) first. */
             groups: components["schemas"]["GroupContribution"][];
-            /** @description True when at least one group of this dimension is an outlier. */
-            has_outliers: boolean;
             /** @description How to read the group values, like the `kind` of a result column. */
             kind: components["schemas"]["ValueKind"];
             /** @description Vietnamese name of the column from the column profile; null when the profile has none. */
@@ -880,26 +878,6 @@ export interface components {
              */
             total_rows: number;
         };
-        /**
-         * @description - `separates_slices`: every value of the column is found in one slice only, so the column is another name of the
-         *       two slices (all orders of one status paid by card, all of the other by transfer).
-         *     - `duplicates`: the column splits the rows into exactly the same groups as a kept dimension (an id and its name).
-         * @enum {string}
-         */
-        DropReason: "separates_slices" | "duplicates";
-        /** @description A dimension left out of the breakdown. */
-        DroppedDimension: {
-            /** @description For `separates_slices`: the values found only in the base slice, as text. */
-            base_only: string[];
-            column: string;
-            /** @description For `separates_slices`: the values found only in the compare slice, as text. */
-            compare_only: string[];
-            /** @description For `duplicates`: the kept dimension with the same groups. */
-            duplicate_of: string | null;
-            /** @description Vietnamese name of the column from the column profile; null when the profile has none. */
-            label: string | null;
-            reason: components["schemas"]["DropReason"];
-        };
         /** @description Error body returned by every endpoint on failure. */
         ErrorBody: {
             code: components["schemas"]["ErrorCode"];
@@ -929,13 +907,8 @@ export interface components {
             comparison: components["schemas"]["Comparison"];
             /** @description True when the measure counts rows (a count, not a sum): the measure is then itself the size of each slice. */
             counts_rows: boolean;
-            /**
-             * @description One breakdown per dimension: dimensions with an outlier group first, then the others, each part in ranking
-             *     order (the dimension that explains the change best first).
-             */
+            /** @description One breakdown per dimension, the dimension that explains the change best first. */
             dimensions: components["schemas"]["DimensionBreakdown"][];
-            /** @description Dimensions left out of `dimensions` because they explain nothing, with the reason. */
-            dropped_dimensions: components["schemas"]["DroppedDimension"][];
             /** @description Measure that changed, text for the end user (Vietnamese). */
             measure: string;
             /** @description How the measure adds up over groups, which decides how to read the numbers below. */
@@ -989,36 +962,12 @@ export interface components {
              */
             mix_effect: string | null;
             /**
-             * @description True when the group changed at least 10 percentage points more or less than the whole (`percent_change` against
-             *     `Explanation.percent_change`) and makes at least 1% of the change; or exists on one side only and makes at
-             *     least 1% of the change.
-             */
-            outlier: boolean;
-            /**
-             * @description `(compare_value - base_value) / base_value * 100`, rounded to one decimal. Null when the group is not in both
-             *     slices or `base_value` is zero or negative.
-             */
-            percent_change: string | null;
-            presence: components["schemas"]["GroupPresence"];
-            /**
              * @description Ratio measures only: part of `change` because the ratio inside this group changed,
              *     `(base_share + compare_share) / 2 * (compare_value - base_value)`.
              */
             rate_effect: string | null;
-            /**
-             * @description `contribution / change * 100`, rounded to one decimal: the share of the change from this group. Negative when
-             *     the group moved the other way. Null when the change is too close to zero for a share to mean anything.
-             */
-            share_of_change: string | null;
             value: components["schemas"]["CellValue"] | null;
         };
-        /**
-         * @description - `both`: the group has rows in both slices.
-         *     - `new`: no rows (or a zero value) in the base slice.
-         *     - `gone`: no rows (or a zero value) in the compare slice.
-         * @enum {string}
-         */
-        GroupPresence: "both" | "new" | "gone";
         HealthResponse: {
             /** @description Always `ok` when the server answers. */
             status: string;
@@ -1165,7 +1114,7 @@ export interface components {
          *     - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow
          *       comparing groups with the whole (a base slice of zero or less, or a change too close to zero).
          *     - `against`: a group that moved the other way.
-         *     - `dropped`: dimensions left out and why.
+         *     - `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.
          * @enum {string}
          */
         SummaryPointKind: "reason" | "outliers" | "even" | "largest" | "against" | "dropped";

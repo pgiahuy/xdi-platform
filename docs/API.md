@@ -141,11 +141,8 @@ theo nhóm, `explanation` là bảng phân rã; không phân rã được thì `
   `summary` là đoạn chữ của mô hình khi `summary_by_model`, không thì là câu chính nối các ý.
 - `explanation.base.rows`, `compare.rows` là số dòng của mỗi lát cắt; `percent_change` là % thay đổi chung (null khi
   lát gốc không dương); `counts_rows` cho biết độ đo là phép đếm.
-- Mỗi chiều có `label` (nghĩa tiếng Việt của cột, null khi hồ sơ chưa có) và `has_outliers`; mỗi nhóm có `presence`
-  (`both`, `new`, `gone`), `share_of_change` (% tác động, âm khi đi ngược chiều, null khi chênh lệch gần 0),
-  `percent_change` (% thay đổi trong nhóm) và `outlier`. Chiều có nhóm khác thường đứng trước.
-- `explanation.dropped_dimensions` là các chiều bị bỏ kèm `reason`: `separates_slices` (mọi giá trị chỉ có ở một bên,
-  `base_only` và `compare_only` liệt kê giá trị) hay `duplicates` (chia nhóm giống hệt `duplicate_of`).
+- Mỗi chiều có `label`: nghĩa tiếng Việt của cột, null khi hồ sơ chưa có. `dimensions` vẫn đủ mọi chiều theo thứ tự
+  xếp hạng, kể cả chiều mà ý `dropped` nói là bỏ qua.
 
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:

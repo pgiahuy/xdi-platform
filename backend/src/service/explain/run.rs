@@ -336,22 +336,11 @@ async fn run_plan(
         .iter()
         .map(|d| d.column.as_str())
         .collect();
-    let mut detail = format!(
+    let detail = format!(
         "Phân rã theo {} chiều: {}",
         columns.len(),
         columns.join(", ")
     );
-    if !explanation.dropped_dimensions.is_empty() {
-        let dropped: Vec<&str> = explanation
-            .dropped_dimensions
-            .iter()
-            .map(|d| d.column.as_str())
-            .collect();
-        detail.push_str(&format!(
-            "; bỏ {} vì chỉ là tên khác của hai lát cắt hay trùng chiều khác",
-            dropped.join(", ")
-        ));
-    }
     steps.push(build_step(StepName::Explain, started, true, Some(&detail)));
     apply_summary_parts(&mut explanation);
     let narrated = narrate(

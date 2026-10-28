@@ -4,15 +4,15 @@ DataCo (#186): COMPLETE với CANCELED (cột trùng hai nhóm bị bỏ, chênh
 đều, nhóm lớn nhất chênh nhiều nhất), tháng 5 với tháng 4 (bang mới có đơn, nhóm khác thường). Explanation dựng tay
 rồi qua đúng annotate_dimensions như bước explain; lời nào cũng phải qua bước kiểm số của narrate. */
 
-use std::collections::HashMap;
-
 use rust_decimal::Decimal;
 
 use crate::service::ask::contract::{
     CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
     SummaryPointKind, ValueKind,
 };
-use crate::service::explain::annotate::{annotate_dimensions, build_percent_text, Totals};
+use crate::service::explain::annotate::{
+    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
+};
 use crate::service::explain::summary::{build_summary_parts, build_template_summary};
 use crate::service::explain::{build_group_contributions, build_number_check, GroupValues};
 
@@ -37,7 +37,7 @@ fn d(text: &str) -> Decimal {
 fn build(case: Case) -> Explanation {
     let (base_total, compare_total) = (d(case.base.1), d(case.compare.1));
     let change = compare_total - base_total;
-    let dimensions = case
+    let dimensions: Vec<DimensionBreakdown> = case
         .dimensions
         .iter()
         .map(|(column, groups)| {
@@ -59,8 +59,11 @@ fn build(case: Case) -> Explanation {
                 .collect();
             DimensionBreakdown {
                 column: column.to_string(),
-                label: None,
-                has_outliers: false,
+                label: case
+                    .labels
+                    .iter()
+                    .find(|(c, _)| c == column)
+                    .map(|(_, l)| l.to_string()),
                 kind: if numeric {
                     ValueKind::Number
                 } else {
@@ -73,20 +76,13 @@ fn build(case: Case) -> Explanation {
             }
         })
         .collect();
-    let labels: HashMap<String, String> = case
-        .labels
-        .iter()
-        .map(|(c, l)| (c.to_string(), l.to_string()))
-        .collect();
-    let annotated = annotate_dimensions(
-        dimensions,
-        Totals {
-            base: base_total,
-            compare: compare_total,
-            change,
-        },
-        &labels,
-    );
+    let totals = Totals {
+        base: base_total,
+        compare: compare_total,
+        change,
+    };
+    let presences: Vec<_> = dimensions.iter().map(build_value_presences).collect();
+    let notes = annotate_dimensions(&dimensions, &presences, totals);
     let slice = |(label, value, rows): (&str, &str, &str)| ExplanationSlice {
         label: label.to_string(),
         filter: String::new(),
@@ -103,14 +99,14 @@ fn build(case: Case) -> Explanation {
         base: slice(case.base),
         compare: slice(case.compare),
         change: change.to_string(),
-        percent_change: annotated.percent_change.map(build_percent_text),
-        dimensions: annotated.dimensions,
-        dropped_dimensions: annotated.dropped,
+        percent_change: build_percent_change(totals).map(build_percent_text),
+        dimensions,
         volume_price: None,
         summary: String::new(),
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: false,
+        notes,
     }
 }
 
@@ -228,6 +224,38 @@ fn complete_canceled_drops_the_columns_that_rename_the_groups() {
          hai nhóm đang so, không giải thích được gì."
     );
     build_number_check(&template, &explanation).unwrap();
+}
+
+/// Lời tóm tắt bỏ qua Type và Delivery Status, nhưng bảng phân rã trả cho giao diện vẫn đủ mọi chiều theo đúng thứ tự
+/// xếp hạng: bỏ qua chỉ nằm trong ghi chú nội bộ.
+#[test]
+fn the_breakdown_keeps_the_dimensions_the_summary_skips() {
+    let explanation = complete_canceled();
+    let columns: Vec<&str> = explanation
+        .dimensions
+        .iter()
+        .map(|d| d.column.as_str())
+        .collect();
+    assert_eq!(
+        columns,
+        [
+            "Type",
+            "Customer Country",
+            "Delivery Status",
+            "Customer Segment"
+        ]
+    );
+    let skipped: Vec<&str> = explanation
+        .notes
+        .dropped
+        .iter()
+        .map(|d| d.column.as_str())
+        .collect();
+    assert_eq!(skipped, ["Type", "Delivery Status"]);
+    assert_eq!(
+        explanation.dimensions[0].label.as_deref(),
+        Some("hình thức thanh toán")
+    );
 }
 
 #[test]

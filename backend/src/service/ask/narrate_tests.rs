@@ -15,10 +15,11 @@ use crate::engine::llm::{LlmProvider, LlmRequest};
 use crate::error::AppError;
 use crate::service::ask::contract::{
     CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice, GroupContribution,
-    GroupPresence, MeasureKind, StepName, ValueKind,
+    MeasureKind, StepName, ValueKind,
 };
 use crate::service::ask::examples::build_why_example;
 use crate::service::ask::narrate::narrate;
+use crate::service::explain::annotate::{annotate_dimensions, build_value_presences, Totals};
 use crate::service::explain::build_direction_text;
 use crate::service::explain::number::{build_number_text, MAX_FRACTION_DIGITS};
 use crate::service::explain::{
@@ -44,7 +45,7 @@ fn small_explanation(
     change: &str,
     groups: &[(Option<&str>, &str)],
 ) -> Explanation {
-    Explanation {
+    let mut explanation = Explanation {
         measure: "Doanh thu".to_string(),
         measure_kind: MeasureKind::Total,
         comparison: Comparison::Periods,
@@ -65,11 +66,9 @@ fn small_explanation(
         },
         change: change.to_string(),
         percent_change: None,
-        dropped_dimensions: Vec::new(),
         dimensions: vec![DimensionBreakdown {
             column: "Market".to_string(),
             label: None,
-            has_outliers: false,
             kind: ValueKind::Text,
             sql: String::new(),
             groups: groups
@@ -79,10 +78,6 @@ fn small_explanation(
                     base_value: "0.00".to_string(),
                     compare_value: "0.00".to_string(),
                     contribution: contribution.to_string(),
-                    presence: GroupPresence::Both,
-                    share_of_change: None,
-                    percent_change: None,
-                    outlier: false,
                     mix_effect: None,
                     rate_effect: None,
                 })
@@ -95,7 +90,33 @@ fn small_explanation(
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: false,
-    }
+        notes: Default::default(),
+    };
+    apply_notes(&mut explanation);
+    explanation
+}
+
+/// Ghi chú cho lời tóm tắt, tính lại từ bảng phân rã như bước explain; test sửa bảng thì gọi lại. Số không đọc được
+/// thì để ghi chú rỗng, như Explanation không có phân rã.
+fn apply_notes(explanation: &mut Explanation) {
+    let (Ok(base), Ok(compare), Ok(change)) = (
+        explanation.base.value.parse(),
+        explanation.compare.value.parse(),
+        explanation.change.parse(),
+    ) else {
+        return;
+    };
+    let totals = Totals {
+        base,
+        compare,
+        change,
+    };
+    let presences: Vec<_> = explanation
+        .dimensions
+        .iter()
+        .map(build_value_presences)
+        .collect();
+    explanation.notes = annotate_dimensions(&explanation.dimensions, &presences, totals);
 }
 
 /// Mô hình giả: trả câu viết sẵn hoặc một lỗi viết sẵn.
@@ -345,10 +366,6 @@ fn numeric_group_values_use_the_same_text_everywhere() {
         base_value: "100.00".to_string(),
         compare_value: "50.00".to_string(),
         contribution: "-50.00".to_string(),
-        presence: GroupPresence::Both,
-        share_of_change: None,
-        percent_change: None,
-        outlier: false,
         mix_effect: None,
         rate_effect: None,
     }];

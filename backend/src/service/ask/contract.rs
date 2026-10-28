@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::service::explain::annotate::BreakdownNotes;
+
 // Kết quả bình thường của một câu hỏi, kể cả khi không có số. Câu không trả lời được vẫn là 200 có trạng thái trong
 // body: giao diện cần hiện SQL bị từ chối, các bước và lựa chọn, mà ErrorBody chỉ có code và message.
 /// Outcome of the question, and which fields of `AskResponse` are set:
@@ -415,11 +417,8 @@ pub struct Explanation {
     /// `change / base.value * 100`, rounded to one decimal; null when `base.value` is zero or negative.
     #[schema(required)]
     pub percent_change: Option<String>,
-    /// One breakdown per dimension: dimensions with an outlier group first, then the others, each part in ranking
-    /// order (the dimension that explains the change best first).
+    /// One breakdown per dimension, the dimension that explains the change best first.
     pub dimensions: Vec<DimensionBreakdown>,
-    /// Dimensions left out of `dimensions` because they explain nothing, with the reason.
-    pub dropped_dimensions: Vec<DroppedDimension>,
     #[schema(required)]
     pub volume_price: Option<VolumePrice>,
     /// Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown.
@@ -432,6 +431,10 @@ pub struct Explanation {
     /// False when the model's text failed the number check, or the model was not reached, and `summary` is a template
     /// sentence written by the backend.
     pub summary_by_model: bool,
+    // Ghi chú nội bộ cho lời tóm tắt (% tác động, nhóm khác thường, chiều bỏ qua), không gửi qua API: annotate.rs
+    // tính, summary.rs và bước kiểm số của narrate đọc. Bảng `dimensions` ở trên không đổi vì ghi chú này.
+    #[serde(skip)]
+    pub notes: BreakdownNotes,
 }
 
 // Tỷ lệ không cộng được theo nhóm nên phân rã khác (explain/ratio.rs): giá trị của lát cắt và của nhóm là tỷ lệ, đóng
@@ -489,7 +492,7 @@ pub struct SummaryPoint {
 /// - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow
 ///   comparing groups with the whole (a base slice of zero or less, or a change too close to zero).
 /// - `against`: a group that moved the other way.
-/// - `dropped`: dimensions left out and why.
+/// - `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SummaryPointKind {
@@ -501,45 +504,6 @@ pub enum SummaryPointKind {
     Dropped,
 }
 
-/// A dimension left out of the breakdown.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct DroppedDimension {
-    pub column: String,
-    /// Vietnamese name of the column from the column profile; null when the profile has none.
-    #[schema(required)]
-    pub label: Option<String>,
-    pub reason: DropReason,
-    /// For `duplicates`: the kept dimension with the same groups.
-    #[schema(required)]
-    pub duplicate_of: Option<String>,
-    /// For `separates_slices`: the values found only in the base slice, as text.
-    pub base_only: Vec<String>,
-    /// For `separates_slices`: the values found only in the compare slice, as text.
-    pub compare_only: Vec<String>,
-}
-
-/// - `separates_slices`: every value of the column is found in one slice only, so the column is another name of the
-///   two slices (all orders of one status paid by card, all of the other by transfer).
-/// - `duplicates`: the column splits the rows into exactly the same groups as a kept dimension (an id and its name).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum DropReason {
-    SeparatesSlices,
-    Duplicates,
-}
-
-/// - `both`: the group has rows in both slices.
-/// - `new`: no rows (or a zero value) in the base slice.
-/// - `gone`: no rows (or a zero value) in the compare slice.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum GroupPresence {
-    #[default]
-    Both,
-    New,
-    Gone,
-}
-
 /// Contribution of every group of one dimension; the contributions add up to `change`.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct DimensionBreakdown {
@@ -548,8 +512,6 @@ pub struct DimensionBreakdown {
     /// Vietnamese name of the column from the column profile; null when the profile has none.
     #[schema(required)]
     pub label: Option<String>,
-    /// True when at least one group of this dimension is an outlier.
-    pub has_outliers: bool,
     /// How to read the group values, like the `kind` of a result column.
     pub kind: ValueKind,
     /// SQL that computed the groups of both slices, after the guard.
@@ -576,19 +538,6 @@ pub struct GroupContribution {
     /// Part of `change` from this group: `compare_value - base_value` for a total, `mix_effect + rate_effect` for a
     /// ratio.
     pub contribution: String,
-    pub presence: GroupPresence,
-    /// `contribution / change * 100`, rounded to one decimal: the share of the change from this group. Negative when
-    /// the group moved the other way. Null when the change is too close to zero for a share to mean anything.
-    #[schema(required)]
-    pub share_of_change: Option<String>,
-    /// `(compare_value - base_value) / base_value * 100`, rounded to one decimal. Null when the group is not in both
-    /// slices or `base_value` is zero or negative.
-    #[schema(required)]
-    pub percent_change: Option<String>,
-    /// True when the group changed at least 10 percentage points more or less than the whole (`percent_change` against
-    /// `Explanation.percent_change`) and makes at least 1% of the change; or exists on one side only and makes at
-    /// least 1% of the change.
-    pub outlier: bool,
     /// Ratio measures only: part of `change` because this group's share of the denominator changed,
     /// `(compare_share - base_share) * (base_value + compare_value) / 2`. For a group with no denominator in one slice,
     /// the ratio of that slice is taken equal to the other slice, so the whole contribution is a mix effect.

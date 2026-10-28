@@ -403,11 +403,7 @@
               "compare_value": "2210340.15",
               "contribution": "-639780.25",
               "mix_effect": null,
-              "outlier": false,
-              "percent_change": "-22.4",
-              "presence": "both",
               "rate_effect": null,
-              "share_of_change": "49.9",
               "value": "Europe"
             },
             {
@@ -415,11 +411,7 @@
               "compare_value": "2301250.60",
               "contribution": "-339049.50",
               "mix_effect": null,
-              "outlier": false,
-              "percent_change": "-12.8",
-              "presence": "both",
               "rate_effect": null,
-              "share_of_change": "26.4",
               "value": "LATAM"
             },
             {
@@ -427,11 +419,7 @@
               "compare_value": "1960120.00",
               "contribution": "-145310.25",
               "mix_effect": null,
-              "outlier": false,
-              "percent_change": "-6.9",
-              "presence": "both",
               "rate_effect": null,
-              "share_of_change": "11.3",
               "value": "Pacific Asia"
             },
             {
@@ -439,11 +427,7 @@
               "compare_value": "1090230.00",
               "contribution": "-120270.00",
               "mix_effect": null,
-              "outlier": false,
-              "percent_change": "-9.9",
-              "presence": "both",
               "rate_effect": null,
-              "share_of_change": "9.4",
               "value": "USCA"
             },
             {
@@ -451,15 +435,10 @@
               "compare_value": "557159.25",
               "contribution": "-38990.00",
               "mix_effect": null,
-              "outlier": false,
-              "percent_change": "-6.5",
-              "presence": "both",
               "rate_effect": null,
-              "share_of_change": "3",
               "value": "Africa"
             }
           ],
-          "has_outliers": false,
           "kind": "text",
           "label": "thị trường",
           "mix_effect": null,
@@ -474,11 +453,7 @@
               "compare_value": "4150100.50",
               "contribution": "-730099.65",
               "mix_effect": null,
-              "outlier": false,
-              "percent_change": "-15",
-              "presence": "both",
               "rate_effect": null,
-              "share_of_change": "56.9",
               "value": "Consumer"
             },
             {
@@ -486,11 +461,7 @@
               "compare_value": "2480300.25",
               "contribution": "-369699.85",
               "mix_effect": null,
-              "outlier": false,
-              "percent_change": "-13",
-              "presence": "both",
               "rate_effect": null,
-              "share_of_change": "28.8",
               "value": "Corporate"
             },
             {
@@ -498,15 +469,10 @@
               "compare_value": "1488699.25",
               "contribution": "-183600.50",
               "mix_effect": null,
-              "outlier": false,
-              "percent_change": "-11",
-              "presence": "both",
               "rate_effect": null,
-              "share_of_change": "14.3",
               "value": "Home Office"
             }
           ],
-          "has_outliers": false,
           "kind": "text",
           "label": "phân khúc khách hàng",
           "mix_effect": null,
@@ -514,7 +480,6 @@
           "sql": "SELECT \"Customer Segment\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Customer Segment\" LIMIT 100000"
         }
       ],
-      "dropped_dimensions": [],
       "measure": "Doanh thu",
       "measure_kind": "total",
       "percent_change": "-13.6",

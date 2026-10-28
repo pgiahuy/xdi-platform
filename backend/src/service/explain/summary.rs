@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/summary.rs - lời tóm tắt do code viết cho câu hỏi tìm nguyên nhân (#186): một câu trả lời chính và
-vài ý ngắn, mỗi ý chỉ nói khi số đã tính xác nhận. Đọc Explanation đã gắn số ở explain/annotate.rs (% tác động, % thay
-đổi, nhóm khác thường, chiều đã bỏ). run.rs ghi summary_title, summary_points vào Explanation; narrate.rs dùng
+vài ý ngắn, mỗi ý chỉ nói khi số đã tính xác nhận. Đọc bảng phân rã cùng ghi chú nội bộ của explain/annotate.rs
+(Explanation.notes: % tác động, % thay đổi, nhóm khác thường, chiều bỏ qua); không đổi bảng phân rã. run.rs ghi summary_title, summary_points vào Explanation; narrate.rs dùng
 build_template_summary khi không dùng lời của mô hình; prompt narrate (explain/mod.rs) gửi đúng các ý này để mô hình chỉ
 diễn đạt lại, không tự tìm nguyên nhân.
 
@@ -23,8 +23,11 @@ khi hồ sơ có bí danh: "Type (hình thức thanh toán)". Test ở explain/s
 use rust_decimal::Decimal;
 
 use crate::service::ask::contract::{
-    Comparison, DimensionBreakdown, DropReason, DroppedDimension, Explanation, GroupContribution,
-    GroupPresence, MeasureKind, SummaryPoint, SummaryPointKind,
+    Comparison, DimensionBreakdown, Explanation, GroupContribution, MeasureKind, SummaryPoint,
+    SummaryPointKind,
+};
+use crate::service::explain::annotate::{
+    DimensionNotes, DropReason, DroppedDimension, GroupNotes, GroupPresence,
 };
 use crate::service::explain::number::build_number_text_with;
 use crate::service::explain::{
@@ -39,18 +42,51 @@ const AGAINST_MIN_SHARE: i64 = 5;
 /// Số nhóm, số cột nêu tên trong một ý; nhiều hơn thì câu dài mà không thêm ý.
 const LIST_MAX: usize = 3;
 
+/// Một chiều lời tóm tắt dùng: bảng phân rã của nó và ghi chú của annotate.rs.
+#[derive(Clone, Copy)]
+struct Dimension<'a> {
+    breakdown: &'a DimensionBreakdown,
+    notes: &'a DimensionNotes,
+}
+
+impl<'a> Dimension<'a> {
+    /// Từng nhóm kèm ghi chú của nó (hai danh sách thẳng hàng).
+    fn groups(&self) -> impl Iterator<Item = (&'a GroupContribution, &'a GroupNotes)> {
+        self.breakdown.groups.iter().zip(&self.notes.groups)
+    }
+
+    fn column_text(&self) -> String {
+        build_column_text(&self.breakdown.column, self.breakdown.label.as_deref())
+    }
+}
+
+// Chiều lời tóm tắt dùng, theo thứ tự của ghi chú: chiều có nhóm khác thường trước.
+fn kept_dimensions(e: &Explanation) -> Vec<Dimension<'_>> {
+    e.notes
+        .dimensions
+        .iter()
+        .filter_map(|notes| {
+            let breakdown = e.dimensions.get(notes.index)?;
+            Some(Dimension { breakdown, notes })
+        })
+        .collect()
+}
+
 /// Câu trả lời chính và các ý, đọc từ Explanation.
 pub fn build_summary_parts(explanation: &Explanation) -> (String, Vec<SummaryPoint>) {
     let title = build_title(explanation);
     let mut points = Vec::new();
     let change = explanation.change.parse::<Decimal>().ok();
     if change.is_some_and(|c| !c.is_zero()) {
-        points.extend(build_reason(explanation));
-        match explanation.dimensions.iter().find(|d| d.has_outliers) {
-            Some(dimension) => points.push(build_outliers(explanation, dimension)),
-            None => points.extend(build_even(explanation).or_else(|| build_largest(explanation))),
+        let kept = kept_dimensions(explanation);
+        points.extend(build_reason(explanation, &kept));
+        match kept.iter().find(|d| d.notes.has_outliers) {
+            Some(dimension) => points.push(build_outliers(explanation, *dimension)),
+            None => points.extend(
+                build_even(explanation, &kept).or_else(|| build_largest(explanation, &kept)),
+            ),
         }
-        points.extend(build_against(explanation));
+        points.extend(build_against(explanation, &kept));
     }
     points.extend(build_dropped(explanation));
     (title, points)
@@ -115,11 +151,11 @@ fn build_title(e: &Explanation) -> String {
     }
 }
 
-fn build_reason(e: &Explanation) -> Option<SummaryPoint> {
+fn build_reason(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     let digits = build_fraction_digits(e);
     let comparison = e.comparison;
     if e.measure_kind == MeasureKind::Ratio {
-        let dimension = e.dimensions.first()?;
+        let dimension = kept.first()?.breakdown;
         let (mix, rate) = (
             dimension.mix_effect.as_deref()?,
             dimension.rate_effect.as_deref()?,
@@ -209,31 +245,28 @@ fn similar_row_averages(e: &Explanation) -> Option<bool> {
     Some(gap <= base_average * Decimal::from(SIMILAR_AVERAGE_PERCENT))
 }
 
-fn build_outliers(e: &Explanation, dimension: &DimensionBreakdown) -> SummaryPoint {
-    let mut groups: Vec<&GroupContribution> =
-        dimension.groups.iter().filter(|g| g.outlier).collect();
-    groups.sort_by_key(|g| std::cmp::Reverse(share_abs(g)));
+fn build_outliers(e: &Explanation, dimension: Dimension) -> SummaryPoint {
+    let mut groups: Vec<(&GroupContribution, &GroupNotes)> =
+        dimension.groups().filter(|(_, n)| n.outlier).collect();
+    groups.sort_by_key(|(_, n)| std::cmp::Reverse(share_abs(n)));
     let items: Vec<String> = groups
         .iter()
         .take(LIST_MAX)
-        .map(|g| build_outlier_item(e, g))
+        .map(|(g, n)| build_outlier_item(e, g, n))
         .collect();
     point(
         SummaryPointKind::Outliers,
-        format!(
-            "Khác thường theo {}",
-            build_column_text(&dimension.column, dimension.label.as_deref())
-        ),
+        format!("Khác thường theo {}", dimension.column_text()),
         format!("{}.", items.join("; ")),
     )
 }
 
-fn build_outlier_item(e: &Explanation, group: &GroupContribution) -> String {
+fn build_outlier_item(e: &Explanation, group: &GroupContribution, notes: &GroupNotes) -> String {
     let digits = build_fraction_digits(e);
     let comparison = e.comparison;
     let name = group_name(group);
     let amount = build_direction_text(&group.contribution, digits, comparison);
-    let what = match (group.presence, comparison) {
+    let what = match (notes.presence, comparison) {
         (GroupPresence::New, Comparison::Periods) => {
             format!("{name} mới có ở {} ({amount})", e.compare.label)
         }
@@ -246,7 +279,7 @@ fn build_outlier_item(e: &Explanation, group: &GroupContribution) -> String {
         (GroupPresence::Gone, Comparison::Groups) => {
             format!("{name} chỉ có ở {} ({amount})", e.base.label)
         }
-        (GroupPresence::Both, _) => match (&group.percent_change, &e.percent_change) {
+        (GroupPresence::Both, _) => match (&notes.percent_change, &e.percent_change) {
             (Some(own), Some(whole)) => format!(
                 "{name} {} trong khi mức chung {}",
                 build_percent_change_text(own, comparison),
@@ -256,7 +289,7 @@ fn build_outlier_item(e: &Explanation, group: &GroupContribution) -> String {
         },
     };
     // Phần âm nghĩa là nhóm đi ngược chênh lệch chung: "chiếm -36%" khó hiểu, nên nói "kéo ngược 36%".
-    match group.share_of_change.as_deref().and_then(parse) {
+    match notes.share_of_change.as_deref().and_then(parse) {
         Some(share) if share < Decimal::ZERO => format!(
             "{what}, kéo ngược {} chênh lệch",
             build_percent_text(&share.abs().to_string())
@@ -269,16 +302,13 @@ fn build_outlier_item(e: &Explanation, group: &GroupContribution) -> String {
     }
 }
 
-fn build_even(e: &Explanation) -> Option<SummaryPoint> {
+fn build_even(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     let whole = e.percent_change.as_deref()?;
-    if e.dimensions.is_empty() {
-        return None;
-    }
-    let columns: Vec<String> = e
-        .dimensions
+    let first = kept.first()?;
+    let columns: Vec<String> = kept
         .iter()
         .take(LIST_MAX)
-        .map(|d| build_column_text(&d.column, d.label.as_deref()))
+        .map(|d| d.column_text())
         .collect();
     let mut text = format!(
         "theo {}, không nhóm nào lệch hẳn mức chung ({}).",
@@ -286,7 +316,7 @@ fn build_even(e: &Explanation) -> Option<SummaryPoint> {
         build_percent_change_text(whole, e.comparison)
     );
     if e.measure_kind == MeasureKind::Total {
-        if let Some(largest) = largest_groups(&e.dimensions[0]) {
+        if let Some(largest) = largest_groups(*first) {
             text.push_str(&format!(
                 " Chênh lệch lớn nhất ở {} chỉ vì đây là những nhóm có {} lớn nhất.",
                 join_words(&largest),
@@ -303,11 +333,11 @@ fn build_even(e: &Explanation) -> Option<SummaryPoint> {
 
 // Hai nhóm chênh nhiều nhất cũng nằm trong ba nhóm có giá trị lát gốc lớn nhất: chênh lệch lớn vì nhóm lớn. Không
 // đúng như vậy thì không nói câu này.
-fn largest_groups(dimension: &DimensionBreakdown) -> Option<Vec<String>> {
+fn largest_groups(dimension: Dimension) -> Option<Vec<String>> {
     let both: Vec<&GroupContribution> = dimension
-        .groups
-        .iter()
-        .filter(|g| g.presence == GroupPresence::Both && g.value.is_some())
+        .groups()
+        .filter(|(g, n)| n.presence == GroupPresence::Both && g.value.is_some())
+        .map(|(g, _)| g)
         .collect();
     if both.len() < 3 {
         return None;
@@ -324,15 +354,15 @@ fn largest_groups(dimension: &DimensionBreakdown) -> Option<Vec<String>> {
 
 // Nhóm lớn nhất cùng chiều với chênh lệch chung: nhóm đầu bảng có thể đi ngược chiều (chung giảm mà nhóm biến động
 // mạnh nhất lại tăng), gọi nó là nhóm góp nhiều nhất thì sai.
-fn build_largest(e: &Explanation) -> Option<SummaryPoint> {
+fn build_largest(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     let change = parse(&e.change)?;
-    let dimension = e.dimensions.first()?;
-    let group = dimension.groups.iter().find(|g| {
+    let dimension = kept.first()?;
+    let group = dimension.breakdown.groups.iter().find(|g| {
         parse(&g.contribution).is_some_and(|c| (c < Decimal::ZERO) == (change < Decimal::ZERO))
     })?;
     let digits = build_fraction_digits(e);
     let amount = build_direction_text(&group.contribution, digits, e.comparison);
-    let column = build_column_text(&dimension.column, dimension.label.as_deref());
+    let column = dimension.column_text();
     let text = match e.comparison {
         Comparison::Periods => format!(
             "theo {column}, riêng nhóm {}, {} {amount}.",
@@ -353,30 +383,22 @@ fn build_largest(e: &Explanation) -> Option<SummaryPoint> {
     ))
 }
 
-fn build_against(e: &Explanation) -> Option<SummaryPoint> {
-    let dimension = e.dimensions.first()?;
+fn build_against(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
+    let dimension = kept.first()?;
     let limit = -Decimal::from(AGAINST_MIN_SHARE);
-    let group = dimension
-        .groups
-        .iter()
-        .filter(|g| !(dimension.has_outliers && g.outlier))
-        .filter(|g| {
-            g.share_of_change
-                .as_deref()
-                .and_then(parse)
-                .is_some_and(|s| s <= limit)
-        })
-        .min_by(|a, b| {
-            let share = |g: &GroupContribution| g.share_of_change.as_deref().and_then(parse);
-            share(a).cmp(&share(b))
-        })?;
+    let share = |n: &GroupNotes| n.share_of_change.as_deref().and_then(parse);
+    let (group, _) = dimension
+        .groups()
+        .filter(|(_, n)| !(dimension.notes.has_outliers && n.outlier))
+        .filter(|(_, n)| share(n).is_some_and(|s| s <= limit))
+        .min_by_key(|(_, n)| share(n))?;
     let digits = build_fraction_digits(e);
     Some(point(
         SummaryPointKind::Against,
         "Ngược chiều".to_string(),
         format!(
             "theo {}, {} {}.",
-            build_column_text(&dimension.column, dimension.label.as_deref()),
+            dimension.column_text(),
             group_name(group),
             build_direction_text(&group.contribution, digits, e.comparison)
         ),
@@ -384,16 +406,18 @@ fn build_against(e: &Explanation) -> Option<SummaryPoint> {
 }
 
 fn build_dropped(e: &Explanation) -> Option<SummaryPoint> {
-    if e.dropped_dimensions.is_empty() {
+    if e.notes.dropped.is_empty() {
         return None;
     }
     let columns: Vec<String> = e
-        .dropped_dimensions
+        .notes
+        .dropped
         .iter()
         .map(|d| build_column_text(&d.column, d.label.as_deref()))
         .collect();
     let separated: Vec<String> = e
-        .dropped_dimensions
+        .notes
+        .dropped
         .iter()
         .filter(|d| d.reason == DropReason::SeparatesSlices)
         .map(|d| build_separated_text(e, d))
@@ -415,7 +439,8 @@ fn build_dropped(e: &Explanation) -> Option<SummaryPoint> {
         ));
     }
     for dropped in e
-        .dropped_dimensions
+        .notes
+        .dropped
         .iter()
         .filter(|d| d.reason == DropReason::Duplicates)
     {
@@ -509,8 +534,8 @@ fn join_words(words: &[String]) -> String {
     }
 }
 
-fn share_abs(group: &GroupContribution) -> Option<Decimal> {
-    group
+fn share_abs(notes: &GroupNotes) -> Option<Decimal> {
+    notes
         .share_of_change
         .as_deref()
         .and_then(parse)

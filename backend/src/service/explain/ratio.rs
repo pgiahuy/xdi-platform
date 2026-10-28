@@ -32,7 +32,7 @@ use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::{Decimal, RoundingStrategy};
 
 use crate::service::ask::contract::{CellValue, GroupContribution};
-use crate::service::explain::annotate::build_presence;
+use crate::service::explain::annotate::{build_presence, GroupPresence};
 use crate::service::explain::{build_decimal_text, compare_group_values, GroupValues, ScoreError};
 
 /// Số chữ số thập phân của mọi tỷ lệ và mọi phần đóng góp: đủ đọc tỷ lệ phần trăm tới hai chữ số lẻ (0.0123 là
@@ -74,6 +74,8 @@ pub struct RatioSplit {
     /// Đóng góp của từng nhóm dạng GroupValues (base 0, compare là đóng góp), để xếp chiều bằng
     /// build_dimension_score theo cách Effect với tổng base 0 và tổng compare là chênh lệch.
     pub scored: Vec<GroupValues>,
+    /// Nhóm có ở lát cắt nào, thẳng hàng với `groups`, cho lời tóm tắt (explain/annotate.rs).
+    pub presences: Vec<GroupPresence>,
 }
 
 /// Tỷ lệ hai lát cắt. None khi một mẫu bằng 0 (lát cắt không có tỷ lệ) hay phép chia tràn.
@@ -143,6 +145,7 @@ pub fn build_ratio_split(
         mix_effect: Decimal::ZERO,
         rate_effect: Decimal::ZERO,
         scored: Vec::with_capacity(exact.len()),
+        presences: Vec::with_capacity(exact.len()),
     };
     for (i, group) in exact.iter().enumerate() {
         let (mix, rate) = (rounded[2 * i], rounded[2 * i + 1]);
@@ -154,14 +157,6 @@ pub fn build_ratio_split(
             base_value: build_rate_text(build_rounded(group.base_rate)),
             compare_value: build_rate_text(build_rounded(group.compare_rate)),
             contribution: build_rate_text(contribution),
-            // Không có mẫu số ở một lát cắt nghĩa là nhóm không có dòng nào ở lát đó.
-            presence: build_presence(
-                group.group.base.denominator.is_zero(),
-                group.group.compare.denominator.is_zero(),
-            ),
-            share_of_change: None,
-            percent_change: None,
-            outlier: false,
             mix_effect: Some(build_rate_text(mix)),
             rate_effect: Some(build_rate_text(rate)),
         });
@@ -170,6 +165,11 @@ pub fn build_ratio_split(
             base_value: Decimal::ZERO,
             compare_value: contribution,
         });
+        // Không có mẫu số ở một lát cắt nghĩa là nhóm không có dòng nào ở lát đó.
+        split.presences.push(build_presence(
+            group.group.base.denominator.is_zero(),
+            group.group.compare.denominator.is_zero(),
+        ));
     }
     Ok(split)
 }

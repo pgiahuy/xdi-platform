@@ -492,7 +492,7 @@ async fn two_groups_get_a_plain_summary_from_the_code() {
     assert!(explanation.base.rows.parse::<i64>().unwrap() > 0);
     assert!(explanation.compare.rows.parse::<i64>().unwrap() > 0);
     assert!(explanation.percent_change.is_some());
-    let segments = &explanation.dimensions[0];
+    let segments = &explanation.notes.dimensions[0];
     assert!(segments.groups.iter().all(|g| g.share_of_change.is_some()));
     assert!(
         explanation

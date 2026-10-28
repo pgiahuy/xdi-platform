@@ -3,16 +3,15 @@
 bị bỏ (so hai nhóm và so hai kỳ), chiều chỉ có vài nhóm một bên thì giữ và gắn "mới", chiều trùng nhóm bị bỏ và giữ
 chiều có giá trị chữ, % tác động và % thay đổi, cờ khác thường theo luật 10 điểm và 1%, lát gốc không dương, chênh lệch
 gần 0, nhóm ngược chiều, thứ tự chiều. Dựng chiều từ giá trị hai lát cắt bằng đúng build_group_contributions của bước
-explain. */
-
-use std::collections::HashMap;
+explain. Bảng phân rã đưa vào không đổi: mọi kết quả nằm trong ghi chú. */
 
 use rust_decimal::Decimal;
 
-use crate::service::ask::contract::{
-    CellValue, DimensionBreakdown, DropReason, GroupContribution, GroupPresence, ValueKind,
+use crate::service::ask::contract::{CellValue, DimensionBreakdown, ValueKind};
+use crate::service::explain::annotate::{
+    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences,
+    BreakdownNotes, DimensionNotes, DropReason, GroupNotes, GroupPresence, Totals,
 };
-use crate::service::explain::annotate::{annotate_dimensions, build_percent_text, Totals};
 use crate::service::explain::{build_group_contributions, GroupValues};
 
 fn d(text: &str) -> Decimal {
@@ -35,7 +34,6 @@ fn dimension(column: &str, kind: ValueKind, groups: &[(&str, &str, &str)]) -> Di
     DimensionBreakdown {
         column: column.to_string(),
         label: None,
-        has_outliers: false,
         kind,
         sql: String::new(),
         groups: build_group_contributions(&values).expect("contributions"),
@@ -52,36 +50,53 @@ fn totals(base: &str, compare: &str) -> Totals {
     }
 }
 
-fn group<'a>(dimension: &'a DimensionBreakdown, value: &str) -> &'a GroupContribution {
-    dimension
+/// Ghi chú của các chiều, nhóm có mặt ở đâu theo giá trị 0 như breakdown.rs.
+fn annotate(dimensions: &[DimensionBreakdown], totals: Totals) -> BreakdownNotes {
+    let presences: Vec<_> = dimensions.iter().map(build_value_presences).collect();
+    annotate_dimensions(dimensions, &presences, totals)
+}
+
+fn columns<'a>(notes: &BreakdownNotes, dimensions: &'a [DimensionBreakdown]) -> Vec<&'a str> {
+    notes
+        .dimensions
+        .iter()
+        .map(|n| dimensions[n.index].column.as_str())
+        .collect()
+}
+
+fn group<'a>(
+    notes: &'a DimensionNotes,
+    dimensions: &[DimensionBreakdown],
+    value: &str,
+) -> &'a GroupNotes {
+    let i = dimensions[notes.index]
         .groups
         .iter()
-        .find(|g| matches!(&g.value, Some(CellValue::String(v)) if v == value))
-        .expect("group")
+        .position(|g| matches!(&g.value, Some(CellValue::String(v)) if v == value))
+        .expect("group");
+    &notes.groups[i]
 }
 
 /// COMPLETE với CANCELED: Type tách hẳn hai nhóm (DEBIT chỉ ở COMPLETE, TRANSFER chỉ ở CANCELED) nên bị bỏ, kèm giá
 /// trị mỗi bên; Market thì giữ.
 #[test]
 fn a_dimension_that_splits_the_two_groups_is_dropped() {
-    let annotated = annotate_dimensions(
-        vec![
-            dimension(
-                "Type",
-                ValueKind::Text,
-                &[("DEBIT", "1000", "0"), ("TRANSFER", "0", "60")],
-            ),
-            dimension(
-                "Market",
-                ValueKind::Text,
-                &[("Europe", "600", "35"), ("LATAM", "400", "25")],
-            ),
-        ],
-        totals("1000", "60"),
-        &HashMap::from([("Type".to_string(), "hình thức thanh toán".to_string())]),
+    let mut kind = dimension(
+        "Type",
+        ValueKind::Text,
+        &[("DEBIT", "1000", "0"), ("TRANSFER", "0", "60")],
     );
-    assert_eq!(annotated.dimensions.len(), 1);
-    assert_eq!(annotated.dimensions[0].column, "Market");
+    kind.label = Some("hình thức thanh toán".to_string());
+    let dimensions = [
+        kind,
+        dimension(
+            "Market",
+            ValueKind::Text,
+            &[("Europe", "600", "35"), ("LATAM", "400", "25")],
+        ),
+    ];
+    let annotated = annotate(&dimensions, totals("1000", "60"));
+    assert_eq!(columns(&annotated, &dimensions), ["Market"]);
     let dropped = &annotated.dropped[0];
     assert_eq!(dropped.column, "Type");
     assert_eq!(dropped.label.as_deref(), Some("hình thức thanh toán"));
@@ -94,22 +109,19 @@ fn a_dimension_that_splits_the_two_groups_is_dropped() {
 /// thường khi chiếm từ 1% chênh lệch.
 #[test]
 fn a_few_one_sided_groups_are_kept_and_marked_new() {
-    let annotated = annotate_dimensions(
-        vec![dimension(
-            "Customer State",
-            ValueKind::Text,
-            &[
-                ("CA", "771.12", "1319.99"),
-                ("IL", "0", "524.96"),
-                ("PR", "1809.33", "1323.69"),
-            ],
-        )],
-        totals("2580.45", "3168.64"),
-        &HashMap::new(),
-    );
+    let dimensions = [dimension(
+        "Customer State",
+        ValueKind::Text,
+        &[
+            ("CA", "771.12", "1319.99"),
+            ("IL", "0", "524.96"),
+            ("PR", "1809.33", "1323.69"),
+        ],
+    )];
+    let annotated = annotate(&dimensions, totals("2580.45", "3168.64"));
     assert!(annotated.dropped.is_empty());
     let states = &annotated.dimensions[0];
-    let il = group(states, "IL");
+    let il = group(states, &dimensions, "IL");
     assert_eq!(il.presence, GroupPresence::New);
     assert!(il.outlier);
     assert_eq!(il.percent_change, None);
@@ -121,16 +133,12 @@ fn a_few_one_sided_groups_are_kept_and_marked_new() {
 fn a_duplicate_dimension_keeps_the_text_one() {
     let groups = [("7", "800", "500"), ("4", "200", "120")];
     let named = [("Fan Shop", "800", "500"), ("Apparel", "200", "120")];
-    let annotated = annotate_dimensions(
-        vec![
-            dimension("Department Id", ValueKind::Number, &groups),
-            dimension("Department Name", ValueKind::Text, &named),
-        ],
-        totals("1000", "620"),
-        &HashMap::new(),
-    );
-    assert_eq!(annotated.dimensions.len(), 1);
-    assert_eq!(annotated.dimensions[0].column, "Department Name");
+    let dimensions = [
+        dimension("Department Id", ValueKind::Number, &groups),
+        dimension("Department Name", ValueKind::Text, &named),
+    ];
+    let annotated = annotate(&dimensions, totals("1000", "620"));
+    assert_eq!(columns(&annotated, &dimensions), ["Department Name"]);
     assert_eq!(annotated.dropped[0].column, "Department Id");
     assert_eq!(annotated.dropped[0].reason, DropReason::Duplicates);
     assert_eq!(
@@ -142,19 +150,17 @@ fn a_duplicate_dimension_keeps_the_text_one() {
 /// Consumer với Corporate: mọi nhóm giảm gần như mức chung, nên không nhóm nào khác thường; % tác động cộng lại 100.
 #[test]
 fn an_even_change_has_no_outlier() {
-    let annotated = annotate_dimensions(
-        vec![dimension(
-            "Department Name",
-            ValueKind::Text,
-            &[
-                ("Fan Shop", "8869203.67", "5216292.76"),
-                ("Apparel", "4130801.34", "2408676.13"),
-                ("Golf", "2388833.71", "1405012.47"),
-            ],
-        )],
-        totals("15388838.72", "9029981.36"),
-        &HashMap::new(),
-    );
+    let dimensions = [dimension(
+        "Department Name",
+        ValueKind::Text,
+        &[
+            ("Fan Shop", "8869203.67", "5216292.76"),
+            ("Apparel", "4130801.34", "2408676.13"),
+            ("Golf", "2388833.71", "1405012.47"),
+        ],
+    )];
+    let slices = totals("15388838.72", "9029981.36");
+    let annotated = annotate(&dimensions, slices);
     let departments = &annotated.dimensions[0];
     assert!(!departments.has_outliers);
     let shares: Decimal = departments
@@ -167,11 +173,15 @@ fn an_even_change_has_no_outlier() {
         "{shares}"
     );
     assert_eq!(
-        group(departments, "Fan Shop").percent_change.as_deref(),
+        group(departments, &dimensions, "Fan Shop")
+            .percent_change
+            .as_deref(),
         Some("-41.2")
     );
     assert_eq!(
-        annotated.percent_change.map(build_percent_text).as_deref(),
+        build_percent_change(slices)
+            .map(build_percent_text)
+            .as_deref(),
         Some("-41.3")
     );
 }
@@ -180,47 +190,41 @@ fn an_even_change_has_no_outlier() {
 /// thì không. Chiều có nhóm khác thường xếp lên trước chiều không có.
 #[test]
 fn outliers_follow_the_ten_points_and_one_percent_rule() {
-    let annotated = annotate_dimensions(
-        vec![
-            dimension(
-                "Market",
-                ValueKind::Text,
-                &[("Europe", "500", "450"), ("LATAM", "500", "450")],
-            ),
-            dimension(
-                "Category",
-                ValueKind::Text,
-                &[
-                    ("Fishing", "400", "260"),
-                    ("Golf", "595", "639"),
-                    ("Tiny", "5", "1"),
-                ],
-            ),
-        ],
-        totals("1000", "900"),
-        &HashMap::new(),
-    );
-    assert_eq!(annotated.dimensions[0].column, "Category");
+    let dimensions = [
+        dimension(
+            "Market",
+            ValueKind::Text,
+            &[("Europe", "500", "450"), ("LATAM", "500", "450")],
+        ),
+        dimension(
+            "Category",
+            ValueKind::Text,
+            &[
+                ("Fishing", "400", "260"),
+                ("Golf", "595", "639"),
+                ("Tiny", "5", "1"),
+            ],
+        ),
+    ];
+    let annotated = annotate(&dimensions, totals("1000", "900"));
+    assert_eq!(columns(&annotated, &dimensions), ["Category", "Market"]);
     let category = &annotated.dimensions[0];
-    assert!(group(category, "Fishing").outlier);
+    assert!(group(category, &dimensions, "Fishing").outlier);
     // Golf đi ngược chiều (tăng 7,4% khi chung giảm 10%) cũng lệch hẳn mức chung.
-    assert!(group(category, "Golf").outlier);
+    assert!(group(category, &dimensions, "Golf").outlier);
     assert!(!annotated.dimensions[1].has_outliers);
 }
 
 /// Nhóm dưới 1% chênh lệch không khác thường dù lệch mức chung rất xa.
 #[test]
 fn a_tiny_group_is_not_an_outlier() {
-    let annotated = annotate_dimensions(
-        vec![dimension(
-            "Category",
-            ValueKind::Text,
-            &[("Big", "9990", "8991.5"), ("Tiny", "10", "1")],
-        )],
-        totals("10000", "8992.5"),
-        &HashMap::new(),
-    );
-    let tiny = group(&annotated.dimensions[0], "Tiny");
+    let dimensions = [dimension(
+        "Category",
+        ValueKind::Text,
+        &[("Big", "9990", "8991.5"), ("Tiny", "10", "1")],
+    )];
+    let annotated = annotate(&dimensions, totals("10000", "8992.5"));
+    let tiny = group(&annotated.dimensions[0], &dimensions, "Tiny");
     assert_eq!(tiny.percent_change.as_deref(), Some("-90"));
     assert_eq!(tiny.share_of_change.as_deref(), Some("0.9"));
     assert!(!tiny.outlier);
@@ -229,61 +233,55 @@ fn a_tiny_group_is_not_an_outlier() {
 /// Nhóm đi ngược chiều tổng có % tác động âm; các nhóm cùng chiều cộng lại hơn 100%.
 #[test]
 fn a_group_against_the_change_has_a_negative_share() {
-    let annotated = annotate_dimensions(
-        vec![dimension(
-            "Market",
-            ValueKind::Text,
-            &[("Europe", "500", "300"), ("LATAM", "500", "600")],
-        )],
-        totals("1000", "900"),
-        &HashMap::new(),
-    );
+    let dimensions = [dimension(
+        "Market",
+        ValueKind::Text,
+        &[("Europe", "500", "300"), ("LATAM", "500", "600")],
+    )];
+    let annotated = annotate(&dimensions, totals("1000", "900"));
     let markets = &annotated.dimensions[0];
-    assert_eq!(
-        group(markets, "Europe").share_of_change.as_deref(),
-        Some("200")
-    );
-    assert_eq!(
-        group(markets, "LATAM").share_of_change.as_deref(),
-        Some("-100")
-    );
+    let share = |value| {
+        group(markets, &dimensions, value)
+            .share_of_change
+            .as_deref()
+    };
+    assert_eq!(share("Europe"), Some("200"));
+    assert_eq!(share("LATAM"), Some("-100"));
 }
 
 /// Lợi nhuận âm ở lát gốc: không có % thay đổi chung hay của nhóm có lát gốc âm; % tác động vẫn có.
 #[test]
 fn a_negative_base_has_no_percent_change() {
-    let annotated = annotate_dimensions(
-        vec![dimension(
-            "Market",
-            ValueKind::Text,
-            &[("Europe", "-300", "100"), ("LATAM", "200", "250")],
-        )],
-        totals("-100", "350"),
-        &HashMap::new(),
-    );
-    assert_eq!(annotated.percent_change, None);
+    let dimensions = [dimension(
+        "Market",
+        ValueKind::Text,
+        &[("Europe", "-300", "100"), ("LATAM", "200", "250")],
+    )];
+    let slices = totals("-100", "350");
+    let annotated = annotate(&dimensions, slices);
+    assert_eq!(build_percent_change(slices), None);
     let markets = &annotated.dimensions[0];
-    assert_eq!(group(markets, "Europe").percent_change, None);
+    let europe = group(markets, &dimensions, "Europe");
+    assert_eq!(europe.percent_change, None);
+    assert!(europe.share_of_change.is_some());
     assert_eq!(
-        group(markets, "LATAM").percent_change.as_deref(),
+        group(markets, &dimensions, "LATAM")
+            .percent_change
+            .as_deref(),
         Some("25")
     );
-    assert!(group(markets, "Europe").share_of_change.is_some());
 }
 
 /// Chênh lệch tổng gần 0 so với quy mô hai lát cắt: % tác động phình ra vô nghĩa nên không tính, không nhóm nào khác
 /// thường.
 #[test]
 fn a_change_near_zero_has_no_share() {
-    let annotated = annotate_dimensions(
-        vec![dimension(
-            "Market",
-            ValueKind::Text,
-            &[("Europe", "5000", "6000"), ("LATAM", "5000", "4001")],
-        )],
-        totals("10000", "10001"),
-        &HashMap::new(),
-    );
+    let dimensions = [dimension(
+        "Market",
+        ValueKind::Text,
+        &[("Europe", "5000", "6000"), ("LATAM", "5000", "4001")],
+    )];
+    let annotated = annotate(&dimensions, totals("10000", "10001"));
     let markets = &annotated.dimensions[0];
     assert!(markets.groups.iter().all(|g| g.share_of_change.is_none()));
     assert!(!markets.has_outliers);

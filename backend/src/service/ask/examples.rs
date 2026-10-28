@@ -9,14 +9,14 @@ Mẫu dựng bằng code từ chính các struct; ask/examples_tests.rs báo khi
 Số liệu là số minh họa, không tính từ dữ liệu thật; thời gian các bước cũng vậy, không phải số đo. Các số trong phân
 rã được chọn để cộng khớp đúng như #39 và #40 đòi hỏi (test kiểm). */
 
-use std::collections::HashMap;
-
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::service::ask::contract::*;
 use crate::service::ask::run::REFUSED_MESSAGE;
-use crate::service::explain::annotate::{annotate_dimensions, build_percent_text, Totals};
+use crate::service::explain::annotate::{
+    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
+};
 use crate::service::explain::summary::apply_summary_parts;
 
 const MODEL: &str = "gemini-2.5-flash";
@@ -244,10 +244,10 @@ fn build_why_explanation() -> Explanation {
         },
         change: "-1283400.00".to_string(),
         percent_change: None,
-        dropped_dimensions: Vec::new(),
         dimensions: vec![
             build_breakdown(
                 "Market",
+                Some("thị trường"),
                 by("Market"),
                 &[
                     ("Europe", "2850120.40", "2210340.15", "-639780.25"),
@@ -259,6 +259,7 @@ fn build_why_explanation() -> Explanation {
             ),
             build_breakdown(
                 "Customer Segment",
+                Some("phân khúc khách hàng"),
                 by("Customer Segment"),
                 &[
                     ("Consumer", "4880200.15", "4150100.50", "-730099.65"),
@@ -288,27 +289,21 @@ fn build_why_explanation() -> Explanation {
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: true,
+        notes: Default::default(),
     };
-    // Số của từng nhóm, cờ khác thường và các ý tóm tắt tính bằng đúng hàm của bước explain, để mẫu khớp response thật.
-    let labels = HashMap::from([
-        ("Market".to_string(), "thị trường".to_string()),
-        (
-            "Customer Segment".to_string(),
-            "phân khúc khách hàng".to_string(),
-        ),
-    ]);
-    let annotated = annotate_dimensions(
-        std::mem::take(&mut explanation.dimensions),
-        Totals {
-            base: Decimal::new(940250000, 2),
-            compare: Decimal::new(811910000, 2),
-            change: Decimal::new(-128340000, 2),
-        },
-        &labels,
-    );
-    explanation.dimensions = annotated.dimensions;
-    explanation.dropped_dimensions = annotated.dropped;
-    explanation.percent_change = annotated.percent_change.map(build_percent_text);
+    // % thay đổi, ghi chú và các ý tóm tắt tính bằng đúng hàm của bước explain, để mẫu khớp response thật.
+    let totals = Totals {
+        base: Decimal::new(940250000, 2),
+        compare: Decimal::new(811910000, 2),
+        change: Decimal::new(-128340000, 2),
+    };
+    let presences: Vec<_> = explanation
+        .dimensions
+        .iter()
+        .map(build_value_presences)
+        .collect();
+    explanation.percent_change = build_percent_change(totals).map(build_percent_text);
+    explanation.notes = annotate_dimensions(&explanation.dimensions, &presences, totals);
     apply_summary_parts(&mut explanation);
     explanation
 }
@@ -446,13 +441,13 @@ fn build_revenue_choice() -> Choice {
 
 fn build_breakdown(
     column: &str,
+    label: Option<&str>,
     sql: String,
     groups: &[(&str, &str, &str, &str)],
 ) -> DimensionBreakdown {
     DimensionBreakdown {
         column: column.to_string(),
-        label: None,
-        has_outliers: false,
+        label: label.map(str::to_string),
         kind: ValueKind::Text,
         sql,
         groups: groups
@@ -462,10 +457,6 @@ fn build_breakdown(
                 base_value: base.to_string(),
                 compare_value: compare.to_string(),
                 contribution: contribution.to_string(),
-                presence: GroupPresence::Both,
-                share_of_change: None,
-                percent_change: None,
-                outlier: false,
                 mix_effect: None,
                 rate_effect: None,
             })
