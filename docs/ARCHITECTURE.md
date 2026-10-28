@@ -89,6 +89,11 @@ kết quả, là dòng gốc khi câu không gộp. Nó không biết phân quy�
 tự lọc theo quyền). Mọi bước đều được ghi lại và trả về cho giao diện hiển thị. Phần gửi cho mô hình, chi tiết từng
 lúc: [PRIVACY.md](PRIVACY.md).
 
+Chữ cố định của các prompt (luật, khuôn câu) nằm trong `backend/prompts/`, mỗi prompt một file: đọc ở đó để thấy
+nguyên văn những gì gửi cho mô hình. Chỗ trống viết `{{tên}}`, code điền phần dữ liệu (dòng cột, danh sách giá trị,
+JSON, lượt trước) qua `engine/prompts.rs`; file nhúng vào binary lúc biên dịch, và mỗi prompt có file mẫu so từng byte
+trong `backend/src/service/testdata/`. Riêng prompt diễn giải câu "tại sao" còn trong `service/explain/mod.rs`.
+
 ## 3. Ba tầng, phụ thuộc một chiều
 
 ```
@@ -100,7 +105,7 @@ backend/src/
   service/           tầng nghiệp vụ: ingest.rs, excel.rs, samples.rs, eval.rs và các module con ask/, explain/,
                      drill/, understanding/, semantic/, conversation/; không biết gì về HTTP
   engine/            tầng hạ tầng: analytics.rs, query.rs (DuckDB), excel.rs (đọc xlsx), store/ (Postgres, chia theo
-                     bảng), guard/ (guard SQL, GUARD.md), llm/
+                     bảng), guard/ (guard SQL, GUARD.md), llm/, prompts.rs (điền chữ của backend/prompts/)
   auth/              mật khẩu, mã phiên, mã thiết lập, vai, kiểu WorkspaceId
   error.rs           một enum lỗi chung
 ```

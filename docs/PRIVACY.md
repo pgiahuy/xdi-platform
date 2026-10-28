@@ -43,6 +43,10 @@ Nội dung gửi:
 | Diễn giải câu "tại sao" so hai kỳ | Câu hỏi và bảng phân rã đã tính: độ đo, nhãn và giá trị hai lát cắt, chênh lệch, nhóm chính (`main_group`: nhóm đóng góp lớn nhất cùng chiều với chênh lệch ở chiều đầu), hai chiều đầu, mỗi chiều ba nhóm đầu kèm giá trị nhóm, giá trị hai lát cắt và phần đóng góp (độ đo tỷ lệ thêm phần cơ cấu và phần hiệu suất), tách lượng và giá nếu có. Câu so hai nhóm, hay chênh lệch bằng 0, thì không gửi gì: lời giải thích là câu khuôn do backend viết | Các dòng dữ liệu gốc |
 | Trả lời câu thường | Câu hỏi, phần "Đã hiểu là" (nhãn độ đo, nhóm, bộ lọc), tên cột kết quả, tối đa 10 dòng đầu của kết quả và tổng số dòng. Đây là dữ liệu kết quả thật: giá trị nhóm và con số đã tính, có thể chứa giá trị của mọi cột câu SQL chọn. Tắt bằng `ANSWER_TEXT=false`: không gửi dòng kết quả nào, đoạn trả lời là câu khuôn do backend viết | Các dòng dữ liệu gốc; dòng thứ 11 trở đi của kết quả; câu SQL |
 
+Nguyên văn phần chữ cố định của từng prompt (luật, khuôn câu, chỗ trống nơi dữ liệu ở bảng trên được điền vào) nằm
+trong [`backend/prompts/`](https://github.com/pgiahuy/xdi-platform/tree/main/backend/prompts), trừ prompt diễn giải
+câu "tại sao", còn trong `backend/src/service/explain/mod.rs`.
+
 Lưu ý: giá trị mẫu và giá trị phân loại là dữ liệu thật của bạn, ví dụ tên khu vực hay tên sản phẩm. Cột chữ có ít
 giá trị khác nhau được tính là cột phân loại; backend đánh dấu cột nhạy cảm theo tên cột và dạng giá trị ngay khi nạp,
 nhưng một cột không khớp luật (ví dụ tên khách hàng đặt tên khác thường) vẫn có thể được gửi cho tới khi mô hình
