@@ -2,7 +2,7 @@
 /* components/ask/AnswerText.tsx - đoạn trả lời bằng lời của câu hỏi thường (AskResponse.answer_text): mô hình ngôn ngữ
 viết từ các dòng đầu của kết quả, mọi con số trong đoạn đều có trong các dòng đó. Khi câu của mô hình không qua bước so
 số, không gọi được mô hình hay người quản trị tắt ANSWER_TEXT, backend thay bằng câu viết theo khuôn; ghi rõ điều đó
-như lời giải thích của câu "tại sao" (AnswerSummary.tsx). */
+để người đọc biết. */
 
 type Props = {
   text: string

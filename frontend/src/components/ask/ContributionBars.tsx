@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/ContributionBars.tsx - biểu đồ thanh hai phía cho đóng góp của từng nhóm vào chênh lệch, theo chiều
-giải thích tốt nhất (chiều đầu tiên backend gửi). Thanh giảm sang trái màu hổ phách, thanh tăng sang phải màu xanh ngọc,
+/* components/ask/ContributionBars.tsx - biểu đồ thanh hai phía cho chênh lệch của từng nhóm (lát so sánh trừ lát gốc
+trong nhóm, cộng lại bằng chênh lệch chung), theo chiều đầu tiên backend gửi. Tiêu đề ghi tên cột kèm nghĩa tiếng Việt
+(columnText.ts). Thanh giảm sang trái màu hổ phách, thanh tăng sang phải màu xanh ngọc,
 cùng một thang nên so được độ lớn bằng mắt. Nhóm như bảng phân rã: các nhóm lớn nhất rồi một dòng "Còn lại"
 (breakdownGroups.ts).
 Mỗi dòng ghi số có dấu (+ hay -), nên màu và hướng thanh chỉ giúp đọc nhanh; chữ chiều chỉ cho trình đọc màn hình
@@ -11,6 +12,7 @@ Vẽ bằng thẻ div thay vì Recharts: chỉ là các thanh ngang, và file n�
 
 import { cn } from '@/lib/utils'
 import { splitGroups } from './breakdownGroups'
+import { columnText } from './columnText'
 import { formatCell } from './cellFormat'
 import { changeDirection, directionWord, formatSigned } from './changeFormat'
 import type { Comparison, DimensionView } from './evidenceTypes'
@@ -40,7 +42,7 @@ export function ContributionBars({ dimension, baseLabel, compareLabel, compariso
     <section aria-labelledby="contribution-heading" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 id="contribution-heading" className="text-sm font-semibold">
-          Đóng góp vào chênh lệch theo {dimension.column}
+          Chênh lệch theo {columnText(dimension.column, dimension.label)}
         </h3>
         <p className="text-xs text-muted-foreground">
           {compareLabel} trừ {baseLabel}

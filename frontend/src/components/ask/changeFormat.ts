@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/changeFormat.ts - đọc chiều và viết số có dấu cho một chênh lệch là chuỗi chữ số của backend
-("-1234.50"). Đọc trên chuỗi, không qua Number(), để số lớn không bị làm tròn (cùng lý do với cellFormat.formatDecimal). */
+("-1234.50") hay phần trăm ("-13.6"). Đọc trên chuỗi, không qua Number(), để số lớn không bị làm tròn (cùng lý do với cellFormat.formatDecimal). */
 
 import { formatDecimal } from './cellFormat'
 import type { Comparison } from './evidenceTypes'
@@ -21,4 +21,9 @@ export function directionWord(direction: ChangeDirection, comparison: Comparison
 /** Số có dấu: "+5.107,10" khi tăng, "-1.152,24" khi giảm, không dấu khi bằng 0. */
 export function formatSigned(value: string): string {
   return changeDirection(value) === 'up' ? `+${formatDecimal(value)}` : formatDecimal(value)
+}
+
+/** Phần trăm của backend ("13.6", một chữ số lẻ) thành "13,6%". */
+export function formatPercent(value: string): string {
+  return `${formatDecimal(value)}%`
 }

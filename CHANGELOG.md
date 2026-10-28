@@ -7,6 +7,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 ### Changed
 
 - Câu hỏi tìm nguyên nhân có lời tóm tắt do code viết: câu trả lời chính rồi lý do chính (số dòng, lượng và giá, cơ cấu), nhóm khác thường hay "không có nơi nào đặc biệt", và cột lời tóm tắt bỏ qua vì chỉ là tên khác của hai nhóm đang so (như hình thức thanh toán khi so trạng thái đơn) hay trùng cột khác; tên cột kèm nghĩa tiếng Việt.
+- Thẻ trả lời câu hỏi tìm nguyên nhân hiện lời tóm tắt (câu chính in đậm và các ý ngắn), số dòng của hai bên, phần trăm thay đổi cạnh chênh lệch, và tên cột kèm nghĩa tiếng Việt ở tiêu đề biểu đồ chênh lệch.
 
 ## [0.2.0] - 2026-10-27
 

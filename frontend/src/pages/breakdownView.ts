@@ -18,9 +18,16 @@ export function buildBreakdown(response: AskResponse): TabData<BreakdownView> {
       compareLabel: explanation.compare.label,
       baseValue: explanation.base.value,
       compareValue: explanation.compare.value,
+      baseRows: explanation.base.rows,
+      compareRows: explanation.compare.rows,
+      countsRows: explanation.counts_rows,
       change: explanation.change,
+      percentChange: explanation.percent_change,
+      sliceColumn: explanation.slice_column,
+      sliceColumnLabel: explanation.slice_column_label,
       dimensions: explanation.dimensions.map((dimension) => ({
         column: dimension.column,
+        label: dimension.label,
         kind: dimension.kind,
         groups: dimension.groups.map((group) => ({
           value: group.value,
@@ -44,8 +51,10 @@ export function buildBreakdown(response: AskResponse): TabData<BreakdownView> {
         priceEffect: vp.price_effect,
         ifVolumeUnchanged: vp.if_volume_unchanged,
       },
-      summary: explanation.summary,
-      summaryByModel: explanation.summary_by_model,
+      // Không dùng explanation.summary (lời của mô hình): các ý do code viết luôn khớp số, lời của mô hình chỉ diễn đạt
+      // lại các ý đó nên hiện cả hai là nói một điều hai lần.
+      summaryTitle: explanation.summary_title,
+      summaryPoints: explanation.summary_points.map((point) => ({ lead: point.lead, text: point.text })),
     },
   }
 }
