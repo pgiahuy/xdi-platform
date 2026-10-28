@@ -151,7 +151,8 @@ trong workspace thì thêm `_2`, `_3`. Ví dụ "Bán hàng 2024" thành `ban_ha
   thêm `_2`, `_3`. Tên ở danh sách sheet trùng với tên cột sau khi nạp.
 
 Kết quả nạp (`UploadResult.columns`) trả tên và kiểu DuckDB của từng cột (`BIGINT`, `DOUBLE`, `VARCHAR`, `DATE`...),
-gồm cả `_source_file`. Hồ sơ đầy đủ của từng cột lưu ở bảng `columns` (mục dưới), chưa có API đọc.
+gồm cả `_source_file`. Hồ sơ đầy đủ của từng cột lưu ở bảng `columns` (mục dưới), đọc qua route tổng quan dataset
+([API](API.md), mục Tổng quan dataset).
 
 ## Hồ sơ cột
 

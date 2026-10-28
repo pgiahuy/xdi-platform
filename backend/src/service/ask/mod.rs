@@ -13,7 +13,7 @@ trả lời, người hỏi sẽ gửi lại kèm lựa chọn.
 Cảnh báo kiểm hợp lý (rỗng, toàn null, giá trị lọc không có, độ lớn bất thường) dựng ở ask/checks.rs sau khi chạy;
 chúng không đổi status. */
 
-mod chart;
+pub(crate) mod chart;
 pub mod checks;
 // build_metric_mismatches chờ cách báo chỉ số dùng sai công thức: bốn luật kiểm hợp lý (#36) không có mã cảnh báo hợp,
 // thêm mã mới là đổi API. Phần còn lại endpoint hỏi đã gọi. Gỡ allow khi hàm đó được gọi, để clippy bắt lại mã thừa.
