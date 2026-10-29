@@ -23,6 +23,9 @@ pub mod check;
 #[cfg(test)]
 pub(crate) mod check_tests;
 pub mod choices;
+pub mod dimension_pick;
+#[cfg(test)]
+mod dimension_pick_tests;
 pub mod form;
 pub mod latest;
 pub mod measure;

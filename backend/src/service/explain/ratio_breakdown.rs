@@ -21,10 +21,11 @@ use crate::service::explain::annotate::{
     annotate_dimensions, build_percent_change, build_percent_text, GroupPresence, Totals,
 };
 use crate::service::explain::breakdown::{
-    build_comparison, build_slice_column, build_slice_labels, run_dimension_rows, Breakdown,
-    QueryEnv, SliceTotals,
+    build_comparison, build_slice_column, build_slice_labels, run_candidates, Breakdown, QueryEnv,
+    SliceTotals,
 };
 use crate::service::explain::check::WhyPlan;
+use crate::service::explain::dimension_pick::{pick_dimensions, Candidate, Presence};
 use crate::service::explain::ratio::{
     build_rate_text, build_ratio_change, build_ratio_split, RatioGroup, RatioParts,
 };
@@ -60,12 +61,16 @@ pub(super) async fn build_ratio_breakdown(
             plan.measure.label
         )));
     }
+    let candidates = run_candidates(env, plan, 4).await?;
+    // Nhóm có dòng ở một lát cắt khi mẫu số ở đó khác 0: hai ô mẫu số là ô thứ ba và thứ tư (explain/sql.rs).
+    let presence = Presence {
+        base: 2,
+        compare: 3,
+    };
     let mut ranked = Vec::new();
     let mut presences: HashMap<String, Vec<GroupPresence>> = HashMap::new();
-    for column in &plan.dimensions {
-        let Some(rows) = run_dimension_rows(env, plan, column, 4).await? else {
-            continue;
-        };
+    let picked = pick_dimensions(env, plan, candidates, presence).await?;
+    for Candidate { column, rows } in picked.kept {
         // Bốn ô số theo thứ tự của câu từng chiều (explain/sql.rs): tử base, tử compare, mẫu base, mẫu compare.
         let groups: Vec<RatioGroup> = rows
             .groups
@@ -95,11 +100,11 @@ pub(super) async fn build_ratio_breakdown(
         });
         match scored {
             Ok((split, score)) => {
-                presences.insert(column.to_string(), split.presences);
+                presences.insert(column.clone(), split.presences);
                 ranked.push(RankedDimension {
                     breakdown: DimensionBreakdown {
-                        column: column.to_string(),
-                        label: plan.labels.get(column).cloned(),
+                        label: plan.labels.get(&column).cloned(),
+                        column: column.clone(),
                         kind: rows.kind,
                         sql: rows.shown,
                         groups: split.groups,
@@ -132,7 +137,9 @@ pub(super) async fn build_ratio_breakdown(
         compare: change.compare_rate,
         change: change.change,
     };
-    let notes = annotate_dimensions(&dimensions, &presences, slices);
+    let mut notes = annotate_dimensions(&dimensions, &presences, slices);
+    // Như nhánh cộng được (breakdown.rs): chiều dimension_pick đã bỏ vẫn có trong ý "Bỏ qua" của lời tóm tắt.
+    notes.dropped.extend(picked.dropped);
     let (base_label, compare_label) = build_slice_labels(plan);
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),

@@ -20,8 +20,6 @@ export type SqlView = {
   guarded: string | null
   /** Vì sao không có bản sau guard, ví dụ lý do guard từ chối. */
   guardedMissing: string | null
-  /** Những gì guard ghi là đã thêm, ví dụ "Thêm LIMIT 100000". */
-  guardNotes: string[]
 }
 
 export type GroupView = {

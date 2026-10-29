@@ -13,6 +13,7 @@ use crate::service::ask::contract::{
 };
 use crate::service::ask::summary::{
     build_answer_check, build_summary_prompt, build_template_answer, summarize, SummaryInput,
+    NO_DATA_ANSWER,
 };
 use crate::service::prompt_fixtures::check_fixture;
 
@@ -125,6 +126,54 @@ fn template_without_order_only_counts_rows() {
         result: &result,
     };
     assert_eq!(build_template_answer(&input), "Có 2 dòng kết quả.");
+}
+
+/// Số của câu hỏi nằm trong nhãn của thẻ "Đã hiểu là" (khoảng thời gian "Năm 2019", top 5): mô hình được nhắc lại, kể cả
+/// không chép nguyên nhãn. Số lạ hay số kèm chữ tỷ lệ vẫn bị loại.
+#[test]
+fn numbers_of_the_question_labels_pass_the_check() {
+    let mut u = understanding();
+    u.time_range = Some(item("Năm 2019"));
+    u.limit = Some(item("5 dòng đầu"));
+    let result = sales();
+    let input = SummaryInput {
+        question: "Top 5 danh mục năm 2019",
+        understanding: Some(&u),
+        result: &result,
+    };
+    assert!(build_answer_check("Năm 2019, Fishing cao nhất với 6.929.656,49.", &input).is_ok());
+    assert!(build_answer_check(
+        "Trong 2019, 5 danh mục đứng đầu do Fishing dẫn đầu.",
+        &input
+    )
+    .is_ok());
+    assert_eq!(
+        build_answer_check("Năm 2020 Fishing tăng 2019%.", &input),
+        Err(vec!["2020".to_string(), "2019".to_string()])
+    );
+}
+
+/// Kết quả chỉ có ô trống (tổng của năm không có dữ liệu): câu do code viết, không gọi mô hình, không ra "Tổng ... là .".
+#[tokio::test]
+async fn all_empty_result_gets_the_no_data_answer() {
+    let result = ResultTable {
+        columns: vec![column("total", ValueKind::Decimal, ColumnRole::Measure)],
+        rows: vec![vec![None]],
+        total_rows: 1,
+        truncated: false,
+        limit_reached: false,
+    };
+    let u = understanding();
+    let input = SummaryInput {
+        question: "Doanh thu năm 2019?",
+        understanding: Some(&u),
+        result: &result,
+    };
+    let outcome = summarize(&NeverCalled, &input, true, Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert_eq!(outcome.text, NO_DATA_ANSWER);
+    assert!(!outcome.by_model);
 }
 
 #[test]

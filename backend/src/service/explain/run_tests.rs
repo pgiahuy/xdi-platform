@@ -508,9 +508,21 @@ async fn two_groups_get_a_plain_summary_from_the_code() {
 
 /// Bộ lọc dòng theo vai dữ liệu của người hỏi nằm trong mọi câu, cả câu phân rã: người chỉ thấy Europe được phân rã
 /// trên dòng Europe.
+/// Thêm một dòng Europe, Corporate 0 đồng ở mỗi quý: chỉ thấy Europe thì Market còn một nhóm và Customer Segment cũng
+/// chỉ còn Consumer, mà chiều ít hơn hai nhóm bị bỏ (explain/dimension_pick.rs), nên cần Segment có hai nhóm để còn câu
+/// phân rã mà kiểm. Hai dòng 0 đồng không đổi tổng nào.
 #[tokio::test]
 async fn data_role_filter_reaches_the_breakdown_sql() {
-    let data = Dataco::new();
+    let corporate = |id: i64, day: &str| {
+        format!("SELECT CAST({id} AS INTEGER), 'Europe', 'Corporate', '{day}', CAST(0 AS DOUBLE)")
+    };
+    let data = Dataco::with_rows(
+        &[
+            corporate(30_001, "6/3/2017 08:00"),
+            corporate(30_002, "9/3/2017 08:00"),
+        ],
+        2,
+    );
     let filter = RowFilter {
         column: "Market".to_string(),
         allowed_values: vec!["Europe".to_string()],
@@ -526,6 +538,7 @@ async fn data_role_filter_reaches_the_breakdown_sql() {
     let explanation = outcome.explanation.unwrap();
     assert_eq!(explanation.base.value, "2850120.40");
     assert_eq!(explanation.compare.value, "2210340.15");
+    assert!(!explanation.dimensions.is_empty());
     for dimension in &explanation.dimensions {
         assert!(
             dimension.sql.contains("\"Market\" IN ('Europe')"),

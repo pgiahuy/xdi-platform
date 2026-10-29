@@ -226,8 +226,9 @@ fn complete_canceled_drops_the_columns_that_rename_the_groups() {
     build_number_check(&template, &explanation).unwrap();
 }
 
-/// Lời tóm tắt bỏ qua Type và Delivery Status, nhưng bảng phân rã trả cho giao diện vẫn đủ mọi chiều theo đúng thứ tự
-/// xếp hạng: bỏ qua chỉ nằm trong ghi chú nội bộ.
+/// Lời tóm tắt bỏ qua Type và Delivery Status, nhưng annotate không bỏ chiều nào khỏi bảng phân rã đã dựng: bỏ qua chỉ
+/// nằm trong ghi chú nội bộ. Trên dữ liệu thật, explain/dimension_pick.rs bỏ hai chiều này khỏi bảng trước bước annotate
+/// và đưa chúng vào ghi chú (dimension_pick_tests.rs).
 #[test]
 fn the_breakdown_keeps_the_dimensions_the_summary_skips() {
     let explanation = complete_canceled();

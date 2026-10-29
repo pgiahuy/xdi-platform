@@ -37,6 +37,13 @@ pub const MAX_ANSWER_CHARS: usize = 400;
 /// Giá trị ô có chữ dài quá thì cắt khi đưa vào câu khuôn, để đoạn dữ liệu dài không lọt nguyên văn ra giao diện.
 const TEMPLATE_CELL_CHARS: usize = 80;
 
+/// Câu trả lời khi mọi ô của kết quả đều trống, thường là tổng hợp trên tập không có dòng nào (hỏi năm 2019 trên dữ liệu
+/// tới tháng 1/2018 ra một dòng SUM là null). Câu khuôn "<độ đo> là <giá trị>." khi đó thành "Tổng Sales là ." vì giá trị
+/// rỗng, còn lời của mô hình hay bị bước kiểm số loại; cảnh báo all_null (ask/checks.rs) nói thêm khoảng thời gian dữ
+/// liệu có khi câu lọc theo thời gian.
+pub const NO_DATA_ANSWER: &str =
+    "Không có dữ liệu khớp với câu hỏi, nên chưa có con số để trả lời.";
+
 /// Đầu vào của summarize: câu hỏi, thẻ "Đã hiểu là" và bảng kết quả đã có vai trò cột.
 pub struct SummaryInput<'a> {
     pub question: &'a str,
@@ -51,8 +58,9 @@ pub struct SummaryOutcome {
     pub step: AskStep,
 }
 
-/// None khi kết quả không có dòng nào: thẻ cảnh báo kết quả rỗng (ask/checks.rs) đã nói điều đó. enabled là
-/// Config::answer_text; false thì không gọi mô hình.
+/// None khi kết quả không có dòng nào: thẻ cảnh báo kết quả rỗng (ask/checks.rs) đã nói điều đó. Mọi ô đều trống thì
+/// trả NO_DATA_ANSWER, không gọi mô hình: không có số nào để mô hình kể. enabled là Config::answer_text; false thì không
+/// gọi mô hình.
 pub async fn summarize(
     llm: &dyn LlmProvider,
     input: &SummaryInput<'_>,
@@ -63,6 +71,14 @@ pub async fn summarize(
         return None;
     }
     let started = Instant::now();
+    if input.result.rows.iter().flatten().all(Option::is_none) {
+        let detail = "Mọi ô của kết quả đều trống nên không gọi mô hình".to_string();
+        return Some(SummaryOutcome {
+            text: NO_DATA_ANSWER.to_string(),
+            by_model: false,
+            step: build_step(started, true, Some(detail)),
+        });
+    }
     if !enabled {
         let detail = "ANSWER_TEXT=false nên không gọi mô hình".to_string();
         return Some(fallback(input, build_step(started, true, Some(detail))));
@@ -162,8 +178,9 @@ pub fn build_template_answer(input: &SummaryInput<'_>) -> String {
     format!("Có {total} dòng kết quả.")
 }
 
-/// Mọi số trong câu phải có nguyên văn trong các ô đã gửi, trong tổng số dòng, hoặc nằm trong một đoạn chữ dữ liệu
-/// (ô có chữ, tên cột, nhãn của thẻ); số kèm chữ tỷ lệ luôn sai. Luật quét số ở explain/mod.rs.
+/// Mọi số trong câu phải có nguyên văn trong các ô đã gửi, trong tổng số dòng, trong một nhãn của thẻ "Đã hiểu là" (độ
+/// đo, nhóm, điều kiện lọc, khoảng thời gian, giới hạn số dòng), hoặc nằm trong một đoạn chữ dữ liệu (ô có chữ, tên
+/// cột); số kèm chữ tỷ lệ luôn sai. Luật quét số ở explain/mod.rs.
 pub fn build_answer_check(text: &str, input: &SummaryInput<'_>) -> Result<(), Vec<String>> {
     let result = input.result;
     let mut allowed = HashSet::new();
@@ -191,6 +208,10 @@ pub fn build_answer_check(text: &str, input: &SummaryInput<'_>) -> Result<(), Ve
     let labels = build_labels(input.understanding);
     for label in &labels {
         push_known_text(&mut known, label);
+        // Số trong nhãn của thẻ là số của câu hỏi (năm 2019, top 5), không phải số mô hình bịa: mô hình được nhắc lại
+        // ở bất kỳ đâu, kể cả không chép nguyên nhãn ("năm 2019" thay cho nhãn "Năm 2019"). Số kèm chữ tỷ lệ vẫn bị
+        // loại (build_text_number_check).
+        allow_text(&mut allowed, label);
     }
     build_text_number_check(text, &allowed, &known, &labels.join(" "))
 }
@@ -313,6 +334,8 @@ fn build_labels(understanding: Option<&Understanding>) -> Vec<String> {
         .iter()
         .chain(&u.group_by)
         .chain(&u.filters)
+        .chain(&u.time_range)
+        .chain(&u.limit)
         .map(|item| item.label.clone())
         .collect()
 }

@@ -13,7 +13,7 @@ import { AnswerSummary } from './AnswerSummary'
 import { columnText } from './columnText'
 import { formatDecimal } from './cellFormat'
 import { ContributionBars } from './ContributionBars'
-import { changeDirection, directionWord, formatPercent, formatSigned } from './changeFormat'
+import { changeDirection, directionTextClass, directionWord, formatPercent, formatSigned } from './changeFormat'
 import type { BreakdownView, Comparison } from './evidenceTypes'
 
 type Props = {
@@ -71,7 +71,7 @@ function ChangeStat({ change, percent, baseLabel, comparison }: ChangeStatProps)
     comparison === 'groups'
       ? [word, baseLabel, amount].filter(Boolean).join(' ')
       : [word, amount, 'so với', baseLabel].filter(Boolean).join(' ')
-  const tone = direction === 'down' ? 'text-highlight-text' : 'text-label'
+  const tone = directionTextClass(direction)
   return (
     <div className="flex flex-col">
       <dt className="text-xs font-medium text-muted-foreground">Chênh lệch</dt>

@@ -7,6 +7,8 @@ service/ask/mod.rs gọi build_result_warnings sau run_with_repair. Phần cần
 của ask/values.rs) làm ở đó, rồi build_warnings, hàm thuần, dựng cảnh báo theo thứ tự cố định của các luật:
 - empty_result: câu không ra dòng nào.
 - all_null: có cột kết quả chỉ toàn ô trống. Chỉ xét các dòng đã gửi; kết quả bị cắt thì lời ghi rõ "trong n dòng đầu".
+  Với empty_result và all_null, câu lọc theo một cột thời gian thì lời kèm khoảng thời gian dữ liệu có (min, max của
+  hồ sơ cột): hỏi năm 2019 trên dữ liệu tới tháng 1/2018 thì người hỏi biết ngay vì sao không có số.
 - filter_value_not_found: câu lọc `cột = 'x'` hay `cột IN (...)` trên cột có danh sách giá trị (cột chiều không nhạy
   cảm), hoặc mô hình nêu giá trị đó trong terms, mà cột không có giá trị ấy. Gợi ý giá trị gần nhất: khác hoa thường,
   khác dấu, trùng bí danh, hay khác một hai chữ. Phần tra cứu ở ask/filter_values.rs.
@@ -18,7 +20,7 @@ Kiểm theo chuỗi thời gian (kỳ thiếu dữ liệu, như câu "tại sao"
 
 use crate::auth::WorkspaceId;
 use crate::engine::sql_shape::{build_query_shape, QueryShape};
-use crate::engine::store::{DatasetVersion, ProfileColumn};
+use crate::engine::store::{DatasetVersion, ProfileColumn, ProfileRole};
 use crate::service::ask::contract::{AskStatus, ResultTable, Warning, WarningCode};
 use crate::service::ask::filter_values::{build_filter_values, build_missing_values, MissingValue};
 use crate::service::ask::magnitude::build_magnitude_warnings;
@@ -106,8 +108,15 @@ pub fn build_warnings(
 ) -> Vec<Warning> {
     let mut warnings = Vec::new();
     if let Some(result) = result {
-        warnings.extend(build_empty_warning(result));
-        warnings.extend(build_null_warning(result));
+        let note = shape.and_then(|shape| build_time_range_note(shape, profile));
+        let with_note = |mut warning: Warning| {
+            if let Some(note) = &note {
+                warning.message = format!("{} {note}", warning.message);
+            }
+            warning
+        };
+        warnings.extend(build_empty_warning(result).map(with_note));
+        warnings.extend(build_null_warning(result).map(with_note));
     }
     warnings.extend(missing.iter().map(build_missing_warning));
     if let (Some(result), Some(shape)) = (result, shape) {
@@ -158,6 +167,50 @@ fn build_null_warning(result: &ResultTable) -> Option<Warning> {
             names.join(", ")
         ),
     })
+}
+
+/// Khoảng thời gian dữ liệu có, của các cột thời gian mà WHERE của câu lọc theo; None khi câu không lọc theo cột thời
+/// gian nào hay hồ sơ chưa có min, max. Không xét vế trong hộp đọc bảng: vế đó có thể là điều kiện phân quyền guard
+/// thêm, người hỏi không viết.
+fn build_time_range_note(shape: &QueryShape, profile: &[ProfileColumn]) -> Option<String> {
+    let notes: Vec<String> = profile
+        .iter()
+        .filter(|c| c.role == ProfileRole::Time.as_str())
+        .filter(|c| {
+            shape
+                .filters
+                .iter()
+                .any(|f| !f.in_table_box && mentions_column(&f.sql, &c.name))
+        })
+        .filter_map(|c| {
+            let from = build_day_text(c.min_value.as_deref()?);
+            let until = build_day_text(c.max_value.as_deref()?);
+            Some(format!("cột {} có dữ liệu từ {from} tới {until}", c.name))
+        })
+        .collect();
+    (!notes.is_empty()).then(|| format!("Trong dữ liệu, {}.", notes.join("; ")))
+}
+
+/// Cột có mặt trong chữ của một vế: viết trong nháy kép, hoặc viết trơn mà không dính vào tên dài hơn.
+fn mentions_column(sql: &str, column: &str) -> bool {
+    if sql.contains(&format!("\"{column}\"")) {
+        return true;
+    }
+    sql.match_indices(column).any(|(start, _)| {
+        let is_name = |c: char| c.is_alphanumeric() || c == '_';
+        let before = sql[..start].chars().next_back();
+        let after = sql[start + column.len()..].chars().next();
+        !before.is_some_and(is_name) && !after.is_some_and(is_name)
+    })
+}
+
+/// "2015-01-01 00:00:00" (min, max của cột thời gian trong hồ sơ) thành "01/01/2015"; chữ khác dạng thì giữ nguyên.
+fn build_day_text(value: &str) -> String {
+    let day = value.get(..10).unwrap_or(value);
+    match day.split('-').collect::<Vec<_>>().as_slice() {
+        [year, month, date] if year.len() == 4 => format!("{date}/{month}/{year}"),
+        _ => value.to_string(),
+    }
 }
 
 fn build_missing_warning(missing: &MissingValue) -> Warning {

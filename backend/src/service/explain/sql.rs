@@ -113,6 +113,18 @@ pub fn build_dimension_sql(plan: &WhyPlan, column: &str) -> String {
     )
 }
 
+/// Số cặp giá trị khác nhau của hai cột trên đúng tập dòng của câu từng chiều (cùng build_where): explain/dimension_pick.rs
+/// so với số nhóm của mỗi cột để biết hai cột có chia dữ liệu y hệt nhau không.
+pub fn build_pair_count_sql(plan: &WhyPlan, first: &str, second: &str) -> String {
+    format!(
+        "SELECT COUNT(*) AS pairs FROM (SELECT DISTINCT {}, {} FROM {} WHERE {}) AS pair_values",
+        build_ident(first),
+        build_ident(second),
+        build_ident(&plan.table),
+        build_where(plan)
+    )
+}
+
 /// Độ đo của hai lát cắt: tử base, tử compare, rồi mẫu base, mẫu compare khi độ đo là tỷ lệ. explain/breakdown.rs đọc
 /// các cột của câu từng chiều theo đúng thứ tự này.
 fn build_sliced_items(plan: &WhyPlan, base: &Expr, compare: &Expr) -> Vec<String> {
