@@ -34,6 +34,10 @@ pub struct Config {
     /// Như gemini_timeout, nhưng mặc định dài hơn nhiều: mô hình chạy bằng CPU của máy thường chậm hơn Gemini nhiều
     /// lần, và lần gọi đầu còn phải nạp mô hình vào RAM.
     pub ollama_timeout: Duration,
+    /// Thời gian tối đa của bước phân loại câu hỏi (CLASSIFY_TIMEOUT_SECS, service/ask/classify.rs), ngắn hơn nhiều so
+    /// với timeout của nhà cung cấp: bước này chạy trước bước viết SQL, mô hình treo thì câu hỏi chuyển sang luật từ
+    /// khóa sau mức này thay vì chờ hết timeout rồi mới gọi tiếp.
+    pub classify_timeout: Duration,
     /// Cửa sổ ngữ cảnh, tính bằng token, gửi trong options.num_ctx của mỗi request tới Ollama (OLLAMA_NUM_CTX).
     /// Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM), và prompt dài hơn bị bỏ phần
     /// đầu, tức phần luật, mà không báo lỗi.
@@ -86,6 +90,7 @@ impl Config {
             ollama_url: var_or("OLLAMA_URL", "http://localhost:11434"),
             ollama_model: var_or("OLLAMA_MODEL", "qwen2.5-coder:7b"),
             ollama_timeout: timeout_secs("OLLAMA_TIMEOUT_SECS", 300),
+            classify_timeout: timeout_secs("CLASSIFY_TIMEOUT_SECS", 15),
             ollama_num_ctx: positive_number(
                 "OLLAMA_NUM_CTX",
                 env::var("OLLAMA_NUM_CTX").ok().as_deref(),

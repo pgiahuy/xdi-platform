@@ -12,10 +12,11 @@ use uuid::Uuid;
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::error::AppError;
 use crate::service::ask::classify::{
-    build_classify_prompt, classify, ClassifyInput, MAX_REASON_CHARS,
+    build_classify_prompt, build_classify_timeout, classify, ClassifyInput, MAX_REASON_CHARS,
 };
 use crate::service::ask::context::ColumnProfile;
 use crate::service::ask::contract::StepName;
+use crate::service::ask::prompt::PROMPT_MAX_CHARS;
 use crate::service::ask::values::ValueEntry;
 use crate::service::explain::form::QuestionKind;
 use crate::service::prompt_fixtures::check_fixture;
@@ -222,4 +223,46 @@ async fn timeout_falls_back_to_keywords() {
         detail.contains("không trả lời trong 10 mili giây"),
         "{detail}"
     );
+}
+
+/// Trần của bước phân loại là CLASSIFY_TIMEOUT_SECS, không phải timeout của nhà cung cấp, và không bao giờ dài hơn
+/// timeout đó.
+#[test]
+fn classify_timeout_is_its_own_short_limit() {
+    let mut config = crate::config::Config::from_env();
+    config.llm_provider = "ollama".to_string();
+    config.ollama_timeout = Duration::from_secs(300);
+    config.classify_timeout = Duration::from_secs(15);
+    assert_eq!(build_classify_timeout(&config), Duration::from_secs(15));
+
+    config.llm_provider = "gemini".to_string();
+    config.gemini_timeout = Duration::from_secs(10);
+    assert_eq!(build_classify_timeout(&config), Duration::from_secs(10));
+}
+
+/// Bảng rất nhiều cột: prompt vượt PROMPT_MAX_CHARS thì chỉ còn cột khớp câu hỏi và cột thời gian, như prompt SQL.
+#[test]
+fn long_prompt_keeps_only_matched_and_time_columns() {
+    let mut columns: Vec<ColumnProfile> = (0..400)
+        .map(|i| {
+            column(
+                &format!("Column {i}"),
+                &[],
+                Some("Mô tả khá dài để danh sách cột vượt trần ký tự của prompt"),
+            )
+        })
+        .collect();
+    columns[7].matched = true;
+    columns[9].role = "time".to_string();
+    let input = ClassifyInput {
+        table: "wide",
+        question: "Doanh thu theo Column 7",
+        columns: &columns,
+        earlier: &[],
+    };
+    let prompt = build_classify_prompt(&input);
+    assert!(prompt.chars().count() <= PROMPT_MAX_CHARS);
+    assert!(prompt.contains("\"Column 7\""), "{prompt}");
+    assert!(prompt.contains("\"Column 9\""), "{prompt}");
+    assert!(!prompt.contains("\"Column 8\""), "{prompt}");
 }

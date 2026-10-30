@@ -160,6 +160,10 @@ Mô hình ngôn ngữ:
   khởi động.
 - Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,
   vì mô hình chạy bằng CPU chậm hơn nhiều).
+- Bước phân loại câu hỏi (câu thường hay câu hỏi tìm nguyên nhân) có trần riêng `CLASSIFY_TIMEOUT_SECS` (mặc định 15
+  giây, không dài hơn hai mức trên), vì nó chạy trước bước viết SQL. Quá trần thì backend dùng luật từ khóa, câu hỏi
+  chạy tiếp, bước `classify` ghi là mô hình không trả lời kịp. Với Ollama, lần gọi đầu còn nạp mô hình vào RAM nên có
+  thể quá trần; máy chậm thì tăng giá trị này.
 
 Dữ liệu nằm trong hai volume Docker: `xdi-platform_pgdata` (Postgres) và `xdi-platform_xdidata` (file Parquet). Tiền
 tố là tên project của compose: mặc định là tên thư mục chứa `docker-compose.yml`, đổi được bằng `COMPOSE_PROJECT_NAME`

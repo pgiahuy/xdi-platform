@@ -20,8 +20,10 @@ use serde_json::json;
 use crate::config::Config;
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
+use crate::engine::store::ProfileRole;
 use crate::service::ask::context::ColumnProfile;
 use crate::service::ask::contract::{AskStep, StepName};
+use crate::service::ask::prompt::{build_within_limit, Detail};
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::run::build_duration_text;
 use crate::service::ask::why::build_narrate_timeout;
@@ -63,8 +65,9 @@ enum ReplyKind {
     Cause,
 }
 
-/// Không bao giờ trả lỗi: mô hình hỏng thì dùng luật từ khóa. timeout là trần riêng của lần gọi này, để mô hình treo
-/// không giữ câu hỏi lâu hơn một lần gọi bình thường.
+/// Không bao giờ trả lỗi: mô hình hỏng thì dùng luật từ khóa. timeout là trần của riêng lần gọi này
+/// (build_classify_timeout), ngắn hơn timeout của nhà cung cấp: quá mức đó thì dùng luật từ khóa và chi tiết của bước
+/// ghi là mô hình không trả lời kịp.
 pub async fn classify(
     llm: &dyn LlmProvider,
     input: &ClassifyInput<'_>,
@@ -122,15 +125,30 @@ pub async fn classify(
     }
 }
 
-/// Trần thời gian của lần gọi: như bước narrate (ask/why.rs), đúng timeout của nhà cung cấp đang cấu hình, để mô hình
-/// chậm mà vẫn trả lời bình thường không bị bỏ oan.
+/// Trần thời gian của lần gọi: CLASSIFY_TIMEOUT_SECS (mặc định 15 giây; lần đo ngày 28/10/2026 với Gemini lâu nhất
+/// 12,8 giây), không quá timeout của nhà cung cấp. Bước này chạy trước lần gọi viết SQL hay điền form, nên nếu dùng
+/// đúng timeout của nhà cung cấp thì mô hình treo bắt người hỏi chờ gần gấp đôi trước khi nhận cùng một lỗi. Hạn chế:
+/// Ollama lần gọi đầu còn nạp mô hình vào RAM, có thể quá mức này, khi đó câu hỏi đó dùng luật từ khóa.
 pub fn build_classify_timeout(config: &Config) -> Duration {
-    build_narrate_timeout(config)
+    config.classify_timeout.min(build_narrate_timeout(config))
 }
 
-/// Prompt phân loại: luật ở backend/prompts/classify_question.txt, rồi danh sách cột, câu hỏi trước và câu hỏi.
+/// Prompt phân loại: luật ở backend/prompts/classify_question.txt, rồi danh sách cột, câu hỏi trước và câu hỏi. Cùng
+/// trần PROMPT_MAX_CHARS với prompt SQL (build_within_limit): dài hơn thì chỉ giữ cột khớp câu hỏi và cột thời gian.
+/// Prompt này không có danh sách giá trị nên ngắn hơn prompt SQL nhiều, ít khi chạm trần.
 pub fn build_classify_prompt(input: &ClassifyInput<'_>) -> String {
-    let columns: Vec<String> = input.columns.iter().map(build_column_line).collect();
+    build_within_limit(|detail| build_prompt_text(input, detail))
+}
+
+fn build_prompt_text(input: &ClassifyInput<'_>, detail: Detail) -> String {
+    let columns: Vec<String> = input
+        .columns
+        .iter()
+        .filter(|c| {
+            detail < Detail::MatchedColumns || c.matched || c.role == ProfileRole::Time.as_str()
+        })
+        .map(build_column_line)
+        .collect();
     let earlier = if input.earlier.is_empty() {
         "(none)".to_string()
     } else {
