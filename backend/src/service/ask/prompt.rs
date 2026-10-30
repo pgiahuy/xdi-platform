@@ -11,6 +11,10 @@ prompt sửa (ask/repair.rs); câu hỏi, tên cột, mô tả, giá trị giữ
 backend/prompts/sql.txt và unanswerable_rule.txt (engine/prompts.rs); nhãn của từng phần dữ liệu ("Columns:",
 "Metrics defined by the organization:") và dòng của từng cột, chỉ số dựng ở đây cùng dữ liệu.
 
+Câu hỏi đọc được bảng liên quan (#213, ask/related.rs, ask/group_prompt.rs) thì phần cột thành một khối mỗi bảng, bảng
+đang chọn trước, theo sau là danh sách quan hệ và luật nối bảng (backend/prompts/sql_joins.txt); chỉ số ghi kèm tên
+bảng. Câu một bảng giữ nguyên chữ như trước.
+
 Thứ tự: luật, luật của guard, cột, gợi ý, lựa chọn đã có, chỉ số, khái niệm ngành, ví dụ, các lượt hỏi trước của hội
 thoại, câu hỏi cuối cùng, để mô hình đọc câu hỏi khi đã có đủ ngữ cảnh. Luật của guard sinh từ chính guard
 (engine/guard/prompt_rules.rs), để mô hình viết được câu qua guard ngay lần đầu; guard vẫn kiểm lại mọi câu. Chỉ số
@@ -23,8 +27,9 @@ use crate::engine::guard::build_prompt_rules;
 use crate::engine::prompts::{self, fill};
 use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileRole, PromptExample};
 use crate::service::ask::choices::COLUMN_CHOICE_PREFIX;
-use crate::service::ask::context::{AskContext, ColumnProfile};
+use crate::service::ask::context::{is_always_sent, AskContext, ColumnProfile};
 use crate::service::ask::contract::ChosenOption;
+use crate::service::ask::group_prompt::{GroupPrompt, JoinLine};
 use crate::service::ask::phrases::build_phrases;
 use crate::service::ask::values::ValueEntry;
 
@@ -53,6 +58,8 @@ pub struct PromptInput<'a> {
     pub choices: &'a [ChosenOption],
     /// Khối "Hội thoại trước" (service/conversation/history.rs); chuỗi rỗng khi câu mở đầu cuộc trò chuyện.
     pub history: &'a str,
+    /// Các bảng liên quan và quan hệ (ask/related.rs); None khi câu chỉ đọc bảng đang chọn, luôn None với prompt form.
+    pub group: Option<&'a GroupPrompt>,
 }
 
 /// Mức chi tiết của danh sách cột; prompt quá dài thì hạ dần theo thứ tự khai báo.
@@ -68,14 +75,18 @@ pub(super) enum Detail {
 
 /// Prompt sinh SQL cho câu thường.
 pub fn build_sql_prompt(input: &PromptInput) -> String {
+    let mut tables = vec![input.table];
+    if let Some(group) = input.group {
+        tables.extend(group.tables.iter().map(|t| t.table.as_str()));
+    }
     build_within_limit(|detail| {
         join_sections(vec![
-            build_sql_rules(input.table),
-            build_prompt_rules(&[input.table]),
-            build_columns_section(input.context, detail),
+            build_sql_rules(&tables),
+            build_prompt_rules(&tables),
+            build_group_columns(input, detail),
             build_hints_section(input.context),
             build_choices_section(input.context, input.choices),
-            build_metrics_section(input.metrics, true),
+            build_group_metrics(input),
             build_domain_section(input.domain),
             build_examples_section(input.question, input.examples),
             input.history.to_string(),
@@ -113,15 +124,103 @@ pub(super) fn join_sections(sections: Vec<String>) -> String {
         .join("\n\n")
 }
 
-/// Luật của prompt SQL, chữ ở backend/prompts/sql.txt.
-fn build_sql_rules(table: &str) -> String {
+/// Luật của prompt SQL, chữ ở backend/prompts/sql.txt; tables là bảng đang chọn rồi các bảng liên quan.
+fn build_sql_rules(tables: &[&str]) -> String {
+    let names = match tables {
+        [table] => format!("the table {table}"),
+        _ => format!("the tables {}", tables.join(", ")),
+    };
     fill(
         &prompts::SQL,
         &[
-            ("table", table),
+            ("tables", &names),
             ("unanswerable_rule", &build_unanswerable_rule()),
         ],
     )
+}
+
+/// Phần cột: một khối "Columns:" khi chỉ một bảng; nhiều bảng thì một khối mỗi bảng rồi quan hệ và luật nối bảng.
+fn build_group_columns(input: &PromptInput, detail: Detail) -> String {
+    let Some(group) = input.group else {
+        return build_columns_section(input.context, detail);
+    };
+    let mut sections = vec![build_table_block(
+        &format!("Columns of table {}:", input.table),
+        &input.context.columns,
+        detail,
+    )];
+    for table in &group.tables {
+        let title = format!("Columns of table {}:", table.table);
+        sections.push(build_table_block(&title, &table.columns, detail));
+    }
+    let joins: Vec<String> = group.joins.iter().map(build_join_line).collect();
+    sections.push(fill(
+        &prompts::SQL_JOINS,
+        &[("relationships", &joins.join("\n"))],
+    ));
+    join_sections(sections)
+}
+
+/// `- order_items.order_id = orders.order_id (many order_items rows per orders row)`; khóa nhiều cột nối bằng AND.
+fn build_join_line(join: &JoinLine) -> String {
+    let pairs: Vec<String> = join
+        .from_columns
+        .iter()
+        .zip(&join.to_columns)
+        .map(|(from, to)| {
+            format!(
+                "{}.{} = {}.{}",
+                join.from_table,
+                build_join_column(from),
+                join.to_table,
+                build_join_column(to)
+            )
+        })
+        .collect();
+    let (from, to) = (&join.from_table, &join.to_table);
+    let kind = if join.one_to_one {
+        format!("at most one {from} row per {to} row")
+    } else {
+        format!("many {from} rows per {to} row")
+    };
+    format!("- {} ({kind})", pairs.join(" AND "))
+}
+
+/// Tên cột trơn (chữ thường, số, gạch dưới) viết nguyên cho dễ đọc; tên khác (dấu cách, chữ hoa) đặt trong nháy kép
+/// để chép vào SQL vẫn đúng.
+fn build_join_column(name: &str) -> String {
+    let plain = name.starts_with(|c: char| c.is_ascii_lowercase() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+    if plain {
+        name.to_string()
+    } else {
+        quote_ident(name)
+    }
+}
+
+/// Chỉ số: như build_metrics_section khi một bảng; nhiều bảng thì chỉ số của mọi bảng, mỗi dòng ghi tên bảng của nó.
+fn build_group_metrics(input: &PromptInput) -> String {
+    let Some(group) = input.group else {
+        return build_metrics_section(input.metrics, true);
+    };
+    let mut lines: Vec<String> = input
+        .metrics
+        .iter()
+        .map(|m| build_metric_line(m, Some(input.table), true))
+        .collect();
+    for table in &group.tables {
+        let table_lines = table
+            .metrics
+            .iter()
+            .map(|m| build_metric_line(m, Some(&table.table), true));
+        lines.extend(table_lines);
+    }
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!("Metrics defined by the organization:\n{}", lines.join("\n"))
 }
 
 /// Luật của trường unanswerable (backend/prompts/unanswerable_rule.txt), chung cho prompt SQL và prompt form câu "tại
@@ -132,18 +231,20 @@ pub(super) fn build_unanswerable_rule() -> String {
 }
 
 pub(super) fn build_columns_section(context: &AskContext, detail: Detail) -> String {
-    let lines: Vec<String> = context
-        .columns
+    build_table_block("Columns:", &context.columns, detail)
+}
+
+/// Khối cột của một bảng. Mức MatchedColumns giữ cột is_always_sent: cột khớp, cột thời gian và cột khóa nối bảng.
+fn build_table_block(title: &str, columns: &[ColumnProfile], detail: Detail) -> String {
+    let lines: Vec<String> = columns
         .iter()
-        .filter(|c| {
-            detail < Detail::MatchedColumns || c.matched || c.role == ProfileRole::Time.as_str()
-        })
+        .filter(|c| detail < Detail::MatchedColumns || is_always_sent(c))
         .map(|c| build_column_line(c, detail))
         .collect();
     if lines.is_empty() {
         return String::new();
     }
-    format!("Columns:\n{}", lines.join("\n"))
+    format!("{title}\n{}", lines.join("\n"))
 }
 
 /// Một cột: tên, kiểu, vai trò, định dạng ngày nếu là ngày dạng chữ, cách gộp nếu là avg, mô tả, bí danh, rồi giá trị
@@ -270,18 +371,22 @@ pub(super) fn build_metrics_section(metrics: &[MetricDefinition], with_formula: 
     }
     let lines: Vec<String> = metrics
         .iter()
-        .map(|m| build_metric_line(m, with_formula))
+        .map(|m| build_metric_line(m, None, with_formula))
         .collect();
     format!("Metrics defined by the organization:\n{}", lines.join("\n"))
 }
 
-fn build_metric_line(metric: &MetricDefinition, with_formula: bool) -> String {
+/// table: tên bảng của chỉ số khi prompt có nhiều bảng.
+fn build_metric_line(metric: &MetricDefinition, table: Option<&str>, with_formula: bool) -> String {
     let status = if metric.confirmed {
         ""
     } else {
         " [UNCONFIRMED draft]"
     };
     let mut line = format!("- \"{}\"{status}", metric.name);
+    if let Some(table) = table {
+        line.push_str(&format!(" (table {table})"));
+    }
     if with_formula {
         line.push_str(&format!(": {}", metric.expression));
         if let Some(filter) = &metric.filter {

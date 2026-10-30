@@ -1,0 +1,7 @@
+Relationships between the tables, from the foreign keys of the source database:
+{{relationships}}
+Rules for reading several tables:
+- Join tables only on the relationships listed above, with exactly those columns. Never join on other columns, even when their names look alike.
+- When a query reads more than one table, write every column with its table name or alias, for example orders."order_id" or o."order_id".
+- "many A rows per B row" means one row of B matches many rows of A. Before SUM or AVG of a column of B over a join with A, aggregate A first in a subquery or WITH table with one row per join key, then join; otherwise every value of B is counted once per matching row of A. Count rows of B with COUNT(DISTINCT key).
+- Read only the tables the question needs.

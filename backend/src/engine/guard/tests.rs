@@ -831,21 +831,34 @@ fn set_operations_have_at_most_ten_branches() {
 }
 
 #[test]
-fn from_has_at_most_four_sources() {
+fn from_has_at_most_six_sources() {
     let from = |n: usize| {
         (1..=n)
             .map(|i| format!("sales s{i}"))
             .collect::<Vec<_>>()
             .join(", ")
     };
-    assert_accepted(&format!("SELECT s1.region FROM {}", from(4)));
-    let reason = assert_oversized(&format!("SELECT s1.region FROM {}", from(5)));
-    assert!(reason.contains("tối đa 4"), "{reason}");
+    assert_accepted(&format!("SELECT s1.region FROM {}", from(6)));
+    let reason = assert_oversized(&format!("SELECT s1.region FROM {}", from(7)));
+    assert!(reason.contains("tối đa 6"), "{reason}");
     // JOIN, JOIN trong ngoặc cũng tính.
     assert_oversized(
         "SELECT a.region FROM sales a JOIN sales b ON a.region = b.region JOIN (sales c JOIN sales d ON c.region = d.region) \
-         ON a.region = c.region JOIN customers e ON a.customer_id = e.customer_id",
+         ON a.region = c.region JOIN customers e ON a.customer_id = e.customer_id JOIN customers f \
+         ON a.customer_id = f.customer_id JOIN customers g ON a.customer_id = g.customer_id",
     );
+}
+
+/// Guard báo đúng các bảng câu đọc, mỗi bảng một lần, kể cả bảng chỉ đọc trong bảng tạm; không tính bảng tạm.
+#[test]
+fn tables_read_lists_each_data_table_once() {
+    let guarded = assert_accepted(
+        "WITH c AS (SELECT * FROM customers) SELECT s.region FROM sales s JOIN c ON s.customer_id = c.customer_id \
+         JOIN sales t ON t.region = s.region",
+    );
+    assert_eq!(guarded.tables_read, ["customers", "sales"]);
+    let guarded = assert_accepted("SELECT region FROM sales");
+    assert_eq!(guarded.tables_read, ["sales"]);
 }
 
 #[test]
@@ -1283,7 +1296,7 @@ fn filter_without_name_check(sql: &str) -> Result<Vec<String>, AppError> {
         panic!("not a query: {sql}");
     };
     let tables = tables_with_sales_policy("/data", vec![row_filter("region", &["South"])]);
-    super::apply_row_filters(&mut query, &tables, &BTreeSet::new())
+    super::apply_row_filters(&mut query, &tables, &BTreeSet::new()).map(|(added, _)| added)
 }
 
 #[test]

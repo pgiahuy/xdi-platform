@@ -6,7 +6,7 @@ Vì sao: mỗi tầng ghép được giá trị của tầng dưới nhiều l�
 theo từng tầng, và DuckDB tính các chuỗi hằng như vậy lúc chuẩn bị câu, khi giới hạn thời gian chưa có tác dụng. Đo qua
 guard khi chỉ có luật này (chạy bằng run_query, giới hạn 1 giây): 3 tầng với câu 11,6 KB đã cho chuỗi 625 MB, RSS đỉnh
 674 MB. Trần 4 tầng chỉ an toàn cùng các luật khác: tối đa 20 mảnh ghép (guard/pieces.rs), chuỗi hằng tối đa 1000
-byte, 200 cột mỗi SELECT, 4 nguồn mỗi FROM (guard/width.rs). Có đủ các luật đó, đo chép 200 cột: 4 tầng 268 MB, 6 tầng
+byte, 200 cột mỗi SELECT, 4 nguồn mỗi FROM lúc đo (nay 6, guard/width.rs). Có đủ các luật đó, đo chép 200 cột: 4 tầng 268 MB, 6 tầng
 486 MB; UNION ALL 74 nhánh ở 6 tầng 2,4 GB. Nên giữ 4: câu 5 tầng (4 bảng tạm nối nhau rồi câu chính) bị
 từ chối với lý do để mô hình viết lại gọn hơn trong vòng sửa (GuardError::Oversized). Bảng số đo ở docs/GUARD.md, mục
 Số tầng, mảnh ghép, độ rộng. */

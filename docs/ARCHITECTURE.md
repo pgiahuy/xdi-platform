@@ -62,7 +62,8 @@ không cần CORS và cookie đăng nhập đơn giản. DuckDB là thư viện 
 ```
 1. api        kiểm phiên đăng nhập, lấy workspace, role và dataset id
 2. store      đọc hồ sơ cột, giá trị phân loại, chính sách phân quyền của role     (Postgres)
-3. ask        ghép prompt: schema context + bí danh + câu hỏi mẫu đã đúng + các lượt trước của cuộc trò chuyện
+3. ask        ghép prompt: schema context + bí danh + câu hỏi mẫu đã đúng + các lượt trước của cuộc trò chuyện;
+               dataset chụp từ database: thêm cột của các bảng liên quan và danh sách quan hệ khóa ngoại
 4. llm        phân loại câu hỏi -> JSON {kind, reason}: câu thường hay câu hỏi tìm nguyên nhân (lỗi thì luật từ khóa)
                câu thường: LlmProvider::complete -> JSON {terms, assumptions, clarify, unanswerable, sql}, SQL trên
                tên bảng logic
@@ -71,7 +72,7 @@ không cần CORS và cookie đăng nhập đơn giản. DuckDB là thư viện 
 6. analytics  resolve tên logic -> Parquet, chạy SQL, trả dòng và thời gian           (DuckDB)
 7. explain    câu "tại sao": phân rã chênh lệch theo chiều, LLM chỉ viết lời khi so hai kỳ;
                câu thường: LLM viết đoạn trả lời ngắn từ tối đa 10 dòng đầu của kết quả
-8. store      ghi queries: câu hỏi, SQL thô, SQL sau guard, thời gian, version_id
+8. store      ghi queries: câu hỏi, SQL thô, SQL sau guard, thời gian, version_id, phiên bản mọi bảng đã đọc
 9. api        trả gói: SQL thô, SQL sau guard, thẻ "Đã hiểu là", dòng, gợi ý biểu đồ, cảnh báo, phân rã, timeline
 ```
 
@@ -273,9 +274,26 @@ Mô hình ngôn ngữ sinh SQL trên tên bảng logic. Engine resolve tên logi
 của một phiên bản. Nguồn Postgres (#165) chụp bảng thành phiên bản Parquet như nạp file (đọc bằng sqlx `COPY`, không
 qua extension của DuckDB vì extension phải tải từ Internet lúc chạy), nên không đổi guard, prompt hay lịch sử. Nhiều
 bảng liên quan chụp cùng lúc thành nhiều dataset, khóa ngoại giữa chúng ghi vào `dataset_relations`, không nối thành
-một bảng phẳng (cột của bảng phía một sẽ lặp lại trên mọi dòng phía nhiều và bị cộng nhầm). Câu hỏi hiện vẫn đọc một
-dataset; mô hình viết `JOIN` theo các quan hệ này là #213. Truy vấn thẳng database ngoài lúc hỏi để sau, cần quyết
-định riêng.
+một bảng phẳng (cột của bảng phía một sẽ lặp lại trên mọi dòng phía nhiều và bị cộng nhầm). Truy vấn thẳng database
+ngoài lúc hỏi để sau, cần quyết định riêng.
+
+Hỏi trên một dataset có quan hệ (#213, `service/ask/related.rs`): câu thường được đọc thêm các dataset nối với nó qua
+`dataset_relations`, cả hai chiều, tối đa 2 bước và 8 bảng kể cả bảng đang chọn, chỉ dataset có phiên bản đang dùng
+và đã lập hồ sơ. Mỗi bảng vào guard với bộ lọc dòng của riêng nó. Prompt SQL có một khối cột mỗi bảng, danh sách quan
+hệ dạng `order_items.order_id = orders.order_id (many order_items rows per orders row)` và luật nối bảng
+(`backend/prompts/sql_joins.txt`): chỉ nối theo quan hệ đã liệt kê, ghi tên bảng trước cột, gộp bảng phía nhiều trước
+khi SUM hay AVG cột của bảng phía một. Trần 60 cột và 400 giá trị tính chung cho mọi bảng; trần 24 000 ký tự tính trên
+cả prompt. Hỏi lại khi một cụm khớp nhiều cột, giả định cột và cảnh báo giá trị lọc không có chỉ xét bảng đang chọn,
+vì tên cột ở đó không kèm tên bảng. Câu "tại sao" và truy dòng nguồn vẫn chỉ một bảng: truy dòng nguồn từ chối câu đọc
+nhiều bảng. Guard báo các bảng câu đã đọc; response trả chúng trong `tables_read` và lịch sử ghi phiên bản của chúng vào
+`queries.read_versions`. Chặn cộng lặp bằng code (khi mô hình bỏ qua luật gộp trước) chưa có, là #214.
+
+Luật tạm thời cho người bị lọc dòng, bỏ khi bộ lọc lan theo khóa ngoại (#215): bộ lọc chỉ gắn với bảng có cột lọc, nên
+người bị lọc theo `customers.region` mà đọc `orders` (không có cột vùng) sẽ thấy đơn của mọi vùng. Vì vậy khi người hỏi
+có bộ lọc trên một bảng của nhóm, các bảng trỏ tới bảng bị lọc (trực tiếp hay qua bảng khác, theo chiều nhiều-một) bị
+bỏ khỏi nhóm, trừ bảng đang chọn; bảng khác vẫn nối được. Câu không trả lời được khi có bảng bị bỏ thì lời báo nói tài
+khoản bị giới hạn theo vai và kể tên các bảng đó. Hạn chế còn lại: chọn thẳng `orders` để hỏi thì vẫn đọc được mọi đơn,
+như trước #213, vì `orders` không có chính sách riêng.
 
 ## 6b. Chọn biểu đồ
 
@@ -428,7 +446,8 @@ Cập nhật khi có thay đổi.
 | OpenAPI (mục 8): đặc tả sinh từ code ở `/api/openapi.json`, Swagger UI ở `/api/docs`, `openapi.json` và kiểu TypeScript `frontend/src/api/schema.ts` trong repo, test và CI báo khi lệch code | Có |
 | Trait `LlmProvider` và ba cài đặt; `complete` nhận loại việc, câu hỏi gốc, prompt và JSON Schema của câu trả lời nếu cần | Mock trả lời các câu viết sẵn trên DataCo (bảng logic `dataco`, `engine/llm/mock_answers.json`): 16 câu thường, trong đó một câu cố ý đọc sai định dạng ngày và có câu sửa để thử vòng sửa, ba câu để thử nhánh bị từ chối, chạy lỗi cả sau khi sửa và giá trị lọc không có trong cột; 5 câu "tại sao", trong đó một câu dữ liệu không trả lời được; câu phân loại cho cả 21 câu đó; cùng hồ sơ ngữ nghĩa và một lời diễn giải viết sẵn; câu trả lời sinh SQL là object `{terms, assumptions, clarify, unanswerable, sql}` (`service/ask/reply.rs`), Gemini nhận schema qua `responseJsonSchema`, Ollama qua `format`; Gemini (`generateContent`) và Ollama (`/api/generate`, kèm `options.num_ctx` theo `OLLAMA_NUM_CTX`) gọi qua HTTP, có timeout theo cấu hình, không theo chuyển hướng; lỗi trả lời hướng dẫn tiếng Việt với mã 502 (`upstream`, dịch vụ mô hình lỗi) hoặc 503 (`unavailable`, máy chủ thiếu cấu hình); khóa Gemini không vào log; hồ sơ ngữ nghĩa (#23) gọi `complete` sau mỗi lần nạp, kèm JSON Schema của câu trả lời (`service/semantic/schema.rs`); endpoint hỏi (#33) gọi `complete` để sinh SQL và sửa; đã chạy với Gemini thật trên DataCo (hồ sơ ngữ nghĩa và một câu thường, #135), Ollama mới thử với server giả |
 | Nạp dataset: `POST /api/workspaces/{ws}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet, hoặc một file Excel kèm sheet đã chọn), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB`; liệt kê sheet của file Excel ở `POST .../datasets/sheets`; xóa dataset cùng mọi phiên bản, hồ sơ, chỉ số, cuộc trò chuyện và file Parquet ở `DELETE .../datasets/{id}` (chỉ admin); lịch sử câu hỏi của dataset giữ lại, cột trỏ tới dataset và phiên bản thành null | Có; sheet Excel khác cột nạp riêng từng lần; chưa xóa riêng một phiên bản hay chọn lại phiên bản cũ |
-| Nguồn database (`service/sources/`, `api/sources.rs`, [DATA.md](DATA.md)): admin thêm nguồn Postgres (thử kết nối trước khi lưu, máy chủ trong `SOURCE_ALLOWED_HOSTS`, thông tin kết nối mã hóa bằng `SOURCE_SECRET_KEY`), liệt kê bảng và view, chụp một bảng thành phiên bản Parquet qua đường nạp CSV, chụp lại thành phiên bản mới, xóa nguồn; trang Dữ liệu có khung "Kết nối database". Chụp kèm bảng liên quan theo khóa ngoại (cả hai chiều, tối đa 10 bảng, một giao dịch `REPEATABLE READ`): mỗi bảng một dataset, bảng đã chụp thì thêm phiên bản, khóa ngoại giữa chúng ghi vào `dataset_relations`; chụp lại cả nhóm | Có bản tối thiểu, chỉ Postgres (#165); chưa có TLS tới Postgres, MySQL, SQLite, truy vấn thẳng database ngoài lúc hỏi; câu hỏi vẫn đọc một dataset, hỏi bằng `JOIN` qua quan hệ là #213 |
+| Nguồn database (`service/sources/`, `api/sources.rs`, [DATA.md](DATA.md)): admin thêm nguồn Postgres (thử kết nối trước khi lưu, máy chủ trong `SOURCE_ALLOWED_HOSTS`, thông tin kết nối mã hóa bằng `SOURCE_SECRET_KEY`), liệt kê bảng và view, chụp một bảng thành phiên bản Parquet qua đường nạp CSV, chụp lại thành phiên bản mới, xóa nguồn; trang Dữ liệu có khung "Kết nối database". Chụp kèm bảng liên quan theo khóa ngoại (cả hai chiều, tối đa 10 bảng, một giao dịch `REPEATABLE READ`): mỗi bảng một dataset, bảng đã chụp thì thêm phiên bản, khóa ngoại giữa chúng ghi vào `dataset_relations`; chụp lại cả nhóm | Có bản tối thiểu, chỉ Postgres (#165); chưa có TLS tới Postgres, MySQL, SQLite, truy vấn thẳng database ngoài lúc hỏi |
+| Hỏi qua bảng liên quan (`service/ask/related.rs`, `service/ask/group_prompt.rs`, #213): câu thường trên dataset chụp từ database đọc thêm các dataset nối qua `dataset_relations` (hai chiều, 2 bước, 8 bảng), mỗi bảng một bộ lọc dòng; prompt có khối cột mỗi bảng, danh sách quan hệ và luật nối bảng; guard nhận tối đa 6 nguồn mỗi `FROM`; `tables_read` trong response, `queries.read_versions` trong lịch sử, khung Minh chứng ghi bảng đã đọc; người bị lọc dòng không nhận bảng trỏ tới bảng bị lọc (#215 sẽ bỏ luật này) | Có, kèm test prompt, test luật chọn bảng và test qua route trên ảnh chụp Postgres thật với mô hình giả. Chưa chạy với mô hình thật; bộ 10 câu JOIN trên schema `sales` của database mẫu ở `eval/sales_joins.json` (SQL đúng đã đối chiếu bằng psql) chưa có lệnh chạy; chưa có chặn cộng lặp bằng code (#214); câu "tại sao" và truy dòng nguồn chỉ một bảng |
 | Route ask, drill | Có route dưới `/api/workspaces/{ws}/`, kiểm đăng nhập và thành viên. Ask chạy luồng hỏi câu thường (`service/ask/mod.rs`, #33) và câu "tại sao" (`service/ask/why.rs`, #38), trả thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ: câu mơ hồ hỏi lại trước khi gọi mô hình, câu cần thông tin không cột nào có thì mô hình báo `unanswerable` và trả `rejected` không chạy SQL (`service/ask/unanswerable.rs`), câu trả lời, câu bị từ chối và câu lỗi ghi vào `queries`; drill truy được dòng nguồn của một ô và của một dòng phân rã (mục 8). Hợp đồng request và response của ask (mục 8) có trong đặc tả, kèm response mẫu cho giao diện |
 | Trang hỏi dữ liệu (`pages/AskPage.tsx`): ô chọn dataset ở đầu khung trò chuyện, dính khi cuộn (`components/ask/DatasetPicker.tsx`), kèm dòng báo hồ sơ đang lập, không có câu gợi ý với mô hình hiện tại, hoặc lỗi; câu gợi ý của dataset (tự tải lại khi hồ sơ đang lập); ô hỏi dính đáy khung; câu trả lời gồm đoạn trả lời ngắn, biểu đồ theo gợi ý của backend (Recharts, tải riêng khi có biểu đồ), bảng kết quả phân trang kèm tải CSV các dòng đã nhận, thẻ "Đã hiểu là" với giả định đổi được; câu "tại sao" có một hàng ba số (hai lát cắt và chênh lệch), lời giải thích và thanh đóng góp của từng nhóm ở chiều đầu; câu hỏi lại, lời báo khi bị từ chối, chạy lỗi, mô hình lỗi | Có, dựng trên hợp đồng; trang gọi route ask thật; `npm run dev` có công tắc dữ liệu mẫu |
 | Hồ sơ cột lớp cấu trúc (`service/profile.rs`, `engine/profile.rs`, [DATA.md](DATA.md)): kiểu, số ô trống, số giá trị khác nhau, min, max, vai trò, định dạng của cột ngày dạng chữ, tần suất giá trị của cột tối đa 200 giá trị; đánh dấu cột nhạy cảm theo luật tên cột và dạng giá trị trong cùng giao dịch ghi hồ sơ; lập lúc nạp, phiên bản cũ lập nền và quét đánh dấu lại lúc khởi động | Có; đọc qua route tổng quan dataset (dòng dưới) |

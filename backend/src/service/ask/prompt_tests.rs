@@ -42,6 +42,7 @@ fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
         matched: false,
         unit: None,
         aggregation: crate::engine::store::ColumnAggregation::Sum,
+        join_key: false,
     }
 }
 
@@ -173,6 +174,7 @@ fn input<'a>(
         domain: None,
         choices,
         history: "",
+        group: None,
     }
 }
 

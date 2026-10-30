@@ -58,7 +58,7 @@ fn shop_schema(user: &str) -> Vec<String> {
     all
 }
 
-async fn add_source(s: &Setup) -> String {
+pub(super) async fn add_source(s: &Setup) -> String {
     for sql in shop_schema(&s.user) {
         exec(&s.db.store, &sql).await;
     }
@@ -87,7 +87,7 @@ async fn relations(s: &Setup, id: &str, table: &str) -> Value {
     body
 }
 
-async fn snapshot(s: &Setup, id: &str, body: Value) -> (StatusCode, Value) {
+pub(super) async fn snapshot(s: &Setup, id: &str, body: Value) -> (StatusCode, Value) {
     let url = format!("{SHOP}/sources/{id}/snapshot");
     let (status, _, result) = call(&s.app, "POST", &url, Some(&s.lan), Some(body)).await;
     (status, result)
@@ -117,7 +117,7 @@ fn summary(result: &Value) -> Vec<(String, i64, bool)> {
         .collect()
 }
 
-fn dataset_id(result: &Value, name: &str) -> String {
+pub(super) fn dataset_id(result: &Value, name: &str) -> String {
     result["datasets"]
         .as_array()
         .unwrap()

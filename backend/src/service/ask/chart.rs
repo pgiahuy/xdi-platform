@@ -361,6 +361,7 @@ mod tests {
             matched: false,
             unit: unit.map(str::to_string),
             aggregation: crate::engine::store::ColumnAggregation::Sum,
+            join_key: false,
         }
     }
 

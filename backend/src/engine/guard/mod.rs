@@ -61,6 +61,9 @@ pub struct GuardedSql {
     /// Điều kiện lọc dòng guard đã thêm, in đúng như trong `shown`, để thẻ "Đã hiểu là" (#35) gắn nhãn điều kiện nào do
     /// phân quyền chứ không do câu hỏi. Mỗi điều kiện một lần dù bảng được đọc ở nhiều chỗ; rỗng khi không lọc.
     pub row_filters: Vec<String>,
+    /// Tên các bảng câu thật sự đọc (AllowedTable::name), theo thứ tự gặp, mỗi bảng một lần. Luồng hỏi (#213) ghi phiên
+    /// bản của đúng các bảng này vào lịch sử, không phải mọi bảng được phép.
+    pub tables_read: Vec<String>,
 }
 
 /// Vì sao guard không nhận câu. Lý do là chữ tiếng Việt chỉ đúng chỗ sai, đọc được cả với mô hình lẫn người dùng.
@@ -96,7 +99,7 @@ pub fn build_guarded_sql(
     // thành `read_parquet(...) AS s`, mất tên bảng. `shown` chứa cả điều kiện để người hỏi thấy phạm vi dữ liệu của mình.
     // Sau các luật kích thước: hộp lọc thêm một tầng câu nhưng chỉ là SELECT * kèm WHERE, không ghép thêm giá trị, nên
     // không đếm vào số tầng; đếm thì câu 4 tầng hợp lệ của người bị lọc thành 5 tầng và bị từ chối.
-    let row_filters =
+    let (row_filters, tables_read) =
         apply_row_filters(&mut query, tables, &cte_names).map_err(GuardError::Internal)?;
     let limit_note = apply_row_limit(&mut query, max_rows)?;
     let shown = query.to_string();
@@ -108,6 +111,7 @@ pub fn build_guarded_sql(
         runnable,
         limit_note,
         row_filters,
+        tables_read,
     })
 }
 
@@ -476,21 +480,23 @@ impl Visitor for ExprChecker<'_> {
 // Bước này vẫn không tin hẳn bước 2: gặp chỗ đọc dữ liệu nào không nhận ra thì chặn cả câu thay vì bỏ qua. Bỏ qua thì
 // một dạng bước 2 sót, nay hay sau này, thành chỗ đọc dữ liệu không qua lọc.
 
-/// Trả các điều kiện đã thêm cho GuardedSql::row_filters.
+/// Trả các điều kiện đã thêm (GuardedSql::row_filters) và các bảng đã đọc (GuardedSql::tables_read). Bước này đi qua
+/// mọi chỗ đọc bảng dữ liệu nên cũng là chỗ gom tên bảng chắc nhất.
 fn apply_row_filters(
     query: &mut Query,
     tables: &[AllowedTable],
     cte_names: &BTreeSet<String>,
-) -> Result<Vec<String>, AppError> {
+) -> Result<(Vec<String>, Vec<String>), AppError> {
     let mut injector = RowFilterInjector {
         tables,
         cte_names,
         added: Vec::new(),
+        read: Vec::new(),
     };
     if let ControlFlow::Break(error) = VisitMut::visit(query, &mut injector) {
         return Err(error);
     }
-    Ok(injector.added)
+    Ok((injector.added, injector.read))
 }
 
 struct RowFilterInjector<'a> {
@@ -498,6 +504,8 @@ struct RowFilterInjector<'a> {
     cte_names: &'a BTreeSet<String>,
     /// Điều kiện đã thêm, in như trong `shown`, theo thứ tự gặp và không lặp.
     added: Vec<String>,
+    /// Tên bảng dữ liệu đã gặp, theo thứ tự gặp và không lặp.
+    read: Vec<String>,
 }
 
 impl RowFilterInjector<'_> {
@@ -541,6 +549,9 @@ impl VisitorMut for RowFilterInjector<'_> {
             }
             return ControlFlow::Break(unfilterable_read(&ident));
         };
+        if !self.read.contains(&table.name) {
+            self.read.push(table.name.clone());
+        }
         let conditions = match build_row_conditions(table) {
             Ok(conditions) => conditions,
             Err(error) => return ControlFlow::Break(error),

@@ -151,8 +151,10 @@ bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộ
 - **Lỗi giữa chừng:** các bảng nạp lần lượt sau khi chép xong. Một bảng nạp lỗi thì các bảng nạp trước đó đã có phiên
   bản mới, còn quan hệ của lần này chưa ghi. Chụp lại là đủ: bảng không đổi trùng hash nội dung nên không tạo phiên bản
   trùng.
-- **Hỏi:** bây giờ mỗi câu hỏi vẫn chỉ đọc một dataset. Hỏi qua nhiều dataset bằng `JOIN` theo các quan hệ này là
-  [#213](https://github.com/pgiahuy/xdi-platform/issues/213).
+- **Hỏi:** câu thường trên một dataset của nhóm được đọc thêm các dataset nối với nó qua quan hệ (hai chiều, tối đa 2
+  bước và 8 bảng), mô hình viết `JOIN` theo đúng các quan hệ đó; khung Minh chứng ghi các bảng câu đã đọc. Câu "tại
+  sao" và truy dòng nguồn vẫn chỉ một bảng. Cách chọn bảng và luật cho người bị lọc dòng:
+  [ARCHITECTURE.md](ARCHITECTURE.md), mục 6.
 
 ## Gộp nhiều file và cột `_source_file`
 
@@ -340,5 +342,5 @@ hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và
 - Nạp nguyên tử: ghi phiên bản vào Postgres và chuyển file Parquet về chỗ cuối chưa nằm trong một giao dịch, lỗi giữa
   hai bước có thể để lại dòng thừa trong Postgres ([#79](https://github.com/pgiahuy/xdi-platform/issues/79)).
 - Nguồn dữ liệu là MySQL, SQLite, hay truy vấn thẳng database ngoài lúc hỏi; TLS tới Postgres.
-- Hỏi qua nhiều dataset chụp cùng nhau bằng `JOIN` theo quan hệ khóa ngoại
-  ([#213](https://github.com/pgiahuy/xdi-platform/issues/213)).
+- Câu "tại sao" và truy dòng nguồn qua nhiều dataset chụp cùng nhau; chặn cộng lặp khi `JOIN` bằng code
+  ([#214](https://github.com/pgiahuy/xdi-platform/issues/214)).

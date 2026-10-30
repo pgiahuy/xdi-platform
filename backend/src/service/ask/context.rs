@@ -81,6 +81,9 @@ pub struct ColumnProfile {
     pub unit: Option<String>,
     /// Cách gộp mặc định của cột số đo (#185); prompt dặn mô hình dùng AVG với cột avg.
     pub aggregation: ColumnAggregation,
+    /// Cột nằm trong một quan hệ khóa ngoại tới bảng khác của câu hỏi (#213). Luôn gửi, kể cả khi chỉ gửi cột khớp:
+    /// thiếu cột khóa thì mô hình không viết được JOIN.
+    pub join_key: bool,
 }
 
 /// Một cụm của câu hỏi bằng chính xác một giá trị hay bí danh ("southern europe" là Order Region = Southern Europe).
@@ -147,6 +150,19 @@ pub async fn build_ask_context(
     question: &str,
     choices: &[ChosenOption],
 ) -> Result<AskContext, AppError> {
+    build_ask_context_with_keys(state, ws, version, question, choices, &[]).await
+}
+
+/// Như build_ask_context, và đánh dấu join_key cho các cột tên trong join_keys (cột khóa của quan hệ tới bảng liên
+/// quan, #213).
+pub async fn build_ask_context_with_keys(
+    state: &AppState,
+    ws: &WorkspaceId,
+    version: &DatasetVersion,
+    question: &str,
+    choices: &[ChosenOption],
+    join_keys: &[String],
+) -> Result<AskContext, AppError> {
     check_profile_ready(version)?;
     let columns = state.store.list_columns(ws, version.id).await?;
     // Hồ sơ ghi cùng giao dịch với trạng thái structure, nên rỗng ở đây là phiên bản không thuộc workspace này.
@@ -154,15 +170,24 @@ pub async fn build_ask_context(
         return Err(profile_not_ready());
     }
     let index = load_value_index(state, ws, version).await?;
+    let mut profiles = build_profiles(columns);
+    apply_join_keys(&mut profiles, join_keys);
     Ok(build_context(
         &build_phrases(question),
-        build_profiles(columns),
+        profiles,
         &index,
         choices,
     ))
 }
 
-fn check_profile_ready(version: &DatasetVersion) -> Result<(), AppError> {
+/// Đánh dấu join_key cho cột có tên trong join_keys.
+pub(crate) fn apply_join_keys(columns: &mut [ColumnProfile], join_keys: &[String]) {
+    for column in columns {
+        column.join_key = join_keys.contains(&column.name);
+    }
+}
+
+pub(crate) fn check_profile_ready(version: &DatasetVersion) -> Result<(), AppError> {
     if version.profile_status == ProfileStatus::Failed.as_str() {
         return Err(AppError::BadRequest(
             "Không lập được hồ sơ cột cho phiên bản này của dataset; nạp lại file".to_string(),
@@ -196,6 +221,7 @@ pub(crate) fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> 
             unit: c.unit,
             // Chữ lạ (không thể có, vì CHECK của 0010_column_aggregation.sql) coi như mặc định sum.
             aggregation: ColumnAggregation::parse(&c.aggregation).unwrap_or(ColumnAggregation::Sum),
+            join_key: false,
         })
         .collect()
 }
@@ -276,7 +302,7 @@ pub fn build_context(
     );
 
     let mut sent = build_sent_columns(columns, &matched);
-    apply_column_values(&mut sent, index, &open);
+    apply_group_values(&mut [(&mut sent, index)]);
     context.columns = sent;
     context
 }
@@ -293,8 +319,29 @@ fn build_sent_columns(
     }
     columns
         .into_iter()
-        .filter(|c| send_all || c.matched || c.role == ProfileRole::Time.as_str())
+        .filter(|c| send_all || is_always_sent(c))
         .collect()
+}
+
+/// Cột vẫn gửi khi chỉ gửi cột khớp: cột khớp câu hỏi, cột thời gian (câu có kỳ nào cũng cần) và cột khóa nối bảng.
+pub(crate) fn is_always_sent(column: &ColumnProfile) -> bool {
+    column.matched || column.role == ProfileRole::Time.as_str() || column.join_key
+}
+
+/// Trần FULL_SCHEMA_MAX_COLUMNS tính trên tổng cột của mọi bảng một câu hỏi đọc (#213): mỗi bảng đã qua
+/// build_sent_columns riêng, nhưng sáu bảng ba mươi cột vẫn là 180 cột. Vượt trần thì mọi bảng chỉ giữ cột
+/// is_always_sent, trừ khi không cột nào của cả nhóm khớp câu hỏi (cùng lý do như build_sent_columns).
+pub fn apply_group_column_cap(tables: &mut [&mut Vec<ColumnProfile>]) {
+    let total: usize = tables.iter().map(|columns| columns.len()).sum();
+    let any_matched = tables
+        .iter()
+        .any(|columns| columns.iter().any(|c| c.matched));
+    if total <= FULL_SCHEMA_MAX_COLUMNS || !any_matched {
+        return;
+    }
+    for columns in tables.iter_mut() {
+        columns.retain(is_always_sent);
+    }
 }
 
 /// Số giá trị gửi cho mỗi cột, theo thứ tự của counts (số giá trị có của từng cột): đủ khi tới COLUMN_VALUES_ALL_MAX,
@@ -328,23 +375,34 @@ pub fn build_column_values(counts: &[usize]) -> Vec<usize> {
     wanted.into_iter().map(|w| w.min(cap)).collect()
 }
 
-/// Gắn danh sách giá trị vào các cột chiều không nhạy cảm sẽ gửi (open), theo build_column_values.
-fn apply_column_values(columns: &mut [ColumnProfile], index: &ValueIndex, open: &HashSet<Uuid>) {
-    let mut found: Vec<(usize, &ColumnValues)> = Vec::new();
-    for (i, column) in columns.iter_mut().enumerate() {
-        if !open.contains(&column.id) {
-            continue;
-        }
-        match index.columns.iter().find(|v| v.column_id == column.id) {
-            Some(values) => found.push((i, values)),
-            // Cột chiều không có dòng nào trong column_values: danh sách rỗng là đủ, nếu giá trị đã tải được.
-            None => column.values_complete = index.loaded,
+/// Gắn danh sách giá trị vào các cột chiều không nhạy cảm sẽ gửi, theo build_column_values. Mỗi phần tử của tables là
+/// cột của một bảng cùng chỉ mục giá trị của phiên bản bảng đó; mọi bảng của một câu hỏi chung một trần
+/// CONTEXT_VALUES_MAX (#213), nên thêm bảng liên quan không làm prompt dài gấp mấy lần. Gọi lại trên cột đã có giá trị
+/// thì giá trị được tính lại từ đầu.
+pub fn apply_group_values(tables: &mut [(&mut Vec<ColumnProfile>, &ValueIndex)]) {
+    // (bảng, cột, giá trị của cột) của mọi cột có danh sách giá trị.
+    let mut found: Vec<(usize, usize, &ColumnValues)> = Vec::new();
+    for (t, (columns, index)) in tables.iter_mut().enumerate() {
+        // Chép tham chiếu ra: found giữ giá trị mượn từ chỉ mục, không mượn từ tables, nên sửa tables ở dưới được.
+        let index: &ValueIndex = index;
+        for (i, column) in columns.iter_mut().enumerate() {
+            column.values = Vec::new();
+            column.values_complete = false;
+            if column.role != ProfileRole::Dimension.as_str() || column.is_sensitive {
+                continue;
+            }
+            match index.columns.iter().find(|v| v.column_id == column.id) {
+                Some(values) => found.push((t, i, values)),
+                // Cột chiều không có dòng nào trong column_values: danh sách rỗng là đủ, nếu giá trị đã tải được.
+                None => column.values_complete = index.loaded,
+            }
         }
     }
-    let counts: Vec<usize> = found.iter().map(|(_, v)| v.values.len()).collect();
-    for ((i, values), sent) in found.into_iter().zip(build_column_values(&counts)) {
-        columns[i].values = values.values[..sent].to_vec();
-        columns[i].values_complete = sent == values.values.len() && !values.dropped;
+    let counts: Vec<usize> = found.iter().map(|(_, _, v)| v.values.len()).collect();
+    for ((t, i, values), sent) in found.into_iter().zip(build_column_values(&counts)) {
+        let column = &mut tables[t].0[i];
+        column.values = values.values[..sent].to_vec();
+        column.values_complete = sent == values.values.len() && !values.dropped;
     }
 }
 

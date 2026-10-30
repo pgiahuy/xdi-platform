@@ -22,6 +22,7 @@ use crate::service::explain::summary::apply_summary_parts;
 const MODEL: &str = "gemini-2.5-flash";
 const CONVERSATION_ID: Uuid = Uuid::from_u128(0x7d4a2e91_3b6c_4f10_a5d8_6e2c1b0f9a01);
 const VERSION_ID: Uuid = Uuid::from_u128(0x3c8e1d2a_9f4b_4a6c_8d7e_2b1f0a9c8d01);
+const DATASET_ID: Uuid = Uuid::from_u128(0x1a6f3b2c_4d5e_4f60_8a7b_9c0d1e2f3a01);
 // Trần số dòng guard thêm vào SQL trong mẫu; con số thật do #33 chọn khi gọi guard.
 const GUARD_LIMIT: &str = " LIMIT 100000";
 const ORDER_DATE: &str = r#"strptime("order date (DateOrders)", '%m/%d/%Y %H:%M')"#;
@@ -58,6 +59,7 @@ pub fn build_simple_example() -> AskResponse {
         ],
         sql_generated: Some(sql.to_string()),
         sql_guarded: Some(format!("{sql}{GUARD_LIMIT}")),
+        tables_read: build_dataco_read(),
         understanding: Some(Understanding {
             measures: vec![build_revenue_item()],
             filters: vec![],
@@ -130,6 +132,7 @@ pub fn build_why_example() -> AskResponse {
         ],
         sql_generated: Some(sql.clone()),
         sql_guarded: Some(format!("{sql}{GUARD_LIMIT}")),
+        tables_read: build_dataco_read(),
         understanding: Some(Understanding {
             measures: vec![
                 build_revenue_item(),
@@ -403,6 +406,7 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         choices: vec![],
         sql_generated: None,
         sql_guarded: None,
+        tables_read: vec![],
         understanding: None,
         result: None,
         chart: None,
@@ -413,6 +417,14 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         clarifications: vec![],
         steps: vec![],
     }
+}
+
+fn build_dataco_read() -> Vec<TableRead> {
+    vec![TableRead {
+        dataset_id: DATASET_ID,
+        name: "DataCo".to_string(),
+        logical_table: "dataco".to_string(),
+    }]
 }
 
 fn build_period_filter(from: &str, until: &str) -> String {

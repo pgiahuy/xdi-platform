@@ -46,6 +46,7 @@ fn profile(name: &str, role: &str, aliases: &[&str]) -> ColumnProfile {
         matched: false,
         unit: None,
         aggregation: crate::engine::store::ColumnAggregation::Sum,
+        join_key: false,
     }
 }
 

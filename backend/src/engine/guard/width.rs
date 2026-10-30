@@ -6,10 +6,11 @@ nhánh UNION, INTERSECT, EXCEPT trong cả câu. build_guarded_sql (mod.rs) gọ
 Vì sao: chép một giá trị lớn ra nhiều cột không cần ghép (`SELECT v, v, v, ...`), mà mỗi bản chép là một chuỗi riêng
 DuckDB dựng lúc chuẩn bị câu. Đo qua guard trước khi có luật này: chuỗi hằng 16 KB chép ra 8000 cột cho RSS đỉnh 690 MB
 dù không ghép gì; thêm ghép qua các tầng thì nhân lên (600 cột, 49 lần, 2,5 GB). Chuỗi hằng tối đa 1000 byte, 200 cột
-mỗi SELECT và 4 nguồn mỗi FROM giữ các ca cho một dòng kết quả đã đo dưới 270 MB (bảng số đo ở docs/GUARD.md, mục Số
-tầng, mảnh ghép, độ rộng). Chuỗi dài lấy từ dữ liệu thì không bị luật này giới hạn: đó là phần tính lúc chạy, trong
-trần của engine/query.rs. Mỗi nhánh UNION ALL cho một dòng chép lại cùng giá trị, nên nhân như chép cột: 74 nhánh × 200
-cột đo được 1,94 GB; tối đa 10 nhánh. Phần nhân theo số dòng của bảng thì để tiến trình con (#119). */
+mỗi SELECT và 4 nguồn mỗi FROM (trần lúc đo; nay 6, xem MAX_FROM_SOURCES) giữ các ca cho một dòng kết quả đã đo dưới 270
+MB (bảng số đo ở docs/GUARD.md, mục Số tầng, mảnh ghép, độ rộng). Chuỗi dài lấy từ dữ liệu thì không bị luật này giới
+hạn: đó là phần tính lúc chạy, trong trần của engine/query.rs. Mỗi nhánh UNION ALL cho một dòng chép lại cùng giá trị,
+nên nhân như chép cột: 74 nhánh × 200 cột đo được 1,94 GB; tối đa 10 nhánh. Phần nhân theo số dòng của bảng thì để tiến
+trình con (#119). */
 
 use std::ops::ControlFlow;
 
@@ -27,9 +28,11 @@ pub const MAX_LITERAL_BYTES: usize = 1000;
 /// cột thật khi có nhiều nguồn (xem pre_visit_select).
 pub const MAX_SELECT_ITEMS: usize = 200;
 
-/// Số nguồn tối đa trong một FROM, tính cả JOIN, bảng tạm và câu con: đủ cho câu phân tích trên một dataset, và giữ
-/// `*` qua nhiều lần JOIN (mỗi lần JOIN nhân số cột) trong tầm.
-pub const MAX_FROM_SOURCES: usize = 4;
+/// Số nguồn tối đa trong một FROM, tính cả JOIN, bảng tạm và câu con. 6 từ #213: câu hỏi đọc được bảng đang chọn cùng
+/// các bảng liên quan theo khóa ngoại, và chuỗi order_items, orders, customers, products cộng một hai bảng tạm đã cần
+/// 5 tới 6 nguồn. `*` qua nhiều lần JOIN vẫn tính theo số cột thật (MAX_SELECT_ITEMS), nên số cột không tăng theo trần
+/// này; số đo bộ nhớ ở đầu file đo khi trần là 4.
+pub const MAX_FROM_SOURCES: usize = 6;
 
 /// Tổng số nhánh tối đa của mọi phép tập hợp (UNION, INTERSECT, EXCEPT) trong cả câu, ở mọi tầng: đủ cho dòng tổng,
 /// vài nhóm top và bottom ghép lại.

@@ -1,0 +1,7 @@
+Quan hệ giữa các bảng, lấy từ khóa ngoại của database nguồn:
+{{relationships}}
+Luật khi đọc nhiều bảng:
+- Chỉ nối bảng theo các quan hệ liệt kê ở trên, đúng các cột đó. Không bao giờ nối theo cột khác, kể cả khi tên cột trông giống nhau.
+- Câu đọc hơn một bảng thì viết mọi cột kèm tên bảng hay bí danh, ví dụ orders."order_id" hoặc o."order_id".
+- "many A rows per B row" nghĩa là một dòng của B khớp nhiều dòng của A. Trước khi SUM hay AVG một cột của B qua phép nối với A, gộp A trước trong câu con hay bảng WITH, mỗi khóa nối một dòng, rồi mới nối; không thì mỗi giá trị của B bị cộng một lần cho mỗi dòng khớp của A. Đếm dòng của B bằng COUNT(DISTINCT khóa).
+- Chỉ đọc các bảng câu hỏi cần.
