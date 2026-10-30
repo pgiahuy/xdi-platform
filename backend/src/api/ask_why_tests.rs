@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/ask_why_tests.rs - test câu "tại sao" qua route thật (#38): hỏi, kiểm phân rã, thẻ, biểu đồ, form và Explanation
 được ghi vào queries.explanation, rồi truy dòng nguồn của một dòng phân rã và một ô của bảng tổng trên chính câu vừa
-ghi. Đường dự phòng khi form sai hai lần. Mô hình giả trả form viết sẵn (ScriptedLlm của ask_tests.rs), độ đo là cột
+ghi. Đường dự phòng khi form sai hai lần. Bước phân loại (#197) chọn đường theo câu trả lời của mô hình, không theo
+từ khóa. Mô hình giả trả form viết sẵn (ScriptedLlm của ask_tests.rs), độ đo là cột
 nên không cần chỉ số. Mỗi test dùng database và thư mục dữ liệu riêng; không có DATABASE_URL thì bỏ qua.
 
 Dữ liệu: quý 2/2017 Europe 140.5 (hai dòng), LATAM 200; quý 3/2017 Europe 80 (hai dòng), LATAM 120.25. */
@@ -9,7 +10,7 @@ Dữ liệu: quý 2/2017 Europe 140.5 (hai dòng), LATAM 200; quý 3/2017 Europe
 use axum::http::StatusCode;
 use serde_json::{json, Value};
 
-use super::ask_tests::{scripted, sql_reply, start_on, step_names, Asking};
+use super::ask_tests::{scripted, scripted_with_kind, sql_reply, start_on, step_names, Asking};
 use crate::api::test_support::call;
 use crate::engine::store::test_support::{exec, fetch_count, fetch_text};
 
@@ -67,8 +68,15 @@ async fn why_question_is_answered_recorded_and_drilled() {
     assert_eq!(response["status"], "answered", "{response}");
     assert_eq!(
         step_names(&response),
-        ["context", "llm", "guard", "run", "explain", "narrate", "record"]
+        ["context", "classify", "llm", "guard", "run", "explain", "narrate", "record"]
     );
+    // Mô hình giả không phân loại: luật từ khóa nhận "Tại sao", bước classify báo không ok kèm lý do.
+    let classify = &response["steps"][1];
+    assert_eq!(classify["ok"], false, "{classify}");
+    assert!(classify["detail"]
+        .as_str()
+        .unwrap()
+        .starts_with("Dùng luật từ khóa vì mô hình lỗi"));
     assert_eq!(response["warnings"], json!([]));
     assert_eq!(
         response["choices"],
@@ -132,7 +140,7 @@ async fn why_question_is_answered_recorded_and_drilled() {
 
     // Ô quý 3 của bảng tổng truy như ô của câu thường.
     let quarter = response["result"]["rows"][1][0].clone();
-    let cell = json!({"query_id": query_id, "cell": [{"column": "quarter", "value": quarter}]});
+    let cell = json!({"query_id": query_id, "cell": [{"column": "Quý", "value": quarter}]});
     let (status, page) = drill(&asking, cell).await;
     assert_eq!(status, StatusCode::OK, "{page}");
     assert_eq!(page["total_rows"], 3);
@@ -248,5 +256,43 @@ async fn member_data_role_filters_every_why_query() {
             .iter()
             .any(|f| f["label"].as_str().unwrap().starts_with("Phân quyền")),
         "{filters:?}"
+    );
+}
+
+/// Câu hỏi tìm nguyên nhân không có cụm nào của luật từ khóa: mô hình phân loại là cause thì câu đi đường phân rã.
+#[tokio::test]
+async fn model_routes_a_cause_question_without_keywords() {
+    let question = "Doanh thu quý 3 năm 2017 giảm do gì?";
+    let narrate = json!("Doanh thu giảm vì Europe và LATAM cùng giảm.");
+    let llm = scripted_with_kind("cause", &[quarter_form(), narrate]);
+    let Some(asking) = start_on(Some(llm), CSV, |_| {}).await else {
+        return;
+    };
+    let (status, response) = asking.ask(question, json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    assert!(response["explanation"].is_object(), "{response}");
+    let classify = &response["steps"][1];
+    assert_eq!(classify["name"], "classify");
+    assert_eq!(classify["ok"], true, "{classify}");
+}
+
+/// Câu đếm theo cột tên "lý do": luật từ khóa bắt nhầm, mô hình phân loại là plain thì câu đi đường viết SQL.
+#[tokio::test]
+async fn model_keeps_a_count_by_a_reason_column_plain() {
+    let question = "Doanh thu theo lý do hủy";
+    let sql =
+        r#"SELECT "Market", SUM("Order Item Total") AS revenue FROM dataco GROUP BY "Market""#;
+    let llm = scripted_with_kind("plain", &[sql_reply(sql)]);
+    let Some(asking) = start_on(Some(llm), CSV, |_| {}).await else {
+        return;
+    };
+    let (status, response) = asking.ask(question, json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    assert!(response["explanation"].is_null(), "{response}");
+    assert_eq!(
+        step_names(&response),
+        ["context", "classify", "llm", "guard", "run", "narrate", "record"]
     );
 }

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/conversation/mod.rs - cuộc trò chuyện (#164): câu sau hiểu theo các câu trước. Bọc luồng hỏi (service/ask/):
-đọc vài lượt gần nhất của cuộc, dựng khối "Hội thoại trước" (history.rs) cho prompt, gọi ask, rồi gắn câu vừa ghi vào
-cuộc kèm phần đã hiểu dạng chữ. Luồng hỏi chỉ nhận khối lịch sử dạng chữ, không biết gì thêm về cuộc trò chuyện.
+đọc vài lượt gần nhất của cuộc, dựng khối "Hội thoại trước" (history.rs) cho prompt cùng danh sách câu hỏi trước cho
+bước phân loại, gọi ask, rồi gắn câu vừa ghi vào cuộc kèm phần đã hiểu dạng chữ. Luồng hỏi chỉ nhận khối lịch sử dạng
+chữ và các câu hỏi trước (AskHistory), không biết gì thêm về cuộc trò chuyện.
 
 Chỉ người tạo đọc và hỏi tiếp được một cuộc, kể cả admin của workspace: câu hỏi của một người là việc riêng của họ,
 cũng như hiện chưa có màn nào cho xem lịch sử câu hỏi của người khác. Cuộc của người khác, của dataset khác hay của
@@ -18,6 +19,7 @@ use uuid::Uuid;
 use crate::auth::Member;
 use crate::engine::store::{Conversation, StoredTurn};
 use crate::service::ask::contract::{AskResponse, AskStatus, ChosenOption};
+use crate::service::ask::AskHistory;
 use crate::service::conversation::carryover::{apply_carryover, find_previous};
 use crate::service::conversation::contract::{
     ConversationItem, ConversationListResponse, ConversationResponse, TurnItem,
@@ -60,7 +62,10 @@ pub async fn ask(
         }
         None => Vec::new(),
     };
-    let history = build_history_section(&turns);
+    let history = AskHistory {
+        section: build_history_section(&turns),
+        questions: turns.iter().map(|turn| turn.question.clone()).collect(),
+    };
     let mut response =
         crate::service::ask::ask(state, member, dataset_id, question, choices, &history).await?;
 

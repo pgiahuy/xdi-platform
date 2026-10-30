@@ -34,9 +34,11 @@ type Props = {
 
 type StepName = AskResponse['steps'][number]['name']
 
-// Nhãn tiếng Việt của tên bước do giao diện đặt (hợp đồng chỉ gửi tên); llm, repair, narrate là ba bước gọi mô hình.
+// Nhãn tiếng Việt của tên bước do giao diện đặt (hợp đồng chỉ gửi tên); classify, llm, repair, narrate là bốn bước gọi
+// mô hình.
 const stepLabels: Record<StepName, string> = {
   context: 'Đọc hồ sơ dữ liệu',
+  classify: 'Phân loại câu hỏi',
   llm: 'Mô hình viết SQL',
   guard: 'Kiểm SQL (guard)',
   run: 'Chạy SQL',
@@ -45,7 +47,7 @@ const stepLabels: Record<StepName, string> = {
   narrate: 'Mô hình viết lời giải thích',
   record: 'Lưu vào lịch sử',
 }
-const modelSteps: StepName[] = ['llm', 'repair', 'narrate']
+const modelSteps: StepName[] = ['classify', 'llm', 'repair', 'narrate']
 
 export function AskEvidence({ ws, answer, pending, view }: Props) {
   const { response, variables } = answer

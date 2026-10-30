@@ -295,7 +295,7 @@ async fn sample_question_gives_the_sample_breakdown() {
     );
     let result = outcome.result.as_ref().unwrap();
     assert_eq!(result.total_rows, 2);
-    assert_eq!(result.columns[0].name, "quarter");
+    assert_eq!(result.columns[0].name, "Quý");
     assert!(outcome
         .sql_guarded
         .as_deref()
@@ -785,10 +785,7 @@ async fn why_card_names_the_two_periods() {
     assert_eq!(view.roles, [ColumnRole::Time, ColumnRole::Measure]);
     let chart = view.chart.unwrap();
     // Hai quý, tới 10 kỳ là cột đứng (ask/chart.rs, luật 2).
-    assert_eq!(
-        (chart.kind, chart.x.as_str()),
-        (ChartKind::Column, "quarter")
-    );
+    assert_eq!((chart.kind, chart.x.as_str()), (ChartKind::Column, "Quý"));
 }
 
 /// So hai nhóm: hai nhóm là một mục lọc có nhãn riêng; điều kiện phân quyền ở cuối; bảng theo Market vẽ thanh ngang.

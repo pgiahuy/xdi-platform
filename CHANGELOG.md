@@ -8,15 +8,19 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 - API chỉ số của dataset (`/api/workspaces/{ws}/datasets/{id}/metrics`): admin tạo, sửa (thêm phiên bản), xóa chỉ số; công thức được chạy thử trước khi lưu, lỗi trả kèm tên trường sai; câu hỏi sau dùng đúng công thức đó (#185).
 - Cột số đo có cách gộp mặc định, tổng hay trung bình: mô hình đề xuất lúc nạp, admin đổi qua API; câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng (#185).
+- Postgres mẫu nhiều bảng có khóa chính, khóa ngoại (DataCo và OULAD) để thử kết nối cơ sở dữ liệu công ty: `data/postgres-demo/`.
 
 ### Changed
 
 - Dòng "Đo" của thẻ "Đã hiểu là" ghi cách tính bằng lời khi chỉ số không có mô tả, ví dụ "tổng cột Order Item Total" (#185).
+- Mô hình nhận ra câu hỏi tìm nguyên nhân thay cho so từ khóa, kể cả cách hỏi như "Doanh thu giảm do gì?"; câu đếm theo cột "lý do" vẫn là câu thường. Mô hình lỗi thì dùng luật từ khóa như trước; tab Các bước có thêm bước Phân loại câu hỏi.
 - Câu hỏi tìm nguyên nhân có lời tóm tắt do code viết: câu trả lời chính rồi lý do chính (số dòng, lượng và giá, cơ cấu), nhóm khác thường hay "không có nơi nào đặc biệt", và cột lời tóm tắt bỏ qua vì chỉ là tên khác của hai nhóm đang so (như hình thức thanh toán khi so trạng thái đơn) hay trùng cột khác; tên cột kèm nghĩa tiếng Việt.
 - Thẻ trả lời câu hỏi tìm nguyên nhân hiện lời tóm tắt (câu chính in đậm và các ý ngắn), số dòng của hai bên, phần trăm thay đổi cạnh chênh lệch, và tên cột kèm nghĩa tiếng Việt ở tiêu đề biểu đồ chênh lệch.
 - Tab Phân rã của câu "tại sao" dễ đọc hơn với người dùng nghiệp vụ: thêm cột % Tác động (phần của chênh lệch do nhóm tạo ra) và % Thay đổi (bên so sánh so với bên gốc trong nhóm), in đậm nhóm khác thường so với mức chung, dòng Tổng cuối mỗi bảng và một thẻ xanh dương giải thích các cột tính thêm; số giảm màu đỏ, tăng màu xanh lá ở bảng phân rã, thanh đóng góp và số chênh lệch.
 - Tab Phân rã không còn cắt ở 8 bảng: các cột chia nhóm không nhạy cảm có từ 2 tới 50 giá trị (tối đa 30 cột) đều được tính và hiện, xếp theo mức giải thích chênh lệch, bảng giải thích rõ nhất trước, thay cho 8 cột đứng đầu file; bỏ bảng chia y hệt bảng khác (Department Id trùng Department Name, giữ bảng có tên), bảng chỉ một nhóm, và khi so hai nhóm thì bỏ bảng mà mỗi nhóm chỉ có ở một bên; cột bị bỏ vì trùng hay chỉ có ở một bên vẫn được nhắc trong ý "Bỏ qua" của lời tóm tắt. Trên DataCo, câu so phân khúc Consumer với Home Office giờ có bảng theo Market, Order Status, Shipping Mode.
 - Tab SQL của pane Minh chứng gọn hơn: bỏ ba câu chú thích dưới bản sau guard (câu giải thích vạch đánh dấu, "Thêm LIMIT 100000", lời nhắc về phân quyền dữ liệu). Dòng guard thêm vẫn có vạch đánh dấu; chi tiết bước guard vẫn ở tab Các bước.
+- Câu hỏi tìm nguyên nhân: lời giải thích nói "giảm chủ yếu do" thay cho "nhờ", cột kỳ của bảng kết quả và biểu đồ tên "Tháng", "Quý", "Năm".
+- Bảng kết quả: cột thời gian mà mọi ô đều là nửa đêm chỉ hiện ngày, không kèm " 00:00:00".
 
 ### Fixed
 

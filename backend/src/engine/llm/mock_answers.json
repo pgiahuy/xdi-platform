@@ -460,5 +460,110 @@
         "related_columns": ["Delivery Status", "Late_delivery_risk", "Order Status", "Customer Segment"]
       }
     }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo thị trường",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo tháng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Top 10 danh mục có doanh thu cao nhất",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Tỷ lệ giao hàng trễ theo phương thức vận chuyển",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Số đơn hàng theo trạng thái giao hàng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Lợi nhuận theo phân khúc khách hàng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "5 khu vực có tỷ lệ giao trễ cao nhất",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Số ngày giao thực tế và dự kiến theo phương thức vận chuyển",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu từng quý năm 2017",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "5 danh mục có doanh thu cao nhất ở châu Âu",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo ngày giao hàng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Xóa các đơn hàng bị hủy",
+    "answer": { "kind": "plain", "reason": "Câu hỏi không hỏi nguyên nhân của một con số." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo ngày đặt hàng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu ở thị trường châu Á",
+    "answer": { "kind": "plain", "reason": "Câu hỏi chỉ hỏi con số doanh thu, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo tháng giảm so với cùng kỳ năm trước",
+    "answer": { "kind": "plain", "reason": "Câu hỏi nêu mức giảm theo tháng nhưng không hỏi điều gì gây ra nó." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo quý của từng thị trường",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Tại sao doanh thu quý 3 năm 2017 giảm",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao một độ đo thay đổi hay khác nhau giữa hai nhóm." }
+  },
+  {
+    "task": "classify",
+    "question": "Vì sao doanh thu tháng 5 năm 2017 tăng",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao một độ đo thay đổi hay khác nhau giữa hai nhóm." }
+  },
+  {
+    "task": "classify",
+    "question": "Tại sao doanh thu Europe thấp hơn LATAM",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao một độ đo thay đổi hay khác nhau giữa hai nhóm." }
+  },
+  {
+    "task": "classify",
+    "question": "Vì sao doanh thu Europe cao hơn LATAM",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao một độ đo thay đổi hay khác nhau giữa hai nhóm." }
+  },
+  {
+    "task": "classify",
+    "question": "Tại sao khách hàng không hài lòng",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao khách hàng không hài lòng." }
   }
 ]
