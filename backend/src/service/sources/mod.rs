@@ -12,6 +12,7 @@ Bảo vệ:
 - Thông tin kết nối mã hóa bằng SOURCE_SECRET_KEY trước khi lưu; mật khẩu không bao giờ có trong response, log hay
   prompt. Cột _source_file ghi postgres://máy/database/schema.bảng, không có tài khoản hay mật khẩu. */
 
+mod pg_types;
 mod postgres;
 mod secret;
 
@@ -189,7 +190,7 @@ pub async fn snapshot(
         }
         postgres::copy_to_csv(&mut conn, &table, max_rows, max_bytes, &path).await
     };
-    let content_sha = match tokio::time::timeout(limit, copy).await {
+    let copied = match tokio::time::timeout(limit, copy).await {
         Ok(result) => result?,
         Err(_) => {
             return Err(AppError::BadRequest(
@@ -202,7 +203,7 @@ pub async fn snapshot(
     let label = source_file_label(&info, &wanted);
     // Băm cả nhãn nguồn lẫn nội dung: cùng nội dung mà từ bảng khác hay từ một file nạp tay thì vẫn là dữ liệu khác,
     // không bị coi là trùng phiên bản đã có ở dataset khác.
-    let sha256 = Sha256::digest(format!("{label}\n{content_sha}").as_bytes())
+    let sha256 = Sha256::digest(format!("{label}\n{}", copied.sha256).as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
@@ -214,6 +215,7 @@ pub async fn snapshot(
             path,
             name: label,
             sha256,
+            column_types: copied.column_types,
         }],
         sheets: Vec::new(),
         database_source: Some(row.id),

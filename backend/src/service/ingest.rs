@@ -95,6 +95,9 @@ pub struct StagedFile {
     pub name: String,
     /// SHA-256 dạng hex.
     pub sha256: String,
+    /// Kiểu DuckDB của từng cột, dạng (tên cột, kiểu), khi file là bản chụp bảng database (service/sources/). Rỗng với
+    /// file người dùng nạp: kiểu do DuckDB đoán.
+    pub column_types: Vec<(String, String)>,
 }
 
 pub struct Upload {
@@ -178,9 +181,10 @@ pub async fn upload(
     upload: Upload,
 ) -> Result<UploadResult, AppError> {
     let ws = &member.workspace;
-    // Bản chụp bảng database có tên postgres://..., không có đuôi file để đoán định dạng; service/sources/ luôn ghi CSV.
+    // Bản chụp bảng database có tên postgres://..., không có đuôi file để đoán định dạng; service/sources/ luôn ghi CSV
+    // bằng COPY, kèm kiểu từng cột.
     let format = match upload.database_source {
-        Some(_) => FileFormat::Csv,
+        Some(_) => FileFormat::DatabaseCsv,
         None => common_format(&upload.files)?,
     };
     reject_repeated_files(&upload.files)?;
@@ -252,7 +256,7 @@ pub async fn upload(
                 path: f.path.clone(),
                 name: f.name.clone(),
                 format,
-                timestamp_columns: Vec::new(),
+                column_types: f.column_types.clone(),
             })
             .collect(),
     };
@@ -593,6 +597,7 @@ fn source_kind(format: FileFormat) -> SourceKind {
         FileFormat::Csv => SourceKind::Csv,
         FileFormat::Parquet => SourceKind::Parquet,
         FileFormat::Xlsx => SourceKind::Xlsx,
+        FileFormat::DatabaseCsv => SourceKind::Postgres,
     }
 }
 
@@ -639,6 +644,7 @@ mod tests {
             path: PathBuf::new(),
             name: "x.csv".to_string(),
             sha256: h.to_string(),
+            column_types: Vec::new(),
         };
         let sheets = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
         assert_eq!(

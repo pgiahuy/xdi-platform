@@ -109,8 +109,11 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   đường nạp CSV ở trên (Parquet, hồ sơ cột, phiên bản). Hồ sơ, bằng chứng, dòng nguồn và câu hỏi cũ trỏ đúng phiên bản
   đã chụp. "Chụp lại" tạo phiên bản mới của cùng dataset, đọc lại đúng bảng của lần trước; bảng không đổi thì trả
   `created: false` như nạp trùng.
-- Kiểu cột: Postgres ghi mọi giá trị thành chữ, DuckDB dò lại kiểu như với file CSV. Số có phần thập phân cố định
-  (`numeric`) và ngày giờ đọc lại được; kiểu riêng của Postgres (mảng, `jsonb`, hình học) thành chữ.
+- Kiểu cột lấy từ Postgres, DuckDB không đoán như với file CSV nạp tay: số nguyên thành `INTEGER` hay `BIGINT`,
+  `real` và `double precision` thành `DOUBLE`, `numeric(p,s)` thành `DECIMAL(p,s)` (`numeric` không khai báo, hay
+  rộng hơn 38 chữ số, thành `DOUBLE`, chỉ giữ chính xác khoảng 15 chữ số), `boolean`, `date`, `timestamp`,
+  `timestamptz` giữ kiểu tương ứng. Mọi kiểu khác (`text`, `varchar`, `uuid`, `json`, mảng, enum) thành chữ, nên mã
+  như `00123` giữ nguyên số 0 ở đầu. Chuỗi rỗng và `NULL` vẫn khác nhau sau khi chụp.
 - Giới hạn: `SOURCE_MAX_ROWS` dòng (đếm trước, quá thì từ chối, không chụp thiếu), `MAX_UPLOAD_MB` dung lượng CSV,
   `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
 - Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`). Máy chủ phải nằm trong

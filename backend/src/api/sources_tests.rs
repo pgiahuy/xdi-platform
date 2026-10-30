@@ -392,3 +392,100 @@ async fn sources_are_guarded() {
         .contains("SOURCE_SECRET_KEY"));
     off.finish().await;
 }
+
+/// Kiểu cột của bản chụp lấy từ Postgres, không do DuckDB đoán từ phần đầu file: cột sku toàn số trong 25.000 dòng
+/// đầu (quá mẫu 20.480 dòng của DuckDB) rồi mới có chữ vẫn chụp được, mã có số 0 ở đầu giữ nguyên, int và numeric(p,s)
+/// giữ kiểu, chuỗi rỗng khác NULL.
+#[tokio::test]
+async fn snapshot_keeps_postgres_column_types() {
+    let Some(s) = start(Some(KEY), &[]).await else {
+        return;
+    };
+    exec(
+        &s.db.store,
+        "CREATE TABLE items (code text, sku text, note text, qty int, price numeric(10,2), ratio numeric, ok boolean,
+                             at timestamptz, day date)",
+    )
+    .await;
+    exec(
+        &s.db.store,
+        "INSERT INTO items
+         SELECT lpad(i::text, 5, '0'), (100000 + i)::text, 'x', i, i * 1.25, i / 3.0, i % 2 = 0,
+                timestamptz '2024-03-17 10:00:00+07' + i * interval '1 minute', date '2024-01-01' + i % 30
+         FROM generate_series(1, 25000) AS i",
+    )
+    .await;
+    exec(
+        &s.db.store,
+        "INSERT INTO items VALUES
+         ('A1', '85123A', '', 1, 2.50, 0.5, true, '2024-03-17 10:00:00+07', '2024-01-01'),
+         ('A2', '85124B', NULL, 2, NULL, NULL, NULL, NULL, NULL)",
+    )
+    .await;
+    exec(&s.db.store, &format!("GRANT SELECT ON items TO {}", s.user)).await;
+
+    let url = format!("{SHOP}/sources");
+    let (status, _, source) = call(&s.app, "POST", &url, Some(&s.lan), Some(s.form.clone())).await;
+    assert_eq!(status, StatusCode::CREATED, "{source}");
+    let id = source["id"].as_str().unwrap();
+    let snap = json!({"table": "public.items"});
+    let (status, _, result) = call(
+        &s.app,
+        "POST",
+        &format!("{url}/{id}/snapshot"),
+        Some(&s.lan),
+        Some(snap),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{result}");
+    assert_eq!(result["version"]["row_count"], 25_002);
+    let types: Vec<(String, String)> = result["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            let text = |key: &str| c[key].as_str().unwrap().to_string();
+            (text("name"), text("data_type"))
+        })
+        .collect();
+    let expected = [
+        ("code", "VARCHAR"),
+        ("sku", "VARCHAR"),
+        ("note", "VARCHAR"),
+        ("qty", "INTEGER"),
+        ("price", "DECIMAL(10,2)"),
+        ("ratio", "DOUBLE"),
+        ("ok", "BOOLEAN"),
+        ("at", "TIMESTAMP WITH TIME ZONE"),
+        ("day", "DATE"),
+    ];
+    for (name, data_type) in expected {
+        assert!(
+            types.contains(&(name.to_string(), data_type.to_string())),
+            "{name} {data_type}: {types:?}"
+        );
+    }
+
+    let parquet = s
+        .data
+        .join(result["version"]["parquet_path"].as_str().unwrap())
+        .join("*.parquet");
+    let conn = duckdb::Connection::open_in_memory().unwrap();
+    let count = |filter: &str| -> i64 {
+        let sql = format!(
+            "SELECT count(*) FROM read_parquet('{}') WHERE {filter}",
+            parquet.display()
+        );
+        conn.query_row(&sql, [], |row| row.get(0)).unwrap()
+    };
+    assert_eq!(count("code = '00123'"), 1);
+    assert_eq!(count("sku = '85123A' AND note = ''"), 1);
+    assert_eq!(count("sku = '85124B' AND note IS NULL"), 1);
+    // timestamptz 10:00 giờ +07 là 03:00 UTC: epoch của 2024-03-17 03:00:00 UTC.
+    assert_eq!(
+        count("sku = '85123A' AND epoch(\"at\")::BIGINT = 1710644400"),
+        1
+    );
+    assert_eq!(count("code = '00004' AND price = 5.00 AND ok"), 1);
+    s.finish().await;
+}

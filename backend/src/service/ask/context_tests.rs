@@ -995,7 +995,7 @@ async fn measure_dataco_values() {
         path: csv.into(),
         name: "DataCoSupplyChainDataset.csv".to_string(),
         format: FileFormat::Csv,
-        timestamp_columns: Vec::new(),
+        column_types: Vec::new(),
     };
     let materialized = materialize(&[input], &dir).unwrap();
     let columns = crate::service::profile::build_profile(

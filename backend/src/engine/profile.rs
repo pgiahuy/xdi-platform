@@ -237,7 +237,7 @@ mod tests {
             path,
             name: "data.csv".to_string(),
             format: FileFormat::Csv,
-            timestamp_columns: Vec::new(),
+            column_types: Vec::new(),
         };
         let result =
             materialize(&[file], &out).and_then(|_| build_column_stats(&out, values_max, previous));
