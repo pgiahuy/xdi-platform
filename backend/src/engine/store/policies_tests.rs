@@ -10,6 +10,7 @@ use uuid::Uuid;
 use super::test_support::{fresh_database, TestDb};
 use super::{DataRoleOutcome, PoliciesOutcome, RowPolicy, Store, WorkspaceKind};
 use crate::auth::{Role, WorkspaceId};
+use crate::engine::guard::RowFilter;
 
 struct Fixture {
     db: TestDb,
@@ -89,7 +90,10 @@ async fn filter_columns(store: &Store, f: &Fixture, dataset: Uuid) -> Vec<String
         .await
         .unwrap()
         .into_iter()
-        .map(|filter| filter.column)
+        .filter_map(|filter| match filter {
+            RowFilter::Column { column, .. } => Some(column),
+            RowFilter::Parent { .. } => None,
+        })
         .collect()
 }
 

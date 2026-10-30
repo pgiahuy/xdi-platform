@@ -31,22 +31,41 @@ use crate::error::AppError;
 
 pub use prompt_rules::build_prompt_rules;
 
-/// Bảng logic mà SQL của LLM được phép đọc, ví dụ "sales".
+/// Bảng logic mà SQL của LLM được phép đọc, ví dụ "sales". Cũng là bảng cha trong RowFilter::Parent: khi đó mô hình
+/// không đọc được nó, guard chỉ dùng nó trong điều kiện lọc của bảng con.
+#[derive(Debug, Clone)]
 pub struct AllowedTable {
     /// Cột datasets.logical_table.
     pub name: String,
     /// Lấy từ bảng columns.
     pub columns: Vec<String>,
     pub parquet_dir: PathBuf,
-    /// Lấy từ rls_policies theo data_role của người hỏi. Rỗng thì không lọc: service quyết định ai được thấy hết.
+    /// Lấy từ rls_policies theo data_role của người hỏi, cộng điều kiện lan theo khóa ngoại. Rỗng thì không lọc:
+    /// service quyết định ai được thấy hết.
     pub row_filters: Vec<RowFilter>,
 }
 
-/// Một dòng của rls_policies: chỉ thấy dòng có `column` nằm trong `allowed_values`. Dòng có `column` rỗng (NULL) cũng
-/// bị ẩn, vì NULL không khớp IN.
-pub struct RowFilter {
-    pub column: String,
-    pub allowed_values: Vec<String>,
+/// Một điều kiện lọc dòng. Mọi điều kiện của một bảng nối bằng AND.
+#[derive(Debug, Clone)]
+pub enum RowFilter {
+    /// Một dòng của rls_policies: chỉ thấy dòng có `column` nằm trong `allowed_values`. Dòng có `column` rỗng (NULL)
+    /// cũng bị ẩn, vì NULL không khớp IN.
+    Column {
+        column: String,
+        allowed_values: Vec<String>,
+    },
+    /// Điều kiện lan theo khóa ngoại (#215), do service dựng từ dataset_relations, không do mô hình viết: chỉ thấy dòng
+    /// mà khóa ngoại `columns` trỏ tới một dòng của `parent` người hỏi được thấy. Thành
+    /// `("columns") IN (SELECT "parent_columns" FROM parent WHERE <điều kiện của parent>)`. Dòng có ô khóa ngoại rỗng
+    /// bị ẩn, như NULL ở RowFilter::Column.
+    Parent {
+        /// Cột khóa ngoại của bảng được lọc, cùng thứ tự với parent_columns.
+        columns: Vec<String>,
+        /// Cột khóa chính hay UNIQUE của bảng cha mà khóa ngoại trỏ tới.
+        parent_columns: Vec<String>,
+        /// Bảng cha kèm điều kiện lọc của chính nó với người hỏi, có thể lại gồm RowFilter::Parent (lan nhiều bước).
+        parent: AllowedTable,
+    },
 }
 
 /// Hai bản của cùng một câu, vì bản chạy chứa đường dẫn file trên máy chủ, không được lộ ra cho người dùng.
@@ -238,8 +257,10 @@ fn check_names(query: &Query, tables: &[AllowedTable]) -> Result<BTreeSet<String
         tables,
         names: &mut names,
     });
+    let parents = build_parent_tables(tables);
     if let ControlFlow::Break(error) = query.visit(&mut TableChecker {
         tables,
+        parents: &parents,
         names: &names,
     }) {
         return Err(error);
@@ -325,6 +346,8 @@ impl Visitor for Collector<'_> {
 
 struct TableChecker<'a> {
     tables: &'a [AllowedTable],
+    /// Bảng cha của điều kiện lan theo khóa ngoại (build_parent_tables): mô hình không đọc được, nhưng tên vẫn bị giữ.
+    parents: &'a [AllowedTable],
     names: &'a Names,
 }
 
@@ -362,8 +385,10 @@ impl Visitor for TableChecker<'_> {
         }
         for cte in &with.cte_tables {
             // Nhận thì build_runnable đổi mọi `FROM sales` sang file Parquet: câu đọc bảng dữ liệu thay vì bảng tạm,
-            // ra kết quả sai mà không báo lỗi.
-            if find_table(self.tables, &name_key(&cte.alias.name)).is_some() {
+            // ra kết quả sai mà không báo lỗi. Tên bảng cha cũng vậy, và còn tệ hơn: bảng tạm `customers` của câu thành
+            // đọc thẳng file của customers, không qua hộp lọc nào.
+            let key = name_key(&cte.alias.name);
+            if find_table(self.tables, &key).is_some() || find_table(self.parents, &key).is_some() {
                 return ControlFlow::Break(rejected(format!(
                     "Bảng tạm {} trùng tên bảng dữ liệu, hãy đặt tên khác",
                     cte.alias.name
@@ -472,7 +497,9 @@ impl Visitor for ExprChecker<'_> {
 
 // Bước 3: lọc dòng theo vai dữ liệu (data_role) của người hỏi.
 //
-// Bọc chỗ đọc bảng thành câu con: `sales s` thành `(SELECT * FROM sales WHERE "region" IN ('South')) s`. Không thêm
+// Bọc chỗ đọc bảng thành câu con: `sales s` thành `(SELECT * FROM sales WHERE "region" IN ('South')) s`. Điều kiện lan
+// theo khóa ngoại (RowFilter::Parent, #215) nằm trong cùng hộp đó, dạng `"customer_id" IN (SELECT "id" FROM
+// "customers" WHERE ...)`, nên câu chỉ đọc orders cũng chỉ thấy đơn của khách được thấy. Không thêm
 // điều kiện vào WHERE của câu LLM viết vì điều kiện trong câu con chạy trước mọi JOIN, WHERE, OR của câu ngoài: viết
 // khéo cỡ nào cũng không gỡ được nó. Chỉ cần bọc chỗ đọc bảng vì bước 2 đã từ chối mọi nguồn khác: hàm đọc file, bảng
 // hệ thống, tên kèm schema, bảng tạm trùng tên bảng dữ liệu.
@@ -568,7 +595,7 @@ impl VisitorMut for RowFilterInjector<'_> {
             columns: vec![],
             at: None,
         });
-        match build_filtered_read(factor.clone(), condition) {
+        match build_filtered_read(factor.clone(), Some(condition)) {
             Ok(subquery) => {
                 *factor = TableFactor::Derived {
                     lateral: false,
@@ -591,24 +618,58 @@ fn unfilterable_read(read: impl std::fmt::Display) -> AppError {
 
 /// Mỗi chính sách một điều kiện; rỗng khi bảng không có chính sách. Cột phải có trong hồ sơ bảng: cột không có thì
 /// DuckDB lấy cột cùng tên của bảng khác ở câu ngoài (câu con trong FROM được nối như LATERAL), điều kiện thành lọc
-/// bảng khác và mọi dòng của bảng này lọt ra.
+/// bảng khác và mọi dòng của bảng này lọt ra. Cùng lý do, cột của bảng cha trong câu con của RowFilter::Parent cũng
+/// phải có trong hồ sơ bảng cha.
 fn build_row_conditions(table: &AllowedTable) -> Result<Vec<Expr>, AppError> {
     let mut conditions = Vec::new();
     for filter in &table.row_filters {
-        let column_key = filter.column.to_lowercase();
-        let is_table_column = table
-            .columns
-            .iter()
-            .any(|column| column.to_lowercase() == column_key);
-        if !is_table_column {
-            return Err(AppError::Internal(format!(
-                "row filter column {} is not a column of table {}",
-                filter.column, table.name
-            )));
-        }
-        conditions.push(build_column_condition(filter));
+        let condition = match filter {
+            RowFilter::Column {
+                column,
+                allowed_values,
+            } => {
+                check_filter_columns(table, std::slice::from_ref(column))?;
+                build_column_condition(column, allowed_values)
+            }
+            RowFilter::Parent {
+                columns,
+                parent_columns,
+                parent,
+            } => {
+                if columns.is_empty() || columns.len() != parent_columns.len() {
+                    return Err(AppError::Internal(format!(
+                        "row filter of table {} has {} key columns for {} columns of {}",
+                        table.name,
+                        columns.len(),
+                        parent_columns.len(),
+                        parent.name
+                    )));
+                }
+                check_filter_columns(table, columns)?;
+                check_filter_columns(parent, parent_columns)?;
+                build_parent_condition(columns, parent_columns, parent)?
+            }
+        };
+        conditions.push(condition);
     }
     Ok(conditions)
+}
+
+fn check_filter_columns(table: &AllowedTable, names: &[String]) -> Result<(), AppError> {
+    for name in names {
+        let key = name.to_lowercase();
+        if !table
+            .columns
+            .iter()
+            .any(|column| column.to_lowercase() == key)
+        {
+            return Err(AppError::Internal(format!(
+                "row filter column {name} is not a column of table {}",
+                table.name
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// None khi không có điều kiện. Nhiều chính sách trên một bảng (mỗi cột một dòng) thì dòng phải qua tất cả.
@@ -623,43 +684,111 @@ fn build_all_of(conditions: &[Expr]) -> Option<Expr> {
         })
 }
 
-fn build_column_condition(filter: &RowFilter) -> Expr {
+fn build_column_condition(column: &str, allowed_values: &[String]) -> Expr {
     // Danh sách rỗng nghĩa là không được thấy dòng nào; `IN ()` là lỗi cú pháp nên viết thẳng FALSE.
-    if filter.allowed_values.is_empty() {
+    if allowed_values.is_empty() {
         return Expr::value(Value::Boolean(false));
     }
-    let allowed_values = filter
-        .allowed_values
+    let list = allowed_values
         .iter()
         .map(|value| Expr::value(Value::SingleQuotedString(value.clone())))
         .collect();
     Expr::InList {
-        // Nháy kép vì tên cột lấy từ file nạp vào, có thể có dấu cách hay chữ hoa như "Order Item Total".
-        expr: Box::new(Expr::Identifier(Ident::with_quote('"', &filter.column))),
-        list: allowed_values,
+        expr: Box::new(quoted_column(column)),
+        list,
         negated: false,
     }
 }
 
-/// Lấy khung `SELECT * FROM t` rồi gắn bảng và điều kiện vào cây, không ghép chuỗi SQL: giá trị như "O'Brien" nằm
-/// trong cây dạng chuỗi, sqlparser tự thoát dấu nháy khi in.
-fn build_filtered_read(table: TableFactor, condition: Expr) -> Result<Query, AppError> {
-    let template = "SELECT * FROM t";
-    let statement = Parser::parse_sql(&DuckDbDialect {}, template)
-        .ok()
-        .and_then(|mut statements| statements.pop());
-    if let Some(Statement::Query(mut query)) = statement {
-        if let SetExpr::Select(select) = query.body.as_mut() {
-            if let Some(from) = select.from.first_mut() {
-                from.relation = table;
-                select.selection = Some(condition);
-                return Ok(*query);
+/// Nháy kép vì tên cột lấy từ file nạp vào, có thể có dấu cách hay chữ hoa như "Order Item Total".
+fn quoted_column(column: &str) -> Expr {
+    Expr::Identifier(Ident::with_quote('"', column))
+}
+
+/// `"customer_id" IN (SELECT "id" FROM "customers" WHERE "region" IN ('South'))`; khóa nhiều cột thì
+/// `("maker", "sku") IN (SELECT "maker", "sku" FROM "products" WHERE ...)`.
+///
+/// Nửa nối (IN câu con) chứ không JOIN bảng cha vào hộp lọc: JOIN nhân dòng khi khóa bên cha lặp (cột UNIQUE có thể
+/// có nhiều NULL, hay hồ sơ ghi khóa sai), và thêm cột của bảng cha vào `SELECT *` của hộp, làm câu ngoài thấy cột lạ.
+/// IN chỉ giữ hay bỏ từng dòng của bảng con, không đổi số dòng hay cột. IN nhiều cột của DuckDB theo luật chuẩn: một ô
+/// khóa ngoại rỗng thì không khớp dòng nào, nên dòng đó bị ẩn. Không dùng so cả bộ dạng `(a, b)` với câu con trả một
+/// cột kiểu STRUCT: DuckDB coi NULL bằng NULL khi so STRUCT, dòng có ô rỗng sẽ lọt.
+///
+/// Điều kiện của bảng cha nằm trong câu con, dựng bằng chính build_row_conditions, nên lan được nhiều bước
+/// (order_items qua orders tới customers). Tên cột trong câu con không cần tên bảng đi trước: check_filter_columns đã
+/// chắc chúng là cột của bảng cha, nên DuckDB gắn chúng với bảng gần nhất là bảng cha. Bước 5 đổi tên bảng cha sang
+/// file Parquet như mọi bảng khác (build_parent_tables).
+fn build_parent_condition(
+    columns: &[String],
+    parent_columns: &[String],
+    parent: &AllowedTable,
+) -> Result<Expr, AppError> {
+    let parent_conditions = build_row_conditions(parent)?;
+    let mut subquery = build_filtered_read(
+        build_table_read(&parent.name)?,
+        build_all_of(&parent_conditions),
+    )?;
+    if let SetExpr::Select(select) = subquery.body.as_mut() {
+        select.projection = parent_columns
+            .iter()
+            .map(|column| SelectItem::UnnamedExpr(quoted_column(column)))
+            .collect();
+    }
+    let keys: Vec<Expr> = columns.iter().map(|column| quoted_column(column)).collect();
+    let left = match <[Expr; 1]>::try_from(keys) {
+        Ok([key]) => key,
+        Err(keys) => Expr::Tuple(keys),
+    };
+    Ok(Expr::InSubquery {
+        expr: Box::new(left),
+        subquery: Box::new(subquery),
+        negated: false,
+    })
+}
+
+/// Chỗ đọc `"name"` dạng cây, lấy từ khung `SELECT * FROM t`. Nháy kép để tên trùng từ khóa SQL vẫn đọc lại được
+/// (truy dòng nguồn đọc lại bản shown).
+fn build_table_read(name: &str) -> Result<TableFactor, AppError> {
+    if let SetExpr::Select(mut select) = *parse_select_template()?.body {
+        if let Some(from) = select.from.pop() {
+            let mut read = from.relation;
+            if let TableFactor::Table { name: table, .. } = &mut read {
+                *table = ObjectName::from(vec![Ident::with_quote('"', name)]);
+                return Ok(read);
             }
         }
     }
     Err(AppError::Internal(format!(
-        "cannot build row filter from {template}"
+        "cannot build a table read for {name}"
     )))
+}
+
+/// Lấy khung `SELECT * FROM t` rồi gắn bảng và điều kiện vào cây, không ghép chuỗi SQL: giá trị như "O'Brien" nằm
+/// trong cây dạng chuỗi, sqlparser tự thoát dấu nháy khi in.
+/// condition None thì không có WHERE (bảng cha không bị lọc gì, chỉ cần khóa có thật).
+fn build_filtered_read(table: TableFactor, condition: Option<Expr>) -> Result<Query, AppError> {
+    let mut query = parse_select_template()?;
+    if let SetExpr::Select(select) = query.body.as_mut() {
+        if let Some(from) = select.from.first_mut() {
+            from.relation = table;
+            select.selection = condition;
+            return Ok(query);
+        }
+    }
+    Err(AppError::Internal(
+        "cannot build row filter from the select template".to_string(),
+    ))
+}
+
+fn parse_select_template() -> Result<Query, AppError> {
+    let template = "SELECT * FROM t";
+    let statement = Parser::parse_sql(&DuckDbDialect {}, template)
+        .ok()
+        .and_then(|mut statements| statements.pop());
+    match statement {
+        Some(Statement::Query(query)) => Ok(*query),
+        _ => Err(AppError::Internal(format!("cannot parse {template}"))),
+    }
 }
 
 // Bước 4: giới hạn số dòng.
@@ -723,7 +852,9 @@ fn build_runnable(
     cte_names: &BTreeSet<String>,
 ) -> Result<Query, AppError> {
     let mut sources = HashMap::new();
-    for table in tables {
+    // Bảng cha chỉ xuất hiện trong câu con của điều kiện lan theo khóa ngoại (bước 3), nhưng cũng phải đọc từ Parquet.
+    let parents = build_parent_tables(tables);
+    for table in tables.iter().chain(&parents) {
         sources.insert(
             table.name.to_lowercase(),
             parquet_source(&table.parquet_dir)?,
@@ -823,6 +954,27 @@ fn name_key(ident: &Ident) -> String {
     ident.value.to_lowercase()
 }
 
+/// Mọi bảng cha trong RowFilter::Parent của các bảng, kể cả cha của cha, mỗi tên một lần, trừ tên đã có trong tables.
+/// Bước 2 giữ tên của chúng (không cho đặt bảng tạm trùng tên), bước 5 đổi chúng sang file Parquet. Truy dòng nguồn
+/// (service/drill/mod.rs) thêm chúng vào danh sách bảng, vì câu đã lưu có hộp lọc nhắc tới chúng.
+pub fn build_parent_tables(tables: &[AllowedTable]) -> Vec<AllowedTable> {
+    let mut found: Vec<AllowedTable> = Vec::new();
+    let mut pending: Vec<&AllowedTable> = tables.iter().collect();
+    while let Some(table) = pending.pop() {
+        for filter in &table.row_filters {
+            let RowFilter::Parent { parent, .. } = filter else {
+                continue;
+            };
+            let key = parent.name.to_lowercase();
+            if find_table(tables, &key).is_none() && find_table(&found, &key).is_none() {
+                found.push(parent.clone());
+            }
+            pending.push(parent);
+        }
+    }
+    found
+}
+
 fn find_table<'a>(tables: &'a [AllowedTable], key: &str) -> Option<&'a AllowedTable> {
     tables.iter().find(|t| t.name.to_lowercase() == key)
 }
@@ -847,6 +999,8 @@ fn unknown_name(reason: String) -> GuardError {
 }
 
 mod depth;
+#[cfg(test)]
+mod parent_filter_tests;
 mod pieces;
 mod prompt_rules;
 #[cfg(test)]
