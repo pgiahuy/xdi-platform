@@ -42,15 +42,28 @@ impl Drop for DataDir {
     }
 }
 
-/// Mô hình giả: trả lần lượt các câu viết sẵn cho câu hỏi (sinh SQL và sửa).
+/// Mô hình giả: trả lần lượt các câu viết sẵn cho câu hỏi (sinh SQL và sửa). classify là câu trả lời cho bước phân
+/// loại; None thì bước đó lỗi và luồng hỏi dùng luật từ khóa.
 struct ScriptedLlm {
     replies: Mutex<VecDeque<String>>,
+    classify: Option<String>,
 }
 
 pub(super) fn scripted(replies: &[Value]) -> Arc<dyn LlmProvider> {
     let replies = replies.iter().map(Value::to_string).collect();
     Arc::new(ScriptedLlm {
         replies: Mutex::new(replies),
+        classify: None,
+    })
+}
+
+/// Như scripted, và bước phân loại nhận kind ("plain" hay "cause").
+pub(super) fn scripted_with_kind(kind: &str, replies: &[Value]) -> Arc<dyn LlmProvider> {
+    let replies = replies.iter().map(Value::to_string).collect();
+    let classify = json!({"kind": kind, "reason": "Câu trả lời viết sẵn của test."});
+    Arc::new(ScriptedLlm {
+        replies: Mutex::new(replies),
+        classify: Some(classify.to_string()),
     })
 }
 
@@ -61,10 +74,17 @@ impl LlmProvider for ScriptedLlm {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        if let (LlmTask::Classify, Some(reply)) = (request.task, &self.classify) {
+            return Ok(reply.clone());
+        }
         // Nạp file xong, lớp ngữ nghĩa (service/semantic/mod.rs) chạy nền và cũng gọi mô hình. Lỗi tạm thì nó không ghi gì
         // vào hồ sơ, nên câu viết sẵn chỉ dành cho câu hỏi và bí danh test tự đặt không bị ghi đè.
-        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn.
-        if matches!(request.task, LlmTask::Profile | LlmTask::Summary) {
+        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn. Bước phân
+        // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
+        if matches!(
+            request.task,
+            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify
+        ) {
             return Err(AppError::Upstream(
                 "scripted model has no profile or summary".to_string(),
             ));
@@ -198,8 +218,15 @@ async fn answers_a_question_and_records_it() {
     );
     assert_eq!(
         step_names(&response),
-        ["context", "llm", "guard", "run", "narrate", "record"]
+        ["context", "classify", "llm", "guard", "run", "narrate", "record"]
     );
+    // Mock có câu phân loại viết sẵn cho câu mẫu: mô hình chọn, không phải luật từ khóa.
+    let classify = &response["steps"][1];
+    assert_eq!(classify["ok"], true, "{classify}");
+    assert!(classify["detail"]
+        .as_str()
+        .unwrap()
+        .starts_with("Câu hỏi thường: "));
     // Mock không có câu trả lời viết sẵn cho task summary nên đoạn trả lời là câu khuôn, không gọi mạng.
     assert_eq!(
         response["answer_text"],
@@ -246,7 +273,10 @@ async fn repairs_a_failed_run_once() {
     assert_eq!(response["status"], "answered", "{response}");
     assert_eq!(
         step_names(&response),
-        ["context", "llm", "guard", "run", "repair", "guard", "run", "narrate", "record"]
+        [
+            "context", "classify", "llm", "guard", "run", "repair", "guard", "run", "narrate",
+            "record"
+        ]
     );
     assert!(response["sql_generated"]
         .as_str()
@@ -279,7 +309,10 @@ async fn unanswerable_question_is_rejected_without_sql() {
     );
     assert!(response["sql_generated"].is_null());
     assert!(response["query_id"].is_string());
-    assert_eq!(step_names(&response), ["context", "llm", "record"]);
+    assert_eq!(
+        step_names(&response),
+        ["context", "classify", "llm", "record"]
+    );
     assert_eq!(asking.queries_with("rejected").await, 1);
     assert!(response["understanding"].is_null());
 }
@@ -305,7 +338,10 @@ async fn mock_why_question_without_data_is_rejected() {
          hàng. Có thể hỏi về các cột gần nhất: Delivery Status, Order Status."
     );
     assert!(response["explanation"].is_null());
-    assert_eq!(step_names(&response), ["context", "llm", "record"]);
+    assert_eq!(
+        step_names(&response),
+        ["context", "classify", "llm", "record"]
+    );
     assert_eq!(asking.queries_with("rejected").await, 1);
     let sql = "SELECT count(*) FROM queries WHERE explanation IS NULL";
     assert_eq!(fetch_count(&asking.db.store, sql).await, 1);
@@ -330,11 +366,11 @@ async fn guard_refusal_is_recorded_as_rejected() {
     assert!(response["query_id"].is_string());
     assert_eq!(
         step_names(&response),
-        ["context", "llm", "guard", "repair", "guard", "record"]
+        ["context", "classify", "llm", "guard", "repair", "guard", "record"]
     );
     assert_eq!(response["message"], REFUSED_MESSAGE);
     assert!(
-        response["steps"][4]["detail"]
+        response["steps"][5]["detail"]
             .as_str()
             .unwrap()
             .contains("SELECT"),
@@ -468,8 +504,12 @@ impl LlmProvider for RecordingLlm {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn.
-        if matches!(request.task, LlmTask::Profile | LlmTask::Summary) {
+        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn. Bước phân
+        // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
+        if matches!(
+            request.task,
+            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify
+        ) {
             return Err(AppError::Upstream(
                 "recording model has no profile or summary".to_string(),
             ));
