@@ -29,6 +29,7 @@ use crate::service::ask::contract::{AskStatus, AskStep, ResultTable, StepName};
 use crate::service::ask::repair::{
     build_repair_prompt, build_safe_error, build_user_error, build_user_text, mentions_data_files,
 };
+use crate::service::ask::repeated::{find_repeated_sum, RepeatedColumn};
 use crate::service::ask::reply::{
     build_answer_from_reply, build_sql_reply_schema, Assumption, Clarify, ModelAnswer, SqlAnswer,
     Term, Unanswerable,
@@ -52,6 +53,8 @@ pub struct RunInput<'a> {
     pub reply: &'a str,
     /// Đầu vào của guard: các bảng được phép và trần số dòng.
     pub tables: &'a [AllowedTable],
+    /// Cột chép từ bảng nối nhiều-một (ask/repeated.rs): câu SQL cộng chúng ngay trên bảng thì không chạy mà đi vòng sửa.
+    pub repeated: &'a [RepeatedColumn],
     pub max_rows: u64,
     /// Thời gian tối đa mỗi lần chạy (Config::query_timeout).
     pub timeout: Duration,
@@ -208,11 +211,19 @@ async fn attempt(
 ) -> Result<Attempt, AppError> {
     let started = Instant::now();
     let reason = match build_guarded_sql(sql, input.tables, input.max_rows) {
-        Ok(guarded) => {
-            let note = guarded.limit_note.as_deref();
-            steps.push(build_step(StepName::Guard, started, true, note));
-            return run_guarded(input, guarded, steps).await;
-        }
+        Ok(guarded) => match repeated_sum(input, sql) {
+            // Lời gửi mô hình bằng tiếng Anh như lý do của guard; bước guard ghi lời tiếng Việt cho người dùng.
+            Some(reason) => {
+                let detail = "Câu SQL cộng một cột lặp lại từ bảng nối nhiều-một, cần sửa";
+                steps.push(build_step(StepName::Guard, started, false, Some(detail)));
+                return Ok(Attempt::Refused { reason });
+            }
+            None => {
+                let note = guarded.limit_note.as_deref();
+                steps.push(build_step(StepName::Guard, started, true, note));
+                return run_guarded(input, guarded, steps).await;
+            }
+        },
         Err(GuardError::Internal(e)) => return Err(e),
         Err(
             GuardError::UnknownName(reason)
@@ -222,6 +233,13 @@ async fn attempt(
     };
     steps.push(build_step(StepName::Guard, started, false, Some(&reason)));
     Ok(Attempt::Refused { reason })
+}
+
+fn repeated_sum(input: &RunInput<'_>, sql: &str) -> Option<String> {
+    input
+        .tables
+        .iter()
+        .find_map(|table| find_repeated_sum(sql, &table.name, input.repeated))
 }
 
 async fn run_guarded(

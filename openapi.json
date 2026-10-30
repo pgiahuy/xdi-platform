@@ -2556,13 +2556,86 @@
         }
       }
     },
+    "/workspaces/{ws}/sources/{id}/relations": {
+      "post": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Foreign keys around a table: many-to-one joins it can take, and incoming ones it cannot (admin only)",
+        "description": "Read from pg_catalog. Many-to-one relations follow foreign keys leaving the table, and one more hop from each joinable table; a relation is joinable when the target columns are the primary key or a UNIQUE constraint and the account can read the target. Foreign keys pointing into the table are listed in `one_to_many` and never joined, since they would repeat its rows.",
+        "operationId": "listSourceRelations",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelationsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 unknown table or cannot connect, 401, 403 not admin, 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/sources/{id}/snapshot": {
       "post": {
         "tags": [
           "sources"
         ],
         "summary": "Snapshot a table as a new dataset, or as a new version of one (admin only)",
-        "description": "The table is copied once into a Parquet version, like an uploaded file. A snapshot with the same content as an existing version creates nothing and returns 200 with `created` false.",
+        "description": "The table is copied once into a Parquet version, like an uploaded file. With `relations`, the chosen many-to-one tables are LEFT JOINed in one COPY statement; their columns are named `<table>.<column>`, and a join that changes the row count is refused. A snapshot again (`dataset_id`) reuses the joins of the current version. A snapshot with the same content as an existing version creates nothing and returns 200 with `created` false.",
         "operationId": "snapshotSource",
         "parameters": [
           {
@@ -2617,7 +2690,7 @@
             }
           },
           "4XX": {
-            "description": "400 unknown table or cannot read it, 401, 403 not admin, 404, 413 more rows than SOURCE_MAX_ROWS or bigger than MAX_UPLOAD_MB",
+            "description": "400 unknown table or relation, cannot read it, or the joins change the row count, 401, 403 not admin, 404, 413 more rows than SOURCE_MAX_ROWS or bigger than MAX_UPLOAD_MB",
             "content": {
               "application/json": {
                 "schema": {
@@ -3408,6 +3481,7 @@
           "source_id",
           "source_table",
           "current_version_at",
+          "current_source_model",
           "created_at"
         ],
         "properties": {
@@ -3421,6 +3495,17 @@
               "null"
             ],
             "description": "Profile status of the current version (`pending`, `structure`, `semantic`, `failed`); null while the dataset\nhas no current version. The UI polls it to know when the semantic profile is done."
+          },
+          "current_source_model": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SourceModel",
+                "description": "How the current version was built from a database: main table and many-to-one joins. Null for uploaded files\nand for snapshots taken before joins were recorded."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "current_version_at": {
             "type": [
@@ -4037,6 +4122,113 @@
           }
         }
       },
+      "ModelJoin": {
+        "type": "object",
+        "description": "One many-to-one join of a snapshot.",
+        "required": [
+          "relation",
+          "constraint",
+          "from_table",
+          "from_columns",
+          "to_table",
+          "to_columns",
+          "prefix",
+          "columns"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dataset columns copied from `to_table`, as named in the dataset."
+          },
+          "constraint": {
+            "type": "string",
+            "description": "Foreign-key constraint name in the source database."
+          },
+          "from_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "from_table": {
+            "type": "string",
+            "description": "`schema.table` holding the foreign key: the main table, or a table joined before (two hops)."
+          },
+          "key_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dataset columns that identify one row of `to_table` (the foreign-key values pointing to it)."
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Prefix of the dataset columns copied from `to_table`: a column `c` of it is named `<prefix>.c`."
+          },
+          "relation": {
+            "type": "string",
+            "description": "Relation id from the relation list; a snapshot again resolves the same ids."
+          },
+          "to_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "to_table": {
+            "type": "string",
+            "description": "`schema.table` the foreign key points to."
+          }
+        }
+      },
+      "RelationsRequest": {
+        "type": "object",
+        "required": [
+          "table"
+        ],
+        "properties": {
+          "table": {
+            "type": "string",
+            "description": "`schema.table` from the table list."
+          }
+        }
+      },
+      "RelationsResponse": {
+        "type": "object",
+        "required": [
+          "table",
+          "column_count",
+          "many_to_one",
+          "one_to_many"
+        ],
+        "properties": {
+          "column_count": {
+            "type": "integer",
+            "description": "Readable columns of the chosen table.",
+            "minimum": 0
+          },
+          "many_to_one": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRelation"
+            },
+            "description": "Foreign keys leaving the chosen table (depth 1) or a table joined at depth 1 (depth 2), in join order."
+          },
+          "one_to_many": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRelation"
+            },
+            "description": "Foreign keys of other tables pointing into the chosen table: never joined, they would repeat its rows."
+          },
+          "table": {
+            "type": "string"
+          }
+        }
+      },
       "ResetPasswordResponse": {
         "type": "object",
         "required": [
@@ -4220,7 +4412,7 @@
               "null"
             ],
             "format": "uuid",
-            "description": "Snapshot again into this dataset as a new version."
+            "description": "Snapshot again into this dataset as a new version. The joins of the current version are reused."
           },
           "name": {
             "type": [
@@ -4229,12 +4421,124 @@
             ],
             "description": "Name of the new dataset; defaults to the table name."
           },
+          "relations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of many-to-one relations to join (from the relation list of the table). Not allowed with `dataset_id`."
+          },
           "table": {
             "type": [
               "string",
               "null"
             ],
             "description": "`schema.table` from the table list. Not needed with `dataset_id`: the table snapshotted before is used."
+          }
+        }
+      },
+      "SourceModel": {
+        "type": "object",
+        "description": "How a dataset version snapshotted from a database was built: the main (fact) table and the tables joined\nmany-to-one along foreign keys.",
+        "required": [
+          "fact_table",
+          "fact_rows",
+          "joined_rows",
+          "joins"
+        ],
+        "properties": {
+          "fact_rows": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows of the main table and of the joined result, counted in the same snapshot; always equal (a snapshot whose\njoin would change the row count is refused)."
+          },
+          "fact_table": {
+            "type": "string",
+            "description": "`schema.table` whose rows become the rows of the dataset."
+          },
+          "joined_rows": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "joins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelJoin"
+            },
+            "description": "Joins in the order they appear in the SQL; empty when only the main table was copied."
+          }
+        }
+      },
+      "SourceRelation": {
+        "type": "object",
+        "description": "One foreign key around the chosen table, as the UI lists it.",
+        "required": [
+          "id",
+          "depth",
+          "parent",
+          "constraint",
+          "from_table",
+          "from_columns",
+          "to_table",
+          "to_columns",
+          "joinable",
+          "reason",
+          "column_count"
+        ],
+        "properties": {
+          "column_count": {
+            "type": "integer",
+            "description": "Columns the join would add (the target table's readable columns minus the key columns).",
+            "minimum": 0
+          },
+          "constraint": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 for a foreign key of the chosen table, 2 for a foreign key of a table joined at depth 1.",
+            "minimum": 0
+          },
+          "from_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "from_table": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable id to send back in the snapshot request: `schema.table/constraint`, two hops joined with `>`."
+          },
+          "joinable": {
+            "type": "boolean",
+            "description": "True when the join keeps one row per row of the chosen table and the account can read the target."
+          },
+          "parent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id of the depth-1 relation this one continues; null at depth 1."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the relation is not joined, in Vietnamese; null when joinable."
+          },
+          "to_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "to_table": {
+            "type": "string"
           }
         }
       },

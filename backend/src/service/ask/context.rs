@@ -77,6 +77,9 @@ pub struct ColumnProfile {
     pub matched: bool,
     /// Đơn vị của cột số đo (ColumnUnit::as_str), cho luật biểu đồ (ARCHITECTURE mục 6); None khi chưa biết.
     pub unit: Option<String>,
+    /// schema.bảng của bảng nối nhiều-một mà cột chép từ đó (bản chụp database); prompt ghi kèm để mô hình không cộng
+    /// cột này. None với cột của bảng chính và cột nạp từ file.
+    pub origin_table: Option<String>,
 }
 
 /// Một cụm của câu hỏi bằng chính xác một giá trị hay bí danh ("southern europe" là Order Region = Southern Europe).
@@ -190,6 +193,7 @@ fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> {
             values_complete: false,
             matched: false,
             unit: c.unit,
+            origin_table: c.origin_table,
         })
         .collect()
 }

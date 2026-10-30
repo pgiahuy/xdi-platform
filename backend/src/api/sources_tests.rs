@@ -16,8 +16,8 @@ use crate::config::{Config, Secret};
 use crate::engine::store::test_support::{exec, fresh_database, TestDb};
 
 const PASSWORD: &str = "a long password";
-const SHOP: &str = "/api/workspaces/cua-hang";
-const KEY: &str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+pub(super) const SHOP: &str = "/api/workspaces/cua-hang";
+pub(super) const KEY: &str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
 
 /// Máy, cổng, tài khoản, mật khẩu của DATABASE_URL dạng postgres://user:pw@host:port/db.
 fn url_parts(url: &str) -> (String, u16, String, String) {
@@ -48,19 +48,19 @@ impl Write for LogBuffer {
     }
 }
 
-struct Setup {
-    db: TestDb,
+pub(super) struct Setup {
+    pub db: TestDb,
     data: std::path::PathBuf,
-    app: axum::Router,
-    lan: String,
-    minh: String,
-    form: Value,
-    user: String,
+    pub app: axum::Router,
+    pub lan: String,
+    pub minh: String,
+    pub form: Value,
+    pub user: String,
     password: String,
 }
 
 /// Lan admin, Minh member của "Cửa hàng"; bảng public.orders trong database của test. key None: tính năng tắt.
-async fn start(key: Option<&str>, llm_replies: &[Value]) -> Option<Setup> {
+pub(super) async fn start(key: Option<&str>, llm_replies: &[Value]) -> Option<Setup> {
     let db = fresh_database().await?;
     let url = crate::engine::store::test_support::database_url().unwrap();
     let (host, port, _, _) = url_parts(&url);
@@ -143,7 +143,7 @@ async fn start(key: Option<&str>, llm_replies: &[Value]) -> Option<Setup> {
 
 impl Setup {
     /// Tài khoản Postgres là của cả máy chủ, không mất theo database: xóa sau khi xóa database của test.
-    async fn finish(self) {
+    pub(super) async fn finish(self) {
         let _ = std::fs::remove_dir_all(&self.data);
         self.db.drop().await;
         let url = crate::engine::store::test_support::database_url().unwrap();

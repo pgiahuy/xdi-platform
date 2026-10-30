@@ -36,6 +36,7 @@ fn column(id: Uuid, name: &str, data_type: &str, role: ProfileRole) -> ProfileCo
         max_value: None,
         time_format: None,
         unit: None,
+        origin_table: None,
     }
 }
 
@@ -662,6 +663,7 @@ fn new_column(
         min_value: None,
         max_value: None,
         time_format: None,
+        origin_table: None,
         values: values
             .iter()
             .map(|(value, frequency)| NewColumnValue {
@@ -707,6 +709,7 @@ async fn dataco(store: &Store, ws: &WorkspaceId) -> (Dataset, DatasetVersion) {
         file_hash: "h1",
         parquet_path: "x",
         row_count: 12,
+        source_model: None,
     };
     let v = store
         .create_version(ws, ds.id, &version, &columns)
@@ -921,6 +924,7 @@ async fn unusable_answers_are_marked_with_the_provider() {
         file_hash: "h1",
         parquet_path: "x",
         row_count: 2,
+        source_model: None,
     };
     let v = store
         .create_version(&ws, ds.id, &version, &columns)
@@ -995,6 +999,7 @@ async fn startup_pass_skips_versions_attempted_meanwhile() {
         file_hash: "h1",
         parquet_path: "x",
         row_count: 2,
+        source_model: None,
     };
     let v = store
         .create_version(&ws, ds.id, &version, &columns)

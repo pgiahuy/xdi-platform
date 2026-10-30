@@ -52,7 +52,7 @@ pub use metrics::{MetricDefinition, NewMetric};
 pub use policies::{DataRoleOutcome, PoliciesOutcome, RowPolicy};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, PromptExample, QueryStatus, StoredQuery};
-pub use sources::SourceRow;
+pub use sources::{ModelJoin, SourceModel, SourceRow};
 pub use users::{Deactivated, UserSummary};
 #[allow(unused_imports)]
 pub use workspaces::WorkspaceKind;

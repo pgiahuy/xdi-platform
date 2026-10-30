@@ -98,8 +98,30 @@ pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColu
             max_value: s.max_value.map(remove_nul),
             time_format: s.time_format,
             values: build_new_values(s.values),
+            origin_table: None,
         })
         .collect()
+}
+
+/// Ghi bảng gốc cho các cột chép từ bảng nối nhiều-một (bản chụp database, service/sources/), origins là tên cột ->
+/// schema.bảng. Giá trị của cột như vậy lặp lại trên mọi dòng trỏ tới cùng một dòng của bảng kia (giá sản phẩm lặp trên
+/// mọi dòng đơn của sản phẩm đó), nên cộng nó là đếm lặp. Vì vậy cột số đang là measure đổi thành dimension khi có danh
+/// sách giá trị (như luật cột chữ ít giá trị), không thì thành text: cả hai vai trò đều không được cộng ở form "tại sao"
+/// (chỉ cộng cột measure), và lớp ngữ nghĩa không được đổi chúng về measure. Cột key, time, cờ 0/1 giữ nguyên vai trò.
+pub fn apply_origin_tables(columns: &mut [NewColumn], origins: &HashMap<String, String>) {
+    for column in columns.iter_mut() {
+        let Some(table) = origins.get(&column.name) else {
+            continue;
+        };
+        column.origin_table = Some(table.clone());
+        if column.role == ProfileRole::Measure {
+            column.role = if column.values.is_empty() {
+                ProfileRole::Text
+            } else {
+                ProfileRole::Dimension
+            };
+        }
+    }
 }
 
 /// Cụm tên cột nhạy cảm, so theo dạng đã chuẩn hóa (bỏ dấu, chữ thường, tách từ): email, mật khẩu, số điện
@@ -625,6 +647,54 @@ mod tests {
         assert_eq!(columns[3].min_value.as_deref(), Some("ab"));
     }
 
+    /// Cột số chép từ bảng nối nhiều-một không còn là measure: có danh sách giá trị thì dimension, không thì text. Cột
+    /// của bảng chính và cột vai trò khác giữ nguyên.
+    #[test]
+    fn columns_from_joined_tables_are_not_measures() {
+        let mut price = stats("products.price", "DOUBLE", 0, 3);
+        price.values = vec![
+            ValueCount {
+                value: "4".to_string(),
+                frequency: 1,
+            },
+            ValueCount {
+                value: "9.5".to_string(),
+                frequency: 7,
+            },
+            ValueCount {
+                value: "12".to_string(),
+                frequency: 3,
+            },
+        ];
+        let mut columns = build_new_columns(
+            vec![
+                stats("quantity", "BIGINT", 0, 40),
+                stats("products.weight", "DOUBLE", 0, 900),
+                price,
+                stats("orders.order_date", "DATE", 0, 300),
+            ],
+            1000,
+        );
+        let origins = HashMap::from([
+            ("products.weight".to_string(), "sales.products".to_string()),
+            ("products.price".to_string(), "sales.products".to_string()),
+            ("orders.order_date".to_string(), "sales.orders".to_string()),
+        ]);
+        apply_origin_tables(&mut columns, &origins);
+        let roles: Vec<_> = columns.iter().map(|c| c.role).collect();
+        assert_eq!(
+            roles,
+            [
+                ProfileRole::Measure,
+                ProfileRole::Text,
+                ProfileRole::Dimension,
+                ProfileRole::Time
+            ]
+        );
+        assert_eq!(columns[0].origin_table, None);
+        assert_eq!(columns[1].origin_table.as_deref(), Some("sales.products"));
+    }
+
     /// Bảng một hai dòng: số nào cũng mỗi dòng một giá trị, tối đa 2 giá trị; không thành key hay cờ mà là measure.
     #[test]
     fn numbers_in_tiny_tables_are_measures() {
@@ -710,6 +780,7 @@ mod tests {
             file_hash: hash,
             parquet_path: path,
             row_count: materialized.row_count,
+            source_model: None,
         };
         let missing = store
             .create_version(&ws, ds.id, &version("h0", "ws/ds/gone"), &[])

@@ -34,6 +34,7 @@ use crate::service::ask::contract::{
 };
 use crate::service::ask::narrate::narrate;
 use crate::service::ask::prompt::PromptInput;
+use crate::service::ask::repeated::RepeatedColumn;
 use crate::service::ask::reply::{build_sql_reply_schema, ChoiceKind, Clarify, Term};
 use crate::service::ask::run::build_step;
 use crate::service::ask::unanswerable::build_unanswerable_message;
@@ -71,6 +72,8 @@ pub struct WhyInput<'a> {
     pub row_count: Option<i64>,
     /// Bảng được phép, kèm bộ lọc dòng theo vai dữ liệu của người hỏi.
     pub tables: &'a [AllowedTable],
+    /// Cột chép từ bảng nối nhiều-một: đường dự phòng (câu thường) không được cộng chúng (ask/repeated.rs).
+    pub repeated: &'a [RepeatedColumn],
     pub max_rows: u64,
     /// Thời gian tối đa mỗi câu SQL (Config::query_timeout).
     pub timeout: Duration,

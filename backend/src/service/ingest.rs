@@ -33,7 +33,7 @@ use uuid::Uuid;
 use crate::auth::{Member, WorkspaceId};
 use crate::engine::analytics::{self, Column, FileFormat, InputFile};
 use crate::engine::store::{
-    Dataset, DatasetVersion, NewColumn, NewVersion, ProfileStatus, SourceKind,
+    Dataset, DatasetVersion, NewColumn, NewVersion, ProfileStatus, SourceKind, SourceModel,
 };
 use crate::service::{excel, profile, semantic};
 use crate::{error::AppError, state::AppState};
@@ -108,6 +108,9 @@ pub struct Upload {
     /// Có thì files là một file CSV chép từ bảng của nguồn database này (service/sources/): dataset mới gắn vào nguồn
     /// đó thay vì một nguồn file riêng, phiên bản ghi source_kind postgres.
     pub database_source: Option<Uuid>,
+    /// Bảng chính và các bảng nối nhiều-một của bản chụp database: ghi vào phiên bản, và cột chép từ bảng nối được
+    /// đánh dấu bảng gốc trong hồ sơ (profile::apply_origin_tables). None với file nạp.
+    pub source_model: Option<SourceModel>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -266,12 +269,20 @@ pub async fn upload(
         Some(d) => profile::previous_time_formats(state, ws, d.id).await?,
         None => HashMap::new(),
     };
-    let columns = profile::build_profile(
+    let mut columns = profile::build_profile(
         staging.parquet_dir(),
         materialized.row_count,
         previous_formats,
     )
     .await?;
+    if let Some(model) = &upload.source_model {
+        let origins: HashMap<String, String> = model
+            .joins
+            .iter()
+            .flat_map(|j| j.columns.iter().map(|c| (c.clone(), j.to_table.clone())))
+            .collect();
+        profile::apply_origin_tables(&mut columns, &origins);
+    }
 
     // Bước 4: dataset (nếu mới) và phiên bản. Đường dẫn lưu trong database là tương đối với DATA_DIR, để đổi chỗ thư
     // mục dữ liệu không phải sửa database.
@@ -300,6 +311,7 @@ pub async fn upload(
         file_hash: &content_hash,
         parquet_path: &relative,
         row_count: materialized.row_count,
+        source_model: upload.source_model.as_ref(),
     };
     let created = create_version_retrying(state, ws, dataset.id, &new_version, &columns).await;
     // Phiên bản và hồ sơ không ghi được thì dataset vừa tạo cho lần nạp này không có phiên bản nào: xóa nó, để danh

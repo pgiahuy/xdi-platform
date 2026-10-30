@@ -157,6 +157,10 @@ fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
     if let Some(format) = &column.time_format {
         line.push_str(&format!(", date format {format}"));
     }
+    // Luật "from joined table" trong backend/prompts/sql.txt dựa vào đúng cụm này.
+    if let Some(table) = &column.origin_table {
+        line.push_str(&format!(", from joined table {table}"));
+    }
     line.push(')');
     if let Some(description) = column.description.as_deref().map(str::trim) {
         if !description.is_empty() {

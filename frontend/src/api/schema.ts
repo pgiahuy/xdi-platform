@@ -520,6 +520,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/sources/{id}/relations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Foreign keys around a table: many-to-one joins it can take, and incoming ones it cannot (admin only)
+         * @description Read from pg_catalog. Many-to-one relations follow foreign keys leaving the table, and one more hop from each joinable table; a relation is joinable when the target columns are the primary key or a UNIQUE constraint and the account can read the target. Foreign keys pointing into the table are listed in `one_to_many` and never joined, since they would repeat its rows.
+         */
+        post: operations["listSourceRelations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/sources/{id}/snapshot": {
         parameters: {
             query?: never;
@@ -531,7 +551,7 @@ export interface paths {
         put?: never;
         /**
          * Snapshot a table as a new dataset, or as a new version of one (admin only)
-         * @description The table is copied once into a Parquet version, like an uploaded file. A snapshot with the same content as an existing version creates nothing and returns 200 with `created` false.
+         * @description The table is copied once into a Parquet version, like an uploaded file. With `relations`, the chosen many-to-one tables are LEFT JOINed in one COPY statement; their columns are named `<table>.<column>`, and a join that changes the row count is refused. A snapshot again (`dataset_id`) reuses the joins of the current version. A snapshot with the same content as an existing version creates nothing and returns 200 with `created` false.
          */
         post: operations["snapshotSource"];
         delete?: never;
@@ -881,6 +901,7 @@ export interface components {
              *     has no current version. The UI polls it to know when the semantic profile is done.
              */
             current_profile_status: string | null;
+            current_source_model: components["schemas"]["SourceModel"] | null;
             /**
              * Format: date-time
              * @description When the current version was created: upload time, or the last snapshot of a database source.
@@ -1136,6 +1157,38 @@ export interface components {
             /** Format: uuid */
             workspace_id: string;
         };
+        /** @description One many-to-one join of a snapshot. */
+        ModelJoin: {
+            /** @description Dataset columns copied from `to_table`, as named in the dataset. */
+            columns: string[];
+            /** @description Foreign-key constraint name in the source database. */
+            constraint: string;
+            from_columns: string[];
+            /** @description `schema.table` holding the foreign key: the main table, or a table joined before (two hops). */
+            from_table: string;
+            /** @description Dataset columns that identify one row of `to_table` (the foreign-key values pointing to it). */
+            key_columns?: string[];
+            /** @description Prefix of the dataset columns copied from `to_table`: a column `c` of it is named `<prefix>.c`. */
+            prefix: string;
+            /** @description Relation id from the relation list; a snapshot again resolves the same ids. */
+            relation: string;
+            to_columns: string[];
+            /** @description `schema.table` the foreign key points to. */
+            to_table: string;
+        };
+        RelationsRequest: {
+            /** @description `schema.table` from the table list. */
+            table: string;
+        };
+        RelationsResponse: {
+            /** @description Readable columns of the chosen table. */
+            column_count: number;
+            /** @description Foreign keys leaving the chosen table (depth 1) or a table joined at depth 1 (depth 2), in join order. */
+            many_to_one: components["schemas"]["SourceRelation"][];
+            /** @description Foreign keys of other tables pointing into the chosen table: never joined, they would repeat its rows. */
+            one_to_many: components["schemas"]["SourceRelation"][];
+            table: string;
+        };
         ResetPasswordResponse: {
             /** @description Shown once to hand to the user; not stored anywhere in plain text. */
             temporary_password: string;
@@ -1208,13 +1261,56 @@ export interface components {
         SnapshotRequest: {
             /**
              * Format: uuid
-             * @description Snapshot again into this dataset as a new version.
+             * @description Snapshot again into this dataset as a new version. The joins of the current version are reused.
              */
             dataset_id?: string | null;
             /** @description Name of the new dataset; defaults to the table name. */
             name?: string | null;
+            /** @description Ids of many-to-one relations to join (from the relation list of the table). Not allowed with `dataset_id`. */
+            relations?: string[];
             /** @description `schema.table` from the table list. Not needed with `dataset_id`: the table snapshotted before is used. */
             table?: string | null;
+        };
+        /**
+         * @description How a dataset version snapshotted from a database was built: the main (fact) table and the tables joined
+         *     many-to-one along foreign keys.
+         */
+        SourceModel: {
+            /**
+             * Format: int64
+             * @description Rows of the main table and of the joined result, counted in the same snapshot; always equal (a snapshot whose
+             *     join would change the row count is refused).
+             */
+            fact_rows: number;
+            /** @description `schema.table` whose rows become the rows of the dataset. */
+            fact_table: string;
+            /** Format: int64 */
+            joined_rows: number;
+            /** @description Joins in the order they appear in the SQL; empty when only the main table was copied. */
+            joins: components["schemas"]["ModelJoin"][];
+        };
+        /** @description One foreign key around the chosen table, as the UI lists it. */
+        SourceRelation: {
+            /** @description Columns the join would add (the target table's readable columns minus the key columns). */
+            column_count: number;
+            constraint: string;
+            /**
+             * Format: int32
+             * @description 1 for a foreign key of the chosen table, 2 for a foreign key of a table joined at depth 1.
+             */
+            depth: number;
+            from_columns: string[];
+            from_table: string;
+            /** @description Stable id to send back in the snapshot request: `schema.table/constraint`, two hops joined with `>`. */
+            id: string;
+            /** @description True when the join keeps one row per row of the chosen table and the account can read the target. */
+            joinable: boolean;
+            /** @description Id of the depth-1 relation this one continues; null at depth 1. */
+            parent: string | null;
+            /** @description Why the relation is not joined, in Vietnamese; null when joinable. */
+            reason: string | null;
+            to_columns: string[];
+            to_table: string;
         };
         /** @description A database source without its password. */
         SourceResponse: {
@@ -2891,6 +2987,53 @@ export interface operations {
             };
         };
     };
+    listSourceRelations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Source id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelationsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelationsResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 unknown table or cannot connect, 401, 403 not admin, 404 */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     snapshotSource: {
         parameters: {
             query?: never;
@@ -2936,7 +3079,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description 400 unknown table or cannot read it, 401, 403 not admin, 404, 413 more rows than SOURCE_MAX_ROWS or bigger than MAX_UPLOAD_MB */
+            /** @description 400 unknown table or relation, cannot read it, or the joins change the row count, 401, 403 not admin, 404, 413 more rows than SOURCE_MAX_ROWS or bigger than MAX_UPLOAD_MB */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

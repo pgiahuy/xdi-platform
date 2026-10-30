@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/sources.rs - nguồn database của workspace: thêm, thử kết nối, liệt kê bảng, chụp bảng thành dataset, xóa. Logic ở
+/* api/sources.rs - nguồn database của workspace: thêm, thử kết nối, liệt kê bảng và quan hệ khóa ngoại, chụp bảng (kèm
+bảng nối nhiều-một) thành dataset, xóa. Logic ở
 service/sources/. Mọi route chỉ cho admin của workspace (member 403), kể cả liệt kê nguồn: cấu hình nguồn (máy chủ, tài
 khoản) cũng là thông tin cần giữ. Không route nào trả mật khẩu. */
 
@@ -14,7 +15,8 @@ use crate::auth::Member;
 use crate::error::ErrorBody;
 use crate::service::ingest::UploadResult;
 use crate::service::sources::{
-    self, CreateSourceRequest, SnapshotRequest, SourceResponse, SourceTable, TestSourceResponse,
+    self, CreateSourceRequest, RelationsRequest, RelationsResponse, SnapshotRequest,
+    SourceResponse, SourceTable, TestSourceResponse,
 };
 use crate::{error::AppError, state::AppState};
 
@@ -24,6 +26,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(remove))
         .routes(routes!(test))
         .routes(routes!(tables))
+        .routes(routes!(relations))
         .routes(routes!(snapshot))
 }
 
@@ -144,12 +147,44 @@ async fn tables(
 
 #[utoipa::path(
     post,
+    path = "/workspaces/{ws}/sources/{id}/relations",
+    tag = "sources",
+    operation_id = "listSourceRelations",
+    summary = "Foreign keys around a table: many-to-one joins it can take, and incoming ones it cannot (admin only)",
+    description = "Read from pg_catalog. Many-to-one relations follow foreign keys leaving the table, and one more \
+                   hop from each joinable table; a relation is joinable when the target columns are the primary key \
+                   or a UNIQUE constraint and the account can read the target. Foreign keys pointing into the table \
+                   are listed in `one_to_many` and never joined, since they would repeat its rows.",
+    params(
+        ("ws" = String, Path, description = "Workspace slug"),
+        ("id" = Uuid, Path, description = "Source id")
+    ),
+    request_body = RelationsRequest,
+    responses(
+        (status = 200, body = RelationsResponse, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "400 unknown table or cannot connect, 401, 403 not admin, 404")
+    )
+)]
+async fn relations(
+    State(state): State<AppState>,
+    member: Member,
+    PathParams((_ws, id)): PathParams<(String, Uuid)>,
+    JsonBody(req): JsonBody<RelationsRequest>,
+) -> Result<Json<RelationsResponse>, AppError> {
+    Ok(Json(sources::relations(&state, &member, id, req).await?))
+}
+
+#[utoipa::path(
+    post,
     path = "/workspaces/{ws}/sources/{id}/snapshot",
     tag = "sources",
     operation_id = "snapshotSource",
     summary = "Snapshot a table as a new dataset, or as a new version of one (admin only)",
-    description = "The table is copied once into a Parquet version, like an uploaded file. A snapshot with the same \
-                   content as an existing version creates nothing and returns 200 with `created` false.",
+    description = "The table is copied once into a Parquet version, like an uploaded file. With `relations`, the \
+                   chosen many-to-one tables are LEFT JOINed in one COPY statement; their columns are named \
+                   `<table>.<column>`, and a join that changes the row count is refused. A snapshot again \
+                   (`dataset_id`) reuses the joins of the current version. A snapshot with the same content as an \
+                   existing version creates nothing and returns 200 with `created` false.",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = Uuid, Path, description = "Source id")
@@ -158,7 +193,8 @@ async fn tables(
     responses(
         (status = 201, body = UploadResult, description = "New dataset or version created"),
         (status = 200, body = UploadResult, description = "Same content as an existing version: nothing created"),
-        (status = "4XX", body = ErrorBody, description = "400 unknown table or cannot read it, 401, 403 not admin, \
+        (status = "4XX", body = ErrorBody, description = "400 unknown table or relation, cannot read it, or the \
+                                                         joins change the row count, 401, 403 not admin, \
                                                          404, 413 more rows than SOURCE_MAX_ROWS or bigger than \
                                                          MAX_UPLOAD_MB")
     )

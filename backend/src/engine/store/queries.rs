@@ -159,6 +159,7 @@ mod tests {
                     file_hash: "h",
                     parquet_path: "/data/x.parquet",
                     row_count: 1,
+                    source_model: None,
                 },
                 &[],
             )
@@ -211,6 +212,7 @@ mod tests {
                     file_hash: "h",
                     parquet_path: "x",
                     row_count: 1,
+                    source_model: None,
                 },
                 &[],
             )

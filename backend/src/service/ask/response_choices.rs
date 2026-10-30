@@ -255,6 +255,7 @@ mod tests {
             values_complete: true,
             matched: true,
             unit: None,
+            origin_table: None,
         }
     }
 

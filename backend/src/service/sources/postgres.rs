@@ -19,7 +19,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::postgres::{PgConnectOptions, PgConnection, PgSslMode};
-use sqlx::{ConnectOptions, Connection};
+use sqlx::{ConnectOptions, Connection, Executor};
 use tokio::io::AsyncWriteExt;
 
 use crate::error::AppError;
@@ -49,6 +49,11 @@ impl SourceTable {
     /// Tên hiển thị và tên gửi lại khi chụp: schema.table.
     pub fn full_name(&self) -> String {
         format!("{}.{}", self.schema, self.name)
+    }
+
+    /// Cùng một bảng: so schema và tên, không so kind (bảng đọc từ pg_catalog luôn ghi kind table).
+    pub fn same(&self, other: &SourceTable) -> bool {
+        self.schema == other.schema && self.name == other.name
     }
 }
 
@@ -100,40 +105,57 @@ pub async fn list_tables(c: &mut PgConnection) -> Result<Vec<SourceTable>, AppEr
         .collect())
 }
 
-/// Định danh SQL trong ngoặc kép, nhân đôi ngoặc kép bên trong. Tên bảng còn được đối chiếu với list_tables trước
-/// khi tới đây, nên không có tên nào người dùng gõ tự do đi thẳng vào câu SQL.
-fn quote_ident(name: &str) -> String {
+/// Định danh SQL trong ngoặc kép, nhân đôi ngoặc kép bên trong. Tên bảng, tên cột tới đây đều đọc từ danh sách bảng
+/// hay pg_catalog (relations.rs), nên không có tên nào người dùng gõ tự do đi thẳng vào câu SQL.
+pub(super) fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-fn qualified(table: &SourceTable) -> String {
-    format!(
-        "{}.{}",
-        quote_ident(&table.schema),
-        quote_ident(&table.name)
-    )
+/// Mở giao dịch REPEATABLE READ chỉ đọc: đếm dòng và chép bảng sau đó cùng thấy một ảnh chụp MVCC của database, nên số
+/// dòng đã kiểm là số dòng được chép, kể cả khi database đang được ghi. Kết thúc bằng commit_snapshot; kết nối bị
+/// đóng giữa chừng thì Postgres tự hủy giao dịch (chỉ đọc, không có gì để hoàn tác).
+pub async fn begin_snapshot(c: &mut PgConnection) -> Result<(), AppError> {
+    c.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await
+        .map_err(|e| query_error(&e))?;
+    Ok(())
 }
 
-pub async fn count_rows(c: &mut PgConnection, table: &SourceTable) -> Result<i64, AppError> {
-    sqlx::query_scalar(&format!("SELECT count(*) FROM {}", qualified(table)))
+pub async fn commit_snapshot(c: &mut PgConnection) -> Result<(), AppError> {
+    c.execute("COMMIT").await.map_err(|e| query_error(&e))?;
+    Ok(())
+}
+
+/// Số dòng của bảng chính và của câu SELECT đã nối, trong một câu lệnh. Nối nhiều-một thì hai số bằng nhau; khác nhau
+/// là lần nối nhân dòng (mod.rs từ chối). Không nối gì thì chỉ đếm một lần.
+pub async fn count_rows(
+    c: &mut PgConnection,
+    fact: &str,
+    select: Option<&str>,
+) -> Result<(i64, i64), AppError> {
+    let sql = match select {
+        Some(select) => {
+            format!("SELECT (SELECT count(*) FROM {fact}), (SELECT count(*) FROM ({select}) AS j)")
+        }
+        None => format!("SELECT count(*), count(*) FROM {fact}"),
+    };
+    sqlx::query_as(&sql)
         .fetch_one(&mut *c)
         .await
         .map_err(|e| query_error(&e))
 }
 
-/// Chép bảng ra file CSV có dòng tiêu đề. Trả SHA-256 của nội dung, tính trong lúc ghi. Quá max_bytes thì dừng và báo
+/// Chép kết quả của câu SELECT ra file CSV có dòng tiêu đề. COPY (SELECT ...) là một câu lệnh, nên mọi bảng trong câu
+/// được đọc tại cùng một thời điểm, kể cả ngoài giao dịch của begin_snapshot. Trả SHA-256 của nội dung, tính trong lúc ghi. Quá max_bytes thì dừng và báo
 /// lỗi, như nạp file quá MAX_UPLOAD_MB. max_rows chặn thêm một lần nữa phòng bảng tăng dòng sau bước count_rows.
 pub async fn copy_to_csv(
     c: &mut PgConnection,
-    table: &SourceTable,
+    select: &str,
     max_rows: u64,
     max_bytes: u64,
     out_path: &Path,
 ) -> Result<String, AppError> {
-    let sql = format!(
-        "COPY (SELECT * FROM {} LIMIT {max_rows}) TO STDOUT WITH (FORMAT csv, HEADER true)",
-        qualified(table)
-    );
+    let sql = format!("COPY ({select} LIMIT {max_rows}) TO STDOUT WITH (FORMAT csv, HEADER true)");
     let mut out = tokio::fs::File::create(out_path)
         .await
         .map_err(|e| AppError::Internal(format!("create {}: {e}", out_path.display())))?;
@@ -202,7 +224,7 @@ fn unreachable(conn: &ConnectInfo) -> AppError {
     ))
 }
 
-fn query_error(e: &sqlx::Error) -> AppError {
+pub(super) fn query_error(e: &sqlx::Error) -> AppError {
     tracing::debug!(error = %e, "source query failed");
     match e.as_database_error().and_then(|d| d.code()).as_deref() {
         // insufficient_privilege

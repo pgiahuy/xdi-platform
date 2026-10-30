@@ -40,6 +40,7 @@ pub mod prompt;
 #[cfg(test)]
 mod prompt_tests;
 pub mod repair;
+pub mod repeated;
 pub mod reply;
 mod response_choices;
 pub mod result;
@@ -70,6 +71,7 @@ use crate::service::ask::contract::{
     WarningCode,
 };
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput};
+use crate::service::ask::repeated::build_repeated_columns;
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
 use crate::service::ask::response_choices::{
     build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
@@ -116,6 +118,8 @@ pub async fn ask(
         .list_correct_queries(ws, dataset.id, EXAMPLE_POOL)
         .await?;
     let columns = state.store.list_columns(ws, version.id).await?;
+    let model = state.store.version_source_model(ws, version.id).await?;
+    let repeated = build_repeated_columns(model.as_ref());
     let detail = build_ambiguity_detail(&context);
     let mut steps = vec![build_step(
         StepName::Context,
@@ -154,6 +158,7 @@ pub async fn ask(
             prompt: input,
             columns: &columns,
             tables: &tables,
+            repeated: &repeated,
             steps,
         };
         return ask_why(state, member, why).await;
@@ -175,6 +180,7 @@ pub async fn ask(
         prompt: &prompt,
         reply: &reply,
         tables: &tables,
+        repeated: &repeated,
         max_rows: state.config.ask_max_rows,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,
