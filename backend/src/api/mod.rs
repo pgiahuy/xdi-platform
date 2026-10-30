@@ -34,6 +34,8 @@ mod metrics;
 mod metrics_tests;
 mod openapi;
 #[cfg(test)]
+mod overview_tests;
+#[cfg(test)]
 mod profile_tests;
 mod query;
 #[cfg(test)]

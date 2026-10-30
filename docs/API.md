@@ -197,6 +197,27 @@ prompt của câu hỏi kế tiếp.
 admin của workspace, `member` nhận 403; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không
 khôi phục được.
 
+## Tổng quan dataset
+
+`GET /api/workspaces/{ws}/datasets/{id}/overview` cho mọi thành viên biết dataset có gì trước khi hỏi: số dòng, khoảng
+thời gian có dữ liệu, phiên bản hiện hành; mỗi cột tên, nhãn tiếng Việt (bí danh đầu), mô tả, vai trò, đơn vị, % ô
+trống, số giá trị khác nhau, và giá trị kèm số dòng của cột chia nhóm không nhạy cảm; chỉ số đã định nghĩa; biểu đồ dựng
+sẵn (`charts`), mỗi cái có `result` và `chart` cùng dạng với câu trả lời của route hỏi. Không gọi mô hình ngôn ngữ.
+
+- Số dòng theo giá trị của từng cột chia nhóm lấy từ hồ sơ cột, không chạy câu nào. Cột nhạy cảm không trả giá trị.
+- Số dòng, khoảng thời gian, độ đo chính theo kỳ (`measure_over_time`) và số dòng theo kỳ (`rows_over_time`) tính bằng
+  câu SQL do backend dựng, qua guard với vai dữ liệu của người xem như route hỏi; `sql` của biểu đồ là câu sau guard.
+  Kỳ là ngày khi dữ liệu dài tới 92 ngày, tháng khi dài hơn. Kết quả giữ trong bộ nhớ theo phiên bản và câu, mất khi
+  khởi động lại.
+- Độ đo chính (`main_measure`) là chỉ số đã xác nhận đầu tiên theo tên, chưa có thì cột số đo đơn vị tiền rồi số lượng.
+- Người bị lọc dòng theo vai dữ liệu nhận `summary.restricted` là true: hồ sơ đếm trên mọi dòng nên số ô trống, số giá
+  trị khác nhau và số dòng theo giá trị không trả.
+- `missing` liệt kê phần chưa có kèm lời cho người dùng: hồ sơ đang lập hay lỗi, nhãn và mô tả chưa viết, không có cột
+  thời gian, không có độ đo chính, một câu lỗi.
+
+Mã lỗi: 404 khi dataset không có hoặc thuộc workspace khác. Dataset chưa có dữ liệu hay đang lập hồ sơ vẫn trả 200, kèm
+`missing`.
+
 ## Truy dòng nguồn
 
 `POST /api/workspaces/{ws}/datasets/{id}/drill` trả một trang dòng nguồn của một ô trong bảng kết quả hay của một dòng

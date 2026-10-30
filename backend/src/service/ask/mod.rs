@@ -14,7 +14,7 @@ trả lời, người hỏi sẽ gửi lại kèm lựa chọn.
 Cảnh báo kiểm hợp lý (rỗng, toàn null, giá trị lọc không có, độ lớn bất thường) dựng ở ask/checks.rs sau khi chạy;
 chúng không đổi status. */
 
-mod chart;
+pub(crate) mod chart;
 pub mod checks;
 pub mod classify;
 #[cfg(test)]

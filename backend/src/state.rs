@@ -10,6 +10,7 @@ use crate::config::Config;
 use crate::engine::llm::{self, LlmProvider};
 use crate::engine::store::Store;
 use crate::service::ask::values::ValueCache;
+use crate::service::overview::cache::OverviewCache;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -33,6 +34,9 @@ pub struct AppState {
     /// Chỉ một lượt lập hồ sơ ngữ nghĩa (service/semantic/mod.rs) gọi mô hình mỗi lúc: nạp nhiều file liền hay việc nền
     /// lúc khởi động cũng không dồn request lên nhà cung cấp (gói miễn phí dễ trả 429). Lượt sau chờ, không bị từ chối.
     pub semantic_jobs: Arc<Semaphore>,
+    /// Kết quả các câu SQL của trang tổng quan dataset theo phiên bản (service/overview/cache.rs), để mở lại khung tổng
+    /// quan không chạy lại câu.
+    pub overview_cache: Arc<OverviewCache>,
 }
 
 impl AppState {
@@ -47,6 +51,7 @@ impl AppState {
             query_jobs: Arc::new(Semaphore::new(2)),
             value_cache: Arc::new(ValueCache::new()),
             semantic_jobs: Arc::new(Semaphore::new(1)),
+            overview_cache: Arc::new(OverviewCache::new()),
         }
     }
 }

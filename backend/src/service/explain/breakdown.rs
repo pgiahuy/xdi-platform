@@ -53,7 +53,13 @@ pub struct QueryEnv<'a> {
     pub max_rows: u64,
     pub timeout: Duration,
     pub jobs: &'a Arc<Semaphore>,
+    /// Lời khuyên nối sau câu báo quá giờ hay quá bộ nhớ. Câu hỏi khuyên hỏi hẹp hơn (ASK_STOP_HINT); trang tổng quan
+    /// không có câu hỏi nào nên dùng lời riêng.
+    pub stop_hint: &'a str,
 }
+
+/// Lời khuyên khi câu SQL của một câu hỏi bị dừng vì quá giờ hay quá bộ nhớ.
+pub const ASK_STOP_HINT: &str = "Thử hỏi hẹp hơn, ví dụ thêm bộ lọc";
 
 /// Kết quả một câu SQL do code dựng.
 pub enum CodeQuery {
@@ -110,13 +116,14 @@ pub async fn run_code_query(
             CodeQuery::Failed(build_user_error(&build_safe_error(&raw, env.tables)))
         }
         Err(QueryError::Timeout) => CodeQuery::Failed(format!(
-            "Câu SQL chạy quá {} nên đã bị dừng. Thử hỏi hẹp hơn, ví dụ thêm bộ lọc",
-            build_duration_text(env.timeout)
+            "Câu SQL chạy quá {} nên đã bị dừng. {}",
+            build_duration_text(env.timeout),
+            env.stop_hint
         )),
-        Err(QueryError::OutOfMemory) => CodeQuery::Failed(
-            "Câu SQL cần nhiều bộ nhớ hơn mức cho phép nên đã bị dừng. Thử hỏi hẹp hơn, ví dụ thêm bộ lọc"
-                .to_string(),
-        ),
+        Err(QueryError::OutOfMemory) => CodeQuery::Failed(format!(
+            "Câu SQL cần nhiều bộ nhớ hơn mức cho phép nên đã bị dừng. {}",
+            env.stop_hint
+        )),
         Err(QueryError::Internal(e)) => return Err(e),
     };
     if let Some(steps) = steps {

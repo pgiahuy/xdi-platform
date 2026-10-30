@@ -505,6 +505,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/datasets/{id}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a dataset holds: summary, column profile, metrics and pre-built charts
+         * @description For every member who can ask the dataset. No language model is called. Charts that read the data go through the SQL guard with the viewer's row filters and are kept per version; row counts by value come from the column profile. Sensitive columns return no values.
+         */
+        get: operations["getDatasetOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/members": {
         parameters: {
             query?: never;
@@ -870,6 +890,23 @@ export interface components {
              */
             suggested_questions: string[];
         };
+        /** @description Overview of a dataset for anyone who can ask it: what it holds and what to ask, computed without the language model. */
+        DatasetOverviewResponse: {
+            /** @description Pre-built charts: the main measure over time, row count over time, then row count by value of each dimension. */
+            charts: components["schemas"]["OverviewChart"][];
+            /** @description Columns in table order, without the ones the profile ignores (all empty, `_source_file`). */
+            columns: components["schemas"]["OverviewColumn"][];
+            /** Format: uuid */
+            dataset_id: string;
+            main_measure: components["schemas"]["MainMeasure"] | null;
+            /** @description Defined metrics, one per name: the latest confirmed definition, else the latest draft. */
+            metrics: components["schemas"]["OverviewMetric"][];
+            /** @description Parts that are not there yet or cannot be shown, with the reason. */
+            missing: components["schemas"]["MissingPart"][];
+            name: string;
+            summary: components["schemas"]["OverviewSummary"];
+            version: components["schemas"]["OverviewVersion"] | null;
+        };
         DatasetVersion: {
             /** Format: date-time */
             created_at: string;
@@ -1062,6 +1099,14 @@ export interface components {
             email: string;
             password: string;
         };
+        MainMeasure: {
+            /** @description The measure column, or null for a metric. */
+            column: string | null;
+            /** @description Metric name, or the column label (else name) of a measure column; also the measure column of the chart. */
+            label: string;
+            /** @description The metric of that name, or null for a measure column. */
+            metric: string | null;
+        };
         MeResponse: {
             user: components["schemas"]["User"];
             /** @description Workspaces the user belongs to, with their role in each, sorted by name. */
@@ -1146,6 +1191,122 @@ export interface components {
             columns: components["schemas"]["MetricColumn"][];
             /** @description One entry per metric name, sorted by name. */
             metrics: components["schemas"]["Metric"][];
+        };
+        /**
+         * @description What is missing:
+         *     - `no_version`: the dataset has no data yet.
+         *     - `profile_pending`: the column profile is being built; no columns or charts yet.
+         *     - `profile_failed`: the profile failed; upload the file again.
+         *     - `semantic_pending`: labels, descriptions and units are being written.
+         *     - `semantic_unavailable`: the current model cannot write labels, descriptions and units.
+         *     - `restricted`: the viewer's data role filters rows, so per-column counts and value charts are left out.
+         *     - `no_time`: no time column, so no time span and no time charts.
+         *     - `no_measure`: no confirmed metric and no money or quantity measure column, so no measure chart.
+         *     - `chart_failed`: a chart query failed; the message says why.
+         * @enum {string}
+         */
+        MissingCode: "no_version" | "profile_pending" | "profile_failed" | "semantic_pending" | "semantic_unavailable" | "restricted" | "no_time" | "no_measure" | "chart_failed";
+        MissingPart: {
+            code: components["schemas"]["MissingCode"];
+            /** @description Text for the end user (Vietnamese). */
+            message: string;
+        };
+        OverviewChart: {
+            chart: components["schemas"]["ChartSuggestion"];
+            /** @description Column of the profile the chart is about: the dimension for `rows_by_value`, the time column otherwise. */
+            column: string;
+            grain: components["schemas"]["TimeGrain"] | null;
+            kind: components["schemas"]["OverviewChartKind"];
+            result: components["schemas"]["ResultTable"];
+            /** @description SQL after the guard that computed the chart; null for `rows_by_value`, which no query computes. */
+            sql: string | null;
+        };
+        /**
+         * @description Kind of pre-built chart:
+         *     - `measure_over_time`: the main measure by day or month.
+         *     - `rows_over_time`: number of rows by day or month, to see periods with little data or data that stops mid-period.
+         *     - `rows_by_value`: number of rows for each value of a dimension column, read from the profile.
+         * @enum {string}
+         */
+        OverviewChartKind: "measure_over_time" | "rows_over_time" | "rows_by_value";
+        OverviewColumn: {
+            description: string | null;
+            /**
+             * Format: int64
+             * @description Exact number of different values; null when `summary.restricted`.
+             */
+            distinct_count: number | null;
+            /** @description Vietnamese label: the first alias written by the semantic profile; null until then. */
+            label: string | null;
+            name: string;
+            /**
+             * Format: double
+             * @description Share of empty cells, 0 to 100; null when `summary.restricted`.
+             */
+            null_percent: number | null;
+            role: components["schemas"]["OverviewRole"];
+            /** @description Marked sensitive: no values are returned for it. */
+            sensitive: boolean;
+            /** @description money, quantity, percent, duration or other; null when unknown. */
+            unit: string | null;
+            /** @description Values with their row counts, most rows first; only for dimension columns that are not sensitive, at most 200. */
+            values: components["schemas"]["OverviewValue"][];
+        };
+        OverviewMetric: {
+            /** @description False while an admin has not confirmed the definition. */
+            confirmed: boolean;
+            description: string;
+            /** @description Aggregate over the columns, for example `SUM("Order Item Total")`. */
+            expression: string;
+            filter: string | null;
+            name: string;
+            time_column: string | null;
+            unit: string | null;
+        };
+        /**
+         * @description Role of a column in the profile; the rules are in docs/DATA.md.
+         * @enum {string}
+         */
+        OverviewRole: "dimension" | "measure" | "time" | "key" | "text";
+        OverviewSummary: {
+            /**
+             * @description True when the viewer's data role filters rows. Per-column counts and value frequencies are computed on every
+             *     row, so they are left out: null `null_percent` and `distinct_count`, empty `values`, no `rows_by_value` charts.
+             */
+            restricted: boolean;
+            /**
+             * Format: int64
+             * @description Rows the viewer can read, after the row filters of their data role; null when not counted yet or the count failed.
+             */
+            row_count: number | null;
+            /** @description Time column of the time span and the time charts; null when the dataset has no time column. */
+            time_column: string | null;
+            time_end: string | null;
+            /** @description First and last day with data in `time_column` (YYYY-MM-DD), among the rows the viewer can read. */
+            time_start: string | null;
+        };
+        OverviewValue: {
+            /** @description First alias of the value; null when it has none. */
+            label: string | null;
+            /**
+             * Format: int64
+             * @description Rows holding this value, on every row of the version.
+             */
+            rows: number;
+            value: string;
+        };
+        OverviewVersion: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int32
+             * @description Version number, from 1.
+             */
+            number: number;
+            /** @description pending, structure, semantic or failed (see `Dataset.current_profile_status`). */
+            profile_status: string;
         };
         ResetPasswordResponse: {
             /** @description Shown once to hand to the user; not stored anywhere in plain text. */
@@ -1252,6 +1413,11 @@ export interface components {
          * @enum {string}
          */
         SummaryPointKind: "reason" | "outliers" | "even" | "largest" | "against" | "dropped";
+        /**
+         * @description Period of the time charts: by day when the data spans at most 92 days, else by month.
+         * @enum {string}
+         */
+        TimeGrain: "day" | "month";
         /** @description One recorded question of a conversation. Questions waiting for a choice (`needs_choice`) are not recorded. */
         TurnItem: {
             /** Format: date-time */
@@ -2779,6 +2945,49 @@ export interface operations {
                 };
             };
             /** @description 401; 403 not admin; 404 no such dataset or metric */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getDatasetOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOverviewResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401, 404 not a member or no such dataset */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

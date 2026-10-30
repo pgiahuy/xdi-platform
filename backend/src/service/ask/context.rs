@@ -178,7 +178,7 @@ fn profile_not_ready() -> AppError {
     AppError::BadRequest("Dataset chưa lập hồ sơ xong, thử lại sau ít phút".to_string())
 }
 
-fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> {
+pub(crate) fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> {
     columns
         .into_iter()
         .map(|c| ColumnProfile {
