@@ -590,8 +590,10 @@ phân rã của câu "tại sao") vẫn ở lại trong database, chỉ mất kh
 Chụp một bảng Postgres (chỉ `admin`, cần `SOURCE_SECRET_KEY` và `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình): khung
 **Database** của trang **Dữ liệu**, bấm **Kết nối database**, nhập máy chủ, cổng, database, tài khoản và mật khẩu, chọn
 bảng hay view rồi bấm **Chụp bảng thành dataset**. Bảng có khóa ngoại thì khung hiện các bảng liên quan để chụp kèm,
-mỗi bảng thành một dataset riêng. Dataset chụp từ database có nút **Chụp lại**, chụp lại cả các dataset liên quan, thay
-cho **Nạp phiên bản mới**. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
+tách hai nhóm: bảng nó trỏ tới (nhiều-một, chọn sẵn) và bảng trỏ tới nó (một-nhiều); **Xem bảng nối với ...** dưới một
+bảng đã chọn mở thêm một bước. Mỗi bảng thành một dataset riêng, tối đa 10 bảng một lần chụp. Dòng của dataset ghi
+**Liên quan:** các dataset nối với nó. Dataset chụp từ database có nút **Chụp lại**, chụp lại cả các dataset liên quan,
+thay cho **Nạp phiên bản mới**. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
 
 ### Bước 4. Chờ hồ sơ dữ liệu
 
