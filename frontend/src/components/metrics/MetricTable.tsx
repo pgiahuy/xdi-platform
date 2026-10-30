@@ -65,14 +65,17 @@ export function MetricTable({ metrics, onEdit, onDelete, deletePending }: Props)
                     {onDelete && (
                       <ConfirmDialog
                         trigger={
-                          <Button variant="ghost" size="icon-sm" aria-label={`Xóa ${metric.name}`} aria-disabled={deletePending}>
+                          <Button variant="ghost" size="icon-sm" aria-label={`Xóa ${metric.name}`} disabled={deletePending}>
                             <Trash2 aria-hidden />
                           </Button>
                         }
                         title={`Xóa chỉ số ${metric.name}?`}
                         description="Chỉ số cùng mọi phiên bản của nó bị xóa; câu hỏi sau không dùng công thức này nữa. Câu hỏi cũ vẫn giữ câu SQL đã chạy."
                         confirmLabel="Xóa chỉ số"
-                        onConfirm={() => onDelete(metric)}
+                        // Hộp hỏi đã mở trước khi lần xóa khác bắt đầu vẫn bấm được nút xác nhận: chặn cả ở đây.
+                        onConfirm={() => {
+                          if (!deletePending) onDelete(metric)
+                        }}
                       />
                     )}
                   </div>

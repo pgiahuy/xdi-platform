@@ -103,7 +103,6 @@ function DatasetMetrics({ ws, datasetId }: { ws: string; datasetId: string }) {
   if (!metrics.data) return <p className="text-sm text-muted-foreground">Đang tải...</p>
   const { metrics: items, columns } = toItems(metrics.data)
   const measures = columns.filter((c) => c.role === 'measure')
-  const actionError = remove.error ?? setAggregation.error
 
   return (
     <div className="flex max-w-4xl flex-col gap-8">
@@ -146,7 +145,7 @@ function DatasetMetrics({ ws, datasetId }: { ws: string; datasetId: string }) {
             description={isAdmin ? 'Thêm chỉ số để câu hỏi dùng đúng công thức của tổ chức.' : 'Admin của workspace định nghĩa chỉ số.'}
           />
         )}
-        {actionError && <FormMessage kind="error">{actionError.message}</FormMessage>}
+        {remove.error && <FormMessage kind="error">{remove.error.message}</FormMessage>}
       </section>
 
       {measures.length > 0 && (
@@ -163,6 +162,7 @@ function DatasetMetrics({ ws, datasetId }: { ws: string; datasetId: string }) {
             onChange={isAdmin ? (column, aggregation) => setAggregation.mutate({ column, aggregation }) : undefined}
             pendingColumn={setAggregation.isPending ? setAggregation.variables?.column : undefined}
           />
+          {setAggregation.error && <FormMessage kind="error">{setAggregation.error.message}</FormMessage>}
         </section>
       )}
     </div>

@@ -50,16 +50,28 @@ function buildDraft(columns: ColumnItem[], editing?: MetricItem): MetricDraft {
   return { name: '', description: '', expression, filter: '', timeColumn: time?.name ?? '', unit: '' }
 }
 
-export function MetricForm({ columns, editing, pending, error, onSubmit, onCancel }: Props) {
+export function MetricForm({ columns, editing, pending, error: serverError, onSubmit, onCancel }: Props) {
   const [draft, setDraft] = useState(() => buildDraft(columns, editing))
+  // Lỗi kiểm ngay trên form trước khi gửi (công thức rỗng khi phép tính không có cột hợp); có thì hiện thay lỗi backend.
+  const [localError, setLocalError] = useState<FormError<MetricField>>()
+  const error = localError ?? serverError
   useFocusOnError(error, fieldIds)
   const set = (key: keyof MetricDraft) => (value: string) => setDraft((d) => ({ ...d, [key]: value }))
   const errorOf = (field: MetricField) => (error?.field === field ? error.message : undefined)
   const timeColumns = columns.filter((c) => c.role === 'time')
+  // Cột thời gian đã lưu mà không còn là cột thời gian (hay không còn trong dataset): vẫn hiện tên đó, kèm ghi chú, thay
+  // vì để ô chọn hiện "Không có" trong khi giá trị gửi đi vẫn là cột cũ.
+  const timeColumnMissing = draft.timeColumn !== '' && !timeColumns.some((c) => c.name === draft.timeColumn)
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!pending) onSubmit(draft)
+    if (pending) return
+    if (!draft.expression.trim()) {
+      setLocalError({ field: 'expression', message: 'Chọn cột cho phép tính, hoặc viết công thức bằng SQL' })
+      return
+    }
+    setLocalError(undefined)
+    onSubmit(draft)
   }
 
   return (
@@ -86,7 +98,10 @@ export function MetricForm({ columns, editing, pending, error, onSubmit, onCance
       <FormulaInput
         id={fieldIds.expression}
         value={draft.expression}
-        onChange={set('expression')}
+        onChange={(expression) => {
+          setLocalError(undefined)
+          set('expression')(expression)
+        }}
         columns={columns}
         error={errorOf('expression')}
       />
@@ -108,7 +123,13 @@ export function MetricForm({ columns, editing, pending, error, onSubmit, onCance
             value={draft.timeColumn}
             aria-invalid={errorOf('time_column') ? true : undefined}
             onChange={(e) => set('timeColumn')(e.target.value)}
-            options={[{ value: '', label: 'Không có' }, ...timeColumns.map((c) => ({ value: c.name, label: c.name }))]}
+            options={[
+              { value: '', label: 'Không có' },
+              ...timeColumns.map((c) => ({ value: c.name, label: c.name })),
+              ...(timeColumnMissing
+                ? [{ value: draft.timeColumn, label: `${draft.timeColumn} (không phải cột thời gian)` }]
+                : []),
+            ]}
           />
           {errorOf('time_column') && (
             <p role="alert" className="text-sm text-destructive">
