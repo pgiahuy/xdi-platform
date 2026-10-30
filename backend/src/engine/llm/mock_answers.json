@@ -243,8 +243,8 @@
     "answer": {
       "columns": [
         { "name": "Type", "description": "Hình thức thanh toán của giao dịch", "aliases": ["hình thức thanh toán", "loại giao dịch"] },
-        { "name": "Days for shipping (real)", "description": "Số ngày giao hàng thực tế", "aliases": ["số ngày giao thực tế", "thời gian giao thực tế"], "unit": "duration" },
-        { "name": "Days for shipment (scheduled)", "description": "Số ngày giao hàng dự kiến", "aliases": ["số ngày giao dự kiến", "thời gian giao dự kiến"], "unit": "duration" },
+        { "name": "Days for shipping (real)", "description": "Số ngày giao hàng thực tế", "aliases": ["số ngày giao thực tế", "thời gian giao thực tế"], "unit": "duration", "aggregation": "avg" },
+        { "name": "Days for shipment (scheduled)", "description": "Số ngày giao hàng dự kiến", "aliases": ["số ngày giao dự kiến", "thời gian giao dự kiến"], "unit": "duration", "aggregation": "avg" },
         { "name": "Benefit per order", "description": "Lợi nhuận của dòng đơn hàng", "aliases": ["lợi nhuận đơn"], "unit": "money" },
         { "name": "Sales per customer", "description": "Doanh số của dòng đơn hàng tính theo khách hàng", "aliases": ["doanh số theo khách"], "unit": "money" },
         { "name": "Delivery Status", "description": "Trạng thái giao hàng: giao sớm, giao trễ, đúng hẹn, đã hủy", "aliases": ["trạng thái giao hàng", "tình trạng giao"] },
@@ -274,9 +274,9 @@
         { "name": "Order Id", "description": "Mã đơn hàng; một đơn có thể có nhiều dòng", "aliases": ["mã đơn hàng", "đơn hàng"] },
         { "name": "Order Item Cardprod Id", "description": "Mã sản phẩm đọc từ thẻ RFID", "aliases": [] },
         { "name": "Order Item Discount", "description": "Số tiền giảm giá của dòng đơn hàng", "aliases": ["giảm giá", "tiền giảm giá"], "unit": "money" },
-        { "name": "Order Item Discount Rate", "description": "Tỷ lệ giảm giá của dòng đơn hàng", "aliases": ["tỷ lệ giảm giá", "phần trăm giảm giá"], "unit": "percent" },
+        { "name": "Order Item Discount Rate", "description": "Tỷ lệ giảm giá của dòng đơn hàng", "aliases": ["tỷ lệ giảm giá", "phần trăm giảm giá"], "unit": "percent", "aggregation": "avg" },
         { "name": "Order Item Id", "description": "Mã dòng đơn hàng", "aliases": ["mã dòng đơn"] },
-        { "name": "Order Item Product Price", "description": "Đơn giá sản phẩm chưa giảm giá", "aliases": ["đơn giá"], "unit": "money" },
+        { "name": "Order Item Product Price", "description": "Đơn giá sản phẩm chưa giảm giá", "aliases": ["đơn giá"], "unit": "money", "aggregation": "avg" },
         { "name": "Order Item Profit Ratio", "description": "Tỷ suất lợi nhuận của dòng đơn hàng", "aliases": ["tỷ suất lợi nhuận", "biên lợi nhuận"], "unit": "percent" },
         { "name": "Order Item Quantity", "description": "Số lượng sản phẩm trong dòng đơn hàng", "aliases": ["số lượng", "sản lượng"], "unit": "quantity" },
         { "name": "Sales", "description": "Doanh số trước giảm giá: đơn giá nhân số lượng", "aliases": ["doanh số", "doanh thu gộp"], "unit": "money" },
@@ -291,7 +291,7 @@
         { "name": "Product Description", "description": "Mô tả sản phẩm", "aliases": [] },
         { "name": "Product Image", "description": "Đường dẫn ảnh sản phẩm", "aliases": [] },
         { "name": "Product Name", "description": "Tên sản phẩm", "aliases": ["sản phẩm", "tên sản phẩm", "mặt hàng"] },
-        { "name": "Product Price", "description": "Giá niêm yết của sản phẩm", "aliases": ["giá sản phẩm", "giá bán"], "unit": "money" },
+        { "name": "Product Price", "description": "Giá niêm yết của sản phẩm", "aliases": ["giá sản phẩm", "giá bán"], "unit": "money", "aggregation": "avg" },
         { "name": "Product Status", "description": "Tình trạng kho: 1 là hết hàng, 0 là còn hàng", "aliases": ["tình trạng kho"] },
         { "name": "shipping date (DateOrders)", "description": "Ngày giờ giao hàng, dạng tháng/ngày/năm giờ:phút", "aliases": ["ngày giao hàng", "ngày giao"] },
         { "name": "Shipping Mode", "description": "Phương thức vận chuyển", "aliases": ["phương thức vận chuyển", "hình thức giao hàng", "loại vận chuyển"] }
@@ -460,5 +460,110 @@
         "related_columns": ["Delivery Status", "Late_delivery_risk", "Order Status", "Customer Segment"]
       }
     }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo thị trường",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo tháng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Top 10 danh mục có doanh thu cao nhất",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Tỷ lệ giao hàng trễ theo phương thức vận chuyển",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Số đơn hàng theo trạng thái giao hàng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Lợi nhuận theo phân khúc khách hàng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "5 khu vực có tỷ lệ giao trễ cao nhất",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Số ngày giao thực tế và dự kiến theo phương thức vận chuyển",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu từng quý năm 2017",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "5 danh mục có doanh thu cao nhất ở châu Âu",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo ngày giao hàng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Xóa các đơn hàng bị hủy",
+    "answer": { "kind": "plain", "reason": "Câu hỏi không hỏi nguyên nhân của một con số." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo ngày đặt hàng",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu ở thị trường châu Á",
+    "answer": { "kind": "plain", "reason": "Câu hỏi chỉ hỏi con số doanh thu, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo tháng giảm so với cùng kỳ năm trước",
+    "answer": { "kind": "plain", "reason": "Câu hỏi nêu mức giảm theo tháng nhưng không hỏi điều gì gây ra nó." }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo quý của từng thị trường",
+    "answer": { "kind": "plain", "reason": "Câu hỏi hỏi con số theo nhóm hay theo thời gian, không hỏi nguyên nhân." }
+  },
+  {
+    "task": "classify",
+    "question": "Tại sao doanh thu quý 3 năm 2017 giảm",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao một độ đo thay đổi hay khác nhau giữa hai nhóm." }
+  },
+  {
+    "task": "classify",
+    "question": "Vì sao doanh thu tháng 5 năm 2017 tăng",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao một độ đo thay đổi hay khác nhau giữa hai nhóm." }
+  },
+  {
+    "task": "classify",
+    "question": "Tại sao doanh thu Europe thấp hơn LATAM",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao một độ đo thay đổi hay khác nhau giữa hai nhóm." }
+  },
+  {
+    "task": "classify",
+    "question": "Vì sao doanh thu Europe cao hơn LATAM",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao một độ đo thay đổi hay khác nhau giữa hai nhóm." }
+  },
+  {
+    "task": "classify",
+    "question": "Tại sao khách hàng không hài lòng",
+    "answer": { "kind": "cause", "reason": "Câu hỏi hỏi vì sao khách hàng không hài lòng." }
   }
 ]

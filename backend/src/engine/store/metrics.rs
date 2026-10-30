@@ -2,7 +2,8 @@
 /* engine/store/metrics.rs - định nghĩa chỉ số của dataset (bảng metrics), để prompt sinh SQL (service/ask/prompt.rs)
 dùng đúng công thức của tổ chức thay vì để mô hình tự đoán "doanh thu" là cột nào.
 Sửa một định nghĩa là thêm dòng cùng tên với version lớn hơn, không ghi đè (0001_init.sql), nên đọc chỉ lấy bản mới
-nhất của mỗi tên. Hiện chỉ bước nạp dataset mẫu (service/samples.rs) ghi định nghĩa; màn Thiết lập chỉ số chưa có. */
+nhất của mỗi tên. Hai đường ghi: bước nạp dataset mẫu (service/samples.rs, ở đây) và màn Chỉ số của admin
+(service/metrics/, qua metric_edits.rs). */
 
 use serde::Deserialize;
 
@@ -24,7 +25,8 @@ pub struct MetricDefinition {
     pub confirmed: bool,
 }
 
-/// Một chỉ số để ghi, đọc từ file chỉ số mẫu (data/samples/<dataset>.metrics.json). Các trường như MetricDefinition.
+/// Một chỉ số để ghi: đọc từ file chỉ số mẫu (data/samples/<dataset>.metrics.json) hay từ màn Chỉ số. Các trường như
+/// MetricDefinition.
 #[derive(Debug, Clone, Deserialize)]
 pub struct NewMetric {
     pub name: String,

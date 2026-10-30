@@ -163,6 +163,10 @@ Mô hình ngôn ngữ:
   khởi động.
 - Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,
   vì mô hình chạy bằng CPU chậm hơn nhiều).
+- Bước phân loại câu hỏi (câu thường hay câu hỏi tìm nguyên nhân) có trần riêng `CLASSIFY_TIMEOUT_SECS` (mặc định 15
+  giây, không dài hơn hai mức trên), vì nó chạy trước bước viết SQL. Quá trần thì backend dùng luật từ khóa, câu hỏi
+  chạy tiếp, bước `classify` ghi là mô hình không trả lời kịp. Với Ollama, lần gọi đầu còn nạp mô hình vào RAM nên có
+  thể quá trần; máy chậm thì tăng giá trị này.
 
 Dữ liệu nằm trong hai volume Docker: `xdi-platform_pgdata` (Postgres) và `xdi-platform_xdidata` (file Parquet). Tiền
 tố là tên project của compose: mặc định là tên thư mục chứa `docker-compose.yml`, đổi được bằng `COMPOSE_PROJECT_NAME`
@@ -605,6 +609,22 @@ hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi đ
   ở lần khởi động sau.
 - "Lập hồ sơ dataset lỗi nên chưa hỏi được phiên bản này" nghĩa là phần cấu trúc lỗi: nạp lại file ở trang **Dữ liệu**.
 
+### Chỉ số và cách gộp (không bắt buộc)
+
+Trang **Dữ liệu** có nút **Chỉ số** ở mỗi dataset. Màn này liệt kê chỉ số của dataset (tên, mô tả, công thức, đơn vị)
+và cách gộp của từng cột số đo; mọi thành viên xem được, chỉ `admin` sửa được.
+
+- **Thêm chỉ số**: đặt **Tên** (tên người dùng gõ khi hỏi, ví dụ "Doanh thu"), **Mô tả**, rồi chọn **Phép tính**
+  (tổng, trung bình, đếm dòng, đếm giá trị khác nhau) và **Cột**, hoặc bấm **Viết bằng SQL** để gõ công thức như
+  `SUM("Order Item Total") / COUNT(DISTINCT "Order Id")`. **Điều kiện**, **Cột thời gian**, **Đơn vị** không bắt buộc.
+  Backend chạy thử công thức trên phiên bản hiện hành trước khi lưu; sai cột, không phải hàm gộp hay bị guard từ chối
+  thì lời báo hiện ngay dưới ô sai. Câu hỏi kế tiếp nhắc tên chỉ số thì mô hình dùng đúng công thức này (xem ở tab SQL).
+- **Sửa** (biểu tượng bút) lưu một phiên bản mới cùng tên, bản cũ giữ lại; không đổi tên được. **Xóa** (biểu tượng
+  thùng rác) xóa chỉ số cùng mọi phiên bản sau khi hỏi lại.
+- **Cách gộp của cột số đo**: **Tổng** cho tiền, số lượng hàng; **Trung bình** cho giá trị mô tả một dòng (tuổi, điểm,
+  số tín chỉ, số ngày). Mô hình đề xuất lúc lập hồ sơ; đổi ở đây có hiệu lực từ câu hỏi kế tiếp, cho phiên bản hiện
+  hành. Câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng.
+
 ### Bước 5. Hỏi
 
 Trang **Hỏi dữ liệu** là một khung trò chuyện: ô **Dataset** ở đầu khung (dính khi cuộn) chọn sẵn dataset tạo gần nhất,
@@ -622,6 +642,16 @@ của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cu�
 
 Câu có cụm khớp nhiều cột thì backend hỏi lại trước khi viết SQL: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
 SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
+
+Chưa biết dataset có gì thì bấm **Tổng quan dữ liệu** cạnh ô **Dataset** (trang **Dữ liệu**: nút **Tổng quan** ở dòng
+của dataset). Khung ghi số dòng và khoảng thời gian có dữ liệu, các cột xếp theo nhóm **Số đo**, **Chia nhóm theo**,
+**Thời gian**, **Mã**, **Chữ khác** (tên cột, nhãn tiếng Việt trong ngoặc, mô tả, % ô trống, số giá trị khác nhau, các
+giá trị nhiều dòng nhất), biểu đồ dựng sẵn (độ đo chính và số dòng theo tháng hay theo ngày, số dòng theo giá trị của
+từng cột chia nhóm) và các chỉ số đã định nghĩa. Bấm một cột, một giá trị, một chỉ số hay tiêu đề một biểu đồ thì câu
+hỏi được điền vào ô hỏi, ví dụ bấm `Market` trên DataCo thì "Doanh thu theo Market"; sửa câu rồi bấm **Hỏi**. Từ trang
+**Dữ liệu**, bấm như vậy mở trang hỏi trên đúng dataset đó. Khung không gọi mô hình. Hồ sơ đang lập thì khung ghi phần
+nào chưa có; người có vai dữ liệu chỉ xem một phần dòng thì không thấy số ô trống, số giá trị khác nhau và số dòng theo
+giá trị, vì các số đó tính trên mọi dòng.
 
 ### Bước 6. Đọc kết quả và minh chứng
 
@@ -648,22 +678,28 @@ còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**)
   thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
 - **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm một ô số đo của bảng **Kết quả**, hay số của
   một kỳ hay một nhóm trong bảng phân rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
-- **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL
-  (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Tính phân rã và Mô hình viết lời giải thích (câu "tại sao"), Lưu vào
-  lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ viết SQL, điền form và viết lời, còn con số do
-  DuckDB và backend tính.
+- **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Phân loại câu hỏi, Mô hình
+  viết SQL, Kiểm SQL (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Tính phân rã và Mô hình viết lời giải thích (câu "tại
+  sao"), Lưu vào lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ phân loại câu hỏi, viết SQL, điền
+  form và viết lời, còn con số do DuckDB và backend tính. Bước **Phân loại câu hỏi** ghi câu được hiểu là câu thường
+  hay câu hỏi tìm nguyên nhân kèm lý do; mô hình lỗi thì bước này ghi `lỗi` và "Dùng luật từ khóa vì ...", câu hỏi
+  vẫn chạy.
 
-Câu hỏi "tại sao" (backend nhận ra bằng các cụm "tại sao", "vì sao", "sao lại", "vì đâu", "lý do", "nguyên nhân",
-"do đâu", gõ không dấu cũng được): mô hình không viết SQL mà điền một form (đo
-gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm form rồi tự dựng mọi câu SQL. Đầu thẻ trả lời là một hàng
-ba số (hai kỳ hay hai nhóm và chênh lệch), khung **Giải thích**, rồi thanh chênh lệch của từng nhóm theo chiều giải
-thích tốt nhất. Lời giải thích nói so gì với gì, chênh bao nhiêu, rồi nhóm nào tạo ra phần lớn chênh lệch. So hai kỳ
-thì nói "tăng", "giảm"; so hai nhóm thì nói "cao hơn", "thấp hơn" và luôn là câu do backend viết. Lời của mô hình
-được kiểm: số nào không có trong bảng phân rã, hay chữ "tăng", "giảm" ngược dấu của số đứng sau, thì backend dùng câu
-của mình và ghi "Câu viết theo khuôn từ số đã tính". Không phân rã được (ví dụ kỳ so sánh không có dòng nào) thì vẫn
-có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra tăng (hay không đổi) thì kết quả có thêm một cảnh báo
-nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Vì sao doanh thu tháng 5 năm 2017 tăng", và "Tại sao doanh thu
-quý 3 năm 2017 giảm" để thấy cảnh báo đó.
+Backend nhận ra câu hỏi "tại sao" ở bước Phân loại câu hỏi: mô hình đọc câu hỏi, tên cột và các câu hỏi trước của
+cuộc, nên nhận cả cách hỏi như "Doanh thu giảm do gì?" hay "Còn tháng 6 thì sao?" sau một câu "tại sao", còn câu đếm
+theo một cột tên "lý do" như "Số đơn theo lý do hủy" vẫn là câu thường. Mô hình lỗi, hay với `mock` khi câu không phải
+câu mẫu, thì backend dùng các cụm "tại sao", "vì sao", "sao lại", "vì đâu", "lý do", "nguyên nhân", "do đâu", gõ không
+dấu cũng được.
+
+Câu hỏi "tại sao": mô hình không viết SQL mà điền một form (đo gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm
+form rồi tự dựng mọi câu SQL. Đầu thẻ trả lời là một hàng ba số (hai kỳ hay hai nhóm và chênh lệch), khung **Giải
+thích**, rồi thanh chênh lệch của từng nhóm theo chiều giải thích tốt nhất. Lời giải thích nói so gì với gì, chênh bao
+nhiêu, rồi nhóm nào tạo ra phần lớn chênh lệch. So hai kỳ thì nói "tăng", "giảm"; so hai nhóm thì nói "cao hơn", "thấp
+hơn" và luôn là câu do backend viết. Lời của mô hình được kiểm: số nào không có trong bảng phân rã, hay chữ "tăng",
+"giảm" ngược dấu của số đứng sau, thì backend dùng câu của mình và ghi "Câu viết theo khuôn từ số đã tính". Không phân
+rã được (ví dụ kỳ so sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra
+tăng (hay không đổi) thì kết quả có thêm một cảnh báo nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Vì sao doanh
+thu tháng 5 năm 2017 tăng", và "Tại sao doanh thu quý 3 năm 2017 giảm" để thấy cảnh báo đó.
 
 Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") vẫn có phân rã: backend chọn kỳ gần nhất có dữ liệu (theo tháng
 nếu câu không nói tháng, quý hay năm) và so với kỳ liền trước. Kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó
@@ -684,5 +720,5 @@ Chưa có thư mời qua email hay tự đăng ký. Thành viên cần có tài 
 2. `admin` của workspace mở **Thành viên**, khung **Thêm thành viên**: **Email** của tài khoản vừa tạo, **Vai** là
    **Admin** hoặc **Thành viên**, bấm **Thêm**.
 
-**Thành viên** chọn dataset và hỏi, không nạp được file. **Admin** thêm nạp và xóa dataset, thêm, xóa, đổi vai
-thành viên, đổi tên và xóa workspace. Người được thêm thấy workspace trong ô chọn workspace sau khi đăng nhập.
+**Thành viên** chọn dataset, hỏi và xem chỉ số, không nạp được file. **Admin** thêm nạp và xóa dataset, sửa chỉ số
+và cách gộp, thêm, xóa, đổi vai thành viên, đổi tên và xóa workspace. Người được thêm thấy workspace trong ô chọn workspace sau khi đăng nhập.

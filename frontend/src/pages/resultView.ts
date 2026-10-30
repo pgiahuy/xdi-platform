@@ -2,11 +2,12 @@
 /* pages/resultView.ts - đổi ResultTable của hợp đồng sang ResultView của components/ask. Bảng kết quả (AskOutcome.tsx)
 và bảng dòng nguồn (AskEvidence.tsx) cùng dạng nên dùng chung; để ở file .ts riêng vì file .tsx chỉ xuất component
 (luật only-export-components của lint, cho Vite nạp lại nóng đúng). Ô nào bấm được để xem dòng nguồn cũng dựng ở đây,
-vì bảng kết quả (AskOutcome) và tab Dòng nguồn (AskEvidence, để biết có gì để bấm) cùng cần. */
+vì bảng kết quả (AskOutcome) và tab Dòng nguồn (AskEvidence, để biết có gì để bấm) cùng cần. Gợi ý biểu đồ
+(buildChartView) cũng ở đây vì câu trả lời và biểu đồ dựng sẵn của khung tổng quan (overviewView.ts) cùng dùng. */
 
-import type { AskResponse, ResultTable } from '@/api/ask'
+import type { AskResponse, ChartSuggestion, ResultTable } from '@/api/ask'
 import type { CellDrill, DrillTarget } from '@/components/ask/evidenceTypes'
-import type { ResultView } from '@/components/ask/types'
+import type { ChartView, ResultView } from '@/components/ask/types'
 
 export function buildResultView(result: ResultTable): ResultView {
   return {
@@ -33,4 +34,27 @@ export function buildCellIndexes(response: AskResponse): { measures: number[]; k
 export function buildCellDrill(response: AskResponse, onDrill: (target: DrillTarget) => void): CellDrill | undefined {
   const indexes = buildCellIndexes(response)
   return indexes ? { ...indexes, onDrill } : undefined
+}
+
+// Gợi ý trỏ tới cột không có trong kết quả thì bỏ biểu đồ, vẫn hiện bảng: vẽ sai cột còn tệ hơn không vẽ. Không có
+// dòng nào thì cũng bỏ, khỏi vẽ một trục trống.
+export function buildChartView(chart: ChartSuggestion, result: ResultView): ChartView | null {
+  if (result.rows.length === 0) return null
+  const names = new Set(result.columns.map((column) => column.name))
+  const columnsExist =
+    names.has(chart.x) &&
+    chart.y.length > 0 &&
+    chart.y.every((name) => names.has(name)) &&
+    (chart.series === null || names.has(chart.series))
+  if (!columnsExist) return null
+  return {
+    kind: chart.kind,
+    x: chart.x,
+    y: chart.y,
+    layout: chart.layout,
+    series: chart.series,
+    ratio: chart.ratio,
+    top: chart.top,
+    otherBucket: chart.other_bucket,
+  }
 }

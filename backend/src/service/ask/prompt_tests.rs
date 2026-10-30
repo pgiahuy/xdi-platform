@@ -42,6 +42,7 @@ fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
         matched: false,
         unit: None,
         origin_table: None,
+        aggregation: crate::engine::store::ColumnAggregation::Sum,
     }
 }
 

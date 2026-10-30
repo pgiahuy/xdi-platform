@@ -71,6 +71,8 @@ Lỗi trả cùng một dạng body (`ErrorBody`), trừ hai ngoại lệ ở cu
   `message`.
 - `message`: lời giải thích tiếng Việt cho người dùng cuối, hiện nguyên văn được. Riêng lỗi 500 chỉ có câu chung, chi
   tiết nằm trong log của backend.
+- `field`: chỉ có khi lỗi 400 nằm ở một trường của body (hiện chỉ API chỉ số), là tên trường JSON đó, ví dụ
+  `expression`; giao diện hiện lời báo ngay dưới ô tương ứng. Lỗi khác không có trường này.
 
 | `code` | HTTP | Khi nào |
 |---|---|---|
@@ -166,6 +168,27 @@ hỏi: `query_id`, câu hỏi, `status`, `sql` (sau guard), `understood` (phần
 lưu; hỏi lại câu đó để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, admin của workspace cũng không: cuộc của
 người khác, của dataset khác hay id không có đều trả 404.
 
+## Chỉ số và cách gộp
+
+Chỉ số của một dataset (`backend/src/service/metrics/`): `GET /api/workspaces/{ws}/datasets/{id}/metrics` trả
+`metrics` (mỗi tên một mục: bản đã xác nhận mới nhất, kèm `version`, `origin`) và `columns` (cột của phiên bản hiện
+hành, `aggregation` là `sum` hay `avg` với cột `measure`, null với cột khác); mọi thành viên gọi được. Chỉ admin, `member`
+nhận 403:
+
+- `POST .../metrics` tạo chỉ số (201), `origin` `ui`, đã xác nhận. Tên trùng một chỉ số có sẵn (không phân biệt hoa
+  thường và dấu thanh) trả 400 với `field` `name`.
+- `PUT .../metrics/{metric_id}` lưu phiên bản mới (`version` + 1) cùng tên, bản cũ giữ lại; đổi tên trả 400.
+  `metric_id` là id của bất kỳ phiên bản nào của chỉ số đó.
+- `DELETE .../metrics/{metric_id}` xóa chỉ số cùng mọi phiên bản (204). Câu hỏi cũ giữ câu SQL đã chạy.
+- `PUT .../columns/aggregation` với `{column, aggregation}` đổi cách gộp của một cột `measure` trong phiên bản hiện hành
+  (204); cột không có hay không phải `measure` trả 400 với `field` `column`.
+
+Trước khi lưu, backend kiểm tên không có dấu ngoặc kép, công thức và điều kiện không có chú thích SQL (`--`, `/* */`),
+công thức là một hàm gộp trên cột có thật, điều kiện không chứa hàm gộp, cột thời gian có thật, rồi chạy
+`SELECT <công thức> FROM <bảng> [WHERE <điều kiện>]` qua guard trên phiên bản hiện hành. Sai thì 400 với `field` là
+`name`, `expression`, `filter` hay `time_column`; lý do gốc của guard hay DuckDB chỉ ghi log. Chỉ số lưu xong vào
+prompt của câu hỏi kế tiếp.
+
 ## Xóa dataset
 
 `DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, chỉ số, cuộc trò chuyện
@@ -173,6 +196,27 @@ người khác, của dataset khác hay id không có đều trả 404.
 (bảng `queries`) không xóa: các dòng còn lại với `dataset_id`, `version_id` null, và chỉ mất khi xóa workspace. Chỉ
 admin của workspace, `member` nhận 403; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không
 khôi phục được.
+
+## Tổng quan dataset
+
+`GET /api/workspaces/{ws}/datasets/{id}/overview` cho mọi thành viên biết dataset có gì trước khi hỏi: số dòng, khoảng
+thời gian có dữ liệu, phiên bản hiện hành; mỗi cột tên, nhãn tiếng Việt (bí danh đầu), mô tả, vai trò, đơn vị, % ô
+trống, số giá trị khác nhau, và giá trị kèm số dòng của cột chia nhóm không nhạy cảm; chỉ số đã định nghĩa; biểu đồ dựng
+sẵn (`charts`), mỗi cái có `result` và `chart` cùng dạng với câu trả lời của route hỏi. Không gọi mô hình ngôn ngữ.
+
+- Số dòng theo giá trị của từng cột chia nhóm lấy từ hồ sơ cột, không chạy câu nào. Cột nhạy cảm không trả giá trị.
+- Số dòng, khoảng thời gian, độ đo chính theo kỳ (`measure_over_time`) và số dòng theo kỳ (`rows_over_time`) tính bằng
+  câu SQL do backend dựng, qua guard với vai dữ liệu của người xem như route hỏi; `sql` của biểu đồ là câu sau guard.
+  Kỳ là ngày khi dữ liệu dài tới 92 ngày, tháng khi dài hơn. Kết quả giữ trong bộ nhớ theo phiên bản và câu, mất khi
+  khởi động lại.
+- Độ đo chính (`main_measure`) là chỉ số đã xác nhận đầu tiên theo tên, chưa có thì cột số đo đơn vị tiền rồi số lượng.
+- Người bị lọc dòng theo vai dữ liệu nhận `summary.restricted` là true: hồ sơ đếm trên mọi dòng nên số ô trống, số giá
+  trị khác nhau và số dòng theo giá trị không trả.
+- `missing` liệt kê phần chưa có kèm lời cho người dùng: hồ sơ đang lập hay lỗi, nhãn và mô tả chưa viết, không có cột
+  thời gian, không có độ đo chính, một câu lỗi.
+
+Mã lỗi: 404 khi dataset không có hoặc thuộc workspace khác. Dataset chưa có dữ liệu hay đang lập hồ sơ vẫn trả 200, kèm
+`missing`.
 
 ## Nguồn database
 

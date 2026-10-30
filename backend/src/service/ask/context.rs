@@ -26,7 +26,9 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::auth::WorkspaceId;
-use crate::engine::store::{DatasetVersion, ProfileColumn, ProfileRole, ProfileStatus};
+use crate::engine::store::{
+    ColumnAggregation, DatasetVersion, ProfileColumn, ProfileRole, ProfileStatus,
+};
 use crate::service::ask::contract::ChosenOption;
 use crate::service::ask::matching::{
     build_column_text, build_scored_phrases, build_value_hints, is_partial_match,
@@ -80,6 +82,8 @@ pub struct ColumnProfile {
     /// schema.bảng của bảng nối nhiều-một mà cột chép từ đó (bản chụp database); prompt ghi kèm để mô hình không cộng
     /// cột này. None với cột của bảng chính và cột nạp từ file.
     pub origin_table: Option<String>,
+    /// Cách gộp mặc định của cột số đo (#185); prompt dặn mô hình dùng AVG với cột avg.
+    pub aggregation: ColumnAggregation,
 }
 
 /// Một cụm của câu hỏi bằng chính xác một giá trị hay bí danh ("southern europe" là Order Region = Southern Europe).
@@ -177,7 +181,7 @@ fn profile_not_ready() -> AppError {
     AppError::BadRequest("Dataset chưa lập hồ sơ xong, thử lại sau ít phút".to_string())
 }
 
-fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> {
+pub(crate) fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> {
     columns
         .into_iter()
         .map(|c| ColumnProfile {
@@ -194,6 +198,8 @@ fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> {
             matched: false,
             unit: c.unit,
             origin_table: c.origin_table,
+            // Chữ lạ (không thể có, vì CHECK của 0010_column_aggregation.sql) coi như mặc định sum.
+            aggregation: ColumnAggregation::parse(&c.aggregation).unwrap_or(ColumnAggregation::Sum),
         })
         .collect()
 }

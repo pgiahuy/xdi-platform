@@ -51,6 +51,7 @@ pub(crate) fn column(
         time_format: None,
         unit: None,
         origin_table: None,
+        aggregation: "sum".to_string(),
     }
 }
 
@@ -308,7 +309,7 @@ fn quarter_compares_with_the_quarter_before() {
     assert_eq!(
         sql.total_sql,
         format!(
-            "SELECT date_trunc('quarter', strptime(\"{DATE}\", '{DATE_FORMAT}')) AS \"quarter\", \
+            "SELECT date_trunc('quarter', strptime(\"{DATE}\", '{DATE_FORMAT}')) AS \"Quý\", \
              SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2))) AS \"Doanh thu\" FROM \"dataco\" WHERE ({} OR {}) GROUP BY 1 ORDER BY 1",
             example.base.filter, example.compare.filter
         )
@@ -682,6 +683,37 @@ fn ratio_metrics_split_into_numerator_and_denominator() {
     assert_eq!(
         fixture.fields(with(quarter_form(), "metric", json!("doanh thu mỗi đơn"))),
         ["metric"]
+    );
+}
+
+/// Cột có cách gộp avg (#185): "sum" của form thành trung bình mỗi dòng, tử SUM, mẫu COUNT của cột, như AVG(x).
+#[test]
+fn sum_of_an_avg_column_becomes_the_average_per_row() {
+    let mut fixture = Fixture::new();
+    let quantity = fixture
+        .columns
+        .iter_mut()
+        .find(|c| c.name == "Order Item Quantity")
+        .unwrap();
+    quantity.aggregation = "avg".to_string();
+    let mut form = quarter_form();
+    form["metric"] = json!(null);
+    form["measure"] = json!({"column": "Order Item Quantity", "agg": "sum"});
+    let plan = fixture.plan(form);
+    let column = parse_expr("\"Order Item Quantity\"").unwrap();
+    assert_eq!(plan.measure.label, "Trung bình Order Item Quantity");
+    assert_eq!(
+        plan.measure.additive,
+        Additive::Sum {
+            value: column.clone(),
+            decimal: false
+        }
+    );
+    assert_eq!(
+        plan.measure.denominator,
+        Some(Additive::Count {
+            value: Some(column)
+        })
     );
 }
 

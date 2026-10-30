@@ -18,6 +18,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::service::ingest::{StagedFile, Staging, Upload};
 use crate::{error::AppError, state::AppState};
 
+mod overview;
 mod read;
 mod sheets;
 mod upload;
@@ -41,6 +42,7 @@ pub fn routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .routes(routes!(read::list, upload::create))
         .routes(routes!(sheets::sheets))
         .routes(routes!(read::detail, read::remove))
+        .routes(routes!(overview::overview))
         .layer(DefaultBodyLimit::max(body_limit))
 }
 /// Nhận multipart: ghi từng file xuống thư mục tạm, đọc các trường chữ, đếm tổng dung lượng.

@@ -380,6 +380,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/datasets/{id}/columns/aggregation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the default aggregation of a measure column (admin only)
+         * @description Applies to the current version. The SQL prompt asks for AVG on `avg` columns, and why questions on them compare the average per row.
+         */
+        put: operations["setColumnAggregation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/datasets/{id}/conversations": {
         parameters: {
             query?: never;
@@ -434,6 +454,71 @@ export interface paths {
          * @description Reads the stored question, keeps its table and filters, adds the keys of the clicked cell, and runs that on the dataset version the question used, through the guard with the row filters of the member calling now. One page of rows per call, in the order the analytics engine reads them.
          */
         post: operations["drill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/datasets/{id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metrics of a dataset and the columns of its current version */
+        get: operations["listMetrics"];
+        put?: never;
+        /**
+         * Create a metric (admin only)
+         * @description The expression is run once on the current version, through the SQL guard, before it is saved. The metric is confirmed and used by the next question.
+         */
+        post: operations["createMetric"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/datasets/{id}/metrics/{metric_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save a new version of a metric (admin only)
+         * @description Adds a version with the next number and keeps the earlier ones. The name cannot change. Checked like a new metric.
+         */
+        put: operations["updateMetric"];
+        post?: never;
+        /**
+         * Delete a metric with all its versions (admin only)
+         * @description Earlier questions keep the SQL they ran.
+         */
+        delete: operations["deleteMetric"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/datasets/{id}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a dataset holds: summary, column profile, metrics and pre-built charts
+         * @description For every member who can ask the dataset. No language model is called. Charts that read the data go through the SQL guard with the viewer's row filters and are kept per version; row counts by value come from the column profile. Sensitive columns return no values.
+         */
+        get: operations["getDatasetOverview"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -836,6 +921,17 @@ export interface components {
             name: string;
         };
         /**
+         * @description How the values of a measure column are combined when no metric says otherwise: `sum` for amounts and quantities,
+         *     `avg` for values that describe one row (age, score, credits, days).
+         * @enum {string}
+         */
+        ColumnAggregation: "sum" | "avg";
+        /** @description New default aggregation of one measure column of the current version. */
+        ColumnAggregationRequest: {
+            aggregation: components["schemas"]["ColumnAggregation"];
+            column: string;
+        };
+        /**
          * @description What a result column is:
          *     - `dimension`: a grouping key that is not time, for example a market.
          *     - `time`: a grouping key on time, for example a quarter.
@@ -936,6 +1032,23 @@ export interface components {
              */
             suggested_questions: string[];
         };
+        /** @description Overview of a dataset for anyone who can ask it: what it holds and what to ask, computed without the language model. */
+        DatasetOverviewResponse: {
+            /** @description Pre-built charts: the main measure over time, row count over time, then row count by value of each dimension. */
+            charts: components["schemas"]["OverviewChart"][];
+            /** @description Columns in table order, without the ones the profile ignores (all empty, `_source_file`). */
+            columns: components["schemas"]["OverviewColumn"][];
+            /** Format: uuid */
+            dataset_id: string;
+            main_measure: components["schemas"]["MainMeasure"] | null;
+            /** @description Defined metrics, one per name: the latest confirmed definition, else the latest draft. */
+            metrics: components["schemas"]["OverviewMetric"][];
+            /** @description Parts that are not there yet or cannot be shown, with the reason. */
+            missing: components["schemas"]["MissingPart"][];
+            name: string;
+            summary: components["schemas"]["OverviewSummary"];
+            version: components["schemas"]["OverviewVersion"] | null;
+        };
         DatasetVersion: {
             /** Format: date-time */
             created_at: string;
@@ -1023,6 +1136,8 @@ export interface components {
         /** @description Error body returned by every endpoint on failure. */
         ErrorBody: {
             code: components["schemas"]["ErrorCode"];
+            /** @description Name of the request field the error is about, when it is about one field. Omitted otherwise. */
+            field?: string | null;
             /** @description Human-readable explanation in Vietnamese, meant to be shown to the end user as is. */
             message: string;
         };
@@ -1126,6 +1241,14 @@ export interface components {
             email: string;
             password: string;
         };
+        MainMeasure: {
+            /** @description The measure column, or null for a metric. */
+            column: string | null;
+            /** @description Metric name, or the column label (else name) of a measure column; also the measure column of the chart. */
+            label: string;
+            /** @description The metric of that name, or null for a measure column. */
+            metric: string | null;
+        };
         MeResponse: {
             user: components["schemas"]["User"];
             /** @description Workspaces the user belongs to, with their role in each, sorted by name. */
@@ -1157,6 +1280,79 @@ export interface components {
             /** Format: uuid */
             workspace_id: string;
         };
+        /** @description A metric of the dataset: the version in use (the latest confirmed one). */
+        Metric: {
+            /** @description False for a draft nobody approved; the SQL prompt marks it as such. */
+            confirmed: boolean;
+            description: string;
+            /** @description Aggregate SQL expression over the dataset's columns, for example `SUM("Order Item Total")`. */
+            expression: string;
+            /** @description Row condition applied with the expression, for example `"Order Status" <> 'CANCELED'`. */
+            filter: string | null;
+            /**
+             * Format: uuid
+             * @description Id of this version; editing or deleting by it acts on the metric with this name.
+             */
+            id: string;
+            name: string;
+            /** @description `ui` (written on the metrics screen), `sample`, `formula_table` or `llm_suggested`. */
+            origin: string;
+            /** @description Column that dates the rows for this metric. */
+            time_column: string | null;
+            unit: string | null;
+            /**
+             * Format: int32
+             * @description Starts at 1; each edit adds a version and keeps the earlier ones.
+             */
+            version: number;
+        };
+        /** @description A column of the current version, for the column picker and the default aggregation of measure columns. */
+        MetricColumn: {
+            aggregation: components["schemas"]["ColumnAggregation"] | null;
+            /** @description DuckDB type, for example `DOUBLE`, `BIGINT`, `VARCHAR`. */
+            data_type: string;
+            description: string | null;
+            name: string;
+            /** @description `dimension`, `measure`, `time`, `key`, `text` or `ignore`. */
+            role: string;
+        };
+        /** @description A metric to create, or the new version of one. Errors name the wrong field in `field`. */
+        MetricRequest: {
+            description?: string;
+            /** @description One aggregate SQL expression over the dataset's columns, column names in double quotes. */
+            expression: string;
+            filter?: string | null;
+            /** @description Name users ask with, unique in the dataset ignoring case and accents. Cannot change when editing. */
+            name: string;
+            time_column?: string | null;
+            unit?: string | null;
+        };
+        /** @description Metrics of a dataset and the columns of its current version. */
+        MetricsResponse: {
+            /** @description Columns of the current version in table order; empty while the dataset has no profiled version. */
+            columns: components["schemas"]["MetricColumn"][];
+            /** @description One entry per metric name, sorted by name. */
+            metrics: components["schemas"]["Metric"][];
+        };
+        /**
+         * @description What is missing:
+         *     - `no_version`: the dataset has no data yet.
+         *     - `profile_pending`: the column profile is being built; no columns or charts yet.
+         *     - `profile_failed`: the profile failed; upload the file again.
+         *     - `semantic_pending`: labels, descriptions and units are being written.
+         *     - `semantic_unavailable`: the current model cannot write labels, descriptions and units.
+         *     - `restricted`: the viewer's data role filters rows, so per-column counts and value charts are left out.
+         *     - `no_time`: no time column, so no time span and no time charts.
+         *     - `no_measure`: no confirmed metric and no money or quantity measure column, so no measure chart.
+         *     - `chart_failed`: a chart query failed; the message says why.
+         * @enum {string}
+         */
+        MissingCode: "no_version" | "profile_pending" | "profile_failed" | "semantic_pending" | "semantic_unavailable" | "restricted" | "no_time" | "no_measure" | "chart_failed";
+        MissingPart: {
+            code: components["schemas"]["MissingCode"];
+            /** @description Text for the end user (Vietnamese). */
+            message: string;
+        };
         /** @description One many-to-one join of a snapshot. */
         ModelJoin: {
             /** @description Dataset columns copied from `to_table`, as named in the dataset. */
@@ -1175,6 +1371,103 @@ export interface components {
             to_columns: string[];
             /** @description `schema.table` the foreign key points to. */
             to_table: string;
+        };
+        OverviewChart: {
+            chart: components["schemas"]["ChartSuggestion"];
+            /** @description Column of the profile the chart is about: the dimension for `rows_by_value`, the time column otherwise. */
+            column: string;
+            grain: components["schemas"]["TimeGrain"] | null;
+            kind: components["schemas"]["OverviewChartKind"];
+            result: components["schemas"]["ResultTable"];
+            /** @description SQL after the guard that computed the chart; null for `rows_by_value`, which no query computes. */
+            sql: string | null;
+        };
+        /**
+         * @description Kind of pre-built chart:
+         *     - `measure_over_time`: the main measure by day or month.
+         *     - `rows_over_time`: number of rows by day or month, to see periods with little data or data that stops mid-period.
+         *     - `rows_by_value`: number of rows for each value of a dimension column, read from the profile.
+         * @enum {string}
+         */
+        OverviewChartKind: "measure_over_time" | "rows_over_time" | "rows_by_value";
+        OverviewColumn: {
+            description: string | null;
+            /**
+             * Format: int64
+             * @description Exact number of different values; null when `summary.restricted`.
+             */
+            distinct_count: number | null;
+            /** @description Vietnamese label: the first alias written by the semantic profile; null until then. */
+            label: string | null;
+            name: string;
+            /**
+             * Format: double
+             * @description Share of empty cells, 0 to 100; null when `summary.restricted`.
+             */
+            null_percent: number | null;
+            role: components["schemas"]["OverviewRole"];
+            /** @description Marked sensitive: no values are returned for it. */
+            sensitive: boolean;
+            /** @description money, quantity, percent, duration or other; null when unknown. */
+            unit: string | null;
+            /** @description Values with their row counts, most rows first; only for dimension columns that are not sensitive, at most 200. */
+            values: components["schemas"]["OverviewValue"][];
+        };
+        OverviewMetric: {
+            /** @description False while an admin has not confirmed the definition. */
+            confirmed: boolean;
+            description: string;
+            /** @description Aggregate over the columns, for example `SUM("Order Item Total")`. */
+            expression: string;
+            filter: string | null;
+            name: string;
+            time_column: string | null;
+            unit: string | null;
+        };
+        /**
+         * @description Role of a column in the profile; the rules are in docs/DATA.md.
+         * @enum {string}
+         */
+        OverviewRole: "dimension" | "measure" | "time" | "key" | "text";
+        OverviewSummary: {
+            /**
+             * @description True when the viewer's data role filters rows. Per-column counts and value frequencies are computed on every
+             *     row, so they are left out: null `null_percent` and `distinct_count`, empty `values`, no `rows_by_value` charts.
+             */
+            restricted: boolean;
+            /**
+             * Format: int64
+             * @description Rows the viewer can read, after the row filters of their data role; null when not counted yet or the count failed.
+             */
+            row_count: number | null;
+            /** @description Time column of the time span and the time charts; null when the dataset has no time column. */
+            time_column: string | null;
+            time_end: string | null;
+            /** @description First and last day with data in `time_column` (YYYY-MM-DD), among the rows the viewer can read. */
+            time_start: string | null;
+        };
+        OverviewValue: {
+            /** @description First alias of the value; null when it has none. */
+            label: string | null;
+            /**
+             * Format: int64
+             * @description Rows holding this value, on every row of the version.
+             */
+            rows: number;
+            value: string;
+        };
+        OverviewVersion: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int32
+             * @description Version number, from 1.
+             */
+            number: number;
+            /** @description pending, structure, semantic or failed (see `Dataset.current_profile_status`). */
+            profile_status: string;
         };
         RelationsRequest: {
             /** @description `schema.table` from the table list. */
@@ -1335,6 +1628,8 @@ export interface components {
         /**
          * @description Step of the backend:
          *     - `context`: read the dataset profile and build the prompt.
+         *     - `classify`: the language model tells a plain question from a question that asks for a cause; when the model
+         *       fails, the keyword rule decides and the step is not ok.
          *     - `llm`: the language model writes SQL.
          *     - `guard`: check the SQL, add row-level filters and a row limit.
          *     - `run`: run the SQL on the analytics engine.
@@ -1345,7 +1640,7 @@ export interface components {
          *     - `record`: save the question in the history.
          * @enum {string}
          */
-        StepName: "context" | "llm" | "guard" | "run" | "repair" | "explain" | "narrate" | "record";
+        StepName: "context" | "classify" | "llm" | "guard" | "run" | "repair" | "explain" | "narrate" | "record";
         /** @description One point of the summary: a short lead (shown in bold) and the sentence after it. */
         SummaryPoint: {
             kind: components["schemas"]["SummaryPointKind"];
@@ -1370,6 +1665,11 @@ export interface components {
             /** @description Number of tables and views the account can read. */
             table_count: number;
         };
+        /**
+         * @description Period of the time charts: by day when the data spans at most 92 days, else by month.
+         * @enum {string}
+         */
+        TimeGrain: "day" | "month";
         /** @description One recorded question of a conversation. Questions waiting for a choice (`needs_choice`) are not recorded. */
         TurnItem: {
             /** Format: date-time */
@@ -2548,6 +2848,51 @@ export interface operations {
             };
         };
     };
+    setColumnAggregation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ColumnAggregationRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 no measure column of that name (`field` is `column`); 401; 403 not admin; 404 no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listConversations: {
         parameters: {
             query?: never;
@@ -2671,6 +3016,230 @@ export interface operations {
                 };
             };
             /** @description 400 invalid body, keys that do not match the result, a question that was rejected or failed, a question whose form cannot be traced yet (the message says why), a breakdown row of a question without that breakdown, or a deleted version; 401; 404 not a member, or no such question in this dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createMetric: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Metric"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 invalid metric, `field` names the field; 401; 403 not admin; 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    updateMetric: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+                /** @description Id of any version of the metric (UUID) */
+                metric_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricRequest"];
+            };
+        };
+        responses: {
+            /** @description The new version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Metric"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 invalid metric, `field` names the field; 401; 403 not admin; 404 no such dataset or metric */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteMetric: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+                /** @description Id of any version of the metric (UUID) */
+                metric_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 no such dataset or metric */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getDatasetOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOverviewResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401, 404 not a member or no such dataset */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

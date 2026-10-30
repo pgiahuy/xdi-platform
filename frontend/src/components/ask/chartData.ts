@@ -143,7 +143,7 @@ function numberOf(value: string | number | null | undefined): number {
 }
 
 // Mốc thời gian gộp theo ngày, tháng, quý đều rơi vào nửa đêm; bỏ " 00:00:00" trên trục cho nhãn đủ chỗ ở màn hẹp.
-// Bảng vẫn hiện đủ giờ.
+// Bảng kết quả cũng bỏ giờ khi cả cột đều là nửa đêm (buildDisplayKind trong cellFormat.ts).
 function axisLabel(text: string): string {
   return text.replace(/ 00:00:00$/, '')
 }

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/measure.rs - phần độ đo của bước kiểm form câu "tại sao" (explain/check.rs): chỉ số trong metrics
-hoặc một cột với sum, count, đổi thành PlanMeasure để explain/sql.rs dựng SQL. Tách khỏi explain/check.rs vì đọc công
-thức chỉ số bằng sqlparser là phần riêng: công thức do tổ chức viết, code phải tách được phần bên trong SUM để đặt điều
+hoặc một cột với sum, count, đổi thành PlanMeasure để explain/sql.rs dựng SQL. Sum trên cột có cách gộp avg
+(columns.aggregation, #185) thành trung bình mỗi dòng, phân rã như tỷ lệ. Tách khỏi explain/check.rs vì đọc công thức
+chỉ số bằng sqlparser là phần riêng: công thức do tổ chức viết, code phải tách được phần bên trong SUM để đặt điều
 kiện lát cắt vào. Test ở explain/check_tests.rs.
 
 Chỉ số nhận hai dạng. Dạng cộng được theo nhóm: SUM(biểu thức) hay COUNT(*), COUNT(cột), không DISTINCT, không cửa sổ;
@@ -18,7 +19,7 @@ use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
 use sqlparser::tokenizer::Token;
 
-use crate::engine::store::{MetricDefinition, ProfileRole};
+use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileRole};
 use crate::service::ask::phrases::build_key;
 use crate::service::explain::check::{find_column, WhyProfile};
 use crate::service::explain::form::{FieldError, FormAgg, WhyForm};
@@ -88,8 +89,20 @@ pub(super) fn check_measure(
             }
             let additive = Additive::Sum {
                 decimal: !is_exact_type(&column.data_type),
-                value: ident,
+                value: ident.clone(),
             };
+            // Cột avg (mỗi giá trị mô tả một dòng, như số tín chỉ của một sinh viên): tổng của nó vô nghĩa và chênh
+            // lệch tổng chủ yếu do số dòng của hai lát cắt. So trung bình mỗi dòng như AVG(x) của chỉ số: tử SUM(x),
+            // mẫu COUNT(x), phân rã thành phần cơ cấu và phần hiệu suất (explain/ratio.rs).
+            if column.aggregation == ColumnAggregation::Avg.as_str() {
+                let rows = Additive::Count { value: Some(ident) };
+                return build_plan_measure(
+                    format!("Trung bình {}", column.name),
+                    None,
+                    additive,
+                    Some(rows),
+                );
+            }
             build_plan_measure(format!("Tổng {}", column.name), None, additive, None)
         }
         FormAgg::Count => build_plan_measure(

@@ -29,7 +29,12 @@ mod drill_tests;
 #[cfg(test)]
 mod excel_tests;
 mod extract;
+mod metrics;
+#[cfg(test)]
+mod metrics_tests;
 mod openapi;
+#[cfg(test)]
+mod overview_tests;
 #[cfg(test)]
 mod profile_tests;
 mod query;
@@ -70,6 +75,7 @@ fn api_routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .merge(datasets::routes(max_upload_bytes))
         .merge(query::routes())
         .merge(conversations::routes())
+        .merge(metrics::routes())
         .merge(sources::routes())
 }
 

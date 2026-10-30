@@ -73,6 +73,7 @@ fn profile() -> Vec<ColumnProfile> {
             matched: false,
             unit: None,
             origin_table: None,
+            aggregation: crate::engine::store::ColumnAggregation::Sum,
         })
         .collect()
 }
