@@ -160,6 +160,10 @@ Mô hình ngôn ngữ:
   khởi động.
 - Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,
   vì mô hình chạy bằng CPU chậm hơn nhiều).
+- Bước phân loại câu hỏi (câu thường hay câu hỏi tìm nguyên nhân) có trần riêng `CLASSIFY_TIMEOUT_SECS` (mặc định 15
+  giây, không dài hơn hai mức trên), vì nó chạy trước bước viết SQL. Quá trần thì backend dùng luật từ khóa, câu hỏi
+  chạy tiếp, bước `classify` ghi là mô hình không trả lời kịp. Với Ollama, lần gọi đầu còn nạp mô hình vào RAM nên có
+  thể quá trần; máy chậm thì tăng giá trị này.
 
 Dữ liệu nằm trong hai volume Docker: `xdi-platform_pgdata` (Postgres) và `xdi-platform_xdidata` (file Parquet). Tiền
 tố là tên project của compose: mặc định là tên thư mục chứa `docker-compose.yml`, đổi được bằng `COMPOSE_PROJECT_NAME`
@@ -654,22 +658,28 @@ còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**)
   thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
 - **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm một ô số đo của bảng **Kết quả**, hay số của
   một kỳ hay một nhóm trong bảng phân rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
-- **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Mô hình viết SQL, Kiểm SQL
-  (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Tính phân rã và Mô hình viết lời giải thích (câu "tại sao"), Lưu vào
-  lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ viết SQL, điền form và viết lời, còn con số do
-  DuckDB và backend tính.
+- **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Phân loại câu hỏi, Mô hình
+  viết SQL, Kiểm SQL (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Tính phân rã và Mô hình viết lời giải thích (câu "tại
+  sao"), Lưu vào lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ phân loại câu hỏi, viết SQL, điền
+  form và viết lời, còn con số do DuckDB và backend tính. Bước **Phân loại câu hỏi** ghi câu được hiểu là câu thường
+  hay câu hỏi tìm nguyên nhân kèm lý do; mô hình lỗi thì bước này ghi `lỗi` và "Dùng luật từ khóa vì ...", câu hỏi
+  vẫn chạy.
 
-Câu hỏi "tại sao" (backend nhận ra bằng các cụm "tại sao", "vì sao", "sao lại", "vì đâu", "lý do", "nguyên nhân",
-"do đâu", gõ không dấu cũng được): mô hình không viết SQL mà điền một form (đo
-gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm form rồi tự dựng mọi câu SQL. Đầu thẻ trả lời là một hàng
-ba số (hai kỳ hay hai nhóm và chênh lệch), khung **Giải thích**, rồi thanh chênh lệch của từng nhóm theo chiều giải
-thích tốt nhất. Lời giải thích nói so gì với gì, chênh bao nhiêu, rồi nhóm nào tạo ra phần lớn chênh lệch. So hai kỳ
-thì nói "tăng", "giảm"; so hai nhóm thì nói "cao hơn", "thấp hơn" và luôn là câu do backend viết. Lời của mô hình
-được kiểm: số nào không có trong bảng phân rã, hay chữ "tăng", "giảm" ngược dấu của số đứng sau, thì backend dùng câu
-của mình và ghi "Câu viết theo khuôn từ số đã tính". Không phân rã được (ví dụ kỳ so sánh không có dòng nào) thì vẫn
-có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra tăng (hay không đổi) thì kết quả có thêm một cảnh báo
-nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Vì sao doanh thu tháng 5 năm 2017 tăng", và "Tại sao doanh thu
-quý 3 năm 2017 giảm" để thấy cảnh báo đó.
+Backend nhận ra câu hỏi "tại sao" ở bước Phân loại câu hỏi: mô hình đọc câu hỏi, tên cột và các câu hỏi trước của
+cuộc, nên nhận cả cách hỏi như "Doanh thu giảm do gì?" hay "Còn tháng 6 thì sao?" sau một câu "tại sao", còn câu đếm
+theo một cột tên "lý do" như "Số đơn theo lý do hủy" vẫn là câu thường. Mô hình lỗi, hay với `mock` khi câu không phải
+câu mẫu, thì backend dùng các cụm "tại sao", "vì sao", "sao lại", "vì đâu", "lý do", "nguyên nhân", "do đâu", gõ không
+dấu cũng được.
+
+Câu hỏi "tại sao": mô hình không viết SQL mà điền một form (đo gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm
+form rồi tự dựng mọi câu SQL. Đầu thẻ trả lời là một hàng ba số (hai kỳ hay hai nhóm và chênh lệch), khung **Giải
+thích**, rồi thanh chênh lệch của từng nhóm theo chiều giải thích tốt nhất. Lời giải thích nói so gì với gì, chênh bao
+nhiêu, rồi nhóm nào tạo ra phần lớn chênh lệch. So hai kỳ thì nói "tăng", "giảm"; so hai nhóm thì nói "cao hơn", "thấp
+hơn" và luôn là câu do backend viết. Lời của mô hình được kiểm: số nào không có trong bảng phân rã, hay chữ "tăng",
+"giảm" ngược dấu của số đứng sau, thì backend dùng câu của mình và ghi "Câu viết theo khuôn từ số đã tính". Không phân
+rã được (ví dụ kỳ so sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra
+tăng (hay không đổi) thì kết quả có thêm một cảnh báo nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Vì sao doanh
+thu tháng 5 năm 2017 tăng", và "Tại sao doanh thu quý 3 năm 2017 giảm" để thấy cảnh báo đó.
 
 Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") vẫn có phân rã: backend chọn kỳ gần nhất có dữ liệu (theo tháng
 nếu câu không nói tháng, quý hay năm) và so với kỳ liền trước. Kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó

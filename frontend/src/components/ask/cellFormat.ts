@@ -66,8 +66,16 @@ export function formatDecimal(value: string): string {
   return fraction === undefined ? `${sign}${grouped}` : `${sign}${grouped},${fraction}`
 }
 
+/** Kind dùng để hiện một cột: cột timestamp mà mọi ô đều rơi vào nửa đêm (date_trunc theo ngày, tháng, quý) hiện như
+ * cột ngày, vì " 00:00:00" lặp ở mọi dòng chỉ làm rối. Cột có ô mang giờ thật thì giữ đủ giờ ở mọi ô cho thẳng hàng. */
+export function buildDisplayKind(kind: CellKind, values: Cell[]): CellKind {
+  if (kind !== 'timestamp') return kind
+  const midnight = values.every((value) => value === null || /T00:00:00$/.test(String(value)))
+  return midnight ? 'date' : kind
+}
+
 function formatDate(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00)?$/.exec(value)
   return match ? `${match[3]}/${match[2]}/${match[1]}` : value
 }
 

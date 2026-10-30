@@ -33,9 +33,15 @@ impl LlmProvider for RecordingLlm {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        // Lớp ngữ nghĩa chạy nền và đoạn trả lời cũng gọi mô hình; lỗi tạm thì cả hai bỏ qua.
-        if matches!(request.task, LlmTask::Profile | LlmTask::Summary) {
-            return Err(AppError::Upstream("no profile or summary".to_string()));
+        // Lớp ngữ nghĩa chạy nền, bước phân loại câu hỏi và đoạn trả lời cũng gọi mô hình; lỗi tạm thì phân loại dùng
+        // luật từ khóa, hai bước kia bỏ qua.
+        if matches!(
+            request.task,
+            LlmTask::Profile | LlmTask::Classify | LlmTask::Summary
+        ) {
+            return Err(AppError::Upstream(
+                "no profile, classify or summary".to_string(),
+            ));
         }
         self.prompts
             .lock()

@@ -1487,6 +1487,12 @@
                           "ok": true
                         },
                         {
+                          "detail": "Câu hỏi thường: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân.",
+                          "duration_ms": 640,
+                          "name": "classify",
+                          "ok": true
+                        },
+                        {
                           "detail": null,
                           "duration_ms": 1120,
                           "name": "llm",
@@ -1787,6 +1793,12 @@
                           "detail": null,
                           "duration_ms": 21,
                           "name": "context",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Câu hỏi tìm nguyên nhân: câu hỏi hỏi vì sao doanh thu quý 3 giảm.",
+                          "duration_ms": 710,
+                          "name": "classify",
                           "ok": true
                         },
                         {
@@ -4286,9 +4298,10 @@
       },
       "StepName": {
         "type": "string",
-        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.\n- `record`: save the question in the history.",
+        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `classify`: the language model tells a plain question from a question that asks for a cause; when the model\n  fails, the keyword rule decides and the step is not ok.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.\n- `record`: save the question in the history.",
         "enum": [
           "context",
+          "classify",
           "llm",
           "guard",
           "run",

@@ -308,7 +308,7 @@ fn quarter_compares_with_the_quarter_before() {
     assert_eq!(
         sql.total_sql,
         format!(
-            "SELECT date_trunc('quarter', strptime(\"{DATE}\", '{DATE_FORMAT}')) AS \"quarter\", \
+            "SELECT date_trunc('quarter', strptime(\"{DATE}\", '{DATE_FORMAT}')) AS \"Quý\", \
              SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2))) AS \"Doanh thu\" FROM \"dataco\" WHERE ({} OR {}) GROUP BY 1 ORDER BY 1",
             example.base.filter, example.compare.filter
         )

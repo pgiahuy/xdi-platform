@@ -23,7 +23,8 @@ cột chồng. Câu narrate cho câu
 Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask/reply.rs);
 terms ghi cách hiểu từng cụm chữ ("châu Âu" là Market = Europe) để luồng hỏi có dữ liệu thử phần kiểm cách hiểu. Câu
 trả lời của task why là form câu "tại sao" (service/ask/why_prompt.rs); lần sửa form cũng là task why nên mock trả lại
-đúng form đó. */
+đúng form đó. Mỗi câu sql và why có một câu task classify (service/ask/classify.rs): plain với câu sql, cause với câu
+why, để bước phân loại của câu mẫu đi đúng đường mà không cần luật từ khóa. */
 
 use std::collections::HashMap;
 
@@ -135,6 +136,7 @@ mod tests {
         assert_eq!(count(LlmTask::Repair), 3);
         assert_eq!(count(LlmTask::Narrate), 1);
         assert_eq!(count(LlmTask::Why), 5);
+        assert_eq!(count(LlmTask::Classify), 21);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];
         let profile: serde_json::Value = serde_json::from_str(profile).unwrap();
         assert!(profile["columns"].is_array());
@@ -249,6 +251,31 @@ mod tests {
                     entry.question
                 );
             }
+        }
+    }
+
+    /// Câu sql phân loại là plain, câu why là cause; thiếu câu classify thì câu mẫu đi đường dự phòng bằng từ khóa.
+    #[test]
+    fn every_sample_question_has_a_matching_classification() {
+        let entries = file_entries();
+        let kind_of = |question: &str| {
+            entries
+                .iter()
+                .find(|e| e.task == LlmTask::Classify && e.question == question)
+                .map(|e| e.answer["kind"].as_str().unwrap().to_string())
+        };
+        for entry in &entries {
+            let expected = match entry.task {
+                LlmTask::Sql => "plain",
+                LlmTask::Why => "cause",
+                _ => continue,
+            };
+            assert_eq!(
+                kind_of(&entry.question).as_deref(),
+                Some(expected),
+                "classification of {:?}",
+                entry.question
+            );
         }
     }
 
