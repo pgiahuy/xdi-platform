@@ -56,8 +56,8 @@ pub enum RowFilter {
     },
     /// Điều kiện lan theo khóa ngoại (#215), do service dựng từ dataset_relations, không do mô hình viết: chỉ thấy dòng
     /// mà khóa ngoại `columns` trỏ tới một dòng của `parent` người hỏi được thấy. Thành
-    /// `("columns") IN (SELECT "parent_columns" FROM parent WHERE <điều kiện của parent>)`. Dòng có ô khóa ngoại rỗng
-    /// bị ẩn, như NULL ở RowFilter::Column.
+    /// `("columns") IN (SELECT "parent_columns" FROM parent WHERE <điều kiện của parent>)`. Luật NULL khi bảng có
+    /// nhiều đường lan ở build_parent_conditions.
     Parent {
         /// Cột khóa ngoại của bảng được lọc, cùng thứ tự với parent_columns.
         columns: Vec<String>,
@@ -623,36 +623,112 @@ fn unfilterable_read(read: impl std::fmt::Display) -> AppError {
 fn build_row_conditions(table: &AllowedTable) -> Result<Vec<Expr>, AppError> {
     let mut conditions = Vec::new();
     for filter in &table.row_filters {
-        let condition = match filter {
-            RowFilter::Column {
-                column,
-                allowed_values,
-            } => {
-                check_filter_columns(table, std::slice::from_ref(column))?;
-                build_column_condition(column, allowed_values)
-            }
-            RowFilter::Parent {
-                columns,
-                parent_columns,
-                parent,
-            } => {
-                if columns.is_empty() || columns.len() != parent_columns.len() {
-                    return Err(AppError::Internal(format!(
-                        "row filter of table {} has {} key columns for {} columns of {}",
-                        table.name,
-                        columns.len(),
-                        parent_columns.len(),
-                        parent.name
-                    )));
-                }
-                check_filter_columns(table, columns)?;
-                check_filter_columns(parent, parent_columns)?;
-                build_parent_condition(columns, parent_columns, parent)?
-            }
-        };
-        conditions.push(condition);
+        if let RowFilter::Column {
+            column,
+            allowed_values,
+        } = filter
+        {
+            check_filter_columns(table, std::slice::from_ref(column))?;
+            conditions.push(build_column_condition(column, allowed_values));
+        }
     }
+    conditions.extend(build_parent_conditions(table)?);
     Ok(conditions)
+}
+
+/// Điều kiện của các RowFilter::Parent (các đường lan) của một bảng.
+///
+/// Một đường: `fk IN (SELECT ...)`. Khóa ngoại rỗng thì dòng bị ẩn: dòng không nối với dòng nào được thấy của bảng cha.
+///
+/// Nhiều đường (order_items.order_id qua orders, order_items.gift_customer_id tới customers): mỗi đường thành
+/// `(fk IS NULL OR fk IN (SELECT ...))`, nối AND, cộng một điều kiện "ít nhất một khóa ngoại không rỗng". Lý do: khóa
+/// ngoại tùy chọn (gift_customer_id) thường rỗng; ẩn dòng vì nó rỗng thì người bị lọc không thấy dòng hàng nào, kể cả
+/// dòng hàng của đơn trong vùng mình. Khóa rỗng nghĩa là đường đó không nối tới đâu, nên không cần qua đường đó; còn
+/// dòng mà mọi đường đều rỗng thì không nối với dòng nào được thấy, nên vẫn ẩn. Khóa nhiều cột chỉ tính là rỗng khi mọi
+/// cột đều rỗng; rỗng một phần thì không khớp IN (luật chuẩn) và dòng bị ẩn.
+///
+/// Một đường cũng là ca riêng của luật trên: `(fk IS NULL OR fk IN ...) AND fk IS NOT NULL` bằng `fk IN ...`, nên viết
+/// gọn cho dễ đọc.
+fn build_parent_conditions(table: &AllowedTable) -> Result<Vec<Expr>, AppError> {
+    let mut paths = Vec::new();
+    for filter in &table.row_filters {
+        let RowFilter::Parent {
+            columns,
+            parent_columns,
+            parent,
+        } = filter
+        else {
+            continue;
+        };
+        if columns.is_empty() || columns.len() != parent_columns.len() {
+            return Err(AppError::Internal(format!(
+                "row filter of table {} has {} key columns for {} columns of {}",
+                table.name,
+                columns.len(),
+                parent_columns.len(),
+                parent.name
+            )));
+        }
+        check_filter_columns(table, columns)?;
+        check_filter_columns(parent, parent_columns)?;
+        let condition = build_parent_condition(columns, parent_columns, parent)?;
+        paths.push((columns, condition));
+    }
+    if paths.len() < 2 {
+        return Ok(paths.into_iter().map(|(_, condition)| condition).collect());
+    }
+    let mut conditions = Vec::new();
+    let mut key_columns: Vec<&String> = Vec::new();
+    for (columns, condition) in paths {
+        let all_null = build_all_of(
+            &columns
+                .iter()
+                .map(|c| is_null(c, false))
+                .collect::<Vec<_>>(),
+        );
+        if let Some(all_null) = all_null {
+            // Bọc ngoặc: các điều kiện được nối bằng AND, mà AND tính trước OR.
+            conditions.push(Expr::Nested(Box::new(or(nested(all_null), condition))));
+        }
+        for column in columns {
+            if !key_columns.contains(&column) {
+                key_columns.push(column);
+            }
+        }
+    }
+    let linked = key_columns
+        .iter()
+        .map(|c| is_null(c, true))
+        .reduce(or)
+        .map(|any| Expr::Nested(Box::new(any)));
+    conditions.extend(linked);
+    Ok(conditions)
+}
+
+/// `"cot" IS NULL`, hay `"cot" IS NOT NULL` khi negated.
+fn is_null(column: &str, negated: bool) -> Expr {
+    let column = Box::new(quoted_column(column));
+    if negated {
+        Expr::IsNotNull(column)
+    } else {
+        Expr::IsNull(column)
+    }
+}
+
+fn or(left: Expr, right: Expr) -> Expr {
+    Expr::BinaryOp {
+        left: Box::new(left),
+        op: BinaryOperator::Or,
+        right: Box::new(right),
+    }
+}
+
+/// Bọc ngoặc khi là phép AND của nhiều vế (khóa nhiều cột), để đứng cạnh OR không đổi nghĩa.
+fn nested(expr: Expr) -> Expr {
+    match expr {
+        Expr::BinaryOp { .. } => Expr::Nested(Box::new(expr)),
+        other => other,
+    }
 }
 
 fn check_filter_columns(table: &AllowedTable, names: &[String]) -> Result<(), AppError> {
@@ -711,8 +787,9 @@ fn quoted_column(column: &str) -> Expr {
 /// Nửa nối (IN câu con) chứ không JOIN bảng cha vào hộp lọc: JOIN nhân dòng khi khóa bên cha lặp (cột UNIQUE có thể
 /// có nhiều NULL, hay hồ sơ ghi khóa sai), và thêm cột của bảng cha vào `SELECT *` của hộp, làm câu ngoài thấy cột lạ.
 /// IN chỉ giữ hay bỏ từng dòng của bảng con, không đổi số dòng hay cột. IN nhiều cột của DuckDB theo luật chuẩn: một ô
-/// khóa ngoại rỗng thì không khớp dòng nào, nên dòng đó bị ẩn. Không dùng so cả bộ dạng `(a, b)` với câu con trả một
-/// cột kiểu STRUCT: DuckDB coi NULL bằng NULL khi so STRUCT, dòng có ô rỗng sẽ lọt.
+/// khóa ngoại rỗng thì không khớp dòng nào (build_parent_conditions quyết định khi nào khóa rỗng vẫn cho qua). Không
+/// dùng so cả bộ dạng `(a, b)` với câu con trả một cột kiểu STRUCT: DuckDB coi NULL bằng NULL khi so STRUCT, dòng có ô
+/// rỗng sẽ khớp dòng cha có ô rỗng.
 ///
 /// Điều kiện của bảng cha nằm trong câu con, dựng bằng chính build_row_conditions, nên lan được nhiều bước
 /// (order_items qua orders tới customers). Tên cột trong câu con không cần tên bảng đi trước: check_filter_columns đã

@@ -14,9 +14,11 @@ Hai phần:
 Luật đã chốt:
 - Bảng có chính sách riêng giữ chính sách đó và cộng thêm điều kiện lan xuống (AND).
 - Bảng có hai đường tới bảng bị lọc (order_items.order_id -> orders -> customers và order_items.gift_customer_id ->
-  customers) nhận cả hai điều kiện (AND): dòng phải qua mọi đường.
+  customers) nhận cả hai điều kiện (AND): dòng phải qua mọi đường có khóa không rỗng.
 - Quan hệ một-một lan như nhiều-một: điều kiện chỉ đi theo chiều khóa ngoại, không theo cardinality.
-- Khóa ngoại rỗng (NULL) thì dòng bị ẩn, như NULL ở cột chính sách: NULL không khớp IN.
+- Khóa ngoại rỗng (NULL): một đường thì dòng bị ẩn. Nhiều đường thì đường có khóa rỗng được bỏ qua (khóa ngoại tùy
+  chọn như gift_customer_id thường rỗng), nhưng dòng mà mọi đường đều rỗng thì ẩn. Guard dựng điều kiện này
+  (engine/guard/mod.rs, build_parent_conditions).
 - Vòng quan hệ (bảng trỏ vào chính nó, hay A -> B -> A) dừng ở bảng đã có trên đường đang đi, để điều kiện không lồng
   mãi. Bảng trỏ vào chính nó vì thế không nhận điều kiện lan từ chính nó; chính sách riêng của nó vẫn áp.
 - Bảng cha bị lọc mà không đọc được (chưa có phiên bản, chưa có file Parquet): ẩn mọi dòng của bảng con, vì không kiểm
