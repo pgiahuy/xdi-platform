@@ -1,8 +1,8 @@
 -- sql/verify.sql - kiểm dữ liệu sau khi nạp, so với bảng staging (bản chép nguyên CSV).
 -- Cần nạp với KEEP_STAGING=1: KEEP_STAGING=1 sh load.sh, rồi
 --   docker compose exec -T demo-db psql -U demo -d company_demo -f - < sql/verify.sql
--- Mỗi câu in cột ok; mọi dòng phải là t. Câu 1 tới 7 so dữ liệu thật; câu 8 kiểm bước cài nguyên nhân chỉ đổi đúng
--- các đơn đã định.
+-- Mỗi câu in cột ok; mọi dòng phải là t. Câu 1 và 3 tới 7 so dữ liệu thật; câu 2 đếm khóa ngoại; câu 8 kiểm bước
+-- cài nguyên nhân đổi đúng 187 đơn đã định và đổi đúng như mô tả.
 
 \pset pager off
 
@@ -25,12 +25,11 @@ UNION ALL SELECT 'tổng num_sites = (sinh viên, tài liệu, ngày) khác nhau
     (SELECT count(*) FROM (SELECT DISTINCT code_module, code_presentation, id_student, id_site, date FROM staging.oulad_student_vle) s)
 ) counts;
 
-\echo '2. Khóa ngoại: mọi ràng buộc đã kiểm trên dữ liệu (convalidated)'
-SELECT conrelid::regclass AS from_table, confrelid::regclass AS to_table, pg_get_constraintdef(oid) AS definition,
-       convalidated AS ok
+\echo '2. Khóa ngoại: đủ 12 ràng buộc (edu 7, sales 5)'
+\echo '   Không kiểm convalidated: khóa ngoại khai trong CREATE TABLE luôn là true vì được kiểm ở mỗi lần INSERT'
+SELECT count(*) AS foreign_keys, count(*) = 12 AS ok
 FROM pg_constraint
-WHERE contype = 'f' AND connamespace IN ('edu'::regnamespace, 'sales'::regnamespace)
-ORDER BY 1, 2;
+WHERE contype = 'f' AND connamespace IN ('edu'::regnamespace, 'sales'::regnamespace);
 
 \echo '3. Nối bảng sự kiện nhiều-một với mọi bảng chiều: số dòng không đổi'
 SELECT fact, joined_rows, fact_rows, joined_rows = fact_rows AS ok FROM (
@@ -92,28 +91,40 @@ JOIN (SELECT i.final_result, round(avg(nullif(sa.score, '?')::numeric), 4) AS av
       GROUP BY 1) csv USING (final_result)
 ORDER BY 1;
 
-\echo '8. Nguyên nhân cài sẵn (sql/plant_demo_cause.sql): đơn khác CSV chỉ nằm trong tháng 11/2016, Pacific Asia, Standard Class'
-\echo '   changed_orders là 0 nếu nạp với SKIP_DEMO_CAUSE=1'
+\echo '8. Nguyên nhân cài sẵn (sql/plant_demo_cause.sql): đúng 187 đơn khác CSV, là mọi đơn của nhóm đã định'
+\echo '   (tháng 11/2016, Pacific Asia, Standard Class, giao sớm hoặc đúng hạn), mỗi đơn đổi đúng như mô tả:'
+\echo '   số ngày giao cộng 3 (thành 5 đến 7), ngày giao cộng 3 ngày, Late delivery, late_delivery_risk true.'
+\echo '   Nạp với SKIP_DEMO_CAUSE=1 thì changed_orders là 0 và ok là f: câu này chỉ dùng khi có bước cài nguyên nhân.'
 WITH csv_orders AS (
     SELECT DISTINCT order_id::integer AS order_id, days_for_shipping_real::integer AS days_real, delivery_status,
            late_delivery_risk = '1' AS late, to_timestamp(shipping_date, 'MM/DD/YYYY HH24:MI')::timestamp AS shipping_date
     FROM staging.dataco
 ),
-changed AS (
-    SELECT o.*, c.days_real AS csv_days_real, c.delivery_status AS csv_delivery_status, c.late AS csv_late
+compared AS (
+    SELECT o.*, c.days_real AS csv_days_real, c.shipping_date AS csv_shipping_date,
+           -- Đơn khác CSV ở một trong 4 cột bước cài nguyên nhân được phép đổi.
+           (o.days_for_shipping_real, o.delivery_status, o.late_delivery_risk, o.shipping_date)
+               IS DISTINCT FROM (c.days_real, c.delivery_status, c.late, c.shipping_date) AS changed,
+           -- Đơn thuộc nhóm đã định, xét theo giá trị trong CSV. Ngày đặt, thị trường, cách giao không bị đổi.
+           (o.order_date >= '2016-11-01' AND o.order_date < '2016-12-01'
+            AND o.market = 'Pacific Asia' AND o.shipping_mode = 'Standard Class'
+            AND c.delivery_status IN ('Advance shipping', 'Shipping on time')) AS in_target
     FROM sales.orders o JOIN csv_orders c USING (order_id)
-    WHERE (o.days_for_shipping_real, o.delivery_status, o.late_delivery_risk, o.shipping_date)
-          IS DISTINCT FROM (c.days_real, c.delivery_status, c.late, c.shipping_date)
+),
+summary AS (
+    SELECT count(*) FILTER (WHERE changed) AS changed_orders,
+           count(*) FILTER (WHERE in_target) AS target_orders,
+           -- Đơn bị đổi mà nằm ngoài nhóm, hoặc đổi khác mô tả.
+           count(*) FILTER (WHERE changed AND NOT (in_target
+                                                   AND days_for_shipping_real = csv_days_real + 3
+                                                   AND days_for_shipping_real BETWEEN 5 AND 7
+                                                   AND shipping_date = csv_shipping_date + interval '3 days'
+                                                   AND delivery_status = 'Late delivery'
+                                                   AND late_delivery_risk)) AS wrong_changes,
+           -- Đơn trong nhóm mà không bị đổi.
+           count(*) FILTER (WHERE in_target AND NOT changed) AS missed_orders
+    FROM compared
 )
-SELECT count(*) AS changed_orders,
-       count(*) FILTER (WHERE NOT (order_date >= '2016-11-01' AND order_date < '2016-12-01'
-                                   AND market = 'Pacific Asia' AND shipping_mode = 'Standard Class'
-                                   AND csv_delivery_status IN ('Advance shipping', 'Shipping on time')
-                                   AND days_for_shipping_real = csv_days_real + 3 AND late_delivery_risk
-                                   AND delivery_status = 'Late delivery')) AS unexpected,
-       count(*) FILTER (WHERE NOT (order_date >= '2016-11-01' AND order_date < '2016-12-01'
-                                   AND market = 'Pacific Asia' AND shipping_mode = 'Standard Class'
-                                   AND csv_delivery_status IN ('Advance shipping', 'Shipping on time')
-                                   AND days_for_shipping_real = csv_days_real + 3 AND late_delivery_risk
-                                   AND delivery_status = 'Late delivery')) = 0 AS ok
-FROM changed;
+SELECT changed_orders, target_orders, wrong_changes, missed_orders,
+       changed_orders = 187 AND target_orders = 187 AND wrong_changes = 0 AND missed_orders = 0 AS ok
+FROM summary;

@@ -176,13 +176,14 @@ Lần chạy gần nhất (có bước cài nguyên nhân) mọi dòng `ok` là 
 
 - Số dòng mỗi bảng bằng số dòng CSV hoặc số khóa khác nhau trong CSV (bảng "Số dòng"); tổng `sum_click` bằng tổng
   trên `studentVle.csv` (39 605 099).
-- 12 khóa ngoại, đều đã kiểm trên dữ liệu (`convalidated`).
+- Có đủ 12 khóa ngoại (edu 7, sales 5).
 - Nối bảng sự kiện với mọi bảng chiều không đổi số dòng.
 - Tổng `item_total` và `profit` theo Market, tổng `sales` theo phòng ban, điểm trung bình theo kết quả cuối khóa: bằng
   đúng số tính trên `staging`. Riêng tổng `Order Item Total` theo Market còn tính lại thẳng từ CSV bằng Python
   (`csv`, `Decimal`): Africa 2061679.392850406, Europe 9769198.321669751, LATAM 9235762.091841220, Pacific Asia
   7434262.652838773, USCA 4553499.921016465, khớp Postgres.
-- So từng đơn với CSV: đúng 187 đơn khác, đều thuộc nhóm đã định ở mục "Nguyên nhân cài sẵn" và đổi đúng như mô tả.
+- So từng đơn với CSV: đúng 187 đơn khác, là mọi đơn của nhóm đã định ở mục "Nguyên nhân cài sẵn", mỗi đơn đổi đúng
+  như mô tả (số ngày giao cộng 3, ngày giao cộng 3 ngày, `Late delivery`, `late_delivery_risk` true).
 
 ## Câu hỏi mẫu cần nhiều bảng
 

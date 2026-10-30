@@ -97,7 +97,7 @@ COMMENT ON COLUMN sales.orders.shipping_date IS 'Thời điểm giao hàng (ship
 COMMENT ON COLUMN sales.orders.payment_type IS 'Hình thức thanh toán: DEBIT, TRANSFER, CASH, PAYMENT (cột Type trong nguồn)';
 COMMENT ON COLUMN sales.orders.order_status IS 'Trạng thái đơn, ví dụ COMPLETE, PENDING, CANCELED, SUSPECTED_FRAUD';
 COMMENT ON COLUMN sales.orders.delivery_status IS 'Tình trạng giao: Advance shipping (sớm), Shipping on time (đúng hạn), Late delivery (trễ), Shipping canceled (hủy)';
-COMMENT ON COLUMN sales.orders.late_delivery_risk IS 'Đơn giao trễ so với lịch hay không (Late_delivery_risk = 1)';
+COMMENT ON COLUMN sales.orders.late_delivery_risk IS 'Giao trễ hay không: true đúng với các đơn có delivery_status = Late delivery (Late_delivery_risk = 1). Đơn hủy (Shipping canceled) luôn là false, kể cả khi số ngày giao thực tế vượt lịch';
 COMMENT ON COLUMN sales.orders.days_for_shipping_real IS 'Số ngày giao thực tế';
 COMMENT ON COLUMN sales.orders.days_for_shipment_scheduled IS 'Số ngày giao theo lịch';
 COMMENT ON COLUMN sales.orders.shipping_mode IS 'Cách giao: Standard Class, Second Class, First Class, Same Day';

@@ -27,7 +27,9 @@ services:
       # CSV nguồn, chỉ đọc. load.sh chạy psql trong container nên máy chủ không cần cài psql.
       - ${DEMO_DATA_DIR:-../downloads}:/downloads:ro
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "demo", "-d", "company_demo"]
+      # -h 127.0.0.1: hỏi qua TCP. Lần chạy đầu, image chạy init/ trên một máy chủ tạm chỉ mở unix socket; không có -h
+      # thì pg_isready báo sẵn sàng ngay lúc đó và load.sh có thể chạy trước khi init/ xong.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "demo", "-d", "company_demo"]
       interval: 5s
       timeout: 3s
       retries: 10

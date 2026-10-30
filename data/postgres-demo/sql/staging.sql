@@ -1,5 +1,5 @@
 -- sql/staging.sql - schema "staging": mỗi file CSV một bảng, mọi cột kiểu text, đúng thứ tự cột trong file.
--- load.sh chép CSV vào đây bằng \copy, rồi sql/edu.sql và sql/sales.sql đổi kiểu và tách sang bảng chuẩn hóa.
+-- load.sh chép CSV vào đây bằng \copy, rồi sql/edu_load.sql và sql/sales_load.sql đổi kiểu và tách sang bảng chuẩn hóa.
 -- Để mọi cột là text: COPY không dừng giữa chừng vì một giá trị lạ ("?", chuỗi rỗng, ngày dạng M/D/YYYY), việc đổi
 -- kiểu nằm trong SQL đọc được. Người dùng analyst không có quyền trên schema này.
 
