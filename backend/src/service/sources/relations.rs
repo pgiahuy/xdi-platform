@@ -262,9 +262,8 @@ pub fn outgoing_reason(key: &ForeignKey) -> Option<String> {
 
 fn incoming_reason(key: &ForeignKey) -> String {
     format!(
-        "{} trỏ vào bảng này: một dòng ở đây ứng với nhiều dòng bên đó, nối sẽ nhân dòng. Chụp {} làm bảng chính nếu \
-         cần phân tích theo nó",
-        key.from.full_name(),
+        "Trỏ vào bảng này: một dòng ở đây ứng với nhiều dòng bên đó, nối sẽ nhân dòng. Chụp {} làm bảng chính nếu cần \
+         phân tích theo nó",
         key.from.full_name()
     )
 }

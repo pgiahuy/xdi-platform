@@ -436,6 +436,16 @@ impl ExprChecker<'_> {
             )));
         };
         if !self.names.qualifiers.contains(&name_key(qualifier)) {
+            // Cột chép từ bảng nối của bản chụp database có tên dạng "orders.status" (docs/DATA.md): mô hình hay viết
+            // nhầm thành orders."status". Lời báo chỉ đúng tên để vòng sửa viết lại được ngay.
+            let joined = Ident::new(format!("{}.{}", qualifier.value, column.value));
+            if self.names.columns.contains(&name_key(&joined)) {
+                return ControlFlow::Break(unknown_name(format!(
+                    "Không có bảng hay bí danh {qualifier}; cột \"{}\" là một tên có dấu chấm, viết cả tên trong một \
+                     cặp ngoặc kép",
+                    joined.value
+                )));
+            }
             return ControlFlow::Break(unknown_name(format!(
                 "Không có bảng hay bí danh {qualifier}"
             )));

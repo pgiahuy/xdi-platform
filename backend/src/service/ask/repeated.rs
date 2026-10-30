@@ -72,7 +72,8 @@ pub fn find_repeated_sum(sql: &str, table: &str, repeated: &[RepeatedColumn]) ->
     Some(format!(
         "The query sums \"{name}\", which was copied from the joined table {source}: its value repeats on every row \
          that links to the same {source} row, so SUM over the rows of {table} counts it many times. Keep one row per \
-         {source} row first, then sum: WITH one_row AS (SELECT DISTINCT {key}, \"{name}\" (and any column you group by) \
+         {source} row first, then sum. The columns {key} together identify one {source} row: keep every one of them \
+         in the DISTINCT, or rows of different {source} rows with equal values merge. WITH one_row AS (SELECT DISTINCT {key}, \"{name}\" (and any column you group by) \
          FROM {table}) SELECT SUM(\"{name}\") FROM one_row. If the question does not need a total, use MIN, MAX or \
          AVG instead.",
         name = column.name,
