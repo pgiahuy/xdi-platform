@@ -2,11 +2,12 @@
 /* components/datasets/DatasetList.tsx - danh sách dataset của workspace, mới tạo đứng đầu (backend sắp theo ngày tạo).
 Mỗi dataset một dòng xuống hàng được, không dùng bảng: màn 320px không đủ chỗ cho ba cột.
 onAddVersion, onSnapshotAgain và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. Dataset
-chụp từ database ghi bảng nguồn, lần chụp gần nhất, và có nút "Chụp lại" thay cho nạp phiên bản mới. */
+chụp từ database ghi bảng nguồn, các bảng đã nối nhiều-một, lần chụp gần nhất, và có nút "Chụp lại" thay cho nạp phiên
+bản mới. */
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
-import type { DatasetRow } from './types'
+import type { DatasetRow, ModelJoinRow } from './types'
 
 type Props = {
   datasets: DatasetRow[]
@@ -15,6 +16,13 @@ type Props = {
   snapshotPending?: boolean
   onDelete?: (dataset: DatasetRow) => void
   deletePending?: boolean
+}
+
+/** "sales.orders (order_id)"; bảng nối từ một bảng nối khác ghi thêm bảng đó: "sales.customers (customer_id của
+ * sales.orders)". */
+function joinText(join: ModelJoinRow, fact: string): string {
+  const key = join.fromColumns.join(', ')
+  return join.fromTable === fact ? `${join.toTable} (${key})` : `${join.toTable} (${key} của ${join.fromTable})`
 }
 
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
@@ -43,6 +51,12 @@ export function DatasetList(props: Props) {
                     <span className="whitespace-nowrap">{dateFormat.format(new Date(dataset.snapshot.at))}</span>
                   </>
                 )}
+              </p>
+            )}
+            {dataset.snapshot && dataset.snapshot.joins.length > 0 && (
+              <p className="text-xs break-words text-muted-foreground">
+                Dựng từ {dataset.snapshot.table}, nối nhiều-một sang{' '}
+                {dataset.snapshot.joins.map((join) => joinText(join, dataset.snapshot?.table ?? '')).join(', ')}
               </p>
             )}
           </div>

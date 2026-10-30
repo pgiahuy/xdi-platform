@@ -8,8 +8,30 @@ export type DatasetRow = {
   /** Tên bảng dùng trong SQL. */
   tableName: string
   createdAt: string
-  /** Dataset chụp từ bảng database: bảng nguồn và lần chụp gần nhất. Không có với dataset nạp từ file. */
-  snapshot?: { table: string; at: string | null }
+  /** Dataset chụp từ bảng database: bảng nguồn, lần chụp gần nhất và các bảng đã nối. Không có với dataset nạp từ file. */
+  snapshot?: { table: string; at: string | null; joins: ModelJoinRow[] }
+}
+
+/** Một bảng nối nhiều-một của phiên bản hiện hành. */
+export type ModelJoinRow = {
+  fromTable: string
+  fromColumns: string[]
+  toTable: string
+}
+
+/** Một khóa ngoại quanh bảng đang chọn để chụp. */
+export type RelationOption = {
+  id: string
+  depth: number
+  /** Id quan hệ bước 1 mà quan hệ này đi tiếp; null ở bước 1. */
+  parent: string | null
+  fromTable: string
+  fromColumns: string[]
+  toTable: string
+  joinable: boolean
+  reason: string | null
+  /** Số cột lần nối thêm vào dataset. */
+  columnCount: number
 }
 
 export type SheetOption = {

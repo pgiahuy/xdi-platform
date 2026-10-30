@@ -1,20 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres): nút mở form thêm nguồn,
 rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chụp bảng thành dataset. DatasetsPage chỉ hiện khung này cho admin;
-backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel). */
+backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel, RelationPicker).
+Chọn bảng xong thì mọi quan hệ nhiều-một bước 1 nối được đều chọn sẵn; bước 2 để người dùng tự chọn. */
 
 import { useState } from 'react'
 import {
   useCreateSource,
   useDeleteSource,
   useSnapshot,
+  useSourceRelations,
   useSourceTables,
   useSources,
   useTestSource,
+  type RelationsResponse,
   type Source,
+  type UploadResult,
 } from '@/api/sources'
 import { ConnectForm, type ConnectValues } from '@/components/datasets/ConnectForm'
+import { RelationPicker } from '@/components/datasets/RelationPicker'
 import { SourcePanel } from '@/components/datasets/SourcePanel'
+import type { RelationOption } from '@/components/datasets/types'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 
@@ -83,14 +89,53 @@ function sourceLabel(source: Source): string {
   return `${source.host}:${source.port}/${source.database} (${source.user})`
 }
 
+function toOptions(list: RelationsResponse['many_to_one']): RelationOption[] {
+  return list.map((r) => ({
+    id: r.id,
+    depth: r.depth,
+    parent: r.parent,
+    fromTable: r.from_table,
+    fromColumns: r.from_columns,
+    toTable: r.to_table,
+    joinable: r.joinable,
+    reason: r.reason,
+    columnCount: r.column_count,
+  }))
+}
+
+function joinedText(result: UploadResult): string {
+  const joins = result.dataset.current_source_model?.joins.length ?? 0
+  return joins > 0 ? `, nối ${joins} bảng, số dòng giữ đúng như bảng chính` : ''
+}
+
+/** Mặc định: mọi quan hệ bước 1 nối được. */
+function defaultSelection(relations: RelationOption[]): string[] {
+  return relations.filter((r) => r.depth === 1 && r.joinable).map((r) => r.id)
+}
+
 function SourceItem({ ws, source }: { ws: string; source: Source }) {
   const tables = useSourceTables(ws, source.id)
   const snapshot = useSnapshot(ws)
   const remove = useDeleteSource(ws)
   const testSource = useTestSource(ws)
   const [table, setTable] = useState('')
+  const relations = useSourceRelations(ws, source.id, table)
+  // Lựa chọn gắn với bảng đã chọn: đổi bảng thì lựa chọn cũ không còn áp dụng, dùng mặc định của bảng mới. Suy ra lúc
+  // dựng thay vì đặt lại trong effect, để không có lần vẽ nào dùng lựa chọn của bảng trước.
+  const [choice, setChoice] = useState<{ table: string; ids: string[] }>()
   const [name, setName] = useState('')
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string }>()
+
+  const manyToOne = relations.data ? toOptions(relations.data.many_to_one) : []
+  const selected = choice?.table === table ? choice.ids : defaultSelection(manyToOne)
+
+  // Bỏ chọn bước 1 thì bỏ luôn bước 2 đi tiếp từ nó: câu JOIN của bước 2 cần bảng ở giữa.
+  const toggle = (relation: RelationOption, checked: boolean) => {
+    const ids = checked
+      ? [...selected, relation.id]
+      : selected.filter((id) => id !== relation.id && !manyToOne.some((r) => r.id === id && r.parent === relation.id))
+    setChoice({ table, ids })
+  }
 
   const test = () => {
     testSource.mutate(source.id, {
@@ -104,11 +149,11 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
 
   const take = () => {
     snapshot.mutate(
-      { sourceId: source.id, table, name: name.trim() || null },
+      { sourceId: source.id, table, name: name.trim() || null, relations: selected },
       {
         onSuccess: (result) => {
           const text = result.created
-            ? `Đã chụp ${table} thành ${result.dataset.name}, phiên bản ${result.version.version}, ${result.version.row_count ?? 0} dòng.`
+            ? `Đã chụp ${table} thành ${result.dataset.name}, phiên bản ${result.version.version}, ${result.version.row_count ?? 0} dòng${joinedText(result)}.`
             : `Bảng không đổi từ lần chụp trước; giữ phiên bản ${result.version.version} của ${result.dataset.name}.`
           setMessage({ kind: 'success', text })
           setName('')
@@ -126,6 +171,21 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
       tablesError={tables.error?.message}
       table={table}
       onTableChange={setTable}
+      relations={
+        table === '' ? undefined : relations.isLoading ? (
+          <p className="text-sm text-muted-foreground">Đang đọc khóa ngoại của bảng...</p>
+        ) : relations.error ? (
+          <FormMessage kind="error">{relations.error.message}</FormMessage>
+        ) : relations.data ? (
+          <RelationPicker
+            manyToOne={manyToOne}
+            oneToMany={toOptions(relations.data.one_to_many)}
+            factColumns={relations.data.column_count}
+            selected={selected}
+            onToggle={toggle}
+          />
+        ) : undefined
+      }
       name={name}
       onNameChange={setName}
       busy={snapshot.isPending || testSource.isPending || remove.isPending}

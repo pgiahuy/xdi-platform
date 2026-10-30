@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/sources.ts - hook cho nguồn database của workspace (backend/src/api/sources.rs): liệt kê, thêm, thử kết nối, liệt
-kê bảng, chụp bảng thành dataset, xóa. Chỉ admin gọi được; member nhận 403. Mật khẩu chỉ đi một chiều lúc thêm nguồn,
+kê bảng và quan hệ khóa ngoại quanh một bảng, chụp bảng (kèm bảng nối nhiều-một) thành dataset, xóa. Chỉ admin gọi được; member nhận 403. Mật khẩu chỉ đi một chiều lúc thêm nguồn,
 backend không bao giờ trả lại. */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,6 +14,8 @@ export type CreateSourceRequest = Schemas['CreateSourceRequest']
 export type SnapshotRequest = Schemas['SnapshotRequest']
 export type UploadResult = Schemas['UploadResult']
 export type TestSourceResponse = Schemas['TestSourceResponse']
+export type RelationsResponse = Schemas['RelationsResponse']
+export type SourceRelation = Schemas['SourceRelation']
 
 function sourcesPath(ws: string): string {
   return `/workspaces/${encodeURIComponent(ws)}/sources`
@@ -54,6 +56,19 @@ export function useSourceTables(ws: string, sourceId: string | undefined) {
     queryKey: [...sourcesKey(ws), sourceId, 'tables'],
     queryFn: () => apiGet<SourceTable[]>(`${sourcesPath(ws)}/${encodeURIComponent(sourceId ?? '')}/tables`),
     enabled: sourceId !== undefined,
+    staleTime: 0,
+    retry: false,
+  })
+}
+
+/** Quan hệ khóa ngoại quanh bảng đang chọn, đọc lại từ database ngoài mỗi lần chọn bảng như danh sách bảng. Backend
+ * nhận POST (thân là tên bảng) nhưng không đổi gì, nên dùng useQuery. */
+export function useSourceRelations(ws: string, sourceId: string, table: string) {
+  return useQuery({
+    queryKey: [...sourcesKey(ws), sourceId, 'relations', table],
+    queryFn: () =>
+      apiPost<RelationsResponse>(`${sourcesPath(ws)}/${encodeURIComponent(sourceId)}/relations`, { table }),
+    enabled: table !== '',
     staleTime: 0,
     retry: false,
   })

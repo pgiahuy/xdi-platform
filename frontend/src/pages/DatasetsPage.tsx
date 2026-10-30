@@ -143,7 +143,17 @@ function ListBody(props: ListBodyProps) {
     name: d.name,
     tableName: d.logical_table,
     createdAt: d.created_at,
-    snapshot: d.source_table ? { table: d.source_table, at: d.current_version_at } : undefined,
+    snapshot: d.source_table
+      ? {
+          table: d.source_table,
+          at: d.current_version_at,
+          joins: (d.current_source_model?.joins ?? []).map((j) => ({
+            fromTable: j.from_table,
+            fromColumns: j.from_columns,
+            toTable: j.to_table,
+          })),
+        }
+      : undefined,
   }))
   return (
     <DatasetList
