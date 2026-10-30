@@ -219,7 +219,8 @@ impl Store {
     ) -> Result<Vec<ProfileColumn>, AppError> {
         sqlx::query_as(
             "SELECT id, position, name, data_type, role, description, aliases, is_sensitive,
-                 null_count, distinct_count, min_value, max_value, time_format, unit, aggregation
+                 null_count, distinct_count, min_value, max_value, time_format, unit,
+                 COALESCE(aggregation, 'sum') AS aggregation
              FROM columns WHERE workspace_id = $1 AND version_id = $2 ORDER BY position",
         )
         .bind(ws.as_uuid())
@@ -355,13 +356,15 @@ impl Store {
             return Ok(false);
         }
 
+        // Cách gộp chỉ điền khi còn NULL (chưa ai chọn): admin có thể đổi ở màn Chỉ số ngay sau khi nạp, trước khi lượt
+        // chạy nền này xong; ghi đè thì lựa chọn đó mất mà không ai báo.
         for column in columns {
             let role = column.role.map(|r| r.as_str());
             let unit = column.unit.map(|u| u.as_str());
             let aggregation = column.aggregation.map(|a| a.as_str());
             sqlx::query(
                 "UPDATE columns SET description = $3, aliases = $4, role = COALESCE($5, role), unit = $6,
-                                    aggregation = COALESCE($7, aggregation)
+                                    aggregation = COALESCE(aggregation, $7)
                  WHERE workspace_id = $1 AND id = $2",
             )
             .bind(ws.as_uuid())
@@ -759,5 +762,62 @@ mod tests {
 
         drop_workspace(&store, a).await;
         drop_workspace(&store, b).await;
+    }
+
+    /// Admin đổi cách gộp khi lớp ngữ nghĩa còn chạy nền: lượt chạy xong sau đó chỉ điền cột chưa ai chọn, không ghi
+    /// đè lựa chọn của admin, kể cả khi admin chọn sum.
+    #[tokio::test]
+    async fn semantic_profile_keeps_an_aggregation_the_admin_set() {
+        let Some(store) = store().await else {
+            eprintln!("skip: DATABASE_URL not set");
+            return;
+        };
+        let ws = temp_workspace(&store).await;
+        let src = store.create_local_source(&ws).await.unwrap();
+        let ds = store
+            .create_dataset(&ws, src, "Credits", "credits", None)
+            .await
+            .unwrap();
+        let columns = [
+            new_column(0, "Price", ProfileRole::Measure, &[]),
+            new_column(1, "Credits", ProfileRole::Measure, &[]),
+        ];
+        let version = NewVersion {
+            source_kind: SourceKind::Csv,
+            file_hash: "h1",
+            parquet_path: "x",
+            row_count: 3,
+        };
+        let v = store
+            .create_version(&ws, ds.id, &version, &columns)
+            .await
+            .unwrap();
+        let read = store.list_columns(&ws, v.id).await.unwrap();
+        // Chưa ai chọn thì đọc là sum.
+        assert_eq!(read[0].aggregation, "sum");
+        assert!(store
+            .set_column_aggregation(&ws, v.id, "Price", ColumnAggregation::Sum)
+            .await
+            .unwrap());
+
+        let suggest_avg = |column_id| SemanticColumnUpdate {
+            column_id,
+            description: None,
+            aliases: Vec::new(),
+            role: None,
+            unit: None,
+            aggregation: Some(ColumnAggregation::Avg),
+        };
+        let updates = vec![suggest_avg(read[0].id), suggest_avg(read[1].id)];
+        assert!(store
+            .apply_semantic_profile(&ws, v.id, &updates, &[], &[], &[])
+            .await
+            .unwrap());
+
+        let read = store.list_columns(&ws, v.id).await.unwrap();
+        assert_eq!(read[0].aggregation, "sum");
+        assert_eq!(read[1].aggregation, "avg");
+
+        drop_workspace(&store, ws).await;
     }
 }
