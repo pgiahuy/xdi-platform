@@ -5,8 +5,10 @@ chạy trên DuckDB thật như row_filter_tests.rs: mỗi câu chạy qua guard
 còn dòng được phép, viết tay bằng WHERE với id cụ thể (không qua code của guard). Hai kết quả phải giống hệt.
 
 Lược đồ: order_items -> orders -> customers (order_id, customer_id), order_items.gift_customer_id -> customers (đường
-thứ hai tới customers), order_items (maker, sku) -> products (khóa hai cột). Có dòng mang khóa ngoại rỗng ở mỗi quan
-hệ để kiểm luật "khóa ngoại rỗng thì ẩn". */
+thứ hai tới customers), order_items (maker, sku) -> products (khóa hai cột). Dòng mang khóa ngoại rỗng ở từng quan hệ
+kiểm luật NULL của build_parent_conditions: một đường thì khóa rỗng bị ẩn (đơn 13); nhiều đường thì đường rỗng được bỏ
+qua (dòng hàng 2, 6, 9), mọi đường rỗng thì ẩn (dòng hàng 8, và 10 khi products không bị lọc), khóa hai cột rỗng một
+phần thì ẩn (dòng hàng 7 khi products bị lọc). */
 
 use std::path::{Path, PathBuf};
 
@@ -28,25 +30,29 @@ const ORDERS_ROWS: &str =
                            (13, NULL, 'done'), (14, 1, 'open')) v(id, customer_id, status)";
 const PRODUCTS_ROWS: &str =
     "SELECT * FROM (VALUES ('acme', 1, 'Retail'), ('acme', 2, 'Gov'), ('zeta', 1, 'Retail')) v(maker, sku, segment)";
-const ORDER_ITEMS_ROWS: &str = "SELECT * FROM (VALUES (10, 1, 'acme', 1, 4), (10, NULL, 'acme', 2, 1), \
-                                (11, 1, 'zeta', 1, 2), (14, 1, 'acme', 2, 3), (14, 2, 'zeta', 1, 5), \
-                                (NULL, 1, 'acme', 1, 7), (10, 1, NULL, 1, 6)) \
-                                v(order_id, gift_customer_id, maker, sku, qty)";
+/// Cột đầu là id của dòng hàng, để bảng đáp án chọn dòng theo id viết tay.
+const ORDER_ITEMS_ROWS: &str = "SELECT * FROM (VALUES (1, 10, 1, 'acme', 1, 4), (2, 10, NULL, 'acme', 2, 1), \
+                                (3, 11, 1, 'zeta', 1, 2), (4, 14, 1, 'acme', 2, 3), (5, 14, 2, 'zeta', 1, 5), \
+                                (6, NULL, 1, 'acme', 1, 7), (7, 10, 1, NULL, 1, 6), (8, NULL, NULL, NULL, NULL, 9), \
+                                (9, 10, NULL, NULL, NULL, 2), (10, NULL, NULL, 'zeta', 1, 3)) \
+                                v(id, order_id, gift_customer_id, maker, sku, qty)";
 
-/// Chỉ chính sách customers.region = South. Đơn của khách 1 là 10 và 14; dòng hàng phải thuộc hai đơn đó và có khách
-/// nhận quà là khách 1 (hai đường, AND). Dòng có khóa ngoại rỗng bị ẩn.
-const ALLOWED_SOUTH: &str = "CREATE TABLE customers AS SELECT * FROM customers_rows WHERE id IN (1); \
+/// Chỉ chính sách customers.region = South. Đơn của khách 1 là 10 và 14 (đơn 13 có customer_id rỗng: một đường, ẩn).
+/// Dòng hàng có hai đường (order_id, gift_customer_id): 1, 4 qua cả hai; 2, 9 có khách nhận quà rỗng; 6 có đơn rỗng;
+/// 7 như 1 (products không bị lọc). Ẩn: 3 (đơn 11), 5 (khách nhận quà 2 ở vùng khác), 8 và 10 (mọi đường rỗng).
+const ALLOWED_SOUTH: &str =
+    "CREATE TABLE customers AS SELECT * FROM customers_rows WHERE id IN (1); \
      CREATE TABLE orders AS SELECT * FROM orders_rows WHERE id IN (10, 14); \
-     CREATE TABLE order_items AS SELECT * FROM order_items_rows WHERE order_id IN (10, 14) AND gift_customer_id = 1; \
+     CREATE TABLE order_items AS SELECT * FROM order_items_rows WHERE id IN (1, 2, 4, 6, 7, 9); \
      CREATE TABLE products AS SELECT * FROM products_rows;";
 
-/// Thêm chính sách riêng orders.status = done và products.segment = Retail: orders còn đơn 10; dòng hàng còn dòng của
-/// đơn 10, khách nhận quà 1, sản phẩm (acme, 1). Dòng có maker rỗng bị ẩn.
+/// Thêm chính sách riêng orders.status = done và products.segment = Retail: orders còn đơn 10. Dòng hàng thêm đường thứ
+/// ba (maker, sku): 1, 6 qua cả ba; 9 có khóa sản phẩm rỗng cả hai cột; 10 chỉ có đường sản phẩm và qua. Ẩn: 2 (sản
+/// phẩm Gov), 4 (đơn 14 chưa done), 7 (khóa sản phẩm rỗng một phần), 3, 5, 8.
 const ALLOWED_SOUTH_DONE_RETAIL: &str =
     "CREATE TABLE customers AS SELECT * FROM customers_rows WHERE id IN (1); \
      CREATE TABLE orders AS SELECT * FROM orders_rows WHERE id IN (10); \
-     CREATE TABLE order_items AS SELECT * FROM order_items_rows \
-         WHERE order_id = 10 AND gift_customer_id = 1 AND maker = 'acme' AND sku = 1; \
+     CREATE TABLE order_items AS SELECT * FROM order_items_rows WHERE id IN (1, 6, 9, 10); \
      CREATE TABLE products AS SELECT * FROM products_rows WHERE segment = 'Retail';";
 
 /// Mỗi dạng là một cách đọc: một bảng đọc riêng, JOIN theo quan hệ, khóa hai cột, câu con, bảng tạm, phép tập hợp.
@@ -133,7 +139,7 @@ fn sales_tables(dir: &Path, order_status: &[&str], product_segment: &[&str]) -> 
     }
     let order_items = table(
         "order_items",
-        &["order_id", "gift_customer_id", "maker", "sku", "qty"],
+        &["id", "order_id", "gift_customer_id", "maker", "sku", "qty"],
         dir,
         item_filters,
     );
@@ -173,8 +179,9 @@ fn single_key_filter_reads_the_filtered_parent() {
     );
 }
 
-/// order_items: điều kiện của orders nằm trong câu con của order_items (lan hai bước), cộng đường gift_customer_id và
-/// khóa hai cột tới products; ba điều kiện nối AND.
+/// order_items: điều kiện của orders nằm trong câu con của order_items (lan hai bước); orders chỉ có một đường nên dạng
+/// gọn `IN`. order_items có ba đường (orders, gift_customer_id, khóa hai cột tới products): mỗi đường cho qua khóa rỗng,
+/// cộng điều kiện ít nhất một khóa không rỗng.
 #[test]
 fn transitive_two_path_and_composite_filters_are_all_added() {
     let tables = sales_tables(Path::new("/data"), &["done"], &["Retail"]);
@@ -184,12 +191,17 @@ fn transitive_two_path_and_composite_filters_are_all_added() {
     let orders = format!(
         "SELECT \"id\" FROM \"orders\" WHERE \"status\" IN ('done') AND \"customer_id\" IN ({customers})"
     );
+    let products = "SELECT \"maker\", \"sku\" FROM \"products\" WHERE \"segment\" IN ('Retail')";
     assert_eq!(
         guarded.row_filters,
         [
-            format!("\"order_id\" IN ({orders})"),
-            format!("\"gift_customer_id\" IN ({customers})"),
-            "(\"maker\", \"sku\") IN (SELECT \"maker\", \"sku\" FROM \"products\" WHERE \"segment\" IN ('Retail'))"
+            format!("(\"order_id\" IS NULL OR \"order_id\" IN ({orders}))"),
+            format!("(\"gift_customer_id\" IS NULL OR \"gift_customer_id\" IN ({customers}))"),
+            format!(
+                "((\"maker\" IS NULL AND \"sku\" IS NULL) OR (\"maker\", \"sku\") IN ({products}))"
+            ),
+            "(\"order_id\" IS NOT NULL OR \"gift_customer_id\" IS NOT NULL OR \"maker\" IS NOT NULL \
+             OR \"sku\" IS NOT NULL)"
                 .to_string(),
         ]
     );
@@ -364,4 +376,28 @@ fn orders_read_alone_count_only_orders_of_visible_customers() {
     let rows = sorted_rows(&full, &guarded.runnable).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(rows, vec![vec![Value::Int(10)], vec![Value::Int(14)]]);
+}
+
+/// Luật NULL của nhiều đường, đọc từng dòng hàng theo id: khóa ngoại tùy chọn rỗng vẫn thấy (2, 9), khóa tùy chọn trỏ
+/// ra ngoài phần được thấy thì ẩn (5), mọi đường rỗng thì ẩn (8; 10 khi products không bị lọc), khóa hai cột rỗng một
+/// phần thì ẩn (7 khi products bị lọc).
+#[test]
+fn optional_keys_pass_when_empty_and_rows_without_any_link_stay_hidden() {
+    let dir = std::env::temp_dir().join(format!("xdi-guard-parent-null-{}", uuid::Uuid::new_v4()));
+    let full = Connection::open_in_memory().unwrap();
+    write_full_data(&full, &dir);
+    let ids = |tables: &[AllowedTable]| {
+        let guarded = build_guarded_sql("SELECT id FROM order_items", tables, MAX_ROWS).unwrap();
+        sorted_rows(&full, &guarded.runnable).unwrap()
+    };
+    let south = ids(&sales_tables(&dir, &[], &[]));
+    let retail = ids(&sales_tables(&dir, &["done"], &["Retail"]));
+    std::fs::remove_dir_all(&dir).unwrap();
+    let expected = |list: &[i32]| -> Vec<Vec<Value>> {
+        let mut rows: Vec<Vec<Value>> = list.iter().map(|&n| vec![Value::Int(n)]).collect();
+        rows.sort_by_key(|cells| format!("{cells:?}"));
+        rows
+    };
+    assert_eq!(south, expected(&[1, 2, 4, 6, 7, 9]));
+    assert_eq!(retail, expected(&[1, 6, 9, 10]));
 }

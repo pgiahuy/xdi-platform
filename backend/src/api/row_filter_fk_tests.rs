@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/row_filter_fk_tests.rs - bộ lọc dòng lan theo khóa ngoại (#215) qua route thật, trên ảnh chụp Postgres thật của
 schema shop (api/source_relations_tests.rs), với mô hình giả trả câu SQL viết sẵn. Minh có vai north, chỉ một chính
-sách: customers.region_code = 'N' (khách 1). Theo dữ liệu shop, Minh chỉ thấy đơn 10, phiếu trả 1; không thấy dòng hàng
-nào, vì mỗi dòng hàng phải qua cả đường đơn hàng lẫn đường khách nhận quà (gift_customer_id), mà dòng hàng của đơn 10
-có khách nhận quà rỗng hay là khách 3 (không có vùng). Lan bảng chỉ đọc một mình, truy dòng nguồn và tổng quan dataset
+sách: customers.region_code = 'N' (khách 1). Theo dữ liệu shop, Minh chỉ thấy đơn 10, phiếu trả 1 và một dòng hàng:
+dòng của đơn 10 có khách nhận quà rỗng (khóa ngoại tùy chọn rỗng thì đường đó được bỏ qua). Dòng còn lại của đơn 10
+có khách nhận quà là khách 3 (không có vùng) nên bị ẩn. Lan bảng chỉ đọc một mình, truy dòng nguồn và tổng quan dataset
 đều được kiểm, cùng câu với admin để so. Không có DATABASE_URL thì bỏ qua. */
 
 use axum::http::StatusCode;
@@ -81,13 +81,15 @@ async fn member_filtered_on_customers_sees_only_rows_reaching_their_customers() 
     let answer = ask(&s, &s.minh, &returns, "Có bao nhiêu phiếu trả hàng").await;
     assert_eq!(rows(&answer), &json!([["1"]]));
 
-    // order_items: dòng hàng phải qua cả hai đường tới customers.
+    // order_items: hai đường tới customers; đường gift_customer_id rỗng được bỏ qua, trỏ tới khách 3 thì ẩn.
     let answer = ask(&s, &s.minh, &items, "Có bao nhiêu dòng hàng").await;
-    assert_eq!(rows(&answer), &json!([["0"]]));
+    assert_eq!(rows(&answer), &json!([["1"]]));
     let guarded = answer["sql_guarded"].as_str().unwrap();
     assert!(
         guarded.contains("\"order_id\" IN (SELECT \"id\" FROM \"orders\" WHERE \"customer_id\" IN")
-            && guarded.contains("\"gift_customer_id\" IN (SELECT \"id\" FROM \"customers\""),
+            && guarded.contains("(\"gift_customer_id\" IS NULL OR \"gift_customer_id\" IN (SELECT")
+            && guarded.contains("\"order_id\" IS NOT NULL")
+            && guarded.contains("\"gift_customer_id\" IS NOT NULL"),
         "{guarded}"
     );
     let answer = ask(&s, &s.lan, &items, "Có bao nhiêu dòng hàng").await;

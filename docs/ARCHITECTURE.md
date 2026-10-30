@@ -293,8 +293,8 @@ bị lọc theo `customers.region` mà đọc `orders` (không có cột vùng) 
 bảng bị lọc (theo `dataset_relations`, chiều khóa ngoại, đi hết mọi bước) nhận thêm điều kiện do code dựng
 `"customer_id" IN (SELECT "id" FROM "customers" WHERE <điều kiện của customers>)`. Điều kiện nằm trong hộp lọc của
 guard, nên áp ở mọi chỗ đọc bảng đó: câu thường, câu "tại sao", truy dòng nguồn, tổng quan dataset, kể cả khi chọn thẳng
-`orders` để hỏi. Hai đường tới bảng bị lọc, hay chính sách riêng cộng điều kiện lan, nối `AND`; khóa ngoại rỗng thì
-dòng bị ẩn. Chi tiết và hạn chế ở [GUARD.md](GUARD.md), mục Bước 3. Vai và chính sách vẫn chưa đặt được qua API (#45).
+`orders` để hỏi. Hai đường tới bảng bị lọc, hay chính sách riêng cộng điều kiện lan, nối `AND`. Khóa ngoại rỗng: một
+đường thì dòng bị ẩn; nhiều đường thì đường rỗng được bỏ qua (khóa tùy chọn), nhưng mọi đường rỗng thì ẩn. Chi tiết và hạn chế ở [GUARD.md](GUARD.md), mục Bước 3. Vai và chính sách vẫn chưa đặt được qua API (#45).
 
 ## 6b. Chọn biểu đồ
 
