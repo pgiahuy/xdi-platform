@@ -5,7 +5,8 @@
 
 | File | Vai trò |
 |---|---|
-| `cases/<dataset>.json` | Bộ câu của một dataset: câu hỏi và SQL đáp án |
+| `cases/<dataset>.json` | Bộ câu của một dataset: câu hỏi và SQL đáp án. Có `dataco.json` (DataCo mẫu, chạy được với mock) và `oulad.json` (OULAD `studentInfo.csv`, cần Gemini) |
+| `metrics/<dataset>.json` | Chỉ số của dataset không có sẵn trong `data/samples/`, ví dụ OULAD; trỏ tới từ `dataset.metrics` |
 | `baseline.json` | Tỷ lệ đúng tối thiểu; `make eval` thoát mã 1 khi thấp hơn |
 | `result.json` | Kết quả của lần chạy gần nhất, ghi đè mỗi lần chạy |
 | `classify.json` | Bộ câu riêng của bước phân loại câu hỏi (#197), chạy bằng `make eval-classify`; định dạng riêng, không theo file này |
@@ -93,7 +94,7 @@ hỏi, câu tiếp nối trỏ tới câu không đứng trước, người vi�
 
 ## Đang làm (#202)
 
-Đã có: định dạng và luật kiểm file, câu phải từ chối, chỉ số của dataset. Chưa có, theo thứ tự sẽ làm:
+Đã có: định dạng và luật kiểm file, câu phải từ chối, chỉ số của dataset, bộ câu DataCo và OULAD. Chưa có, theo thứ tự sẽ làm:
 
 - Chấm ba trạng thái (đạt, trượt, cần xem lại), số làm tròn 4 chữ số có nghĩa, cho phép cột thừa theo
   `required_columns`, chạy `check_sql`.

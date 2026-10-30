@@ -19,11 +19,21 @@ fn errors_of(cases: &str) -> Vec<String> {
     check_case_file(&file_with(cases)).expect_err("file should have errors")
 }
 
+// Mọi file trong eval/cases/ phải đọc và qua luật kiểm, để file sai bị bắt ở CI chứ không phải lúc chạy với Gemini.
 #[test]
 fn repo_case_files_load() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../eval/cases/dataco.json");
-    let file = load_case_file(&path).expect("eval/cases/dataco.json is valid");
-    assert!(!file.cases.is_empty());
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../eval/cases");
+    let mut count = 0;
+    for entry in std::fs::read_dir(&dir).expect("eval/cases exists") {
+        let path = entry.expect("readable entry").path();
+        if path.extension().is_some_and(|e| e == "json") {
+            let file = load_case_file(&path)
+                .unwrap_or_else(|e| panic!("{} is invalid: {e:?}", path.display()));
+            assert!(!file.cases.is_empty());
+            count += 1;
+        }
+    }
+    assert!(count >= 2, "expected the DataCo and OULAD case files");
 }
 
 #[test]

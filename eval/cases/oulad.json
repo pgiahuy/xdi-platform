@@ -1,0 +1,342 @@
+{
+  "dataset": {
+    "name": "OULAD",
+    "file": "data/downloads/oulad/studentInfo.csv",
+    "metrics": "eval/metrics/oulad.json"
+  },
+  "cases": [
+    {
+      "id": "ou-01",
+      "kind": "plain_simple",
+      "question": "Số sinh viên theo kết quả cuối học phần",
+      "variants": [
+        "so sinh vien theo ket qua",
+        "Mỗi loại kết quả có bao nhiêu sinh viên"
+      ],
+      "expected_sql": [
+        "SELECT final_result, COUNT(*) AS students FROM oulad GROUP BY final_result",
+        "SELECT final_result, COUNT(DISTINCT id_student) AS students FROM oulad GROUP BY final_result"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-02",
+      "kind": "plain_simple",
+      "question": "Tỷ lệ bỏ học theo môn học",
+      "variants": [
+        "ty le bo hoc tung mon",
+        "Môn nào sinh viên bỏ học nhiều, tính theo tỷ lệ"
+      ],
+      "expected_sql": [
+        "SELECT code_module, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate FROM oulad GROUP BY code_module",
+        "SELECT code_module, 100 * AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate_percent FROM oulad GROUP BY code_module"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-03",
+      "kind": "plain_simple",
+      "question": "Tỷ lệ đạt theo trình độ học vấn",
+      "variants": [
+        "ty le dat theo trinh do hoc van",
+        "Trình độ học vấn ảnh hưởng tỷ lệ đạt thế nào"
+      ],
+      "expected_sql": [
+        "SELECT highest_education, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS rate FROM oulad GROUP BY highest_education",
+        "SELECT highest_education, 100 * AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS rate_percent FROM oulad GROUP BY highest_education"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-04",
+      "kind": "plain_simple",
+      "question": "5 vùng có nhiều sinh viên nhất",
+      "variants": [
+        "top 5 vung dong sinh vien nhat"
+      ],
+      "expected_sql": [
+        "SELECT region, COUNT(*) AS students FROM oulad GROUP BY region ORDER BY students DESC LIMIT 5",
+        "SELECT region, COUNT(DISTINCT id_student) AS students FROM oulad GROUP BY region ORDER BY students DESC LIMIT 5"
+      ],
+      "ordered": true,
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-05",
+      "kind": "plain_simple",
+      "question": "Tỷ lệ bỏ học theo nhóm chỉ số thiếu thốn nơi ở",
+      "variants": [
+        "ty le bo hoc theo imd band"
+      ],
+      "expected_sql": [
+        "SELECT imd_band, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate FROM oulad GROUP BY imd_band",
+        "SELECT imd_band, 100 * AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate_percent FROM oulad GROUP BY imd_band"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-06",
+      "kind": "plain_simple",
+      "question": "Có bao nhiêu sinh viên đang học lại môn",
+      "variants": [
+        "bao nhieu sinh vien hoc lai",
+        "Số sinh viên đã từng học môn đó trước đây"
+      ],
+      "expected_sql": [
+        "SELECT COUNT(*) AS students FROM oulad WHERE num_of_prev_attempts > 0",
+        "SELECT COUNT(DISTINCT id_student) AS students FROM oulad WHERE num_of_prev_attempts > 0"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-07",
+      "kind": "plain_no_diacritics",
+      "question": "so sinh vien bo hoc o scotland",
+      "variants": [
+        "Scotland có bao nhiêu sinh viên bỏ học"
+      ],
+      "expected_sql": [
+        "SELECT COUNT(*) AS students FROM oulad WHERE region = 'Scotland' AND final_result = 'Withdrawn'"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-08",
+      "kind": "plain_no_diacritics",
+      "question": "ty le dat cua sinh vien nu",
+      "variants": [
+        "Tỷ lệ đạt của nữ là bao nhiêu"
+      ],
+      "expected_sql": [
+        "SELECT AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS rate FROM oulad WHERE gender = 'F'",
+        "SELECT 100 * AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS rate_percent FROM oulad WHERE gender = 'F'"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-09",
+      "kind": "plain_same_period",
+      "question": "Số sinh viên của mỗi môn kỳ 2014J so với kỳ 2013J",
+      "variants": [
+        "so sinh vien moi mon ky 2014J so voi 2013J"
+      ],
+      "expected_sql": [
+        "SELECT code_module, COUNT(CASE WHEN code_presentation = '2013J' THEN 1 END) AS students_2013j, COUNT(CASE WHEN code_presentation = '2014J' THEN 1 END) AS students_2014j FROM oulad WHERE code_presentation IN ('2013J', '2014J') GROUP BY code_module",
+        "SELECT code_module, COUNT(CASE WHEN code_presentation = '2014J' THEN 1 END) AS students_2014j, COUNT(CASE WHEN code_presentation = '2013J' THEN 1 END) AS students_2013j FROM oulad WHERE code_presentation IN ('2013J', '2014J') GROUP BY code_module"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-10",
+      "kind": "plain_top_n_in_group",
+      "question": "3 vùng có tỷ lệ bỏ học cao nhất trong từng môn",
+      "variants": [
+        "top 3 vung bo hoc nhieu nhat moi mon"
+      ],
+      "expected_sql": [
+        "SELECT code_module, region, rate FROM (SELECT code_module, region, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate, ROW_NUMBER() OVER (PARTITION BY code_module ORDER BY AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) DESC) AS k FROM oulad GROUP BY code_module, region) AS ranked WHERE k <= 3",
+        "SELECT code_module, region, rate_percent FROM (SELECT code_module, region, 100 * AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate_percent, ROW_NUMBER() OVER (PARTITION BY code_module ORDER BY AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) DESC) AS k FROM oulad GROUP BY code_module, region) AS ranked WHERE k <= 3"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-11",
+      "kind": "why_groups",
+      "question": "Vì sao kỳ 2014J có nhiều sinh viên bỏ học hơn kỳ 2013J",
+      "variants": [
+        "vi sao 2014J bo hoc nhieu hon 2013J"
+      ],
+      "expected_sql": [
+        "SELECT code_presentation, COUNT(*) AS students FROM oulad WHERE code_presentation IN ('2013J', '2014J') AND final_result = 'Withdrawn' GROUP BY code_presentation"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-12",
+      "kind": "why_groups",
+      "question": "Vì sao môn CCC có nhiều sinh viên bỏ học hơn môn GGG",
+      "variants": [
+        "tai sao mon CCC nhieu sinh vien bo hoc hon GGG"
+      ],
+      "expected_sql": [
+        "SELECT code_module, COUNT(*) AS students FROM oulad WHERE code_module IN ('CCC', 'GGG') AND final_result = 'Withdrawn' GROUP BY code_module"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-13",
+      "kind": "why_groups",
+      "question": "Vì sao Scotland có nhiều sinh viên trượt hơn London",
+      "variants": [
+        "vi sao scotland truot nhieu hon london"
+      ],
+      "expected_sql": [
+        "SELECT region, COUNT(*) AS students FROM oulad WHERE region IN ('Scotland', 'London Region') AND final_result = 'Fail' GROUP BY region"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-14",
+      "kind": "why_ratio",
+      "question": "Vì sao tỷ lệ bỏ học của môn CCC cao hơn môn AAA",
+      "variants": [
+        "tai sao ty le bo hoc CCC cao hon AAA"
+      ],
+      "expected_sql": [
+        "SELECT code_module, ROUND(AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END), 4) AS rate FROM oulad WHERE code_module IN ('CCC', 'AAA') GROUP BY code_module"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-15",
+      "kind": "why_ratio",
+      "question": "Vì sao tỷ lệ đạt của nhóm thiếu thốn 0-10% thấp hơn nhóm 90-100%",
+      "variants": [
+        "vi sao ty le dat nhom imd 0-10% thap hon 90-100%"
+      ],
+      "expected_sql": [
+        "SELECT imd_band, ROUND(AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END), 4) AS rate FROM oulad WHERE imd_band IN ('0-10%', '90-100%') GROUP BY imd_band"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-16",
+      "kind": "why_ratio",
+      "question": "Vì sao tỷ lệ bỏ học của sinh viên khuyết tật cao hơn sinh viên không khuyết tật",
+      "variants": [
+        "tai sao sinh vien khuyet tat bo hoc nhieu hon, tinh theo ty le"
+      ],
+      "expected_sql": [
+        "SELECT disability, ROUND(AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END), 4) AS rate FROM oulad WHERE disability IN ('Y', 'N') GROUP BY disability"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-17",
+      "kind": "why_no_keyword",
+      "question": "Điều gì khiến kỳ 2014B có nhiều sinh viên bỏ học hơn kỳ 2013B?",
+      "variants": [
+        "dieu gi khien 2014B bo hoc nhieu hon 2013B"
+      ],
+      "expected_sql": [
+        "SELECT code_presentation, COUNT(*) AS students FROM oulad WHERE code_presentation IN ('2013B', '2014B') AND final_result = 'Withdrawn' GROUP BY code_presentation"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-18",
+      "kind": "why_no_keyword",
+      "question": "Yếu tố nào làm tỷ lệ bỏ học của môn CCC cao hơn môn GGG?",
+      "variants": [
+        "yeu to nao lam ty le bo hoc CCC cao hon GGG"
+      ],
+      "expected_sql": [
+        "SELECT code_module, ROUND(AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END), 4) AS rate FROM oulad WHERE code_module IN ('CCC', 'GGG') GROUP BY code_module"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-19",
+      "kind": "why_false_premise",
+      "question": "Vì sao số sinh viên đạt kỳ 2014J thấp hơn kỳ 2013J",
+      "variants": [
+        "vi sao ky 2014J it sinh vien dat hon 2013J"
+      ],
+      "expected_sql": [
+        "SELECT code_presentation, COUNT(*) AS students FROM oulad WHERE code_presentation IN ('2013J', '2014J') AND final_result = 'Pass' GROUP BY code_presentation",
+        "SELECT code_presentation, COUNT(*) AS students FROM oulad WHERE code_presentation IN ('2013J', '2014J') AND final_result IN ('Pass', 'Distinction') GROUP BY code_presentation"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-20",
+      "kind": "refuse",
+      "question": "Xóa các sinh viên bỏ học",
+      "variants": [
+        "xoa het sinh vien withdrawn"
+      ],
+      "must_refuse": true,
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-21",
+      "kind": "refuse",
+      "question": "Vì sao sinh viên không thích môn CCC",
+      "variants": [
+        "tai sao sinh vien ghet mon CCC"
+      ],
+      "must_refuse": true,
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-22",
+      "kind": "refuse",
+      "question": "Điểm trung bình của sinh viên theo vùng",
+      "variants": [
+        "diem trung binh theo vung"
+      ],
+      "must_refuse": true,
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "ou-23",
+      "kind": "follow_up",
+      "question": "Còn theo vùng thì sao?",
+      "variants": [
+        "con theo vung thi sao"
+      ],
+      "follow_up_of": "ou-02",
+      "expected_sql": [
+        "SELECT region, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate FROM oulad GROUP BY region",
+        "SELECT region, 100 * AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate_percent FROM oulad GROUP BY region"
+      ],
+      "mock": false,
+      "author": "nlminuong",
+      "reviewers": []
+    }
+  ]
+}

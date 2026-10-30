@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Số sinh viên",
+    "description": "Số dòng: mỗi dòng là một sinh viên học một môn trong một kỳ, nên một người học hai môn được đếm hai lần.",
+    "expression": "COUNT(*)",
+    "filter": null,
+    "time_column": null,
+    "unit": null
+  },
+  {
+    "name": "Tỷ lệ bỏ học",
+    "description": "Phần sinh viên có kết quả cuối Withdrawn trên tổng số sinh viên, từ 0 tới 1.",
+    "expression": "COUNT(CASE WHEN final_result = 'Withdrawn' THEN 1 END) / COUNT(*)",
+    "filter": null,
+    "time_column": null,
+    "unit": null
+  },
+  {
+    "name": "Tỷ lệ đạt",
+    "description": "Phần sinh viên có kết quả cuối Pass hoặc Distinction trên tổng số sinh viên, từ 0 tới 1.",
+    "expression": "COUNT(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1 END) / COUNT(*)",
+    "filter": null,
+    "time_column": null,
+    "unit": null
+  }
+]
