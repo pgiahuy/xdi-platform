@@ -110,7 +110,7 @@ export function ResultTable(props: Props) {
                   onClick={
                     rowDrill === undefined || cellDrill === undefined
                       ? undefined
-                      : () => cellDrill.onDrill(buildTarget(result, cellDrill, row, rowDrill))
+                      : () => cellDrill.onDrill(buildTarget(result, kinds, cellDrill, row, rowDrill))
                   }
                 >
                   {row.map((cell, c) => (
@@ -126,7 +126,7 @@ export function ResultTable(props: Props) {
                         <DrillCell
                           cell={cell}
                           kind={kinds[c]}
-                          target={buildTarget(result, cellDrill, row, c)}
+                          target={buildTarget(result, kinds, cellDrill, row, c)}
                           onDrill={cellDrill.onDrill}
                         />
                       ) : nowrap ? (
@@ -222,11 +222,19 @@ function DrillCell({ cell, kind, target, onDrill }: DrillCellProps) {
   )
 }
 
-function buildTarget(result: ResultView, cellDrill: CellDrill, row: Cell[], column: number): DrillTarget {
+// kinds là kind dùng để hiện từng cột (buildDisplayKind): dòng "Đang xem" hiện khóa giống ô trong bảng, ví dụ
+// "01/07/2017" thay cho "01/07/2017 00:00:00". Giá trị gửi drill vẫn là giá trị gốc của ô.
+function buildTarget(
+  result: ResultView,
+  kinds: CellKind[],
+  cellDrill: CellDrill,
+  row: Cell[],
+  column: number,
+): DrillTarget {
   const keys = cellDrill.keys.map((k) => ({
     column: result.columns[k].name,
     value: row[k],
-    kind: result.columns[k].kind,
+    kind: kinds[k],
   }))
   return { from: 'cell', keys, measure: result.columns[column].name }
 }
