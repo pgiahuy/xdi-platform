@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/sources.ts - hook cho nguồn database của workspace (backend/src/api/sources.rs): liệt kê, thêm, thử kết nối, liệt
-kê bảng và quan hệ khóa ngoại quanh một bảng, chụp bảng (kèm bảng nối nhiều-một) thành dataset, xóa. Chỉ admin gọi được; member nhận 403. Mật khẩu chỉ đi một chiều lúc thêm nguồn,
-backend không bao giờ trả lại. */
+kê bảng và bảng liên quan theo khóa ngoại, chụp một nhóm bảng thành dataset (mỗi bảng một dataset), xóa. Chỉ admin gọi
+được; member nhận 403. Mật khẩu chỉ đi một chiều lúc thêm nguồn, backend không bao giờ trả lại. */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost } from './client'
@@ -12,10 +12,10 @@ export type Source = Schemas['SourceResponse']
 export type SourceTable = Schemas['SourceTable']
 export type CreateSourceRequest = Schemas['CreateSourceRequest']
 export type SnapshotRequest = Schemas['SnapshotRequest']
-export type UploadResult = Schemas['UploadResult']
+export type SnapshotResponse = Schemas['SnapshotResponse']
 export type TestSourceResponse = Schemas['TestSourceResponse']
 export type RelationsResponse = Schemas['RelationsResponse']
-export type SourceRelation = Schemas['SourceRelation']
+export type RelatedTable = Schemas['RelatedTable']
 
 function sourcesPath(ws: string): string {
   return `/workspaces/${encodeURIComponent(ws)}/sources`
@@ -61,7 +61,7 @@ export function useSourceTables(ws: string, sourceId: string | undefined) {
   })
 }
 
-/** Quan hệ khóa ngoại quanh bảng đang chọn, đọc lại từ database ngoài mỗi lần chọn bảng như danh sách bảng. Backend
+/** Bảng liên quan quanh bảng đang chọn, đọc lại từ database ngoài mỗi lần chọn bảng như danh sách bảng. Backend
  * nhận POST (thân là tên bảng) nhưng không đổi gì, nên dùng useQuery. */
 export function useSourceRelations(ws: string, sourceId: string, table: string) {
   return useQuery({
@@ -74,12 +74,13 @@ export function useSourceRelations(ws: string, sourceId: string, table: string) 
   })
 }
 
-/** Chụp bảng thành dataset mới, hoặc chụp lại vào dataset đã có (dataset_id). Xong thì tải lại danh sách dataset. */
+/** Chụp bảng (kèm các bảng chọn thêm) thành dataset, hoặc chụp lại cả nhóm của một dataset (dataset_id). Xong thì tải
+ * lại danh sách dataset. */
 export function useSnapshot(ws: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ sourceId, ...body }: SnapshotRequest & { sourceId: string }) =>
-      apiPost<UploadResult>(`${sourcesPath(ws)}/${encodeURIComponent(sourceId)}/snapshot`, body),
+      apiPost<SnapshotResponse>(`${sourcesPath(ws)}/${encodeURIComponent(sourceId)}/snapshot`, body),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['workspaces', ws, 'datasets'] }),
   })
 }

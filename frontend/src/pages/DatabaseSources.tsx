@@ -2,7 +2,7 @@
 /* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres): nút mở form thêm nguồn,
 rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chụp bảng thành dataset. DatasetsPage chỉ hiện khung này cho admin;
 backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel, RelationPicker).
-Chọn bảng xong thì mọi quan hệ nhiều-một bước 1 nối được đều chọn sẵn; bước 2 để người dùng tự chọn. */
+Chọn bảng xong thì mọi bảng mà nó trỏ tới (nhiều-một) chụp kèm được đều chọn sẵn; bảng trỏ vào nó để người dùng tự chọn. */
 
 import { useState } from 'react'
 import {
@@ -14,8 +14,8 @@ import {
   useSources,
   useTestSource,
   type RelationsResponse,
+  type SnapshotResponse,
   type Source,
-  type UploadResult,
 } from '@/api/sources'
 import { ConnectForm, type ConnectValues } from '@/components/datasets/ConnectForm'
 import { RelationPicker } from '@/components/datasets/RelationPicker'
@@ -63,7 +63,8 @@ export function DatabaseSources({ ws }: { ws: string }) {
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        Chụp một bảng Postgres thành dataset; mỗi lần chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
+        Chụp bảng Postgres thành dataset, có thể kèm các bảng liên quan theo khóa ngoại (mỗi bảng một dataset); mỗi lần
+        chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
       </p>
       {open && (
         <ConnectForm
@@ -89,28 +90,33 @@ function sourceLabel(source: Source): string {
   return `${source.host}:${source.port}/${source.database} (${source.user})`
 }
 
-function toOptions(list: RelationsResponse['many_to_one']): RelationOption[] {
-  return list.map((r) => ({
-    id: r.id,
-    depth: r.depth,
-    parent: r.parent,
+/** Nhiều-một trước, rồi một-nhiều; bảng trùng (hai khóa cùng tới một bảng) vẫn hiện từng khóa. */
+function toOptions(relations: RelationsResponse): RelationOption[] {
+  return [...relations.many_to_one, ...relations.one_to_many].map((r) => ({
+    table: r.table,
     fromTable: r.from_table,
     fromColumns: r.from_columns,
-    toTable: r.to_table,
-    joinable: r.joinable,
+    addable: r.addable,
     reason: r.reason,
     columnCount: r.column_count,
   }))
 }
 
-function joinedText(result: UploadResult): string {
-  const joins = result.dataset.current_source_model?.joins.length ?? 0
-  return joins > 0 ? `, nối ${joins} bảng, số dòng giữ đúng như bảng chính` : ''
+/** Mặc định: mọi bảng mà bảng đang chọn trỏ tới, nếu chụp kèm được. */
+function defaultSelection(relations: RelationsResponse | undefined): string[] {
+  const tables = (relations?.many_to_one ?? []).filter((r) => r.addable).map((r) => r.table)
+  return [...new Set(tables)]
 }
 
-/** Mặc định: mọi quan hệ bước 1 nối được. */
-function defaultSelection(relations: RelationOption[]): string[] {
-  return relations.filter((r) => r.depth === 1 && r.joinable).map((r) => r.id)
+/** "Đã chụp 3 bảng: orders phiên bản 2 (120 dòng), customers không đổi, ..." */
+function resultText(result: SnapshotResponse): string {
+  const parts = result.datasets.map((d) =>
+    d.created
+      ? `${d.dataset.name} phiên bản ${d.version.version} (${d.version.row_count ?? 0} dòng)`
+      : `${d.dataset.name} không đổi`,
+  )
+  const relations = result.relations.length > 0 ? `, ghi ${result.relations.length} quan hệ` : ''
+  return `Đã chụp ${result.datasets.length} bảng: ${parts.join(', ')}${relations}.`
 }
 
 function SourceItem({ ws, source }: { ws: string; source: Source }) {
@@ -122,19 +128,15 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
   const relations = useSourceRelations(ws, source.id, table)
   // Lựa chọn gắn với bảng đã chọn: đổi bảng thì lựa chọn cũ không còn áp dụng, dùng mặc định của bảng mới. Suy ra lúc
   // dựng thay vì đặt lại trong effect, để không có lần vẽ nào dùng lựa chọn của bảng trước.
-  const [choice, setChoice] = useState<{ table: string; ids: string[] }>()
+  const [choice, setChoice] = useState<{ table: string; tables: string[] }>()
   const [name, setName] = useState('')
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string }>()
 
-  const manyToOne = relations.data ? toOptions(relations.data.many_to_one) : []
-  const selected = choice?.table === table ? choice.ids : defaultSelection(manyToOne)
+  const selected = choice?.table === table ? choice.tables : defaultSelection(relations.data)
 
-  // Bỏ chọn bước 1 thì bỏ luôn bước 2 đi tiếp từ nó: câu JOIN của bước 2 cần bảng ở giữa.
-  const toggle = (relation: RelationOption, checked: boolean) => {
-    const ids = checked
-      ? [...selected, relation.id]
-      : selected.filter((id) => id !== relation.id && !manyToOne.some((r) => r.id === id && r.parent === relation.id))
-    setChoice({ table, ids })
+  const toggle = (option: RelationOption, checked: boolean) => {
+    const rest = selected.filter((t) => t !== option.table)
+    setChoice({ table, tables: checked ? [...rest, option.table] : rest })
   }
 
   const test = () => {
@@ -149,13 +151,10 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
 
   const take = () => {
     snapshot.mutate(
-      { sourceId: source.id, table, name: name.trim() || null, relations: selected },
+      { sourceId: source.id, table, name: name.trim() || null, tables: selected },
       {
         onSuccess: (result) => {
-          const text = result.created
-            ? `Đã chụp ${table} thành ${result.dataset.name}, phiên bản ${result.version.version}, ${result.version.row_count ?? 0} dòng${joinedText(result)}.`
-            : `Bảng không đổi từ lần chụp trước; giữ phiên bản ${result.version.version} của ${result.dataset.name}.`
-          setMessage({ kind: 'success', text })
+          setMessage({ kind: 'success', text: resultText(result) })
           setName('')
         },
         onError: (error) => setMessage({ kind: 'error', text: error.message }),
@@ -177,13 +176,7 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
         ) : relations.error ? (
           <FormMessage kind="error">{relations.error.message}</FormMessage>
         ) : relations.data ? (
-          <RelationPicker
-            manyToOne={manyToOne}
-            oneToMany={toOptions(relations.data.one_to_many)}
-            factColumns={relations.data.column_count}
-            selected={selected}
-            onToggle={toggle}
-          />
+          <RelationPicker table={table} options={toOptions(relations.data)} selected={selected} onToggle={toggle} />
         ) : undefined
       }
       name={name}

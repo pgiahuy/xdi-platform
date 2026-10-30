@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/datasets/SourcePanel.tsx - một nguồn database đã kết nối: thử kết nối lại, chọn bảng, chọn bảng nối (phần
-relations, thường là RelationPicker), đặt tên, chụp bảng thành dataset, xóa nguồn. Danh sách bảng và kết quả do trang
+/* components/datasets/SourcePanel.tsx - một nguồn database đã kết nối: thử kết nối lại, chọn bảng, chọn bảng chụp kèm
+(phần relations, thường là RelationPicker), đặt tên, chụp bảng thành dataset, xóa nguồn. Danh sách bảng và kết quả do trang
 truyền vào (pages/DatabaseSources.tsx). */
 
 import { useId, type ReactNode } from 'react'
