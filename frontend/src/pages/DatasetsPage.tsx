@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 import { DatasetUpload } from './DatasetUpload'
+import { RouterLink } from './RouterLink'
 
 export function DatasetsPage() {
   const { ws = '' } = useParams()
@@ -121,6 +122,8 @@ function ListBody({ datasets, error, onRetry, isAdmin, onAddVersion, onDelete, d
       onAddVersion={isAdmin ? onAddVersion : undefined}
       onDelete={isAdmin ? onDelete : undefined}
       deletePending={deletePending}
+      metricsHref={(row) => `${row.id}/metrics`}
+      link={RouterLink}
     />
   )
 }

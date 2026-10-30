@@ -599,6 +599,22 @@ hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi đ
   ở lần khởi động sau.
 - "Lập hồ sơ dataset lỗi nên chưa hỏi được phiên bản này" nghĩa là phần cấu trúc lỗi: nạp lại file ở trang **Dữ liệu**.
 
+### Chỉ số và cách gộp (không bắt buộc)
+
+Trang **Dữ liệu** có nút **Chỉ số** ở mỗi dataset. Màn này liệt kê chỉ số của dataset (tên, mô tả, công thức, đơn vị)
+và cách gộp của từng cột số đo; mọi thành viên xem được, chỉ `admin` sửa được.
+
+- **Thêm chỉ số**: đặt **Tên** (tên người dùng gõ khi hỏi, ví dụ "Doanh thu"), **Mô tả**, rồi chọn **Phép tính**
+  (tổng, trung bình, đếm dòng, đếm giá trị khác nhau) và **Cột**, hoặc bấm **Viết bằng SQL** để gõ công thức như
+  `SUM("Order Item Total") / COUNT(DISTINCT "Order Id")`. **Điều kiện**, **Cột thời gian**, **Đơn vị** không bắt buộc.
+  Backend chạy thử công thức trên phiên bản hiện hành trước khi lưu; sai cột, không phải hàm gộp hay bị guard từ chối
+  thì lời báo hiện ngay dưới ô sai. Câu hỏi kế tiếp nhắc tên chỉ số thì mô hình dùng đúng công thức này (xem ở tab SQL).
+- **Sửa** (biểu tượng bút) lưu một phiên bản mới cùng tên, bản cũ giữ lại; không đổi tên được. **Xóa** (biểu tượng
+  thùng rác) xóa chỉ số cùng mọi phiên bản sau khi hỏi lại.
+- **Cách gộp của cột số đo**: **Tổng** cho tiền, số lượng hàng; **Trung bình** cho giá trị mô tả một dòng (tuổi, điểm,
+  số tín chỉ, số ngày). Mô hình đề xuất lúc lập hồ sơ; đổi ở đây có hiệu lực từ câu hỏi kế tiếp, cho phiên bản hiện
+  hành. Câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng.
+
 ### Bước 5. Hỏi
 
 Trang **Hỏi dữ liệu** là một khung trò chuyện: ô **Dataset** ở đầu khung (dính khi cuộn) chọn sẵn dataset tạo gần nhất,
@@ -684,5 +700,5 @@ Chưa có thư mời qua email hay tự đăng ký. Thành viên cần có tài 
 2. `admin` của workspace mở **Thành viên**, khung **Thêm thành viên**: **Email** của tài khoản vừa tạo, **Vai** là
    **Admin** hoặc **Thành viên**, bấm **Thêm**.
 
-**Thành viên** chọn dataset và hỏi, không nạp được file. **Admin** thêm nạp và xóa dataset, thêm, xóa, đổi vai
-thành viên, đổi tên và xóa workspace. Người được thêm thấy workspace trong ô chọn workspace sau khi đăng nhập.
+**Thành viên** chọn dataset, hỏi và xem chỉ số, không nạp được file. **Admin** thêm nạp và xóa dataset, sửa chỉ số
+và cách gộp, thêm, xóa, đổi vai thành viên, đổi tên và xóa workspace. Người được thêm thấy workspace trong ô chọn workspace sau khi đăng nhập.
