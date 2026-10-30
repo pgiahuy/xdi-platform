@@ -231,20 +231,22 @@ database. Thiếu `SOURCE_SECRET_KEY` thì thêm và dùng nguồn trả 503 (`u
 - `POST .../sources/{id}/test`: kết nối lại, trả số bảng và view đọc được.
 - `GET .../sources/{id}/tables`: bảng và view tài khoản đọc được (`schema`, `name`, `kind`).
 - `POST .../sources/{id}/relations`: thân `{"table": "schema.table"}`. Trả `column_count` (cột đọc được của bảng),
-  `many_to_one` (khóa ngoại rời bảng, bước 1 và bước 2, theo thứ tự nối) và `one_to_many` (khóa ngoại của bảng khác trỏ
-  vào bảng, không bao giờ nối). Mỗi quan hệ có `id`, `depth`, `parent`, `constraint`, `from_table`, `from_columns`,
-  `to_table`, `to_columns`, `joinable`, `reason` (tiếng Việt, khi không nối được) và `column_count` (số cột lần nối thêm).
-  Chỉ đọc `pg_catalog`, không đọc dòng dữ liệu.
-- `POST .../sources/{id}/snapshot`: `table` (`schema.table` lấy từ danh sách bảng), `name` và `relations` (id quan hệ
-  nhiều-một lấy từ route trên, có thể rỗng) để tạo dataset mới, hoặc `dataset_id` để chụp lại vào dataset đã chụp từ
-  nguồn này, nối đúng các quan hệ của phiên bản hiện hành (gửi kèm `relations` thì 400). Response như nạp file
-  (`UploadResult`): 201 khi tạo, 200 với `created: false` khi bảng không đổi; 400 khi id quan hệ lạ, quan hệ không nối
-  được, hay số dòng sau khi nối khác số dòng của bảng chính; 413 khi quá `SOURCE_MAX_ROWS` hay `MAX_UPLOAD_MB`.
+  `many_to_one` (bảng mà bảng này trỏ tới) và `one_to_many` (bảng trỏ vào bảng này). Mỗi mục có `table` (bảng chụp kèm
+  được), `constraint`, `from_table`, `from_columns`, `to_table`, `to_columns`, `column_count`, `addable` và `reason`
+  (tiếng Việt, khi không chụp kèm được). Chỉ đọc `pg_catalog`, không đọc dòng dữ liệu.
+- `POST .../sources/{id}/snapshot`: `table` (`schema.table` lấy từ danh sách bảng), `tables` (các bảng chụp kèm, có thể
+  rỗng) và `name` (tên dataset của `table` khi nó mới), hoặc `dataset_id` để chụp lại dataset đó cùng mọi dataset cùng
+  nguồn nối với nó qua quan hệ (gửi kèm `tables` thì 400). Mỗi bảng thành một dataset; bảng đã chụp từ nguồn này thì
+  thêm phiên bản vào dataset cũ. Response `SnapshotResponse`: `datasets` (mỗi bảng một `UploadResult`, bảng bắt đầu đứng
+  đầu, `created: false` khi bảng không đổi) và `relations` (quan hệ giữa các dataset này, dạng `DatasetRelation`). 201
+  khi có ít nhất một phiên bản mới, 200 khi không bảng nào đổi; 400 khi quá 10 bảng hay có bảng không đọc được; 413 khi
+  một bảng quá `SOURCE_MAX_ROWS` hay `MAX_UPLOAD_MB`.
 - `DELETE .../sources/{id}`: 204; 400 khi còn dataset chụp từ nguồn này.
 
 Dataset trả qua API có thêm `source_kind`, `source_id`, `source_table`, `current_version_at` (lần nạp hay lần chụp
-gần nhất) và `current_source_model` (bảng chính `fact_table`, số dòng `fact_rows`, `joined_rows`, các lần nối `joins`
-với bảng và cột hai đầu, tiền tố, cột đã thêm, cột khóa; null với file nạp). Mọi thành viên đọc được trường này.
+gần nhất) và `relations`: các dataset nối với nó theo khóa ngoại của database nguồn, mỗi mục có `dataset_id`, `name`,
+`direction` (`many_to_one` khi dataset này giữ khóa ngoại, `one_to_many` khi dataset kia giữ), `columns` (cột khóa của
+dataset này) và `related_columns`; rỗng với file nạp. Mọi thành viên đọc được trường này.
 
 ## Truy dòng nguồn
 
