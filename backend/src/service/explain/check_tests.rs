@@ -20,6 +20,7 @@ use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::sql::{
     build_dimension_sql, build_equals, build_slices_sql, build_why_sql,
 };
+use crate::service::prompt_fixtures::check_fixture;
 
 pub(super) const TABLE: &str = "dataco";
 pub(super) const DATE: &str = "order date (DateOrders)";
@@ -727,7 +728,8 @@ fn sliced_measures_are_exact() {
 #[test]
 fn dimensions_and_volume_follow_the_profile() {
     let mut fixture = Fixture::new();
-    // Chín cột chiều ít giá trị: tối đa tám chiều, theo thứ tự cột.
+    // Chín cột chiều ít giá trị: mọi cột đều là ứng viên, theo thứ tự cột; bỏ chiều trùng và xếp theo điểm là việc của
+    // bước sau khi chạy (explain/dimension_pick.rs, explain/breakdown.rs), không cắt ở đây.
     for i in 0..9 {
         fixture
             .columns
@@ -739,9 +741,21 @@ fn dimensions_and_volume_follow_the_profile() {
                 4,
             ));
     }
+    // Cột chỉ một giá trị không chia được nhóm: không là ứng viên, khỏi tốn một câu SQL.
+    fixture
+        .columns
+        .push(crate::service::explain::check_tests::column(
+            29,
+            "Product Status",
+            "VARCHAR",
+            "dimension",
+            1,
+        ));
     let plan = fixture.plan(quarter_form());
-    assert_eq!(plan.dimensions.len(), 8);
+    assert_eq!(plan.dimensions.len(), 11);
+    assert!(!plan.dimensions.iter().any(|d| d == "Product Status"));
     assert_eq!(&plan.dimensions[..3], ["Market", "Customer Segment", "d0"]);
+    assert_eq!(plan.dimensions.last().map(String::as_str), Some("d8"));
 
     let mut fixture = Fixture::new();
     fixture
@@ -783,4 +797,40 @@ fn repair_prompt_lists_each_field_error() {
     assert!(prompt.ends_with(
         "- measure.column: \"Revenue\" is not a column of dataco\n- compare: \"Q3 2017\" is not a quarter such as 2017-Q3"
     ));
+}
+
+/// Prompt sửa form đầy đủ so với file mẫu (service/prompt_fixtures.rs). Prompt gốc thay bằng một dòng ngắn: prompt form
+/// đã có file mẫu riêng (why_prompt.txt).
+#[test]
+fn why_repair_prompt_matches_the_fixture() {
+    let errors = vec![
+        FieldError::new("measure.column", "\"Revenue\" is not a column of dataco"),
+        FieldError::new("compare", "\"Q3 2017\" is not a quarter such as 2017-Q3"),
+    ];
+    let prompt = build_why_repair_prompt(
+        "Question: Vì sao doanh thu quý 3 năm 2017 giảm?",
+        " {\"measure\": {\"column\": \"Revenue\", \"agg\": \"sum\"}, \"compare\": \"Q3 2017\"} ",
+        &errors,
+    );
+    check_fixture("why_repair_prompt.txt", &prompt);
+}
+
+// Cột chiều đặt vào "time" (như cột kỳ học "2013J", "2014J"): lời báo chỉ đường sang so hai nhóm, để vòng sửa của mô
+// hình không bỏ "time" rồi quên "groups".
+#[test]
+fn dimension_as_time_points_to_groups() {
+    let fixture = Fixture::new();
+    let errors = fixture
+        .check(with(
+            quarter_form(),
+            "time",
+            json!({"column": "Market", "grain": "quarter"}),
+        ))
+        .unwrap_err();
+    assert_eq!(errors[0].field, "time.column");
+    assert!(
+        errors[0].message.contains("set \"groups\" to this column"),
+        "{}",
+        errors[0].message
+    );
 }

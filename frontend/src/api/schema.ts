@@ -604,6 +604,17 @@ export interface components {
         };
         /** @description Answer to one question, with the evidence behind it. See `AskStatus` for which fields are set. */
         AskResponse: {
+            /**
+             * @description Short answer in Vietnamese for an `answered` question that is not a "why" question and has at least one row:
+             *     written by the language model from the first 10 rows of the result, every number checked against those rows,
+             *     or a template sentence written by the backend. Null otherwise; a "why" question has `explanation.summary`.
+             */
+            answer_text: string | null;
+            /**
+             * @description True when `answer_text` was written by the language model, false for the template sentence (the model failed,
+             *     timed out, wrote a number that is not in the rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null.
+             */
+            answer_text_by_model: boolean | null;
             chart: components["schemas"]["ChartSuggestion"] | null;
             /**
              * @description Every choice this answer used, defaults included, in the shape of `AskRequest.choices`. To ask again with one
@@ -666,9 +677,11 @@ export interface components {
          *       again. This can happen before the model is called (a word matches several columns) or after (the two slices of
          *       a "why" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.
          *       Not recorded in the history, so `query_id` is null.
-         *     - `rejected`: the guard refused the SQL: the generated one for a reason a fix cannot change (for example it is not
-         *       a read-only SELECT, or it calls a function that is not allowed), or the one fixed in the `repair` round. Set:
-         *       `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false. Also when
+         *     - `rejected`: the guard refused the SQL the model wrote in the `repair` round (when the guard refuses the model's
+         *       first SQL, for any reason, the question always gets that round), or the SQL the server built for a "why"
+         *       breakdown. Set: `message`, `query_id`, `sql_generated`. For the model's SQL, the `guard` step that stopped it has
+         *       `ok` false and the guard's reason in `detail`, and `message` is a fixed text asking to rephrase the question, since
+         *       the user cannot fix the SQL; for a breakdown, `message` gives the guard's reason. Also when
          *       the model finds that no column of the dataset holds the information the question needs (a rating that is not
          *       there, a forecast): no SQL runs, `sql_generated` is null, and `message` gives the reason and the closest columns.
          *     - `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or
@@ -676,11 +689,10 @@ export interface components {
          *       Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or
          *       `repair` step that stopped it has `ok` false.
          *
-         *     A fix round starts when the analytics engine fails on the SQL, or when the guard refuses it because a table or
-         *     column does not exist or because it could build a value too large (too deep, too many concatenated pieces, too
-         *     wide, a size argument over the limit); there is at most one round per question. The status names the step that stopped the
-         *     question: the guard gives `rejected`, the engine or the fix round gives `failed`. A model error before any SQL
-         *     exists is not a status: the request gets 502 or 503.
+         *     A fix round starts when the analytics engine fails on the SQL, when the guard refuses it for any reason, or when the
+         *     model's reply cannot be read; there is at most one round per question, and the fixed SQL goes through the guard
+         *     again. The status names the step that stopped the question: the guard gives `rejected`, the engine or the fix round
+         *     gives `failed`. A model error before any SQL exists is not a status: the request gets 502 or 503.
          * @enum {string}
          */
         AskStatus: "answered" | "needs_choice" | "rejected" | "failed";
@@ -812,6 +824,12 @@ export interface components {
          * @enum {string}
          */
         ColumnRole: "dimension" | "time" | "measure" | "other";
+        /**
+         * @description - `periods`: the slices are two periods; `compare` is the later one.
+         *     - `groups`: the slices are two values of one column, with no order in time.
+         * @enum {string}
+         */
+        Comparison: "periods" | "groups";
         /** @description One conversation on a dataset. */
         ConversationItem: {
             /** Format: date-time */
@@ -921,6 +939,8 @@ export interface components {
             groups: components["schemas"]["GroupContribution"][];
             /** @description How to read the group values, like the `kind` of a result column. */
             kind: components["schemas"]["ValueKind"];
+            /** @description Vietnamese name of the column from the column profile; null when the profile has none. */
+            label: string | null;
             /** @description Ratio measures only: sum of `mix_effect` of every group; `mix_effect + rate_effect` is `change`. */
             mix_effect: string | null;
             /** @description Ratio measures only: sum of `rate_effect` of every group. */
@@ -1001,12 +1021,25 @@ export interface components {
             change: string;
             /** @description Slice being explained. */
             compare: components["schemas"]["ExplanationSlice"];
+            /**
+             * @description What the two slices are, which decides the words for the change: up or down between two periods, higher or
+             *     lower between two groups.
+             */
+            comparison: components["schemas"]["Comparison"];
+            /** @description True when the measure counts rows (a count, not a sum): the measure is then itself the size of each slice. */
+            counts_rows: boolean;
             /** @description One breakdown per dimension, the dimension that explains the change best first. */
             dimensions: components["schemas"]["DimensionBreakdown"][];
             /** @description Measure that changed, text for the end user (Vietnamese). */
             measure: string;
             /** @description How the measure adds up over groups, which decides how to read the numbers below. */
             measure_kind: components["schemas"]["MeasureKind"];
+            /** @description `change / base.value * 100`, rounded to one decimal; null when `base.value` is zero or negative. */
+            percent_change: string | null;
+            /** @description Column whose two values are compared, for `groups`; null for `periods`. */
+            slice_column: string | null;
+            /** @description Vietnamese name of `slice_column` from the column profile; null when the profile has none. */
+            slice_column_label: string | null;
             /** @description Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown. */
             summary: string;
             /**
@@ -1014,6 +1047,13 @@ export interface components {
              *     sentence written by the backend.
              */
             summary_by_model: boolean;
+            /**
+             * @description Points under the main answer, written by the backend from the numbers above; each is said only when the numbers
+             *     support it.
+             */
+            summary_points: components["schemas"]["SummaryPoint"][];
+            /** @description Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese). */
+            summary_title: string;
             volume_price: components["schemas"]["VolumePrice"] | null;
         };
         /** @description One of the two slices. */
@@ -1022,6 +1062,8 @@ export interface components {
             filter: string;
             /** @description Text for the end user (Vietnamese) naming the slice, for example a quarter. */
             label: string;
+            /** @description Number of rows of the slice. */
+            rows: string;
             /** @description Value of the measure on the slice. */
             value: string;
         };
@@ -1203,11 +1245,31 @@ export interface components {
          *     - `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column
          *       does not exist or because it could build a value too large (at most once).
          *     - `explain`: compute the breakdown of a "why" question (code, no model).
-         *     - `narrate`: the language model writes the summary of the breakdown.
+         *     - `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.
          *     - `record`: save the question in the history.
          * @enum {string}
          */
         StepName: "context" | "llm" | "guard" | "run" | "repair" | "explain" | "narrate" | "record";
+        /** @description One point of the summary: a short lead (shown in bold) and the sentence after it. */
+        SummaryPoint: {
+            kind: components["schemas"]["SummaryPointKind"];
+            /** @description Lead of the point (Vietnamese), for example "Lý do chính". */
+            lead: string;
+            /** @description Rest of the point (Vietnamese). */
+            text: string;
+        };
+        /**
+         * @description - `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the
+         *       rate).
+         *     - `outliers`: groups that changed much more or much less than the whole, or exist on one side only.
+         *     - `even`: no group stands out; the largest contributions are the largest groups.
+         *     - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow
+         *       comparing groups with the whole (a base slice of zero or less, or a change too close to zero).
+         *     - `against`: a group that moved the other way.
+         *     - `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.
+         * @enum {string}
+         */
+        SummaryPointKind: "reason" | "outliers" | "even" | "largest" | "against" | "dropped";
         TestSourceResponse: {
             /** @description Number of tables and views the account can read. */
             table_count: number;
@@ -1250,6 +1312,11 @@ export interface components {
         };
         /** @description One thing the question was understood to mean. */
         UnderstoodItem: {
+            /**
+             * @description True when the item is carried over from the previous turn of the conversation: the same as in that turn's card
+             *     (same SQL fragment or same label) and not named in this question. Omitted when false.
+             */
+            from_previous?: boolean;
             /** @description Text for the end user (Vietnamese) naming the measure, filter, grouping, order or period. */
             label: string;
             /** @description Fragment of `sql_guarded` this item comes from. */

@@ -17,6 +17,7 @@ use crate::config::{Config, Secret};
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::store::test_support::{exec, fetch_count, fresh_database, TestDb};
 use crate::error::AppError;
+use crate::service::ask::run::REFUSED_MESSAGE;
 
 /// Đủ cột cho các câu mẫu của mock dùng ở đây. Ngày giao hàng ghi tháng/ngày/năm như DataCo, nên câu mẫu đọc
 /// ngày/tháng/năm lỗi ở dòng đầu (tháng 31) và câu sửa đọc đúng.
@@ -62,9 +63,10 @@ impl LlmProvider for ScriptedLlm {
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
         // Nạp file xong, lớp ngữ nghĩa (service/semantic/mod.rs) chạy nền và cũng gọi mô hình. Lỗi tạm thì nó không ghi gì
         // vào hồ sơ, nên câu viết sẵn chỉ dành cho câu hỏi và bí danh test tự đặt không bị ghi đè.
-        if request.task == LlmTask::Profile {
+        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn.
+        if matches!(request.task, LlmTask::Profile | LlmTask::Summary) {
             return Err(AppError::Upstream(
-                "scripted model has no profile".to_string(),
+                "scripted model has no profile or summary".to_string(),
             ));
         }
         let reply = self.replies.lock().unwrap().pop_front();
@@ -196,8 +198,14 @@ async fn answers_a_question_and_records_it() {
     );
     assert_eq!(
         step_names(&response),
-        ["context", "llm", "guard", "run", "record"]
+        ["context", "llm", "guard", "run", "narrate", "record"]
     );
+    // Mock không có câu trả lời viết sẵn cho task summary nên đoạn trả lời là câu khuôn, không gọi mạng.
+    assert_eq!(
+        response["answer_text"],
+        "Có 2 dòng; cao nhất là LATAM với 200."
+    );
+    assert_eq!(response["answer_text_by_model"], false);
     // Giả định "toàn bộ thời gian" của mô hình thành một lựa chọn với id do code dựng.
     assert_eq!(
         response["choices"],
@@ -238,7 +246,7 @@ async fn repairs_a_failed_run_once() {
     assert_eq!(response["status"], "answered", "{response}");
     assert_eq!(
         step_names(&response),
-        ["context", "llm", "guard", "run", "repair", "guard", "run", "record"]
+        ["context", "llm", "guard", "run", "repair", "guard", "run", "narrate", "record"]
     );
     assert!(response["sql_generated"]
         .as_str()
@@ -303,9 +311,14 @@ async fn mock_why_question_without_data_is_rejected() {
     assert_eq!(fetch_count(&asking.db.store, sql).await, 1);
 }
 
+/// Guard từ chối câu đầu thì mô hình được sửa một lần; câu sửa vẫn bị từ chối thì câu hỏi là rejected, người hỏi nhận
+/// lời của hệ thống còn lý do của guard ở bước guard.
 #[tokio::test]
 async fn guard_refusal_is_recorded_as_rejected() {
-    let llm = scripted(&[sql_reply("DELETE FROM dataco")]);
+    let llm = scripted(&[
+        sql_reply("DELETE FROM dataco"),
+        sql_reply("DELETE FROM dataco"),
+    ]);
     let Some(asking) = start(Some(llm)).await else {
         return;
     };
@@ -315,7 +328,18 @@ async fn guard_refusal_is_recorded_as_rejected() {
     assert_eq!(response["sql_generated"], "DELETE FROM dataco");
     assert!(response["sql_guarded"].is_null());
     assert!(response["query_id"].is_string());
-    assert_eq!(step_names(&response), ["context", "llm", "guard", "record"]);
+    assert_eq!(
+        step_names(&response),
+        ["context", "llm", "guard", "repair", "guard", "record"]
+    );
+    assert_eq!(response["message"], REFUSED_MESSAGE);
+    assert!(
+        response["steps"][4]["detail"]
+            .as_str()
+            .unwrap()
+            .contains("SELECT"),
+        "{response}"
+    );
     assert_eq!(asking.queries_with("rejected").await, 1);
     // Không có câu nào chạy nên không có thẻ hay biểu đồ.
     assert!(response["understanding"].is_null());
@@ -444,9 +468,10 @@ impl LlmProvider for RecordingLlm {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        if request.task == LlmTask::Profile {
+        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn.
+        if matches!(request.task, LlmTask::Profile | LlmTask::Summary) {
             return Err(AppError::Upstream(
-                "recording model has no profile".to_string(),
+                "recording model has no profile or summary".to_string(),
             ));
         }
         self.prompts

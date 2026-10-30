@@ -20,8 +20,6 @@ export type SqlView = {
   guarded: string | null
   /** Vì sao không có bản sau guard, ví dụ lý do guard từ chối. */
   guardedMissing: string | null
-  /** Những gì guard ghi là đã thêm, ví dụ "Thêm LIMIT 100000". */
-  guardNotes: string[]
 }
 
 export type GroupView = {
@@ -36,6 +34,8 @@ export type GroupView = {
 
 export type DimensionView = {
   column: string
+  /** Nghĩa tiếng Việt của cột từ hồ sơ cột; null khi hồ sơ không có. */
+  label: string | null
   kind: CellKind
   groups: GroupView[]
   /** Chỉ có với độ đo tỷ lệ: tổng hai phần của mọi nhóm, cộng lại bằng chênh lệch. */
@@ -57,18 +57,40 @@ export type VolumePriceView = {
 
 export type BreakdownView = {
   measure: string
+  /** Hai kỳ hay hai nhóm: quyết định chữ chiều (tăng, giảm hay cao hơn, thấp hơn). */
+  comparison: Comparison
   baseLabel: string
   compareLabel: string
   baseValue: string
   compareValue: string
+  /** Số dòng của từng lát cắt, chuỗi chữ số. */
+  baseRows: string
+  compareRows: string
+  /** Độ đo đếm dòng: số đo của lát cắt chính là quy mô của nó. */
+  countsRows: boolean
   change: string
+  /** Chênh lệch so với lát gốc, phần trăm; null khi lát gốc không dương. */
+  percentChange: string | null
+  /** Cột có hai giá trị đang so (so hai nhóm), kèm nghĩa tiếng Việt; null khi so hai kỳ. */
+  sliceColumn: string | null
+  sliceColumnLabel: string | null
   /** Chiều giải thích chênh lệch tốt nhất đứng đầu, đúng thứ tự backend gửi. */
   dimensions: DimensionView[]
   volumePrice: VolumePriceView | null
-  summary: string
-  /** False: câu viết theo khuôn, không phải lời của mô hình. */
-  summaryByModel: boolean
+  /** Câu trả lời chính và các ý ngắn, do code viết từ số đã tính nên luôn khớp số. */
+  summaryTitle: string
+  summaryPoints: SummaryPointView[]
+  /** Lời giải thích do mô hình viết lại từ chính các ý trên, đã qua kiểm số và kiểm chiều; null khi dùng câu khuôn. */
+  modelSummary: string | null
 }
+
+export type SummaryPointView = {
+  /** Đầu ý, in đậm, ví dụ "Lý do chính". */
+  lead: string
+  text: string
+}
+
+export type Comparison = 'periods' | 'groups'
 
 export type Slice = 'base' | 'compare'
 

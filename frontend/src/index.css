@@ -24,6 +24,12 @@
     --color-label: var(--label);
     --color-label-soft: var(--label-soft);
     --color-label-border: var(--label-border);
+    --color-decrease: var(--decrease);
+    --color-increase: var(--increase);
+    --color-info: var(--info);
+    --color-info-soft: var(--info-soft);
+    --color-info-border: var(--info-border);
+    --color-info-text: var(--info-text);
     --color-code: var(--code);
     --color-code-foreground: var(--code-foreground);
     --color-code-keyword: var(--code-keyword);
@@ -120,7 +126,7 @@
     --sidebar-border: #24414d;
     /* Viền focus hổ phách trên nền mực: khoảng 5,7:1. */
     --sidebar-ring: #d98a1e;
-    /* Màu nhấn hổ phách cho số chênh lệch, cảnh báo, dòng đang chọn. */
+    /* Màu nhấn hổ phách cho cảnh báo, dòng đang chọn. */
     --highlight: #d98a1e;
     --highlight-soft: #fcf3e6;
     --highlight-border: #f6dfbc;
@@ -129,6 +135,19 @@
     --label: #2b6f6a;
     --label-soft: #eaf3f2;
     --label-border: #d2e5e2;
+    /* Chiều thay đổi của một số trong câu "tại sao" (số chênh lệch, thanh đóng góp, bảng phân rã): giảm đỏ, tăng xanh
+       lá, để người đọc nhận ra chiều ngay. Tách khỏi --highlight, --label vì đó là màu thương hiệu, còn dùng cho cảnh
+       báo, nút, liên kết. Chữ trên nền trắng và trên --background: đỏ khoảng 6,6:1 và 6,2:1, xanh khoảng 5,7:1 và
+       5,4:1, trên mức 4,5:1 của WCAG 2.2 mục 1.4.3. Số luôn kèm dấu nên màu không phải cách duy nhất để biết chiều. */
+    --decrease: #b42318;
+    --increase: #067647;
+    /* Thẻ thông tin bổ sung (cách đọc các cột của tab Phân rã): xanh dương để khác hẳn cảnh báo hổ phách. Tiêu đề
+       --info-text trên --info-soft khoảng 6,2:1, chữ thường khoảng 14:1, viền trái --info khoảng 4,8:1 (non-text cần
+       3:1, WCAG 2.2 mục 1.4.11). */
+    --info: #2563eb;
+    --info-soft: #eff6ff;
+    --info-border: #bfdbfe;
+    --info-text: #1d4ed8;
     /* Khối SQL nền mực. Từ khóa hổ phách sáng khoảng 8:1, tên cột xanh nhạt khoảng 9:1 trên nền mực. */
     --code: #13262f;
     --code-foreground: #e9f0f0;
@@ -139,6 +158,14 @@
 }
 
 .dark {
+    /* Giảm, tăng trên nền tối: đỏ khoảng 7,1:1 và 6,4:1, xanh khoảng 9,8:1 và 8,9:1 trên --background và --card. */
+    --decrease: #f97066;
+    --increase: #47cd89;
+    /* Thẻ thông tin trên nền tối: tiêu đề khoảng 8,2:1, chữ thường khoảng 14:1, viền trái khoảng 5,8:1 trên --info-soft. */
+    --info: #60a5fa;
+    --info-soft: #172554;
+    --info-border: #1e3a8a;
+    --info-text: #93c5fd;
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -177,6 +204,10 @@
     /* Viền mặc định cho phần tử không có lớp ring riêng (ví dụ link bỏ qua điều hướng). shadcn để outline-ring/50:
        nửa độ đậm chỉ còn khoảng 2,4:1 kể cả với màu ring ở trên, nên dùng đủ độ đậm. */
     @apply border-border outline-ring;
+    /* Thanh cuộn mảnh cho mọi vùng cuộn (trang, cột danh sách, pane minh chứng, bảng): thanh mặc định dày chiếm chỗ
+       và nổi hơn nội dung. Màu lấy từ token nên theo cả chế độ tối. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-foreground) transparent;
     }
   body {
     @apply bg-background text-foreground;

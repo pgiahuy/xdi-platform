@@ -1,0 +1,11 @@
+Question: Doanh thu theo thị trường
+
+The SQL you wrote for this question could not run.
+SQL:
+SELECT "Market", SUM("Revenue") FROM dataco GROUP BY 1
+
+Error:
+Binder Error: Referenced column "Revenue" not found in FROM clause!
+Candidate bindings: "Order Item Total"
+
+Fix it so that it answers the same question. Use only the tables and columns given above. Reply with one JSON object in the same format as before: "terms", "assumptions", and the fixed SQL in "sql" as one SELECT statement. Do not use "clarify" and write nothing outside the JSON object.

@@ -48,6 +48,9 @@ pub struct Config {
     pub static_dir: Option<PathBuf>,
     /// Nạp dataset mẫu vào workspace đầu tiên lúc thiết lập lần đầu (SEED_SAMPLE, service/samples.rs).
     pub seed_sample: bool,
+    /// Câu hỏi thường có đoạn trả lời do mô hình viết từ các dòng đầu của kết quả (ANSWER_TEXT, service/ask/summary.rs).
+    /// false: không gửi dòng kết quả nào cho mô hình, đoạn trả lời là câu khuôn.
+    pub answer_text: bool,
     /// Thư mục chứa file mẫu (SAMPLES_DIR): data/samples của repo, compose gắn vào /samples.
     pub samples_dir: PathBuf,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
@@ -109,6 +112,7 @@ impl Config {
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
             seed_sample: flag("SEED_SAMPLE", env::var("SEED_SAMPLE").ok().as_deref(), true),
+            answer_text: flag("ANSWER_TEXT", env::var("ANSWER_TEXT").ok().as_deref(), true),
             // Mặc định tính từ thư mục backend/, nơi make dev chạy cargo run, như DATA_DIR=./data là backend/data.
             samples_dir: PathBuf::from(var_or("SAMPLES_DIR", "../data/samples")),
             excel_worker: ExcelWorker::Process(worker_binary()),

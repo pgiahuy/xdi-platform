@@ -13,22 +13,28 @@ use crate::service::ask::context::AskContext;
 use crate::service::ask::contract::{Choice, ChoiceOption};
 use crate::service::ask::reply::{SqlAnswer, Term, TermKind};
 use crate::service::explain::check::{PlanSlices, WhyPlan};
+use crate::service::explain::latest::{build_compare_choice, LatestPeriod};
 use crate::service::explain::period::{Grain, Period};
 
 /// Id lựa chọn kỳ so sánh của câu so hai kỳ, theo dạng why:<trường> của #38. Phương án: previous_<grain>,
 /// same_<grain>_last_year, hoặc một kỳ viết như trong form.
 pub const BASE_CHOICE_ID: &str = "why:base";
 
-/// Giả định của câu "tại sao": kỳ so sánh khi so hai kỳ, rồi chỉ số chưa xác nhận (build_assumption_choices của #29,
-/// với terms của form cộng một term cho chỉ số form dùng, để chỉ số mô hình quên ghi vào terms vẫn được báo).
+/// Giả định của câu "tại sao": kỳ cần giải thích khi code chọn nó (latest, câu không nêu kỳ, explain/latest.rs), kỳ
+/// so sánh khi so hai kỳ, rồi chỉ số chưa xác nhận (build_assumption_choices của #29, với terms của form cộng một term
+/// cho chỉ số form dùng, để chỉ số mô hình quên ghi vào terms vẫn được báo).
 pub fn build_why_assumptions(
     context: &AskContext,
     metrics: &[MetricDefinition],
     terms: &[Term],
     plan: &WhyPlan,
+    latest: Option<&LatestPeriod>,
 ) -> Vec<Choice> {
     let mut choices = Vec::new();
     if let PlanSlices::Periods { base, compare, .. } = &plan.slices {
+        if let Some(latest) = latest {
+            choices.push(build_compare_choice(latest, *base));
+        }
         choices.push(build_base_choice(*base, *compare));
     }
     let mut terms = terms.to_vec();

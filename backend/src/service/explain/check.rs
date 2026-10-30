@@ -9,6 +9,8 @@ thường, vì giá trị là điều kiện lọc trên dữ liệu thật và 
 
 Phần độ đo (chỉ số, cột với sum, count) ở explain/measure.rs. */
 
+use std::collections::HashMap;
+
 use sqlparser::ast::Expr;
 
 use crate::engine::store::{MetricDefinition, ProfileColumn, ProfileRole};
@@ -20,8 +22,11 @@ use crate::service::explain::sql::{build_equals, build_time_expr};
 
 /// Chiều có tới ngần này giá trị khác nhau mới phân rã (#39): nhiều hơn thì bảng đóng góp dài mà mỗi nhóm nhỏ.
 pub const DIMENSION_MAX_VALUES: i64 = 50;
-/// Số chiều phân rã tối đa (#39): mỗi chiều một câu SQL.
-pub const DIMENSION_MAX: usize = 8;
+/// Số cột ứng viên tối đa chạy cho một câu hỏi: mỗi ứng viên một câu SQL, chạy lần lượt. Chọn ở đây: DataCo có 13 ứng
+/// viên (12 khi so hai phân khúc, vì cột đang so không là ứng viên), và phân rã 12 ứng viên đo một lần mất 199 ms (bản
+/// release, 180 nghìn dòng), nên 30 ứng viên ước còn dưới một giây trên cỡ dữ liệu đó. Bảng rộng hơn thì các cột sau ứng
+/// viên thứ 30 theo thứ tự trong file không được xét.
+pub const DIMENSION_CANDIDATES_MAX: usize = 30;
 /// Số giá trị đưa vào lời báo lỗi khi giá trị không có trong danh sách, đủ để mô hình thấy cách viết.
 const VALUES_IN_ERROR: usize = 20;
 
@@ -50,6 +55,9 @@ pub struct WhyPlan {
     pub dimensions: Vec<String>,
     /// Cột đếm phân biệt làm lượng (#40); None thì không tách lượng và giá.
     pub volume: Option<String>,
+    /// Tên tiếng Việt của cột (bí danh đầu tiên trong hồ sơ ngữ nghĩa), để lời tóm tắt ghi "Type (cách thanh toán)".
+    /// Cột chưa có bí danh thì không có mục nào.
+    pub labels: HashMap<String, String>,
 }
 
 /// Hai lát cắt.
@@ -111,6 +119,7 @@ pub fn build_why_check(
         table: profile.table.to_string(),
         dimensions: build_dimensions(form, profile, &slices),
         volume: build_volume(profile),
+        labels: build_labels(profile),
         measure,
         slices,
         filters,
@@ -368,8 +377,11 @@ fn check_value(
     None
 }
 
-/// Cột chiều để phân rã (#39): vai trò dimension, không nhạy cảm (giá trị nhóm hiện ra và gửi cho mô hình viết lời),
-/// tới DIMENSION_MAX_VALUES giá trị, trừ cột làm lát cắt và cột đã lọc bằng một giá trị (chỉ còn một nhóm).
+/// Cột chiều ứng viên để phân rã (#39): vai trò dimension, không nhạy cảm (giá trị nhóm hiện ra và gửi cho mô hình viết
+/// lời), từ 2 tới DIMENSION_MAX_VALUES giá trị (một giá trị thì chỉ có một nhóm), trừ cột làm lát cắt và cột đã lọc bằng
+/// một giá trị. Chỉ cắt ở DIMENSION_CANDIDATES_MAX: explain/dimension_pick.rs bỏ chiều trùng, chiều không so được gì,
+/// rồi phần chấm điểm xếp các chiều còn lại. Cắt sớm hơn theo thứ tự cột ở đây thì cột đứng sau trong file không bao giờ
+/// được xét, dù giải thích tốt hơn.
 fn build_dimensions(form: &WhyForm, profile: &WhyProfile, slices: &PlanSlices) -> Vec<String> {
     let slice_column = match slices {
         PlanSlices::Groups { column, .. } => Some(column.as_str()),
@@ -379,10 +391,13 @@ fn build_dimensions(form: &WhyForm, profile: &WhyProfile, slices: &PlanSlices) -
         .columns
         .iter()
         .filter(|c| c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive)
-        .filter(|c| c.distinct_count.is_some_and(|n| n <= DIMENSION_MAX_VALUES))
+        .filter(|c| {
+            c.distinct_count
+                .is_some_and(|n| (2..=DIMENSION_MAX_VALUES).contains(&n))
+        })
         .filter(|c| slice_column != Some(c.name.as_str()))
         .filter(|c| !form.filters.iter().any(|f| f.column == c.name))
-        .take(DIMENSION_MAX)
+        .take(DIMENSION_CANDIDATES_MAX)
         .map(|c| c.name.clone())
         .collect()
 }
@@ -402,6 +417,20 @@ fn build_volume(profile: &WhyProfile) -> Option<String> {
     let repeats =
         matches!((key.distinct_count, profile.row_count), (Some(d), Some(rows)) if d < rows);
     repeats.then(|| key.name.clone())
+}
+
+// Bí danh của hồ sơ ngữ nghĩa là tiếng Việt (luật của prompt lập hồ sơ); bí danh đầu là tên mô hình thấy hợp nhất.
+// Bí danh trùng tên cột (khác hoa thường) thì không thêm gì cho người đọc, nên bỏ.
+fn build_labels(profile: &WhyProfile) -> HashMap<String, String> {
+    profile
+        .columns
+        .iter()
+        .filter_map(|c| {
+            let alias = c.aliases.iter().map(|a| a.trim()).find(|a| !a.is_empty())?;
+            (alias.to_lowercase() != c.name.to_lowercase())
+                .then(|| (c.name.clone(), alias.to_string()))
+        })
+        .collect()
 }
 
 pub(super) fn find_column<'a>(
@@ -424,10 +453,21 @@ pub(super) fn find_column<'a>(
 }
 
 fn wrong_role(column: &ProfileColumn, field: &str, wanted: &str) -> FieldError {
+    // Cột kỳ học dạng chữ ("2013J", "2014J") có vai trò chiều: mô hình hay đặt nó vào "time", sửa lần hai thì bỏ "time"
+    // mà quên "groups", form sai hai lần và câu rơi về câu thường. Chỉ luôn đường sửa đúng trong lời báo lỗi.
+    let hint = if field.starts_with("time") && column.role == "dimension" {
+        format!(
+            "; to compare two values of \"{}\", leave \"time\" out and set \"groups\" to this column with the two \
+             values: the one the question asks about as \"compare\", the other as \"base\"",
+            column.name
+        )
+    } else {
+        String::new()
+    };
     FieldError::new(
         field,
         format!(
-            "\"{}\" has role {}; this field needs a column of role {wanted}",
+            "\"{}\" has role {}; this field needs a column of role {wanted}{hint}",
             column.name, column.role
         ),
     )

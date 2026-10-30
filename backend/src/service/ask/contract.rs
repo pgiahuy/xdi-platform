@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::service::explain::annotate::BreakdownNotes;
+
 // Kết quả bình thường của một câu hỏi, kể cả khi không có số. Câu không trả lời được vẫn là 200 có trạng thái trong
 // body: giao diện cần hiện SQL bị từ chối, các bước và lựa chọn, mà ErrorBody chỉ có code và message.
 /// Outcome of the question, and which fields of `AskResponse` are set:
@@ -27,9 +29,11 @@ use uuid::Uuid;
 ///   again. This can happen before the model is called (a word matches several columns) or after (the two slices of
 ///   a "why" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.
 ///   Not recorded in the history, so `query_id` is null.
-/// - `rejected`: the guard refused the SQL: the generated one for a reason a fix cannot change (for example it is not
-///   a read-only SELECT, or it calls a function that is not allowed), or the one fixed in the `repair` round. Set:
-///   `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false. Also when
+/// - `rejected`: the guard refused the SQL the model wrote in the `repair` round (when the guard refuses the model's
+///   first SQL, for any reason, the question always gets that round), or the SQL the server built for a "why"
+///   breakdown. Set: `message`, `query_id`, `sql_generated`. For the model's SQL, the `guard` step that stopped it has
+///   `ok` false and the guard's reason in `detail`, and `message` is a fixed text asking to rephrase the question, since
+///   the user cannot fix the SQL; for a breakdown, `message` gives the guard's reason. Also when
 ///   the model finds that no column of the dataset holds the information the question needs (a rating that is not
 ///   there, a forecast): no SQL runs, `sql_generated` is null, and `message` gives the reason and the closest columns.
 /// - `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or
@@ -37,11 +41,10 @@ use uuid::Uuid;
 ///   Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or
 ///   `repair` step that stopped it has `ok` false.
 ///
-/// A fix round starts when the analytics engine fails on the SQL, or when the guard refuses it because a table or
-/// column does not exist or because it could build a value too large (too deep, too many concatenated pieces, too
-/// wide, a size argument over the limit); there is at most one round per question. The status names the step that stopped the
-/// question: the guard gives `rejected`, the engine or the fix round gives `failed`. A model error before any SQL
-/// exists is not a status: the request gets 502 or 503.
+/// A fix round starts when the analytics engine fails on the SQL, when the guard refuses it for any reason, or when the
+/// model's reply cannot be read; there is at most one round per question, and the fixed SQL goes through the guard
+/// again. The status names the step that stopped the question: the guard gives `rejected`, the engine or the fix round
+/// gives `failed`. A model error before any SQL exists is not a status: the request gets 502 or 503.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AskStatus {
@@ -94,6 +97,15 @@ pub struct AskResponse {
     pub warnings: Vec<Warning>,
     #[schema(required)]
     pub explanation: Option<Explanation>,
+    /// Short answer in Vietnamese for an `answered` question that is not a "why" question and has at least one row:
+    /// written by the language model from the first 10 rows of the result, every number checked against those rows,
+    /// or a template sentence written by the backend. Null otherwise; a "why" question has `explanation.summary`.
+    #[schema(required)]
+    pub answer_text: Option<String>,
+    /// True when `answer_text` was written by the language model, false for the template sentence (the model failed,
+    /// timed out, wrote a number that is not in the rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null.
+    #[schema(required)]
+    pub answer_text_by_model: Option<bool>,
     /// Questions back to the user, only for `needs_choice`. Every entry has `selected` null.
     pub clarifications: Vec<Choice>,
     /// What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a
@@ -109,6 +121,11 @@ pub struct UnderstoodItem {
     pub label: String,
     /// Fragment of `sql_guarded` this item comes from.
     pub sql: String,
+    /// True when the item is carried over from the previous turn of the conversation: the same as in that turn's card
+    /// (same SQL fragment or same label) and not named in this question. Omitted when false.
+    // Bỏ khi false để response của câu đơn lẻ không đổi; đánh dấu ở service/conversation/carryover.rs.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub from_previous: bool,
 }
 
 /// The "understood as" card, built from `sql_guarded`: what is measured, filtered, grouped, sorted, over which
@@ -380,21 +397,44 @@ pub struct Explanation {
     pub measure: String,
     /// How the measure adds up over groups, which decides how to read the numbers below.
     pub measure_kind: MeasureKind,
+    /// What the two slices are, which decides the words for the change: up or down between two periods, higher or
+    /// lower between two groups.
+    pub comparison: Comparison,
+    /// True when the measure counts rows (a count, not a sum): the measure is then itself the size of each slice.
+    pub counts_rows: bool,
+    /// Column whose two values are compared, for `groups`; null for `periods`.
+    #[schema(required)]
+    pub slice_column: Option<String>,
+    /// Vietnamese name of `slice_column` from the column profile; null when the profile has none.
+    #[schema(required)]
+    pub slice_column_label: Option<String>,
     /// Slice compared against.
     pub base: ExplanationSlice,
     /// Slice being explained.
     pub compare: ExplanationSlice,
     /// `compare.value - base.value`.
     pub change: String,
+    /// `change / base.value * 100`, rounded to one decimal; null when `base.value` is zero or negative.
+    #[schema(required)]
+    pub percent_change: Option<String>,
     /// One breakdown per dimension, the dimension that explains the change best first.
     pub dimensions: Vec<DimensionBreakdown>,
     #[schema(required)]
     pub volume_price: Option<VolumePrice>,
     /// Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown.
     pub summary: String,
+    /// Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese).
+    pub summary_title: String,
+    /// Points under the main answer, written by the backend from the numbers above; each is said only when the numbers
+    /// support it.
+    pub summary_points: Vec<SummaryPoint>,
     /// False when the model's text failed the number check, or the model was not reached, and `summary` is a template
     /// sentence written by the backend.
     pub summary_by_model: bool,
+    // Ghi chú nội bộ cho lời tóm tắt (% tác động, nhóm khác thường, chiều bỏ qua), không gửi qua API: annotate.rs
+    // tính, summary.rs và bước kiểm số của narrate đọc. Bảng `dimensions` ở trên không đổi vì ghi chú này.
+    #[serde(skip)]
+    pub notes: BreakdownNotes,
 }
 
 // Tỷ lệ không cộng được theo nhóm nên phân rã khác (explain/ratio.rs): giá trị của lát cắt và của nhóm là tỷ lệ, đóng
@@ -409,6 +449,17 @@ pub enum MeasureKind {
     Ratio,
 }
 
+// Hai nhóm (Pass và Withdrawn) không có trước sau: nói "Withdrawn tăng so với Pass" làm người đọc tưởng một nhóm đổi
+// theo thời gian. Lời viết theo khuôn, prompt của mô hình và giao diện chọn chữ theo trường này.
+/// - `periods`: the slices are two periods; `compare` is the later one.
+/// - `groups`: the slices are two values of one column, with no order in time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Comparison {
+    Periods,
+    Groups,
+}
+
 // filter là điều kiện SQL, chỉ để hiện và kiểm. Truy dòng nguồn từ một dòng phân rã gửi tên lát cắt (base, compare),
 // không gửi SQL: backend lấy điều kiện đã lưu cùng câu hỏi, client không đưa SQL vào được.
 /// One of the two slices.
@@ -420,6 +471,37 @@ pub struct ExplanationSlice {
     pub filter: String,
     /// Value of the measure on the slice.
     pub value: String,
+    /// Number of rows of the slice.
+    pub rows: String,
+}
+
+/// One point of the summary: a short lead (shown in bold) and the sentence after it.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct SummaryPoint {
+    pub kind: SummaryPointKind,
+    /// Lead of the point (Vietnamese), for example "Lý do chính".
+    pub lead: String,
+    /// Rest of the point (Vietnamese).
+    pub text: String,
+}
+
+/// - `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the
+///   rate).
+/// - `outliers`: groups that changed much more or much less than the whole, or exist on one side only.
+/// - `even`: no group stands out; the largest contributions are the largest groups.
+/// - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow
+///   comparing groups with the whole (a base slice of zero or less, or a change too close to zero).
+/// - `against`: a group that moved the other way.
+/// - `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SummaryPointKind {
+    Reason,
+    Outliers,
+    Even,
+    Largest,
+    Against,
+    Dropped,
 }
 
 /// Contribution of every group of one dimension; the contributions add up to `change`.
@@ -427,6 +509,9 @@ pub struct ExplanationSlice {
 pub struct DimensionBreakdown {
     /// Dimension column, as named in the dataset (not a name from `result.columns`).
     pub column: String,
+    /// Vietnamese name of the column from the column profile; null when the profile has none.
+    #[schema(required)]
+    pub label: Option<String>,
     /// How to read the group values, like the `kind` of a result column.
     pub kind: ValueKind,
     /// SQL that computed the groups of both slices, after the guard.
@@ -501,7 +586,7 @@ pub struct VolumePrice {
 /// - `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column
 ///   does not exist or because it could build a value too large (at most once).
 /// - `explain`: compute the breakdown of a "why" question (code, no model).
-/// - `narrate`: the language model writes the summary of the breakdown.
+/// - `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.
 /// - `record`: save the question in the history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]

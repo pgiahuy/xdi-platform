@@ -14,14 +14,17 @@ use crate::engine::llm::mock::Mock;
 use crate::engine::llm::{LlmProvider, LlmRequest};
 use crate::error::AppError;
 use crate::service::ask::contract::{
-    CellValue, DimensionBreakdown, Explanation, ExplanationSlice, GroupContribution, MeasureKind,
-    StepName, ValueKind,
+    CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice, GroupContribution,
+    MeasureKind, StepName, ValueKind,
 };
 use crate::service::ask::examples::build_why_example;
 use crate::service::ask::narrate::narrate;
-use crate::service::explain::number::{build_change_text, build_number_text, MAX_FRACTION_DIGITS};
+use crate::service::explain::annotate::{annotate_dimensions, build_value_presences, Totals};
+use crate::service::explain::build_direction_text;
+use crate::service::explain::number::{build_number_text, MAX_FRACTION_DIGITS};
 use crate::service::explain::{
-    build_narrate_prompt, build_number_check, build_template_summary, MAX_SUMMARY_CHARS,
+    build_direction_check, build_narrate_prompt, build_number_check, build_template_summary,
+    MAX_SUMMARY_CHARS,
 };
 
 const QUESTION: &str = "Tại sao doanh thu quý 3 năm 2017 giảm?";
@@ -42,22 +45,30 @@ fn small_explanation(
     change: &str,
     groups: &[(Option<&str>, &str)],
 ) -> Explanation {
-    Explanation {
+    let mut explanation = Explanation {
         measure: "Doanh thu".to_string(),
         measure_kind: MeasureKind::Total,
+        comparison: Comparison::Periods,
+        counts_rows: false,
+        slice_column: None,
+        slice_column_label: None,
         base: ExplanationSlice {
             label: "Quý 2/2017".to_string(),
             filter: String::new(),
             value: base_value.to_string(),
+            rows: "0".to_string(),
         },
         compare: ExplanationSlice {
             label: "Quý 3/2017".to_string(),
             filter: String::new(),
             value: compare_value.to_string(),
+            rows: "0".to_string(),
         },
         change: change.to_string(),
+        percent_change: None,
         dimensions: vec![DimensionBreakdown {
             column: "Market".to_string(),
+            label: None,
             kind: ValueKind::Text,
             sql: String::new(),
             groups: groups
@@ -76,8 +87,36 @@ fn small_explanation(
         }],
         volume_price: None,
         summary: String::new(),
+        summary_title: String::new(),
+        summary_points: Vec::new(),
         summary_by_model: false,
-    }
+        notes: Default::default(),
+    };
+    apply_notes(&mut explanation);
+    explanation
+}
+
+/// Ghi chú cho lời tóm tắt, tính lại từ bảng phân rã như bước explain; test sửa bảng thì gọi lại. Số không đọc được
+/// thì để ghi chú rỗng, như Explanation không có phân rã.
+fn apply_notes(explanation: &mut Explanation) {
+    let (Ok(base), Ok(compare), Ok(change)) = (
+        explanation.base.value.parse(),
+        explanation.compare.value.parse(),
+        explanation.change.parse(),
+    ) else {
+        return;
+    };
+    let totals = Totals {
+        base,
+        compare,
+        change,
+    };
+    let presences: Vec<_> = explanation
+        .dimensions
+        .iter()
+        .map(build_value_presences)
+        .collect();
+    explanation.notes = annotate_dimensions(&explanation.dimensions, &presences, totals);
 }
 
 /// Mô hình giả: trả câu viết sẵn hoặc một lỗi viết sẵn.
@@ -167,9 +206,12 @@ fn template_works_without_dimensions_and_volume_price() {
     explanation.dimensions = vec![];
     explanation.volume_price = None;
     let template = build_template_summary(&explanation);
+    // Không còn chiều nào, nhưng số dòng hai bên vẫn cho biết chênh lệch đến từ đâu.
     assert_eq!(
         template,
-        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00."
+        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Lý do chính: \
+         số dòng dữ liệu hai bên khác nhau: Quý 2/2017 có 6.200 dòng, Quý 3/2017 có 5.480 dòng, còn trung bình mỗi \
+         dòng hai bên gần như nhau."
     );
     check(&template, &explanation).unwrap();
 }
@@ -205,11 +247,13 @@ fn wrong_numbers_are_rejected() {
 #[test]
 fn ratios_are_always_rejected() {
     let explanation = example();
+    // 8% không phải phần trăm code đã tính cho mẫu; 3% thì có (phần của Africa), nhưng "gấp 3", "3x", "3 phần trăm"
+    // vẫn bị loại vì chỉ phần trăm viết bằng dấu % mới được đối chiếu với phần trăm đã tính.
     for bad in [
-        "Doanh thu giảm 3% so với quý 2/2017.",
-        "Doanh thu giảm 3 % so với quý 2/2017.",
-        "Doanh thu giảm 3\u{a0}% so với quý 2/2017.",
-        "Doanh thu giảm 3％ so với quý 2/2017.",
+        "Doanh thu giảm 8% so với quý 2/2017.",
+        "Doanh thu giảm 8 % so với quý 2/2017.",
+        "Doanh thu giảm 8\u{a0}% so với quý 2/2017.",
+        "Doanh thu giảm 8％ so với quý 2/2017.",
         "Doanh thu giảm 3‰ so với quý 2/2017.",
         "Doanh thu giảm 3 phần trăm so với quý 2/2017.",
         "Doanh thu giảm 3 phần\u{a0}trăm so với quý 2/2017.",
@@ -379,10 +423,38 @@ fn template_names_a_group_in_the_same_direction_as_the_change() {
     );
     let template = build_template_summary(&explanation);
     assert!(
-        template.contains("nhóm B đóng góp nhiều nhất (giảm 400,00)"),
+        template.contains("Nhóm góp nhiều nhất: theo Market, riêng nhóm B, doanh thu giảm 400,00."),
         "{template}"
     );
     assert!(!template.contains("nhóm A"), "{template}");
+    check(&template, &explanation).unwrap();
+}
+
+/// Hai nhóm không có trước sau: câu khuôn nói "cao hơn", "thấp hơn" và đặt tên nhóm gốc cạnh chữ chiều, không nói
+/// "tăng", "giảm" hay "từ ... lên ...".
+#[test]
+fn template_compares_two_groups_without_time_words() {
+    let mut explanation = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("A"), "500.00"), (Some("B"), "-400.00")],
+    );
+    explanation.comparison = Comparison::Groups;
+    explanation.base.label = "Pass".to_string();
+    explanation.compare.label = "Withdrawn".to_string();
+    let template = build_template_summary(&explanation);
+    assert!(
+        template.contains("của Withdrawn thấp hơn Pass 100,00 (900,00 so với 1.000,00)"),
+        "{template}"
+    );
+    assert!(
+        template.contains("theo Market, ở nhóm B, Withdrawn thấp hơn Pass 400,00."),
+        "{template}"
+    );
+    for word in ["tăng", "giảm", " lên ", " xuống "] {
+        assert!(!template.contains(word), "{word}: {template}");
+    }
     check(&template, &explanation).unwrap();
 }
 
@@ -467,7 +539,9 @@ fn prompt_sends_two_dimensions_with_three_groups_each() {
     assert!(prompt.contains(change), "{prompt}");
     assert!(prompt.contains("\"value\": \"9.402.500,00\""), "{prompt}");
     assert!(!prompt.contains("-1283400.00"), "{prompt}");
-    assert_eq!(prompt.matches("\"contribution\"").count(), 2 * 3);
+    // Hai chiều, ba nhóm mỗi chiều, cộng nhóm chính (main_group) mà câu thứ hai phải nói tới.
+    assert_eq!(prompt.matches("\"contribution\"").count(), 2 * 3 + 1);
+    assert!(prompt.contains("\"main_group\""), "{prompt}");
     assert!(prompt.contains("\"column\": \"Market\""));
     assert!(prompt.contains("\"column\": \"Customer Segment\""));
     assert!(prompt.contains("\"if_volume_unchanged\": \"9.226.250,00\""));
@@ -549,14 +623,15 @@ async fn empty_or_too_long_reply_falls_back_to_the_template() {
 async fn wrong_numbers_fall_back_to_the_template() {
     let explanation = example();
     let llm = StubLlm {
-        reply: Reply::Text("Doanh thu quý 3/2017 giảm 13,6% so với quý 2/2017.".to_string()),
+        // 13,6% là % thay đổi code đã tính nên được phép; 14% thì mô hình tự làm tròn, không có trong bảng.
+        reply: Reply::Text("Doanh thu quý 3/2017 giảm 14% so với quý 2/2017.".to_string()),
     };
     let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
     assert_eq!(outcome.summary, build_template_summary(&explanation));
     assert!(!outcome.summary_by_model);
     assert!(!outcome.step.ok);
     let detail = outcome.step.detail.expect("detail");
-    assert!(detail.contains("13"), "{detail}");
+    assert!(detail.contains("14"), "{detail}");
 }
 
 /// Chênh lệch bằng 0: không gọi mô hình, câu khuôn nói "không đổi", bước narrate vẫn ok kèm detail nói lý do.
@@ -597,15 +672,30 @@ fn numbers_are_written_the_vietnamese_way() {
 #[test]
 fn changes_read_as_a_direction_and_an_amount() {
     assert_eq!(
-        build_change_text("-1152666.24", MAX_FRACTION_DIGITS),
+        build_direction_text("-1152666.24", MAX_FRACTION_DIGITS, Comparison::Periods),
         "giảm 1.152.666,24"
     );
     assert_eq!(
-        build_change_text("1039598.96", MAX_FRACTION_DIGITS),
+        build_direction_text("1039598.96", MAX_FRACTION_DIGITS, Comparison::Periods),
         "tăng 1.039.598,96"
     );
-    assert_eq!(build_change_text("0.00", MAX_FRACTION_DIGITS), "không đổi");
-    assert_eq!(build_change_text("abc", MAX_FRACTION_DIGITS), "abc");
+    assert_eq!(
+        build_direction_text("0.00", MAX_FRACTION_DIGITS, Comparison::Periods),
+        "không đổi"
+    );
+    assert_eq!(
+        build_direction_text("abc", MAX_FRACTION_DIGITS, Comparison::Periods),
+        "abc"
+    );
+    // Giữa hai nhóm không có trước sau: chữ chiều là cao hơn, thấp hơn, bằng.
+    assert_eq!(
+        build_direction_text("-400", MAX_FRACTION_DIGITS, Comparison::Groups),
+        "thấp hơn 400"
+    );
+    assert_eq!(
+        build_direction_text("0", MAX_FRACTION_DIGITS, Comparison::Groups),
+        "bằng"
+    );
 }
 
 /// Dấu phẩy chỉ thuộc số khi nằm giữa hai chữ số: liệt kê "3, 4" vẫn là các số riêng có trong nhãn.
@@ -613,4 +703,45 @@ fn changes_read_as_a_direction_and_an_amount() {
 fn a_comma_between_numbers_does_not_join_them() {
     let explanation = example();
     check("Quý 3, quý 2 năm 2017: giảm 1.283.400,00.", &explanation).unwrap();
+}
+
+/// Bước kiểm số không bắt được câu nói ngược chiều ("nhóm B tăng 400,00" khi nhóm B giảm 400,00); bước kiểm chiều thì
+/// bắt được, và không bắt nhầm câu đúng chiều.
+#[test]
+fn direction_check_catches_a_change_told_the_wrong_way() {
+    let explanation = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("A"), "300.00"), (Some("B"), "-400.00")],
+    );
+    let right =
+        "Doanh thu Quý 3/2017 giảm 100,00 so với Quý 2/2017. Riêng nhóm B, doanh thu giảm 400,00.";
+    build_direction_check(right, &explanation).unwrap();
+    let wrong =
+        "Doanh thu Quý 3/2017 giảm 100,00 so với Quý 2/2017. Riêng nhóm B, doanh thu tăng 400,00.";
+    check(wrong, &explanation).unwrap();
+    assert_eq!(
+        build_direction_check(wrong, &explanation).unwrap_err(),
+        ["400,00"]
+    );
+}
+
+/// So hai nhóm: không gọi mô hình, dùng câu khuôn; bước narrate vẫn ok vì đây là lựa chọn, không phải lỗi.
+#[tokio::test]
+async fn two_groups_use_the_template_without_the_model() {
+    let mut explanation = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("A"), "300.00"), (Some("B"), "-400.00")],
+    );
+    explanation.comparison = Comparison::Groups;
+    let llm = StubLlm {
+        reply: Reply::Text("Câu của mô hình.".to_string()),
+    };
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
+    assert_eq!(outcome.summary, build_template_summary(&explanation));
+    assert!(!outcome.summary_by_model);
+    assert!(outcome.step.ok);
 }

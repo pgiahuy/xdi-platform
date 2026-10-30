@@ -1,0 +1,8 @@
+Question: Vì sao doanh thu quý 3 năm 2017 giảm?
+
+Your previous reply:
+{"measure": {"column": "Revenue", "agg": "sum"}, "compare": "Q3 2017"}
+
+The form has these errors. Reply with the whole form again, in the same JSON format, with them fixed:
+- measure.column: "Revenue" is not a column of dataco
+- compare: "Q3 2017" is not a quarter such as 2017-Q3

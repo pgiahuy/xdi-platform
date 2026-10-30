@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/AskIdle.tsx - chỗ của kết quả khi chưa hỏi gì: một dòng nói bước tiếp theo, thay cho khoảng trắng lớn
+/* components/ask/AskIdle.tsx - chỗ của kết quả khi chưa hỏi gì: một dòng nhạt nói bước tiếp theo (dataset đã chọn ở đầu trang), thay cho khoảng trắng lớn
 dưới ô hỏi. Đang hỏi câu đầu tiên thì báo đang hỏi ở cùng chỗ, để người dùng thấy kết quả sẽ hiện ở đâu. */
 
 type Props = {
@@ -12,7 +12,8 @@ export function AskIdle({ pending, hasSuggestions }: Props) {
   const text = pending
     ? 'Đang hỏi...'
     : hasSuggestions
-      ? 'Chọn dataset, gõ câu hỏi rồi bấm Hỏi, hoặc bấm một câu gợi ý để hỏi ngay. Kết quả và bằng chứng hiện ở đây.'
-      : 'Chọn dataset, gõ câu hỏi rồi bấm Hỏi. Kết quả và bằng chứng hiện ở đây.'
-  return <p className="rounded-xl border border-dashed border-input px-4 py-6 text-sm text-muted-foreground sm:px-6">{text}</p>
+      ? 'Gõ câu hỏi ở ô bên dưới hoặc bấm một câu gợi ý. Kết quả và minh chứng hiện ở đây.'
+      : 'Gõ câu hỏi ở ô bên dưới. Kết quả và minh chứng hiện ở đây.'
+  // Một dòng chữ nhạt, không khung: khung viền đứt trước đây trông như một ô nhập, lẫn với ô hỏi bên dưới.
+  return <p className="text-sm text-muted-foreground">{text}</p>
 }

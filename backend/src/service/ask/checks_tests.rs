@@ -126,6 +126,89 @@ fn a_column_of_nulls_is_flagged_and_some_nulls_are_not() {
     assert!(codes(sql, &some_null).is_empty());
 }
 
+/// Câu lọc theo cột thời gian mà ra ô trống hay không dòng nào: lời kèm khoảng thời gian dữ liệu có, lấy từ min, max của
+/// hồ sơ cột. Câu không lọc theo thời gian thì không kèm.
+#[test]
+fn empty_answer_names_the_time_range_of_the_data() {
+    let mut date = column(6, "order date (DateOrders)", "VARCHAR", "time", 1000);
+    date.min_value = Some("2015-01-01 00:00:00".to_string());
+    date.max_value = Some("2018-01-31 23:38:00".to_string());
+    let mut profile = profile();
+    profile.push(date);
+    let note =
+        "Trong dữ liệu, cột order date (DateOrders) có dữ liệu từ 01/01/2015 tới 31/01/2018.";
+
+    let year = r#"SELECT sum("Sales") FROM dataco WHERE strptime("order date (DateOrders)", '%m/%d/%Y %H:%M') >= TIMESTAMP '2019-01-01'"#;
+    let shape = build_query_shape(year).unwrap();
+    let null_sum = table(&["sum(\"Sales\")"], vec![vec![None]], false);
+    let warnings = build_warnings(Some(&null_sum), Some(&shape), &profile, &[]);
+    assert_eq!(warnings.len(), 1);
+    assert!(
+        warnings[0].message.ends_with(note),
+        "{}",
+        warnings[0].message
+    );
+    let empty = table(&["Market"], vec![], false);
+    let warnings = build_warnings(Some(&empty), Some(&shape), &profile, &[]);
+    assert_eq!(warnings[0].code, WarningCode::EmptyResult);
+    assert!(
+        warnings[0].message.ends_with(note),
+        "{}",
+        warnings[0].message
+    );
+
+    let market = r#"SELECT sum("Sales") FROM dataco WHERE "Market" = 'Asia'"#;
+    let shape = build_query_shape(market).unwrap();
+    let warnings = build_warnings(Some(&null_sum), Some(&shape), &profile, &[]);
+    assert!(
+        !warnings[0].message.contains("Trong dữ liệu"),
+        "{}",
+        warnings[0].message
+    );
+}
+
+/// Lời kèm khoảng thời gian chỉ khi câu lọc đúng một cột thời gian bằng tên đầy đủ, ngoài hộp đọc bảng: cột ship_date
+/// chứa chữ date nhưng không phải cột date; cột chiều có min, max vẫn không phải cột thời gian; vế trong hộp đọc bảng
+/// có thể là phân quyền guard thêm.
+#[test]
+fn the_range_note_needs_a_time_column_the_question_filters() {
+    let mut date = column(6, "date", "DATE", "time", 1000);
+    date.min_value = Some("2015-01-01".to_string());
+    date.max_value = Some("2018-01-31".to_string());
+    let mut region = column(7, "region", "VARCHAR", "dimension", 4);
+    region.min_value = Some("East".to_string());
+    region.max_value = Some("West".to_string());
+    let mut profile = profile();
+    profile.extend([date, region]);
+    let null_sum = table(&["s"], vec![vec![None]], false);
+    for sql in [
+        "SELECT sum(\"Sales\") AS s FROM dataco WHERE ship_date >= DATE '2019-01-01'",
+        "SELECT sum(\"Sales\") AS s FROM dataco WHERE region = 'North'",
+        "SELECT sum(\"Sales\") AS s FROM (SELECT * FROM dataco WHERE \"date\" >= DATE '2019-01-01') AS dataco",
+    ] {
+        let shape = build_query_shape(sql).unwrap();
+        let warnings = build_warnings(Some(&null_sum), Some(&shape), &profile, &[]);
+        assert!(
+            !warnings[0].message.contains("Trong dữ liệu"),
+            "{sql}: {}",
+            warnings[0].message
+        );
+    }
+    // Cùng cột date, lọc ngoài hộp đọc bảng: có lời.
+    let shape = build_query_shape(
+        "SELECT sum(\"Sales\") AS s FROM dataco WHERE \"date\" >= DATE '2019-01-01'",
+    )
+    .unwrap();
+    let warnings = build_warnings(Some(&null_sum), Some(&shape), &profile, &[]);
+    assert!(
+        warnings[0]
+            .message
+            .ends_with("Trong dữ liệu, cột date có dữ liệu từ 01/01/2015 tới 31/01/2018."),
+        "{}",
+        warnings[0].message
+    );
+}
+
 #[test]
 fn nulls_in_a_cut_result_name_the_rows_checked() {
     let result = table(&["s"], vec![vec![None]; 1000], true);

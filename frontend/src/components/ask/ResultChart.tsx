@@ -152,7 +152,6 @@ function ChartPanel({ title, chart, data, small }: PanelProps) {
                   dataKey={s.key}
                   name={s.name}
                   fill={colorOf(s.key, i)}
-                  radius={[0, 4, 4, 0]}
                   isAnimationActive={false}
                 >
                   {barCells}
@@ -216,7 +215,6 @@ function ChartPanel({ title, chart, data, small }: PanelProps) {
                   fill={colorOf(s.key, i)}
                   stackId={stacked ? 'parts' : undefined}
                   stroke={stacked ? 'var(--background)' : undefined}
-                  radius={stacked ? undefined : [4, 4, 0, 0]}
                   isAnimationActive={false}
                 >
                   {barCells}

@@ -35,7 +35,7 @@ export function SqlCode({ sql, compareTo, className }: Props) {
     return lines.map((line) => lineText(line) !== '' && !known.has(lineText(line)))
   }, [lines, compareTo])
 
-  const code = (
+  return (
     <pre
       className={cn(
         'overflow-x-auto rounded-[9px] bg-code px-3.5 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-code-foreground',
@@ -43,30 +43,23 @@ export function SqlCode({ sql, compareTo, className }: Props) {
       )}
     >
       {lines.map((line, i) => (
-          <span
-            key={i}
-            className={cn('block', added[i] && '-mx-3.5 border-l-[3px] border-highlight bg-code-added pr-3.5 pl-[11px]')}
-          >
-            {line.map((part, j) =>
-              part.kind === 'plain' ? (
-                part.text
-              ) : (
-                <span key={j} className={partClass[part.kind]}>
-                  {part.text}
-                </span>
-              ),
-            )}
-            {added[i] && <span className="sr-only"> (dòng guard thêm)</span>}
-          </span>
+        <span
+          key={i}
+          className={cn('block', added[i] && '-mx-3.5 border-l-[3px] border-highlight bg-code-added pr-3.5 pl-[11px]')}
+        >
+          {line.map((part, j) =>
+            part.kind === 'plain' ? (
+              part.text
+            ) : (
+              <span key={j} className={partClass[part.kind]}>
+                {part.text}
+              </span>
+            ),
+          )}
+          {added[i] && <span className="sr-only"> (dòng guard thêm)</span>}
+        </span>
       ))}
     </pre>
-  )
-  if (!added.includes(true)) return code
-  return (
-    <div className="flex flex-col gap-1.5">
-      {code}
-      <p className="text-xs text-muted-foreground">Dòng có vạch hổ phách bên trái là dòng guard thêm vào.</p>
-    </div>
   )
 }
 

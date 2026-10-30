@@ -4,13 +4,26 @@ Quy trình ra một phiên bản mới. Số phiên bản theo Semantic Versioni
 
 ## Trước khi tag
 
-1. `main` xanh: `make check` qua trên máy và CI qua trên GitHub; `make eval` đạt baseline (với mock). Trước bản
-   phát hành, chạy thêm một lượt eval với mô hình thật: `LLM_PROVIDER=gemini make eval` (cần GEMINI_API_KEY).
-2. Đổi số phiên bản ở hai chỗ, cùng một số: `backend/Cargo.toml`, `frontend/package.json`. Rồi chạy `make openapi`:
-   đặc tả OpenAPI lấy số phiên bản từ `backend/Cargo.toml`, nên `openapi.json` đổi theo
-   (thiếu bước này thì test `openapi_json_is_up_to_date` và `scripts/check-version.sh` báo lỗi).
+1. `main` xanh: `make check` qua trên máy và CI qua trên GitHub; `make eval` đạt baseline. Trước bản phát hành, chạy
+   thêm một lượt eval với mô hình thật. `make eval` luôn đặt `LLM_PROVIDER=mock`, nên với Gemini thì chạy `make eval`
+   một lần (tạo database `xdi_eval` và build binary) rồi gọi thẳng binary, bỏ `--baseline` vì baseline 1.0 là mức của
+   mock:
+
+   ```bash
+   DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi_eval LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> \
+     DATA_DIR=backend/target/eval-data backend/target/debug/xdi-backend eval \
+     --data data/samples/dataco.csv --cases eval/dataco.json
+   ```
+
+   Đặt `CARGO_TARGET_DIR` thì binary nằm ở `$CARGO_TARGET_DIR/debug/xdi-backend` thay cho `backend/target/debug/`.
+2. Đổi số phiên bản ở hai chỗ, cùng một số: `backend/Cargo.toml`, `frontend/package.json`. Chạy `cargo build` trong
+   `backend/` và `npm install` trong `frontend/` để `Cargo.lock`, `package-lock.json` mang số mới (build phát hành
+   dùng `cargo build --locked`, `Cargo.lock` cũ làm nó lỗi). Rồi chạy `make openapi`: đặc tả OpenAPI lấy số phiên bản
+   từ `backend/Cargo.toml`, nên `openapi.json` đổi theo (thiếu bước này thì test `openapi_json_is_up_to_date` và
+   `scripts/check-version.sh` báo lỗi).
 3. `CHANGELOG.md`: đổi mục `Unreleased` thành `[x.y.z] - YYYY-MM-DD`, tạo mục `Unreleased` trống mới ở trên.
-4. Tài liệu trong `docs/` khớp với code: hướng dẫn cài đặt làm theo được trên máy sạch, ARCHITECTURE.md mục Trạng thái cập nhật.
+4. Tài liệu khớp với code: hướng dẫn cài đặt làm theo được trên máy sạch, ARCHITECTURE.md mục Trạng thái cập nhật,
+   số bản phát hành mới nhất ghi trong `README.md` và `docs/index.md` đổi sang số mới.
 5. Mỗi file mã nguồn chương trình mới có dòng giấy phép ở đầu (`SPDX-License-Identifier: Apache-2.0`).
 6. Một PR tên `chore(release): vx.y.z` gồm các thay đổi trên. Merge xong mới tag.
 
@@ -32,8 +45,7 @@ Workflow `release.yml` chạy khi có tag `v*`:
 - `make release-artifacts VERSION=x.y.z`: binary Linux `xdi-backend-x.y.z-linux-x86_64.tar.gz` (kèm LICENSE, README,
   LICENSES.md, licenses-dependencies.md, thông báo giấy phép của Swagger UI), mã nguồn `xdi-platform-x.y.z.tar.gz`
   giải nén ra thư mục `xdi-platform-x.y.z/`, ghi chú lấy từ mục `[x.y.z]` của CHANGELOG.md
-  (`scripts/release-notes.sh`). Thiếu mục đó thì
-  workflow dừng.
+  (`scripts/release-notes.sh`). Thiếu mục đó thì workflow dừng.
 - Build image `ghcr.io/pgiahuy/xdi-platform`, đẩy với tag `x.y.z` và `latest`.
 - Tạo GitHub Release đính kèm hai file trên.
 
@@ -49,8 +61,9 @@ CI không build image trên mỗi PR.
    `xdi-platform`): `docker pull ghcr.io/pgiahuy/xdi-platform:x.y.z`,
    `docker tag ghcr.io/pgiahuy/xdi-platform:x.y.z xdi-platform-backend`, rồi `docker compose up -d --no-build`.
 2. Tải `xdi-backend-x.y.z-linux-x86_64.tar.gz` từ Release, giải nén, chạy binary với `DATABASE_URL` trỏ tới một
-   Postgres, `/api/health` trả ok. Không cần Rust. Gói này chỉ có backend: muốn có giao diện thì đặt `STATIC_DIR` trỏ tới
-   một bản `frontend/dist` đã build, hoặc dùng image Docker. Tarball mã nguồn thì cần Rust: `make install PREFIX=/tmp/xdi`.
+   Postgres, `/api/health` trả ok. Không cần Rust. Gói này chỉ có backend: muốn có giao diện thì đặt `STATIC_DIR` trỏ
+   tới một bản `frontend/dist` đã build, hoặc dùng image Docker. Tarball mã nguồn thì cần Rust:
+   `make install PREFIX=/tmp/xdi`.
 3. Đăng một bài ở Discussions mục Announcements: phiên bản, ba thay đổi đáng chú ý, link Release.
 4. Trang web (`docs/`) tự cập nhật theo `main`.
 

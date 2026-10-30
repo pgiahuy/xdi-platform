@@ -40,11 +40,12 @@ const TIME_PART_FUNCTIONS: &[&str] = &["date_trunc", "datetrunc", "date_part", "
 pub fn build_column_label(name: &str, profile: &[ColumnProfile], mid_sentence: bool) -> String {
     let column = profile.iter().find(|c| c.name.eq_ignore_ascii_case(name));
     match column.and_then(|c| c.description.as_deref()) {
-        Some(description) if !description.trim().is_empty() => {
+        Some(description) if !build_plain_description(description).is_empty() => {
+            let description = build_plain_description(description);
             let description = if mid_sentence {
-                lower_first(description.trim())
+                lower_first(description)
             } else {
-                description.trim().to_string()
+                description.to_string()
             };
             format!("{description} ({name})")
         }
@@ -383,16 +384,48 @@ fn build_aggregate_label(tree: &Expr, profile: &[ColumnProfile]) -> Option<Strin
     };
     let subject = build_subject_label(arg, profile, true);
     let label = match (name.as_str(), distinct) {
-        ("count", true) => format!("Số {subject} khác nhau"),
+        ("count", true) => format!("{} khác nhau", build_prefixed("Số", &subject)),
         ("count", false) => format!("Số dòng có {subject}"),
-        ("sum", false) => format!("Tổng {subject}"),
-        ("avg" | "mean", false) => format!("Trung bình {subject}"),
+        ("sum", false) => build_prefixed("Tổng", &subject),
+        ("avg" | "mean", false) => build_prefixed("Trung bình", &subject),
         ("min", _) => format!("Nhỏ nhất của {subject}"),
         ("max", _) => format!("Lớn nhất của {subject}"),
         ("median", false) => format!("Trung vị của {subject}"),
         _ => return None,
     };
     Some(label)
+}
+
+/// Mô tả cột do mô hình viết thường là một câu trọn ("Tổng doanh số bán hàng."): bỏ khoảng trắng và dấu câu cuối,
+/// để nhãn ghép thêm "(Sales)" không thành "bán hàng. (Sales)".
+fn build_plain_description(description: &str) -> &str {
+    description
+        .trim()
+        .trim_end_matches(['.', '!', '?', ';', ':', ',', '…'])
+        .trim_end()
+}
+
+/// "Tổng" + "doanh thu" thành "Tổng doanh thu"; mô tả cột đã bắt đầu bằng chính từ đó ("tổng doanh số bán hàng") thì
+/// không thêm lần nữa, chỉ viết hoa chữ đầu, để nhãn không thành "Tổng tổng doanh số". So không phân biệt hoa thường.
+fn build_prefixed(prefix: &str, subject: &str) -> String {
+    let lower = subject.to_lowercase();
+    let wanted = prefix.to_lowercase();
+    let repeats = lower
+        .strip_prefix(&wanted)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '));
+    if repeats {
+        upper_first(subject)
+    } else {
+        format!("{prefix} {subject}")
+    }
+}
+
+fn upper_first(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
 }
 
 /// Hạ chữ đầu để ghép giữa câu ("Quý của ngày đặt hàng"). Từ đầu viết hoa cả (SKU, EU) thì giữ nguyên.

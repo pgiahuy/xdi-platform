@@ -4,14 +4,17 @@ Vai gắn với từng workspace (docs/ARCHITECTURE.md mục 4b), nên đổi wo
 của từng workspace để người dùng biết trước mình sẽ làm được gì ở đó. Nút này không đổi vai của ai.
 Mỗi mục là một link: workspace nằm trong đường dẫn, đổi workspace là chuyển trang, mở được trong tab mới.
 Ở trang ngoài workspace (quản trị hệ thống, tài khoản) không có workspace đang mở: nút thành "Chọn workspace", và người
-chưa thuộc workspace nào thấy một dòng chữ thay cho nút, vì không có gì để chọn. */
+chưa thuộc workspace nào thấy một dòng chữ thay cho nút, vì không có gì để chọn.
+Mục cuối "Tạo workspace" chỉ báo cho trang qua onCreateWorkspace; hộp thoại nằm ngoài menu (AppShell), vì menu đóng
+lại ngay khi chọn mục và gỡ mọi thứ bên trong nó. */
 
-import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react'
+import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -24,11 +27,16 @@ type Props = {
   workspaces: WorkspaceOption[]
   link: LinkComponent
   onNavigate?: () => void
+  /** Không có thì menu không có mục tạo workspace. */
+  onCreateWorkspace?: () => void
+  /** Thanh bên thu gọn: nút chỉ còn ô chữ đầu của workspace; tên và vai đọc qua aria-label và title. */
+  compact?: boolean
 }
 
-export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate }: Props) {
+export function WorkspaceSwitcher(props: Props) {
+  const { current, workspaces, link: Link, onNavigate, onCreateWorkspace, compact = false } = props
   if (workspaces.length === 0) {
-    return <p className="truncate px-2 py-1.5 text-sm text-sidebar-muted">Chưa thuộc workspace nào</p>
+    return compact ? null : <p className="truncate px-2 py-1.5 text-sm text-sidebar-muted">Chưa thuộc workspace nào</p>
   }
   const title = current?.name ?? 'Chọn workspace'
   const subtitle = current ? roleLabel(current.role) : 'Trang không thuộc workspace'
@@ -39,29 +47,31 @@ export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate 
         // một span sr-only: Chrome chèn khoảng trắng quanh span đó, đọc thành "Admin , đổi workspace". Giữ tên và vai
         // đứng đầu theo đúng thứ tự đang hiện, để người dùng điều khiển bằng giọng nói gọi được nút.
         aria-label={current ? `${current.name}, ${roleLabel(current.role)}, đổi workspace` : title}
+        title={compact ? title : undefined}
         className={cn(
           // Khung có viền và nền riêng để đọc ra đây là bộ chọn workspace, không phải chữ tĩnh.
           'flex w-full items-center gap-2.5 rounded-[10px] border border-sidebar-border bg-sidebar-raised px-2.5 py-2 text-left transition-colors',
           'hover:bg-sidebar-accent data-[state=open]:bg-sidebar-accent',
           'focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none',
+          compact && 'justify-center px-1.5',
         )}
       >
         {/* Ô chữ đầu của tên workspace, giúp nhận ra workspace khi có nhiều cái. */}
-        {current && (
+        {(current || compact) && (
           <span
             aria-hidden="true"
             className="flex size-7 shrink-0 items-center justify-center rounded-md bg-label text-[13px] font-semibold text-sidebar-foreground"
           >
-            {current.name.charAt(0).toUpperCase()}
+            {current ? current.name.charAt(0).toUpperCase() : <ChevronsUpDownIcon className="size-4" />}
           </span>
         )}
-        <span className="flex min-w-0 flex-1 flex-col leading-tight">
+        <span className={cn('flex min-w-0 flex-1 flex-col leading-tight', compact && 'hidden')}>
           <span className="truncate text-sm font-semibold" title={title}>
             {title}
           </span>
           <span className="truncate text-xs text-sidebar-muted">{subtitle}</span>
         </span>
-        <ChevronsUpDownIcon aria-hidden="true" className="size-4 shrink-0 text-sidebar-muted" />
+        {!compact && <ChevronsUpDownIcon aria-hidden="true" className="size-4 shrink-0 text-sidebar-muted" />}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-60">
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Workspace của bạn</DropdownMenuLabel>
@@ -86,6 +96,15 @@ export function WorkspaceSwitcher({ current, workspaces, link: Link, onNavigate 
             </DropdownMenuItem>
           )
         })}
+        {onCreateWorkspace && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className={menuItemFocus} onSelect={onCreateWorkspace}>
+              <PlusIcon aria-hidden="true" className="size-4 shrink-0" />
+              Tạo workspace
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/SuggestedQuestions.tsx - danh sách câu hỏi gợi ý; bấm một câu là hỏi luôn câu đó. Trang đặt danh sách
-trong thẻ "Câu gợi ý" (AskSection), nên ở đây không có tiêu đề riêng.
+dưới tiêu đề "Câu gợi ý" khi cuộc trò chuyện còn trống, nên ở đây không có tiêu đề riêng.
 Danh sách rỗng thì không hiện gì: câu gợi ý do lớp hồ sơ ngữ nghĩa viết sau khi nạp (ARCHITECTURE mục 6), chưa xong
 hoặc mô hình không đề xuất câu nào thì dataset không có câu gợi ý. */
 

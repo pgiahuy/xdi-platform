@@ -7,7 +7,7 @@
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
     },
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "servers": [
     {
@@ -1216,6 +1216,8 @@
                   "failed": {
                     "summary": "SQL failed, also after one fix round",
                     "value": {
+                      "answer_text": null,
+                      "answer_text_by_model": null,
                       "chart": null,
                       "choices": [
                         {
@@ -1296,6 +1298,8 @@
                   "needs_choice": {
                     "summary": "Ambiguous question",
                     "value": {
+                      "answer_text": null,
+                      "answer_text_by_model": null,
                       "chart": null,
                       "choices": [],
                       "clarifications": [
@@ -1341,12 +1345,14 @@
                   "rejected": {
                     "summary": "SQL refused by the guard",
                     "value": {
+                      "answer_text": null,
+                      "answer_text_by_model": null,
                       "chart": null,
                       "choices": [],
                       "clarifications": [],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
-                      "message": "Câu SQL bị từ chối: Chỉ chạy được câu SELECT đọc dữ liệu.",
+                      "message": "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.",
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
                       "question": "Xóa các đơn hàng bị hủy",
@@ -1374,6 +1380,18 @@
                           "ok": false
                         },
                         {
+                          "detail": "Mô hình sửa SQL theo lý do guard từ chối",
+                          "duration_ms": 1150,
+                          "name": "repair",
+                          "ok": true
+                        },
+                        {
+                          "detail": "Chỉ chạy được câu SELECT đọc dữ liệu",
+                          "duration_ms": 2,
+                          "name": "guard",
+                          "ok": false
+                        },
+                        {
                           "detail": null,
                           "duration_ms": 5,
                           "name": "record",
@@ -1388,6 +1406,8 @@
                   "simple": {
                     "summary": "One dimension, one measure",
                     "value": {
+                      "answer_text": "Europe có doanh thu cao nhất với 10.845.230,42, tiếp theo là LATAM (10.276.850,17) và Pacific Asia (8.124.900,80).",
+                      "answer_text_by_model": true,
                       "chart": {
                         "kind": "bar",
                         "layout": "single",
@@ -1486,6 +1506,12 @@
                         },
                         {
                           "detail": null,
+                          "duration_ms": 910,
+                          "name": "narrate",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
                           "duration_ms": 6,
                           "name": "record",
                           "ok": true
@@ -1553,6 +1579,8 @@
                   "why": {
                     "summary": "Why question with a breakdown",
                     "value": {
+                      "answer_text": null,
+                      "answer_text_by_model": null,
                       "chart": {
                         "kind": "column",
                         "layout": "panels",
@@ -1582,14 +1610,18 @@
                         "base": {
                           "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01'",
                           "label": "Quý 2/2017",
+                          "rows": "6200",
                           "value": "9402500.00"
                         },
                         "change": "-1283400.00",
                         "compare": {
                           "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01'",
                           "label": "Quý 3/2017",
+                          "rows": "5480",
                           "value": "8119100.00"
                         },
+                        "comparison": "periods",
+                        "counts_rows": false,
                         "dimensions": [
                           {
                             "column": "Market",
@@ -1636,6 +1668,7 @@
                               }
                             ],
                             "kind": "text",
+                            "label": "thị trường",
                             "mix_effect": null,
                             "rate_effect": null,
                             "sql": "SELECT \"Market\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Market\" LIMIT 100000"
@@ -1669,6 +1702,7 @@
                               }
                             ],
                             "kind": "text",
+                            "label": "phân khúc khách hàng",
                             "mix_effect": null,
                             "rate_effect": null,
                             "sql": "SELECT \"Customer Segment\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Customer Segment\" LIMIT 100000"
@@ -1676,8 +1710,24 @@
                         ],
                         "measure": "Doanh thu",
                         "measure_kind": "total",
+                        "percent_change": "-13.6",
+                        "slice_column": null,
+                        "slice_column_label": null,
                         "summary": "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9.226.250,00.",
                         "summary_by_model": true,
+                        "summary_points": [
+                          {
+                            "kind": "reason",
+                            "lead": "Lý do chính",
+                            "text": "chủ yếu do số đơn: Quý 2/2017 có 5.000, Quý 3/2017 có 4.400. Phần do số đơn giảm 1.117.725,00, phần do giá trị đơn trung bình giảm 165.675,00. Nếu số đơn giữ nguyên như Quý 2/2017, doanh thu Quý 3/2017 là 9.226.250,00."
+                          },
+                          {
+                            "kind": "even",
+                            "lead": "Không có nơi nào đặc biệt",
+                            "text": "theo Market (thị trường) và Customer Segment (phân khúc khách hàng), không nhóm nào lệch hẳn mức chung (giảm 13,6%). Chênh lệch lớn nhất ở Europe và LATAM chỉ vì đây là những nhóm có doanh thu lớn nhất."
+                          }
+                        ],
+                        "summary_title": "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00.",
                         "volume_price": {
                           "base_price": "1880.50",
                           "base_volume": "5000",
@@ -2781,10 +2831,26 @@
           "chart",
           "warnings",
           "explanation",
+          "answer_text",
+          "answer_text_by_model",
           "clarifications",
           "steps"
         ],
         "properties": {
+          "answer_text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Short answer in Vietnamese for an `answered` question that is not a \"why\" question and has at least one row:\nwritten by the language model from the first 10 rows of the result, every number checked against those rows,\nor a template sentence written by the backend. Null otherwise; a \"why\" question has `explanation.summary`."
+          },
+          "answer_text_by_model": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True when `answer_text` was written by the language model, false for the template sentence (the model failed,\ntimed out, wrote a number that is not in the rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null."
+          },
           "chart": {
             "oneOf": [
               {
@@ -2907,7 +2973,7 @@
       },
       "AskStatus": {
         "type": "string",
-        "description": "Outcome of the question, and which fields of `AskResponse` are set:\n- `answered`: the SQL ran. Set: `query_id`, `sql_generated`, `sql_guarded`, `understanding`, `result`; `chart`\n  when a chart fits; `explanation` for a \"why\" question (when the breakdown cannot be made, a warning\n  `explanation_unavailable` says why).\n- `needs_choice`: the question can be read several ways; pick one option of each entry in `clarifications` and ask\n  again. This can happen before the model is called (a word matches several columns) or after (the two slices of\n  a \"why\" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.\n  Not recorded in the history, so `query_id` is null.\n- `rejected`: the guard refused the SQL: the generated one for a reason a fix cannot change (for example it is not\n  a read-only SELECT, or it calls a function that is not allowed), or the one fixed in the `repair` round. Set:\n  `message` (the reason), `query_id`, `sql_generated`; the `guard` step that stopped it has `ok` false. Also when\n  the model finds that no column of the dataset holds the information the question needs (a rating that is not\n  there, a forecast): no SQL runs, `sql_generated` is null, and `message` gives the reason and the closest columns.\n- `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or\n  because the model failed during the fix; or the SQL ran past the time or memory limit, which gets no fix round.\n  Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or\n  `repair` step that stopped it has `ok` false.\n\nA fix round starts when the analytics engine fails on the SQL, or when the guard refuses it because a table or\ncolumn does not exist or because it could build a value too large (too deep, too many concatenated pieces, too\nwide, a size argument over the limit); there is at most one round per question. The status names the step that stopped the\nquestion: the guard gives `rejected`, the engine or the fix round gives `failed`. A model error before any SQL\nexists is not a status: the request gets 502 or 503.",
+        "description": "Outcome of the question, and which fields of `AskResponse` are set:\n- `answered`: the SQL ran. Set: `query_id`, `sql_generated`, `sql_guarded`, `understanding`, `result`; `chart`\n  when a chart fits; `explanation` for a \"why\" question (when the breakdown cannot be made, a warning\n  `explanation_unavailable` says why).\n- `needs_choice`: the question can be read several ways; pick one option of each entry in `clarifications` and ask\n  again. This can happen before the model is called (a word matches several columns) or after (the two slices of\n  a \"why\" question cannot be told). Set: `message`, `clarifications`; `sql_generated` when the model was called.\n  Not recorded in the history, so `query_id` is null.\n- `rejected`: the guard refused the SQL the model wrote in the `repair` round (when the guard refuses the model's\n  first SQL, for any reason, the question always gets that round), or the SQL the server built for a \"why\"\n  breakdown. Set: `message`, `query_id`, `sql_generated`. For the model's SQL, the `guard` step that stopped it has\n  `ok` false and the guard's reason in `detail`, and `message` is a fixed text asking to rephrase the question, since\n  the user cannot fix the SQL; for a breakdown, `message` gives the guard's reason. Also when\n  the model finds that no column of the dataset holds the information the question needs (a rating that is not\n  there, a forecast): no SQL runs, `sql_generated` is null, and `message` gives the reason and the closest columns.\n- `failed`: the SQL could not run and the one fix round did not help, either because the fixed SQL failed too or\n  because the model failed during the fix; or the SQL ran past the time or memory limit, which gets no fix round.\n  Set: `message`, `query_id`, `sql_generated`; `sql_guarded` unless that SQL never passed the guard. The `run` or\n  `repair` step that stopped it has `ok` false.\n\nA fix round starts when the analytics engine fails on the SQL, when the guard refuses it for any reason, or when the\nmodel's reply cannot be read; there is at most one round per question, and the fixed SQL goes through the guard\nagain. The status names the step that stopped the question: the guard gives `rejected`, the engine or the fix round\ngives `failed`. A model error before any SQL exists is not a status: the request gets 502 or 503.",
         "enum": [
           "answered",
           "needs_choice",
@@ -3188,6 +3254,14 @@
           "time",
           "measure",
           "other"
+        ]
+      },
+      "Comparison": {
+        "type": "string",
+        "description": "- `periods`: the slices are two periods; `compare` is the later one.\n- `groups`: the slices are two values of one column, with no order in time.",
+        "enum": [
+          "periods",
+          "groups"
         ]
       },
       "ConversationItem": {
@@ -3477,6 +3551,7 @@
         "description": "Contribution of every group of one dimension; the contributions add up to `change`.",
         "required": [
           "column",
+          "label",
           "kind",
           "sql",
           "groups",
@@ -3498,6 +3573,13 @@
           "kind": {
             "$ref": "#/components/schemas/ValueKind",
             "description": "How to read the group values, like the `kind` of a result column."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vietnamese name of the column from the column profile; null when the profile has none."
           },
           "mix_effect": {
             "type": [
@@ -3654,12 +3736,19 @@
         "required": [
           "measure",
           "measure_kind",
+          "comparison",
+          "counts_rows",
+          "slice_column",
+          "slice_column_label",
           "base",
           "compare",
           "change",
+          "percent_change",
           "dimensions",
           "volume_price",
           "summary",
+          "summary_title",
+          "summary_points",
           "summary_by_model"
         ],
         "properties": {
@@ -3674,6 +3763,14 @@
           "compare": {
             "$ref": "#/components/schemas/ExplanationSlice",
             "description": "Slice being explained."
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/Comparison",
+            "description": "What the two slices are, which decides the words for the change: up or down between two periods, higher or\nlower between two groups."
+          },
+          "counts_rows": {
+            "type": "boolean",
+            "description": "True when the measure counts rows (a count, not a sum): the measure is then itself the size of each slice."
           },
           "dimensions": {
             "type": "array",
@@ -3690,6 +3787,27 @@
             "$ref": "#/components/schemas/MeasureKind",
             "description": "How the measure adds up over groups, which decides how to read the numbers below."
           },
+          "percent_change": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`change / base.value * 100`, rounded to one decimal; null when `base.value` is zero or negative."
+          },
+          "slice_column": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Column whose two values are compared, for `groups`; null for `periods`."
+          },
+          "slice_column_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vietnamese name of `slice_column` from the column profile; null when the profile has none."
+          },
           "summary": {
             "type": "string",
             "description": "Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown."
@@ -3697,6 +3815,17 @@
           "summary_by_model": {
             "type": "boolean",
             "description": "False when the model's text failed the number check, or the model was not reached, and `summary` is a template\nsentence written by the backend."
+          },
+          "summary_points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SummaryPoint"
+            },
+            "description": "Points under the main answer, written by the backend from the numbers above; each is said only when the numbers\nsupport it."
+          },
+          "summary_title": {
+            "type": "string",
+            "description": "Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese)."
           },
           "volume_price": {
             "oneOf": [
@@ -3716,7 +3845,8 @@
         "required": [
           "label",
           "filter",
-          "value"
+          "value",
+          "rows"
         ],
         "properties": {
           "filter": {
@@ -3726,6 +3856,10 @@
           "label": {
             "type": "string",
             "description": "Text for the end user (Vietnamese) naming the slice, for example a quarter."
+          },
+          "rows": {
+            "type": "string",
+            "description": "Number of rows of the slice."
           },
           "value": {
             "type": "string",
@@ -4170,7 +4304,7 @@
       },
       "StepName": {
         "type": "string",
-        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown.\n- `record`: save the question in the history.",
+        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.\n- `record`: save the question in the history.",
         "enum": [
           "context",
           "llm",
@@ -4180,6 +4314,40 @@
           "explain",
           "narrate",
           "record"
+        ]
+      },
+      "SummaryPoint": {
+        "type": "object",
+        "description": "One point of the summary: a short lead (shown in bold) and the sentence after it.",
+        "required": [
+          "kind",
+          "lead",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/SummaryPointKind"
+          },
+          "lead": {
+            "type": "string",
+            "description": "Lead of the point (Vietnamese), for example \"Lý do chính\"."
+          },
+          "text": {
+            "type": "string",
+            "description": "Rest of the point (Vietnamese)."
+          }
+        }
+      },
+      "SummaryPointKind": {
+        "type": "string",
+        "description": "- `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the\n  rate).\n- `outliers`: groups that changed much more or much less than the whole, or exist on one side only.\n- `even`: no group stands out; the largest contributions are the largest groups.\n- `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow\n  comparing groups with the whole (a base slice of zero or less, or a change too close to zero).\n- `against`: a group that moved the other way.\n- `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.",
+        "enum": [
+          "reason",
+          "outliers",
+          "even",
+          "largest",
+          "against",
+          "dropped"
         ]
       },
       "TestSourceResponse": {
@@ -4316,6 +4484,10 @@
           "sql"
         ],
         "properties": {
+          "from_previous": {
+            "type": "boolean",
+            "description": "True when the item is carried over from the previous turn of the conversation: the same as in that turn's card\n(same SQL fragment or same label) and not named in this question. Omitted when false."
+          },
           "label": {
             "type": "string",
             "description": "Text for the end user (Vietnamese) naming the measure, filter, grouping, order or period."

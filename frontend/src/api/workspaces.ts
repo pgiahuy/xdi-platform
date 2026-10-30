@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/workspaces.ts - hook cho thành viên của một workspace và đổi tên, xóa workspace (backend/src/api/workspaces.rs).
+/* api/workspaces.ts - hook cho thành viên của một workspace và tạo, đổi tên, xóa workspace
+(backend/src/api/workspaces.rs).
 Quyền do backend kiểm (docs/ARCHITECTURE.md mục 4b); giao diện chỉ ẩn nút người dùng không bấm được, lỗi từ backend
 vẫn hiện nguyên lời. Kiểu dữ liệu lấy từ schema.ts, sinh từ openapi.json; tên ở đây chỉ là bí danh để trang import
 gọn. */
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPatch, apiPost } from './client'
-import { meKey, type Me } from './auth'
+import { meKey, type Me, type Membership } from './auth'
 import type { components } from './schema'
 
 type Schemas = components['schemas']
@@ -63,6 +64,21 @@ export function useRemoveMember(slug: string) {
   return useMutation({
     mutationFn: (userId: string) => apiDelete<void>(`${workspacePath(slug)}/members/${userId}`),
     onSuccess: () => refreshMembers(queryClient, slug),
+  })
+}
+
+/** Tạo workspace mới; ai đăng nhập cũng tạo được, người tạo là admin của nó. Trả về Membership của workspace mới. */
+export function useCreateWorkspace() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiPost<Membership>('/workspaces', { name } satisfies Schemas['CreateWorkspaceRequest']),
+    // Trang chuyển ngay sang workspace mới; AppLayout tìm nó trong /auth/me. Thêm vào bộ đệm trước, không chờ tải lại:
+    // nếu không, trang mới đọc bộ đệm cũ và báo "Không mở được workspace này" cho tới khi /auth/me về.
+    onSuccess: (created) => {
+      queryClient.setQueryData<Me>(meKey, (me) => (me ? { ...me, workspaces: [...me.workspaces, created] } : me))
+      void queryClient.invalidateQueries({ queryKey: meKey })
+    },
   })
 }
 

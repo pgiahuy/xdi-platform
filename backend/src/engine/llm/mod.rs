@@ -39,6 +39,9 @@ pub enum LlmTask {
     /// Điền form của câu "tại sao" (service/ask/why_prompt.rs), cả lần đầu lẫn lần sửa theo lỗi từng trường
     /// (service/explain/run.rs). Câu hỏi là câu hỏi gốc; câu trả lời là object JSON của form.
     Why,
+    /// Viết đoạn trả lời bằng lời từ các dòng đầu của kết quả câu thường (service/ask/summary.rs). Câu hỏi là câu hỏi
+    /// gốc; câu trả lời là văn bản tự do.
+    Summary,
 }
 
 /// Một lần nhờ mô hình. Tách câu hỏi gốc khỏi prompt: prompt còn chứa các câu mẫu làm ví dụ, nên mock không tìm câu

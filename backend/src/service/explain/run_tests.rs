@@ -33,11 +33,11 @@ use crate::service::ask::examples::build_why_example;
 use crate::service::ask::prompt::PromptInput;
 use crate::service::ask::values::ValueIndex;
 use crate::service::ask::view::{build_answer_view, AnswerView, RanQuery};
-use crate::service::explain::build_number_check;
 use crate::service::explain::check_tests::{
     dataco_columns, dataco_values, metric, quarter_form, revenue, DATE, TABLE,
 };
 use crate::service::explain::run::{run_why, WhyInput, WhyOutcome};
+use crate::service::explain::{build_number_check, build_template_summary};
 
 const QUARTER_QUESTION: &str = "Tại sao doanh thu quý 3 năm 2017 giảm";
 
@@ -479,11 +479,50 @@ async fn two_groups_are_compared() {
     assert!(outcome.assumptions.iter().all(|c| c.id != "why:base"));
 }
 
+/// Hết đường câu "tại sao" (#186): Explanation có số dòng hai lát cắt, % thay đổi chung, % của từng nhóm, cột của hai
+/// nhóm, và câu chính cùng các ý do code viết; so hai nhóm thì summary chính là lời đó và qua bước kiểm số.
+#[tokio::test]
+async fn two_groups_get_a_plain_summary_from_the_code() {
+    let data = Dataco::new();
+    let outcome = data
+        .ask(&Mock::new(), "Tại sao doanh thu Europe thấp hơn LATAM", &[])
+        .await;
+    let explanation = outcome.explanation.unwrap();
+    assert_eq!(explanation.slice_column.as_deref(), Some("Market"));
+    assert!(explanation.base.rows.parse::<i64>().unwrap() > 0);
+    assert!(explanation.compare.rows.parse::<i64>().unwrap() > 0);
+    assert!(explanation.percent_change.is_some());
+    let segments = &explanation.notes.dimensions[0];
+    assert!(segments.groups.iter().all(|g| g.share_of_change.is_some()));
+    assert!(
+        explanation
+            .summary_title
+            .starts_with("Doanh thu của Market Europe cao hơn LATAM"),
+        "{}",
+        explanation.summary_title
+    );
+    assert!(!explanation.summary_points.is_empty());
+    assert_eq!(explanation.summary, build_template_summary(&explanation));
+    build_number_check(&explanation.summary, &explanation).unwrap();
+}
+
 /// Bộ lọc dòng theo vai dữ liệu của người hỏi nằm trong mọi câu, cả câu phân rã: người chỉ thấy Europe được phân rã
 /// trên dòng Europe.
+/// Thêm một dòng Europe, Corporate 0 đồng ở mỗi quý: chỉ thấy Europe thì Market còn một nhóm và Customer Segment cũng
+/// chỉ còn Consumer, mà chiều ít hơn hai nhóm bị bỏ (explain/dimension_pick.rs), nên cần Segment có hai nhóm để còn câu
+/// phân rã mà kiểm. Hai dòng 0 đồng không đổi tổng nào.
 #[tokio::test]
 async fn data_role_filter_reaches_the_breakdown_sql() {
-    let data = Dataco::new();
+    let corporate = |id: i64, day: &str| {
+        format!("SELECT CAST({id} AS INTEGER), 'Europe', 'Corporate', '{day}', CAST(0 AS DOUBLE)")
+    };
+    let data = Dataco::with_rows(
+        &[
+            corporate(30_001, "6/3/2017 08:00"),
+            corporate(30_002, "9/3/2017 08:00"),
+        ],
+        2,
+    );
     let filter = RowFilter {
         column: "Market".to_string(),
         allowed_values: vec!["Europe".to_string()],
@@ -499,6 +538,7 @@ async fn data_role_filter_reaches_the_breakdown_sql() {
     let explanation = outcome.explanation.unwrap();
     assert_eq!(explanation.base.value, "2850120.40");
     assert_eq!(explanation.compare.value, "2210340.15");
+    assert!(!explanation.dimensions.is_empty());
     for dimension in &explanation.dimensions {
         assert!(
             dimension.sql.contains("\"Market\" IN ('Europe')"),
@@ -850,4 +890,107 @@ async fn ratio_metric_splits_into_mix_and_rate() {
         explanation.summary
     );
     assert!(llm.prompt(1).contains("\"measure_kind\": \"ratio\""));
+}
+
+/// Form của câu "Tại sao doanh thu giảm": so hai kỳ theo quý, không nêu kỳ.
+fn no_period_form() -> serde_json::Value {
+    json!({
+        "terms": [{"text": "doanh thu", "kind": "metric", "value": "doanh thu"}],
+        "metric": "doanh thu",
+        "time": {"column": DATE, "grain": "quarter"},
+        "compare": "",
+        "filters": []
+    })
+}
+
+fn compare_choice(outcome: &WhyOutcome) -> &crate::service::ask::contract::Choice {
+    outcome
+        .assumptions
+        .iter()
+        .find(|c| c.id == "why:compare")
+        .unwrap()
+}
+
+fn compared(outcome: &WhyOutcome) -> (String, String) {
+    let explanation = outcome.explanation.as_ref().unwrap();
+    (
+        explanation.compare.label.clone(),
+        explanation.base.label.clone(),
+    )
+}
+
+/// Câu không nêu kỳ: code chọn quý gần nhất có dữ liệu (quý 3/2017) và so với quý liền trước, vẫn có phân rã.
+#[tokio::test]
+async fn question_without_period_explains_the_latest_period() {
+    let data = Dataco::new();
+    let llm = ScriptedLlm::new(vec![no_period_form()]);
+    let outcome = data.ask(&llm, "Tại sao doanh thu giảm", &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered);
+    assert_eq!(
+        compared(&outcome),
+        ("Quý 3/2017".to_string(), "Quý 2/2017".to_string())
+    );
+    let choice = compare_choice(&outcome);
+    assert_eq!(
+        choice.label,
+        "Kỳ gần nhất có dữ liệu: Quý 3/2017 so với Quý 2/2017"
+    );
+    assert_eq!(choice.selected.as_deref(), Some("2017-Q3"));
+    let options: Vec<&str> = choice.options.iter().map(|o| o.id.as_str()).collect();
+    assert_eq!(options, ["2017-Q3", "2017-Q2", "2016-Q3"]);
+    // Một lượt gọi mô hình cho form, không vòng sửa.
+    assert_eq!(llm.tasks()[0], LlmTask::Why);
+    assert!(!llm.tasks().contains(&LlmTask::Repair));
+    let form = outcome.form.unwrap();
+    assert_eq!(form["compare"], "2017-Q3");
+}
+
+/// Mười dòng ở quý 4/2017, ít hơn hẳn 4400 dòng của quý 3: dữ liệu dừng giữa quý, code lùi về quý 3.
+#[tokio::test]
+async fn partial_last_period_is_skipped() {
+    let extra = vec!["SELECT CAST(i AS INTEGER), 'Europe', 'Consumer', '10/2/2017 08:00', CAST(5 AS DOUBLE) FROM range(30001, 30011) t(i)".to_string()];
+    let mut data = Dataco::with_rows(&extra, 10);
+    data.columns = dataco_columns("2016-08-01", "2017-10-02");
+    let llm = ScriptedLlm::new(vec![no_period_form()]);
+    let outcome = data.ask(&llm, "Tại sao doanh thu giảm", &[]).await;
+    assert_eq!(
+        compared(&outcome),
+        ("Quý 3/2017".to_string(), "Quý 2/2017".to_string())
+    );
+    let options: Vec<String> = compare_choice(&outcome)
+        .options
+        .iter()
+        .map(|o| o.id.clone())
+        .collect();
+    assert_eq!(options[0], "2017-Q4");
+}
+
+/// Người hỏi chọn chip quý 4/2017: code dùng kỳ đó, nhãn đổi sang "Kỳ đã chọn".
+#[tokio::test]
+async fn chosen_compare_period_is_used() {
+    let extra = vec!["SELECT CAST(i AS INTEGER), 'Europe', 'Consumer', '10/2/2017 08:00', CAST(5 AS DOUBLE) FROM range(30001, 30011) t(i)".to_string()];
+    let mut data = Dataco::with_rows(&extra, 10);
+    data.columns = dataco_columns("2016-08-01", "2017-10-02");
+    let llm = ScriptedLlm::new(vec![no_period_form()]);
+    let choices = choose("why:compare", "2017-Q4");
+    let outcome = data.ask(&llm, "Tại sao doanh thu giảm", &choices).await;
+    assert_eq!(
+        compared(&outcome),
+        ("Quý 4/2017".to_string(), "Quý 3/2017".to_string())
+    );
+    let choice = compare_choice(&outcome);
+    assert_eq!(choice.label, "Kỳ đã chọn: Quý 4/2017 so với Quý 3/2017");
+    assert_eq!(choice.selected.as_deref(), Some("2017-Q4"));
+}
+
+/// Câu nêu kỳ giữ hành vi cũ: không có lựa chọn why:compare.
+#[tokio::test]
+async fn question_with_period_has_no_compare_choice() {
+    let data = Dataco::new();
+    let outcome = data.ask(&Mock::new(), QUARTER_QUESTION, &[]).await;
+    assert_eq!(
+        compared(&outcome),
+        ("Quý 3/2017".to_string(), "Quý 2/2017".to_string())
+    );
+    assert!(outcome.assumptions.iter().all(|c| c.id != "why:compare"));
 }

@@ -104,22 +104,46 @@ Enum lỗi nằm ở `backend/src/error.rs`.
 ## Hỏi dữ liệu
 
 `POST /api/workspaces/{ws}/datasets/{id}/ask` trả lời một câu hỏi trên phiên bản đang dùng của dataset
-(`backend/src/service/ask/mod.rs`): lấy ngữ cảnh từ hồ sơ cột, nhờ mô hình viết SQL, guard kiểm, DuckDB chạy, sửa một lần khi
-lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với `status` trong
-body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, body sai, dataset chưa có dữ liệu, hồ sơ chưa lập xong hay lập
-lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu mock không có câu trả lời mẫu; 404 dataset không có; 502, 503 khi mô
-hình lỗi hay chưa cấu hình trước khi có câu SQL nào. Câu answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ.
-Câu "tại sao" (nhận bằng từ khóa) đi đường form: mô hình
-điền form, code dựng SQL, `result` là bảng tổng theo kỳ hay theo nhóm, `explanation` là bảng phân rã; không phân rã
-được thì `explanation` null kèm cảnh báo `explanation_unavailable`, câu vẫn answered. Câu nói một hướng ("vì sao
-giảm", "vì sao cao hơn") mà chênh lệch tính được ngược hướng hay bằng 0 thì kèm cảnh báo `premise_mismatch` nêu chênh
-lệch thực tế; phân rã và lời giải thích vẫn trả như thường, theo chênh lệch thực tế. Câu hỏi cần thông tin không cột
-nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo `unanswerable`, không câu SQL nào
-chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các cột gần nhất có thể hỏi; câu
-vẫn ghi vào lịch sử như câu bị từ chối.
-`explanation.measure_kind` cho biết cách đọc số: `total` (tổng, đếm; đóng góp là hiệu hai lát cắt) hay `ratio` (chỉ số
-tỷ lệ hay trung bình; giá trị là tỷ lệ, đóng góp của nhóm là `mix_effect + rate_effect`, mỗi chiều có tổng
-`mix_effect`, `rate_effect`). Với `total` bốn trường này là null.
+(`backend/src/service/ask/mod.rs`): lấy ngữ cảnh từ hồ sơ cột, nhờ mô hình viết SQL, guard kiểm, DuckDB chạy, sửa một
+lần khi lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với
+`status` trong body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, body sai, dataset chưa có dữ liệu, hồ sơ chưa lập
+xong hay lập lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu mock không có câu trả lời mẫu; 404 dataset không có;
+502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào.
+
+Câu answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ. Câu thường answered có ít nhất một dòng kết quả thì có
+`answer_text`: một đến hai câu tiếng Việt trả lời câu hỏi, do mô hình viết từ tối đa 10 dòng đầu của kết quả (mọi số
+trong câu có nguyên văn trong các dòng đó, không thì backend thay bằng câu khuôn), và `answer_text_by_model` cho biết
+câu đó do mô hình viết (`true`) hay theo khuôn (`false`). Hai trường null với câu "tại sao" (đã có
+`explanation.summary`) và câu không answered. Bước này hiện trong `steps` dưới tên `narrate`. `ANSWER_TEXT=false` thì
+luôn là câu khuôn, không gọi mô hình.
+
+Câu hỏi cần thông tin không cột nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo
+`unanswerable`, không câu SQL nào chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các
+cột gần nhất có thể hỏi; câu vẫn ghi vào lịch sử như câu bị từ chối.
+
+Câu "tại sao" (nhận bằng từ khóa) đi đường form: mô hình điền form, code dựng SQL, `result` là bảng tổng theo kỳ hay
+theo nhóm, `explanation` là bảng phân rã; không phân rã được thì `explanation` null kèm cảnh báo
+`explanation_unavailable`, câu vẫn answered.
+
+- Câu nói một hướng ("vì sao giảm", "vì sao cao hơn") mà chênh lệch tính được ngược hướng hay bằng 0 thì kèm cảnh báo
+  `premise_mismatch` nêu chênh lệch thực tế; phân rã và lời giải thích vẫn trả như thường, theo chênh lệch thực tế.
+- Câu so hai kỳ không nêu kỳ thì code chọn kỳ gần nhất có dữ liệu (kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó
+  thì lùi một kỳ) và ghi thành giả định `why:compare` trong `understanding.assumptions`, phương án là kỳ viết như
+  `2017-Q4`; gửi lại `{choice_id: "why:compare", option_id: "2017-Q3"}` để giải thích kỳ khác.
+- `explanation.measure_kind` cho biết cách đọc số: `total` (tổng, đếm; đóng góp là hiệu hai lát cắt) hay `ratio` (chỉ
+  số tỷ lệ hay trung bình; giá trị là tỷ lệ, đóng góp của nhóm là `mix_effect + rate_effect`, mỗi chiều có tổng
+  `mix_effect`, `rate_effect`). Với `total` bốn trường này là null.
+- `explanation.comparison` là `periods` (hai kỳ) hay `groups` (hai nhóm cùng lúc). Với `groups`, `explanation.summary`
+  luôn là câu khuôn do backend viết, không gọi mô hình (`summary_by_model` là `false`); `slice_column` và
+  `slice_column_label` là cột của hai nhóm và nghĩa tiếng Việt của nó.
+- `explanation.summary_title` và `summary_points` là lời tóm tắt do backend viết từ số đã tính: câu chính và các ý, mỗi
+  ý có `kind` (`reason`, `outliers`, `even`, `largest`, `against`, `dropped`), `lead` (đầu ý, in đậm) và `text`.
+  `summary` là đoạn chữ của mô hình khi `summary_by_model`, không thì là câu chính nối các ý.
+- `explanation.base.rows`, `compare.rows` là số dòng của mỗi lát cắt; `percent_change` là % thay đổi chung (null khi
+  lát gốc không dương); `counts_rows` cho biết độ đo là phép đếm.
+- Mỗi chiều có `label`: nghĩa tiếng Việt của cột, null khi hồ sơ chưa có. `dimensions` vẫn đủ mọi chiều theo thứ tự
+  xếp hạng, kể cả chiều mà ý `dropped` nói là bỏ qua.
+
 Lý do và nghĩa từng trường: [Kiến trúc](ARCHITECTURE.md), mục 8, phần Hỏi dữ liệu. Năm response mẫu nằm trong đặc tả
 (example của response 200) và ở `frontend/src/api/examples/ask.json`. Guard kiểm câu SQL trước khi chạy:
 [Guard SQL](GUARD.md).
@@ -131,17 +155,24 @@ vắng thì backend mở cuộc mới; `AskResponse.conversation_id` luôn có, 
 tiếp nối của tối đa 4 lượt gần nhất (phần gửi cho mô hình: [Dữ liệu và quyền riêng tư](PRIVACY.md)). Câu `needs_choice`
 không thành lượt, nhưng gửi lại kèm lựa chọn và cùng `conversation_id` thì vào đúng cuộc.
 
-`GET /api/workspaces/{ws}/datasets/{id}/conversations` liệt kê các cuộc của người gọi trên dataset, mới nhất trước, bỏ
-cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả cuộc đó kèm các lượt theo thứ tự hỏi: `query_id`,
-câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Đã hiểu là" dạng chữ). Bảng kết quả không lưu; hỏi lại câu đó
-để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, kể cả admin của workspace: cuộc của người khác, của dataset
-khác hay id không có đều trả 404.
+Ở câu tiếp nối, mục của `understanding` (độ đo, bộ lọc, nhóm, `time_range`) có `from_previous: true` khi nó giống một
+mục của lượt đã trả lời gần nhất (đoạn SQL có nguyên văn trong câu SQL lượt đó, hay cùng nhãn) và câu hỏi không nhắc
+tới nó (không chứa tên cột, giá trị, năm trong đoạn SQL hay tên chỉ số). Trường vắng khi false, kể cả khi không đọc
+được lượt trước.
+
+`GET /api/workspaces/{ws}/datasets/{id}/conversations` liệt kê tối đa 50 cuộc mới nhất của người gọi trên dataset, bỏ
+cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả cuộc đó kèm tối đa 200 lượt gần nhất theo thứ tự
+hỏi: `query_id`, câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Đã hiểu là" dạng chữ). Bảng kết quả không
+lưu; hỏi lại câu đó để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, admin của workspace cũng không: cuộc của
+người khác, của dataset khác hay id không có đều trả 404.
 
 ## Xóa dataset
 
-`DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, chỉ số, lịch sử câu hỏi
-(CASCADE) và file Parquet trên đĩa (`delete_dataset` trong `backend/src/service/ingest.rs`). Chỉ admin của workspace,
-`member` nhận 403; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không khôi phục được.
+`DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, chỉ số, cuộc trò chuyện
+(CASCADE) và file Parquet trên đĩa (`delete_dataset` trong `backend/src/service/ingest.rs`). Lịch sử câu hỏi của dataset
+(bảng `queries`) không xóa: các dòng còn lại với `dataset_id`, `version_id` null, và chỉ mất khi xóa workspace. Chỉ
+admin của workspace, `member` nhận 403; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không
+khôi phục được.
 
 ## Nguồn database
 
