@@ -1,84 +1,113 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/eval_tests.rs - ca test của bộ so kết quả đánh giá (build_eval_verdict), thuần không cần Postgres:
-cùng dòng khác thứ tự, lệch một dòng, số lệch quanh ngưỡng, null với null, cột đổi tên, ordered khác thứ tự. */
+/* service/eval_tests.rs - ca test của bước chấm một câu ở service/eval.rs (#202), thuần không cần Postgres: ba trạng
+thái đạt, trượt, cần xem lại theo lỗi của mô hình, status, phần giải thích của câu tìm nguyên nhân, nhiều đáp án.
+Câu trả lời lấy từ response mẫu ở service/ask/examples.rs. */
 
-use super::eval::build_eval_verdict;
-use crate::service::ask::contract::CellValue;
+use super::ask::contract::{AskStatus, CellValue};
+use super::ask::examples::{build_needs_choice_example, build_simple_example, build_why_example};
+use super::eval::{build_answer_verdict, build_ask_error_verdict, build_refuse_verdict, Verdict};
+use super::eval_cases::EvalCase;
+use crate::error::AppError;
 
-type Row = Vec<Option<CellValue>>;
+type Table = Vec<Vec<Option<CellValue>>>;
 
-fn row(cells: Vec<CellValue>) -> Row {
-    cells.into_iter().map(Some).collect()
+fn case(kind: &str) -> EvalCase {
+    serde_json::from_value(serde_json::json!({
+        "id": "t1",
+        "kind": kind,
+        "question": "q",
+        "expected_sql": ["SELECT 1"],
+        "author": "tester"
+    }))
+    .expect("test case parses")
 }
 
-fn num(n: f64) -> CellValue {
-    CellValue::Number(n)
+/// Bảng đáp án bằng đúng bảng kết quả của response, để ca test chỉ đổi đúng thứ nó kiểm.
+fn rows_of(response: &super::ask::contract::AskResponse) -> Table {
+    response
+        .result
+        .as_ref()
+        .expect("example has a result")
+        .rows
+        .clone()
 }
 
-fn text(s: &str) -> CellValue {
-    CellValue::String(s.to_string())
-}
-
-#[test]
-fn same_rows_other_order_pass_when_unordered() {
-    let actual = vec![
-        row(vec![text("b"), num(2.0)]),
-        row(vec![text("a"), num(1.0)]),
-    ];
-    let expected = vec![
-        row(vec![text("a"), num(1.0)]),
-        row(vec![text("b"), num(2.0)]),
-    ];
-    assert!(build_eval_verdict(&actual, &expected, false).is_ok());
-}
-
-#[test]
-fn same_rows_other_order_fail_when_ordered() {
-    let actual = vec![row(vec![text("b")]), row(vec![text("a")])];
-    let expected = vec![row(vec![text("a")]), row(vec![text("b")])];
-    assert!(build_eval_verdict(&actual, &expected, true).is_err());
+fn wrong_table() -> Table {
+    vec![vec![Some(CellValue::String("nowhere".to_string()))]]
 }
 
 #[test]
-fn one_row_off_is_a_mismatch() {
-    let actual = vec![row(vec![num(1.0)]), row(vec![num(2.0)])];
-    let expected = vec![row(vec![num(1.0)]), row(vec![num(3.0)])];
-    let why = build_eval_verdict(&actual, &expected, false).unwrap_err();
-    assert!(why.contains("dòng 1"), "{why}");
+fn quota_and_missing_key_need_review_not_a_fail() {
+    let quota = AppError::Upstream("Đã hết hạn mức gọi Gemini".to_string());
+    assert_eq!(build_ask_error_verdict(&quota).0, Verdict::Review);
+    let no_key = AppError::Unavailable("Chưa đặt GEMINI_API_KEY".to_string());
+    assert_eq!(build_ask_error_verdict(&no_key).0, Verdict::Review);
+    let bad = AppError::BadRequest("mock không có câu này".to_string());
+    assert_eq!(build_ask_error_verdict(&bad).0, Verdict::Fail);
 }
 
 #[test]
-fn numbers_allow_tiny_relative_drift() {
-    let actual = vec![row(vec![num(1.0000000005)])];
-    let expected = vec![row(vec![num(1.0)])];
-    assert!(build_eval_verdict(&actual, &expected, false).is_ok());
-    let actual = vec![row(vec![num(1.5)])];
-    assert!(build_eval_verdict(&actual, &expected, false).is_err());
+fn matching_answer_passes_and_wrong_answer_fails() {
+    let response = build_simple_example();
+    let expected = rows_of(&response);
+    let plain = case("plain_simple");
+    assert_eq!(
+        build_answer_verdict(&response, &plain, &[expected]).0,
+        Verdict::Pass
+    );
+    let (verdict, detail) = build_answer_verdict(&response, &plain, &[wrong_table()]);
+    assert_eq!(verdict, Verdict::Fail);
+    assert!(detail.contains("sql sinh ra"), "{detail}");
 }
 
 #[test]
-fn null_matches_null_only() {
-    let actual: Vec<Row> = vec![vec![None]];
-    let expected: Vec<Row> = vec![vec![None]];
-    assert!(build_eval_verdict(&actual, &expected, false).is_ok());
-    let expected = vec![row(vec![num(0.0)])];
-    assert!(build_eval_verdict(&actual, &expected, false).is_err());
+fn any_expected_answer_is_enough() {
+    let response = build_simple_example();
+    let expected = vec![wrong_table(), rows_of(&response)];
+    assert_eq!(
+        build_answer_verdict(&response, &case("plain_simple"), &expected).0,
+        Verdict::Pass
+    );
 }
 
 #[test]
-fn column_names_do_not_matter_but_width_does() {
-    // Tên cột không vào verdict (bí danh là chi tiết cách viết), chỉ số cột tính.
-    let actual = vec![row(vec![text("x")])];
-    let expected = vec![row(vec![text("x")])];
-    assert!(build_eval_verdict(&actual, &expected, false).is_ok());
-    let wide = vec![row(vec![text("x"), num(1.0)])];
-    assert!(build_eval_verdict(&wide, &expected, false).is_err());
+fn why_question_answered_on_the_plain_path_fails() {
+    // Bảng khớp, nhưng response không có phần giải thích: người hỏi "vì sao" không nhận được nguyên nhân.
+    let response = build_simple_example();
+    let expected = rows_of(&response);
+    let (verdict, detail) = build_answer_verdict(&response, &case("why_groups"), &[expected]);
+    assert_eq!(verdict, Verdict::Fail);
+    assert!(detail.contains("đường câu thường"), "{detail}");
+
+    let why = build_why_example();
+    let expected = rows_of(&why);
+    assert_eq!(
+        build_answer_verdict(&why, &case("why_periods"), &[expected]).0,
+        Verdict::Pass
+    );
 }
 
 #[test]
-fn row_count_mismatch_is_reported() {
-    let actual = vec![row(vec![num(1.0)])];
-    let expected = vec![row(vec![num(1.0)]), row(vec![num(2.0)])];
-    let why = build_eval_verdict(&actual, &expected, false).unwrap_err();
-    assert!(why.contains("số dòng"), "{why}");
+fn asking_back_needs_review() {
+    let response = build_needs_choice_example();
+    assert_eq!(
+        build_answer_verdict(&response, &case("plain_simple"), &[wrong_table()]).0,
+        Verdict::Review
+    );
+}
+
+#[test]
+fn refusal_passes_only_when_rejected() {
+    assert_eq!(
+        build_refuse_verdict(AskStatus::Rejected, None).0,
+        Verdict::Pass
+    );
+    assert_eq!(
+        build_refuse_verdict(AskStatus::Answered, Some("SELECT 1")).0,
+        Verdict::Fail
+    );
+    assert_eq!(
+        build_refuse_verdict(AskStatus::Failed, None).0,
+        Verdict::Fail
+    );
 }

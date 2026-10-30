@@ -14,9 +14,13 @@ pub mod eval;
 pub mod eval_cases;
 #[cfg(test)]
 mod eval_cases_tests;
+pub mod eval_check;
 pub mod eval_classify;
 #[cfg(test)]
 mod eval_classify_tests;
+pub mod eval_grade;
+#[cfg(test)]
+mod eval_grade_tests;
 #[cfg(test)]
 mod eval_tests;
 pub mod excel;

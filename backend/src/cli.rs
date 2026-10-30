@@ -5,7 +5,8 @@ Ai chạy được binary trên máy chủ (và đọc được DATABASE_URL) l�
 Đây là đường cứu khi quản trị hệ thống duy nhất quên mật khẩu. Không có tham số thì main chạy server như thường. */
 
 use crate::error::AppError;
-use crate::service::{eval, eval_cases, eval_classify, users};
+use crate::service::eval::Verdict;
+use crate::service::{eval, eval_cases, eval_check, eval_classify, users};
 use crate::state::AppState;
 
 const USAGE: &str = "usage:
@@ -14,10 +15,11 @@ const USAGE: &str = "usage:
   xdi-backend list-admins                     list system administrators
   xdi-backend openapi                         print the OpenAPI spec (JSON) to stdout, without a database
   xdi-backend ask-examples                    print sample ask responses (JSON) to stdout, without a database
-  xdi-backend eval --cases <json> [--data <file>] [--baseline <json>]
+  xdi-backend eval --cases <json> [--data <file>] [--baseline <json>] [--check-answers]
                                               run an evaluation case file on its dataset (--data overrides the
                                               file named in it); exit 1 when accuracy drops below the baseline,
-                                              2 on infrastructure errors
+                                              2 on infrastructure errors. --check-answers compares each answer
+                                              with its check_sql without asking the model; exit 1 on a mismatch
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
                                               exit 2 on infrastructure errors";
@@ -66,17 +68,19 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
 
 /// Lệnh eval (#37, #202): chạy một file bộ câu đánh giá trên dataset của nó. In từng câu sai kèm lý do, dòng accuracy cuối,
 /// ghi eval/result.json. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ tầng (thiếu file, JSON
-/// hỏng, không nạp được dữ liệu) thoát mã 2.
+/// hỏng, không nạp được dữ liệu) thoát mã 2. Có --check-answers thì chỉ kiểm đáp án với check_sql (run_check_answers).
 async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut data = None;
     let mut cases = None;
     let mut baseline = None;
+    let mut check = false;
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         match flag.as_str() {
             "--data" => data = it.next(),
             "--cases" => cases = it.next(),
             "--baseline" => baseline = it.next(),
+            "--check-answers" => check = true,
             _ => {
                 eprintln!("{USAGE}");
                 return 2;
@@ -100,6 +104,9 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         }
     };
     let data = data.map(std::path::Path::new);
+    if check {
+        return run_check_answers(state, &file, data).await;
+    }
     let report = match eval::run_eval(state, &file, data).await {
         Ok(r) => r,
         Err(e) => {
@@ -108,20 +115,22 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         }
     };
     for case in &report.cases {
-        if case.ok {
-            println!("ok   {} {}", case.id, case.question);
-        } else {
-            println!("SAI  {} {}\n     {}", case.id, case.question, case.detail);
+        match case.verdict {
+            Verdict::Pass => println!("ok   {} {} ({})", case.id, case.question, case.detail),
+            Verdict::Fail => println!("SAI  {} {}\n     {}", case.id, case.question, case.detail),
+            Verdict::Review => println!("XEM  {} {}\n     {}", case.id, case.question, case.detail),
         }
     }
     for case in &report.skipped {
         println!("BỎ   {} {}", case.id, case.reason);
     }
     println!(
-        "accuracy: {}/{} ({:.1}%)",
+        "accuracy: {}/{} ({:.1}%), cần xem lại {}, bỏ qua {}",
         report.passed,
-        report.total,
-        report.accuracy * 100.0
+        report.passed + report.failed,
+        report.accuracy * 100.0,
+        report.review,
+        report.skipped.len()
     );
     if let Err(e) = std::fs::write(
         "eval/result.json",
@@ -153,6 +162,36 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         }
     }
     0
+}
+
+/// eval --check-answers (#202): in từng câu có check_sql (khớp hay lệch kèm lý do), rồi các câu chưa có check_sql.
+/// Thoát mã 1 khi có câu lệch, để CI chặn đáp án sai trước khi nó làm sai số đo.
+async fn run_check_answers(
+    state: &AppState,
+    file: &eval_cases::CaseFile,
+    data: Option<&std::path::Path>,
+) -> i32 {
+    let report = match eval_check::check_answers(state, file, data).await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("eval: {e:?}");
+            return 2;
+        }
+    };
+    for case in &report.cases {
+        let mark = if case.ok { "ok  " } else { "SAI " };
+        println!("{mark} {} {}", case.id, case.detail);
+    }
+    if !report.unchecked.is_empty() {
+        println!("chưa có check_sql: {}", report.unchecked.join(", "));
+    }
+    let wrong = report.cases.iter().filter(|c| !c.ok).count();
+    println!(
+        "check-answers: {}/{} khớp",
+        report.cases.len() - wrong,
+        report.cases.len()
+    );
+    i32::from(wrong > 0)
 }
 
 /// Lệnh eval-classify (#197): bộ câu thử phân loại câu hỏi. In từng câu kèm loại đúng, loại của luật từ khóa, loại

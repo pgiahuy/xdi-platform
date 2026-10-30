@@ -19,10 +19,29 @@ make eval   # mock, chỉ các câu có "mock": true; CI chạy lệnh này
 `make eval` luôn dùng mock: mock trả câu viết sẵn trong `backend/src/engine/llm/mock_answers.json`, nên đạt hết chỉ
 nói đường ống chạy đúng, không nói mô hình viết SQL giỏi tới đâu. Chạy với Gemini: [docs/RELEASING.md](../docs/RELEASING.md).
 
-Mỗi câu: hệ thống hỏi `question` qua đúng luồng hỏi của giao diện, SQL đáp án chạy qua cùng guard và DuckDB, rồi so hai
-bảng kết quả: bỏ qua tên cột, cùng số cột và số dòng, số lệch tương đối dưới 1e-6, không xét thứ tự dòng trừ khi
-`ordered`. Câu hỏi tìm nguyên nhân thì bảng của hệ thống là bảng tổng code dựng từ form (một dòng mỗi kỳ hay mỗi nhóm),
-nên đáp án viết đúng bảng đó. Câu phải từ chối đạt khi status là `rejected`.
+Mỗi câu: hệ thống hỏi `question` qua đúng luồng hỏi của giao diện, mọi `expected_sql` chạy qua cùng guard và DuckDB,
+rồi so bảng của hệ thống với từng bảng đáp án, khớp một là đạt. Luật so (`backend/src/service/eval_grade.rs`):
+
+- Bỏ qua tên cột và vị trí cột: mỗi cột của đáp án ghép với một cột của kết quả có cùng giá trị. Cột thừa vẫn đạt và
+  được ghi lại; có `required_columns` thì chỉ các cột đó bắt buộc có.
+- Cùng số dòng; không xét thứ tự dòng trừ khi `ordered`.
+- Số dạng chữ (BIGINT, DECIMAL) đổi về số trước khi so. Hai số nguyên phải bằng nhau; số không nguyên so sau khi làm
+  tròn 4 chữ số có nghĩa, nên 0,44537 khớp 0,4454.
+
+Câu hỏi tìm nguyên nhân thì bảng của hệ thống là bảng tổng code dựng từ form (một dòng mỗi kỳ hay mỗi nhóm), nên đáp
+án viết đúng bảng đó; câu loại `why_*` mà hệ thống trả lời theo đường câu thường (không có phần giải thích) là trượt,
+dù bảng khớp. Câu phải từ chối đạt khi status là `rejected`.
+
+Ba trạng thái: đạt, trượt, cần xem lại. Cần xem lại khi mô hình không trả lời được (hết hạn mức, quá tải, thiếu khóa),
+khi không `expected_sql` nào chạy được, hay khi hệ thống hỏi lại để chọn cách hiểu. Tỷ lệ đúng là đạt chia cho đạt cộng
+trượt; câu cần xem lại không vào mẫu số, để một lần hết hạn mức không kéo tỷ lệ xuống.
+
+Kiểm đáp án không cần mô hình: `--check-answers` chạy `expected_sql` và `check_sql` của mọi câu có `check_sql` rồi so
+bằng cùng luật trên, thoát mã 1 khi có câu lệch. `make eval` chạy thêm bước này trên DataCo.
+
+```bash
+LLM_PROVIDER=mock xdi-backend eval --cases eval/cases/oulad.json --check-answers
+```
 
 ## Định dạng file
 
@@ -95,8 +114,6 @@ hỏi, câu tiếp nối trỏ tới câu không đứng trước, người vi�
 
 Đã có: định dạng và luật kiểm file, câu phải từ chối, chỉ số của dataset. Chưa có, theo thứ tự sẽ làm:
 
-- Chấm ba trạng thái (đạt, trượt, cần xem lại), số làm tròn 4 chữ số có nghĩa, cho phép cột thừa theo
-  `required_columns`, chạy `check_sql`.
 - Hỏi cả `variants`, chạy câu tiếp nối qua cuộc trò chuyện (hiện câu có `follow_up_of` được ghi là bỏ qua), nhiều file
   bộ câu một lần, nghỉ giữa các câu vì hạn mức Gemini, chạy lặp để đo độ dao động.
 - Báo cáo theo loại câu kèm khoảng tin cậy và số câu hồi quy so với lần trước.

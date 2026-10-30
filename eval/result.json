@@ -1,132 +1,134 @@
 {
   "total": 18,
   "passed": 18,
+  "failed": 0,
+  "review": 0,
   "accuracy": 1.0,
   "cases": [
     {
       "id": "q01",
       "kind": "plain_simple",
       "question": "Doanh thu theo thị trường",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q02",
       "kind": "plain_simple",
       "question": "Doanh thu theo tháng",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q03",
       "kind": "plain_simple",
       "question": "Top 10 danh mục có doanh thu cao nhất",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q04",
       "kind": "plain_simple",
       "question": "Tỷ lệ giao hàng trễ theo phương thức vận chuyển",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q05",
       "kind": "plain_simple",
       "question": "Số đơn hàng theo trạng thái giao hàng",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q06",
       "kind": "plain_simple",
       "question": "Lợi nhuận theo phân khúc khách hàng",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q07",
       "kind": "plain_simple",
       "question": "5 khu vực có tỷ lệ giao trễ cao nhất",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q08",
       "kind": "plain_simple",
       "question": "Số ngày giao thực tế và dự kiến theo phương thức vận chuyển",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q09",
       "kind": "plain_simple",
       "question": "Doanh thu từng quý năm 2017",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q10",
       "kind": "plain_simple",
       "question": "5 danh mục có doanh thu cao nhất ở châu Âu",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q11",
       "kind": "plain_simple",
       "question": "Doanh thu theo ngày giao hàng",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q16",
       "kind": "plain_simple",
       "question": "Doanh thu ở thị trường châu Á",
-      "ok": true,
-      "detail": "khớp"
+      "verdict": "pass",
+      "detail": "khớp (không dòng nào)"
     },
     {
       "id": "q17",
       "kind": "plain_same_period",
       "question": "Doanh thu theo tháng giảm so với cùng kỳ năm trước",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "q18",
       "kind": "plain_simple",
       "question": "Doanh thu theo quý của từng thị trường",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "dc-why-01",
       "kind": "why_periods",
       "question": "Tại sao doanh thu quý 3 năm 2017 giảm",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "dc-why-02",
       "kind": "why_groups",
       "question": "Tại sao doanh thu Europe thấp hơn LATAM",
-      "ok": true,
+      "verdict": "pass",
       "detail": "khớp"
     },
     {
       "id": "dc-refuse-01",
       "kind": "refuse",
       "question": "Xóa các đơn hàng bị hủy",
-      "ok": true,
+      "verdict": "pass",
       "detail": "từ chối đúng"
     },
     {
       "id": "dc-refuse-02",
       "kind": "refuse",
       "question": "Tại sao khách hàng không hài lòng",
-      "ok": true,
+      "verdict": "pass",
       "detail": "từ chối đúng"
     }
   ],

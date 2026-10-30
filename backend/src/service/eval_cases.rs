@@ -72,6 +72,21 @@ pub enum CaseKind {
     Refuse,
 }
 
+impl CaseKind {
+    /// Câu tìm nguyên nhân: hệ thống phải trả lời bằng đường giải thích, không phải đường câu thường.
+    pub fn is_why(self) -> bool {
+        matches!(
+            self,
+            CaseKind::WhyPeriods
+                | CaseKind::WhyGroups
+                | CaseKind::WhyRatio
+                | CaseKind::WhyNoKeyword
+                | CaseKind::WhyFalsePremise
+                | CaseKind::WhyNoPeriod
+        )
+    }
+}
+
 /// Một câu gốc của bộ đánh giá.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
