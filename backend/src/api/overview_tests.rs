@@ -238,5 +238,32 @@ async fn unknown_datasets_and_strangers_get_errors() {
     let path = format!("{SHOP}/datasets/{dataset_id}/overview");
     let (status, _, _) = call(&app, "GET", &path, None, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    // An chỉ là member của workspace thứ hai: hỏi dataset của "Cửa hàng" qua slug của mình hay slug "Cửa hàng" đều 404.
+    let (status, _, ws) = call(
+        &app,
+        "POST",
+        "/api/workspaces",
+        Some(&lan),
+        Some(json!({"name": "Kho hai"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let second = format!("/api/workspaces/{}", ws["slug"].as_str().unwrap());
+    let user = json!({"email": "an@example.com", "password": PASSWORD});
+    let (status, _, _) = call(&app, "POST", "/api/admin/users", Some(&lan), Some(user)).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let add = json!({"email": "an@example.com", "role": "member"});
+    let members = format!("{second}/members");
+    let (status, _, _) = call(&app, "POST", &members, Some(&lan), Some(add)).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let login = json!({"email": "an@example.com", "password": PASSWORD});
+    let (_, an, _) = call(&app, "POST", "/api/auth/login", None, Some(login)).await;
+    let an = an.unwrap();
+    for ws in [second.as_str(), SHOP] {
+        let path = format!("{ws}/datasets/{dataset_id}/overview");
+        let (status, _, body) = call(&app, "GET", &path, Some(&an), None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{ws}: {body}");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

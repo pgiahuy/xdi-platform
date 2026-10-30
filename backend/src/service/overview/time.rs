@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/overview/time.rs - phần của trang tổng quan tính bằng SQL: tóm tắt (số dòng người xem đọc được, ngày đầu,
 ngày cuối), rồi độ đo chính và số dòng theo ngày hay theo tháng tùy khoảng dữ liệu. Câu dựng ở overview/sql.rs, chạy qua
-guard và cache ở overview/query.rs, biểu đồ chọn ở overview/charts.rs. Một câu lỗi chỉ thành một MissingPart, phần còn
-lại của trang vẫn trả. */
+guard và cache ở overview/query.rs, biểu đồ chọn ở overview/charts.rs. Câu bị guard từ chối, câu DuckDB báo lỗi, quá giờ
+hay quá bộ nhớ chỉ thành một MissingPart, phần còn lại của trang vẫn trả. Lỗi máy chủ (ví dụ file Parquet của phiên bản
+không còn trên đĩa) thì trả Err và cả trang tổng quan báo lỗi 500. */
 
 use uuid::Uuid;
 
@@ -26,6 +27,11 @@ use crate::service::overview::sql::{
 };
 use crate::state::AppState;
 
+/// Lời khuyên khi một câu của trang bị dừng vì quá giờ hay quá bộ nhớ. Người xem không hỏi gì nên không khuyên "hỏi
+/// hẹp hơn" như luồng hỏi; phần này bỏ trống, muốn xem thì hỏi riêng về một khoảng ngắn hơn.
+const OVERVIEW_STOP_HINT: &str =
+    "Phần này để trống; muốn xem thì đặt câu hỏi cho một khoảng thời gian ngắn hơn.";
+
 /// Thứ phần SQL của trang cần, đã đọc xong từ Postgres.
 pub struct TimeInput<'a> {
     pub state: &'a AppState,
@@ -48,6 +54,7 @@ pub async fn add_time_parts(
         max_rows: SENT_ROWS as u64,
         timeout: input.state.config.query_timeout,
         jobs: &input.state.query_jobs,
+        stop_hint: OVERVIEW_STOP_HINT,
     };
     let plan = choose_measure(input.metrics, input.columns);
     overview.main_measure = plan.as_ref().map(|p| p.main.clone());

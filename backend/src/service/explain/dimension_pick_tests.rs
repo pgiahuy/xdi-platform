@@ -17,7 +17,7 @@ use crate::engine::guard::AllowedTable;
 use crate::service::ask::contract::ValueKind;
 use crate::service::explain::annotate::DropReason;
 use crate::service::explain::breakdown::{
-    build_breakdown, run_candidates, Breakdown, DimensionRows, QueryEnv, SliceTotals,
+    build_breakdown, run_candidates, Breakdown, DimensionRows, QueryEnv, SliceTotals, ASK_STOP_HINT,
 };
 use crate::service::explain::check::{PlanSlices, WhyPlan};
 use crate::service::explain::dimension_pick::{
@@ -73,6 +73,7 @@ fn env<'a>(table: &'a Table, jobs: &'a Arc<Semaphore>) -> QueryEnv<'a> {
         max_rows: 100_000,
         timeout: Duration::from_secs(10),
         jobs,
+        stop_hint: ASK_STOP_HINT,
     }
 }
 
