@@ -61,6 +61,15 @@ pub(super) struct Setup {
 
 /// Lan admin, Minh member của "Cửa hàng"; bảng public.orders trong database của test. key None: tính năng tắt.
 pub(super) async fn start(key: Option<&str>, llm_replies: &[Value]) -> Option<Setup> {
+    start_with_max_rows(key, llm_replies, None).await
+}
+
+/// Như start, kèm SOURCE_MAX_ROWS khác mặc định.
+pub(super) async fn start_with_max_rows(
+    key: Option<&str>,
+    llm_replies: &[Value],
+    max_rows: Option<u64>,
+) -> Option<Setup> {
     let db = fresh_database().await?;
     let url = crate::engine::store::test_support::database_url().unwrap();
     let (host, port, _, _) = url_parts(&url);
@@ -93,6 +102,9 @@ pub(super) async fn start(key: Option<&str>, llm_replies: &[Value]) -> Option<Se
         c.data_dir = data_dir;
         c.source_secret_key = Secret::new(key.unwrap_or_default());
         c.source_allowed_hosts = vec![allowed];
+        if let Some(max_rows) = max_rows {
+            c.source_max_rows = max_rows;
+        }
     };
     let app = app_with_llm(
         db.store.clone(),
@@ -226,13 +238,19 @@ async fn snapshot_table_becomes_a_dataset() {
     .await;
     assert_eq!(status, StatusCode::CREATED, "{result}");
     bodies.push(result.to_string());
-    assert_eq!(result["version"]["source_kind"], "postgres");
-    assert_eq!(result["version"]["row_count"], 3);
-    assert_eq!(result["dataset"]["source_kind"], "postgres");
-    assert_eq!(result["dataset"]["source_id"], id.as_str());
-    assert_eq!(result["dataset"]["source_table"], "public.orders");
-    assert_eq!(result["dataset"]["logical_table"], "orders");
-    let dataset_id = result["dataset"]["id"].as_str().unwrap().to_string();
+    assert_eq!(result["datasets"][0]["version"]["source_kind"], "postgres");
+    assert_eq!(result["datasets"][0]["version"]["row_count"], 3);
+    assert_eq!(result["datasets"][0]["dataset"]["source_kind"], "postgres");
+    assert_eq!(result["datasets"][0]["dataset"]["source_id"], id.as_str());
+    assert_eq!(
+        result["datasets"][0]["dataset"]["source_table"],
+        "public.orders"
+    );
+    assert_eq!(result["datasets"][0]["dataset"]["logical_table"], "orders");
+    let dataset_id = result["datasets"][0]["dataset"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let ask = json!({"question": "Doanh thu theo vùng", "choices": []});
     let (status, _, answer) = call(
@@ -260,8 +278,8 @@ async fn snapshot_table_becomes_a_dataset() {
     .await;
     let (status, _, next) = call(&s.app, "POST", &url, Some(&s.lan), Some(again)).await;
     assert_eq!(status, StatusCode::CREATED, "{next}");
-    assert_eq!(next["version"]["version"], 2);
-    assert_eq!(next["version"]["row_count"], 4);
+    assert_eq!(next["datasets"][0]["version"]["version"], 2);
+    assert_eq!(next["datasets"][0]["version"]["row_count"], 4);
 
     // Nguồn còn dataset thì không xóa được; xóa dataset rồi xóa nguồn.
     let (status, _, _) = call(
@@ -438,8 +456,8 @@ async fn snapshot_keeps_postgres_column_types() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{result}");
-    assert_eq!(result["version"]["row_count"], 25_002);
-    let types: Vec<(String, String)> = result["columns"]
+    assert_eq!(result["datasets"][0]["version"]["row_count"], 25_002);
+    let types: Vec<(String, String)> = result["datasets"][0]["columns"]
         .as_array()
         .unwrap()
         .iter()
@@ -468,7 +486,11 @@ async fn snapshot_keeps_postgres_column_types() {
 
     let parquet = s
         .data
-        .join(result["version"]["parquet_path"].as_str().unwrap())
+        .join(
+            result["datasets"][0]["version"]["parquet_path"]
+                .as_str()
+                .unwrap(),
+        )
         .join("*.parquet");
     let conn = duckdb::Connection::open_in_memory().unwrap();
     let count = |filter: &str| -> i64 {

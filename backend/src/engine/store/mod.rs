@@ -28,6 +28,9 @@ mod datasets;
 mod metric_edits;
 mod metrics;
 mod queries;
+mod relations;
+#[cfg(test)]
+mod relations_tests;
 #[cfg(test)]
 mod schema_tests;
 mod sources;
@@ -57,7 +60,8 @@ pub use metrics::{MetricDefinition, NewMetric};
 pub use policies::{DataRoleOutcome, PoliciesOutcome, RowPolicy};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, PromptExample, QueryStatus, StoredQuery};
-pub use sources::{ModelJoin, SourceModel, SourceRow};
+pub use relations::{build_related, DatasetRelation, NewRelation};
+pub use sources::SourceRow;
 pub use users::{Deactivated, UserSummary};
 #[allow(unused_imports)]
 pub use workspaces::WorkspaceKind;

@@ -54,98 +54,58 @@ fn table(schema: &str, name: &str) -> SourceTable {
     }
 }
 
-fn relation(
-    id: &str,
-    parent: Option<&str>,
+fn key(
+    constraint: &str,
     from: SourceTable,
-    from_columns: &[&str],
     to: SourceTable,
-    to_columns: &[&str],
-    target_columns: &[&str],
-) -> relations::Relation {
-    let strings = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    let key = relations::ForeignKey {
-        constraint: id.rsplit('/').next().unwrap().to_string(),
+    unique_target: bool,
+) -> relations::ForeignKey {
+    relations::ForeignKey {
+        constraint: constraint.to_string(),
         from,
-        from_columns: strings(from_columns),
+        from_columns: vec!["order_id".to_string()],
         to,
-        to_columns: strings(to_columns),
-        unique_target: true,
+        to_columns: vec!["id".to_string()],
+        unique_target,
+        unique_source: false,
+        readable_source: true,
         readable_target: true,
-    };
-    relations::Relation {
-        info: relations::SourceRelation {
-            id: id.to_string(),
-            depth: if parent.is_some() { 2 } else { 1 },
-            parent: parent.map(str::to_string),
-            constraint: key.constraint.clone(),
-            from_table: key.from.full_name(),
-            from_columns: key.from_columns.clone(),
-            to_table: key.to.full_name(),
-            to_columns: key.to_columns.clone(),
-            joinable: true,
-            reason: None,
-            column_count: 0,
-        },
-        key,
-        target_columns: strings(target_columns),
     }
 }
 
+/// Khóa giữa hai bảng trong nhóm giữ một lần dù đọc từ cả hai đầu; khóa ra ngoài nhóm và khóa tới cột không UNIQUE bỏ.
 #[test]
-fn no_relation_keeps_the_plain_copy() {
-    let plan = join_sql::build_join_plan(&table("public", "orders"), &[], &[]);
-    assert_eq!(plan.select, "SELECT * FROM \"public\".\"orders\"");
-    assert!(plan.joins.is_empty());
-}
+fn group_keys_stay_inside_the_group_once() {
+    let items = table("shop", "order_items");
+    let orders = table("shop", "orders");
+    let customers = table("shop", "customers");
+    let inside = key("items_order", items.clone(), orders.clone(), true);
+    let keys = vec![
+        inside.clone(),
+        inside,
+        key("orders_customer", orders.clone(), customers, true),
+        key("items_channel", items.clone(), orders.clone(), false),
+    ];
+    let kept = relations::build_group_keys(keys, &[items.clone(), orders.clone()]);
+    let names: Vec<&str> = kept.iter().map(|k| k.constraint.as_str()).collect();
+    assert_eq!(names, ["items_order"]);
 
-/// Khóa nhiều cột ghép theo cặp, bước 2 nối từ bí danh của bước 1, tên có ngoặc kép được nhân đôi, tên trùng thêm _2.
-#[test]
-fn join_plan_names_and_quotes_columns() {
-    let fact = table("sales", "order_items");
-    let orders = relation(
-        "sales.order_items/fk_order",
-        None,
-        fact.clone(),
-        &["order_id"],
-        table("sales", "orders"),
-        &["id"],
-        &["id", "customer_id", "status"],
-    );
-    let customers = relation(
-        "sales.order_items/fk_order>sales.orders/fk_customer",
-        Some("sales.order_items/fk_order"),
-        table("sales", "orders"),
-        &["customer_id"],
-        table("crm", "orders"),
-        &["code"],
-        &["code", "say \"hi\""],
-    );
-    let fact_columns = vec!["order_id".to_string(), "ORDERS.STATUS".to_string()];
-    let plan = join_sql::build_join_plan(&fact, &fact_columns, &[&orders, &customers]);
+    let ids = [(items, Uuid::new_v4()), (orders, Uuid::new_v4())];
+    let rel = snapshot::build_new_relations(&kept, &ids);
+    assert_eq!(rel.len(), 1);
     assert_eq!(
-        plan.select,
-        "SELECT t0.\"order_id\", t0.\"ORDERS.STATUS\", t1.\"customer_id\" AS \"orders.customer_id\", \
-         t1.\"status\" AS \"orders.status_2\", t2.\"say \"\"hi\"\"\" AS \"orders_2.say \"\"hi\"\"\" \
-         FROM \"sales\".\"order_items\" AS t0 \
-         LEFT JOIN \"sales\".\"orders\" AS t1 ON t0.\"order_id\" = t1.\"id\" \
-         LEFT JOIN \"crm\".\"orders\" AS t2 ON t1.\"customer_id\" = t2.\"code\""
+        (rel[0].from_dataset_id, rel[0].to_dataset_id),
+        (ids[0].1, ids[1].1)
     );
-    assert_eq!(plan.joins[1].prefix, "orders_2");
-    assert_eq!(plan.joins[1].columns, ["orders_2.say \"hi\""]);
-    assert_eq!(plan.joins[0].to_table, "sales.orders");
-    // Khóa của dòng bảng đích trong dataset: bước 1 là cột của bảng chính, bước 2 là tên đã đặt ở bước 1.
-    assert_eq!(plan.joins[0].key_columns, ["order_id"]);
-    assert_eq!(plan.joins[1].key_columns, ["orders.customer_id"]);
+    assert_eq!(rel[0].cardinality, "many_to_one");
 }
 
 #[test]
-fn row_count_change_is_refused() {
-    let err = check_row_counts("sales.order_items", 5, 7, 100).unwrap_err();
-    assert!(matches!(err, AppError::BadRequest(m) if m.contains("từ 5 thành 7")));
+fn row_limit_is_per_table() {
+    let orders = table("shop", "orders");
     assert!(matches!(
-        check_row_counts("sales.order_items", 500, 500, 100),
-        Err(AppError::TooLarge(_))
+        snapshot::check_row_count(&orders, 500, 100),
+        Err(AppError::TooLarge(m)) if m.contains("shop.orders")
     ));
-    assert!(check_row_counts("sales.order_items", 5, 5, 100).is_ok());
+    assert!(snapshot::check_row_count(&orders, 100, 100).is_ok());
 }

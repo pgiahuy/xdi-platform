@@ -158,10 +158,6 @@ fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
     if let Some(format) = &column.time_format {
         line.push_str(&format!(", date format {format}"));
     }
-    // Luật "from joined table" trong backend/prompts/sql.txt dựa vào đúng cụm này.
-    if let Some(table) = &column.origin_table {
-        line.push_str(&format!(", from joined table {table}"));
-    }
     // Chỉ cột avg có thêm chữ: sum là cách mô hình làm sẵn, ghi cho mọi cột chỉ làm prompt dài thêm. Cột mô tả từng
     // dòng (tín chỉ, tuổi, số ngày) cộng lại ra số vô nghĩa (#185).
     if column.role == ProfileRole::Measure.as_str() && column.aggregation == ColumnAggregation::Avg

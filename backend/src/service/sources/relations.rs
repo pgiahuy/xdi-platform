@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/sources/relations.rs - tìm quan hệ khóa ngoại quanh một bảng của nguồn Postgres, để chụp bảng chính (bảng sự
-kiện, ví dụ order_items) kèm các bảng nó trỏ tới (orders, products) thành một dataset. Dựng câu SELECT nối các bảng ở
-join_sql.rs; service/sources/mod.rs gọi cả hai lúc chụp.
+/* service/sources/relations.rs - quan hệ khóa ngoại quanh một bảng của nguồn Postgres. Hai việc:
+- discover: liệt kê bảng nối với bảng đang chọn theo cả hai chiều, để người dùng chọn chụp kèm (route
+  POST /sources/{id}/relations).
+- build_group_keys: lúc chụp một nhóm bảng (snapshot.rs), giữ các khóa ngoại nối hai bảng trong nhóm để ghi thành quan
+  hệ giữa các dataset (engine/store/relations.rs).
 
-Chỉ nối nhiều-một: đi theo khóa ngoại RỜI bảng chính, tới bảng mà cột đích là khóa chính hay có ràng buộc UNIQUE. Mỗi
-dòng của bảng chính khi đó khớp tối đa một dòng bên kia, nên số dòng không đổi và mọi tính năng một bảng (hồ sơ, guard,
-hỏi, "tại sao", truy dòng nguồn) chạy y như cũ. Đi thêm được một bước từ bảng vừa nối (order_items -> orders ->
-customers), không xa hơn: hai bước đủ cho mô hình sao và bông tuyết thường gặp, và mỗi bước thêm cột làm prompt dài ra.
-Khóa ngoại TRỎ VÀO bảng chính (orders <- order_items khi chọn orders) là một-nhiều: nối sẽ nhân dòng, nên chỉ liệt kê
-kèm lý do, không bao giờ nối.
+Mỗi bảng chụp thành một dataset riêng, không nối thành bảng phẳng, nên cả hai chiều đều chụp kèm được: nhiều-một (khóa
+ngoại rời bảng đang chọn, order_items -> orders) và một-nhiều (khóa ngoại của bảng khác trỏ vào nó, orders <-
+order_items). Chỉ đi một bước quanh bảng đang chọn; bảng xa hơn thì chọn tiếp từ bảng đã thêm.
 
-Mọi thông tin đọc từ pg_catalog (tên ràng buộc, bảng, cột, quyền), không đọc dòng dữ liệu nào. pg_catalog cho mọi tài
-khoản xem tên bảng và ràng buộc, kể cả bảng không có quyền đọc; bảng như vậy được liệt kê mà không nối. */
+Chỉ ghi quan hệ khi cột đích là khóa chính hay ràng buộc UNIQUE: mỗi dòng bên nhiều khớp tối đa một dòng bên một, nên
+sau này JOIN theo quan hệ không nhân dòng phía một. Mọi thông tin đọc từ pg_catalog (tên ràng buộc, bảng, cột, quyền),
+không đọc dòng dữ liệu nào. pg_catalog cho mọi tài khoản xem tên bảng và ràng buộc, kể cả bảng không có quyền đọc; bảng
+như vậy được liệt kê kèm lý do mà không chụp được. */
 
 use std::collections::HashSet;
 
@@ -21,37 +22,31 @@ use sqlx::postgres::PgConnection;
 use super::postgres::{query_error, SourceTable};
 use crate::error::AppError;
 
-/// Số bước tối đa đi theo khóa ngoại từ bảng chính.
-pub const MAX_DEPTH: u8 = 2;
-
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct RelationsRequest {
     /// `schema.table` from the table list.
     pub table: String,
 }
 
-/// One foreign key around the chosen table, as the UI lists it.
+/// A table linked to the chosen table by one foreign key.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
-pub struct SourceRelation {
-    /// Stable id to send back in the snapshot request: `schema.table/constraint`, two hops joined with `>`.
-    pub id: String,
-    /// 1 for a foreign key of the chosen table, 2 for a foreign key of a table joined at depth 1.
-    pub depth: u8,
-    /// Id of the depth-1 relation this one continues; null at depth 1.
-    #[schema(required)]
-    pub parent: Option<String>,
+pub struct RelatedTable {
+    /// `schema.table` that can be snapshotted together with the chosen table.
+    pub table: String,
     pub constraint: String,
+    /// Table holding the foreign key (the many side) and its key columns.
     pub from_table: String,
     pub from_columns: Vec<String>,
+    /// Table the foreign key points to (the one side) and its key columns.
     pub to_table: String,
     pub to_columns: Vec<String>,
-    /// True when the join keeps one row per row of the chosen table and the account can read the target.
-    pub joinable: bool,
-    /// Why the relation is not joined, in Vietnamese; null when joinable.
+    /// Readable columns of `table`; 0 when the account cannot read it.
+    pub column_count: usize,
+    /// True when `table` can be snapshotted with the chosen table and the relation recorded.
+    pub addable: bool,
+    /// Why the table cannot be added, in Vietnamese; null when addable.
     #[schema(required)]
     pub reason: Option<String>,
-    /// Columns the join would add (the target table's readable columns minus the key columns).
-    pub column_count: usize,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -59,10 +54,10 @@ pub struct RelationsResponse {
     pub table: String,
     /// Readable columns of the chosen table.
     pub column_count: usize,
-    /// Foreign keys leaving the chosen table (depth 1) or a table joined at depth 1 (depth 2), in join order.
-    pub many_to_one: Vec<SourceRelation>,
-    /// Foreign keys of other tables pointing into the chosen table: never joined, they would repeat its rows.
-    pub one_to_many: Vec<SourceRelation>,
+    /// Tables the chosen table points to (its foreign keys).
+    pub many_to_one: Vec<RelatedTable>,
+    /// Tables pointing to the chosen table (their foreign keys).
+    pub one_to_many: Vec<RelatedTable>,
 }
 
 /// Một khóa ngoại đọc từ pg_constraint, cột theo đúng thứ tự của khóa (khóa nhiều cột ghép theo cặp).
@@ -75,203 +70,110 @@ pub struct ForeignKey {
     pub to_columns: Vec<String>,
     /// Cột đích đúng bằng tập cột của khóa chính hay một ràng buộc UNIQUE của bảng đích.
     pub unique_target: bool,
-    /// Tài khoản có quyền SELECT trên bảng đích.
+    /// Cột khóa ngoại cũng là khóa chính hay UNIQUE của bảng giữ nó: quan hệ một-một.
+    pub unique_source: bool,
+    /// Tài khoản có quyền SELECT trên bảng giữ khóa và trên bảng đích.
+    pub readable_source: bool,
     pub readable_target: bool,
 }
 
-/// Một quan hệ đã tìm, kèm cột của bảng đích để dựng câu SELECT.
-#[derive(Debug, Clone)]
-pub struct Relation {
-    pub info: SourceRelation,
-    pub key: ForeignKey,
-    /// Cột đọc được của bảng đích, theo thứ tự trong bảng.
-    pub target_columns: Vec<String>,
-}
-
-/// Kết quả tìm quanh một bảng: cột của bảng chính và các quan hệ.
-pub struct Discovered {
-    pub fact_columns: Vec<String>,
-    pub many_to_one: Vec<Relation>,
-    pub one_to_many: Vec<SourceRelation>,
-}
-
-impl Discovered {
-    pub fn build_response(&self, table: &SourceTable) -> RelationsResponse {
-        RelationsResponse {
-            table: table.full_name(),
-            column_count: self.fact_columns.len(),
-            many_to_one: self.many_to_one.iter().map(|r| r.info.clone()).collect(),
-            one_to_many: self.one_to_many.clone(),
+impl ForeignKey {
+    /// Chữ ghi vào dataset_relations.cardinality (CHECK của migration 0009).
+    pub fn cardinality(&self) -> &'static str {
+        if self.unique_source {
+            "one_to_one"
+        } else {
+            "many_to_one"
         }
     }
-
-    /// Quan hệ theo id người dùng chọn, giữ thứ tự tìm thấy (bước 1 trước bước 2 của nó), để tên cột và câu SQL như
-    /// nhau mỗi lần chụp. Chọn bước 2 thì bước 1 của nó được nối theo, vì câu JOIN cần bảng ở giữa. Id lạ, hay quan hệ
-    /// không nối được, thì từ chối cả lần chụp: chụp thiếu một bảng mà không báo thì dataset khác điều người dùng chọn.
-    pub fn pick(&self, ids: &[String]) -> Result<Vec<&Relation>, AppError> {
-        let mut wanted: HashSet<&str> = HashSet::new();
-        for id in ids {
-            let relation = self
-                .many_to_one
-                .iter()
-                .find(|r| &r.info.id == id && r.info.joinable)
-                .ok_or_else(|| {
-                    AppError::BadRequest(format!(
-                        "Quan hệ {id} không còn trong database hoặc không nối được: mở lại danh sách quan hệ \
-                         của bảng rồi chọn lại"
-                    ))
-                })?;
-            wanted.insert(&relation.info.id);
-            if let Some(parent) = &relation.info.parent {
-                wanted.insert(parent);
-            }
-        }
-        Ok(self
-            .many_to_one
-            .iter()
-            .filter(|r| wanted.contains(r.info.id.as_str()))
-            .collect())
-    }
 }
 
-/// Tìm quan hệ quanh bảng chính: khóa ngoại rời nó (bước 1), khóa ngoại rời mỗi bảng nối được ở bước 1 (bước 2), và
-/// khóa ngoại của bảng khác trỏ vào nó (một-nhiều, không nối).
-pub async fn discover(c: &mut PgConnection, fact: &SourceTable) -> Result<Discovered, AppError> {
-    let fact_columns = list_columns(c, fact).await?;
+/// Bảng nối với `chosen` theo cả hai chiều, kèm lý do khi một bảng không chụp kèm được.
+pub async fn discover(
+    c: &mut PgConnection,
+    chosen: &SourceTable,
+) -> Result<RelationsResponse, AppError> {
+    let column_count = list_columns(c, chosen).await?.len();
     let mut many_to_one = Vec::new();
     let mut one_to_many = Vec::new();
-    for key in list_foreign_keys(c, fact).await? {
-        if key.from.same(fact) {
-            let relation = build_relation(c, key, None).await?;
-            many_to_one.push(relation);
-        } else {
-            let id = build_hop_id(&key);
-            one_to_many.push(build_info(
-                id,
-                1,
-                None,
-                &key,
-                0,
-                Some(incoming_reason(&key)),
-            ));
-        }
-    }
-    // Bước 2 chỉ đi tiếp từ bảng nối được, và không quay về bảng chính: nối bảng chính vào chính nó qua một bảng khác
-    // không thêm thông tin gì mà dễ làm người đọc nhầm.
-    let first: Vec<Relation> = many_to_one.clone();
-    let mut ordered = Vec::new();
-    for parent in first {
-        let target = parent.key.to.clone();
-        let parent_id = parent.info.id.clone();
-        let joinable = parent.info.joinable;
-        ordered.push(parent);
-        if !joinable || MAX_DEPTH < 2 {
+    for key in list_foreign_keys(c, chosen).await? {
+        // Khóa trỏ về chính bảng (cột quản lý trỏ tới nhân viên): không có bảng nào khác để thêm. Lúc chụp, quan hệ này
+        // vẫn được ghi (build_group_keys).
+        if key.from.same(&key.to) {
             continue;
         }
-        for key in list_foreign_keys(c, &target).await? {
-            if !key.from.same(&target) || key.to.same(fact) {
-                continue;
-            }
-            ordered.push(build_relation(c, key, Some(&parent_id)).await?);
+        let outgoing = key.from.same(chosen);
+        let (other, readable) = if outgoing {
+            (key.to.clone(), key.readable_target)
+        } else {
+            (key.from.clone(), key.readable_source)
+        };
+        let reason = build_reason(&key, &other, readable);
+        // Bảng không đọc được thì không hỏi cột (danh sách sẽ rỗng).
+        let column_count = if readable {
+            list_columns(c, &other).await?.len()
+        } else {
+            0
+        };
+        let item = RelatedTable {
+            table: other.full_name(),
+            constraint: key.constraint.clone(),
+            from_table: key.from.full_name(),
+            from_columns: key.from_columns.clone(),
+            to_table: key.to.full_name(),
+            to_columns: key.to_columns.clone(),
+            column_count,
+            addable: reason.is_none(),
+            reason,
+        };
+        if outgoing {
+            many_to_one.push(item);
+        } else {
+            one_to_many.push(item);
         }
     }
-    many_to_one = ordered;
-    Ok(Discovered {
-        fact_columns,
+    Ok(RelationsResponse {
+        table: chosen.full_name(),
+        column_count,
         many_to_one,
         one_to_many,
     })
 }
 
-async fn build_relation(
-    c: &mut PgConnection,
-    key: ForeignKey,
-    parent: Option<&str>,
-) -> Result<Relation, AppError> {
-    let hop = build_hop_id(&key);
-    let (id, depth) = match parent {
-        Some(p) => (format!("{p}>{hop}"), 2),
-        None => (hop, 1),
-    };
-    let reason = outgoing_reason(&key);
-    // Bảng không đọc được thì không hỏi cột (danh sách sẽ rỗng): quan hệ đằng nào cũng không nối.
-    let target_columns = if reason.is_none() {
-        list_columns(c, &key.to).await?
-    } else {
-        Vec::new()
-    };
-    let added = target_columns
-        .iter()
-        .filter(|col| !key.to_columns.contains(col))
-        .count();
-    let info = build_info(id, depth, parent.map(str::to_string), &key, added, reason);
-    Ok(Relation {
-        info,
-        key,
-        target_columns,
-    })
-}
-
-fn build_info(
-    id: String,
-    depth: u8,
-    parent: Option<String>,
-    key: &ForeignKey,
-    column_count: usize,
-    reason: Option<String>,
-) -> SourceRelation {
-    SourceRelation {
-        id,
-        depth,
-        parent,
-        constraint: key.constraint.clone(),
-        from_table: key.from.full_name(),
-        from_columns: key.from_columns.clone(),
-        to_table: key.to.full_name(),
-        to_columns: key.to_columns.clone(),
-        joinable: reason.is_none(),
-        reason,
-        column_count,
-    }
-}
-
-/// Id một bước: bảng chứa khóa ngoại và tên ràng buộc. Postgres không cho hai ràng buộc cùng tên trên một bảng, nên id
-/// duy nhất, và không đổi khi bảng thêm cột hay khóa khác: "Chụp lại" tìm lại được đúng quan hệ.
-fn build_hop_id(key: &ForeignKey) -> String {
-    format!("{}/{}", key.from.full_name(), key.constraint)
-}
-
-/// Lý do không nối một khóa ngoại rời bảng; None khi nối được.
-pub fn outgoing_reason(key: &ForeignKey) -> Option<String> {
+/// Lý do không chụp kèm `other` theo khóa này; None khi được.
+pub fn build_reason(key: &ForeignKey, other: &SourceTable, readable: bool) -> Option<String> {
     if !key.unique_target {
         return Some(format!(
-            "Cột {} của {} không phải khóa chính hay có ràng buộc UNIQUE: một dòng có thể khớp nhiều dòng bên đó, nối \
-             sẽ nhân dòng",
+            "Cột {} của {} không phải khóa chính hay có ràng buộc UNIQUE: một dòng có thể khớp nhiều dòng bên đó, nên \
+             quan hệ không được ghi",
             key.to_columns.join(", "),
             key.to.full_name()
         ));
     }
-    if !key.readable_target {
+    if !readable {
         return Some(format!(
-            "Tài khoản không có quyền đọc {}: cấp GRANT SELECT nếu cần nối",
-            key.to.full_name()
+            "Tài khoản không có quyền đọc {}: cấp GRANT SELECT nếu cần chụp bảng này",
+            other.full_name()
         ));
     }
     None
 }
 
-fn incoming_reason(key: &ForeignKey) -> String {
-    format!(
-        "Trỏ vào bảng này: một dòng ở đây ứng với nhiều dòng bên đó, nối sẽ nhân dòng. Chụp {} làm bảng chính nếu cần \
-         phân tích theo nó",
-        key.from.full_name()
-    )
+/// Khóa ngoại nối hai bảng trong nhóm `chosen`, mỗi khóa một lần (list_foreign_keys của hai đầu đều trả nó). Chỉ giữ
+/// khóa có cột đích là khóa chính hay UNIQUE, như discover cho phép.
+pub fn build_group_keys(keys: Vec<ForeignKey>, chosen: &[SourceTable]) -> Vec<ForeignKey> {
+    let in_group = |t: &SourceTable| chosen.iter().any(|c| c.same(t));
+    let mut seen: HashSet<(String, String)> = HashSet::new();
+    keys.into_iter()
+        .filter(|k| k.unique_target && in_group(&k.from) && in_group(&k.to))
+        .filter(|k| seen.insert((k.from.full_name(), k.constraint.clone())))
+        .collect()
 }
 
 /// Khóa ngoại rời hay trỏ vào một bảng. conparentid = 0 bỏ bản sao của ràng buộc mà Postgres tạo cho từng partition.
-/// Cột đích "có ràng buộc UNIQUE" khi tập cột của nó đúng bằng tập cột của khóa chính hay một ràng buộc UNIQUE (hai
-/// chiều chứa nhau); chỉ mục UNIQUE không kèm ràng buộc không tính, để luật dễ kiểm bằng mắt trong \d của psql.
-async fn list_foreign_keys(
+/// Cột "có ràng buộc UNIQUE" khi tập cột của nó đúng bằng tập cột của khóa chính hay một ràng buộc UNIQUE (hai chiều
+/// chứa nhau); chỉ mục UNIQUE không kèm ràng buộc không tính, để luật dễ kiểm bằng mắt trong \d của psql.
+pub async fn list_foreign_keys(
     c: &mut PgConnection,
     table: &SourceTable,
 ) -> Result<Vec<ForeignKey>, AppError> {
@@ -285,6 +187,8 @@ async fn list_foreign_keys(
         Vec<String>,
         bool,
         bool,
+        bool,
+        bool,
     );
     let rows: Vec<Row> = sqlx::query_as(
         "SELECT c.conname::text, sn.nspname::text, s.relname::text,
@@ -296,6 +200,10 @@ async fn list_foreign_keys(
                 EXISTS (SELECT 1 FROM pg_constraint u
                         WHERE u.conrelid = c.confrelid AND u.contype IN ('p', 'u')
                           AND u.conkey @> c.confkey AND u.conkey <@ c.confkey),
+                EXISTS (SELECT 1 FROM pg_constraint u
+                        WHERE u.conrelid = c.conrelid AND u.contype IN ('p', 'u')
+                          AND u.conkey @> c.conkey AND u.conkey <@ c.conkey),
+                has_table_privilege(c.conrelid, 'SELECT'),
                 has_table_privilege(c.confrelid, 'SELECT')
          FROM pg_constraint c
          JOIN pg_class s ON s.oid = c.conrelid
@@ -311,24 +219,23 @@ async fn list_foreign_keys(
     .fetch_all(&mut *c)
     .await
     .map_err(|e| query_error(&e))?;
+    let table_of = |schema: String, name: String| SourceTable {
+        schema,
+        name,
+        kind: "table".to_string(),
+    };
     Ok(rows
         .into_iter()
         .map(|r| ForeignKey {
             constraint: r.0,
-            from: SourceTable {
-                schema: r.1,
-                name: r.2,
-                kind: "table".to_string(),
-            },
+            from: table_of(r.1, r.2),
             from_columns: r.3,
-            to: SourceTable {
-                schema: r.4,
-                name: r.5,
-                kind: "table".to_string(),
-            },
+            to: table_of(r.4, r.5),
             to_columns: r.6,
             unique_target: r.7,
-            readable_target: r.8,
+            unique_source: r.8,
+            readable_source: r.9,
+            readable_target: r.10,
         })
         .collect())
 }

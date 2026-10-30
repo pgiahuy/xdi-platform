@@ -41,7 +41,6 @@ fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
         values_complete: false,
         matched: false,
         unit: None,
-        origin_table: None,
         aggregation: crate::engine::store::ColumnAggregation::Sum,
     }
 }
@@ -287,22 +286,6 @@ fn columns_show_values_and_date_formats() {
     assert!(prompt.contains(
         "- \"Market\" (VARCHAR, dimension): Thị trường nơi giao đơn hàng. Also called: thị trường, châu lục"
     ));
-}
-
-/// Cột chép từ bảng nối nhiều-một ghi rõ bảng gốc, và phần luật nói không SUM riêng cột như vậy.
-#[test]
-fn columns_from_joined_tables_name_their_table() {
-    let mut context = dataco_context();
-    let mut price = column("products.price", "DOUBLE", "text");
-    price.origin_table = Some("sales.products".to_string());
-    context.columns.push(price);
-    let prompt = build_sql_prompt(&input(QUESTION, &context, &[], &[], &[]));
-    assert!(
-        prompt.contains("- \"products.price\" (DOUBLE, text, from joined table sales.products)"),
-        "{prompt}"
-    );
-    assert!(prompt.contains("from joined table T\" was copied from table T"));
-    assert!(prompt.contains("Never SUM it on its own"));
 }
 
 /// Gợi ý giá trị, cột #28 đã chọn kèm cột khác, và lựa chọn chỉ số người hỏi gửi lại; lựa chọn cột không lặp lại.

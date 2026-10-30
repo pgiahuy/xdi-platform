@@ -97,9 +97,6 @@ pub struct NewColumn {
     pub time_format: Option<String>,
     /// Ghi vào column_values; rỗng với cột nhiều giá trị.
     pub values: Vec<NewColumnValue>,
-    /// schema.bảng của bảng nối nhiều-một mà cột chép từ đó (bản chụp database, service/sources/); None với cột của
-    /// bảng chính và cột nạp từ file.
-    pub origin_table: Option<String>,
 }
 
 // position chỉ để sắp xếp trong SQL, description và aliases đợi ngữ cảnh prompt (#29) đọc ngoài test; gỡ allow khi
@@ -124,8 +121,6 @@ pub struct ProfileColumn {
     pub time_format: Option<String>,
     /// Đơn vị của cột số đo (ColumnUnit::as_str); None khi lớp ngữ nghĩa chưa chạy hay không biết.
     pub unit: Option<String>,
-    /// Bảng nối nhiều-một mà cột chép từ đó (NewColumn::origin_table).
-    pub origin_table: Option<String>,
     /// Cách gộp mặc định (ColumnAggregation::as_str): sum hay avg; chỉ có nghĩa với cột measure.
     pub aggregation: String,
 }
@@ -224,7 +219,7 @@ impl Store {
     ) -> Result<Vec<ProfileColumn>, AppError> {
         sqlx::query_as(
             "SELECT id, position, name, data_type, role, description, aliases, is_sensitive,
-                 null_count, distinct_count, min_value, max_value, time_format, unit, origin_table,
+                 null_count, distinct_count, min_value, max_value, time_format, unit,
                  COALESCE(aggregation, 'sum') AS aggregation
              FROM columns WHERE workspace_id = $1 AND version_id = $2 ORDER BY position",
         )
@@ -424,8 +419,8 @@ pub(super) async fn insert_columns(
     for column in columns {
         let column_id: Uuid = sqlx::query_scalar(
             "INSERT INTO columns (workspace_id, version_id, position, name, data_type, role, is_sensitive, null_count,
-                 distinct_count, min_value, max_value, time_format, origin_table)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id",
+                 distinct_count, min_value, max_value, time_format)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
         )
         .bind(ws.as_uuid())
         .bind(version_id)
@@ -439,7 +434,6 @@ pub(super) async fn insert_columns(
         .bind(&column.min_value)
         .bind(&column.max_value)
         .bind(&column.time_format)
-        .bind(&column.origin_table)
         .fetch_one(&mut *conn)
         .await
         .map_err(|e| db_error("insert column", e))?;
@@ -487,7 +481,6 @@ mod tests {
             min_value: None,
             max_value: None,
             time_format: None,
-            origin_table: None,
             values: values
                 .iter()
                 .map(|(value, frequency)| NewColumnValue {
@@ -516,7 +509,6 @@ mod tests {
             file_hash: "h1",
             parquet_path: "x",
             row_count: 3,
-            source_model: None,
         };
         let v = store.create_version(&a, ds.id, &new, &[]).await.unwrap();
         assert_eq!(v.profile_status, "pending");
@@ -597,7 +589,6 @@ mod tests {
             file_hash: hash,
             parquet_path: "x",
             row_count: 3,
-            source_model: None,
         };
         let clash = [
             new_column(0, "a", ProfileRole::Dimension, &[("x", 1)]),
@@ -672,7 +663,6 @@ mod tests {
             file_hash: hash,
             parquet_path: "x",
             row_count: 3,
-            source_model: None,
         };
         // Không có cột thì pending (chưa qua lớp cấu trúc): lớp ngữ nghĩa không ghi được.
         let pending = store
@@ -797,7 +787,6 @@ mod tests {
             file_hash: "h1",
             parquet_path: "x",
             row_count: 3,
-            source_model: None,
         };
         let v = store
             .create_version(&ws, ds.id, &version, &columns)

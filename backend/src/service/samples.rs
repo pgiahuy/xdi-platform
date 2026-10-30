@@ -122,7 +122,6 @@ pub async fn upload_local_file(
         }],
         sheets: Vec::new(),
         database_source: None,
-        source_model: None,
     };
     ingest::upload(state, member, staging, upload).await
 }

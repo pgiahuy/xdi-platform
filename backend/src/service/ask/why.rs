@@ -19,7 +19,6 @@ use crate::engine::store::{Dataset, DatasetVersion, ProfileColumn};
 use crate::service::ask::checks::build_empty_warning;
 use crate::service::ask::contract::{AskResponse, AskStatus, AskStep, Explanation};
 use crate::service::ask::prompt::PromptInput;
-use crate::service::ask::repeated::RepeatedColumn;
 use crate::service::ask::response_choices::{build_unapplied_warnings, build_used_choices};
 use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
@@ -37,8 +36,6 @@ pub(super) struct WhyAsk<'a> {
     pub columns: &'a [ProfileColumn],
     /// Bảng được phép, đã có lọc dòng theo vai dữ liệu của người hỏi: mọi câu của run_why đi qua guard với nó.
     pub tables: &'a [AllowedTable],
-    /// Cột chép từ bảng nối nhiều-một (ask/repeated.rs); rỗng với dataset nạp từ file.
-    pub repeated: &'a [RepeatedColumn],
     /// Các bước đã chạy (context).
     pub steps: Vec<AskStep>,
 }
@@ -54,7 +51,6 @@ pub(super) async fn ask_why(
         prompt,
         columns,
         tables,
-        repeated,
         mut steps,
     } = ask;
     // Các trường của prompt là tham chiếu; chép ra trước khi prompt chuyển vào WhyInput để dùng tiếp sau run_why.
@@ -71,7 +67,6 @@ pub(super) async fn ask_why(
         values: &values,
         row_count: version.row_count,
         tables,
-        repeated,
         max_rows: state.config.ask_max_rows,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,

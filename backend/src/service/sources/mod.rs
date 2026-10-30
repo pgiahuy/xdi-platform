@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/sources/mod.rs - nguồn dữ liệu là database Postgres của tổ chức (#165, bản tối thiểu, chỉ Postgres).
 
-Cách đọc: chụp một bảng thành một phiên bản Parquet như nạp file, không truy vấn thẳng database ngoài lúc hỏi. Nhờ
-vậy hồ sơ cột, bằng chứng, dòng nguồn và câu hỏi cũ vẫn tái lập được trên đúng bản đã chụp; "Chụp lại" tạo phiên bản
-mới. Chép bảng ở postgres.rs (lý do không dùng extension của DuckDB ghi ở đó), mã hóa ở secret.rs, rồi đi tiếp
-service/ingest.rs như một file CSV.
+Cách đọc: chụp bảng thành phiên bản Parquet như nạp file, không truy vấn thẳng database ngoài lúc hỏi. Nhờ vậy hồ sơ
+cột, bằng chứng, dòng nguồn và câu hỏi cũ vẫn tái lập được trên đúng bản đã chụp; "Chụp lại" tạo phiên bản mới. Chép
+bảng ở postgres.rs (lý do không dùng extension của DuckDB ghi ở đó), mã hóa ở secret.rs, rồi đi tiếp service/ingest.rs
+như một file CSV.
 
-Bảng chính có thể kèm các bảng nó trỏ tới theo khóa ngoại, chỉ nhiều-một (relations.rs tìm, join_sql.rs dựng câu
-SELECT): kết quả vẫn là một bảng phẳng, mỗi dòng của bảng chính một dòng. Đếm dòng và chép chạy trong một giao dịch
-REPEATABLE READ; số dòng sau khi nối khác số dòng của bảng chính thì từ chối. Mô hình (bảng chính, các lần nối) ghi vào
-phiên bản (SourceModel), "Chụp lại" đọc lại để nối đúng như lần trước.
+Một lần chụp lấy một bảng cùng các bảng nối với nó theo khóa ngoại (relations.rs tìm, snapshot.rs chụp): mỗi bảng thành
+một dataset riêng, khóa ngoại giữa chúng ghi thành quan hệ giữa các dataset. Không nối thành bảng phẳng, nên không có
+cột lặp lại để cộng nhầm.
 
 Bảo vệ:
 - Chỉ admin của workspace làm mọi việc ở đây, kể cả xem cấu hình nguồn; member nhận 403.
@@ -17,11 +16,11 @@ Bảo vệ:
 - Thông tin kết nối mã hóa bằng SOURCE_SECRET_KEY trước khi lưu; mật khẩu không bao giờ có trong response, log hay
   prompt. Cột _source_file ghi postgres://máy/database/schema.bảng, không có tài khoản hay mật khẩu. */
 
-mod join_sql;
 mod pg_types;
 mod postgres;
 mod relations;
 mod secret;
+mod snapshot;
 
 #[cfg(test)]
 mod tests;
@@ -29,18 +28,17 @@ mod tests;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::auth::Member;
-use crate::engine::store::{SourceModel, SourceRow};
-use crate::service::ingest::{self, StagedFile, Staging, Upload, UploadResult};
+use crate::engine::store::SourceRow;
 use crate::{error::AppError, state::AppState};
 
 pub use postgres::SourceTable;
 use postgres::{ConnectInfo, SSL_MODES};
 pub use relations::{RelationsRequest, RelationsResponse};
 use secret::SecretKey;
+pub use snapshot::{snapshot, SnapshotRequest, SnapshotResponse};
 
 const KIND_POSTGRES: &str = "postgres";
 
@@ -75,19 +73,6 @@ pub struct SourceResponse {
 pub struct TestSourceResponse {
     /// Number of tables and views the account can read.
     pub table_count: usize,
-}
-
-#[derive(Deserialize, utoipa::ToSchema)]
-pub struct SnapshotRequest {
-    /// `schema.table` from the table list. Not needed with `dataset_id`: the table snapshotted before is used.
-    pub table: Option<String>,
-    /// Name of the new dataset; defaults to the table name.
-    pub name: Option<String>,
-    /// Snapshot again into this dataset as a new version. The joins of the current version are reused.
-    pub dataset_id: Option<Uuid>,
-    /// Ids of many-to-one relations to join (from the relation list of the table). Not allowed with `dataset_id`.
-    #[serde(default)]
-    pub relations: Vec<String>,
 }
 
 /// Khóa mã hóa; thiếu hay sai thì tính năng tắt, lời báo nói cách đặt khóa.
@@ -150,7 +135,7 @@ pub async fn tables(
     postgres::list_tables(&mut conn).await
 }
 
-/// Quan hệ khóa ngoại quanh một bảng: bảng nối nhiều-một được (kèm bước 2), bảng không nối được và lý do.
+/// Bảng nối với một bảng theo khóa ngoại, cả hai chiều, kèm lý do khi một bảng không chụp kèm được.
 pub async fn relations(
     state: &AppState,
     member: &Member,
@@ -159,9 +144,9 @@ pub async fn relations(
 ) -> Result<RelationsResponse, AppError> {
     let (_, info) = load(state, member, id).await?;
     let mut conn = postgres::connect(&info, state.config.source_timeout).await?;
-    let table = find_table(&mut conn, req.table.trim()).await?;
-    let discovered = relations::discover(&mut conn, &table).await?;
-    Ok(discovered.build_response(&table))
+    let readable = postgres::list_tables(&mut conn).await?;
+    let table = find_table_in(&readable, req.table.trim())?;
+    relations::discover(&mut conn, &table).await
 }
 
 pub async fn delete(state: &AppState, member: &Member, id: Uuid) -> Result<(), AppError> {
@@ -175,116 +160,15 @@ pub async fn delete(state: &AppState, member: &Member, id: Uuid) -> Result<(), A
     Ok(())
 }
 
-/// Chụp một bảng thành dataset mới, hoặc thành phiên bản mới của dataset đã chụp từ nguồn này.
-pub async fn snapshot(
-    state: &AppState,
-    member: &Member,
-    id: Uuid,
-    req: SnapshotRequest,
-) -> Result<UploadResult, AppError> {
-    let (row, info) = load(state, member, id).await?;
-    let (wanted, relation_ids) = match (req.dataset_id, req.table.as_deref().map(str::trim)) {
-        // Chụp lại: bảng và các quan hệ lấy từ lần chụp trước, để không chụp nhầm bảng khác hay cột khác vào cùng
-        // dataset.
-        (Some(dataset_id), _) => {
-            if !req.relations.is_empty() {
-                return Err(AppError::BadRequest(
-                    "Chụp lại dùng đúng các bảng nối của lần chụp trước; muốn nối khác thì chụp thành dataset mới"
-                        .to_string(),
-                ));
-            }
-            let table = recorded_table(&row, dataset_id)?;
-            let joins = state
-                .store
-                .current_source_model(&member.workspace, dataset_id)
-                .await?
-                .map(|m| m.joins.into_iter().map(|j| j.relation).collect())
-                .unwrap_or_default();
-            (table, joins)
-        }
-        (None, Some(table)) if !table.is_empty() => (table.to_string(), req.relations.clone()),
-        (None, _) => return Err(AppError::BadRequest("Chọn một bảng để chụp".to_string())),
-    };
-
-    let limit = state.config.source_timeout;
-    let staging = Staging::new(&state.config.data_dir)?;
-    let path = staging.upload_path(0);
-    let max_rows = state.config.source_max_rows;
-    let max_bytes = state.config.max_upload_bytes;
-    let copy = async {
-        let mut conn = postgres::connect(&info, limit).await?;
-        let table = find_table(&mut conn, &wanted).await?;
-        let plan = if relation_ids.is_empty() {
-            join_sql::build_join_plan(&table, &[], &[])
-        } else {
-            let discovered = relations::discover(&mut conn, &table).await?;
-            let chosen = discovered.pick(&relation_ids)?;
-            join_sql::build_join_plan(&table, &discovered.fact_columns, &chosen)
-        };
-        let joined = (!plan.joins.is_empty()).then_some(plan.select.as_str());
-        postgres::begin_snapshot(&mut conn).await?;
-        let (fact_rows, joined_rows) =
-            postgres::count_rows(&mut conn, &join_sql::qualified(&table), joined).await?;
-        check_row_counts(&wanted, fact_rows, joined_rows, max_rows)?;
-        let copied =
-            postgres::copy_to_csv(&mut conn, &plan.select, max_rows, max_bytes, &path).await?;
-        postgres::commit_snapshot(&mut conn).await?;
-        let model = SourceModel {
-            fact_table: wanted.clone(),
-            fact_rows,
-            joined_rows,
-            joins: plan.joins,
-        };
-        Ok::<_, AppError>((copied, model))
-    };
-    let (copied, model) = match tokio::time::timeout(limit, copy).await {
-        Ok(result) => result?,
-        Err(_) => {
-            return Err(AppError::BadRequest(
-                "Chụp bảng quá thời gian cho phép (SOURCE_TIMEOUT_SECS): chọn bảng nhỏ hơn hoặc tăng giới hạn"
-                    .to_string(),
-            ))
-        }
-    };
-
-    let label = source_file_label(&info, &wanted);
-    // Băm cả nhãn nguồn lẫn nội dung: cùng nội dung mà từ bảng khác hay từ một file nạp tay thì vẫn là dữ liệu khác,
-    // không bị coi là trùng phiên bản đã có ở dataset khác.
-    let sha256 = Sha256::digest(format!("{label}\n{}", copied.sha256).as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    let table_name = wanted.rsplit('.').next().unwrap_or(&wanted).to_string();
-    let upload = Upload {
-        name: Some(req.name.unwrap_or(table_name)),
-        dataset_id: req.dataset_id.map(|d| d.to_string()),
-        files: vec![StagedFile {
-            path,
-            name: label,
-            sha256,
-            column_types: copied.column_types,
-        }],
-        sheets: Vec::new(),
-        database_source: Some(row.id),
-        source_model: Some(model),
-    };
-    let result = ingest::upload(state, member, staging, upload).await?;
-    state
-        .store
-        .record_source_table(&member.workspace, row.id, result.dataset.id, &wanted)
-        .await?;
-    // Dataset trả về đọc trước khi ghi bảng vào nguồn; đọc lại để giao diện thấy ngay nguồn và bảng.
-    ingest::dataset_detail(state, member, &result.dataset.id.to_string())
-        .await
-        .map(|dataset| UploadResult { dataset, ..result })
-}
-
 /// Bảng có trong danh sách đọc được của tài khoản: tên người dùng gửi không đi thẳng vào câu SQL.
-async fn find_table(conn: &mut sqlx::PgConnection, wanted: &str) -> Result<SourceTable, AppError> {
-    postgres::list_tables(conn)
-        .await?
-        .into_iter()
+pub(super) fn find_table_in(
+    readable: &[SourceTable],
+    wanted: &str,
+) -> Result<SourceTable, AppError> {
+    readable
+        .iter()
         .find(|t| t.full_name() == wanted)
+        .cloned()
         .ok_or_else(|| {
             AppError::BadRequest(format!(
                 "Không thấy bảng {wanted} trong database, hoặc tài khoản không có quyền đọc"
@@ -292,31 +176,8 @@ async fn find_table(conn: &mut sqlx::PgConnection, wanted: &str) -> Result<Sourc
         })
 }
 
-/// Nối làm đổi số dòng (nhân dòng) thì từ chối: mọi phép cộng, đếm trên dataset sẽ sai mà không ai thấy. Nối nhiều-một
-/// theo khóa chính hay UNIQUE không bao giờ đổi số dòng, nên đây là lớp kiểm thứ hai, phòng trường hợp relations.rs
-/// đánh giá sai một ràng buộc.
-fn check_row_counts(
-    table: &str,
-    fact_rows: i64,
-    joined_rows: i64,
-    max_rows: u64,
-) -> Result<(), AppError> {
-    if fact_rows != joined_rows {
-        return Err(AppError::BadRequest(format!(
-            "Nối bảng làm số dòng đổi từ {fact_rows} thành {joined_rows}: có bảng nối không phải nhiều-một nên nhân \
-             dòng. Bỏ chọn bảng đó rồi chụp lại"
-        )));
-    }
-    if u64::try_from(fact_rows).unwrap_or(0) > max_rows {
-        return Err(AppError::TooLarge(format!(
-            "Bảng {table} có {fact_rows} dòng, quá giới hạn {max_rows} dòng của một lần chụp (SOURCE_MAX_ROWS)"
-        )));
-    }
-    Ok(())
-}
-
 /// Nguồn của workspace kèm thông tin kết nối đã giải mã. Chỉ admin.
-async fn load(
+pub(super) async fn load(
     state: &AppState,
     member: &Member,
     id: Uuid,
@@ -341,7 +202,7 @@ async fn get_row(state: &AppState, member: &Member, id: Uuid) -> Result<SourceRo
         .ok_or_else(|| AppError::NotFound("Không có nguồn này".to_string()))
 }
 
-fn recorded_table(row: &SourceRow, dataset_id: Uuid) -> Result<String, AppError> {
+pub(super) fn recorded_table(row: &SourceRow, dataset_id: Uuid) -> Result<String, AppError> {
     row.config["tables"][dataset_id.to_string()]
         .as_str()
         .map(str::to_string)
@@ -425,6 +286,6 @@ fn build_response(row: &SourceRow) -> SourceResponse {
 }
 
 /// Giá trị cột _source_file của mọi dòng chụp từ bảng: chỉ máy chủ, database và bảng.
-fn source_file_label(info: &ConnectInfo, table: &str) -> String {
+pub(super) fn source_file_label(info: &ConnectInfo, table: &str) -> String {
     format!("postgres://{}/{}/{}", info.host, info.database, table)
 }

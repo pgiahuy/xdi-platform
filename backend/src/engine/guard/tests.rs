@@ -1521,25 +1521,3 @@ fn member_sees_only_rows_of_the_policy_on_duckdb() {
         );
     }
 }
-
-/// Cột chép từ bảng nối (tên "orders.status") viết nhầm thành orders."status": lời báo chỉ đúng tên; viết đúng thì qua.
-#[test]
-fn dotted_joined_column_written_as_qualified_gets_a_hint() {
-    let tables = vec![table(
-        "items",
-        &["qty", "orders.status"],
-        PathBuf::from("/data/items"),
-    )];
-    let reason = match build_guarded_sql(r#"SELECT orders."status" FROM items"#, &tables, MAX_ROWS)
-    {
-        Err(GuardError::UnknownName(reason)) => reason,
-        other => panic!("expected UnknownName, got {other:?}"),
-    };
-    assert!(reason.contains("\"orders.status\""), "{reason}");
-    assert!(build_guarded_sql(
-        r#"SELECT "orders.status", sum(qty) FROM items GROUP BY 1"#,
-        &tables,
-        MAX_ROWS
-    )
-    .is_ok());
-}

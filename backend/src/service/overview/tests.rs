@@ -33,7 +33,6 @@ fn column(name: &str, role: &str) -> ProfileColumn {
         max_value: None,
         time_format: None,
         unit: None,
-        origin_table: None,
         aggregation: "sum".to_string(),
     }
 }

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/source_relations_tests.rs - test chụp bảng chính kèm bảng nối nhiều-một qua route thật, trên Postgres thật (database
-riêng của test, như api/sources_tests.rs). Schema shop dựng tay đủ các ca: khóa ngoại nhiều cột, chuỗi hai bước
-(order_items -> orders -> customers), hai đường cùng tới customers (tiền tố customers_2), cột của bảng chính trùng tên
-cột nối ("orders.status"), khóa ngoại trỏ vào bảng (một-nhiều, không nối), bảng đích chỉ có chỉ mục UNIQUE không kèm ràng
-buộc, bảng đích không có quyền đọc, view làm bảng chính. Không có DATABASE_URL thì bỏ qua. */
+/* api/source_relations_tests.rs - test chụp một nhóm bảng liên quan (mỗi bảng một dataset, kèm quan hệ khóa ngoại) qua
+route thật, trên Postgres thật (database riêng của test, như api/sources_tests.rs). Schema shop dựng tay đủ các ca: khóa
+ngoại nhiều cột, chuỗi orders -> customers -> regions, hai bảng sự kiện (order_items, returns) cùng trỏ vào orders,
+khóa ngoại trỏ vào bảng (một-nhiều), bảng đích chỉ có chỉ mục UNIQUE không kèm ràng buộc, bảng không có quyền đọc,
+view. Không có DATABASE_URL thì bỏ qua. */
 
 use axum::http::StatusCode;
 use serde_json::{json, Value};
 
-use super::ask_tests::sql_reply;
-use super::sources_tests::{start, Setup, KEY, SHOP};
+use super::sources_tests::{start, start_with_max_rows, Setup, KEY, SHOP};
 use crate::api::test_support::call;
-use crate::engine::store::test_support::{exec, fetch_text};
+use crate::engine::store::test_support::exec;
 
 /// Các câu dựng schema shop; cấp quyền đọc cho tài khoản nguồn, trừ shop.secrets.
 fn shop_schema(user: &str) -> Vec<String> {
@@ -36,6 +35,7 @@ fn shop_schema(user: &str) -> Vec<String> {
         "INSERT INTO shop.orders VALUES (10, 1, 'done'), (11, 2, 'open'), (12, 3, 'done')",
         "INSERT INTO shop.channels VALUES ('web', 'Web'), ('shop', 'Store')",
         "INSERT INTO shop.secrets VALUES (1, 'x')",
+        "INSERT INTO shop.returns VALUES (1, 10), (2, 12)",
         "INSERT INTO shop.order_items VALUES
              (10, 'acme', 1, 4, 'raw', NULL, 'web', 1), (10, 'acme', 2, 1, 'raw', 3, 'web', NULL),
              (11, 'zeta', 1, 2, 'raw', NULL, 'shop', NULL), (12, 'acme', 1, 1, 'raw', 1, NULL, NULL),
@@ -87,78 +87,98 @@ async fn relations(s: &Setup, id: &str, table: &str) -> Value {
     body
 }
 
-fn find<'a>(list: &'a Value, id: &str) -> &'a Value {
+async fn snapshot(s: &Setup, id: &str, body: Value) -> (StatusCode, Value) {
+    let url = format!("{SHOP}/sources/{id}/snapshot");
+    let (status, _, result) = call(&s.app, "POST", &url, Some(&s.lan), Some(body)).await;
+    (status, result)
+}
+
+fn find<'a>(list: &'a Value, table: &str) -> &'a Value {
     list.as_array()
         .unwrap()
         .iter()
-        .find(|r| r["id"] == id)
-        .unwrap_or_else(|| panic!("no relation {id} in {list}"))
+        .find(|r| r["table"] == table)
+        .unwrap_or_else(|| panic!("no table {table} in {list}"))
 }
 
-const ORDERS: &str = "shop.order_items/order_items_order_id_fkey";
-const PRODUCTS: &str = "shop.order_items/order_items_maker_sku_fkey";
-const GIFT: &str = "shop.order_items/order_items_gift_customer_id_fkey";
-const CHANNEL: &str = "shop.order_items/order_items_channel_fkey";
-const SECRET: &str = "shop.order_items/order_items_secret_id_fkey";
-const ORDER_CUSTOMER: &str =
-    "shop.order_items/order_items_order_id_fkey>shop.orders/orders_customer_id_fkey";
+/// (tên dataset, phiên bản, created) của từng bảng trong kết quả chụp.
+fn summary(result: &Value) -> Vec<(String, i64, bool)> {
+    result["datasets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| {
+            (
+                d["dataset"]["name"].as_str().unwrap().to_string(),
+                d["version"]["version"].as_i64().unwrap(),
+                d["created"].as_bool().unwrap(),
+            )
+        })
+        .collect()
+}
 
-/// Danh sách quan hệ: nhiều-một bước 1 và 2, khóa nhiều cột, lý do không nối; một-nhiều liệt kê riêng; view không có
-/// quan hệ nào.
+fn dataset_id(result: &Value, name: &str) -> String {
+    result["datasets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["dataset"]["name"] == name)
+        .unwrap_or_else(|| panic!("no dataset {name} in {result}"))["dataset"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+/// Bảng liên quan theo cả hai chiều, khóa nhiều cột, lý do khi không chụp kèm được; view không có quan hệ; member 403.
 #[tokio::test]
-async fn relations_list_many_to_one_and_explain_the_rest() {
+async fn relations_list_both_directions_with_reasons() {
     let Some(s) = start(Some(KEY), &[]).await else {
         return;
     };
     let id = add_source(&s).await;
     let body = relations(&s, &id, "shop.order_items").await;
-    let many = &body["many_to_one"];
     assert_eq!(body["column_count"], 8, "{body}");
+    let many = &body["many_to_one"];
 
-    let products = find(many, PRODUCTS);
+    let products = find(many, "shop.products");
     assert_eq!(products["from_columns"], json!(["maker", "sku"]));
     assert_eq!(products["to_columns"], json!(["maker", "sku"]));
-    assert_eq!(products["joinable"], true);
-    // title, price: cột khóa đích không chép lại.
-    assert_eq!(products["column_count"], 2);
+    assert_eq!(products["addable"], true);
+    assert_eq!(products["column_count"], 4);
 
-    let chain = find(many, ORDER_CUSTOMER);
-    assert_eq!(chain["depth"], 2);
-    assert_eq!(chain["parent"], ORDERS);
-    assert_eq!(chain["to_table"], "shop.customers");
-
-    let channel = find(many, CHANNEL);
-    assert_eq!(channel["joinable"], false);
+    let channel = find(many, "shop.channels");
+    assert_eq!(channel["addable"], false);
     assert!(
         channel["reason"].as_str().unwrap().contains("UNIQUE"),
         "{channel}"
     );
-    let secret = find(many, SECRET);
-    assert_eq!(secret["joinable"], false);
+    let secret = find(many, "shop.secrets");
+    assert_eq!(secret["addable"], false);
     assert!(
         secret["reason"].as_str().unwrap().contains("quyền đọc"),
         "{secret}"
     );
     assert!(body["one_to_many"].as_array().unwrap().is_empty());
 
-    // orders có hai bảng trỏ vào: order_items và returns, đều một-nhiều.
+    // orders: trỏ tới customers, và có hai bảng trỏ vào (order_items, returns), cả hai chụp kèm được.
     let orders = relations(&s, &id, "shop.orders").await;
+    assert_eq!(
+        find(&orders["many_to_one"], "shop.customers")["addable"],
+        true
+    );
     let incoming: Vec<&str> = orders["one_to_many"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|r| r["from_table"].as_str().unwrap())
+        .map(|r| r["table"].as_str().unwrap())
         .collect();
     assert_eq!(incoming, ["shop.order_items", "shop.returns"]);
-    assert!(orders["one_to_many"][0]["reason"]
-        .as_str()
-        .unwrap()
-        .contains("nhân dòng"));
+    assert_eq!(orders["one_to_many"][0]["addable"], true);
+    assert_eq!(orders["one_to_many"][0]["to_table"], "shop.orders");
 
     let view = relations(&s, &id, "shop.big_items").await;
     assert!(view["many_to_one"].as_array().unwrap().is_empty(), "{view}");
 
-    // Member không xem được quan hệ, như mọi route của nguồn.
     let (status, _, _) = call(
         &s.app,
         "POST",
@@ -171,88 +191,49 @@ async fn relations_list_many_to_one_and_explain_the_rest() {
     s.finish().await;
 }
 
-/// Chụp kèm bảng nối: số dòng giữ nguyên, tên cột theo tiền tố, mô hình ghi lại và member đọc được, cột từ bảng nối
-/// không còn là measure, hỏi được, chụp lại nối đúng như lần trước.
+/// Ba bảng nối nhau thành ba dataset và hai quan hệ; member thấy quan hệ trong danh sách dataset; chụp lại từ một bảng
+/// của nhóm chụp lại cả nhóm.
 #[tokio::test]
-async fn snapshot_with_relations_keeps_rows_and_records_the_model() {
-    let sql =
-        r#"SELECT "customers_2.name", SUM(qty) AS qty FROM order_items GROUP BY 1 ORDER BY 1"#;
-    // Câu hai cộng giá sản phẩm ngay trên bảng dòng hàng (cộng lặp): không chạy mà đi vòng sửa; câu sửa giữ một dòng
-    // mỗi sản phẩm rồi mới cộng.
-    let summed = r#"SELECT SUM("products.price") AS total FROM order_items"#;
-    let fixed = r#"WITH one_row AS (SELECT DISTINCT "maker", "sku", "products.price" FROM order_items)
-                   SELECT SUM("products.price") AS total FROM one_row"#;
-    let replies = [sql_reply(sql), sql_reply(summed), sql_reply(fixed)];
-    let Some(s) = start(Some(KEY), &replies).await else {
+async fn related_tables_become_datasets_with_relations() {
+    let Some(s) = start(Some(KEY), &[]).await else {
         return;
     };
     let id = add_source(&s).await;
-    let url = format!("{SHOP}/sources/{id}/snapshot");
-
-    // Id lạ hay quan hệ không nối được: từ chối cả lần chụp.
-    for bad in ["shop.order_items/nope", CHANNEL] {
-        let body = json!({"table": "shop.order_items", "relations": [bad]});
-        let (status, _, _) = call(&s.app, "POST", &url, Some(&s.lan), Some(body)).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
-    }
-
-    // Chọn bước 2 mà không chọn bước 1: bước 1 được nối theo.
-    let snap = json!({"table": "shop.order_items", "relations": [PRODUCTS, GIFT, ORDER_CUSTOMER]});
-    let (status, _, result) = call(&s.app, "POST", &url, Some(&s.lan), Some(snap)).await;
+    let body = json!({"table": "shop.orders", "tables": ["shop.customers", "shop.regions"]});
+    let (status, result) = snapshot(&s, &id, body).await;
     assert_eq!(status, StatusCode::CREATED, "{result}");
-    assert_eq!(result["version"]["row_count"], 5);
-    let names: Vec<&str> = result["columns"]
+    assert_eq!(
+        summary(&result),
+        [
+            ("orders".to_string(), 1, true),
+            ("customers".to_string(), 1, true),
+            ("regions".to_string(), 1, true)
+        ]
+    );
+    assert_eq!(result["datasets"][0]["version"]["row_count"], 3);
+    assert_eq!(
+        result["datasets"][0]["dataset"]["source_table"],
+        "shop.orders"
+    );
+    let pairs: Vec<(&str, &str)> = result["relations"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|c| c["name"].as_str().unwrap())
+        .map(|r| {
+            (
+                r["from_dataset_name"].as_str().unwrap(),
+                r["to_dataset_name"].as_str().unwrap(),
+            )
+        })
         .collect();
-    for name in [
-        "orders.status",
-        "orders.status_2",
-        "orders.customer_id",
-        "products.title",
-        "products.price",
-        "customers.name",
-        "customers.region_code",
-        "customers_2.name",
-    ] {
-        assert!(names.contains(&name), "{name} missing from {names:?}");
-    }
-    assert!(!names.contains(&"orders.id") && !names.contains(&"products.maker"));
-
-    let model = &result["dataset"]["current_source_model"];
-    assert_eq!(model["fact_table"], "shop.order_items");
+    assert_eq!(pairs, [("customers", "regions"), ("orders", "customers")]);
     assert_eq!(
-        (model["fact_rows"].as_i64(), model["joined_rows"].as_i64()),
-        (Some(5), Some(5))
+        result["relations"][1]["from_columns"],
+        json!(["customer_id"])
     );
-    let order: Vec<&str> = model["joins"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|j| j["relation"].as_str().unwrap())
-        .collect();
-    // Thứ tự tìm thấy (theo tên ràng buộc, bước 2 ngay sau bước 1 của nó), không theo thứ tự trong request.
-    assert_eq!(order, [GIFT, PRODUCTS, ORDERS, ORDER_CUSTOMER]);
-    assert_eq!(model["joins"][0]["prefix"], "customers");
-    assert_eq!(model["joins"][3]["prefix"], "customers_2");
-    let version = result["version"]["id"].as_str().unwrap().to_string();
-    let dataset_id = result["dataset"]["id"].as_str().unwrap().to_string();
+    assert_eq!(result["relations"][1]["cardinality"], "many_to_one");
 
-    let column = |name: &str| {
-        format!(
-            "SELECT role || '|' || COALESCE(origin_table, '') FROM columns
-             WHERE version_id = '{version}' AND name = '{name}'"
-        )
-    };
-    assert_eq!(
-        fetch_text(&s.db.store, &column("products.price")).await,
-        "dimension|shop.products"
-    );
-    assert_eq!(fetch_text(&s.db.store, &column("qty")).await, "measure|");
-
-    // Member đọc được mô hình qua danh sách dataset.
+    // Member đọc được quan hệ qua danh sách dataset, nhìn từ phía từng dataset.
     let (status, _, list) = call(
         &s.app,
         "GET",
@@ -262,66 +243,160 @@ async fn snapshot_with_relations_keeps_rows_and_records_the_model() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let listed = list
+    let customers = list
         .as_array()
         .unwrap()
         .iter()
-        .find(|d| d["id"] == dataset_id.as_str())
+        .find(|d| d["name"] == "customers")
         .unwrap();
+    let related: Vec<(&str, &str)> = customers["relations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["name"].as_str().unwrap(),
+                r["direction"].as_str().unwrap(),
+            )
+        })
+        .collect();
     assert_eq!(
-        listed["current_source_model"]["joins"]
-            .as_array()
-            .unwrap()
-            .len(),
-        4
+        related,
+        [("regions", "many_to_one"), ("orders", "one_to_many")]
     );
 
-    let ask = json!({"question": "Số lượng theo khách", "choices": []});
-    let (status, _, answer) = call(
-        &s.app,
-        "POST",
-        &format!("{SHOP}/datasets/{dataset_id}/ask"),
-        Some(&s.lan),
-        Some(ask),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{answer}");
-    assert_eq!(answer["status"], "answered", "{answer}");
-    let text = answer.to_string();
-    assert!(text.contains("Binh") && text.contains("Chi"), "{text}");
+    // Chụp lại từ regions, không đổi gì: cả nhóm được đọc, không tạo phiên bản nào, trả 200.
+    let regions = dataset_id(&result, "regions");
+    let (status, same) = snapshot(&s, &id, json!({"dataset_id": regions})).await;
+    assert_eq!(status, StatusCode::OK, "{same}");
+    assert_eq!(same["datasets"].as_array().unwrap().len(), 3);
+    assert!(summary(&same)
+        .iter()
+        .all(|(_, v, created)| *v == 1 && !created));
 
-    let ask = json!({"question": "Tổng giá sản phẩm", "choices": []});
-    let (status, _, answer) = call(
-        &s.app,
-        "POST",
-        &format!("{SHOP}/datasets/{dataset_id}/ask"),
-        Some(&s.lan),
-        Some(ask),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{answer}");
-    assert_eq!(answer["status"], "answered", "{answer}");
-    // Ba sản phẩm 2.50 + 10 + 30, không phải tổng theo năm dòng hàng.
-    assert!(answer["result"].to_string().contains("42.5"), "{answer}");
-    assert!(answer["sql_guarded"].as_str().unwrap().contains("one_row"));
-
-    // Chụp lại: không gửi quan hệ, nối đúng như lần trước; gửi quan hệ thì từ chối.
-    let with_relations = json!({"dataset_id": dataset_id, "relations": [ORDERS]});
-    let (status, _, _) = call(&s.app, "POST", &url, Some(&s.lan), Some(with_relations)).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    exec(
-        &s.db.store,
-        "INSERT INTO shop.order_items VALUES (11, 'acme', 2, 7, 'raw', 2, NULL, NULL)",
-    )
-    .await;
-    let again = json!({"dataset_id": dataset_id});
-    let (status, _, next) = call(&s.app, "POST", &url, Some(&s.lan), Some(again)).await;
+    // Đổi cả ba bảng rồi chụp lại: mỗi dataset một phiên bản 2, quan hệ giữ nguyên.
+    for sql in [
+        "INSERT INTO shop.regions VALUES ('E', 'East')",
+        "INSERT INTO shop.customers VALUES (4, 'Dung', 'E')",
+        "INSERT INTO shop.orders VALUES (13, 4, 'open')",
+    ] {
+        exec(&s.db.store, sql).await;
+    }
+    let (status, next) = snapshot(&s, &id, json!({"dataset_id": regions})).await;
     assert_eq!(status, StatusCode::CREATED, "{next}");
-    assert_eq!(next["version"]["version"], 2);
-    assert_eq!(next["version"]["row_count"], 6);
+    let mut versions = summary(&next);
+    versions.sort();
     assert_eq!(
-        next["dataset"]["current_source_model"]["joins"],
-        model["joins"]
+        versions,
+        [
+            ("customers".to_string(), 2, true),
+            ("orders".to_string(), 2, true),
+            ("regions".to_string(), 2, true)
+        ]
     );
+    assert_eq!(next["datasets"][0]["dataset"]["id"], regions.as_str());
+    assert_eq!(next["relations"].as_array().unwrap().len(), 2);
+
+    // Chụp lại kèm bảng khác: từ chối, nhóm lấy từ quan hệ đã ghi.
+    let (status, _) = snapshot(
+        &s,
+        &id,
+        json!({"dataset_id": regions, "tables": ["shop.orders"]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    s.finish().await;
+}
+
+/// orders là bảng chiều chung của order_items và returns: chụp hai nhóm thì orders vẫn là một dataset, mang quan hệ
+/// với cả hai; quan hệ cũ của orders với customers (nhóm khác) giữ nguyên.
+#[tokio::test]
+async fn shared_dimension_is_reused() {
+    let Some(s) = start(Some(KEY), &[]).await else {
+        return;
+    };
+    let id = add_source(&s).await;
+    let first = json!({"table": "shop.orders", "tables": ["shop.customers"]});
+    let (status, result) = snapshot(&s, &id, first).await;
+    assert_eq!(status, StatusCode::CREATED, "{result}");
+    let orders = dataset_id(&result, "orders");
+
+    let items = json!({"table": "shop.order_items", "tables": ["shop.orders", "shop.products"]});
+    let (status, result) = snapshot(&s, &id, items).await;
+    assert_eq!(status, StatusCode::CREATED, "{result}");
+    // orders không đổi: cùng dataset, không tạo phiên bản mới.
+    assert_eq!(dataset_id(&result, "orders"), orders);
+    assert_eq!(summary(&result)[1], ("orders".to_string(), 1, false));
+    let names: Vec<&str> = result["relations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["to_dataset_name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["products", "orders"]);
+
+    let returns = json!({"table": "shop.returns", "tables": ["shop.orders"]});
+    let (status, result) = snapshot(&s, &id, returns).await;
+    assert_eq!(status, StatusCode::CREATED, "{result}");
+    assert_eq!(dataset_id(&result, "orders"), orders);
+
+    let (_, _, list) = call(
+        &s.app,
+        "GET",
+        &format!("{SHOP}/datasets"),
+        Some(&s.lan),
+        None,
+    )
+    .await;
+    let list = list.as_array().unwrap();
+    assert_eq!(list.iter().filter(|d| d["name"] == "orders").count(), 1);
+    assert_eq!(list.len(), 5);
+    let orders_row = list.iter().find(|d| d["id"] == orders.as_str()).unwrap();
+    let mut related: Vec<&str> = orders_row["relations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["name"].as_str().unwrap())
+        .collect();
+    related.sort();
+    assert_eq!(related, ["customers", "order_items", "returns"]);
+    s.finish().await;
+}
+
+/// Quá 10 bảng thì từ chối trước khi kết nối; giới hạn dòng tính riêng từng bảng, báo đúng bảng vượt; member 403.
+#[tokio::test]
+async fn snapshot_limits_and_roles() {
+    let Some(s) = start_with_max_rows(Some(KEY), &[], Some(4)).await else {
+        return;
+    };
+    let id = add_source(&s).await;
+    let many: Vec<String> = (0..10).map(|i| format!("shop.t{i}")).collect();
+    let (status, body) = snapshot(&s, &id, json!({"table": "shop.orders", "tables": many})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(
+        body["message"].as_str().unwrap().contains("tối đa 10"),
+        "{body}"
+    );
+
+    // orders 3 dòng, customers 3 dòng: mỗi bảng dưới 4 thì chụp được, dù cộng lại quá 4.
+    let ok = json!({"table": "shop.orders", "tables": ["shop.customers"]});
+    let (status, body) = snapshot(&s, &id, ok).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    // order_items 5 dòng: cả lần chụp bị từ chối, lời báo nêu bảng đó.
+    let big = json!({"table": "shop.orders", "tables": ["shop.order_items"]});
+    let (status, body) = snapshot(&s, &id, big).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("shop.order_items"),
+        "{body}"
+    );
+
+    let url = format!("{SHOP}/sources/{id}/snapshot");
+    let body = json!({"table": "shop.orders", "tables": ["shop.customers"]});
+    let (status, _, _) = call(&s.app, "POST", &url, Some(&s.minh), Some(body)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
     s.finish().await;
 }

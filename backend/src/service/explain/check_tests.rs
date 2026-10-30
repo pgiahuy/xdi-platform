@@ -50,7 +50,6 @@ pub(crate) fn column(
         max_value: None,
         time_format: None,
         unit: None,
-        origin_table: None,
         aggregation: "sum".to_string(),
     }
 }

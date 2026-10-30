@@ -79,9 +79,6 @@ pub struct ColumnProfile {
     pub matched: bool,
     /// Đơn vị của cột số đo (ColumnUnit::as_str), cho luật biểu đồ (ARCHITECTURE mục 6); None khi chưa biết.
     pub unit: Option<String>,
-    /// schema.bảng của bảng nối nhiều-một mà cột chép từ đó (bản chụp database); prompt ghi kèm để mô hình không cộng
-    /// cột này. None với cột của bảng chính và cột nạp từ file.
-    pub origin_table: Option<String>,
     /// Cách gộp mặc định của cột số đo (#185); prompt dặn mô hình dùng AVG với cột avg.
     pub aggregation: ColumnAggregation,
 }
@@ -197,7 +194,6 @@ pub(crate) fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> 
             values_complete: false,
             matched: false,
             unit: c.unit,
-            origin_table: c.origin_table,
             // Chữ lạ (không thể có, vì CHECK của 0010_column_aggregation.sql) coi như mặc định sum.
             aggregation: ColumnAggregation::parse(&c.aggregation).unwrap_or(ColumnAggregation::Sum),
         })

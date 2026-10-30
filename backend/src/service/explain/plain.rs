@@ -33,7 +33,6 @@ pub async fn run_plain(
             prompt: &prompt,
             reply: &reply,
             tables: input.tables,
-            repeated: input.repeated,
             max_rows: input.max_rows,
             timeout: input.timeout,
             jobs: input.jobs,

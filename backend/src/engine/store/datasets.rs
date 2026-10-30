@@ -8,7 +8,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::columns::{insert_columns, NewColumn};
-use super::sources::SourceModel;
+use super::relations::RelatedDataset;
 use super::{db_error, is_foreign_key_violation, Store};
 use crate::{auth::WorkspaceId, error::AppError};
 
@@ -102,13 +102,11 @@ pub struct Dataset {
     #[schema(required)]
     #[sqlx(default)]
     pub current_version_at: Option<DateTime<Utc>>,
-    /// How the current version was built from a database: main table and many-to-one joins. Null for uploaded files
-    /// and for snapshots taken before joins were recorded.
-    #[schema(required)]
-    // Câu SQL đổi null của Postgres thành jsonb 'null' (COALESCE), vì sqlx(json) không đọc được NULL của SQL thành
-    // Option; create_dataset (RETURNING không nối phiên bản) nhờ `default` mà có None.
-    #[sqlx(json, default)]
-    pub current_source_model: Option<SourceModel>,
+    /// Datasets linked to this one by a foreign key of the source database (snapshots of several related tables);
+    /// empty for uploaded files.
+    // Store không nối bảng dataset_relations ở đây; service/ingest.rs điền bằng apply_relations trước khi trả qua API.
+    #[sqlx(skip)]
+    pub relations: Vec<RelatedDataset>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -146,8 +144,6 @@ pub struct NewVersion<'a> {
     pub file_hash: &'a str,
     pub parquet_path: &'a str,
     pub row_count: i64,
-    /// Mô hình bảng chính và bảng nối của bản chụp database (service/sources/); None với file nạp.
-    pub source_model: Option<&'a SourceModel>,
 }
 
 /// Phiên bản chưa lập hồ sơ cột, ở bất kỳ workspace nào (xem list_pending_versions).
@@ -178,8 +174,7 @@ const DATASET_COLUMNS_D: &str =
     COALESCE(v.suggested_questions, '[]'::jsonb) AS suggested_questions, \
     s.kind AS source_kind, v.created_at AS current_version_at, \
     CASE WHEN s.kind = 'local_file' THEN NULL ELSE s.id END AS source_id, \
-    s.config->'tables'->>d.id::text AS source_table, \
-    COALESCE(v.source_model, 'null'::jsonb) AS current_source_model";
+    s.config->'tables'->>d.id::text AS source_table";
 // Nối nguồn để giao diện ghi rõ dataset đến từ file hay từ bảng nào của database (service/sources/).
 const CURRENT_VERSION_JOIN: &str =
     "FROM datasets d LEFT JOIN dataset_versions v ON v.workspace_id = d.workspace_id \
@@ -328,9 +323,8 @@ impl Store {
         };
         let sql = format!(
             "INSERT INTO dataset_versions
-                 (workspace_id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status,
-                  source_model)
-             SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5, $6, $7, $8
+                 (workspace_id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status)
+             SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5, $6, $7
              FROM dataset_versions WHERE workspace_id = $1 AND dataset_id = $2
              RETURNING {VERSION_COLUMNS}"
         );
@@ -347,7 +341,6 @@ impl Store {
             .bind(new.parquet_path)
             .bind(new.row_count)
             .bind(status.as_str())
-            .bind(new.source_model.map(sqlx::types::Json))
             .fetch_one(&mut *tx)
             .await
             .map_err(|e| db_error("create version", e))?;
@@ -686,7 +679,6 @@ mod tests {
             file_hash: hash,
             parquet_path: "/data/x.parquet",
             row_count: 10,
-            source_model: None,
         }
     }
 
@@ -705,7 +697,7 @@ mod tests {
             source_id: None,
             source_table: None,
             current_version_at: None,
-            current_source_model: None,
+            relations: Vec::new(),
             created_at: Utc::now(),
         }
     }
@@ -856,7 +848,6 @@ mod tests {
                     file_hash: &hash,
                     parquet_path: "/data/x.parquet",
                     row_count: 1,
-                    source_model: None,
                 };
                 store.create_version(&ws, ds.id, &new, &[]).await
             }));
