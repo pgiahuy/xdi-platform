@@ -258,10 +258,11 @@ vị sai hay đặt cho cột không phải `measure` thì bỏ riêng, phần c
 Luật biểu đồ hiện tại ([Kiến trúc](ARCHITECTURE.md), mục 6) chưa đọc đơn vị: chỉ theo vai trò cột, và biểu đồ đường
 chỉ vẽ độ đo đầu.
 
-**Cách gộp mặc định** (`columns.aggregation`, migration `0010_column_aggregation.sql`, #185) là `sum` hay `avg`, mặc
-định `sum`. Mô hình đề xuất cho cột `measure`: `sum` khi tổng có nghĩa (tiền, số lượng hàng), `avg` khi mỗi giá trị mô
+**Cách gộp mặc định** (`columns.aggregation`, migration `0010_column_aggregation.sql`, #185) là `sum` hay `avg`, chưa ai
+chọn thì đọc là `sum`. Mô hình đề xuất cho cột `measure`: `sum` khi tổng có nghĩa (tiền, số lượng hàng), `avg` khi mỗi giá trị mô
 tả chính dòng của nó (tuổi, điểm, giá, tỷ lệ, số tín chỉ, số ngày). Đề xuất sai hay cho cột khác vai trò thì bỏ riêng,
-giữ `sum`. Admin đổi ở màn **Chỉ số** ([API](API.md), mục Chỉ số và cách gộp) cho phiên bản hiện hành; phiên bản nạp sau
+giữ `sum`. Lượt chạy nền của mô hình chỉ điền cột chưa có cách gộp, nên cách gộp admin đặt trong lúc mô hình chưa
+chạy xong được giữ. Admin đổi ở màn **Chỉ số** ([API](API.md), mục Chỉ số và cách gộp) cho phiên bản hiện hành; phiên bản nạp sau
 nhận đề xuất mới của mô hình, không chép từ phiên bản trước. Ba nơi đọc cách gộp: prompt sinh SQL ghi "one value per row:
 aggregate it with AVG, never SUM" cạnh cột `avg` (cột `sum` không thêm chữ gì); form câu "tại sao" đổi `sum` trên cột
 `avg` thành trung bình mỗi dòng (tử `SUM(cột)`, mẫu `COUNT(cột)`, như `AVG`) và phân rã thành phần cơ cấu và phần hiệu

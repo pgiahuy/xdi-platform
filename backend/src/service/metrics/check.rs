@@ -15,7 +15,7 @@ use std::ops::ControlFlow;
 use sqlparser::ast::{visit_expressions, Expr};
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
-use sqlparser::tokenizer::Token;
+use sqlparser::tokenizer::{Token, Tokenizer, Whitespace};
 
 use crate::auth::WorkspaceId;
 use crate::engine::guard::{build_guarded_sql, AllowedTable};
@@ -201,6 +201,14 @@ fn parse_part(text: &str, field: &'static str, label: &str) -> Result<Expr, Metr
             format!("{label} không được để trống"),
         ));
     }
+    if has_sql_comment(text) {
+        return Err(MetricProblem::new(
+            field,
+            format!(
+                "{label} không được có chú thích SQL (-- hay /* */); ghi chú thì đặt ở phần Mô tả"
+            ),
+        ));
+    }
     let unreadable = || {
         MetricProblem::new(
             field,
@@ -217,6 +225,25 @@ fn parse_part(text: &str, field: &'static str, label: &str) -> Result<Expr, Metr
         return Err(unreadable());
     }
     Ok(expr)
+}
+
+/// Có chú thích SQL (-- hay /* */) không. Parser bỏ qua chú thích, nên "\"x\" > 0 -- ghi chú" vẫn qua bước đọc, rồi
+/// được lưu và chép nguyên vào prompt trên một dòng ("chỉ lấy dòng có ..."); mô hình chép theo vào câu SQL một dòng thì
+/// phần sau "--" bị bỏ. Chọn từ chối thay vì lưu lại biểu thức đã chuẩn hóa (expr.to_string()) để công thức lưu đúng như
+/// admin gõ. Dùng tokenizer chứ không tìm chuỗi "--", vì "--" nằm trong chuỗi '...' là dữ liệu hợp lệ.
+fn has_sql_comment(text: &str) -> bool {
+    let Ok(tokens) = Tokenizer::new(&DuckDbDialect {}, text).tokenize() else {
+        // Không tách được thành token thì parse_part báo "không đọc được" ngay sau đó.
+        return false;
+    };
+    tokens.iter().any(|token| {
+        matches!(
+            token,
+            Token::Whitespace(
+                Whitespace::SingleLineComment { .. } | Whitespace::MultiLineComment(_)
+            )
+        )
+    })
 }
 
 /// Mọi tên cột trong biểu thức phải là cột của bảng. So không phân biệt hoa thường, như guard.
@@ -255,4 +282,32 @@ fn check_columns(
 
 fn find_column<'a>(table: &'a AllowedTable, name: &str) -> Option<&'a String> {
     table.columns.iter().find(|c| c.eq_ignore_ascii_case(name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sql_comments_are_rejected_in_expression_and_filter() {
+        for text in [
+            "\"x\" > 0 -- chỉ đơn đã giao",
+            "SUM(\"x\") /* tổng */",
+            "/* a */ COUNT(*)",
+        ] {
+            let problem = parse_part(text, "filter", "Điều kiện").unwrap_err();
+            assert_eq!(problem.field, "filter");
+            assert!(
+                problem.message.contains("chú thích"),
+                "{text}: {}",
+                problem.message
+            );
+        }
+    }
+
+    #[test]
+    fn dashes_inside_a_string_literal_are_not_a_comment() {
+        assert!(parse_part("\"Note\" <> '--'", "filter", "Điều kiện").is_ok());
+        assert!(parse_part("SUM(\"x\" - -1)", "expression", "Công thức").is_ok());
+    }
 }

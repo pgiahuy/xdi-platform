@@ -269,6 +269,16 @@ async fn invalid_metric_names_the_wrong_field() {
             "filter",
             "gộp",
         ),
+        (
+            json!({"name": "a", "expression": "COUNT(*)", "filter": "\"Order Item Total\" > 0 -- ghi chú"}),
+            "filter",
+            "chú thích",
+        ),
+        (
+            json!({"name": "Doanh thu \"net\"", "expression": "COUNT(*)"}),
+            "name",
+            "ngoặc kép",
+        ),
     ];
     for (body, field, words) in cases {
         let (status, _, reply) = call(

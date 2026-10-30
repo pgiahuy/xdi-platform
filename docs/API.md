@@ -183,9 +183,10 @@ nhận 403:
 - `PUT .../columns/aggregation` với `{column, aggregation}` đổi cách gộp của một cột `measure` trong phiên bản hiện hành
   (204); cột không có hay không phải `measure` trả 400 với `field` `column`.
 
-Trước khi lưu, backend kiểm công thức là một hàm gộp trên cột có thật, điều kiện không chứa hàm gộp, cột thời gian có
-thật, rồi chạy `SELECT <công thức> FROM <bảng> [WHERE <điều kiện>]` qua guard trên phiên bản hiện hành. Sai thì 400 với
-`field` là `expression`, `filter` hay `time_column`; lý do gốc của guard hay DuckDB chỉ ghi log. Chỉ số lưu xong vào
+Trước khi lưu, backend kiểm tên không có dấu ngoặc kép, công thức và điều kiện không có chú thích SQL (`--`, `/* */`),
+công thức là một hàm gộp trên cột có thật, điều kiện không chứa hàm gộp, cột thời gian có thật, rồi chạy
+`SELECT <công thức> FROM <bảng> [WHERE <điều kiện>]` qua guard trên phiên bản hiện hành. Sai thì 400 với `field` là
+`name`, `expression`, `filter` hay `time_column`; lý do gốc của guard hay DuckDB chỉ ghi log. Chỉ số lưu xong vào
 prompt của câu hỏi kế tiếp.
 
 ## Xóa dataset

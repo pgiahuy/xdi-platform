@@ -292,5 +292,12 @@ fn clean_text(
             format!("{label} có ký tự không in được, ví dụ xuống dòng"),
         ));
     }
+    // Prompt ghi tên trong ngoặc kép (- "Doanh thu"); dấu " trong tên làm dòng đó đọc ra hai tên.
+    if field == "name" && trimmed.contains('"') {
+        return Err(MetricProblem::new(
+            field,
+            format!("{label} không được có dấu ngoặc kép (\")"),
+        ));
+    }
     Ok(Some(trimmed.to_string()))
 }
