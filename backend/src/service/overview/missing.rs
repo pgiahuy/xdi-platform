@@ -7,12 +7,13 @@ use crate::service::overview::contract::{MissingCode, MissingPart};
 
 pub fn build_missing(code: MissingCode) -> MissingPart {
     let message = match code {
-        MissingCode::NoVersion => "Dataset chưa có dữ liệu; nạp file ở trang Dữ liệu.",
+        MissingCode::NoVersion => "Dataset chưa có dữ liệu; admin của workspace cần nạp file ở trang Dữ liệu.",
         MissingCode::ProfilePending => {
             "Đang lập hồ sơ cột: danh sách cột, số liệu và biểu đồ sẽ có sau ít phút."
         }
         MissingCode::ProfileFailed => {
-            "Lập hồ sơ phiên bản này lỗi nên chưa có danh sách cột và biểu đồ; nạp lại file ở trang Dữ liệu."
+            "Lập hồ sơ phiên bản này lỗi nên chưa có danh sách cột và biểu đồ; admin của workspace cần nạp lại file ở \
+             trang Dữ liệu."
         }
         MissingCode::SemanticPending => {
             "Đang viết nhãn tiếng Việt, mô tả và đơn vị của cột; các phần này sẽ có sau ít phút."
