@@ -41,6 +41,8 @@ mod query;
 #[cfg(test)]
 mod roles_tests;
 mod security_headers;
+#[cfg(test)]
+mod source_relations_tests;
 mod sources;
 #[cfg(test)]
 mod sources_tests;

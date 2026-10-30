@@ -19,7 +19,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::postgres::{PgConnectOptions, PgConnection, PgSslMode};
-use sqlx::{ConnectOptions, Connection};
+use sqlx::{ConnectOptions, Connection, Executor};
 use tokio::io::AsyncWriteExt;
 
 use super::pg_types;
@@ -50,6 +50,11 @@ impl SourceTable {
     /// Tên hiển thị và tên gửi lại khi chụp: schema.table.
     pub fn full_name(&self) -> String {
         format!("{}.{}", self.schema, self.name)
+    }
+
+    /// Cùng một bảng: so schema và tên, không so kind (bảng đọc từ pg_catalog luôn ghi kind table).
+    pub fn same(&self, other: &SourceTable) -> bool {
+        self.schema == other.schema && self.name == other.name
     }
 }
 
@@ -115,6 +120,22 @@ fn qualified(table: &SourceTable) -> String {
     )
 }
 
+/// Mở giao dịch REPEATABLE READ chỉ đọc: mọi lần đếm và chép bảng sau đó cùng thấy một ảnh chụp MVCC của database, nên
+/// các bảng của một nhóm khớp nhau (không có dòng hàng trỏ tới đơn hàng chưa có trong bản chụp đơn hàng), kể cả khi
+/// database đang được ghi. Kết thúc bằng commit_snapshot; kết nối bị đóng giữa chừng thì Postgres tự hủy giao dịch (chỉ
+/// đọc, không có gì để hoàn tác).
+pub async fn begin_snapshot(c: &mut PgConnection) -> Result<(), AppError> {
+    c.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await
+        .map_err(|e| query_error(&e))?;
+    Ok(())
+}
+
+pub async fn commit_snapshot(c: &mut PgConnection) -> Result<(), AppError> {
+    c.execute("COMMIT").await.map_err(|e| query_error(&e))?;
+    Ok(())
+}
+
 pub async fn count_rows(c: &mut PgConnection, table: &SourceTable) -> Result<i64, AppError> {
     sqlx::query_scalar(&format!("SELECT count(*) FROM {}", qualified(table)))
         .fetch_one(&mut *c)
@@ -154,7 +175,8 @@ pub async fn copy_to_csv(
             written += chunk.len() as u64;
             if written > max_bytes {
                 return Err(AppError::TooLarge(format!(
-                    "Bảng lớn hơn giới hạn {} MB của một lần nạp (MAX_UPLOAD_MB)",
+                    "Bảng {} lớn hơn giới hạn {} MB của một lần nạp (MAX_UPLOAD_MB)",
+                    table.full_name(),
                     max_bytes / 1024 / 1024
                 )));
             }

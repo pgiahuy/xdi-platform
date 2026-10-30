@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/datasets/SourcePanel.tsx - một nguồn database đã kết nối: thử kết nối lại, chọn bảng, đặt tên, chụp bảng
-thành dataset, xóa nguồn. Danh sách bảng và kết quả do trang truyền vào (pages/DatabaseSources.tsx). */
+/* components/datasets/SourcePanel.tsx - một nguồn database đã kết nối: thử kết nối lại, chọn bảng, chọn bảng chụp kèm
+(phần relations, thường là RelationPicker), đặt tên, chụp bảng thành dataset, xóa nguồn. Danh sách bảng và kết quả do trang
+truyền vào (pages/DatabaseSources.tsx). */
 
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/forms/FormField'
 import { FormMessage } from '@/components/forms/FormMessage'
@@ -23,6 +24,8 @@ type Props = {
   tablesError?: string
   table: string
   onTableChange: (table: string) => void
+  /** Phần chọn bảng nối của bảng đang chọn; trang dựng sẵn. */
+  relations?: ReactNode
   name: string
   onNameChange: (name: string) => void
   busy: boolean
@@ -80,6 +83,7 @@ export function SourcePanel(props: Props) {
               ))}
             </select>
           </div>
+          {props.relations}
           <FormField
             id={`${id}-name`}
             label="Tên dataset"

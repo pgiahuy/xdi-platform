@@ -45,3 +45,67 @@ fn stored_config_and_label_have_no_password() {
     let label = source_file_label(&info, "public.orders");
     assert_eq!(label, "postgres://db.example.com/shop/public.orders");
 }
+
+fn table(schema: &str, name: &str) -> SourceTable {
+    SourceTable {
+        schema: schema.to_string(),
+        name: name.to_string(),
+        kind: "table".to_string(),
+    }
+}
+
+fn key(
+    constraint: &str,
+    from: SourceTable,
+    to: SourceTable,
+    unique_target: bool,
+) -> relations::ForeignKey {
+    relations::ForeignKey {
+        constraint: constraint.to_string(),
+        from,
+        from_columns: vec!["order_id".to_string()],
+        to,
+        to_columns: vec!["id".to_string()],
+        unique_target,
+        unique_source: false,
+        readable_source: true,
+        readable_target: true,
+    }
+}
+
+/// Khóa giữa hai bảng trong nhóm giữ một lần dù đọc từ cả hai đầu; khóa ra ngoài nhóm và khóa tới cột không UNIQUE bỏ.
+#[test]
+fn group_keys_stay_inside_the_group_once() {
+    let items = table("shop", "order_items");
+    let orders = table("shop", "orders");
+    let customers = table("shop", "customers");
+    let inside = key("items_order", items.clone(), orders.clone(), true);
+    let keys = vec![
+        inside.clone(),
+        inside,
+        key("orders_customer", orders.clone(), customers, true),
+        key("items_channel", items.clone(), orders.clone(), false),
+    ];
+    let kept = relations::build_group_keys(keys, &[items.clone(), orders.clone()]);
+    let names: Vec<&str> = kept.iter().map(|k| k.constraint.as_str()).collect();
+    assert_eq!(names, ["items_order"]);
+
+    let ids = [(items, Uuid::new_v4()), (orders, Uuid::new_v4())];
+    let rel = snapshot::build_new_relations(&kept, &ids);
+    assert_eq!(rel.len(), 1);
+    assert_eq!(
+        (rel[0].from_dataset_id, rel[0].to_dataset_id),
+        (ids[0].1, ids[1].1)
+    );
+    assert_eq!(rel[0].cardinality, "many_to_one");
+}
+
+#[test]
+fn row_limit_is_per_table() {
+    let orders = table("shop", "orders");
+    assert!(matches!(
+        snapshot::check_row_count(&orders, 500, 100),
+        Err(AppError::TooLarge(m)) if m.contains("shop.orders")
+    ));
+    assert!(snapshot::check_row_count(&orders, 100, 100).is_ok());
+}

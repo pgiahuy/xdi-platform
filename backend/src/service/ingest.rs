@@ -33,7 +33,7 @@ use uuid::Uuid;
 use crate::auth::{Member, WorkspaceId};
 use crate::engine::analytics::{self, Column, FileFormat, InputFile};
 use crate::engine::store::{
-    Dataset, DatasetVersion, NewColumn, NewVersion, ProfileStatus, SourceKind,
+    build_related, Dataset, DatasetVersion, NewColumn, NewVersion, ProfileStatus, SourceKind,
 };
 use crate::service::{excel, profile, semantic};
 use crate::{error::AppError, state::AppState};
@@ -128,8 +128,11 @@ pub struct UploadResult {
 
 pub async fn list_datasets(state: &AppState, member: &Member) -> Result<Vec<Dataset>, AppError> {
     let mut datasets = state.store.list_datasets(&member.workspace).await?;
+    // Một câu cho cả workspace, rồi chia theo dataset: không hỏi Postgres một lần cho mỗi dataset.
+    let relations = state.store.list_relations(&member.workspace, None).await?;
     for dataset in &mut datasets {
         apply_semantic_state(state, dataset);
+        dataset.relations = build_related(dataset.id, &relations);
     }
     Ok(datasets)
 }
@@ -153,6 +156,11 @@ pub async fn dataset_detail(
         .await?
         .ok_or_else(dataset_not_found)?;
     apply_semantic_state(state, &mut dataset);
+    let relations = state
+        .store
+        .list_relations(&member.workspace, Some(id))
+        .await?;
+    dataset.relations = build_related(id, &relations);
     Ok(dataset)
 }
 

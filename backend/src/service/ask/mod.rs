@@ -466,6 +466,7 @@ pub(super) async fn record_query(
         timings,
         row_count,
         explanation: recorded.explanation,
+        read_versions: vec![(dataset.id, version.id)],
     };
     let id = state.store.record_query(&member.workspace, &query).await?;
     steps.push(build_step(StepName::Record, started, true, None));

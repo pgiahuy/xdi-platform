@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/sources.rs - nguồn database của workspace: thêm, thử kết nối, liệt kê bảng, chụp bảng thành dataset, xóa. Logic ở
-service/sources/. Mọi route chỉ cho admin của workspace (member 403), kể cả liệt kê nguồn: cấu hình nguồn (máy chủ, tài
+/* api/sources.rs - nguồn database của workspace: thêm, thử kết nối, liệt kê bảng và quan hệ khóa ngoại, chụp một nhóm
+bảng thành dataset (mỗi bảng một dataset), xóa. Logic ở service/sources/. Mọi route chỉ cho admin của workspace (member 403), kể cả liệt kê nguồn: cấu hình nguồn (máy chủ, tài
 khoản) cũng là thông tin cần giữ. Không route nào trả mật khẩu. */
 
 use axum::extract::State;
@@ -12,9 +12,9 @@ use uuid::Uuid;
 use super::extract::{JsonBody, PathParams};
 use crate::auth::Member;
 use crate::error::ErrorBody;
-use crate::service::ingest::UploadResult;
 use crate::service::sources::{
-    self, CreateSourceRequest, SnapshotRequest, SourceResponse, SourceTable, TestSourceResponse,
+    self, CreateSourceRequest, RelationsRequest, RelationsResponse, SnapshotRequest,
+    SnapshotResponse, SourceResponse, SourceTable, TestSourceResponse,
 };
 use crate::{error::AppError, state::AppState};
 
@@ -24,6 +24,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(remove))
         .routes(routes!(test))
         .routes(routes!(tables))
+        .routes(routes!(relations))
         .routes(routes!(snapshot))
 }
 
@@ -144,23 +145,57 @@ async fn tables(
 
 #[utoipa::path(
     post,
+    path = "/workspaces/{ws}/sources/{id}/relations",
+    tag = "sources",
+    operation_id = "listSourceRelations",
+    summary = "Tables linked to a table by foreign keys, in both directions (admin only)",
+    description = "Read from pg_catalog, one hop around the table. `many_to_one` lists the tables its foreign keys \
+                   point to, `one_to_many` the tables whose foreign keys point to it. A table is addable to the \
+                   snapshot when the account can read it and the referenced columns are the primary key or a UNIQUE \
+                   constraint; otherwise `reason` says why.",
+    params(
+        ("ws" = String, Path, description = "Workspace slug"),
+        ("id" = Uuid, Path, description = "Source id")
+    ),
+    request_body = RelationsRequest,
+    responses(
+        (status = 200, body = RelationsResponse, description = "OK"),
+        (status = "4XX", body = ErrorBody, description = "400 unknown table or cannot connect, 401, 403 not admin, 404")
+    )
+)]
+async fn relations(
+    State(state): State<AppState>,
+    member: Member,
+    PathParams((_ws, id)): PathParams<(String, Uuid)>,
+    JsonBody(req): JsonBody<RelationsRequest>,
+) -> Result<Json<RelationsResponse>, AppError> {
+    Ok(Json(sources::relations(&state, &member, id, req).await?))
+}
+
+#[utoipa::path(
+    post,
     path = "/workspaces/{ws}/sources/{id}/snapshot",
     tag = "sources",
     operation_id = "snapshotSource",
-    summary = "Snapshot a table as a new dataset, or as a new version of one (admin only)",
-    description = "The table is copied once into a Parquet version, like an uploaded file. A snapshot with the same \
-                   content as an existing version creates nothing and returns 200 with `created` false.",
+    summary = "Snapshot a table and related tables, one dataset per table (admin only)",
+    description = "Every table is copied in one read-only REPEATABLE READ transaction, then stored as a Parquet \
+                   version like an uploaded file. A table snapshotted before from this source gets a new version of \
+                   its dataset. Foreign keys among the tables are recorded as dataset relations. A snapshot again \
+                   (`dataset_id`) takes every dataset of this source linked to it. At most 10 tables; \
+                   SOURCE_MAX_ROWS and MAX_UPLOAD_MB apply to each table. A table with the same content as an \
+                   existing version creates nothing (`created` false); the status is 200 when no table created \
+                   anything.",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = Uuid, Path, description = "Source id")
     ),
     request_body = SnapshotRequest,
     responses(
-        (status = 201, body = UploadResult, description = "New dataset or version created"),
-        (status = 200, body = UploadResult, description = "Same content as an existing version: nothing created"),
-        (status = "4XX", body = ErrorBody, description = "400 unknown table or cannot read it, 401, 403 not admin, \
-                                                         404, 413 more rows than SOURCE_MAX_ROWS or bigger than \
-                                                         MAX_UPLOAD_MB")
+        (status = 201, body = SnapshotResponse, description = "At least one new dataset or version created"),
+        (status = 200, body = SnapshotResponse, description = "Every table matches an existing version: nothing created"),
+        (status = "4XX", body = ErrorBody, description = "400 unknown table, cannot read it, more than 10 tables, \
+                                                         401, 403 not admin, 404, 413 a table has more rows than \
+                                                         SOURCE_MAX_ROWS or is bigger than MAX_UPLOAD_MB")
     )
 )]
 async fn snapshot(
@@ -168,9 +203,9 @@ async fn snapshot(
     member: Member,
     PathParams((_ws, id)): PathParams<(String, Uuid)>,
     JsonBody(req): JsonBody<SnapshotRequest>,
-) -> Result<(StatusCode, Json<UploadResult>), AppError> {
+) -> Result<(StatusCode, Json<SnapshotResponse>), AppError> {
     let result = sources::snapshot(&state, &member, id, req).await?;
-    let status = if result.created {
+    let status = if result.datasets.iter().any(|d| d.created) {
         StatusCode::CREATED
     } else {
         StatusCode::OK

@@ -38,6 +38,9 @@ pub struct NewQuery<'a> {
     pub row_count: Option<i64>,
     /// Phần giải thích của câu "tại sao" (#38), gồm điều kiện hai lát cắt cho truy dòng nguồn (#34); None với câu thường.
     pub explanation: Option<serde_json::Value>,
+    /// Các cặp (dataset, phiên bản) câu hỏi đã đọc, ghi vào queries.read_versions (migration 0009). Bây giờ chỉ có cặp
+    /// của target; hỏi qua nhiều bảng (#213) sẽ thêm các bảng liên quan. Rỗng thì ghi null.
+    pub read_versions: Vec<(Uuid, Uuid)>,
 }
 
 /// Phần của một dòng queries mà truy dòng nguồn (#34) cần.
@@ -111,8 +114,8 @@ impl Store {
         };
         sqlx::query_scalar(
             "INSERT INTO queries (workspace_id, dataset_id, version_id, user_id, question, sql_generated,
-                                  sql_guarded, status, error, timings, row_count, explanation)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
+                                  sql_guarded, status, error, timings, row_count, explanation, read_versions)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id",
         )
         .bind(ws.as_uuid())
         .bind(dataset_id)
@@ -126,15 +129,30 @@ impl Store {
         .bind(&q.timings)
         .bind(q.row_count)
         .bind(&q.explanation)
+        .bind(build_read_versions(&q.read_versions))
         .fetch_one(&self.pool)
         .await
         .map_err(|e| db_error("record query", e))
     }
 }
 
+/// [{"dataset_id": ..., "version_id": ...}], hay None khi danh sách rỗng.
+fn build_read_versions(pairs: &[(Uuid, Uuid)]) -> Option<serde_json::Value> {
+    if pairs.is_empty() {
+        return None;
+    }
+    let list = pairs
+        .iter()
+        .map(|(dataset_id, version_id)| {
+            serde_json::json!({"dataset_id": dataset_id, "version_id": version_id})
+        })
+        .collect();
+    Some(serde_json::Value::Array(list))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::super::test_support::{drop_workspace, exec, store, temp_workspace};
+    use super::super::test_support::{drop_workspace, exec, fetch_text, store, temp_workspace};
     use super::super::{NewVersion, SourceKind};
     use super::*;
 
@@ -175,8 +193,15 @@ mod tests {
             timings: serde_json::json!({"llm_ms": 1}),
             row_count: Some(1),
             explanation: Some(serde_json::json!({"base": {"filter": "x = 1"}})),
+            read_versions: vec![(ds.id, v.id)],
         };
-        store.record_query(&ws, &q).await.unwrap();
+        let id = store.record_query(&ws, &q).await.unwrap();
+        let read = fetch_text(
+            &store,
+            &format!("SELECT read_versions->0->>'version_id' FROM queries WHERE id = '{id}'"),
+        )
+        .await;
+        assert_eq!(read, v.id.to_string());
 
         // Câu hỏi trỏ tới dataset của workspace khác bị database từ chối.
         let other = temp_workspace(&store).await;
@@ -240,6 +265,7 @@ mod tests {
                         timings: serde_json::json!({}),
                         row_count: None,
                         explanation: None,
+                        read_versions: Vec::new(),
                     },
                 )
                 .await

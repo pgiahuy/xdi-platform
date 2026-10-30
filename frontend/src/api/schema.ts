@@ -605,6 +605,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/sources/{id}/relations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tables linked to a table by foreign keys, in both directions (admin only)
+         * @description Read from pg_catalog, one hop around the table. `many_to_one` lists the tables its foreign keys point to, `one_to_many` the tables whose foreign keys point to it. A table is addable to the snapshot when the account can read it and the referenced columns are the primary key or a UNIQUE constraint; otherwise `reason` says why.
+         */
+        post: operations["listSourceRelations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/sources/{id}/snapshot": {
         parameters: {
             query?: never;
@@ -615,8 +635,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Snapshot a table as a new dataset, or as a new version of one (admin only)
-         * @description The table is copied once into a Parquet version, like an uploaded file. A snapshot with the same content as an existing version creates nothing and returns 200 with `created` false.
+         * Snapshot a table and related tables, one dataset per table (admin only)
+         * @description Every table is copied in one read-only REPEATABLE READ transaction, then stored as a Parquet version like an uploaded file. A table snapshotted before from this source gets a new version of its dataset. Foreign keys among the tables are recorded as dataset relations. A snapshot again (`dataset_id`) takes every dataset of this source linked to it. At most 10 tables; SOURCE_MAX_ROWS and MAX_UPLOAD_MB apply to each table. A table with the same content as an existing version creates nothing (`created` false); the status is 200 when no table created anything.
          */
         post: operations["snapshotSource"];
         delete?: never;
@@ -991,6 +1011,11 @@ export interface components {
             logical_table: string;
             name: string;
             /**
+             * @description Datasets linked to this one by a foreign key of the source database (snapshots of several related tables);
+             *     empty for uploaded files.
+             */
+            relations: components["schemas"]["RelatedDataset"][];
+            /**
              * @description True when the current version stays at `structure` because the semantic profile was already tried with the
              *     running LLM provider and its answer was not usable: no suggested questions will come until the provider
              *     changes. Asking still works.
@@ -1027,6 +1052,27 @@ export interface components {
             name: string;
             summary: components["schemas"]["OverviewSummary"];
             version: components["schemas"]["OverviewVersion"] | null;
+        };
+        /** @description A foreign-key relation between two datasets of the workspace, copied from the source database. */
+        DatasetRelation: {
+            /** @description `many_to_one`, or `one_to_one` when the foreign-key columns are also unique. */
+            cardinality: string;
+            /** @description Foreign-key constraint name in the source database. */
+            constraint_name: string;
+            from_columns: string[];
+            /**
+             * Format: uuid
+             * @description Dataset holding the foreign key (the many side).
+             */
+            from_dataset_id: string;
+            from_dataset_name: string;
+            to_columns: string[];
+            /**
+             * Format: uuid
+             * @description Dataset whose primary key or UNIQUE columns the foreign key points to (the one side).
+             */
+            to_dataset_id: string;
+            to_dataset_name: string;
         };
         DatasetVersion: {
             /** Format: date-time */
@@ -1429,6 +1475,49 @@ export interface components {
             /** @description pending, structure, semantic or failed (see `Dataset.current_profile_status`). */
             profile_status: string;
         };
+        /** @description A dataset linked to this one by a foreign key of the source database. */
+        RelatedDataset: {
+            /** @description Key columns of this dataset. */
+            columns: string[];
+            /** Format: uuid */
+            dataset_id: string;
+            /** @description `many_to_one` when this dataset holds the foreign key, `one_to_many` when the related dataset holds it. */
+            direction: string;
+            name: string;
+            /** @description Key columns of the related dataset, in the same order. */
+            related_columns: string[];
+        };
+        /** @description A table linked to the chosen table by one foreign key. */
+        RelatedTable: {
+            /** @description True when `table` can be snapshotted with the chosen table and the relation recorded. */
+            addable: boolean;
+            /** @description Readable columns of `table`; 0 when the account cannot read it. */
+            column_count: number;
+            constraint: string;
+            from_columns: string[];
+            /** @description Table holding the foreign key (the many side) and its key columns. */
+            from_table: string;
+            /** @description Why the table cannot be added, in Vietnamese; null when addable. */
+            reason: string | null;
+            /** @description `schema.table` that can be snapshotted together with the chosen table. */
+            table: string;
+            to_columns: string[];
+            /** @description Table the foreign key points to (the one side) and its key columns. */
+            to_table: string;
+        };
+        RelationsRequest: {
+            /** @description `schema.table` from the table list. */
+            table: string;
+        };
+        RelationsResponse: {
+            /** @description Readable columns of the chosen table. */
+            column_count: number;
+            /** @description Tables the chosen table points to (its foreign keys). */
+            many_to_one: components["schemas"]["RelatedTable"][];
+            /** @description Tables pointing to the chosen table (their foreign keys). */
+            one_to_many: components["schemas"]["RelatedTable"][];
+            table: string;
+        };
         ResetPasswordResponse: {
             /** @description Shown once to hand to the user; not stored anywhere in plain text. */
             temporary_password: string;
@@ -1501,13 +1590,24 @@ export interface components {
         SnapshotRequest: {
             /**
              * Format: uuid
-             * @description Snapshot again into this dataset as a new version.
+             * @description Snapshot this dataset again, with every dataset of the same source linked to it by relations.
              */
             dataset_id?: string | null;
-            /** @description Name of the new dataset; defaults to the table name. */
+            /** @description Name of the dataset of `table` when it is new; defaults to the table name. Other tables use their table name. */
             name?: string | null;
-            /** @description `schema.table` from the table list. Not needed with `dataset_id`: the table snapshotted before is used. */
+            /** @description `schema.table` to start from. Not needed with `dataset_id`. */
             table?: string | null;
+            /**
+             * @description More `schema.table` names snapshotted with `table`, usually picked from its relation list. Each table becomes
+             *     its own dataset. Not allowed with `dataset_id`.
+             */
+            tables?: string[];
+        };
+        SnapshotResponse: {
+            /** @description One entry per table, the starting table first. `created` is false for a table whose content did not change. */
+            datasets: components["schemas"]["UploadResult"][];
+            /** @description Foreign-key relations among these datasets, as recorded. */
+            relations: components["schemas"]["DatasetRelation"][];
         };
         /** @description A database source without its password. */
         SourceResponse: {
@@ -3460,6 +3560,53 @@ export interface operations {
             };
         };
     };
+    listSourceRelations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Source id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelationsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelationsResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 unknown table or cannot connect, 401, 403 not admin, 404 */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     snapshotSource: {
         parameters: {
             query?: never;
@@ -3478,22 +3625,22 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Same content as an existing version: nothing created */
+            /** @description Every table matches an existing version: nothing created */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadResult"];
+                    "application/json": components["schemas"]["SnapshotResponse"];
                 };
             };
-            /** @description New dataset or version created */
+            /** @description At least one new dataset or version created */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadResult"];
+                    "application/json": components["schemas"]["SnapshotResponse"];
                 };
             };
             /** @description Internal error; details are in the server log, not in the response */
@@ -3505,7 +3652,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description 400 unknown table or cannot read it, 401, 403 not admin, 404, 413 more rows than SOURCE_MAX_ROWS or bigger than MAX_UPLOAD_MB */
+            /** @description 400 unknown table, cannot read it, more than 10 tables, 401, 403 not admin, 404, 413 a table has more rows than SOURCE_MAX_ROWS or is bigger than MAX_UPLOAD_MB */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

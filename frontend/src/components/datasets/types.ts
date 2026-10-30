@@ -12,6 +12,19 @@ export type DatasetRow = {
   snapshot?: { table: string; at: string | null }
 }
 
+/** Một bảng nối với bảng đang chọn theo một khóa ngoại, chụp kèm được thành dataset riêng. */
+export type RelationOption = {
+  /** schema.bảng sẽ chụp kèm. */
+  table: string
+  /** Bảng giữ khóa ngoại và cột khóa. */
+  fromTable: string
+  fromColumns: string[]
+  addable: boolean
+  reason: string | null
+  /** Số cột đọc được của bảng. */
+  columnCount: number
+}
+
 export type SheetOption = {
   name: string
   hidden: boolean

@@ -49,7 +49,8 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
     uploadHeading.current?.scrollIntoView({ block: 'start' })
   }
 
-  // Chụp lại dùng đúng bảng của lần chụp trước (backend nhớ theo dataset), nên chỉ cần nguồn và dataset.
+  // Chụp lại dùng đúng bảng của lần chụp trước (backend nhớ theo dataset) và chụp lại cả các dataset liên quan, nên
+  // chỉ cần nguồn và dataset.
   const snapshotAgain = (row: DatasetRow) => {
     const sourceId = datasets.data?.find((d) => d.id === row.id)?.source_id
     if (!sourceId) return

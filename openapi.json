@@ -2968,13 +2968,86 @@
         }
       }
     },
+    "/workspaces/{ws}/sources/{id}/relations": {
+      "post": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Tables linked to a table by foreign keys, in both directions (admin only)",
+        "description": "Read from pg_catalog, one hop around the table. `many_to_one` lists the tables its foreign keys point to, `one_to_many` the tables whose foreign keys point to it. A table is addable to the snapshot when the account can read it and the referenced columns are the primary key or a UNIQUE constraint; otherwise `reason` says why.",
+        "operationId": "listSourceRelations",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelationsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 unknown table or cannot connect, 401, 403 not admin, 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/sources/{id}/snapshot": {
       "post": {
         "tags": [
           "sources"
         ],
-        "summary": "Snapshot a table as a new dataset, or as a new version of one (admin only)",
-        "description": "The table is copied once into a Parquet version, like an uploaded file. A snapshot with the same content as an existing version creates nothing and returns 200 with `created` false.",
+        "summary": "Snapshot a table and related tables, one dataset per table (admin only)",
+        "description": "Every table is copied in one read-only REPEATABLE READ transaction, then stored as a Parquet version like an uploaded file. A table snapshotted before from this source gets a new version of its dataset. Foreign keys among the tables are recorded as dataset relations. A snapshot again (`dataset_id`) takes every dataset of this source linked to it. At most 10 tables; SOURCE_MAX_ROWS and MAX_UPLOAD_MB apply to each table. A table with the same content as an existing version creates nothing (`created` false); the status is 200 when no table created anything.",
         "operationId": "snapshotSource",
         "parameters": [
           {
@@ -3009,27 +3082,27 @@
         },
         "responses": {
           "200": {
-            "description": "Same content as an existing version: nothing created",
+            "description": "Every table matches an existing version: nothing created",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadResult"
+                  "$ref": "#/components/schemas/SnapshotResponse"
                 }
               }
             }
           },
           "201": {
-            "description": "New dataset or version created",
+            "description": "At least one new dataset or version created",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadResult"
+                  "$ref": "#/components/schemas/SnapshotResponse"
                 }
               }
             }
           },
           "4XX": {
-            "description": "400 unknown table or cannot read it, 401, 403 not admin, 404, 413 more rows than SOURCE_MAX_ROWS or bigger than MAX_UPLOAD_MB",
+            "description": "400 unknown table, cannot read it, more than 10 tables, 401, 403 not admin, 404, 413 a table has more rows than SOURCE_MAX_ROWS or is bigger than MAX_UPLOAD_MB",
             "content": {
               "application/json": {
                 "schema": {
@@ -3844,6 +3917,7 @@
           "source_id",
           "source_table",
           "current_version_at",
+          "relations",
           "created_at"
         ],
         "properties": {
@@ -3889,6 +3963,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "relations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelatedDataset"
+            },
+            "description": "Datasets linked to this one by a foreign key of the source database (snapshots of several related tables);\nempty for uploaded files."
           },
           "semantic_unavailable": {
             "type": "boolean",
@@ -3999,6 +4080,58 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "DatasetRelation": {
+        "type": "object",
+        "description": "A foreign-key relation between two datasets of the workspace, copied from the source database.",
+        "required": [
+          "from_dataset_id",
+          "from_dataset_name",
+          "from_columns",
+          "to_dataset_id",
+          "to_dataset_name",
+          "to_columns",
+          "constraint_name",
+          "cardinality"
+        ],
+        "properties": {
+          "cardinality": {
+            "type": "string",
+            "description": "`many_to_one`, or `one_to_one` when the foreign-key columns are also unique."
+          },
+          "constraint_name": {
+            "type": "string",
+            "description": "Foreign-key constraint name in the source database."
+          },
+          "from_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "from_dataset_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Dataset holding the foreign key (the many side)."
+          },
+          "from_dataset_name": {
+            "type": "string"
+          },
+          "to_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "to_dataset_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Dataset whose primary key or UNIQUE columns the foreign key points to (the one side)."
+          },
+          "to_dataset_name": {
+            "type": "string"
           }
         }
       },
@@ -5063,6 +5196,149 @@
           }
         }
       },
+      "RelatedDataset": {
+        "type": "object",
+        "description": "A dataset linked to this one by a foreign key of the source database.",
+        "required": [
+          "dataset_id",
+          "name",
+          "direction",
+          "columns",
+          "related_columns"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Key columns of this dataset."
+          },
+          "dataset_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "direction": {
+            "type": "string",
+            "description": "`many_to_one` when this dataset holds the foreign key, `one_to_many` when the related dataset holds it."
+          },
+          "name": {
+            "type": "string"
+          },
+          "related_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Key columns of the related dataset, in the same order."
+          }
+        }
+      },
+      "RelatedTable": {
+        "type": "object",
+        "description": "A table linked to the chosen table by one foreign key.",
+        "required": [
+          "table",
+          "constraint",
+          "from_table",
+          "from_columns",
+          "to_table",
+          "to_columns",
+          "column_count",
+          "addable",
+          "reason"
+        ],
+        "properties": {
+          "addable": {
+            "type": "boolean",
+            "description": "True when `table` can be snapshotted with the chosen table and the relation recorded."
+          },
+          "column_count": {
+            "type": "integer",
+            "description": "Readable columns of `table`; 0 when the account cannot read it.",
+            "minimum": 0
+          },
+          "constraint": {
+            "type": "string"
+          },
+          "from_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "from_table": {
+            "type": "string",
+            "description": "Table holding the foreign key (the many side) and its key columns."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the table cannot be added, in Vietnamese; null when addable."
+          },
+          "table": {
+            "type": "string",
+            "description": "`schema.table` that can be snapshotted together with the chosen table."
+          },
+          "to_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "to_table": {
+            "type": "string",
+            "description": "Table the foreign key points to (the one side) and its key columns."
+          }
+        }
+      },
+      "RelationsRequest": {
+        "type": "object",
+        "required": [
+          "table"
+        ],
+        "properties": {
+          "table": {
+            "type": "string",
+            "description": "`schema.table` from the table list."
+          }
+        }
+      },
+      "RelationsResponse": {
+        "type": "object",
+        "required": [
+          "table",
+          "column_count",
+          "many_to_one",
+          "one_to_many"
+        ],
+        "properties": {
+          "column_count": {
+            "type": "integer",
+            "description": "Readable columns of the chosen table.",
+            "minimum": 0
+          },
+          "many_to_one": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelatedTable"
+            },
+            "description": "Tables the chosen table points to (its foreign keys)."
+          },
+          "one_to_many": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelatedTable"
+            },
+            "description": "Tables pointing to the chosen table (their foreign keys)."
+          },
+          "table": {
+            "type": "string"
+          }
+        }
+      },
       "ResetPasswordResponse": {
         "type": "object",
         "required": [
@@ -5246,21 +5522,51 @@
               "null"
             ],
             "format": "uuid",
-            "description": "Snapshot again into this dataset as a new version."
+            "description": "Snapshot this dataset again, with every dataset of the same source linked to it by relations."
           },
           "name": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Name of the new dataset; defaults to the table name."
+            "description": "Name of the dataset of `table` when it is new; defaults to the table name. Other tables use their table name."
           },
           "table": {
             "type": [
               "string",
               "null"
             ],
-            "description": "`schema.table` from the table list. Not needed with `dataset_id`: the table snapshotted before is used."
+            "description": "`schema.table` to start from. Not needed with `dataset_id`."
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "More `schema.table` names snapshotted with `table`, usually picked from its relation list. Each table becomes\nits own dataset. Not allowed with `dataset_id`."
+          }
+        }
+      },
+      "SnapshotResponse": {
+        "type": "object",
+        "required": [
+          "datasets",
+          "relations"
+        ],
+        "properties": {
+          "datasets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UploadResult"
+            },
+            "description": "One entry per table, the starting table first. `created` is false for a table whose content did not change."
+          },
+          "relations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatasetRelation"
+            },
+            "description": "Foreign-key relations among these datasets, as recorded."
           }
         }
       },

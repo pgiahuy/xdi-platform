@@ -109,6 +109,29 @@ impl Store {
         Ok(())
     }
 
+    /// Dataset đã chụp từ bảng `table` (schema.bảng) của nguồn này, để lần chụp sau thêm phiên bản vào đó thay vì tạo
+    /// dataset trùng (một bảng nguồn, một dataset). Đọc ngược config.tables; dataset đã xóa không còn dòng nên không
+    /// khớp. Bảng từng chụp thành nhiều dataset (trước khi có luật này) thì lấy dataset tạo sớm nhất.
+    pub async fn find_source_dataset(
+        &self,
+        ws: &WorkspaceId,
+        id: Uuid,
+        table: &str,
+    ) -> Result<Option<Uuid>, AppError> {
+        sqlx::query_scalar(
+            "SELECT d.id FROM datasets d
+             JOIN sources s ON s.workspace_id = d.workspace_id AND s.id = d.source_id
+             WHERE d.workspace_id = $1 AND s.id = $2 AND s.config->'tables'->>d.id::text = $3
+             ORDER BY d.created_at LIMIT 1",
+        )
+        .bind(ws.as_uuid())
+        .bind(id)
+        .bind(table)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| db_error("find source dataset", e))
+    }
+
     /// Xóa nguồn. Còn dataset chụp từ nguồn thì khóa ngoại RESTRICT chặn; trả false để báo người dùng xóa dataset
     /// trước, không xóa dataset thay họ.
     pub async fn delete_source(&self, ws: &WorkspaceId, id: Uuid) -> Result<bool, AppError> {

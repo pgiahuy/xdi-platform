@@ -8,6 +8,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::columns::{insert_columns, NewColumn};
+use super::relations::RelatedDataset;
 use super::{db_error, is_foreign_key_violation, Store};
 use crate::{auth::WorkspaceId, error::AppError};
 
@@ -101,6 +102,11 @@ pub struct Dataset {
     #[schema(required)]
     #[sqlx(default)]
     pub current_version_at: Option<DateTime<Utc>>,
+    /// Datasets linked to this one by a foreign key of the source database (snapshots of several related tables);
+    /// empty for uploaded files.
+    // Store không nối bảng dataset_relations ở đây; service/ingest.rs điền bằng apply_relations trước khi trả qua API.
+    #[sqlx(skip)]
+    pub relations: Vec<RelatedDataset>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -691,6 +697,7 @@ mod tests {
             source_id: None,
             source_table: None,
             current_version_at: None,
+            relations: Vec::new(),
             created_at: Utc::now(),
         }
     }

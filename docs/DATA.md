@@ -114,14 +114,45 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   rộng hơn 38 chữ số, thành `DOUBLE`, chỉ giữ chính xác khoảng 15 chữ số), `boolean`, `date`, `timestamp`,
   `timestamptz` giữ kiểu tương ứng. Mọi kiểu khác (`text`, `varchar`, `uuid`, `json`, mảng, enum) thành chữ, nên mã
   như `00123` giữ nguyên số 0 ở đầu. Chuỗi rỗng và `NULL` vẫn khác nhau sau khi chụp.
-- Giới hạn: `SOURCE_MAX_ROWS` dòng (đếm trước, quá thì từ chối, không chụp thiếu), `MAX_UPLOAD_MB` dung lượng CSV,
-  `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
+- Giới hạn: `SOURCE_MAX_ROWS` dòng và `MAX_UPLOAD_MB` dung lượng CSV cho mỗi bảng (đếm trước, quá thì từ chối cả lần
+  chụp, không chụp thiếu), tối đa 10 bảng một lần chụp, `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
 - Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`). Máy chủ phải nằm trong
   `SOURCE_ALLOWED_HOSTS`. Chưa có TLS tới Postgres: `sslmode` nhận `disable` hoặc `prefer`, máy chủ chỉ nhận TLS thì chưa
   kết nối được.
 - Không dùng extension `postgres` của DuckDB vì `INSTALL postgres` tải extension từ Internet lúc chạy, đúng bản DuckDB
   đã biên dịch; image Docker không có thư mục home cho user chạy backend, và máy cài có thể không ra được Internet.
 - Xóa nguồn chỉ được khi không còn dataset nào chụp từ nó; xóa dataset không xóa nguồn.
+
+### Chụp nhiều bảng liên quan
+
+Database của tổ chức thường tách dữ liệu ra nhiều bảng: `order_items` (mỗi dòng một dòng hàng) trỏ tới `orders`,
+`products`; `orders` trỏ tới `customers`. Một lần chụp lấy một bảng cùng các bảng admin chọn kèm; mỗi bảng thành một
+dataset riêng, khóa ngoại giữa chúng ghi thành quan hệ giữa các dataset (bảng `dataset_relations`). Không nối thành một
+bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộng nhầm. Code: `backend/src/service/sources/relations.rs`
+(tìm quan hệ), `snapshot.rs` (chụp), `backend/src/engine/store/relations.rs` (lưu).
+
+- **Bảng liên quan** (`POST .../sources/{id}/relations`): đọc khóa ngoại trong `pg_catalog`, kể cả khóa nhiều cột,
+  một bước quanh bảng đang chọn, theo cả hai chiều: bảng nó trỏ tới (`many_to_one`) và bảng trỏ vào nó (`one_to_many`).
+  Một bảng chụp kèm được khi tài khoản có quyền đọc nó và cột được trỏ tới là khóa chính hay một ràng buộc `UNIQUE`
+  (chỉ mục `UNIQUE` không kèm ràng buộc không tính); không thì có `reason`. Bảng xa hơn một bước thì chọn từ bảng đã
+  thêm.
+- **Một ảnh chụp nhất quán:** mọi bảng đếm dòng và chép trong một giao dịch `REPEATABLE READ READ ONLY` trên một kết
+  nối, nên các bảng cùng là ảnh của một thời điểm (MVCC của Postgres): không có dòng hàng trỏ tới đơn chưa có trong bản
+  chụp `orders`.
+- **Một bảng nguồn, một dataset:** bảng đã chụp từ nguồn này (tra theo `sources.config.tables`) thì lần chụp sau thêm
+  phiên bản vào đúng dataset đó. Bảng chiều dùng chung, ví dụ `orders` được cả `order_items` và `returns` trỏ tới, nên
+  chỉ có một dataset dù chụp trong hai nhóm khác nhau. Bảng không đổi thì không tạo phiên bản mới (`created: false`).
+- **Quan hệ:** ghi khóa ngoại nối hai bảng trong cùng lần chụp, chỉ khi cột được trỏ tới là khóa chính hay `UNIQUE`.
+  Mỗi quan hệ có dataset phía nhiều (giữ khóa ngoại) và cột của nó, dataset phía một và cột của nó, tên ràng buộc, và
+  `cardinality` (`one_to_one` khi cột khóa ngoại cũng là khóa chính hay `UNIQUE`, còn lại `many_to_one`). Lần chụp sau
+  của cùng nhóm thay toàn bộ quan hệ giữa các bảng trong nhóm; quan hệ với dataset ngoài nhóm giữ nguyên. Xóa một
+  dataset thì quan hệ của nó mất theo. API trả quan hệ trong `relations` của mỗi dataset cho mọi thành viên.
+- **Chụp lại** (`dataset_id`): chụp lại dataset đó cùng mọi dataset cùng nguồn nối với nó qua quan hệ, đi hết các bước.
+- **Lỗi giữa chừng:** các bảng nạp lần lượt sau khi chép xong. Một bảng nạp lỗi thì các bảng nạp trước đó đã có phiên
+  bản mới, còn quan hệ của lần này chưa ghi. Chụp lại là đủ: bảng không đổi trùng hash nội dung nên không tạo phiên bản
+  trùng.
+- **Hỏi:** bây giờ mỗi câu hỏi vẫn chỉ đọc một dataset. Hỏi qua nhiều dataset bằng `JOIN` theo các quan hệ này là
+  [#213](https://github.com/pgiahuy/xdi-platform/issues/213).
 
 ## Gộp nhiều file và cột `_source_file`
 
@@ -309,3 +340,5 @@ hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và
 - Nạp nguyên tử: ghi phiên bản vào Postgres và chuyển file Parquet về chỗ cuối chưa nằm trong một giao dịch, lỗi giữa
   hai bước có thể để lại dòng thừa trong Postgres ([#79](https://github.com/pgiahuy/xdi-platform/issues/79)).
 - Nguồn dữ liệu là MySQL, SQLite, hay truy vấn thẳng database ngoài lúc hỏi; TLS tới Postgres.
+- Hỏi qua nhiều dataset chụp cùng nhau bằng `JOIN` theo quan hệ khóa ngoại
+  ([#213](https://github.com/pgiahuy/xdi-platform/issues/213)).
