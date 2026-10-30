@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/semantic/mod.rs - hồ sơ cột lớp ngữ nghĩa (#23): mô tả, bí danh cột, bí danh giá trị, câu hỏi gợi ý, đánh dấu
-cột nhạy cảm, và sửa vai trò cột trong phạm vi hẹp. Khác lớp cấu trúc (service/profile.rs, chạy trong request nạp),
+/* service/semantic/mod.rs - hồ sơ cột lớp ngữ nghĩa (#23): mô tả, bí danh cột, bí danh giá trị, đơn vị và cách gộp
+mặc định (sum hay avg, #185) của cột số đo, câu hỏi gợi ý, đánh dấu cột nhạy cảm, và sửa vai trò cột trong phạm vi hẹp. Khác lớp cấu trúc (service/profile.rs, chạy trong request nạp),
 lớp này gọi mô hình ngôn ngữ, nên mọi lỗi của nó không được chặn lần nạp.
 
 Ba đường chạy, cả ba đi qua semaphore semantic_jobs (một lượt mỗi lúc, để nạp nhiều file liền không dồn request lên
@@ -36,7 +36,7 @@ use crate::auth::WorkspaceId;
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
 use crate::engine::store::{
-    ColumnUnit, ColumnValue, Dataset, ProfileColumn, ProfileRole, ProfileStatus,
+    ColumnAggregation, ColumnUnit, ColumnValue, Dataset, ProfileColumn, ProfileRole, ProfileStatus,
     SemanticColumnUpdate, SemanticValueUpdate,
 };
 use crate::service::ask::context;
@@ -503,12 +503,13 @@ pub fn build_profile_answer(
         let description = clean_text_opt(&item["description"], DESCRIPTION_MAX_CHARS);
         let aliases = valid_aliases(&item["aliases"], &column_names);
         let unit = valid_unit(column, &item["unit"]);
-        if description.is_none() && aliases.is_empty() && unit.is_none() {
+        let aggregation = valid_aggregation(column, &item["aggregation"]);
+        if description.is_none() && aliases.is_empty() && unit.is_none() && aggregation.is_none() {
             note_rejection(
                 &mut reasons,
                 "columns",
                 i,
-                "no valid description, alias or unit",
+                "no valid description, alias, unit or aggregation",
             );
             continue;
         }
@@ -520,6 +521,7 @@ pub fn build_profile_answer(
                 aliases,
                 role: None,
                 unit,
+                aggregation,
             },
         );
     }
@@ -547,6 +549,7 @@ pub fn build_profile_answer(
                 aliases: Vec::new(),
                 role: None,
                 unit: None,
+                aggregation: None,
             })
             .role = Some(role);
     }
@@ -758,6 +761,19 @@ fn valid_unit(column: &ProfileColumn, value: &serde_json::Value) -> Option<Colum
         return None;
     }
     value.as_str().and_then(ColumnUnit::parse)
+}
+
+/// Cách gộp chỉ nhận cho cột measure của hồ sơ cấu trúc, và chỉ sum hay avg. Sai hay thiếu thì giữ mặc định sum của
+/// migration, như mọi bước trước #185: cộng nhầm một cột mô tả từng dòng ra số vô nghĩa nhưng vẫn là số đúng của phép
+/// cộng, còn admin sửa được ở màn Chỉ số.
+fn valid_aggregation(
+    column: &ProfileColumn,
+    value: &serde_json::Value,
+) -> Option<ColumnAggregation> {
+    if column.role != ProfileRole::Measure.as_str() {
+        return None;
+    }
+    value.as_str().and_then(ColumnAggregation::parse)
 }
 
 pub(crate) fn allowed_role_change(column: &ProfileColumn, target: &str) -> Option<ProfileRole> {

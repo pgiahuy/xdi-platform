@@ -15,11 +15,10 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 
 use crate::auth::{self, Member};
-use crate::engine::guard::{build_guarded_sql, AllowedTable};
 use crate::engine::store::{Dataset, DatasetVersion, NewMetric, User};
 use crate::error::AppError;
-use crate::service::ask::run::run_query_in_turn;
 use crate::service::ingest::{self, StagedFile, Staging, Upload, UploadResult};
+use crate::service::metrics::check::{build_check_table, check_metric};
 use crate::state::AppState;
 
 /// Tên dataset mẫu. Tên bảng lấy từ tên dataset (dataco), đúng bảng mà mock_answers.json viết SQL cho.
@@ -151,7 +150,7 @@ async fn keep_runnable(
     version: &DatasetVersion,
     metrics: Vec<NewMetric>,
 ) -> Result<Vec<NewMetric>, AppError> {
-    let table = sample_table(state, member, dataset, version).await?;
+    let table = build_check_table(state, &member.workspace, dataset, version).await?;
     let mut kept = Vec::new();
     for metric in metrics {
         match check_metric(state, &table, &metric).await {
@@ -160,59 +159,4 @@ async fn keep_runnable(
         }
     }
     Ok(kept)
-}
-
-async fn sample_table(
-    state: &AppState,
-    member: &Member,
-    dataset: &Dataset,
-    version: &DatasetVersion,
-) -> Result<AllowedTable, AppError> {
-    let relative = version
-        .parquet_path
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("sample version has no parquet path".to_string()))?;
-    let columns = state
-        .store
-        .list_columns(&member.workspace, version.id)
-        .await?
-        .into_iter()
-        .map(|c| c.name)
-        .collect();
-    Ok(AllowedTable {
-        name: dataset.logical_table.clone(),
-        columns,
-        parquet_dir: state.config.data_dir.join(relative),
-        row_filters: Vec::new(),
-    })
-}
-
-/// Một chỉ số chạy được: cột thời gian (nếu có) là cột thật, và SELECT <biểu thức> FROM <bảng> [WHERE <điều kiện>]
-/// qua được guard rồi chạy được trên DuckDB, như câu SQL mô hình viết từ chỉ số này.
-async fn check_metric(
-    state: &AppState,
-    table: &AllowedTable,
-    metric: &NewMetric,
-) -> Result<(), String> {
-    if let Some(column) = &metric.time_column {
-        if !table.columns.contains(column) {
-            return Err(format!(
-                "time column {column:?} is not a column of the table"
-            ));
-        }
-    }
-    let mut sql = format!("SELECT {} AS value FROM {}", metric.expression, table.name);
-    if let Some(filter) = &metric.filter {
-        sql.push_str(&format!(" WHERE {filter}"));
-    }
-    let guarded = build_guarded_sql(&sql, std::slice::from_ref(table), 1)
-        .map_err(|e| format!("rejected by the guard: {e:?}"))?;
-    run_query_in_turn(
-        &state.query_jobs,
-        guarded.runnable,
-        state.config.query_timeout,
-    )
-    .await
-    .map(|_| ())
-    .map_err(|e| format!("query failed: {e:?}"))
 }

@@ -98,6 +98,7 @@ export type Slice = 'base' | 'compare'
 export type DrillKeyView = {
   column: string
   value: Cell
+  /** Kind dùng để hiện giá trị, có thể là 'date' với cột timestamp toàn nửa đêm; không gửi lên backend. */
   kind: CellKind
 }
 

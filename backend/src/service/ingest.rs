@@ -120,8 +120,8 @@ pub struct UploadResult {
     pub created: bool,
     pub dataset: Dataset,
     pub version: DatasetVersion,
-    // Cột của bảng vừa tạo; rỗng khi created = false. Hồ sơ cột đầy đủ (vai trò, số đo) nằm ở bảng columns, chưa có API
-    // đọc.
+    // Cột của bảng vừa tạo; rỗng khi created = false. Hồ sơ cột đầy đủ (vai trò, số đo) nằm ở bảng columns, đọc qua route
+    // tổng quan (service/overview/mod.rs).
     /// Columns of the new table; empty when `created` is false.
     pub columns: Vec<Column>,
 }

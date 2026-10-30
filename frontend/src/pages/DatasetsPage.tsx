@@ -3,7 +3,8 @@
 (DatabaseSources.tsx) cho admin.
 Vai lấy từ /auth/me (đã có trong bộ đệm, AppLayout vừa đọc). Ẩn khung nạp với member chỉ để giao diện gọn;
 quyền thật nằm ở backend, member gọi thẳng API vẫn nhận 403.
-Hồ sơ cột (kiểu, null, min, max, vai trò cột) chưa có endpoint (#22); tới lúc đó cột chỉ hiện ngay sau khi nạp. */
+Hồ sơ cột, chỉ số và biểu đồ dựng sẵn của từng dataset ở khung tổng quan (DatasetOverviewSection.tsx, #198), mở bằng
+nút Tổng quan của dòng dataset. */
 
 import { useRef, useState } from 'react'
 import { useParams } from 'react-router'
@@ -16,7 +17,9 @@ import { EmptyState } from '@/components/EmptyState'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 import { DatabaseSources } from './DatabaseSources'
+import { DatasetOverviewSection } from './DatasetOverviewSection'
 import { DatasetUpload } from './DatasetUpload'
+import { RouterLink } from './RouterLink'
 
 export function DatasetsPage() {
   const { ws = '' } = useParams()
@@ -32,6 +35,8 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
   const snapshot = useSnapshot(ws)
   const [listError, setListError] = useState<string>()
   const [target, setTarget] = useState<Dataset>()
+  const [overviewId, setOverviewId] = useState<string>()
+  const overviewDataset = datasets.data?.find((d) => d.id === overviewId)
   const uploadHeading = useRef<HTMLHeadingElement>(null)
 
   const isAdmin = me.data?.workspaces.find((m) => m.slug === ws)?.role === 'admin'
@@ -85,6 +90,7 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
           error={datasets.error}
           onRetry={() => datasets.refetch()}
           isAdmin={isAdmin}
+          onOverview={(row) => setOverviewId(row.id)}
           onAddVersion={addVersion}
           onSnapshotAgain={snapshotAgain}
           snapshotPending={snapshot.isPending}
@@ -93,6 +99,9 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
         />
         {listError && <FormMessage kind="error">{listError}</FormMessage>}
       </section>
+      {overviewDataset && (
+        <DatasetOverviewSection ws={ws} dataset={overviewDataset} onClose={() => setOverviewId(undefined)} />
+      )}
     </div>
   )
 }
@@ -102,6 +111,7 @@ type ListBodyProps = {
   error: Error | null
   onRetry: () => void
   isAdmin: boolean
+  onOverview: (row: DatasetRow) => void
   onAddVersion: (row: DatasetRow) => void
   onSnapshotAgain: (row: DatasetRow) => void
   snapshotPending: boolean
@@ -110,7 +120,7 @@ type ListBodyProps = {
 }
 
 function ListBody(props: ListBodyProps) {
-  const { datasets, error, onRetry, isAdmin, onAddVersion, onSnapshotAgain, snapshotPending } = props
+  const { datasets, error, onRetry, isAdmin, onOverview, onAddVersion, onSnapshotAgain, snapshotPending } = props
   const { onDelete, deletePending } = props
   if (error && !datasets) {
     return (
@@ -148,11 +158,14 @@ function ListBody(props: ListBodyProps) {
   return (
     <DatasetList
       datasets={rows}
+      onOverview={onOverview}
       onAddVersion={isAdmin ? onAddVersion : undefined}
       onSnapshotAgain={isAdmin ? onSnapshotAgain : undefined}
       snapshotPending={snapshotPending}
       onDelete={isAdmin ? onDelete : undefined}
       deletePending={deletePending}
+      metricsHref={(row) => `${row.id}/metrics`}
+      link={RouterLink}
     />
   )
 }

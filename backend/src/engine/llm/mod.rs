@@ -42,6 +42,9 @@ pub enum LlmTask {
     /// Viết đoạn trả lời bằng lời từ các dòng đầu của kết quả câu thường (service/ask/summary.rs). Câu hỏi là câu hỏi
     /// gốc; câu trả lời là văn bản tự do.
     Summary,
+    /// Phân loại câu hỏi trước khi viết SQL hay điền form (service/ask/classify.rs): câu thường hay câu hỏi tìm nguyên
+    /// nhân. Câu hỏi là câu hỏi gốc; câu trả lời là object JSON {kind, reason}.
+    Classify,
 }
 
 /// Một lần nhờ mô hình. Tách câu hỏi gốc khỏi prompt: prompt còn chứa các câu mẫu làm ví dụ, nên mock không tìm câu

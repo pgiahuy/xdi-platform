@@ -88,7 +88,8 @@ pub(super) fn build_user_text(error: &AppError, step: &str) -> String {
         | AppError::Unauthorized(text)
         | AppError::Forbidden(text)
         | AppError::TooLarge(text)
-        | AppError::NotFound(text) => text.clone(),
+        | AppError::NotFound(text)
+        | AppError::InvalidField { message: text, .. } => text.clone(),
         AppError::NotImplemented(feature) => format!("Chưa cài đặt: {feature}"),
         AppError::Internal(text) => {
             tracing::error!(error = %text, "model failed during {step}");

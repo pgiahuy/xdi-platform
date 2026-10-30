@@ -35,8 +35,12 @@ impl LlmProvider for RecordingLlm {
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
         // Lớp ngữ nghĩa chạy nền sau khi nạp file cũng gọi mô hình; lỗi tạm thì nó bỏ qua (như ScriptedLlm).
-        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn.
-        if matches!(request.task, LlmTask::Profile | LlmTask::Summary) {
+        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn. Bước phân
+        // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
+        if matches!(
+            request.task,
+            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify
+        ) {
             return Err(AppError::Upstream(
                 "recording model has no profile or summary".to_string(),
             ));

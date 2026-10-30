@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/run.rs - đường của câu "tại sao" (#38), từ câu hỏi tới bảng, phân rã và lời: mô hình điền form
 (ask/why_prompt.rs), code kiểm form (explain/check.rs), dựng SQL (explain/sql.rs), chạy qua guard, phân rã
-(explain/breakdown.rs) và nhờ mô hình viết lời (ask/narrate.rs). Endpoint hỏi gọi run_why qua ask/why.rs khi
-build_question_kind ra Why, thay cho bước llm và run_with_repair của câu thường, rồi dựng AskResponse từ WhyOutcome.
+(explain/breakdown.rs) và nhờ mô hình viết lời (ask/narrate.rs). Endpoint hỏi gọi run_why qua ask/why.rs khi bước
+classify (ask/classify.rs) ra câu hỏi tìm nguyên nhân, thay cho bước llm và run_with_repair của câu thường, rồi dựng
+AskResponse từ WhyOutcome.
 Nhận mô hình và dữ liệu đã đọc qua tham số, như run_with_repair, nên test chạy được với mô hình giả và Parquet tạm,
 không cần Postgres; test ở explain/run_tests.rs.
 
@@ -40,7 +41,8 @@ use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::values::ValueIndex;
 use crate::service::ask::why_prompt::{build_why_form_schema, build_why_prompt};
 use crate::service::explain::breakdown::{
-    build_breakdown, read_slice_totals, run_code_query, Breakdown, CodeQuery, QueryEnv, SliceTotals,
+    build_breakdown, read_slice_totals, run_code_query, Breakdown, CodeQuery, QueryEnv,
+    SliceTotals, ASK_STOP_HINT,
 };
 use crate::service::explain::check::{
     build_chosen_base, build_why_check, PlanSlices, WhyPlan, WhyProfile,
@@ -238,6 +240,7 @@ fn build_env<'a>(input: &WhyInput<'a>) -> QueryEnv<'a> {
         max_rows: input.max_rows,
         timeout: input.timeout,
         jobs: input.jobs,
+        stop_hint: ASK_STOP_HINT,
     }
 }
 

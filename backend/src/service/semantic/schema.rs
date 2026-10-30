@@ -46,6 +46,11 @@ pub fn build_profile_schema() -> serde_json::Value {
                             "type": "string",
                             "enum": ["money", "quantity", "percent", "duration", "other"],
                             "description": "For a measure column only, what one value counts; leave out when unsure"
+                        },
+                        "aggregation": {
+                            "type": "string",
+                            "enum": ["sum", "avg"],
+                            "description": "For a measure column only: sum when totals make sense, avg when one value describes one row"
                         }
                     },
                     "required": ["name", "aliases"]
