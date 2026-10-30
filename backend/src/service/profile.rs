@@ -766,7 +766,7 @@ mod tests {
             path: csv,
             name: "in.csv".to_string(),
             format: FileFormat::Csv,
-            timestamp_columns: Vec::new(),
+            column_types: Vec::new(),
         };
         let materialized = materialize(&[input], &data.join(relative)).unwrap();
 

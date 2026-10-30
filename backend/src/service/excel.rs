@@ -159,7 +159,11 @@ pub async fn sheet_inputs(
             path: job.out,
             name: job.sheet,
             format: FileFormat::Xlsx,
-            timestamp_columns: csv.timestamp_columns,
+            column_types: csv
+                .timestamp_columns
+                .into_iter()
+                .map(|name| (name, "TIMESTAMP".to_string()))
+                .collect(),
         })
         .collect())
 }

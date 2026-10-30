@@ -18,6 +18,7 @@ Bảo vệ:
   prompt. Cột _source_file ghi postgres://máy/database/schema.bảng, không có tài khoản hay mật khẩu. */
 
 mod join_sql;
+mod pg_types;
 mod postgres;
 mod relations;
 mod secret;
@@ -225,7 +226,7 @@ pub async fn snapshot(
         let (fact_rows, joined_rows) =
             postgres::count_rows(&mut conn, &join_sql::qualified(&table), joined).await?;
         check_row_counts(&wanted, fact_rows, joined_rows, max_rows)?;
-        let sha =
+        let copied =
             postgres::copy_to_csv(&mut conn, &plan.select, max_rows, max_bytes, &path).await?;
         postgres::commit_snapshot(&mut conn).await?;
         let model = SourceModel {
@@ -234,9 +235,9 @@ pub async fn snapshot(
             joined_rows,
             joins: plan.joins,
         };
-        Ok::<_, AppError>((sha, model))
+        Ok::<_, AppError>((copied, model))
     };
-    let (content_sha, model) = match tokio::time::timeout(limit, copy).await {
+    let (copied, model) = match tokio::time::timeout(limit, copy).await {
         Ok(result) => result?,
         Err(_) => {
             return Err(AppError::BadRequest(
@@ -249,7 +250,7 @@ pub async fn snapshot(
     let label = source_file_label(&info, &wanted);
     // Băm cả nhãn nguồn lẫn nội dung: cùng nội dung mà từ bảng khác hay từ một file nạp tay thì vẫn là dữ liệu khác,
     // không bị coi là trùng phiên bản đã có ở dataset khác.
-    let sha256 = Sha256::digest(format!("{label}\n{content_sha}").as_bytes())
+    let sha256 = Sha256::digest(format!("{label}\n{}", copied.sha256).as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
@@ -261,6 +262,7 @@ pub async fn snapshot(
             path,
             name: label,
             sha256,
+            column_types: copied.column_types,
         }],
         sheets: Vec::new(),
         database_source: Some(row.id),

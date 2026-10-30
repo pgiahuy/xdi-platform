@@ -5,8 +5,8 @@ CSV. service/sources/mod.rs gọi các hàm ở đây, rồi đưa file CSV vào
 Vì sao không dùng extension postgres của DuckDB: INSTALL postgres tải extension từ extensions.duckdb.org lúc chạy,
 đúng bản DuckDB đã biên dịch kèm. Image Docker chạy bằng user không có thư mục home (nơi DuckDB lưu extension) và máy
 cài đặt có thể không ra được Internet, nên tính năng sẽ hỏng tùy nơi cài. sqlx đã có trong dự án, nói chuyện trực tiếp
-với Postgres; lệnh COPY ... TO STDOUT (FORMAT csv) để Postgres tự ghi mọi kiểu cột thành chữ, DuckDB đọc lại như một
-file CSV nạp tay.
+với Postgres; lệnh COPY ... TO STDOUT (FORMAT csv) để Postgres tự ghi mọi kiểu cột thành chữ. DuckDB đọc lại file đó
+với kiểu từng cột lấy từ Postgres (pg_types.rs), không đoán như với file CSV nạp tay.
 
 Kết nối luôn chỉ đọc: phiên đặt default_transaction_read_only, kèm statement_timeout. Vẫn nên cấp cho xdi một tài
 khoản chỉ có quyền SELECT (docs/INSTALL.md). Bản này chưa bật TLS (sqlx biên dịch không kèm bộ TLS), nên sslmode chỉ
@@ -22,6 +22,7 @@ use sqlx::postgres::{PgConnectOptions, PgConnection, PgSslMode};
 use sqlx::{ConnectOptions, Connection, Executor};
 use tokio::io::AsyncWriteExt;
 
+use super::pg_types;
 use crate::error::AppError;
 
 /// Thông tin kết nối đầy đủ, kể cả mật khẩu. Chỉ tồn tại trong bộ nhớ lúc kết nối và dưới dạng đã mã hóa trong
@@ -145,16 +146,25 @@ pub async fn count_rows(
         .map_err(|e| query_error(&e))
 }
 
+/// File CSV vừa chép: SHA-256 của nội dung và kiểu DuckDB của từng cột (pg_types.rs).
+pub struct CsvCopy {
+    pub sha256: String,
+    pub column_types: Vec<(String, String)>,
+}
+
 /// Chép kết quả của câu SELECT ra file CSV có dòng tiêu đề. COPY (SELECT ...) là một câu lệnh, nên mọi bảng trong câu
-/// được đọc tại cùng một thời điểm, kể cả ngoài giao dịch của begin_snapshot. Trả SHA-256 của nội dung, tính trong lúc ghi. Quá max_bytes thì dừng và báo
-/// lỗi, như nạp file quá MAX_UPLOAD_MB. max_rows chặn thêm một lần nữa phòng bảng tăng dòng sau bước count_rows.
+/// được đọc tại cùng một thời điểm, kể cả ngoài giao dịch của begin_snapshot. SHA-256 của nội dung tính trong lúc ghi.
+/// Quá max_bytes thì dừng và báo lỗi, như nạp file quá MAX_UPLOAD_MB. max_rows chặn thêm một lần nữa phòng bảng tăng
+/// dòng sau bước count_rows.
 pub async fn copy_to_csv(
     c: &mut PgConnection,
     select: &str,
     max_rows: u64,
     max_bytes: u64,
     out_path: &Path,
-) -> Result<String, AppError> {
+) -> Result<CsvCopy, AppError> {
+    // Kiểu cột đọc từ chính câu SELECT được chép, nên khớp đúng cột và thứ tự cột của file CSV, kể cả cột của bảng nối.
+    let column_types = pg_types::column_types(c, select).await?;
     let sql = format!("COPY ({select} LIMIT {max_rows}) TO STDOUT WITH (FORMAT csv, HEADER true)");
     let mut out = tokio::fs::File::create(out_path)
         .await
@@ -182,11 +192,15 @@ pub async fn copy_to_csv(
     out.flush()
         .await
         .map_err(|e| AppError::Internal(format!("flush {}: {e}", out_path.display())))?;
-    Ok(hasher
+    let sha256 = hasher
         .finalize()
         .iter()
         .map(|b| format!("{b:02x}"))
-        .collect())
+        .collect();
+    Ok(CsvCopy {
+        sha256,
+        column_types,
+    })
 }
 
 /// Lỗi lúc kết nối thành lời báo cách sửa. Không chép nguyên văn lỗi của sqlx vào lời báo, chỉ ghi vào log ở mức debug:

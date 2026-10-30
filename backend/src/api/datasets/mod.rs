@@ -106,7 +106,12 @@ async fn receive(
                     .iter()
                     .map(|b| format!("{b:02x}"))
                     .collect();
-                upload.files.push(StagedFile { path, name, sha256 });
+                upload.files.push(StagedFile {
+                    path,
+                    name,
+                    sha256,
+                    column_types: Vec::new(),
+                });
             }
             "name" | "dataset_id" | "sheet" => {
                 // Trường chữ cũng đếm vào giới hạn, để không ai gửi một "tên" dài hàng GB.
