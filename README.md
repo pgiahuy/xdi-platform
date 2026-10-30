@@ -73,7 +73,7 @@ Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, gh
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
   quả hay bảng phân rã (câu có CTE, HAVING, hàm cửa sổ hay nhiều bảng chưa truy được).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
-- **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên DataCo, so với SQL đúng viết tay; CI báo khi tỷ lệ đúng giảm.
+- **Kiểm chất lượng:** `make eval` hỏi 18 câu mẫu trên DataCo, so với SQL đúng viết tay; CI báo khi tỷ lệ đúng giảm.
 
 ## Chưa có
 

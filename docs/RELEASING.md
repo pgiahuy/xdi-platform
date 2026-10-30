@@ -12,7 +12,7 @@ Quy trình ra một phiên bản mới. Số phiên bản theo Semantic Versioni
    ```bash
    DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi_eval LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> \
      DATA_DIR=backend/target/eval-data backend/target/debug/xdi-backend eval \
-     --data data/samples/dataco.csv --cases eval/dataco.json
+     --cases eval/cases/dataco.json
    ```
 
    Đặt `CARGO_TARGET_DIR` thì binary nằm ở `$CARGO_TARGET_DIR/debug/xdi-backend` thay cho `backend/target/debug/`.

@@ -11,6 +11,9 @@ pub mod ask;
 pub mod conversation;
 pub mod drill;
 pub mod eval;
+pub mod eval_cases;
+#[cfg(test)]
+mod eval_cases_tests;
 pub mod eval_classify;
 #[cfg(test)]
 mod eval_classify_tests;

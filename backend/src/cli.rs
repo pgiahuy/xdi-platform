@@ -5,7 +5,7 @@ Ai chạy được binary trên máy chủ (và đọc được DATABASE_URL) l�
 Đây là đường cứu khi quản trị hệ thống duy nhất quên mật khẩu. Không có tham số thì main chạy server như thường. */
 
 use crate::error::AppError;
-use crate::service::{eval, eval_classify, users};
+use crate::service::{eval, eval_cases, eval_classify, users};
 use crate::state::AppState;
 
 const USAGE: &str = "usage:
@@ -14,9 +14,10 @@ const USAGE: &str = "usage:
   xdi-backend list-admins                     list system administrators
   xdi-backend openapi                         print the OpenAPI spec (JSON) to stdout, without a database
   xdi-backend ask-examples                    print sample ask responses (JSON) to stdout, without a database
-  xdi-backend eval --data <csv> --cases <json> [--baseline <json>]
-                                              run the sample question evaluation; exit 1 when accuracy drops
-                                              below the baseline, 2 on infrastructure errors
+  xdi-backend eval --cases <json> [--data <file>] [--baseline <json>]
+                                              run an evaluation case file on its dataset (--data overrides the
+                                              file named in it); exit 1 when accuracy drops below the baseline,
+                                              2 on infrastructure errors
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
                                               exit 2 on infrastructure errors";
@@ -63,7 +64,7 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
     }
 }
 
-/// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu. In từng câu sai kèm lý do, dòng accuracy cuối,
+/// Lệnh eval (#37, #202): chạy một file bộ câu đánh giá trên dataset của nó. In từng câu sai kèm lý do, dòng accuracy cuối,
 /// ghi eval/result.json. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ tầng (thiếu file, JSON
 /// hỏng, không nạp được dữ liệu) thoát mã 2.
 async fn run_eval(state: &AppState, args: &[String]) -> i32 {
@@ -82,18 +83,24 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             }
         }
     }
-    let (Some(data), Some(cases)) = (data, cases) else {
+    let Some(cases) = cases else {
         eprintln!("{USAGE}");
         return 2;
     };
-    let cases = match eval::load_cases(std::path::Path::new(cases)) {
-        Ok(c) => c,
+    let file = match eval_cases::load_case_file(std::path::Path::new(cases)) {
+        Ok(f) => f,
+        // In thẳng lời của Internal: lỗi kiểm file có nhiều dòng, {:?} in chúng thành một dòng có \n.
+        Err(AppError::Internal(message)) => {
+            eprintln!("eval: {message}");
+            return 2;
+        }
         Err(e) => {
             eprintln!("eval: {e:?}");
             return 2;
         }
     };
-    let report = match eval::run_eval(state, std::path::Path::new(data), &cases).await {
+    let data = data.map(std::path::Path::new);
+    let report = match eval::run_eval(state, &file, data).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("eval: {e:?}");
@@ -106,6 +113,9 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         } else {
             println!("SAI  {} {}\n     {}", case.id, case.question, case.detail);
         }
+    }
+    for case in &report.skipped {
+        println!("BỎ   {} {}", case.id, case.reason);
     }
     println!(
         "accuracy: {}/{} ({:.1}%)",

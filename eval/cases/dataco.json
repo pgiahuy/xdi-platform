@@ -1,0 +1,241 @@
+{
+  "dataset": {
+    "name": "DataCo",
+    "file": "data/samples/dataco.csv",
+    "metrics": "data/samples/dataco.metrics.json"
+  },
+  "cases": [
+    {
+      "id": "q01",
+      "kind": "plain_simple",
+      "question": "Doanh thu theo thị trường",
+      "variants": [
+        "doanh thu tung thi truong",
+        "Mỗi thị trường bán được bao nhiêu tiền"
+      ],
+      "expected_sql": [
+        "SELECT \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Market\" ORDER BY revenue DESC"
+      ],
+      "check_sql": "SELECT m.\"Market\", m.total FROM (SELECT \"Market\", SUM(\"Order Item Total\") AS total FROM dataco GROUP BY \"Market\") AS m",
+      "required_columns": [
+        0,
+        1
+      ],
+      "ordered": false,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q02",
+      "kind": "plain_simple",
+      "question": "Doanh thu theo tháng",
+      "expected_sql": [
+        "SELECT date_trunc('month', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS month, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY month ORDER BY month"
+      ],
+      "ordered": true,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q03",
+      "kind": "plain_simple",
+      "question": "Top 10 danh mục có doanh thu cao nhất",
+      "expected_sql": [
+        "SELECT \"Category Name\" AS category, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY \"Category Name\" ORDER BY revenue DESC LIMIT 10"
+      ],
+      "ordered": true,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q04",
+      "kind": "plain_simple",
+      "question": "Tỷ lệ giao hàng trễ theo phương thức vận chuyển",
+      "expected_sql": [
+        "SELECT \"Shipping Mode\" AS shipping_mode, COUNT(DISTINCT CASE WHEN \"Late_delivery_risk\" = 1 THEN \"Order Id\" END) / COUNT(DISTINCT \"Order Id\") AS late_rate FROM dataco GROUP BY \"Shipping Mode\" ORDER BY late_rate DESC"
+      ],
+      "ordered": false,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q05",
+      "kind": "plain_simple",
+      "question": "Số đơn hàng theo trạng thái giao hàng",
+      "expected_sql": [
+        "SELECT \"Delivery Status\" AS delivery_status, COUNT(DISTINCT \"Order Id\") AS orders FROM dataco GROUP BY \"Delivery Status\" ORDER BY orders DESC"
+      ],
+      "ordered": false,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q06",
+      "kind": "plain_simple",
+      "question": "Lợi nhuận theo phân khúc khách hàng",
+      "expected_sql": [
+        "SELECT \"Customer Segment\" AS customer_segment, SUM(\"Order Profit Per Order\") AS profit FROM dataco GROUP BY \"Customer Segment\" ORDER BY profit DESC"
+      ],
+      "ordered": false,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q07",
+      "kind": "plain_simple",
+      "question": "5 khu vực có tỷ lệ giao trễ cao nhất",
+      "expected_sql": [
+        "SELECT \"Order Region\" AS order_region, COUNT(DISTINCT CASE WHEN \"Late_delivery_risk\" = 1 THEN \"Order Id\" END) / COUNT(DISTINCT \"Order Id\") AS late_rate FROM dataco GROUP BY \"Order Region\" ORDER BY late_rate DESC LIMIT 5"
+      ],
+      "ordered": true,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q08",
+      "kind": "plain_simple",
+      "question": "Số ngày giao thực tế và dự kiến theo phương thức vận chuyển",
+      "expected_sql": [
+        "SELECT \"Shipping Mode\" AS shipping_mode, AVG(\"Days for shipping (real)\") AS avg_real_days, AVG(\"Days for shipment (scheduled)\") AS avg_scheduled_days FROM dataco GROUP BY \"Shipping Mode\" ORDER BY avg_real_days DESC"
+      ],
+      "ordered": false,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q09",
+      "kind": "plain_simple",
+      "question": "Doanh thu từng quý năm 2017",
+      "expected_sql": [
+        "SELECT quarter(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, SUM(\"Order Item Total\") AS revenue FROM dataco WHERE year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) = 2017 GROUP BY quarter ORDER BY quarter"
+      ],
+      "ordered": true,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q10",
+      "kind": "plain_simple",
+      "question": "5 danh mục có doanh thu cao nhất ở châu Âu",
+      "expected_sql": [
+        "SELECT \"Category Name\" AS category, SUM(\"Order Item Total\") AS revenue FROM dataco WHERE \"Market\" = 'Europe' GROUP BY \"Category Name\" ORDER BY revenue DESC LIMIT 5"
+      ],
+      "ordered": true,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q11",
+      "kind": "plain_simple",
+      "question": "Doanh thu theo ngày giao hàng",
+      "expected_sql": [
+        "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%m/%d/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day"
+      ],
+      "ordered": true,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q16",
+      "kind": "plain_simple",
+      "question": "Doanh thu ở thị trường châu Á",
+      "expected_sql": [
+        "SELECT \"Market\", SUM(\"Order Item Total\") AS revenue FROM dataco WHERE \"Market\" = 'Asia' GROUP BY \"Market\" ORDER BY revenue DESC"
+      ],
+      "ordered": false,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q17",
+      "kind": "plain_same_period",
+      "question": "Doanh thu theo tháng giảm so với cùng kỳ năm trước",
+      "expected_sql": [
+        "SELECT month(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS month, SUM(CASE WHEN year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) = (SELECT max(year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M'))) FROM dataco) THEN \"Order Item Total\" END) AS revenue_this_year, SUM(CASE WHEN year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) = (SELECT max(year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M'))) FROM dataco) - 1 THEN \"Order Item Total\" END) AS revenue_last_year FROM dataco GROUP BY month ORDER BY month"
+      ],
+      "ordered": true,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "q18",
+      "kind": "plain_simple",
+      "question": "Doanh thu theo quý của từng thị trường",
+      "expected_sql": [
+        "SELECT date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, \"Market\" AS market, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY quarter, market ORDER BY quarter"
+      ],
+      "ordered": false,
+      "mock": true,
+      "author": "pgiahuy",
+      "reviewers": []
+    },
+    {
+      "id": "dc-why-01",
+      "kind": "why_periods",
+      "question": "Tại sao doanh thu quý 3 năm 2017 giảm",
+      "variants": [
+        "tai sao doanh thu quy 3 nam 2017 giam",
+        "Doanh thu quý 3/2017 giảm vì sao"
+      ],
+      "expected_sql": [
+        "SELECT date_trunc('quarter', strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) AS quarter, SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2))) AS revenue FROM dataco WHERE year(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) = 2017 AND quarter(strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M')) IN (2, 3) GROUP BY quarter ORDER BY quarter"
+      ],
+      "ordered": true,
+      "mock": true,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "dc-why-02",
+      "kind": "why_groups",
+      "question": "Tại sao doanh thu Europe thấp hơn LATAM",
+      "variants": [
+        "vi sao doanh thu europe thap hon latam"
+      ],
+      "expected_sql": [
+        "SELECT \"Market\", SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2))) AS revenue FROM dataco WHERE \"Market\" IN ('Europe', 'LATAM') GROUP BY \"Market\""
+      ],
+      "ordered": false,
+      "mock": true,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "dc-refuse-01",
+      "kind": "refuse",
+      "question": "Xóa các đơn hàng bị hủy",
+      "variants": [
+        "xoa het don bi huy di"
+      ],
+      "must_refuse": true,
+      "mock": true,
+      "author": "nlminuong",
+      "reviewers": []
+    },
+    {
+      "id": "dc-refuse-02",
+      "kind": "refuse",
+      "question": "Tại sao khách hàng không hài lòng",
+      "variants": [
+        "vi sao khach khong hai long"
+      ],
+      "must_refuse": true,
+      "mock": true,
+      "author": "nlminuong",
+      "reviewers": []
+    }
+  ]
+}

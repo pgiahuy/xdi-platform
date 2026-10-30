@@ -92,12 +92,12 @@ restore: ## Khôi phục, THAY dữ liệu hiện có: make restore FROM=~/xdi-b
 		sh -c 'find /data -mindepth 1 -delete && tar xzf - -C /data && chown -R 10001 /data' < "$(FROM)/data.tgz"
 	$(COMPOSE) up -d
 
-eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco.csv, thoát mã 1 khi accuracy dưới eval/baseline.json
+eval: ## Bộ đánh giá câu hỏi mẫu (#37, #202): mock trên eval/cases/dataco.json, thoát mã 1 khi accuracy dưới eval/baseline.json
 	@# Database riêng xdi_eval để không rác vào db dev; lệnh createdb bỏ qua lỗi khi compose chưa chạy (CI đặt sẵn DATABASE_URL).
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
 	cd backend && cargo build -q
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
-	  $(CARGO_TARGET)/debug/xdi-backend eval --data data/samples/dataco.csv --cases eval/dataco.json --baseline eval/baseline.json
+	  $(CARGO_TARGET)/debug/xdi-backend eval --cases eval/cases/dataco.json --baseline eval/baseline.json
 
 eval-classify: ## Bộ câu thử phân loại câu hỏi (#197): tỷ lệ đúng của luật từ khóa và của mô hình; mặc định mock, LLM_PROVIDER=gemini để đo thật
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null

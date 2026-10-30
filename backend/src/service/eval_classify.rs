@@ -21,6 +21,7 @@ use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyIn
 use crate::service::ask::context::build_ask_context;
 use crate::service::eval::prepare;
 use crate::service::explain::form::{build_question_kind, QuestionKind};
+use crate::service::samples::SAMPLE_NAME;
 use crate::service::workspaces;
 use crate::state::AppState;
 
@@ -102,7 +103,8 @@ pub async fn run_eval_classify(
     cases: &[ClassifyCase],
     pause: Duration,
 ) -> Result<ClassifyReport, AppError> {
-    let (member, dataset_id) = prepare(state, data).await?;
+    // Bộ câu phân loại chỉ có DataCo và chưa dùng định dạng eval/cases/, nên giữ tên dataset mẫu, không nạp chỉ số.
+    let (member, dataset_id) = prepare(state, data, SAMPLE_NAME, None).await?;
     let outcome = run_cases(state, &member, &dataset_id, cases, pause).await;
     let _ = workspaces::delete(state, &member).await;
     let outcomes = outcome?;

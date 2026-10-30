@@ -11,6 +11,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Cột số đo có cách gộp mặc định, tổng hay trung bình: mô hình đề xuất lúc nạp, admin đổi ở màn Chỉ số; câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng (#185).
 - Postgres mẫu nhiều bảng có khóa chính, khóa ngoại (DataCo và OULAD) để thử kết nối cơ sở dữ liệu công ty: `data/postgres-demo/`.
 - Nguồn Postgres (#165): admin kết nối một database Postgres ở trang Dữ liệu, chụp một bảng thành dataset và chụp lại thành phiên bản mới.
+- Bộ đánh giá đọc định dạng bộ câu mới (#202): mỗi dataset một file trong `eval/cases/`, mỗi câu ghi loại câu, các cách hỏi khác, SQL đáp án, câu có phải từ chối không, người viết và người duyệt; file sai luật bị báo trước khi hỏi câu nào (mô tả ở `eval/README.md`). Bộ câu DataCo thêm hai câu hỏi tìm nguyên nhân và hai câu phải từ chối, 18 câu; dataset của bộ đánh giá giờ có chỉ số mẫu như dataset mẫu người dùng thấy. `eval/dataco.json` chuyển thành `eval/cases/dataco.json`, `--data` của `xdi-backend eval` thành tùy chọn.
 
 ### Changed
 

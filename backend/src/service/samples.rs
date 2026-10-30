@@ -2,7 +2,7 @@
 /* service/samples.rs - dataset mẫu đóng gói sẵn: khi thiết lập lần đầu tạo xong workspace đầu tiên, nạp
 <SAMPLES_DIR>/dataco.csv thành dataset "DataCo" (bảng dataco, bảng mà các câu mẫu của mock viết cho) qua đúng đường
 nạp file thường (service/ingest.rs, kể cả hồ sơ cột), rồi ghi các chỉ số trong dataco.metrics.json vào bảng metrics.
-Bộ đánh giá câu hỏi mẫu (service/eval.rs) nạp file qua cùng hàm upload_local_file.
+Bộ đánh giá câu hỏi mẫu (service/eval.rs) nạp file qua cùng hàm upload_local_file và ghi chỉ số qua add_metrics_file.
 
 Gắn vào thiết lập lần đầu (service/accounts.rs), không vào lúc khởi động: thiết lập chỉ thành công một lần cho mỗi bản
 cài, nên không cần cột hay bảng đánh dấu "đã nạp mẫu"; khởi động lại không nạp thêm, và người dùng đã xóa dataset mẫu
@@ -76,14 +76,26 @@ pub async fn seed_workspace(state: &AppState, member: &Member) -> Result<SeedOut
     if !uploaded.created {
         return Ok(SeedOutcome::AlreadyPresent);
     }
-    let metrics = load_metrics(&dir.join(SAMPLE_METRICS))?;
+    let written = add_metrics_file(state, member, &uploaded, &dir.join(SAMPLE_METRICS)).await?;
+    Ok(SeedOutcome::Seeded { metrics: written })
+}
+
+/// Ghi các chỉ số của một file chỉ số mẫu (dạng dataco.metrics.json) vào dataset vừa nạp, bỏ chỉ số không chạy được.
+/// Bộ đánh giá (service/eval.rs) cũng gọi, để dataset của nó có chỉ số như dataset mẫu người dùng thấy. Trả số chỉ số
+/// đã ghi.
+pub async fn add_metrics_file(
+    state: &AppState,
+    member: &Member,
+    uploaded: &UploadResult,
+    path: &Path,
+) -> Result<u64, AppError> {
+    let metrics = load_metrics(path)?;
     let runnable =
         keep_runnable(state, member, &uploaded.dataset, &uploaded.version, metrics).await?;
-    let written = state
+    state
         .store
         .create_sample_metrics(&member.workspace, uploaded.dataset.id, &runnable)
-        .await?;
-    Ok(SeedOutcome::Seeded { metrics: written })
+        .await
 }
 
 /// Nạp một file trên đĩa máy chủ như khi người dùng gửi file lên: chép vào thư mục tạm, tính SHA-256, rồi gọi
