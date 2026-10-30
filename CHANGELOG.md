@@ -7,6 +7,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 ### Added
 
 - Nguồn Postgres (#165): admin kết nối một database Postgres ở trang Dữ liệu, chụp một bảng thành dataset và chụp lại thành phiên bản mới.
+- Chụp bảng Postgres kèm các bảng nó trỏ tới theo khóa ngoại (chỉ nhiều-một, tới hai bước): dataset là một bảng phẳng đúng số dòng của bảng chính, danh sách dataset ghi bảng nào nối sang bảng nào, và câu hỏi không cộng lặp cột lấy từ bảng nối.
 
 ### Changed
 

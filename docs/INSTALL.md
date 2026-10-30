@@ -585,8 +585,10 @@ phân rã của câu "tại sao") vẫn ở lại trong database, chỉ mất kh
 
 Chụp một bảng Postgres (chỉ `admin`, cần `SOURCE_SECRET_KEY` và `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình): khung
 **Database** của trang **Dữ liệu**, bấm **Kết nối database**, nhập máy chủ, cổng, database, tài khoản và mật khẩu, chọn
-bảng hay view rồi bấm **Chụp bảng thành dataset**. Dataset chụp từ database có nút **Chụp lại** thay cho **Nạp phiên
-bản mới**. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
+bảng hay view rồi bấm **Chụp bảng thành dataset**. Bảng có khóa ngoại thì khung hiện các bảng nối nhiều-một được (ví
+dụ chọn `order_items` thì có `orders`, `products`, và `customers` qua `orders`), chọn sẵn các bảng nối thẳng; dataset ra
+là một bảng phẳng, đúng số dòng của bảng đã chọn. Dataset chụp từ database có nút **Chụp lại** thay cho **Nạp phiên
+bản mới**, nối đúng các bảng của lần trước. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
 
 ### Bước 4. Chờ hồ sơ dữ liệu
 

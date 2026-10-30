@@ -120,6 +120,55 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   đã biên dịch; image Docker không có thư mục home cho user chạy backend, và máy cài có thể không ra được Internet.
 - Xóa nguồn chỉ được khi không còn dataset nào chụp từ nó; xóa dataset không xóa nguồn.
 
+### Nối bảng theo khóa ngoại
+
+Database của tổ chức thường tách dữ liệu ra nhiều bảng: `order_items` (mỗi dòng một dòng hàng) trỏ tới `orders`,
+`products`; `orders` trỏ tới `customers`. Khi chụp, admin chọn một bảng chính (bảng sự kiện, ví dụ `order_items`) và
+các bảng nó trỏ tới; backend nối chúng thành một bảng phẳng, mỗi dòng của bảng chính một dòng. Mọi tính năng một bảng
+(hồ sơ cột, guard, hỏi, câu "tại sao", truy dòng nguồn) chạy y như dataset một bảng. Code:
+`backend/src/service/sources/relations.rs` (tìm quan hệ), `join_sql.rs` (dựng câu SELECT).
+
+- **Tìm quan hệ** (`POST .../sources/{id}/relations`): đọc khóa ngoại trong `pg_catalog`, kể cả khóa nhiều cột. Bước 1
+  là khóa ngoại rời bảng chính; bước 2 là khóa ngoại rời một bảng nối được ở bước 1
+  (`order_items -> orders -> customers`, `student_assessments -> assessments -> courses`), không đi xa hơn và không quay
+  về bảng chính. Giao diện chọn sẵn mọi quan hệ bước 1 nối được; bước 2 người dùng tự chọn, và chọn bước 2 thì bước 1
+  của nó được nối theo.
+- **Chỉ nối nhiều-một.** Một khóa ngoại được nối khi cột đích đúng bằng khóa chính hay một ràng buộc `UNIQUE` của bảng
+  đích (chỉ mục `UNIQUE` không kèm ràng buộc không tính) và tài khoản có quyền đọc bảng đích. Khi đó mỗi dòng của bảng
+  chính khớp tối đa một dòng bên kia, số dòng không đổi. Khóa ngoại của bảng khác trỏ vào bảng chính (`order_items ->
+  orders` khi chọn `orders`) là một-nhiều: nối sẽ nhân dòng, mọi phép cộng sai. Chúng được liệt kê riêng kèm lý do,
+  không bao giờ nối; muốn phân tích theo chúng thì chụp bảng đó làm bảng chính.
+- **Câu SQL:** `SELECT` các cột của bảng chính rồi các cột của từng bảng nối, `LEFT JOIN` theo từng khóa ngoại (dòng
+  không khớp vẫn giữ, cột nối để trống). Tên bảng, tên cột lấy từ `pg_catalog`, đặt trong ngoặc kép; request chỉ chọn
+  id quan hệ trong danh sách vừa tìm, id lạ hay quan hệ không nối được thì từ chối cả lần chụp (400).
+- **Tên cột:** cột của bảng chính giữ tên. Cột của bảng nối là `<bảng>.<cột>`, `<bảng>` là tên bảng không kèm schema:
+  `orders.order_date`, `customers.customer_segment`. Bảng cùng tên được nối lần hai (hai đường cùng tới `courses`, hay
+  hai khóa ngoại cùng trỏ `customers`) thì tiền tố thêm `_2`, `_3` theo thứ tự nối: `courses`, `courses_2`. Tên vẫn
+  trùng một cột đã có (không phân biệt hoa thường) thì thêm `_2` vào sau. Cột đích của khóa (`orders.order_id`) không
+  chép lại vì bằng đúng cột khóa ngoại đã có. Trong SQL, tên có dấu chấm vẫn là một cột: `"orders.order_date"`.
+- **Một ảnh chụp nhất quán:** đếm dòng và chép chạy trong một giao dịch `REPEATABLE READ READ ONLY`, và câu chép
+  `COPY (SELECT ... LEFT JOIN ...) TO STDOUT` là một câu lệnh: mọi bảng được đọc tại cùng một thời điểm (MVCC của
+  Postgres), không có chuyện `orders` đã có đơn mới mà `order_items` chưa.
+- **Kiểm nhân dòng:** trước khi chép, backend đếm `COUNT(*)` của bảng chính và của câu đã nối trong cùng một câu lệnh;
+  hai số khác nhau thì từ chối (400) kèm hai con số. Theo luật nhiều-một ở trên thì không xảy ra; đây là lớp kiểm thứ
+  hai. Trần `SOURCE_MAX_ROWS`, `MAX_UPLOAD_MB`, `SOURCE_TIMEOUT_SECS` giữ như khi chụp một bảng.
+- **Ghi lại mô hình:** mỗi phiên bản lưu `dataset_versions.source_model` (bảng chính, từng lần nối: id quan hệ, ràng
+  buộc, bảng và cột hai đầu, tiền tố, cột đã thêm, số dòng). API trả nó trong `current_source_model` của dataset cho
+  mọi thành viên; danh sách dataset ghi "Dựng từ sales.order_items, nối nhiều-một sang sales.orders (order_id), ...".
+  "Chụp lại" đọc mô hình của phiên bản hiện hành và nối đúng các quan hệ đó; gửi kèm quan hệ khác thì bị từ chối (chụp
+  thành dataset mới nếu muốn nối khác). Quan hệ đã bị xóa khỏi database thì lần chụp lại báo lỗi, không chụp thiếu.
+- **Cột lặp lại:** giá trị của cột từ bảng nối lặp lại trên mọi dòng trỏ tới cùng một dòng bên kia (giá sản phẩm lặp
+  trên mọi dòng hàng của sản phẩm đó), nên cộng nó là đếm lặp. Hồ sơ cột ghi bảng gốc (`columns.origin_table`); cột số
+  từ bảng nối đang là `measure` thành `dimension` nếu có danh sách giá trị (tối đa 200 giá trị khác nhau), không thì
+  `text`, nên form "tại sao" không cộng được nó và lớp ngữ nghĩa không đổi về `measure` được. Prompt SQL ghi
+  `from joined table <schema.bảng>` cạnh cột như vậy, kèm luật không `SUM` cột này mà lọc, nhóm theo nó hay dùng
+  `MIN`, `MAX`, `COUNT(DISTINCT ...)`. Mô hình vẫn có lúc viết `SUM` (chạy thật với Gemini), nên sau guard, câu cộng
+  một cột như vậy ngay trên bảng dataset không chạy mà đi vòng sửa (`backend/src/service/ask/repeated.rs`), kèm cách
+  viết đúng: giữ một dòng cho mỗi dòng của bảng gốc bằng `SELECT DISTINCT` theo đủ các cột khóa (`key_columns` của
+  lần nối) trong một bảng `WITH`, rồi mới cộng. Câu sửa vẫn cộng sai thì câu hỏi bị từ chối, không trả số cộng lặp.
+  Ví dụ trên database mẫu: "Tổng tín chỉ đăng ký theo vùng" trên bảng bài nộp cộng thẳng ra 1 351 520 cho Scotland,
+  câu đã sửa ra 212 005, bằng tổng tính thẳng trên bảng `students` của Postgres nguồn.
+
 ## Gộp nhiều file và cột `_source_file`
 
 Mỗi file (hay mỗi sheet Excel) ghi thành một phần `part-NNNN.parquet` trong thư mục của phiên bản, kèm cột
@@ -292,3 +341,5 @@ hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và
 - Nạp nguyên tử: ghi phiên bản vào Postgres và chuyển file Parquet về chỗ cuối chưa nằm trong một giao dịch, lỗi giữa
   hai bước có thể để lại dòng thừa trong Postgres ([#79](https://github.com/pgiahuy/xdi-platform/issues/79)).
 - Nguồn dữ liệu là MySQL, SQLite, hay truy vấn thẳng database ngoài lúc hỏi; TLS tới Postgres.
+- Nối một-nhiều (tổng hợp bảng con theo bảng cha trước khi nối, ví dụ số dòng hàng của mỗi đơn), nối quá hai bước, và
+  đổi các bảng nối của một dataset đã chụp.
