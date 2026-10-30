@@ -9,6 +9,7 @@ vài tên cột đầu: dataset vài chục cột mà mở hết thì biểu đ�
 import { useState } from 'react'
 import { buildColumnQuestion, buildValueQuestion } from './questions'
 import type { OverviewColumnView, OverviewRole, OverviewView } from './types'
+import { buildUnitText } from './units'
 
 type Props = {
   overview: OverviewView
@@ -25,14 +26,6 @@ const groups: { role: OverviewRole; title: string }[] = [
 
 /** Số tên cột ghi ngay ở dòng tiêu đề của nhóm đang đóng. */
 const PREVIEW_COLUMNS = 5
-
-const unitLabels: Record<string, string> = {
-  money: 'tiền',
-  quantity: 'số lượng',
-  percent: 'phần trăm',
-  duration: 'thời lượng',
-  other: 'đơn vị khác',
-}
 
 /** Số giá trị hiện sẵn của một cột chia nhóm; còn lại mở bằng nút. */
 const VALUES_SHOWN = 6
@@ -129,7 +122,7 @@ function buildPreview(columns: OverviewColumnView[]): string {
 /** Một dòng chữ phụ: đơn vị, ô trống, số giá trị khác nhau, cờ nhạy cảm; null khi không có gì để ghi. */
 function buildFacts(column: OverviewColumnView): string | null {
   const parts: string[] = []
-  if (column.unit) parts.push(`đơn vị ${unitLabels[column.unit] ?? column.unit}`)
+  if (column.unit) parts.push(buildUnitText(column.unit))
   if (column.nullPercent !== null && column.nullPercent > 0) {
     parts.push(`trống ${percentFormat.format(column.nullPercent)}%`)
   }

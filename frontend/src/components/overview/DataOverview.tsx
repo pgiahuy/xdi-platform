@@ -10,6 +10,7 @@ import { ColumnGroups } from './ColumnGroups'
 import { OverviewCharts } from './OverviewCharts'
 import { buildMetricQuestion } from './questions'
 import type { OverviewView } from './types'
+import { buildUnitText } from './units'
 
 type Props = {
   overview: OverviewView
@@ -53,7 +54,7 @@ export function DataOverview({ overview, onPick }: Props) {
                   {metric.name}
                 </button>
                 <p className="text-xs text-muted-foreground">
-                  {[metric.description, metric.unit && `đơn vị ${metric.unit}`, !metric.confirmed && 'chưa xác nhận']
+                  {[metric.description, metric.unit && buildUnitText(metric.unit), !metric.confirmed && 'chưa xác nhận']
                     .filter(Boolean)
                     .join('; ')}
                 </p>

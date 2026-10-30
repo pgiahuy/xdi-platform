@@ -3,9 +3,10 @@
 đồ của khung tổng quan (#198), ví dụ bấm Market thì "Doanh thu theo Market". Chỉ điền, không gửi: người dùng sửa rồi
 mới hỏi, nên câu chỉ cần là điểm bắt đầu hợp lý, không cần đúng mọi ý.
 Câu dựng từ độ đo chính (backend chọn: chỉ số đã xác nhận, hay cột tiền, số lượng) và kỳ của biểu đồ theo thời gian;
-không có độ đo chính thì hỏi số dòng. Cột gọi bằng nhãn tiếng Việt khi có, vì mô hình nhận cả bí danh lẫn tên cột. */
+không có độ đo chính thì hỏi số dòng. Cột số đo hỏi tổng khi cộng được (units.ts), không thì trung bình. Cột gọi bằng nhãn tiếng Việt khi có, vì mô hình nhận cả bí danh lẫn tên cột. */
 
 import type { OverviewChartView, OverviewColumnView, OverviewMetricView, OverviewView } from './types'
+import { isAdditiveUnit } from './units'
 
 const ROWS = 'Số dòng'
 
@@ -29,8 +30,10 @@ export function buildColumnQuestion(column: OverviewColumnView, overview: Overvi
   switch (column.role) {
     case 'dimension':
       return `${measureOf(overview)} theo ${name}`
-    case 'measure':
-      return overview.timeColumn ? `Tổng ${name} theo ${period}` : `Tổng ${name}`
+    case 'measure': {
+      const total = `${isAdditiveUnit(column.unit) ? 'Tổng' : 'Trung bình'} ${name}`
+      return overview.timeColumn ? `${total} theo ${period}` : total
+    }
     case 'time':
       return column.name === overview.timeColumn
         ? `${measureOf(overview)} theo ${period}`
