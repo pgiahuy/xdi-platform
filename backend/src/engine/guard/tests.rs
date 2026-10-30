@@ -911,7 +911,7 @@ fn tables_with_sales_policy(dir: &str, row_filters: Vec<RowFilter>) -> Vec<Allow
 }
 
 fn row_filter(column: &str, allowed_values: &[&str]) -> RowFilter {
-    RowFilter {
+    RowFilter::Column {
         column: column.to_string(),
         allowed_values: allowed_values.iter().map(|v| v.to_string()).collect(),
     }

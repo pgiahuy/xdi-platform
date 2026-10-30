@@ -13,6 +13,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Nguồn Postgres (#165): admin kết nối một database Postgres ở trang Dữ liệu, chụp một bảng thành dataset và chụp lại thành phiên bản mới.
 - Chụp bảng Postgres kèm các bảng liên quan theo khóa ngoại, theo cả hai chiều và tới hai bước (tối đa 10 bảng): mỗi bảng một dataset, quan hệ giữa chúng được ghi lại; danh sách dataset ghi các dataset liên quan.
 - Hỏi trên bảng chụp từ database thì mô hình nối được các bảng liên quan bằng `JOIN`; khung Minh chứng ghi các bảng đã đọc (#213).
+- Bộ lọc dòng theo vai dữ liệu lan theo khóa ngoại: lọc khách hàng theo vùng thì đơn hàng và dòng hàng của khách vùng khác cũng bị ẩn, cả khi hỏi riêng bảng đơn hàng (#215).
 
 ### Changed
 

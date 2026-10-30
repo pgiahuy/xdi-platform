@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/related_tests.rs - test phần thuần của ask/related.rs và ask/group_prompt.rs: chọn bảng liên quan theo số
-bước và số bảng, luật lọc dòng tạm thời (bỏ bảng trỏ tới bảng bị lọc), và prompt SQL nhiều bảng của ask/prompt.rs (khối
-cột mỗi bảng, quan hệ, cột khóa, trần độ dài). Đường đọc Postgres của load_group được test qua route ở
-api/ask_related_tests.rs. */
-
-use std::collections::HashSet;
+bước và số bảng, và prompt SQL nhiều bảng của ask/prompt.rs (khối cột mỗi bảng, quan hệ, cột khóa, trần độ dài).
+Đường đọc Postgres của load_group được test qua route ở api/ask_related_tests.rs. */
 
 use uuid::Uuid;
 
@@ -15,9 +12,7 @@ use crate::service::ask::context::{
 };
 use crate::service::ask::group_prompt::{GroupPrompt, JoinLine, TableContext};
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput, PROMPT_MAX_CHARS};
-use crate::service::ask::related::{
-    build_blocked_ids, build_group_ids, build_left_out_note, MAX_GROUP_TABLES,
-};
+use crate::service::ask::related::{build_group_ids, MAX_GROUP_TABLES};
 use crate::service::ask::values::{ValueEntry, ValueIndex};
 use crate::service::prompt_fixtures::check_fixture;
 
@@ -105,46 +100,6 @@ fn group_stops_at_the_table_limit() {
     let group = build_group_ids(id(1), &relations, |_| true);
     assert_eq!(group.len(), MAX_GROUP_TABLES);
     assert_eq!(group[0], id(1));
-}
-
-/// Người hỏi bị lọc trên customers: orders trỏ thẳng tới customers, order_items và returns trỏ qua orders, nên cả ba
-/// bị bỏ, trừ bảng đang chọn. products, categories không dính tới customers nên giữ.
-#[test]
-fn tables_pointing_to_a_filtered_table_are_blocked() {
-    let relations = sales();
-    let filtered: HashSet<Uuid> = [id(CUSTOMERS)].into();
-    let group = build_group_ids(id(CUSTOMERS), &relations, |_| true);
-    let blocked = build_blocked_ids(id(CUSTOMERS), &group, &relations, &filtered);
-    assert_eq!(blocked, [id(ORDERS), id(ORDER_ITEMS), id(RETURNS)].into());
-
-    // Hỏi trên order_items: order_items là bảng đang chọn nên giữ; orders bị bỏ; products vẫn nối được.
-    let group = build_group_ids(id(ORDER_ITEMS), &relations, |_| true);
-    let blocked = build_blocked_ids(id(ORDER_ITEMS), &group, &relations, &filtered);
-    assert_eq!(blocked, [id(ORDERS), id(RETURNS)].into());
-    let kept = build_group_ids(id(ORDER_ITEMS), &relations, |d| !blocked.contains(&d));
-    assert_eq!(kept, ids(&[ORDER_ITEMS, PRODUCTS, CATEGORIES]));
-}
-
-/// Không ai bị lọc thì không bỏ bảng nào; bảng tự trỏ vào chính nó (quản lý của nhân viên) không tự chặn mình.
-#[test]
-fn nothing_is_blocked_without_filters() {
-    let relations = sales();
-    let group = build_group_ids(id(ORDER_ITEMS), &relations, |_| true);
-    assert!(build_blocked_ids(id(ORDER_ITEMS), &group, &relations, &HashSet::new()).is_empty());
-
-    let relations = vec![relation(20, 20), relation(21, 20)];
-    let filtered: HashSet<Uuid> = [id(20)].into();
-    let group = build_group_ids(id(20), &relations, |_| true);
-    let blocked = build_blocked_ids(id(20), &group, &relations, &filtered);
-    assert_eq!(blocked, [id(21)].into());
-}
-
-#[test]
-fn left_out_note_names_the_tables() {
-    assert_eq!(build_left_out_note(&[]), None);
-    let note = build_left_out_note(&["orders".to_string(), "returns".to_string()]).unwrap();
-    assert!(note.contains("giới hạn dữ liệu theo vai"), "{note}");
-    assert!(note.ends_with("orders, returns."), "{note}");
 }
 
 // Prompt SQL nhiều bảng

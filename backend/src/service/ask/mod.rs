@@ -51,6 +51,9 @@ pub mod repair;
 pub mod reply;
 mod response_choices;
 pub mod result;
+pub mod row_filters;
+#[cfg(test)]
+mod row_filters_tests;
 pub mod run;
 #[cfg(test)]
 mod run_tests;
@@ -65,9 +68,9 @@ pub mod why_prompt;
 
 use std::time::Instant;
 
-use crate::auth::{Member, Role, WorkspaceId};
+use crate::auth::{Member, WorkspaceId};
 use crate::engine::domains::find_domain_package;
-use crate::engine::guard::{AllowedTable, RowFilter};
+use crate::engine::guard::AllowedTable;
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
 use crate::service::ask::checks::{build_result_warnings, CheckedQuery};
@@ -80,12 +83,13 @@ use crate::service::ask::contract::{
 };
 use crate::service::ask::group_prompt::build_group_prompt;
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput};
-use crate::service::ask::related::{build_left_out_note, load_group};
+use crate::service::ask::related::load_group;
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
 use crate::service::ask::response_choices::{
     build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
     build_unapplied_warnings, build_used_choices,
 };
+pub use crate::service::ask::row_filters::load_row_filters;
 use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
 use crate::service::ask::summary::{summarize, SummaryInput, SummaryOutcome};
 use crate::service::ask::unanswerable::build_unanswerable_message;
@@ -228,12 +232,6 @@ pub async fn ask(
     if let Some(unanswerable) = &outcome.unanswerable {
         let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
         outcome.message = Some(build_unanswerable_message(unanswerable, &names));
-    }
-    // Câu không trả lời được mà có bảng bị bỏ vì lọc dòng: nói rõ, để người hỏi không nghĩ dữ liệu thiếu bảng đó.
-    let unanswered = matches!(outcome.status, AskStatus::Rejected | AskStatus::Failed);
-    if let (true, Some(note)) = (unanswered, build_left_out_note(&group.left_out)) {
-        let message = outcome.message.take().unwrap_or_default();
-        outcome.message = Some(format!("{message} {note}").trim().to_string());
     }
     let tables_read = group.build_tables_read(&outcome.tables_read);
     // Giả định thành Choice một lần, dùng cho cả thẻ "Đã hiểu là" lẫn AskResponse.choices để hai chỗ cùng id.
@@ -397,25 +395,6 @@ pub(super) async fn build_allowed_table(
         parquet_dir: state.config.data_dir.join(relative),
         row_filters: load_row_filters(state, member, dataset.id).await?,
     })
-}
-
-/// Điều kiện lọc dòng theo vai dữ liệu (rls_policies) của một thành viên trên một dataset; luồng hỏi và truy dòng nguồn
-/// (drill/mod.rs) cùng gọi để mọi SQL chạy trên dữ liệu bị lọc như nhau. Admin không bị lọc: họ tự sửa được chính sách,
-/// lọc với họ không bảo vệ được gì (#45).
-pub(super) async fn load_row_filters(
-    state: &AppState,
-    member: &Member,
-    dataset_id: uuid::Uuid,
-) -> Result<Vec<RowFilter>, AppError> {
-    match member.role {
-        Role::Admin => Ok(Vec::new()),
-        Role::Member => {
-            state
-                .store
-                .list_row_filters(&member.workspace, dataset_id, member.user.id)
-                .await
-        }
-    }
 }
 
 /// Giá trị mô hình nói là có trong một cột (terms kind value) mà danh sách đủ của cột đó không có: câu SQL lọc theo nó

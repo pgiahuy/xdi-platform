@@ -524,7 +524,7 @@ async fn data_role_filter_reaches_the_breakdown_sql() {
         ],
         2,
     );
-    let filter = RowFilter {
+    let filter = RowFilter::Column {
         column: "Market".to_string(),
         allowed_values: vec!["Europe".to_string()],
     };
@@ -793,7 +793,7 @@ async fn why_card_names_the_two_periods() {
 #[tokio::test]
 async fn why_card_names_the_two_groups() {
     let data = Dataco::new();
-    let filter = RowFilter {
+    let filter = RowFilter::Column {
         column: "Customer Segment".to_string(),
         allowed_values: vec!["Consumer".to_string(), "Corporate".to_string()],
     };

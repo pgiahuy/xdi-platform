@@ -335,7 +335,7 @@ async fn clicker_sees_only_rows_of_their_data_role() {
     // Câu do người không bị lọc hỏi; người bấm chỉ được thấy LATAM.
     let (sql, table) = orders.answer(BY_MARKET).await;
     let latam_only = || {
-        vec![RowFilter {
+        vec![RowFilter::Column {
             column: "Market".to_string(),
             allowed_values: vec!["LATAM".to_string()],
         }]

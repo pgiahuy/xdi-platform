@@ -382,7 +382,7 @@ fn value_filter_is_labelled_with_the_column() {
 #[test]
 fn row_filters_of_the_guard_are_labelled_as_permission() {
     let sql = mock_answers().remove(9).1.sql;
-    let policy = vec![RowFilter {
+    let policy = vec![RowFilter::Column {
         column: "Market".to_string(),
         allowed_values: vec!["Europe".to_string(), "LATAM".to_string()],
     }];
@@ -403,7 +403,7 @@ fn row_filters_of_the_guard_are_labelled_as_permission() {
 #[test]
 fn row_filter_hiding_everything_says_so() {
     let sql = mock_answers().remove(0).1.sql;
-    let policy = vec![RowFilter {
+    let policy = vec![RowFilter::Column {
         column: "Market".to_string(),
         allowed_values: vec![],
     }];
