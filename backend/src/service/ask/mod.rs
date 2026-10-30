@@ -32,6 +32,10 @@ pub mod contract;
 pub mod examples;
 #[cfg(test)]
 mod examples_tests;
+pub mod fanout;
+mod fanout_grain;
+#[cfg(test)]
+mod fanout_tests;
 pub mod filter_values;
 pub mod group_prompt;
 pub mod magnitude;
@@ -78,6 +82,7 @@ use crate::service::ask::contract::{
     AskResponse, AskStatus, AskStep, ChosenOption, ResultTable, StepName, Understanding, Warning,
     WarningCode,
 };
+use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::group_prompt::build_group_prompt;
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput};
 use crate::service::ask::related::{build_left_out_note, load_group};
@@ -214,11 +219,14 @@ pub async fn ask(
     let reply = state.llm.complete(&request).await?;
     steps.push(build_step(StepName::Llm, started, true, None));
 
+    // Quan hệ giữa các bảng của câu hỏi, để chặn câu cộng lặp khi nối bảng một-nhiều (ask/fanout.rs).
+    let links = build_join_links(&group);
     let input = RunInput {
         question,
         prompt: &prompt,
         reply: &reply,
         tables,
+        links: &links,
         max_rows: state.config.ask_max_rows,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,
