@@ -26,7 +26,9 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::auth::WorkspaceId;
-use crate::engine::store::{DatasetVersion, ProfileColumn, ProfileRole, ProfileStatus};
+use crate::engine::store::{
+    ColumnAggregation, DatasetVersion, ProfileColumn, ProfileRole, ProfileStatus,
+};
 use crate::service::ask::contract::ChosenOption;
 use crate::service::ask::matching::{
     build_column_text, build_scored_phrases, build_value_hints, is_partial_match,
@@ -77,6 +79,8 @@ pub struct ColumnProfile {
     pub matched: bool,
     /// Đơn vị của cột số đo (ColumnUnit::as_str), cho luật biểu đồ (ARCHITECTURE mục 6); None khi chưa biết.
     pub unit: Option<String>,
+    /// Cách gộp mặc định của cột số đo (#185); prompt dặn mô hình dùng AVG với cột avg.
+    pub aggregation: ColumnAggregation,
 }
 
 /// Một cụm của câu hỏi bằng chính xác một giá trị hay bí danh ("southern europe" là Order Region = Southern Europe).
@@ -190,6 +194,8 @@ pub(crate) fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> 
             values_complete: false,
             matched: false,
             unit: c.unit,
+            // Chữ lạ (không thể có, vì CHECK của 0010_column_aggregation.sql) coi như mặc định sum.
+            aggregation: ColumnAggregation::parse(&c.aggregation).unwrap_or(ColumnAggregation::Sum),
         })
         .collect()
 }

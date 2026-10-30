@@ -545,7 +545,7 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          - Vietnamese, two or three short sentences, at most {MAX_SUMMARY_CHARS} characters. The reader sees the \
          numbers and the points right below your text, so do not repeat them: tell in plain words what happened and \
          what drove it, the way an analyst would say it to a manager, in the shape \"<measure> <what happened> chủ \
-         yếu nhờ <the groups that drove it>; <a group that went the other way> kéo lại một phần\", every <...> \
+         yếu do <the groups that drove it>; <a group that went the other way> kéo lại một phần\", every <...> \
          replaced with names from \"points\" (leave out the second half when no group went the other way).\n\
          - \"points\" is what the code found, already checked against the data: the main answer first, then each \
          point with its lead. Use only what is in \"points\" and \"main_group\", most important first; never copy \

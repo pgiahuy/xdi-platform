@@ -11,8 +11,8 @@ use crate::auth::WorkspaceId;
 use crate::engine::llm::{LlmProvider, LlmRequest};
 use crate::engine::store::test_support::{drop_workspace, store, temp_workspace};
 use crate::engine::store::{
-    ColumnUnit, ColumnValue, Dataset, DatasetVersion, NewColumn, NewColumnValue, NewVersion,
-    ProfileColumn, ProfileRole, SourceKind, Store,
+    ColumnAggregation, ColumnUnit, ColumnValue, Dataset, DatasetVersion, NewColumn, NewColumnValue,
+    NewVersion, ProfileColumn, ProfileRole, SourceKind, Store,
 };
 use crate::error::AppError;
 use crate::service::prompt_fixtures::check_fixture;
@@ -36,6 +36,7 @@ fn column(id: Uuid, name: &str, data_type: &str, role: ProfileRole) -> ProfileCo
         max_value: None,
         time_format: None,
         unit: None,
+        aggregation: "sum".to_string(),
     }
 }
 
@@ -455,6 +456,40 @@ fn units_are_kept_only_for_measures_from_the_list() {
     assert_eq!(unit_of(sales.id), Some(Some(ColumnUnit::Money)));
     assert_eq!(unit_of(days.id), Some(None));
     assert_eq!(unit_of(market.id), Some(None));
+}
+
+/// Cách gộp (#185) chỉ nhận sum hay avg cho cột measure; sai thì bỏ riêng, mặc định sum của migration giữ nguyên. Mục
+/// chỉ có cách gộp hợp lệ vẫn là mục hợp lệ.
+#[test]
+fn aggregation_is_kept_only_for_measures() {
+    let credits = column(
+        Uuid::new_v4(),
+        "studied_credits",
+        "BIGINT",
+        ProfileRole::Measure,
+    );
+    let sales = column(Uuid::new_v4(), "Sales", "DOUBLE", ProfileRole::Measure);
+    let market = column(Uuid::new_v4(), "Market", "VARCHAR", ProfileRole::Dimension);
+    let columns = [credits.clone(), sales.clone(), market.clone()];
+    let answer = r#"{"columns": [
+        {"name": "studied_credits", "aliases": [], "aggregation": "avg"},
+        {"name": "Sales", "aliases": ["doanh số"], "aggregation": "median"},
+        {"name": "Market", "aliases": ["thị trường"], "aggregation": "avg"}
+    ], "values": [], "suggested_questions": []}"#;
+    let profile = build_profile_answer(answer, &columns, &[]).unwrap();
+    let aggregation_of = |id: Uuid| {
+        profile
+            .columns
+            .iter()
+            .find(|c| c.column_id == id)
+            .map(|c| c.aggregation)
+    };
+    assert_eq!(
+        aggregation_of(credits.id),
+        Some(Some(ColumnAggregation::Avg))
+    );
+    assert_eq!(aggregation_of(sales.id), Some(None));
+    assert_eq!(aggregation_of(market.id), Some(None));
 }
 
 #[test]

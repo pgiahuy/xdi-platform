@@ -12,7 +12,7 @@ BACKUP_DIR ?= $(HOME)/xdi-backups
 CARGO_TARGET := $(if $(filter /%,$(CARGO_TARGET_DIR)),$(CARGO_TARGET_DIR),backend/$(or $(CARGO_TARGET_DIR),target))
 BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
 
-.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval
+.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-classify
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -98,6 +98,12 @@ eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco
 	cd backend && cargo build -q
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
 	  $(CARGO_TARGET)/debug/xdi-backend eval --data data/samples/dataco.csv --cases eval/dataco.json --baseline eval/baseline.json
+
+eval-classify: ## Bộ câu thử phân loại câu hỏi (#197): tỷ lệ đúng của luật từ khóa và của mô hình; mặc định mock, LLM_PROVIDER=gemini để đo thật
+	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
+	cd backend && cargo build -q
+	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=$(or $(LLM_PROVIDER),mock) DATA_DIR=backend/target/eval-data \
+	  $(CARGO_TARGET)/debug/xdi-backend eval-classify --data data/samples/dataco.csv --cases eval/classify.json $(if $(PAUSE_MS),--pause-ms $(PAUSE_MS))
 
 openapi: ## Sinh openapi.json, response mẫu của ask và kiểu TypeScript frontend/src/api/schema.ts từ code; commit cả ba
 	@# Lệnh openapi và ask-examples của backend không kết nối database, chạy được khi chưa có Postgres. Ghi ra file tạm

@@ -295,7 +295,7 @@ async fn sample_question_gives_the_sample_breakdown() {
     );
     let result = outcome.result.as_ref().unwrap();
     assert_eq!(result.total_rows, 2);
-    assert_eq!(result.columns[0].name, "quarter");
+    assert_eq!(result.columns[0].name, "Quý");
     assert!(outcome
         .sql_guarded
         .as_deref()
@@ -770,7 +770,11 @@ async fn why_card_names_the_two_periods() {
         format!("Quý 3/2017 so với quý 2/2017, theo {DATE}")
     );
     assert!(period.sql.starts_with('(') && period.sql.contains(" OR "));
-    assert_eq!(card.measures[0].label, "doanh thu");
+    // Chỉ số không có mô tả: dòng "Đo" ghi cách tính bằng lời (#185).
+    assert_eq!(
+        card.measures[0].label,
+        "doanh thu: tổng cột Order Item Total"
+    );
     assert_eq!(
         card.measures[0].sql,
         "SUM(CAST(\"Order Item Total\" AS DECIMAL(18,2)))"
@@ -781,10 +785,7 @@ async fn why_card_names_the_two_periods() {
     assert_eq!(view.roles, [ColumnRole::Time, ColumnRole::Measure]);
     let chart = view.chart.unwrap();
     // Hai quý, tới 10 kỳ là cột đứng (ask/chart.rs, luật 2).
-    assert_eq!(
-        (chart.kind, chart.x.as_str()),
-        (ChartKind::Column, "quarter")
-    );
+    assert_eq!((chart.kind, chart.x.as_str()), (ChartKind::Column, "Quý"));
 }
 
 /// So hai nhóm: hai nhóm là một mục lọc có nhãn riêng; điều kiện phân quyền ở cuối; bảng theo Market vẽ thanh ngang.

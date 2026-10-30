@@ -29,6 +29,7 @@ use crate::service::understanding::build_understanding;
 use crate::service::understanding::labels::{
     build_column_label, build_filter_label, build_row_filter_label, lower_first,
 };
+use crate::service::understanding::metric_words::build_metric_label;
 
 /// Thẻ của câu "tại sao" đã chạy bảng tổng.
 /// - shape: hình dạng của sql_guarded (bảng tổng), cho khóa nhóm và thứ tự.
@@ -118,7 +119,8 @@ fn build_periods_label(
     )
 }
 
-/// Chỉ số thì "<tên>: <mô tả>" như thẻ câu thường; cột thì nhãn của plan ("Tổng <cột>").
+/// Chỉ số thì "<tên>: <mô tả hay cách tính>" như thẻ câu thường; cột thì nhãn của plan ("Tổng <cột>", "Trung bình
+/// <cột>").
 fn build_measure_label(plan: &WhyPlan, metrics: &[MetricDefinition]) -> String {
     let metric = plan
         .measure
@@ -126,10 +128,7 @@ fn build_measure_label(plan: &WhyPlan, metrics: &[MetricDefinition]) -> String {
         .as_deref()
         .and_then(|name| find_metric(metrics, name));
     match metric {
-        Some(metric) if !metric.description.trim().is_empty() => {
-            format!("{}: {}", metric.name, metric.description.trim())
-        }
-        Some(metric) => metric.name.clone(),
+        Some(metric) => build_metric_label(metric),
         None => plan.measure.label.clone(),
     }
 }

@@ -47,4 +47,7 @@ học tập: bảng dễ hỏi nhất là `studentInfo.csv` (32 593 dòng, mỗi
 khu vực, trình độ, kết quả cuối khóa); đã nạp thử qua trang **Dữ liệu** và hỏi với Gemini. Online Retail II bản đầy
 đủ chưa được thử nạp qua trang **Dữ liệu**, giới hạn của file Excel ở [docs/DATA.md](../docs/DATA.md).
 
+Cùng hai bộ DataCo và OULAD, tách thành nhiều bảng có khóa chính, khóa ngoại trong một Postgres riêng để thử kết nối
+cơ sở dữ liệu công ty: [postgres-demo/README.md](postgres-demo/README.md).
+
 Khi thêm dataset: ghi nguồn, giấy phép, và kiểm tra giấy phép cho phép phân phối lại trước khi đưa vào `samples/`.

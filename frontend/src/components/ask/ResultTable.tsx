@@ -10,7 +10,7 @@ import { useId, useState } from 'react'
 import { ArrowUpRight, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { formatCell } from './cellFormat'
+import { buildDisplayKind, formatCell } from './cellFormat'
 import { describeDrillTarget } from './drillTarget'
 import type { CellDrill, DrillTarget } from './evidenceTypes'
 import { buildResultCsv, downloadCsv } from './resultCsv'
@@ -44,6 +44,8 @@ export function ResultTable(props: Props) {
   const [page, setPage] = useState(0)
   const pageCount = Math.max(1, Math.ceil(result.rows.length / pageSize))
   const rows = result.rows.slice(page * pageSize, (page + 1) * pageSize)
+  // Xét mọi dòng, không chỉ trang đang xem, để cột không đổi cách hiện khi chuyển trang.
+  const kinds = result.columns.map((column, c) => buildDisplayKind(column.kind, result.rows.map((row) => row[c])))
   // Cột số đo duy nhất của bảng, nếu có: cả dòng bấm được để xem dòng nguồn của ô đó.
   const rowDrill = cellDrill?.measures.length === 1 ? cellDrill.measures[0] : undefined
   const partial = result.truncated || result.limitReached
@@ -108,7 +110,7 @@ export function ResultTable(props: Props) {
                   onClick={
                     rowDrill === undefined || cellDrill === undefined
                       ? undefined
-                      : () => cellDrill.onDrill(buildTarget(result, cellDrill, row, rowDrill))
+                      : () => cellDrill.onDrill(buildTarget(result, kinds, cellDrill, row, rowDrill))
                   }
                 >
                   {row.map((cell, c) => (
@@ -123,14 +125,14 @@ export function ResultTable(props: Props) {
                       {cellDrill?.measures.includes(c) ? (
                         <DrillCell
                           cell={cell}
-                          kind={result.columns[c].kind}
-                          target={buildTarget(result, cellDrill, row, c)}
+                          kind={kinds[c]}
+                          target={buildTarget(result, kinds, cellDrill, row, c)}
                           onDrill={cellDrill.onDrill}
                         />
                       ) : nowrap ? (
-                        <TruncatedText cell={cell} kind={result.columns[c].kind} />
+                        <TruncatedText cell={cell} kind={kinds[c]} />
                       ) : (
-                        <CellText cell={cell} kind={result.columns[c].kind} />
+                        <CellText cell={cell} kind={kinds[c]} />
                       )}
                     </td>
                   ))}
@@ -220,11 +222,19 @@ function DrillCell({ cell, kind, target, onDrill }: DrillCellProps) {
   )
 }
 
-function buildTarget(result: ResultView, cellDrill: CellDrill, row: Cell[], column: number): DrillTarget {
+// kinds là kind dùng để hiện từng cột (buildDisplayKind): dòng "Đang xem" hiện khóa giống ô trong bảng, ví dụ
+// "01/07/2017" thay cho "01/07/2017 00:00:00". Giá trị gửi drill vẫn là giá trị gốc của ô.
+function buildTarget(
+  result: ResultView,
+  kinds: CellKind[],
+  cellDrill: CellDrill,
+  row: Cell[],
+  column: number,
+): DrillTarget {
   const keys = cellDrill.keys.map((k) => ({
     column: result.columns[k].name,
     value: row[k],
-    kind: result.columns[k].kind,
+    kind: kinds[k],
   }))
   return { from: 'cell', keys, measure: result.columns[column].name }
 }

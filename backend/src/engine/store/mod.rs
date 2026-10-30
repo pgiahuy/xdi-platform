@@ -10,6 +10,7 @@ vì lúc đó chưa có workspace để lọc; tài khoản, phiên (accounts.rs
 phiên bản chờ lập hồ sơ lúc khởi động (datasets.rs, list_pending_versions). */
 
 mod accounts;
+mod aggregation;
 mod columns;
 mod conversations;
 mod members;
@@ -24,6 +25,7 @@ mod users;
 // Chưa có code gọi nên tạm cho phép "chưa dùng" ở đúng ba module này; gỡ khi có người gọi để clippy bắt lại.
 #[allow(dead_code)]
 mod datasets;
+mod metric_edits;
 mod metrics;
 mod queries;
 #[cfg(test)]
@@ -34,6 +36,7 @@ pub mod test_support;
 mod workspaces;
 
 pub use accounts::{Membership, NewAdmin, User};
+pub use aggregation::ColumnAggregation;
 pub use columns::{
     ColumnUnit, ColumnValue, NewColumn, NewColumnValue, ProfileColumn, ProfileRole,
     SemanticColumnUpdate, SemanticValueUpdate, ValueRow,
@@ -45,6 +48,8 @@ pub use datasets::{
     SourceKind,
 };
 pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
+#[allow(unused_imports)]
+pub use metric_edits::MetricRecord;
 #[allow(unused_imports)]
 pub use metrics::{MetricDefinition, NewMetric};
 #[allow(unused_imports)]

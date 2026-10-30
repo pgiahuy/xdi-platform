@@ -1487,6 +1487,12 @@
                           "ok": true
                         },
                         {
+                          "detail": "Câu hỏi thường: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân.",
+                          "duration_ms": 640,
+                          "name": "classify",
+                          "ok": true
+                        },
+                        {
                           "detail": null,
                           "duration_ms": 1120,
                           "name": "llm",
@@ -1790,6 +1796,12 @@
                           "ok": true
                         },
                         {
+                          "detail": "Câu hỏi tìm nguyên nhân: câu hỏi hỏi vì sao doanh thu quý 3 giảm.",
+                          "duration_ms": 710,
+                          "name": "classify",
+                          "ok": true
+                        },
+                        {
                           "detail": null,
                           "duration_ms": 1380,
                           "name": "llm",
@@ -1933,6 +1945,71 @@
           },
           "503": {
             "description": "The language model is not configured on the server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/datasets/{id}/columns/aggregation": {
+      "put": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Set the default aggregation of a measure column (admin only)",
+        "description": "Applies to the current version. The SQL prompt asks for AVG on `avg` columns, and why questions on them compare the average per row.",
+        "operationId": "setColumnAggregation",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ColumnAggregationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Saved"
+          },
+          "4XX": {
+            "description": "400 no measure column of that name (`field` is `column`); 401; 403 not admin; 404 no such dataset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
             "content": {
               "application/json": {
                 "schema": {
@@ -2126,6 +2203,279 @@
           },
           "4XX": {
             "description": "400 invalid body, keys that do not match the result, a question that was rejected or failed, a question whose form cannot be traced yet (the message says why), a breakdown row of a question without that breakdown, or a deleted version; 401; 404 not a member, or no such question in this dataset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/datasets/{id}/metrics": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Metrics of a dataset and the columns of its current version",
+        "operationId": "listMetrics",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 404 not a member or no such dataset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Create a metric (admin only)",
+        "description": "The expression is run once on the current version, through the SQL guard, before it is saved. The metric is confirmed and used by the next question.",
+        "operationId": "createMetric",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Metric"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 invalid metric, `field` names the field; 401; 403 not admin; 404 not a member or no such dataset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/datasets/{id}/metrics/{metric_id}": {
+      "put": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Save a new version of a metric (admin only)",
+        "description": "Adds a version with the next number and keeps the earlier ones. The name cannot change. Checked like a new metric.",
+        "operationId": "updateMetric",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metric_id",
+            "in": "path",
+            "description": "Id of any version of the metric (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The new version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Metric"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 invalid metric, `field` names the field; 401; 403 not admin; 404 no such dataset or metric",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Delete a metric with all its versions (admin only)",
+        "description": "Earlier questions keep the SQL they ran.",
+        "operationId": "deleteMetric",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metric_id",
+            "in": "path",
+            "description": "Id of any version of the metric (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 no such dataset or metric",
             "content": {
               "application/json": {
                 "schema": {
@@ -2917,6 +3267,30 @@
           }
         }
       },
+      "ColumnAggregation": {
+        "type": "string",
+        "description": "How the values of a measure column are combined when no metric says otherwise: `sum` for amounts and quantities,\n`avg` for values that describe one row (age, score, credits, days).",
+        "enum": [
+          "sum",
+          "avg"
+        ]
+      },
+      "ColumnAggregationRequest": {
+        "type": "object",
+        "description": "New default aggregation of one measure column of the current version.",
+        "required": [
+          "column",
+          "aggregation"
+        ],
+        "properties": {
+          "aggregation": {
+            "$ref": "#/components/schemas/ColumnAggregation"
+          },
+          "column": {
+            "type": "string"
+          }
+        }
+      },
       "ColumnRole": {
         "type": "string",
         "description": "What a result column is:\n- `dimension`: a grouping key that is not time, for example a market.\n- `time`: a grouping key on time, for example a quarter.\n- `measure`: an aggregate, for example a sum; its cells can be drilled into.\n- `other`: anything else, for example a column of a query without aggregates.",
@@ -3382,6 +3756,13 @@
           "code": {
             "$ref": "#/components/schemas/ErrorCode"
           },
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name of the request field the error is about, when it is about one field. Omitted otherwise."
+          },
           "message": {
             "type": "string",
             "description": "Human-readable explanation in Vietnamese, meant to be shown to the end user as is."
@@ -3735,6 +4116,176 @@
           "workspace_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "Metric": {
+        "type": "object",
+        "description": "A metric of the dataset: the version in use (the latest confirmed one).",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "expression",
+          "filter",
+          "time_column",
+          "unit",
+          "version",
+          "origin",
+          "confirmed"
+        ],
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "description": "False for a draft nobody approved; the SQL prompt marks it as such."
+          },
+          "description": {
+            "type": "string"
+          },
+          "expression": {
+            "type": "string",
+            "description": "Aggregate SQL expression over the dataset's columns, for example `SUM(\"Order Item Total\")`."
+          },
+          "filter": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Row condition applied with the expression, for example `\"Order Status\" <> 'CANCELED'`."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id of this version; editing or deleting by it acts on the metric with this name."
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "description": "`ui` (written on the metrics screen), `sample`, `formula_table` or `llm_suggested`."
+          },
+          "time_column": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Column that dates the rows for this metric."
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Starts at 1; each edit adds a version and keeps the earlier ones."
+          }
+        }
+      },
+      "MetricColumn": {
+        "type": "object",
+        "description": "A column of the current version, for the column picker and the default aggregation of measure columns.",
+        "required": [
+          "name",
+          "data_type",
+          "role",
+          "description",
+          "aggregation"
+        ],
+        "properties": {
+          "aggregation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ColumnAggregation",
+                "description": "Default aggregation; null unless the role is `measure`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data_type": {
+            "type": "string",
+            "description": "DuckDB type, for example `DOUBLE`, `BIGINT`, `VARCHAR`."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "description": "`dimension`, `measure`, `time`, `key`, `text` or `ignore`."
+          }
+        }
+      },
+      "MetricRequest": {
+        "type": "object",
+        "description": "A metric to create, or the new version of one. Errors name the wrong field in `field`.",
+        "required": [
+          "name",
+          "expression"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "expression": {
+            "type": "string",
+            "description": "One aggregate SQL expression over the dataset's columns, column names in double quotes."
+          },
+          "filter": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Name users ask with, unique in the dataset ignoring case and accents. Cannot change when editing."
+          },
+          "time_column": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "MetricsResponse": {
+        "type": "object",
+        "description": "Metrics of a dataset and the columns of its current version.",
+        "required": [
+          "metrics",
+          "columns"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricColumn"
+            },
+            "description": "Columns of the current version in table order; empty while the dataset has no profiled version."
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "description": "One entry per metric name, sorted by name."
           }
         }
       },
@@ -4222,9 +4773,10 @@
       },
       "StepName": {
         "type": "string",
-        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.\n- `record`: save the question in the history.",
+        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `classify`: the language model tells a plain question from a question that asks for a cause; when the model\n  fails, the keyword rule decides and the step is not ok.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.\n- `record`: save the question in the history.",
         "enum": [
           "context",
+          "classify",
           "llm",
           "guard",
           "run",
