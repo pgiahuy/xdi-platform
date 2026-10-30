@@ -2,7 +2,8 @@
 /* components/datasets/DatasetList.tsx - danh sách dataset của workspace, mới tạo đứng đầu (backend sắp theo ngày tạo).
 Mỗi dataset một dòng xuống hàng được, không dùng bảng: màn 320px không đủ chỗ cho ba cột.
 onAddVersion, onSnapshotAgain và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. Dataset
-chụp từ database ghi bảng nguồn, lần chụp gần nhất, và có nút "Chụp lại" thay cho nạp phiên bản mới. onOverview mở khung
+chụp từ database ghi bảng nguồn, lần chụp gần nhất, các dataset liên quan theo khóa ngoại, và có nút "Chụp lại" thay
+cho nạp phiên bản mới; xóa dataset có liên quan thì hộp xác nhận báo quan hệ bị xóa theo. onOverview mở khung
 tổng quan dữ liệu của dataset (#198), cho mọi vai. Link Chỉ số (màn chỉ số của dataset) hiện với mọi người khi trang
 truyền metricsHref. */
 
@@ -22,6 +23,18 @@ type Props = {
   /** Đường dẫn tới màn Chỉ số của dataset, và component link của router để mở nó. */
   metricsHref?: (dataset: DatasetRow) => string
   link?: LinkComponent
+}
+
+/** Dataset có liên quan thì nói rõ quan hệ mất theo, còn các dataset kia vẫn giữ. */
+function deleteText(dataset: DatasetRow): string {
+  const base = 'Dataset, mọi phiên bản và file của nó bị xóa.'
+  const count = dataset.related.length
+  const links =
+    count > 0
+      ? ` ${count} dataset khác đang nối với dataset này (${dataset.related.map((r) => r.name).join(', ')}): quan hệ` +
+        ' với chúng bị xóa theo, các dataset đó vẫn giữ nguyên.'
+      : ''
+  return `${base}${links} Không hoàn tác được.`
 }
 
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
@@ -51,6 +64,11 @@ export function DatasetList(props: Props) {
                     <span className="whitespace-nowrap">{dateFormat.format(new Date(dataset.snapshot.at))}</span>
                   </>
                 )}
+              </p>
+            )}
+            {dataset.related.length > 0 && (
+              <p className="text-xs break-words text-muted-foreground">
+                Liên quan: {dataset.related.map((r) => r.name).join(', ')}
               </p>
             )}
           </div>
@@ -109,7 +127,7 @@ export function DatasetList(props: Props) {
                 </Button>
               }
               title={`Xóa ${dataset.name}?`}
-              description="Dataset, mọi phiên bản và file của nó bị xóa. Không hoàn tác được."
+              description={deleteText(dataset)}
               confirmLabel="Xóa dataset"
               onConfirm={() => onDelete(dataset)}
             />

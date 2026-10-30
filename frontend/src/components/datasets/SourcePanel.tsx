@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/datasets/SourcePanel.tsx - một nguồn database đã kết nối: thử kết nối lại, chọn bảng, chọn bảng chụp kèm
-(phần relations, thường là RelationPicker), đặt tên, chụp bảng thành dataset, xóa nguồn. Danh sách bảng và kết quả do trang
-truyền vào (pages/DatabaseSources.tsx). */
+(phần relations, thường là RelatedTablePicker), đặt tên, chụp bảng thành dataset, xóa nguồn, rồi kết quả chụp của từng
+bảng (dataset mới, phiên bản mới hay không đổi). Danh sách bảng và kết quả do trang truyền vào
+(pages/DatabaseSources.tsx). */
 
 import { useId, type ReactNode } from 'react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -9,6 +10,7 @@ import { FormField } from '@/components/forms/FormField'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import type { SnapshotTableResult } from './types'
 
 export type TableOption = {
   /** schema.table, đúng chuỗi gửi lại khi chụp. */
@@ -30,6 +32,8 @@ type Props = {
   onNameChange: (name: string) => void
   busy: boolean
   message?: { kind: 'error' | 'success'; text: string }
+  /** Kết quả lần chụp vừa xong: mỗi bảng một dòng, bảng bắt đầu trước, và số quan hệ đã ghi. */
+  result?: { tables: SnapshotTableResult[]; relationCount: number }
   onTest: () => void
   onSnapshot: () => void
   onDelete: () => void
@@ -98,7 +102,34 @@ export function SourcePanel(props: Props) {
           </div>
         </form>
       )}
+      {props.result && <SnapshotResult {...props.result} />}
       {message && <FormMessage kind={message.kind}>{message.text}</FormMessage>}
     </div>
   )
+}
+
+const numberFormat = new Intl.NumberFormat('vi-VN')
+
+function SnapshotResult({ tables, relationCount }: { tables: SnapshotTableResult[]; relationCount: number }) {
+  const relations = relationCount > 0 ? `, ghi ${relationCount} quan hệ giữa các bảng` : ''
+  return (
+    <div role="status" className="rounded-md bg-muted px-3 py-2 text-sm">
+      <p>
+        Đã chụp {tables.length} bảng{relations}:
+      </p>
+      <ul className="mt-1 list-disc pl-5">
+        {tables.map((t) => (
+          <li key={t.datasetName} className="break-words">
+            {t.datasetName}: {tableResultText(t)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function tableResultText(t: SnapshotTableResult): string {
+  if (!t.created) return `không đổi, giữ phiên bản ${t.version}`
+  const rows = t.rowCount === null ? '' : `, ${numberFormat.format(t.rowCount)} dòng`
+  return t.version === 1 ? `dataset mới${rows}` : `phiên bản ${t.version}${rows}`
 }

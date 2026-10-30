@@ -107,6 +107,12 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
   )
 }
 
+/** Hai dataset có thể nối nhau theo nhiều khóa ngoại (hai chiều, hai cột); danh sách chỉ ghi mỗi dataset một lần. */
+function relatedDatasets(dataset: Dataset): { id: string; name: string }[] {
+  const byId = new Map(dataset.relations.map((r) => [r.dataset_id, { id: r.dataset_id, name: r.name }]))
+  return [...byId.values()]
+}
+
 type ListBodyProps = {
   datasets: Dataset[] | undefined
   error: Error | null
@@ -155,6 +161,7 @@ function ListBody(props: ListBodyProps) {
     tableName: d.logical_table,
     createdAt: d.created_at,
     snapshot: d.source_table ? { table: d.source_table, at: d.current_version_at } : undefined,
+    related: relatedDatasets(d),
   }))
   return (
     <DatasetList

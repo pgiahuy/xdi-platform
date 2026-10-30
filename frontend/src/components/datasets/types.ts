@@ -10,19 +10,49 @@ export type DatasetRow = {
   createdAt: string
   /** Dataset chụp từ bảng database: bảng nguồn và lần chụp gần nhất. Không có với dataset nạp từ file. */
   snapshot?: { table: string; at: string | null }
+  /** Dataset khác nối với dataset này theo khóa ngoại của database nguồn, mỗi dataset một lần (#165). */
+  related: { id: string; name: string }[]
 }
 
-/** Một bảng nối với bảng đang chọn theo một khóa ngoại, chụp kèm được thành dataset riêng. */
+/** Một bảng nối với một bảng của nhóm theo một khóa ngoại, chụp kèm được thành dataset riêng. */
 export type RelationOption = {
-  /** schema.bảng sẽ chụp kèm. */
+  /** Khóa React: một bảng có thể nối theo hai khóa ngoại. */
+  key: string
+  /** schema.bảng, đúng chuỗi gửi khi chụp. */
   table: string
-  /** Bảng giữ khóa ngoại và cột khóa. */
-  fromTable: string
-  fromColumns: string[]
+  /** Tên hiện ra: bỏ schema khi cùng schema với bảng bắt đầu. */
+  label: string
+  /** Cột khóa ngoại, ở bảng giữ khóa. */
+  columns: string[]
   addable: boolean
   reason: string | null
   /** Số cột đọc được của bảng. */
   columnCount: number
+}
+
+/** Bảng liên quan quanh một bảng, tách theo chiều của khóa ngoại. */
+export type RelationNode = {
+  table: string
+  label: string
+  /** Bảng này trỏ tới (khóa ngoại của nó, nhiều-một). */
+  parents: RelationOption[]
+  /** Trỏ tới bảng này (khóa ngoại của bảng kia, một-nhiều). */
+  children: RelationOption[]
+}
+
+/** Đọc bảng liên quan của một bảng: đang đọc, lỗi, hoặc xong. */
+export type RelationNodeState =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ready'; node: RelationNode }
+
+/** Kết quả chụp của một bảng. */
+export type SnapshotTableResult = {
+  datasetName: string
+  /** False: nội dung trùng phiên bản đã có, không tạo gì mới. */
+  created: boolean
+  version: number
+  rowCount: number | null
 }
 
 export type SheetOption = {

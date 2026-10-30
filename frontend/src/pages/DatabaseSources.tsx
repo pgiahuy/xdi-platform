@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres): nút mở form thêm nguồn,
-rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chụp bảng thành dataset. DatasetsPage chỉ hiện khung này cho admin;
-backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel, RelationPicker).
-Chọn bảng xong thì mọi bảng mà nó trỏ tới (nhiều-một) chụp kèm được đều chọn sẵn; bảng trỏ vào nó để người dùng tự chọn. */
+rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chọn bảng chụp kèm, chụp thành dataset. DatasetsPage chỉ hiện khung
+này cho admin; backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel,
+RelatedTablePicker). Cách chọn sẵn, mở thêm một bước và giới hạn số bảng ở relatedTablesView.ts. */
 
 import { useState } from 'react'
 import {
@@ -13,16 +13,16 @@ import {
   useSourceTables,
   useSources,
   useTestSource,
-  type RelationsResponse,
   type SnapshotResponse,
   type Source,
 } from '@/api/sources'
 import { ConnectForm, type ConnectValues } from '@/components/datasets/ConnectForm'
-import { RelationPicker } from '@/components/datasets/RelationPicker'
+import { RelatedTablePicker } from '@/components/datasets/RelatedTablePicker'
 import { SourcePanel } from '@/components/datasets/SourcePanel'
-import type { RelationOption } from '@/components/datasets/types'
+import type { SnapshotTableResult } from '@/components/datasets/types'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
+import { buildRelatedView, MAX_SNAPSHOT_TABLES, type RelationChoice } from './relatedTablesView'
 
 // Khớp SSL_MODES của backend (service/sources/postgres.rs): bản này chưa hỗ trợ máy chủ chỉ nhận TLS.
 const SSL_MODES = ['prefer', 'disable']
@@ -90,33 +90,16 @@ function sourceLabel(source: Source): string {
   return `${source.host}:${source.port}/${source.database} (${source.user})`
 }
 
-/** Nhiều-một trước, rồi một-nhiều; bảng trùng (hai khóa cùng tới một bảng) vẫn hiện từng khóa. */
-function toOptions(relations: RelationsResponse): RelationOption[] {
-  return [...relations.many_to_one, ...relations.one_to_many].map((r) => ({
-    table: r.table,
-    fromTable: r.from_table,
-    fromColumns: r.from_columns,
-    addable: r.addable,
-    reason: r.reason,
-    columnCount: r.column_count,
-  }))
-}
-
-/** Mặc định: mọi bảng mà bảng đang chọn trỏ tới, nếu chụp kèm được. */
-function defaultSelection(relations: RelationsResponse | undefined): string[] {
-  const tables = (relations?.many_to_one ?? []).filter((r) => r.addable).map((r) => r.table)
-  return [...new Set(tables)]
-}
-
-/** "Đã chụp 3 bảng: orders phiên bản 2 (120 dòng), customers không đổi, ..." */
-function resultText(result: SnapshotResponse): string {
-  const parts = result.datasets.map((d) =>
-    d.created
-      ? `${d.dataset.name} phiên bản ${d.version.version} (${d.version.row_count ?? 0} dòng)`
-      : `${d.dataset.name} không đổi`,
-  )
-  const relations = result.relations.length > 0 ? `, ghi ${result.relations.length} quan hệ` : ''
-  return `Đã chụp ${result.datasets.length} bảng: ${parts.join(', ')}${relations}.`
+function toResult(result: SnapshotResponse): { tables: SnapshotTableResult[]; relationCount: number } {
+  return {
+    tables: result.datasets.map((d) => ({
+      datasetName: d.dataset.name,
+      created: d.created,
+      version: d.version.version,
+      rowCount: d.version.row_count,
+    })),
+    relationCount: result.relations.length,
+  }
 }
 
 function SourceItem({ ws, source }: { ws: string; source: Source }) {
@@ -125,21 +108,28 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
   const remove = useDeleteSource(ws)
   const testSource = useTestSource(ws)
   const [table, setTable] = useState('')
-  const relations = useSourceRelations(ws, source.id, table)
-  // Lựa chọn gắn với bảng đã chọn: đổi bảng thì lựa chọn cũ không còn áp dụng, dùng mặc định của bảng mới. Suy ra lúc
-  // dựng thay vì đặt lại trong effect, để không có lần vẽ nào dùng lựa chọn của bảng trước.
-  const [choice, setChoice] = useState<{ table: string; tables: string[] }>()
+  // Lựa chọn gắn với bảng bắt đầu: đổi bảng thì lựa chọn cũ không còn áp dụng. Suy ra lúc dựng thay vì đặt lại trong
+  // effect, để không có lần vẽ nào dùng lựa chọn của bảng trước.
+  const [saved, setChoice] = useState<RelationChoice>()
+  const choice: RelationChoice = saved?.start === table ? saved : { start: table, picked: {}, expanded: [] }
+  const relations = useSourceRelations(ws, source.id, table === '' ? [] : [table, ...choice.expanded])
   const [name, setName] = useState('')
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string }>()
+  const [result, setResult] = useState<SnapshotResponse>()
 
-  const selected = choice?.table === table ? choice.tables : defaultSelection(relations.data)
+  const startData = relations[0]?.data
+  const view = startData ? buildRelatedView(startData, relations, choice) : undefined
 
-  const toggle = (option: RelationOption, checked: boolean) => {
-    const rest = selected.filter((t) => t !== option.table)
-    setChoice({ table, tables: checked ? [...rest, option.table] : rest })
-  }
+  const toggle = (picked: string, checked: boolean) =>
+    setChoice({ ...choice, picked: { ...choice.picked, [picked]: checked } })
+  const expand = (opened: string, open: boolean) =>
+    setChoice({
+      ...choice,
+      expanded: open ? [...choice.expanded, opened] : choice.expanded.filter((t) => t !== opened),
+    })
 
   const test = () => {
+    setResult(undefined)
     testSource.mutate(source.id, {
       onSuccess: (result) => {
         setMessage({ kind: 'success', text: `Kết nối được, đọc được ${result.table_count} bảng và view.` })
@@ -150,11 +140,13 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
   }
 
   const take = () => {
+    setMessage(undefined)
+    setResult(undefined)
     snapshot.mutate(
-      { sourceId: source.id, table, name: name.trim() || null, tables: selected },
+      { sourceId: source.id, table, name: name.trim() || null, tables: view?.selected ?? [] },
       {
-        onSuccess: (result) => {
-          setMessage({ kind: 'success', text: resultText(result) })
+        onSuccess: (done) => {
+          setResult(done)
           setName('')
         },
         onError: (error) => setMessage({ kind: 'error', text: error.message }),
@@ -171,18 +163,27 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
       table={table}
       onTableChange={setTable}
       relations={
-        table === '' ? undefined : relations.isLoading ? (
+        table === '' ? undefined : view ? (
+          <RelatedTablePicker
+            start={view.start}
+            nested={view.nested}
+            expandable={view.expandable}
+            selected={view.selected}
+            max={MAX_SNAPSHOT_TABLES}
+            onToggle={toggle}
+            onExpand={expand}
+          />
+        ) : relations[0]?.error ? (
+          <FormMessage kind="error">{relations[0].error.message}</FormMessage>
+        ) : (
           <p className="text-sm text-muted-foreground">Đang đọc khóa ngoại của bảng...</p>
-        ) : relations.error ? (
-          <FormMessage kind="error">{relations.error.message}</FormMessage>
-        ) : relations.data ? (
-          <RelationPicker table={table} options={toOptions(relations.data)} selected={selected} onToggle={toggle} />
-        ) : undefined
+        )
       }
       name={name}
       onNameChange={setName}
       busy={snapshot.isPending || testSource.isPending || remove.isPending}
       message={message}
+      result={result ? toResult(result) : undefined}
       onTest={test}
       onSnapshot={take}
       onDelete={() =>
