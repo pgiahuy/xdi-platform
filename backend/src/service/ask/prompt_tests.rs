@@ -288,7 +288,7 @@ fn columns_show_values_and_date_formats() {
     ));
 }
 
-/// Cột chép từ bảng nối nhiều-một ghi rõ bảng gốc, và phần luật nói không SUM cột như vậy.
+/// Cột chép từ bảng nối nhiều-một ghi rõ bảng gốc, và phần luật nói không SUM riêng cột như vậy.
 #[test]
 fn columns_from_joined_tables_name_their_table() {
     let mut context = dataco_context();
@@ -301,7 +301,7 @@ fn columns_from_joined_tables_name_their_table() {
         "{prompt}"
     );
     assert!(prompt.contains("from joined table T\" was copied from table T"));
-    assert!(prompt.contains("Never SUM it"));
+    assert!(prompt.contains("Never SUM it on its own"));
 }
 
 /// Gợi ý giá trị, cột #28 đã chọn kèm cột khác, và lựa chọn chỉ số người hỏi gửi lại; lựa chọn cột không lặp lại.

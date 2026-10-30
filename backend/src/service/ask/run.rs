@@ -53,7 +53,7 @@ pub struct RunInput<'a> {
     pub reply: &'a str,
     /// Đầu vào của guard: các bảng được phép và trần số dòng.
     pub tables: &'a [AllowedTable],
-    /// Cột chép từ bảng nối nhiều-một (ask/repeated.rs): câu SQL cộng chúng ngay trên bảng thì không chạy mà đi vòng sửa.
+    /// Cột chép từ bảng nối nhiều-một (ask/repeated.rs): câu SQL cộng riêng chúng ngay trên bảng thì không chạy mà đi vòng sửa.
     pub repeated: &'a [RepeatedColumn],
     pub max_rows: u64,
     /// Thời gian tối đa mỗi lần chạy (Config::query_timeout).
@@ -214,7 +214,7 @@ async fn attempt(
         Ok(guarded) => match repeated_sum(input, sql) {
             // Lời gửi mô hình bằng tiếng Anh như lý do của guard; bước guard ghi lời tiếng Việt cho người dùng.
             Some(reason) => {
-                let detail = "Câu SQL cộng một cột lặp lại từ bảng nối nhiều-một, cần sửa";
+                let detail = "Câu SQL cộng riêng một cột lặp lại từ bảng nối nhiều-một, cần sửa";
                 steps.push(build_step(StepName::Guard, started, false, Some(detail)));
                 return Ok(Attempt::Refused { reason });
             }

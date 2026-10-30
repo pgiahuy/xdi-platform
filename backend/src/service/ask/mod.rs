@@ -41,6 +41,8 @@ pub mod prompt;
 mod prompt_tests;
 pub mod repair;
 pub mod repeated;
+#[cfg(test)]
+mod repeated_tests;
 pub mod reply;
 mod response_choices;
 pub mod result;

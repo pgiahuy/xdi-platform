@@ -161,11 +161,15 @@ các bảng nó trỏ tới; backend nối chúng thành một bảng phẳng, m
   trên mọi dòng hàng của sản phẩm đó), nên cộng nó là đếm lặp. Hồ sơ cột ghi bảng gốc (`columns.origin_table`); cột số
   từ bảng nối đang là `measure` thành `dimension` nếu có danh sách giá trị (tối đa 200 giá trị khác nhau), không thì
   `text`, nên form "tại sao" không cộng được nó và lớp ngữ nghĩa không đổi về `measure` được. Prompt SQL ghi
-  `from joined table <schema.bảng>` cạnh cột như vậy, kèm luật không `SUM` cột này mà lọc, nhóm theo nó hay dùng
-  `MIN`, `MAX`, `COUNT(DISTINCT ...)`. Mô hình vẫn có lúc viết `SUM` (chạy thật với Gemini), nên sau guard, câu cộng
-  một cột như vậy ngay trên bảng dataset không chạy mà đi vòng sửa (`backend/src/service/ask/repeated.rs`), kèm cách
-  viết đúng: giữ một dòng cho mỗi dòng của bảng gốc bằng `SELECT DISTINCT` theo đủ các cột khóa (`key_columns` của
-  lần nối) trong một bảng `WITH`, rồi mới cộng. Câu sửa vẫn cộng sai thì câu hỏi bị từ chối, không trả số cộng lặp.
+  `from joined table <schema.bảng>` cạnh cột như vậy, kèm luật không `SUM` riêng cột này mà lọc, nhóm theo nó hay dùng
+  `MIN`, `MAX`, `COUNT(DISTINCT ...)`; nhân nó với một cột của bảng chính (`SUM("quantity" * "products.price")`) hay
+  chỉ dùng nó trong điều kiện `CASE WHEN` thì được, vì mỗi dòng của bảng chính chỉ được cộng một lần. Mô hình vẫn có
+  lúc viết `SUM` cột lặp (chạy thật với Gemini), nên sau guard, câu có `SUM` mà phần được cộng chỉ gồm cột của cùng
+  một bảng nối và hằng số, trong một `SELECT` đọc thẳng bảng dataset, không chạy mà đi vòng sửa
+  (`backend/src/service/ask/repeated.rs`), kèm cách viết đúng: giữ một dòng cho mỗi dòng của bảng gốc bằng
+  `SELECT DISTINCT` theo đủ các cột khóa (`key_columns` của lần nối) trong một bảng `WITH`, rồi mới cộng. Câu sửa vẫn
+  cộng như vậy thì câu hỏi bị từ chối. Lớp kiểm này không lần theo tên cột qua `WITH` hay bảng con: `SUM` trên một
+  bảng `WITH` chưa `DISTINCT` không bị bắt, chỉ còn luật trong prompt.
   Ví dụ trên database mẫu: "Tổng tín chỉ đăng ký theo vùng" trên bảng bài nộp cộng thẳng ra 1 351 520 cho Scotland,
   câu đã sửa ra 212 005, bằng tổng tính thẳng trên bảng `students` của Postgres nguồn.
 
