@@ -1,0 +1,38 @@
+# data/postgres-demo/docker-compose.yml - một Postgres 17 riêng chứa cơ sở dữ liệu mẫu "company_demo" (DataCo và
+# OULAD tách thành nhiều bảng có khóa chính, khóa ngoại), để thử tính năng kết nối cơ sở dữ liệu của công ty.
+# Tách khỏi docker-compose.yml ở gốc repo: Postgres của ứng dụng chứa dữ liệu ứng dụng, còn container này đóng vai
+# cơ sở dữ liệu bên ngoài mà ứng dụng chỉ đọc. Dữ liệu nạp bằng load.sh, xem README.md cùng thư mục.
+
+name: xdi-demo-db
+
+services:
+  demo-db:
+    image: postgres:17
+    container_name: xdi-demo-db
+    # Cùng lý do như docker-compose.yml ở gốc: tiến trình init nhỏ làm PID 1 để tiến trình mồ côi không làm Postgres
+    # khởi động lại.
+    init: true
+    environment:
+      # Mật khẩu mẫu, chỉ để chạy trên máy. Người dùng chỉ đọc "analyst" tạo trong init/01_roles.sql.
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:-demo}
+      POSTGRES_DB: company_demo
+    ports:
+      # Chỉ mở trên localhost. Cổng 5440 để không đụng Postgres của ứng dụng (5433) hay Postgres cài sẵn (5432).
+      - "127.0.0.1:${DEMO_DB_PORT:-5440}:5432"
+    volumes:
+      - demo-db-data:/var/lib/postgresql/data
+      # Chỉ chạy một lần, khi volume còn trống.
+      - ./init:/docker-entrypoint-initdb.d:ro
+      # CSV nguồn, chỉ đọc. load.sh chạy psql trong container nên máy chủ không cần cài psql.
+      - ${DEMO_DATA_DIR:-../downloads}:/downloads:ro
+    healthcheck:
+      # -h 127.0.0.1: hỏi qua TCP. Lần chạy đầu, image chạy init/ trên một máy chủ tạm chỉ mở unix socket; không có -h
+      # thì pg_isready báo sẵn sàng ngay lúc đó và load.sh có thể chạy trước khi init/ xong.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "demo", "-d", "company_demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  demo-db-data:
