@@ -15,9 +15,9 @@ use crate::auth::{self, Member};
 use crate::engine::guard::{build_guarded_sql, AllowedTable};
 use crate::engine::query::run_query;
 use crate::error::AppError;
-use crate::service::ask::ask;
 use crate::service::ask::contract::{AskStatus, CellValue};
 use crate::service::ask::result::build_result_table;
+use crate::service::ask::{ask, AskHistory};
 use crate::service::samples::{upload_local_file, SAMPLE_NAME};
 use crate::service::workspaces;
 use crate::state::AppState;
@@ -79,7 +79,7 @@ pub async fn run_eval(
 /// Tài khoản và workspace tạm cho lần đánh giá, với dataset mẫu đã nạp và hồ sơ ngữ nghĩa xong (mock thì có ngay).
 /// Trả id của dataset để hỏi. Workspace bị xóa sau khi chạy xong (run_eval), kéo theo user rác trong bảng users:
 /// chấp nhận được vì eval nhắm vào database thử, không phải bản cài thật.
-async fn prepare(state: &AppState, data: &Path) -> Result<(Member, String), AppError> {
+pub(crate) async fn prepare(state: &AppState, data: &Path) -> Result<(Member, String), AppError> {
     let email = format!("eval-{}@example.com", uuid::Uuid::new_v4());
     let user = state.store.create_user(&email, "Eval", "unused").await?;
     let membership = workspaces::create(state, &user, "Eval").await?;
@@ -148,7 +148,8 @@ async fn run_case_inner(
 ) -> Result<String, String> {
     let expected = expected_rows(state, member, dataset_id, case).await?;
     // Mỗi câu của bộ đánh giá là một câu độc lập, không có hội thoại trước.
-    let response = ask(state, member, dataset_id, &case.question, &[], "")
+    let history = AskHistory::default();
+    let response = ask(state, member, dataset_id, &case.question, &[], &history)
         .await
         .map_err(|e| format!("lỗi hệ thống khi hỏi: {e:?}"))?;
     if response.status != AskStatus::Answered {

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/run.rs - đường của câu "tại sao" (#38), từ câu hỏi tới bảng, phân rã và lời: mô hình điền form
 (ask/why_prompt.rs), code kiểm form (explain/check.rs), dựng SQL (explain/sql.rs), chạy qua guard, phân rã
-(explain/breakdown.rs) và nhờ mô hình viết lời (ask/narrate.rs). Endpoint hỏi gọi run_why qua ask/why.rs khi
-build_question_kind ra Why, thay cho bước llm và run_with_repair của câu thường, rồi dựng AskResponse từ WhyOutcome.
+(explain/breakdown.rs) và nhờ mô hình viết lời (ask/narrate.rs). Endpoint hỏi gọi run_why qua ask/why.rs khi bước
+classify (ask/classify.rs) ra câu hỏi tìm nguyên nhân, thay cho bước llm và run_with_repair của câu thường, rồi dựng
+AskResponse từ WhyOutcome.
 Nhận mô hình và dữ liệu đã đọc qua tham số, như run_with_repair, nên test chạy được với mô hình giả và Parquet tạm,
 không cần Postgres; test ở explain/run_tests.rs.
 

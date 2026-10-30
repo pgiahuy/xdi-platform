@@ -100,6 +100,12 @@ pub fn build_simple_example() -> AskResponse {
         answer_text_by_model: Some(true),
         steps: vec![
             build_step(StepName::Context, 15, true, None),
+            build_step(
+                StepName::Classify,
+                640,
+                true,
+                Some("Câu hỏi thường: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân."),
+            ),
             build_step(StepName::Llm, 1120, true, None),
             build_step(StepName::Guard, 3, true, Some("Thêm LIMIT 100000")),
             build_step(StepName::Run, 38, true, None),
@@ -189,6 +195,12 @@ pub fn build_why_example() -> AskResponse {
         explanation: Some(build_why_explanation()),
         steps: vec![
             build_step(StepName::Context, 21, true, None),
+            build_step(
+                StepName::Classify,
+                710,
+                true,
+                Some("Câu hỏi tìm nguyên nhân: câu hỏi hỏi vì sao doanh thu quý 3 giảm."),
+            ),
             build_step(StepName::Llm, 1380, true, None),
             build_step(StepName::Guard, 4, true, Some("Thêm LIMIT 100000")),
             build_step(StepName::Run, 57, true, None),

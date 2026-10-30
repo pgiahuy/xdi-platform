@@ -11,11 +11,15 @@ pub mod ask;
 pub mod conversation;
 pub mod drill;
 pub mod eval;
+pub mod eval_classify;
+#[cfg(test)]
+mod eval_classify_tests;
 #[cfg(test)]
 mod eval_tests;
 pub mod excel;
 pub mod explain;
 pub mod ingest;
+pub mod metrics;
 pub mod overview;
 pub mod profile;
 #[cfg(test)]

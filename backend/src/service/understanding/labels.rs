@@ -17,6 +17,7 @@ use sqlparser::parser::Parser;
 
 use crate::engine::store::MetricDefinition;
 use crate::service::ask::context::ColumnProfile;
+use crate::service::understanding::metric_words::build_metric_label;
 
 /// Hàm lấy một phần của thời gian, và chữ cho phần đó. Đọc ở nhãn khóa nhóm ("Quý của ngày đặt hàng") và để nhận biểu
 /// thức thời gian. Cũng là bảng tên phần của EXTRACT(YEAR FROM x), date_part('year', x) và date_trunc('month', x).
@@ -330,7 +331,7 @@ pub fn build_row_filter_label(sql: &str, profile: &[ColumnProfile]) -> String {
 }
 
 /// Nhãn ngắn (để ghép vào mục sắp xếp) và nhãn đủ của một cột tổng hợp. Trùng biểu thức của một chỉ số thì "<tên chỉ
-/// số>: <mô tả>"; hàm tổng hợp quen thuộc trên một cột thì câu như "Tổng doanh thu"; còn lại là tên cột kết quả.
+/// số>: <mô tả>", không có mô tả thì "<tên chỉ số>: <cách tính bằng lời>" (metric_words.rs); hàm tổng hợp quen thuộc trên một cột thì câu như "Tổng doanh thu"; còn lại là tên cột kết quả.
 pub fn build_measure_labels(
     tree: &Expr,
     name: &str,
@@ -338,12 +339,7 @@ pub fn build_measure_labels(
     profile: &[ColumnProfile],
 ) -> (String, String) {
     if let Some(metric) = find_metric(tree, metrics) {
-        let full = if metric.description.trim().is_empty() {
-            metric.name.clone()
-        } else {
-            format!("{}: {}", metric.name, metric.description.trim())
-        };
-        return (metric.name.clone(), full);
+        return (metric.name.clone(), build_metric_label(metric));
     }
     let label = build_aggregate_label(tree, profile).unwrap_or_else(|| name.to_string());
     (label.clone(), label)

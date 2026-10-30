@@ -21,7 +21,7 @@ use std::collections::HashSet;
 use crate::engine::domains::DomainPackage;
 use crate::engine::guard::build_prompt_rules;
 use crate::engine::prompts::{self, fill};
-use crate::engine::store::{MetricDefinition, ProfileRole, PromptExample};
+use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileRole, PromptExample};
 use crate::service::ask::choices::COLUMN_CHOICE_PREFIX;
 use crate::service::ask::context::{AskContext, ColumnProfile};
 use crate::service::ask::contract::ChosenOption;
@@ -146,7 +146,8 @@ pub(super) fn build_columns_section(context: &AskContext, detail: Detail) -> Str
     format!("Columns:\n{}", lines.join("\n"))
 }
 
-/// Một cột: tên, kiểu, vai trò, định dạng ngày nếu là ngày dạng chữ, mô tả, bí danh, rồi giá trị ở dòng sau.
+/// Một cột: tên, kiểu, vai trò, định dạng ngày nếu là ngày dạng chữ, cách gộp nếu là avg, mô tả, bí danh, rồi giá trị
+/// ở dòng sau.
 fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
     let mut line = format!(
         "- {} ({}, {}",
@@ -156,6 +157,12 @@ fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
     );
     if let Some(format) = &column.time_format {
         line.push_str(&format!(", date format {format}"));
+    }
+    // Chỉ cột avg có thêm chữ: sum là cách mô hình làm sẵn, ghi cho mọi cột chỉ làm prompt dài thêm. Cột mô tả từng
+    // dòng (tín chỉ, tuổi, số ngày) cộng lại ra số vô nghĩa (#185).
+    if column.role == ProfileRole::Measure.as_str() && column.aggregation == ColumnAggregation::Avg
+    {
+        line.push_str(", one value per row: aggregate it with AVG, never SUM");
     }
     line.push(')');
     if let Some(description) = column.description.as_deref().map(str::trim) {
