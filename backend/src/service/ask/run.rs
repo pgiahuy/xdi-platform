@@ -8,13 +8,14 @@ Câu trả lời của mô hình là object JSON {terms, assumptions, clarify, s
 trả needs_choice, không chạy gì; báo dữ liệu không có thông tin (unanswerable, #164) thì trả rejected, không chạy gì,
 ask/mod.rs dựng lời. Câu trả lời không đọc được (không phải JSON, thiếu sql) cũng vào vòng sửa.
 
-Vào vòng sửa: DuckDB báo lỗi, guard từ chối vì bất kỳ lý do nào (trừ lỗi máy chủ GuardError::Internal), hoặc câu trả
-lời không đọc được. Guard từ chối là lỗi của hệ thống chứ không phải của người hỏi: câu sửa lại qua guard từ đầu nên
-gửi mọi lý do cho mô hình không mở thêm đường nào tới dữ liệu. Không sửa: câu chạy quá giờ hay quá bộ nhớ. Lỗi guard,
-lỗi DuckDB và câu trả lời không đọc được chung một vòng sửa, cả câu hỏi tối đa một vòng. Câu sửa vẫn bị từ chối thì
-người hỏi nhận lời của hệ thống (REFUSED_MESSAGE); lý do của guard nằm trong chi tiết bước guard. Lời báo lỗi gửi mô
-hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ (ask/repair.rs, cùng prompt sửa). Test ở
-ask/run_tests.rs. */
+Vào vòng sửa: DuckDB báo lỗi, guard từ chối vì bất kỳ lý do nào (trừ lỗi máy chủ GuardError::Internal), câu cộng lặp
+khi nối bảng một-nhiều (ask/fanout.rs, ghi như một bước guard không qua; câu sửa vẫn cộng lặp thì người hỏi nhận lời
+nói rõ lý do), hoặc câu trả lời không đọc được. Guard từ chối là lỗi của hệ thống chứ không phải của người hỏi: câu
+sửa lại qua guard từ đầu nên gửi mọi lý do cho mô hình không mở thêm đường nào tới dữ liệu. Không sửa: câu chạy quá
+giờ hay quá bộ nhớ. Lỗi guard, lỗi DuckDB và câu trả lời không đọc được chung một vòng sửa, cả câu hỏi tối đa một
+vòng. Câu sửa vẫn bị từ chối thì người hỏi nhận lời của hệ thống (REFUSED_MESSAGE); lý do của guard nằm trong chi
+tiết bước guard. Lời báo lỗi gửi mô hình và hiện cho người dùng đã bỏ đường dẫn file Parquet trên máy chủ
+(ask/repair.rs, cùng prompt sửa). Test ở ask/run_tests.rs. */
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -26,6 +27,9 @@ use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::query::{run_query, QueryError, QueryOutput};
 use crate::error::AppError;
 use crate::service::ask::contract::{AskStatus, AskStep, ResultTable, StepName};
+use crate::service::ask::fanout::{
+    build_hint, build_refused_message, build_step_detail, find_double_count, JoinLink,
+};
 use crate::service::ask::repair::{
     build_repair_prompt, build_safe_error, build_user_error, build_user_text, mentions_data_files,
 };
@@ -52,6 +56,9 @@ pub struct RunInput<'a> {
     pub reply: &'a str,
     /// Đầu vào của guard: các bảng được phép và trần số dòng.
     pub tables: &'a [AllowedTable],
+    /// Quan hệ giữa các bảng (ask/fanout.rs): câu SQL cộng lặp khi nối bảng một-nhiều thì không chạy mà đi vòng sửa.
+    /// Rỗng khi câu hỏi chỉ có một bảng.
+    pub links: &'a [JoinLink],
     pub max_rows: u64,
     /// Thời gian tối đa mỗi lần chạy (Config::query_timeout).
     pub timeout: Duration,
@@ -104,6 +111,9 @@ enum Attempt {
     },
     /// Guard từ chối; reason là lý do của guard, gửi cho mô hình ở vòng sửa.
     Refused { reason: String },
+    /// Guard nhận câu nhưng câu cộng lặp khi nối bảng một-nhiều (ask/fanout.rs). reason gửi mô hình như lý do của
+    /// guard; message cho người hỏi khi câu sửa vẫn cộng lặp.
+    DoubleCounted { reason: String, message: String },
     /// DuckDB báo lỗi; error đã bỏ đường dẫn, gửi được cho mô hình.
     RunFailed { shown: String, error: String },
     /// Quá giờ hay quá bộ nhớ: dừng câu hỏi, không sửa.
@@ -129,7 +139,9 @@ pub async fn run_with_repair(
             unanswerable,
         }) => return Ok(build_unanswerable_outcome(terms, unanswerable, steps)),
         Ok(ModelAnswer::Sql(answer)) => match attempt(&input, &answer.sql, &mut steps).await? {
-            Attempt::Refused { reason } => (Some(answer), reason, None),
+            Attempt::Refused { reason } | Attempt::DoubleCounted { reason, .. } => {
+                (Some(answer), reason, None)
+            }
             Attempt::RunFailed { shown, error } => (Some(answer), error, Some(shown)),
             other => return Ok(build_outcome(other, answer, steps)),
         },
@@ -212,6 +224,15 @@ async fn attempt(
     let started = Instant::now();
     let reason = match build_guarded_sql(sql, input.tables, input.max_rows) {
         Ok(guarded) => {
+            // Kiểm cộng lặp trên câu mô hình viết, sau guard (câu đã hợp lệ) và trước khi chạy.
+            if let Some(found) = find_double_count(sql, input.tables, input.links) {
+                let detail = build_step_detail(&found);
+                steps.push(build_step(StepName::Guard, started, false, Some(&detail)));
+                return Ok(Attempt::DoubleCounted {
+                    reason: build_hint(&found),
+                    message: build_refused_message(&found),
+                });
+            }
             let note = guarded.limit_note.as_deref();
             steps.push(build_step(StepName::Guard, started, true, note));
             return run_guarded(input, guarded, steps).await;
@@ -328,9 +349,9 @@ fn internal(message: String) -> QueryError {
     QueryError::Internal(AppError::Internal(message))
 }
 
-/// RunOutcome từ lượt cuối cùng: lượt đầu khi không sửa, lượt sau khi đã sửa. Lượt đầu không bao giờ là RunFailed hay
-/// Refused (cả hai đã vào vòng sửa), nên RunFailed và Refused ở đây là câu đã sửa vẫn lỗi. answer là câu trả lời của
-/// lượt đó.
+/// RunOutcome từ lượt cuối cùng: lượt đầu khi không sửa, lượt sau khi đã sửa. Lượt đầu không bao giờ là RunFailed,
+/// Refused hay DoubleCounted (cả ba đã vào vòng sửa), nên ba nhánh đó ở đây là câu đã sửa vẫn lỗi. answer là câu trả
+/// lời của lượt đó.
 fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> RunOutcome {
     // Nhánh answered dựng RunOutcome ngay vì chỉ nó có kết quả và ghi chú của guard; các nhánh còn lại chỉ khác nhau
     // ở status, lời báo và câu đã qua guard.
@@ -361,6 +382,7 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
         // Đây luôn là câu của vòng sửa: guard từ chối câu đầu thì câu hỏi vào vòng sửa. Lý do của guard viết cho mô
         // hình và đã nằm trong chi tiết bước guard; người hỏi không sửa được câu SQL nên nhận lời của hệ thống.
         Attempt::Refused { .. } => (AskStatus::Rejected, Some(REFUSED_MESSAGE.to_string()), None),
+        Attempt::DoubleCounted { message, .. } => (AskStatus::Rejected, Some(message), None),
         Attempt::RunFailed { shown, error } => (
             AskStatus::Failed,
             Some(format!(
