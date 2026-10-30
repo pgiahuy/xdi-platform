@@ -633,6 +633,16 @@ của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cu�
 Câu có cụm khớp nhiều cột thì backend hỏi lại trước khi viết SQL: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
 SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
 
+Chưa biết dataset có gì thì bấm **Tổng quan dữ liệu** cạnh ô **Dataset** (trang **Dữ liệu**: nút **Tổng quan** ở dòng
+của dataset). Khung ghi số dòng và khoảng thời gian có dữ liệu, các cột xếp theo nhóm **Số đo**, **Chia nhóm theo**,
+**Thời gian**, **Mã**, **Chữ khác** (tên cột, nhãn tiếng Việt trong ngoặc, mô tả, % ô trống, số giá trị khác nhau, các
+giá trị nhiều dòng nhất), biểu đồ dựng sẵn (độ đo chính và số dòng theo tháng hay theo ngày, số dòng theo giá trị của
+từng cột chia nhóm) và các chỉ số đã định nghĩa. Bấm một cột, một giá trị, một chỉ số hay tiêu đề một biểu đồ thì câu
+hỏi được điền vào ô hỏi, ví dụ bấm `Market` trên DataCo thì "Doanh thu theo Market"; sửa câu rồi bấm **Hỏi**. Từ trang
+**Dữ liệu**, bấm như vậy mở trang hỏi trên đúng dataset đó. Khung không gọi mô hình. Hồ sơ đang lập thì khung ghi phần
+nào chưa có; người có vai dữ liệu chỉ xem một phần dòng thì không thấy số ô trống, số giá trị khác nhau và số dòng theo
+giá trị, vì các số đó tính trên mọi dòng.
+
 ### Bước 6. Đọc kết quả và minh chứng
 
 Câu trả lời nằm trong thẻ **Trả lời** ngay dưới câu đã hỏi. Đầu thẻ là lời trả lời ngắn (câu "tại sao" thì hàng ba số và

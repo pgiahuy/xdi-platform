@@ -38,8 +38,10 @@ import { SampleModeSwitch } from '@/components/ask/SampleModeSwitch'
 import { SuggestedQuestions } from '@/components/ask/SuggestedQuestions'
 import type { ProfileProgress } from '@/components/ask/types'
 import { FormMessage } from '@/components/forms/FormMessage'
+import { OverviewToggle } from '@/components/overview/OverviewToggle'
 import { AskDatasetStatus } from './AskDatasetStatus'
 import { AskEvidence } from './AskEvidence'
+import { AskOverview, askOverviewId } from './AskOverview'
 import { AskConversation } from './AskConversation'
 import type { Answer } from './AskOutcome'
 import { useEvidenceView } from './evidenceView'
@@ -60,7 +62,9 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   const datasets = useDatasets(ws, { watchProfiles: true })
   const ask = useAsk(ws)
   const [params, setParams] = useSearchParams()
-  const [question, setQuestion] = useState('')
+  // ?q= điền sẵn ô hỏi: trang Dữ liệu mở trang này với câu bấm từ khung tổng quan (#198).
+  const [question, setQuestion] = useState(() => params.get('q') ?? '')
+  const [overviewOpen, setOverviewOpen] = useState(false)
   const [pickedDataset, setPickedDataset] = useState(() => params.get('dataset') ?? undefined)
   // Cuộc mở lại từ đường dẫn hay từ danh sách; null khi đang ở cuộc mới (kể cả cuộc vừa tạo trong phiên này).
   const [openedId, setOpenedId] = useState(() => params.get('c'))
@@ -241,8 +245,19 @@ function WorkspaceAsk({ ws }: { ws: string }) {
             // Dữ liệu mẫu không qua dataset thật, báo hồ sơ của dataset đang chọn ở đó chỉ gây nhầm.
             profile={fromSamples ? 'ready' : buildProfileProgress(dataset)}
             disabled={ask.isPending}
+            action={
+              <OverviewToggle
+                open={overviewOpen}
+                onToggle={() => setOverviewOpen((open) => !open)}
+                controls={askOverviewId}
+                disabled={fromSamples || datasetId === ''}
+              />
+            }
           />
         </div>
+      )}
+      {overviewOpen && !fromSamples && datasetId !== '' && (
+        <AskOverview ws={ws} datasetId={datasetId} onPick={setQuestion} onClose={() => setOverviewOpen(false)} />
       )}
       {import.meta.env.DEV && <SampleModeSwitch checked={sampleMode} onChange={setSampleMode} />}
       {hasDatasets && (

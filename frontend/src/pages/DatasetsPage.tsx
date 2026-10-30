@@ -2,7 +2,8 @@
 /* pages/DatasetsPage.tsx - trang Dữ liệu của workspace: danh sách dataset, và khung nạp file cho admin.
 Vai lấy từ /auth/me (đã có trong bộ đệm, AppLayout vừa đọc). Ẩn khung nạp với member chỉ để giao diện gọn;
 quyền thật nằm ở backend, member gọi thẳng API vẫn nhận 403.
-Hồ sơ cột (kiểu, null, min, max, vai trò cột) chưa có endpoint (#22); tới lúc đó cột chỉ hiện ngay sau khi nạp. */
+Hồ sơ cột, chỉ số và biểu đồ dựng sẵn của từng dataset ở khung tổng quan (DatasetOverviewSection.tsx, #198), mở bằng
+nút Tổng quan của dòng dataset. */
 
 import { useRef, useState } from 'react'
 import { useParams } from 'react-router'
@@ -13,6 +14,7 @@ import type { DatasetRow } from '@/components/datasets/types'
 import { EmptyState } from '@/components/EmptyState'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
+import { DatasetOverviewSection } from './DatasetOverviewSection'
 import { DatasetUpload } from './DatasetUpload'
 import { RouterLink } from './RouterLink'
 
@@ -29,6 +31,8 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
   const deleteDataset = useDeleteDataset(ws)
   const [deleteError, setDeleteError] = useState<string>()
   const [target, setTarget] = useState<Dataset>()
+  const [overviewId, setOverviewId] = useState<string>()
+  const overviewDataset = datasets.data?.find((d) => d.id === overviewId)
   const uploadHeading = useRef<HTMLHeadingElement>(null)
 
   const isAdmin = me.data?.workspaces.find((m) => m.slug === ws)?.role === 'admin'
@@ -68,12 +72,16 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
           error={datasets.error}
           onRetry={() => datasets.refetch()}
           isAdmin={isAdmin}
+          onOverview={(row) => setOverviewId(row.id)}
           onAddVersion={addVersion}
           onDelete={remove}
           deletePending={deleteDataset.isPending}
         />
         {deleteError && <FormMessage kind="error">{deleteError}</FormMessage>}
       </section>
+      {overviewDataset && (
+        <DatasetOverviewSection ws={ws} dataset={overviewDataset} onClose={() => setOverviewId(undefined)} />
+      )}
     </div>
   )
 }
@@ -83,12 +91,13 @@ type ListBodyProps = {
   error: Error | null
   onRetry: () => void
   isAdmin: boolean
+  onOverview: (row: DatasetRow) => void
   onAddVersion: (row: DatasetRow) => void
   onDelete: (row: DatasetRow) => void
   deletePending: boolean
 }
 
-function ListBody({ datasets, error, onRetry, isAdmin, onAddVersion, onDelete, deletePending }: ListBodyProps) {
+function ListBody({ datasets, error, onRetry, isAdmin, onOverview, onAddVersion, onDelete, deletePending }: ListBodyProps) {
   if (error && !datasets) {
     return (
       <EmptyState
@@ -119,6 +128,7 @@ function ListBody({ datasets, error, onRetry, isAdmin, onAddVersion, onDelete, d
   return (
     <DatasetList
       datasets={rows}
+      onOverview={onOverview}
       onAddVersion={isAdmin ? onAddVersion : undefined}
       onDelete={isAdmin ? onDelete : undefined}
       deletePending={deletePending}

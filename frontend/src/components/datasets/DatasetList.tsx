@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/datasets/DatasetList.tsx - danh sách dataset của workspace, mới tạo đứng đầu (backend sắp theo ngày tạo).
 Mỗi dataset một dòng xuống hàng được, không dùng bảng: màn 320px không đủ chỗ cho ba cột.
-onAddVersion và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. Link Chỉ số (màn chỉ số
-của dataset) hiện với mọi người khi trang truyền metricsHref. */
+onAddVersion và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. onOverview mở khung tổng
+quan dữ liệu của dataset (#198), cho mọi vai. Link Chỉ số (màn chỉ số của dataset) hiện với mọi người khi trang truyền
+metricsHref. */
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { LinkComponent } from '@/components/shell/types'
@@ -11,6 +12,7 @@ import type { DatasetRow } from './types'
 
 type Props = {
   datasets: DatasetRow[]
+  onOverview?: (dataset: DatasetRow) => void
   onAddVersion?: (dataset: DatasetRow) => void
   onDelete?: (dataset: DatasetRow) => void
   deletePending?: boolean
@@ -21,7 +23,15 @@ type Props = {
 
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
-export function DatasetList({ datasets, onAddVersion, onDelete, deletePending, metricsHref, link: Link }: Props) {
+export function DatasetList({
+  datasets,
+  onOverview,
+  onAddVersion,
+  onDelete,
+  deletePending,
+  metricsHref,
+  link: Link,
+}: Props) {
   return (
     <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {datasets.map((dataset) => (
@@ -36,6 +46,16 @@ export function DatasetList({ datasets, onAddVersion, onDelete, deletePending, m
               <span className="whitespace-nowrap">{dateFormat.format(new Date(dataset.createdAt))}</span>
             </p>
           </div>
+          {onOverview && (
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`Tổng quan dữ liệu của ${dataset.name}`}
+              onClick={() => onOverview(dataset)}
+            >
+              Tổng quan
+            </Button>
+          )}
           {metricsHref && Link && (
             <Link
               href={metricsHref(dataset)}
