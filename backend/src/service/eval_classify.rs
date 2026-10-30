@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppError;
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
 use crate::service::ask::context::build_ask_context;
-use crate::service::eval::prepare;
+use crate::service::eval_prepare::prepare;
 use crate::service::explain::form::{build_question_kind, QuestionKind};
 use crate::service::workspaces;
 use crate::state::AppState;

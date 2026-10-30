@@ -576,7 +576,7 @@ async fn free_logical_table(
 }
 
 /// Định danh SQL hợp lệ ([a-z_][a-z0-9_]*), khớp ràng buộc của cột datasets.logical_table.
-fn logical_table_from_name(name: &str) -> String {
+pub(crate) fn logical_table_from_name(name: &str) -> String {
     let ascii = deunicode::deunicode(name).to_lowercase();
     let joined = ascii
         .split(|c: char| !c.is_ascii_alphanumeric())

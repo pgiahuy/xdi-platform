@@ -1,0 +1,1277 @@
+[
+  {
+    "id": "oulad-a01",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Có bao nhiêu sinh viên theo từng kết quả cuối khóa?",
+    "variants": [
+      "kết quả cuối khóa mỗi loại bao nhiêu sinh viên vậy",
+      "dem so sinh vien theo ket qua cuoi khoa"
+    ],
+    "expected_sql": [
+      "SELECT final_result, COUNT(*) AS students FROM studentinfo GROUP BY final_result",
+      "SELECT final_result, COUNT(DISTINCT id_student) AS students FROM studentinfo GROUP BY final_result"
+    ],
+    "check_sql": [
+      "SELECT final_result, SUM(1) FROM studentinfo GROUP BY 1",
+      "SELECT final_result, COUNT(*) FROM (SELECT DISTINCT final_result, id_student FROM studentinfo) GROUP BY 1"
+    ],
+    "required_columns": [
+      "final_result",
+      "students"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Đáp án 1 đếm dòng (một sinh viên học hai học phần tính hai lần), đáp án 2 đếm mã sinh viên khác nhau."
+  },
+  {
+    "id": "oulad-a02",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Tỷ lệ đạt (Pass hoặc Distinction) của từng môn học",
+    "variants": [
+      "mỗi môn thì tỷ lệ qua môn bao nhiêu, tính cả loại giỏi",
+      "ty le dat theo mon hoc, dat la Pass hoac Distinction"
+    ],
+    "expected_sql": [
+      "SELECT code_module, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS pass_rate FROM studentinfo GROUP BY code_module"
+    ],
+    "check_sql": [
+      "SELECT code_module, COUNT(*) FILTER (WHERE final_result = 'Pass' OR final_result = 'Distinction') / COUNT(*) FROM studentinfo GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_module",
+      "pass_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-a03",
+    "group": "single",
+    "kind": "top_n_group",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Trong mỗi môn, 3 vùng nào có nhiều sinh viên nhất?",
+    "variants": [
+      "top 3 vung dong sinh vien nhat cua tung mon",
+      "Mỗi môn học cho mình 3 vùng có số sinh viên cao nhất"
+    ],
+    "expected_sql": [
+      "SELECT code_module, region, students FROM ( SELECT code_module, region, COUNT(*) AS students, ROW_NUMBER() OVER (PARTITION BY code_module ORDER BY COUNT(*) DESC) AS rn FROM studentinfo GROUP BY code_module, region) t WHERE rn <= 3",
+      "SELECT code_module, region, students FROM ( SELECT code_module, region, COUNT(DISTINCT id_student) AS students, ROW_NUMBER() OVER (PARTITION BY code_module ORDER BY COUNT(DISTINCT id_student) DESC) AS rn FROM studentinfo GROUP BY code_module, region) t WHERE rn <= 3"
+    ],
+    "check_sql": [
+      "SELECT code_module, region, COUNT(*) FROM studentinfo GROUP BY 1, 2 QUALIFY rank() OVER (PARTITION BY code_module ORDER BY COUNT(*) DESC) <= 3",
+      "SELECT a.code_module, a.region, a.n FROM (SELECT code_module, region, COUNT(DISTINCT id_student) AS n FROM studentinfo GROUP BY 1, 2) a WHERE (SELECT COUNT(*) FROM (SELECT code_module, region, COUNT(DISTINCT id_student) AS n FROM studentinfo GROUP BY 1, 2) b WHERE b.code_module = a.code_module AND b.n > a.n) < 3"
+    ],
+    "required_columns": [
+      "code_module",
+      "region",
+      "students"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Không xét thứ tự giữa các môn; tập dòng quyết định đúng sai. Không có hòa ở hạng 3 với cả hai cách đếm."
+  },
+  {
+    "id": "oulad-a04",
+    "group": "single",
+    "kind": "same_period",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "So sánh số sinh viên của từng môn giữa kỳ 2013J và kỳ 2014J",
+    "variants": [
+      "số sinh viên mỗi môn kỳ 2014J so với kỳ 2013J thế nào",
+      "kỳ 2013J với 2014J, môn nào đông sinh viên hơn, so từng môn"
+    ],
+    "expected_sql": [
+      "SELECT code_module, code_presentation, COUNT(*) AS students FROM studentinfo WHERE code_presentation IN ('2013J', '2014J') GROUP BY code_module, code_presentation",
+      "SELECT code_module, COUNT(*) FILTER (WHERE code_presentation = '2013J') AS students_2013j, COUNT(*) FILTER (WHERE code_presentation = '2014J') AS students_2014j FROM studentinfo WHERE code_presentation IN ('2013J', '2014J') GROUP BY code_module"
+    ],
+    "check_sql": [
+      "SELECT code_module, code_presentation, SUM(1) FROM studentinfo WHERE code_presentation = '2013J' OR code_presentation = '2014J' GROUP BY 1, 2",
+      "SELECT m.code_module, (SELECT COUNT(*) FROM studentinfo s WHERE s.code_module = m.code_module AND s.code_presentation = '2013J'), (SELECT COUNT(*) FROM studentinfo s WHERE s.code_module = m.code_module AND s.code_presentation = '2014J') FROM (SELECT DISTINCT code_module FROM studentinfo WHERE code_presentation = '2013J' OR code_presentation = '2014J') m"
+    ],
+    "required_columns": [
+      "code_module",
+      "students"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Hai dạng đều đúng: dạng dài (môn, kỳ, số) hoặc dạng rộng (môn, số 2013J, số 2014J). CCC không mở kỳ 2013J: dạng dài không có dòng, dạng rộng ghi 0. Trong một học phần mã sinh viên không lặp nên đếm dòng hay đếm mã khác nhau ra cùng số."
+  },
+  {
+    "id": "oulad-a05",
+    "group": "single",
+    "kind": "no_diacritics",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "ty le truot theo trinh do hoc van",
+    "variants": [
+      "theo tung trinh do hoc van cao nhat thi ty le Fail la bao nhieu",
+      "Tỷ lệ trượt (Fail) theo trình độ học vấn"
+    ],
+    "expected_sql": [
+      "SELECT highest_education, AVG(CASE WHEN final_result = 'Fail' THEN 1.0 ELSE 0.0 END) AS fail_rate FROM studentinfo GROUP BY highest_education"
+    ],
+    "check_sql": [
+      "SELECT highest_education, SUM(CASE final_result WHEN 'Fail' THEN 1 ELSE 0 END) / COUNT(*) FROM studentinfo GROUP BY 1"
+    ],
+    "required_columns": [
+      "highest_education",
+      "fail_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Trượt là final_result = 'Fail'; Withdrawn (bỏ học) không tính là trượt nhưng vẫn ở mẫu số."
+  },
+  {
+    "id": "oulad-a06",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "courses"
+    ],
+    "question": "Những học phần nào dài nhất?",
+    "variants": [
+      "hoc phan nao co so ngay dai nhat",
+      "Học phần dài nhất là môn nào, kỳ nào, bao nhiêu ngày"
+    ],
+    "expected_sql": [
+      "SELECT code_module, code_presentation, module_presentation_length FROM courses WHERE module_presentation_length = (SELECT MAX(module_presentation_length) FROM courses)"
+    ],
+    "check_sql": [
+      "SELECT code_module, code_presentation, module_presentation_length FROM courses QUALIFY rank() OVER (ORDER BY module_presentation_length DESC) = 1"
+    ],
+    "required_columns": [
+      "code_module",
+      "code_presentation",
+      "module_presentation_length"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Năm học phần cùng dài 269 ngày; câu chỉ trả một dòng (LIMIT 1) là sai."
+  },
+  {
+    "id": "oulad-a07",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "assessments"
+    ],
+    "question": "Tổng trọng số bài thi cuối kỳ (Exam) của từng học phần",
+    "variants": [
+      "moi hoc phan bai thi cuoi ky cong lai trong so bao nhieu",
+      "Mỗi môn mỗi kỳ, bài Exam tổng trọng số là bao nhiêu?"
+    ],
+    "expected_sql": [
+      "SELECT code_module, code_presentation, SUM(weight) AS exam_weight FROM assessments WHERE assessment_type = 'Exam' GROUP BY code_module, code_presentation"
+    ],
+    "check_sql": [
+      "SELECT code_module, code_presentation, SUM(CASE WHEN assessment_type = 'Exam' THEN weight END) FROM assessments GROUP BY 1, 2"
+    ],
+    "required_columns": [
+      "code_module",
+      "code_presentation",
+      "exam_weight"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Môn CCC có hai bài thi nên tổng 200; các học phần khác 100."
+  },
+  {
+    "id": "oulad-a08",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "studentassessment"
+    ],
+    "question": "Điểm trung bình của bài nộp, tách điểm chuyển từ lần học trước và điểm làm mới",
+    "variants": [
+      "diem trung binh theo is_banked",
+      "Điểm bảo lưu với điểm làm lần này, trung bình mỗi loại bao nhiêu?"
+    ],
+    "expected_sql": [
+      "SELECT is_banked, AVG(TRY_CAST(score AS DOUBLE)) AS avg_score FROM studentassessment GROUP BY is_banked"
+    ],
+    "check_sql": [
+      "SELECT is_banked, SUM(CAST(NULLIF(score, '?') AS DOUBLE)) / COUNT(NULLIF(score, '?')) FROM studentassessment GROUP BY 1"
+    ],
+    "required_columns": [
+      "is_banked",
+      "avg_score"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Cột score đọc thành chữ vì nguồn ghi '?' khi thiếu điểm (173 dòng); phải bỏ '?' trước khi tính."
+  },
+  {
+    "id": "oulad-a09",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "studentassessment"
+    ],
+    "question": "Tỷ lệ bài nộp có điểm dưới 40",
+    "variants": [
+      "bao nhieu phan tram bai nop bi duoi 40 diem, tinh theo ty le",
+      "Bài nộp điểm dưới 40 chiếm tỷ lệ bao nhiêu"
+    ],
+    "expected_sql": [
+      "SELECT AVG(CASE WHEN TRY_CAST(score AS DOUBLE) < 40 THEN 1.0 ELSE 0.0 END) FILTER (WHERE TRY_CAST(score AS DOUBLE) IS NOT NULL) AS low_score_rate FROM studentassessment",
+      "SELECT AVG(CASE WHEN TRY_CAST(score AS DOUBLE) < 40 THEN 1.0 ELSE 0.0 END) AS low_score_rate FROM studentassessment"
+    ],
+    "check_sql": [
+      "SELECT COUNT(*) FILTER (WHERE CAST(score AS DOUBLE) < 40) / COUNT(*) FROM studentassessment WHERE score <> '?'",
+      "SELECT (SELECT COUNT(*) FROM studentassessment WHERE score <> '?' AND CAST(score AS DOUBLE) < 40) / (SELECT COUNT(*) FROM studentassessment)"
+    ],
+    "required_columns": [
+      "low_score_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Đáp án 1 chỉ tính bài có điểm, đáp án 2 tính trên mọi bài nộp (bài thiếu điểm tính là không dưới 40)."
+  },
+  {
+    "id": "oulad-a10",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "vle"
+    ],
+    "question": "5 loại hoạt động có nhiều tài liệu nhất trên hệ thống học trực tuyến",
+    "variants": [
+      "top 5 activity_type nhieu tai lieu nhat",
+      "Loại hoạt động nào nhiều tài liệu nhất, lấy 5 loại"
+    ],
+    "expected_sql": [
+      "SELECT activity_type, COUNT(*) AS materials FROM vle GROUP BY activity_type ORDER BY materials DESC LIMIT 5"
+    ],
+    "check_sql": [
+      "SELECT activity_type, COUNT(id_site) FROM vle GROUP BY 1 QUALIFY row_number() OVER (ORDER BY COUNT(id_site) DESC) <= 5 ORDER BY 2 DESC"
+    ],
+    "required_columns": [
+      "activity_type",
+      "materials"
+    ],
+    "ordered": true,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-a11",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "studentregistration"
+    ],
+    "question": "Mỗi môn có bao nhiêu sinh viên hủy đăng ký trước ngày học phần bắt đầu?",
+    "variants": [
+      "so sinh vien huy dang ky truoc khi bat dau hoc phan theo mon",
+      "Trước ngày bắt đầu học phần mà đã hủy đăng ký thì mỗi môn có bao nhiêu sinh viên"
+    ],
+    "expected_sql": [
+      "SELECT code_module, COUNT(*) AS students FROM studentregistration WHERE TRY_CAST(date_unregistration AS INTEGER) < 0 GROUP BY code_module",
+      "SELECT code_module, COUNT(DISTINCT id_student) AS students FROM studentregistration WHERE TRY_CAST(date_unregistration AS INTEGER) < 0 GROUP BY code_module"
+    ],
+    "check_sql": [
+      "SELECT code_module, SUM(CASE WHEN date_unregistration <> '?' AND CAST(date_unregistration AS INTEGER) < 0 THEN 1 ELSE 0 END) FROM studentregistration GROUP BY 1",
+      "SELECT code_module, COUNT(*) FROM (SELECT DISTINCT code_module, id_student FROM studentregistration WHERE date_unregistration <> '?' AND CAST(date_unregistration AS INTEGER) < 0) GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_module",
+      "students"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "date_unregistration là số ngày so với ngày bắt đầu, âm là trước; đọc thành chữ vì nguồn ghi '?' khi không hủy."
+  },
+  {
+    "id": "oulad-a12",
+    "group": "single",
+    "kind": "plain",
+    "tables": [
+      "studentregistration"
+    ],
+    "question": "Trung bình sinh viên đăng ký sớm bao nhiêu ngày trước khi học phần bắt đầu, theo môn?",
+    "variants": [
+      "moi mon sinh vien dang ky truoc trung binh may ngay",
+      "Theo từng môn, ngày đăng ký trung bình là bao nhiêu"
+    ],
+    "expected_sql": [
+      "SELECT code_module, AVG(-TRY_CAST(date_registration AS INTEGER)) AS days_before_start FROM studentregistration GROUP BY code_module",
+      "SELECT code_module, AVG(TRY_CAST(date_registration AS INTEGER)) AS avg_date_registration FROM studentregistration GROUP BY code_module"
+    ],
+    "check_sql": [
+      "SELECT code_module, -SUM(CAST(NULLIF(date_registration, '?') AS INTEGER)) / COUNT(NULLIF(date_registration, '?')) FROM studentregistration GROUP BY 1",
+      "SELECT code_module, SUM(CAST(NULLIF(date_registration, '?') AS INTEGER)) / COUNT(NULLIF(date_registration, '?')) FROM studentregistration GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_module"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "date_registration âm là đăng ký trước ngày bắt đầu. Đáp án 1 đổi dấu (số ngày sớm), đáp án 2 giữ giá trị gốc (số âm); cả hai bỏ 45 dòng ghi '?'."
+  },
+  {
+    "id": "oulad-a13",
+    "group": "single",
+    "kind": "top_n_group",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Trong mỗi môn, kỳ nào có tỷ lệ bỏ học cao nhất?",
+    "variants": [
+      "mon nao ky nao bo hoc nhieu nhat theo ty le, moi mon mot ky",
+      "Với từng môn học, chỉ ra kỳ có tỷ lệ Withdrawn cao nhất"
+    ],
+    "expected_sql": [
+      "SELECT code_module, code_presentation, withdrawn_rate FROM ( SELECT code_module, code_presentation, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate, ROW_NUMBER() OVER (PARTITION BY code_module ORDER BY AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) DESC) AS rn FROM studentinfo GROUP BY code_module, code_presentation) t WHERE rn = 1",
+      "SELECT code_module, code_presentation FROM ( SELECT code_module, code_presentation, ROW_NUMBER() OVER (PARTITION BY code_module ORDER BY AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) DESC) AS rn FROM studentinfo GROUP BY code_module, code_presentation) t WHERE rn = 1"
+    ],
+    "check_sql": [
+      "SELECT code_module, code_presentation, COUNT(*) FILTER (WHERE final_result = 'Withdrawn') / COUNT(*) AS r FROM studentinfo GROUP BY 1, 2 QUALIFY r = MAX(r) OVER (PARTITION BY code_module)",
+      "SELECT code_module, code_presentation FROM studentinfo GROUP BY 1, 2 QUALIFY COUNT(*) FILTER (WHERE final_result = 'Withdrawn') / COUNT(*) = MAX(COUNT(*) FILTER (WHERE final_result = 'Withdrawn') / COUNT(*)) OVER (PARTITION BY code_module)"
+    ],
+    "required_columns": [
+      "code_module",
+      "code_presentation"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Đáp án 2 là cùng câu trả lời không kèm cột tỷ lệ."
+  },
+  {
+    "id": "oulad-a14",
+    "group": "single",
+    "kind": "no_diacritics",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "so sinh vien bo hoc theo nhom tuoi o mon DDD",
+    "variants": [
+      "mon DDD, moi nhom tuoi co bao nhieu sinh vien Withdrawn",
+      "Số sinh viên bỏ học của môn DDD chia theo nhóm tuổi"
+    ],
+    "expected_sql": [
+      "SELECT age_band, COUNT(*) AS students FROM studentinfo WHERE code_module = 'DDD' AND final_result = 'Withdrawn' GROUP BY age_band",
+      "SELECT age_band, COUNT(DISTINCT id_student) AS students FROM studentinfo WHERE code_module = 'DDD' AND final_result = 'Withdrawn' GROUP BY age_band"
+    ],
+    "check_sql": [
+      "SELECT age_band, SUM(CASE WHEN code_module = 'DDD' AND final_result = 'Withdrawn' THEN 1 ELSE 0 END) FROM studentinfo GROUP BY 1 HAVING SUM(CASE WHEN code_module = 'DDD' AND final_result = 'Withdrawn' THEN 1 ELSE 0 END) > 0",
+      "SELECT age_band, COUNT(*) FROM (SELECT DISTINCT age_band, id_student FROM studentinfo WHERE code_module = 'DDD' AND final_result = 'Withdrawn') GROUP BY 1"
+    ],
+    "required_columns": [
+      "age_band",
+      "students"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Đáp án 2 đếm mã sinh viên khác nhau (một người bỏ môn DDD ở hai kỳ tính một lần)."
+  },
+  {
+    "id": "oulad-a15",
+    "group": "single",
+    "kind": "why_groups",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao số sinh viên bỏ học ở London nhiều hơn ở Scotland?",
+    "variants": [
+      "tai sao London bo hoc nhieu hon Scotland",
+      "Số sinh viên Withdrawn vùng London cao hơn Scotland là vì sao"
+    ],
+    "expected_sql": [
+      "SELECT region, COUNT(*) AS withdrawn FROM studentinfo WHERE final_result = 'Withdrawn' AND region IN ('London Region', 'Scotland') GROUP BY region",
+      "SELECT region, COUNT(DISTINCT id_student) AS withdrawn FROM studentinfo WHERE final_result = 'Withdrawn' AND region IN ('London Region', 'Scotland') GROUP BY region"
+    ],
+    "check_sql": [
+      "SELECT region, SUM(CASE WHEN final_result = 'Withdrawn' THEN 1 ELSE 0 END) FROM studentinfo WHERE region = 'London Region' OR region = 'Scotland' GROUP BY 1",
+      "SELECT region, COUNT(*) FROM (SELECT DISTINCT region, id_student FROM studentinfo WHERE final_result = 'Withdrawn' AND (region = 'London Region' OR region = 'Scotland')) GROUP BY 1"
+    ],
+    "required_columns": [
+      "region",
+      "withdrawn"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Đáp án là số liệu chính của câu so hai nhóm: số sinh viên bỏ học của hai vùng."
+  },
+  {
+    "id": "oulad-a16",
+    "group": "single",
+    "kind": "why_groups",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao nhóm dưới 35 tuổi có nhiều sinh viên trượt hơn nhóm 35-55 tuổi?",
+    "variants": [
+      "sao nhom 0-35 tuoi truot nhieu hon nhom 35-55",
+      "Nhóm 0-35 tuổi trượt nhiều hơn nhóm 35-55, lý do là gì?"
+    ],
+    "expected_sql": [
+      "SELECT age_band, COUNT(*) AS failed FROM studentinfo WHERE final_result = 'Fail' AND age_band IN ('0-35', '35-55') GROUP BY age_band",
+      "SELECT age_band, COUNT(DISTINCT id_student) AS failed FROM studentinfo WHERE final_result = 'Fail' AND age_band IN ('0-35', '35-55') GROUP BY age_band"
+    ],
+    "check_sql": [
+      "SELECT age_band, SUM(CASE WHEN final_result = 'Fail' THEN 1 ELSE 0 END) FROM studentinfo WHERE age_band <> '55<=' GROUP BY 1",
+      "SELECT age_band, COUNT(*) FROM (SELECT DISTINCT age_band, id_student FROM studentinfo WHERE final_result = 'Fail' AND age_band <> '55<=') GROUP BY 1"
+    ],
+    "required_columns": [
+      "age_band",
+      "failed"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-a17",
+    "group": "single",
+    "kind": "why_periods",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Tại sao số sinh viên bỏ học môn FFF tăng từ kỳ 2013J lên kỳ 2014J?",
+    "variants": [
+      "vi sao mon FFF ky 2014J bo hoc nhieu hon ky 2013J",
+      "Từ 2013J sang 2014J, môn FFF số sinh viên Withdrawn tăng, vì đâu?"
+    ],
+    "expected_sql": [
+      "SELECT code_presentation, COUNT(*) AS withdrawn FROM studentinfo WHERE code_module = 'FFF' AND final_result = 'Withdrawn' AND code_presentation IN ('2013J', '2014J') GROUP BY code_presentation"
+    ],
+    "check_sql": [
+      "SELECT code_presentation, SUM(CASE WHEN final_result = 'Withdrawn' THEN 1 ELSE 0 END) FROM studentinfo WHERE code_module = 'FFF' AND (code_presentation = '2013J' OR code_presentation = '2014J') GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_presentation",
+      "withdrawn"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "OULAD không có cột ngày; kỳ là giá trị của code_presentation, nên form so hai kỳ phải dùng cột này như nhóm."
+  },
+  {
+    "id": "oulad-a18",
+    "group": "single",
+    "kind": "ratio",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao sinh viên khai báo khuyết tật có tỷ lệ đạt thấp hơn sinh viên không khuyết tật?",
+    "variants": [
+      "tai sao sinh vien khuyet tat ty le dat thap hon",
+      "Tỷ lệ đạt của nhóm có khuyết tật thấp hơn nhóm không khuyết tật, nguyên nhân là gì?"
+    ],
+    "expected_sql": [
+      "SELECT disability, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS pass_rate FROM studentinfo GROUP BY disability"
+    ],
+    "check_sql": [
+      "SELECT disability, COUNT(*) FILTER (WHERE final_result IN ('Pass', 'Distinction')) / COUNT(*) FROM studentinfo GROUP BY 1"
+    ],
+    "required_columns": [
+      "disability",
+      "pass_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Tỷ lệ đạt tính cả Distinction, mẫu số gồm cả Withdrawn. disability ghi Y/N."
+  },
+  {
+    "id": "oulad-a19",
+    "group": "single",
+    "kind": "ratio",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao nhóm IMD 0-10% có tỷ lệ trượt cao hơn nhóm 90-100%?",
+    "variants": [
+      "sao imd 0-10% truot nhieu hon 90-100%",
+      "Nhóm thiếu thốn nhất (IMD 0-10%) trượt nhiều hơn nhóm 90-100% theo tỷ lệ, tại sao"
+    ],
+    "expected_sql": [
+      "SELECT imd_band, AVG(CASE WHEN final_result = 'Fail' THEN 1.0 ELSE 0.0 END) AS fail_rate FROM studentinfo WHERE imd_band IN ('0-10%', '90-100%') GROUP BY imd_band"
+    ],
+    "check_sql": [
+      "SELECT imd_band, SUM(CASE final_result WHEN 'Fail' THEN 1 ELSE 0 END) / COUNT(*) FROM studentinfo WHERE imd_band = '0-10%' OR imd_band = '90-100%' GROUP BY 1"
+    ],
+    "required_columns": [
+      "imd_band",
+      "fail_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-a20",
+    "group": "single",
+    "kind": "ratio",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao tỷ lệ đạt môn CCC kỳ 2014J cao hơn kỳ 2014B?",
+    "variants": [
+      "mon CCC ky 2014J ty le dat cao hon 2014B la do dau",
+      "Tại sao kỳ 2014J môn CCC đạt nhiều hơn kỳ 2014B, tính theo tỷ lệ"
+    ],
+    "expected_sql": [
+      "SELECT code_presentation, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS pass_rate FROM studentinfo WHERE code_module = 'CCC' AND code_presentation IN ('2014B', '2014J') GROUP BY code_presentation"
+    ],
+    "check_sql": [
+      "SELECT code_presentation, COUNT(*) FILTER (WHERE final_result IN ('Pass', 'Distinction')) / COUNT(*) FROM studentinfo WHERE code_module = 'CCC' GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_presentation",
+      "pass_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "CCC chỉ mở hai kỳ 2014B và 2014J."
+  },
+  {
+    "id": "oulad-a21",
+    "group": "single",
+    "kind": "ratio",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao tỷ lệ bỏ học môn DDD kỳ 2014B cao hơn kỳ 2013B?",
+    "variants": [
+      "tai sao DDD 2014B bo hoc nhieu hon 2013B, tinh theo ty le",
+      "Môn DDD: tỷ lệ Withdrawn kỳ 2014B tăng so với kỳ 2013B, nguyên nhân?"
+    ],
+    "expected_sql": [
+      "SELECT code_presentation, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM studentinfo WHERE code_module = 'DDD' AND code_presentation IN ('2013B', '2014B') GROUP BY code_presentation"
+    ],
+    "check_sql": [
+      "SELECT code_presentation, SUM(CASE WHEN final_result = 'Withdrawn' THEN 1 ELSE 0 END) / COUNT(*) FROM studentinfo WHERE code_module = 'DDD' AND right(code_presentation, 1) = 'B' GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_presentation",
+      "withdrawn_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-a22",
+    "group": "single",
+    "kind": "why_implicit",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Điều gì làm tỷ lệ đạt của môn GGG kỳ 2014J thấp hơn kỳ 2013J?",
+    "variants": [
+      "mon GGG ky 2014J dat it hon ky 2013J, yeu to nao",
+      "Yếu tố nào kéo tỷ lệ đạt môn GGG kỳ 2014J xuống so với 2013J"
+    ],
+    "expected_sql": [
+      "SELECT code_presentation, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS pass_rate FROM studentinfo WHERE code_module = 'GGG' AND code_presentation IN ('2013J', '2014J') GROUP BY code_presentation"
+    ],
+    "check_sql": [
+      "SELECT code_presentation, COUNT(*) FILTER (WHERE final_result = 'Pass' OR final_result = 'Distinction') / COUNT(*) FROM studentinfo WHERE code_module = 'GGG' AND code_presentation <> '2014B' GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_presentation",
+      "pass_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Câu cần giải thích nhưng không có cụm 'vì sao', 'tại sao'."
+  },
+  {
+    "id": "oulad-a23",
+    "group": "single",
+    "kind": "why_implicit",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Sinh viên trình độ Lower Than A Level đạt ít hơn hẳn nhóm A Level or Equivalent, yếu tố nào góp phần?",
+    "variants": [
+      "nhom Lower Than A Level ty le dat thap hon nhom A Level or Equivalent, phan tich giup",
+      "Phân tích giúp: tỷ lệ đạt của nhóm Lower Than A Level so với A Level or Equivalent"
+    ],
+    "expected_sql": [
+      "SELECT highest_education, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS pass_rate FROM studentinfo WHERE highest_education IN ('Lower Than A Level', 'A Level or Equivalent') GROUP BY highest_education"
+    ],
+    "check_sql": [
+      "SELECT highest_education, SUM(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1 ELSE 0 END) / COUNT(*) FROM studentinfo WHERE highest_education = 'Lower Than A Level' OR highest_education = 'A Level or Equivalent' GROUP BY 1"
+    ],
+    "required_columns": [
+      "highest_education",
+      "pass_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-a24",
+    "group": "single",
+    "kind": "false_premise",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao sinh viên nữ có tỷ lệ đạt thấp hơn sinh viên nam?",
+    "variants": [
+      "tai sao nu dat it hon nam",
+      "Nữ có tỷ lệ đạt thấp hơn nam là do đâu"
+    ],
+    "expected_sql": [
+      "SELECT gender, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS pass_rate FROM studentinfo GROUP BY gender"
+    ],
+    "check_sql": [
+      "SELECT gender, COUNT(*) FILTER (WHERE final_result IN ('Pass', 'Distinction')) / COUNT(*) FROM studentinfo GROUP BY 1"
+    ],
+    "required_columns": [
+      "gender",
+      "pass_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Tiền đề sai: nữ (F) đạt khoảng 48,4%, nam (M) khoảng 46,2%. Trả lời đúng phải nói nữ không thấp hơn."
+  },
+  {
+    "id": "oulad-a25",
+    "group": "single",
+    "kind": "false_premise",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao tỷ lệ bỏ học môn GGG giảm từ kỳ 2014B sang kỳ 2014J?",
+    "variants": [
+      "tai sao GGG 2014J bo hoc giam so voi 2014B",
+      "Môn GGG kỳ 2014J bỏ học ít đi so với 2014B, lý do?"
+    ],
+    "expected_sql": [
+      "SELECT code_presentation, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM studentinfo WHERE code_module = 'GGG' AND code_presentation IN ('2014B', '2014J') GROUP BY code_presentation"
+    ],
+    "check_sql": [
+      "SELECT code_presentation, SUM(CASE WHEN final_result = 'Withdrawn' THEN 1 ELSE 0 END) / COUNT(*) FROM studentinfo WHERE code_module = 'GGG' AND code_presentation LIKE '2014%' GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_presentation",
+      "withdrawn_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Tiền đề sai: tỷ lệ bỏ học GGG tăng từ 12,0% (2014B) lên 16,8% (2014J)."
+  },
+  {
+    "id": "oulad-a26",
+    "group": "single",
+    "kind": "why_no_period",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao tỷ lệ bỏ học môn BBB tăng?",
+    "variants": [
+      "sao BBB bo hoc tang vay",
+      "Tỷ lệ Withdrawn của môn BBB tăng lên, nguyên nhân"
+    ],
+    "expected_sql": [
+      "SELECT code_presentation, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM studentinfo WHERE code_module = 'BBB' AND code_presentation IN ('2014B', '2014J') GROUP BY code_presentation",
+      "SELECT code_presentation, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM studentinfo WHERE code_module = 'BBB' GROUP BY code_presentation"
+    ],
+    "check_sql": [
+      "SELECT code_presentation, SUM(CASE WHEN final_result = 'Withdrawn' THEN 1 ELSE 0 END) / COUNT(*) FROM studentinfo WHERE code_module = 'BBB' AND code_presentation LIKE '2014%' GROUP BY 1",
+      "SELECT code_presentation, COUNT(*) FILTER (WHERE final_result = 'Withdrawn') / COUNT(*) FROM studentinfo WHERE code_module = 'BBB' GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_presentation",
+      "withdrawn_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Không nêu kỳ: đáp án 1 so kỳ mới nhất 2014J với kỳ liền trước 2014B, đáp án 2 là cả bốn kỳ."
+  },
+  {
+    "id": "oulad-a27",
+    "group": "single",
+    "kind": "follow_up",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Tại sao kỳ 2014B lại nhiều hơn kỳ 2013B?",
+    "variants": [
+      "sao 2014B nhieu hon 2013B",
+      "Kỳ 2014B cao hơn 2013B là vì sao"
+    ],
+    "earlier": [
+      "Số sinh viên bỏ học môn DDD theo từng kỳ"
+    ],
+    "expected_sql": [
+      "SELECT code_presentation, COUNT(*) AS withdrawn FROM studentinfo WHERE code_module = 'DDD' AND final_result = 'Withdrawn' AND code_presentation IN ('2013B', '2014B') GROUP BY code_presentation"
+    ],
+    "check_sql": [
+      "SELECT code_presentation, SUM(CASE WHEN final_result = 'Withdrawn' THEN 1 ELSE 0 END) FROM studentinfo WHERE code_module = 'DDD' AND code_presentation LIKE '%B' GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_presentation",
+      "withdrawn"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Câu tiếp nối: môn DDD và số bỏ học lấy từ câu trước trong earlier."
+  },
+  {
+    "id": "oulad-a28",
+    "group": "single",
+    "kind": "refuse",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Thu nhập trung bình của gia đình sinh viên theo vùng là bao nhiêu?",
+    "variants": [
+      "thu nhap trung binh gia dinh sinh vien moi vung",
+      "Mỗi vùng, gia đình sinh viên thu nhập trung bình bao nhiêu"
+    ],
+    "expected_sql": [],
+    "check_sql": [],
+    "required_columns": [],
+    "ordered": false,
+    "must_refuse": true,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Dữ liệu không có thu nhập. imd_band là nhóm chỉ số thiếu thốn của nơi ở, không phải thu nhập; dùng nó để trả lời là sai."
+  },
+  {
+    "id": "oulad-a29",
+    "group": "single",
+    "kind": "refuse",
+    "tables": [
+      "studentinfo"
+    ],
+    "question": "Vì sao sinh viên đi làm toàn thời gian bỏ học nhiều hơn sinh viên không đi làm?",
+    "variants": [
+      "tai sao sinh vien di lam full time bo hoc nhieu hon",
+      "Sinh viên vừa học vừa làm toàn thời gian bỏ học nhiều hơn, vì sao"
+    ],
+    "expected_sql": [],
+    "check_sql": [],
+    "required_columns": [],
+    "ordered": false,
+    "must_refuse": true,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Dữ liệu không ghi tình trạng việc làm."
+  },
+  {
+    "id": "oulad-b01",
+    "group": "multi",
+    "kind": "plain",
+    "tables": [
+      "student_assessments",
+      "students"
+    ],
+    "question": "Điểm trung bình các bài đánh giá theo kết quả cuối khóa",
+    "variants": [
+      "diem trung binh bai danh gia cua sinh vien Pass, Fail, Withdrawn, Distinction",
+      "Theo kết quả cuối khóa thì điểm trung bình bao nhiêu"
+    ],
+    "expected_sql": [
+      "SELECT s.final_result, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student GROUP BY s.final_result",
+      "SELECT final_result, AVG(student_avg) AS avg_score FROM ( SELECT s.final_result, AVG(sa.score) AS student_avg FROM student_assessments sa JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student GROUP BY s.code_module, s.code_presentation, s.id_student, s.final_result) t GROUP BY final_result"
+    ],
+    "check_sql": [
+      "SELECT s.final_result, SUM(sa.score) / COUNT(sa.score) FROM students s, student_assessments sa WHERE s.id_student = sa.id_student AND s.code_module = sa.code_module AND s.code_presentation = sa.code_presentation GROUP BY 1",
+      "SELECT s.final_result, SUM(t.m) / COUNT(t.m) FROM students s JOIN (SELECT code_module, code_presentation, id_student, SUM(score) / COUNT(score) AS m FROM student_assessments GROUP BY 1, 2, 3) t ON t.code_module = s.code_module AND t.code_presentation = s.code_presentation AND t.id_student = s.id_student GROUP BY 1"
+    ],
+    "required_columns": [
+      "final_result",
+      "avg_score"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Đáp án 1 trung bình trên mọi bài nộp; đáp án 2 trung bình của điểm trung bình từng sinh viên."
+  },
+  {
+    "id": "oulad-b02",
+    "group": "multi",
+    "kind": "plain",
+    "tables": [
+      "student_daily_clicks",
+      "students"
+    ],
+    "question": "Tổng số lần bấm trên hệ thống học trực tuyến theo kết quả cuối khóa",
+    "variants": [
+      "tong so click VLE theo ket qua cuoi khoa",
+      "Sinh viên Pass, Fail... mỗi nhóm bấm tổng cộng bao nhiêu lần"
+    ],
+    "expected_sql": [
+      "SELECT s.final_result, SUM(c.sum_click) AS clicks FROM student_daily_clicks c JOIN students s ON c.code_module = s.code_module AND c.code_presentation = s.code_presentation AND c.id_student = s.id_student GROUP BY s.final_result"
+    ],
+    "check_sql": [
+      "SELECT s.final_result, SUM(t.n) FROM students s JOIN (SELECT code_module, code_presentation, id_student, SUM(sum_click) AS n FROM student_daily_clicks GROUP BY 1, 2, 3) t ON t.code_module = s.code_module AND t.code_presentation = s.code_presentation AND t.id_student = s.id_student GROUP BY 1"
+    ],
+    "required_columns": [
+      "final_result",
+      "clicks"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-b03",
+    "group": "multi",
+    "kind": "plain",
+    "tables": [
+      "student_daily_clicks",
+      "students"
+    ],
+    "question": "Trung bình mỗi sinh viên bấm bao nhiêu lần trên hệ thống học trực tuyến, theo kết quả cuối khóa?",
+    "variants": [
+      "trung binh moi sinh vien click bao nhieu lan theo ket qua",
+      "Theo kết quả cuối khóa, số lần bấm trung bình mỗi sinh viên"
+    ],
+    "expected_sql": [
+      "SELECT s.final_result, AVG(COALESCE(t.clicks, 0)) AS avg_clicks FROM students s LEFT JOIN (SELECT code_module, code_presentation, id_student, SUM(sum_click) AS clicks FROM student_daily_clicks GROUP BY code_module, code_presentation, id_student) t ON t.code_module = s.code_module AND t.code_presentation = s.code_presentation AND t.id_student = s.id_student GROUP BY s.final_result",
+      "SELECT s.final_result, AVG(t.clicks) AS avg_clicks FROM students s JOIN (SELECT code_module, code_presentation, id_student, SUM(sum_click) AS clicks FROM student_daily_clicks GROUP BY code_module, code_presentation, id_student) t ON t.code_module = s.code_module AND t.code_presentation = s.code_presentation AND t.id_student = s.id_student GROUP BY s.final_result"
+    ],
+    "check_sql": [
+      "SELECT s.final_result, 1.0 * (SELECT SUM(c.sum_click) FROM student_daily_clicks c JOIN students s2 ON c.code_module = s2.code_module AND c.code_presentation = s2.code_presentation AND c.id_student = s2.id_student WHERE s2.final_result = s.final_result) / COUNT(*) FROM students s GROUP BY 1",
+      "SELECT s.final_result, 1.0 * SUM(c.sum_click) / COUNT(DISTINCT s.code_module || s.code_presentation || s.id_student) FROM students s JOIN student_daily_clicks c ON c.code_module = s.code_module AND c.code_presentation = s.code_presentation AND c.id_student = s.id_student GROUP BY 1"
+    ],
+    "required_columns": [
+      "final_result",
+      "avg_clicks"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Đáp án 1 tính cả sinh viên không có lượt bấm nào (0 lần), đáp án 2 chỉ tính sinh viên có lượt bấm. Mỗi sinh viên là một dòng students (một người học hai học phần tính hai lần)."
+  },
+  {
+    "id": "oulad-b04",
+    "group": "multi",
+    "kind": "plain",
+    "tables": [
+      "registrations",
+      "students",
+      "courses"
+    ],
+    "question": "Số sinh viên đăng ký theo vùng ở các học phần dài từ 260 ngày trở lên",
+    "variants": [
+      "hoc phan dai tu 260 ngay tro len thi moi vung co bao nhieu sinh vien dang ky",
+      "Theo vùng, số lượt đăng ký vào học phần có độ dài >= 260 ngày"
+    ],
+    "expected_sql": [
+      "SELECT s.region, COUNT(*) AS registrations FROM registrations r JOIN students s ON r.code_module = s.code_module AND r.code_presentation = s.code_presentation AND r.id_student = s.id_student JOIN courses co ON co.code_module = r.code_module AND co.code_presentation = r.code_presentation WHERE co.module_presentation_length >= 260 GROUP BY s.region"
+    ],
+    "check_sql": [
+      "SELECT s.region, COUNT(*) FROM students s WHERE EXISTS (SELECT 1 FROM courses co WHERE co.code_module = s.code_module AND co.code_presentation = s.code_presentation AND co.module_presentation_length >= 260) GROUP BY 1"
+    ],
+    "required_columns": [
+      "region",
+      "registrations"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Mỗi dòng registrations ứng với đúng một dòng students, nên đếm trên students nối courses cũng ra cùng số."
+  },
+  {
+    "id": "oulad-b05",
+    "group": "multi",
+    "kind": "plain",
+    "tables": [
+      "students",
+      "courses"
+    ],
+    "question": "Tỷ lệ đạt theo năm bắt đầu của kỳ học",
+    "variants": [
+      "ty le dat (Pass, Distinction) theo nam cua ky",
+      "Năm 2013 với năm 2014, tỷ lệ đạt mỗi năm bao nhiêu"
+    ],
+    "expected_sql": [
+      "SELECT co.presentation_year, AVG(CASE WHEN s.final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS pass_rate FROM students s JOIN courses co ON co.code_module = s.code_module AND co.code_presentation = s.code_presentation GROUP BY co.presentation_year"
+    ],
+    "check_sql": [
+      "SELECT co.presentation_year, 1.0 * SUM(CASE WHEN s.final_result = 'Pass' OR s.final_result = 'Distinction' THEN 1 ELSE 0 END) / COUNT(*) FROM courses co, students s WHERE co.code_module = s.code_module AND co.code_presentation = s.code_presentation GROUP BY 1"
+    ],
+    "required_columns": [
+      "presentation_year",
+      "pass_rate"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-b06",
+    "group": "multi",
+    "kind": "plain",
+    "tables": [
+      "student_assessments",
+      "assessments"
+    ],
+    "question": "Điểm trung bình bài thi cuối kỳ (Exam) theo môn",
+    "variants": [
+      "diem thi cuoi ky trung binh moi mon",
+      "Mỗi môn học, điểm Exam trung bình là bao nhiêu"
+    ],
+    "expected_sql": [
+      "SELECT a.code_module, AVG(sa.score) AS avg_exam_score FROM student_assessments sa JOIN assessments a ON a.id_assessment = sa.id_assessment WHERE a.assessment_type = 'Exam' GROUP BY a.code_module"
+    ],
+    "check_sql": [
+      "SELECT sa.code_module, SUM(sa.score) / COUNT(sa.score) FROM student_assessments sa WHERE sa.id_assessment IN (SELECT id_assessment FROM assessments WHERE assessment_type = 'Exam') GROUP BY 1"
+    ],
+    "required_columns": [
+      "code_module",
+      "avg_exam_score"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Chỉ hai môn CCC và DDD có điểm bài thi trong student_assessments."
+  },
+  {
+    "id": "oulad-b07",
+    "group": "multi",
+    "kind": "plain",
+    "tables": [
+      "student_assessments",
+      "assessments"
+    ],
+    "question": "Số bài nộp muộn hơn hạn theo loại bài đánh giá",
+    "variants": [
+      "moi loai bai co bao nhieu bai nop tre han",
+      "Theo loại bài TMA, CMA, Exam thì bao nhiêu lượt nộp sau hạn"
+    ],
+    "expected_sql": [
+      "SELECT a.assessment_type, COUNT(*) AS late_submissions FROM student_assessments sa JOIN assessments a ON a.id_assessment = sa.id_assessment WHERE sa.date_submitted > a.date GROUP BY a.assessment_type"
+    ],
+    "check_sql": [
+      "SELECT a.assessment_type, SUM(CASE WHEN sa.date_submitted > a.date THEN 1 ELSE 0 END) FROM assessments a JOIN student_assessments sa ON sa.id_assessment = a.id_assessment GROUP BY 1 HAVING SUM(CASE WHEN sa.date_submitted > a.date THEN 1 ELSE 0 END) > 0"
+    ],
+    "required_columns": [
+      "assessment_type",
+      "late_submissions"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Bài không có hạn (date rỗng) không tính là muộn."
+  },
+  {
+    "id": "oulad-b08",
+    "group": "multi",
+    "kind": "top_n_group",
+    "tables": [
+      "student_assessments",
+      "assessments",
+      "students"
+    ],
+    "question": "5 vùng có điểm trung bình bài TMA cao nhất",
+    "variants": [
+      "top 5 vung diem TMA trung binh cao nhat",
+      "Bài TMA, vùng nào điểm trung bình cao nhất, lấy 5 vùng"
+    ],
+    "expected_sql": [
+      "SELECT s.region, AVG(sa.score) AS avg_tma_score FROM student_assessments sa JOIN assessments a ON a.id_assessment = sa.id_assessment JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student WHERE a.assessment_type = 'TMA' GROUP BY s.region ORDER BY avg_tma_score DESC LIMIT 5"
+    ],
+    "check_sql": [
+      "SELECT region, m FROM (SELECT s.region, SUM(sa.score) / COUNT(sa.score) AS m, ROW_NUMBER() OVER (ORDER BY SUM(sa.score) / COUNT(sa.score) DESC) AS rn FROM students s, student_assessments sa, assessments a WHERE a.id_assessment = sa.id_assessment AND a.assessment_type = 'TMA' AND s.id_student = sa.id_student AND s.code_module = sa.code_module AND s.code_presentation = sa.code_presentation GROUP BY 1) t WHERE rn <= 5 ORDER BY m DESC"
+    ],
+    "required_columns": [
+      "region",
+      "avg_tma_score"
+    ],
+    "ordered": true,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": []
+  },
+  {
+    "id": "oulad-b09",
+    "group": "multi",
+    "kind": "same_period",
+    "tables": [
+      "student_assessments",
+      "assessments"
+    ],
+    "question": "So sánh điểm trung bình bài thi cuối kỳ môn DDD giữa kỳ 2013J và kỳ 2014J",
+    "variants": [
+      "diem thi cuoi ky mon DDD ky 2013J so voi 2014J",
+      "Môn DDD: điểm Exam trung bình kỳ 2014J so với kỳ 2013J"
+    ],
+    "expected_sql": [
+      "SELECT a.code_presentation, AVG(sa.score) AS avg_exam_score FROM student_assessments sa JOIN assessments a ON a.id_assessment = sa.id_assessment WHERE a.assessment_type = 'Exam' AND a.code_module = 'DDD' AND a.code_presentation IN ('2013J', '2014J') GROUP BY a.code_presentation",
+      "SELECT AVG(CASE WHEN a.code_presentation = '2013J' THEN sa.score END) AS avg_exam_2013j, AVG(CASE WHEN a.code_presentation = '2014J' THEN sa.score END) AS avg_exam_2014j FROM student_assessments sa JOIN assessments a ON a.id_assessment = sa.id_assessment WHERE a.assessment_type = 'Exam' AND a.code_module = 'DDD'"
+    ],
+    "check_sql": [
+      "SELECT sa.code_presentation, SUM(sa.score) / COUNT(sa.score) FROM student_assessments sa WHERE sa.code_module = 'DDD' AND (sa.code_presentation = '2013J' OR sa.code_presentation = '2014J') AND sa.id_assessment IN (SELECT id_assessment FROM assessments WHERE assessment_type = 'Exam') GROUP BY 1",
+      "SELECT (SELECT SUM(score) / COUNT(score) FROM student_assessments WHERE code_presentation = '2013J' AND id_assessment IN (SELECT id_assessment FROM assessments WHERE assessment_type = 'Exam' AND code_module = 'DDD')), (SELECT SUM(score) / COUNT(score) FROM student_assessments WHERE code_presentation = '2014J' AND id_assessment IN (SELECT id_assessment FROM assessments WHERE assessment_type = 'Exam' AND code_module = 'DDD'))"
+    ],
+    "required_columns": [
+      "avg_exam_score"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Dạng dài (kỳ, điểm) hay dạng rộng (điểm 2013J, điểm 2014J) đều đúng."
+  },
+  {
+    "id": "oulad-b10",
+    "group": "multi",
+    "kind": "plain",
+    "tables": [
+      "students",
+      "student_daily_clicks"
+    ],
+    "question": "Theo kết quả cuối khóa, bao nhiêu sinh viên có ít nhất một ngày hoạt động trên hệ thống học trực tuyến?",
+    "variants": [
+      "so sinh vien co click it nhat mot lan theo ket qua cuoi khoa",
+      "Có hoạt động trên VLE ít nhất một ngày: đếm sinh viên theo kết quả cuối khóa"
+    ],
+    "expected_sql": [
+      "SELECT s.final_result, COUNT(*) AS active_students FROM students s WHERE EXISTS (SELECT 1 FROM student_daily_clicks c WHERE c.code_module = s.code_module AND c.code_presentation = s.code_presentation AND c.id_student = s.id_student) GROUP BY s.final_result"
+    ],
+    "check_sql": [
+      "SELECT s.final_result, COUNT(*) FROM students s JOIN (SELECT DISTINCT code_module, code_presentation, id_student FROM student_daily_clicks) d ON d.code_module = s.code_module AND d.code_presentation = s.code_presentation AND d.id_student = s.id_student GROUP BY 1"
+    ],
+    "required_columns": [
+      "final_result",
+      "active_students"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Đếm dòng students (sinh viên trong một học phần); JOIN thẳng rồi COUNT(*) sẽ đếm số ngày, không phải số sinh viên."
+  },
+  {
+    "id": "oulad-b11",
+    "group": "multi",
+    "kind": "fanout_trap",
+    "tables": [
+      "students",
+      "student_assessments"
+    ],
+    "question": "Tổng tín chỉ đăng ký theo vùng",
+    "variants": [
+      "tong tin chi theo vung",
+      "Mỗi vùng sinh viên đăng ký tổng cộng bao nhiêu tín chỉ"
+    ],
+    "expected_sql": [
+      "SELECT region, SUM(studied_credits) AS credits FROM students GROUP BY region"
+    ],
+    "check_sql": [
+      "SELECT s.region, SUM(s.studied_credits) FROM students s GROUP BY 1"
+    ],
+    "required_columns": [
+      "region",
+      "credits"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Câu của #214: chỉ cần students. Nối sang student_assessments rồi SUM(studied_credits) cộng lặp mỗi dòng một lần cho mỗi bài nộp."
+  },
+  {
+    "id": "oulad-b12",
+    "group": "multi",
+    "kind": "fanout_trap",
+    "tables": [
+      "students",
+      "student_assessments"
+    ],
+    "question": "Tổng tín chỉ theo vùng của những sinh viên đã nộp ít nhất một bài đánh giá",
+    "variants": [
+      "tong tin chi theo vung, chi tinh sinh vien co nop bai",
+      "Sinh viên có nộp bài: tổng số tín chỉ của họ theo từng vùng"
+    ],
+    "expected_sql": [
+      "SELECT s.region, SUM(s.studied_credits) AS credits FROM students s WHERE EXISTS (SELECT 1 FROM student_assessments sa WHERE sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student) GROUP BY s.region"
+    ],
+    "check_sql": [
+      "SELECT s.region, SUM(s.studied_credits) FROM students s JOIN (SELECT DISTINCT code_module, code_presentation, id_student FROM student_assessments) d ON d.code_module = s.code_module AND d.code_presentation = s.code_presentation AND d.id_student = s.id_student GROUP BY 1"
+    ],
+    "required_columns": [
+      "region",
+      "credits"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Phải lọc bằng EXISTS hoặc nối với danh sách sinh viên đã gộp; JOIN thẳng student_assessments thì cộng lặp."
+  },
+  {
+    "id": "oulad-b13",
+    "group": "multi",
+    "kind": "fanout_trap",
+    "tables": [
+      "students",
+      "student_daily_clicks",
+      "student_assessments"
+    ],
+    "question": "Theo kết quả cuối khóa: tổng số lần bấm trên hệ thống học trực tuyến và tổng số bài đã nộp",
+    "variants": [
+      "tong click va tong so bai nop theo ket qua cuoi khoa",
+      "Mỗi nhóm kết quả cuối khóa có bao nhiêu bài nộp và bao nhiêu lần bấm VLE"
+    ],
+    "expected_sql": [
+      "SELECT s.final_result, SUM(COALESCE(c.clicks, 0)) AS clicks, SUM(COALESCE(a.submissions, 0)) AS submissions FROM students s LEFT JOIN (SELECT code_module, code_presentation, id_student, SUM(sum_click) AS clicks FROM student_daily_clicks GROUP BY code_module, code_presentation, id_student) c ON c.code_module = s.code_module AND c.code_presentation = s.code_presentation AND c.id_student = s.id_student LEFT JOIN (SELECT code_module, code_presentation, id_student, COUNT(*) AS submissions FROM student_assessments GROUP BY code_module, code_presentation, id_student) a ON a.code_module = s.code_module AND a.code_presentation = s.code_presentation AND a.id_student = s.id_student GROUP BY s.final_result"
+    ],
+    "check_sql": [
+      "SELECT x.final_result, x.clicks, y.submissions FROM (SELECT s.final_result, SUM(c.sum_click) AS clicks FROM students s JOIN student_daily_clicks c ON c.code_module = s.code_module AND c.code_presentation = s.code_presentation AND c.id_student = s.id_student GROUP BY 1) x JOIN (SELECT s.final_result, COUNT(*) AS submissions FROM students s JOIN student_assessments sa ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student GROUP BY 1) y ON x.final_result = y.final_result"
+    ],
+    "required_columns": [
+      "final_result",
+      "clicks",
+      "submissions"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Hai bảng bên nhiều cùng nối vào students: JOIN cả hai rồi SUM nhân số lần bấm với số bài nộp."
+  },
+  {
+    "id": "oulad-b14",
+    "group": "multi",
+    "kind": "fanout_trap",
+    "tables": [
+      "assessments",
+      "student_assessments"
+    ],
+    "question": "Mỗi môn: tổng trọng số các bài đánh giá và số lượt nộp bài",
+    "variants": [
+      "tong trong so bai danh gia va so luot nop bai cua tung mon",
+      "Theo môn, cộng trọng số các bài và đếm số bài sinh viên đã nộp"
+    ],
+    "expected_sql": [
+      "SELECT w.code_module, w.total_weight, n.submissions FROM (SELECT code_module, SUM(weight) AS total_weight FROM assessments GROUP BY code_module) w JOIN (SELECT a.code_module, COUNT(*) AS submissions FROM student_assessments sa JOIN assessments a ON a.id_assessment = sa.id_assessment GROUP BY a.code_module) n ON n.code_module = w.code_module"
+    ],
+    "check_sql": [
+      "SELECT a.code_module, SUM(a.weight), (SELECT COUNT(*) FROM student_assessments sa WHERE sa.code_module = a.code_module) FROM assessments a GROUP BY a.code_module"
+    ],
+    "required_columns": [
+      "code_module",
+      "total_weight",
+      "submissions"
+    ],
+    "ordered": false,
+    "must_refuse": false,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Trọng số cộng trên assessments, mỗi bài một lần; JOIN student_assessments rồi SUM(weight) cộng trọng số một lần cho mỗi lượt nộp. Mọi môn đều có lượt nộp."
+  },
+  {
+    "id": "oulad-b15",
+    "group": "multi",
+    "kind": "refuse",
+    "tables": [
+      "courses",
+      "students"
+    ],
+    "question": "Học phí trung bình của mỗi môn là bao nhiêu?",
+    "variants": [
+      "hoc phi trung binh moi mon",
+      "Mỗi môn học thu học phí trung bình bao nhiêu"
+    ],
+    "expected_sql": [],
+    "check_sql": [],
+    "required_columns": [],
+    "ordered": false,
+    "must_refuse": true,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Dữ liệu không có học phí."
+  },
+  {
+    "id": "oulad-b16",
+    "group": "multi",
+    "kind": "refuse",
+    "tables": [
+      "student_daily_clicks",
+      "students"
+    ],
+    "question": "Trung bình mỗi sinh viên dành bao nhiêu phút mỗi tuần trên hệ thống học trực tuyến?",
+    "variants": [
+      "moi tuan sinh vien hoc tren VLE bao nhieu phut",
+      "Thời gian học trực tuyến mỗi tuần của sinh viên, tính bằng phút"
+    ],
+    "expected_sql": [],
+    "check_sql": [],
+    "required_columns": [],
+    "ordered": false,
+    "must_refuse": true,
+    "author": "pgiahuy",
+    "reviewers": [],
+    "note": "Dữ liệu chỉ có số lần bấm và số tài liệu mở mỗi ngày, không có thời gian."
+  }
+]

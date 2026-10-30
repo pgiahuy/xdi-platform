@@ -14,9 +14,10 @@ const USAGE: &str = "usage:
   xdi-backend list-admins                     list system administrators
   xdi-backend openapi                         print the OpenAPI spec (JSON) to stdout, without a database
   xdi-backend ask-examples                    print sample ask responses (JSON) to stdout, without a database
-  xdi-backend eval --data <csv> --cases <json> [--baseline <json>]
-                                              run the sample question evaluation; exit 1 when accuracy drops
-                                              below the baseline, 2 on infrastructure errors
+  xdi-backend eval --data <csv|dir> --cases <json> [--baseline <json>] [--pause-ms <ms>] [--out <json>]
+                                              run the sample question evaluation (a directory loads each CSV as
+                                              its own dataset); exit 1 when accuracy drops below the baseline,
+                                              2 on infrastructure errors
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
                                               exit 2 on infrastructure errors";
@@ -63,26 +64,32 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
     }
 }
 
-/// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu. In từng câu sai kèm lý do, dòng accuracy cuối,
-/// ghi eval/result.json. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ tầng (thiếu file, JSON
-/// hỏng, không nạp được dữ liệu) thoát mã 2.
+/// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu hoặc một thư mục CSV (#202). In từng câu sai kèm
+/// lý do, các ca bỏ qua, dòng accuracy cuối, ghi kết quả vào --out (mặc định eval/result.json). Có --baseline thì
+/// accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ tầng (thiếu file, JSON hỏng, không nạp được dữ liệu) thoát mã 2.
 async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut data = None;
     let mut cases = None;
     let mut baseline = None;
+    let mut pause_ms = Some("0");
+    let mut out = Some("eval/result.json");
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         match flag.as_str() {
             "--data" => data = it.next(),
             "--cases" => cases = it.next(),
             "--baseline" => baseline = it.next(),
+            "--pause-ms" => pause_ms = it.next().map(String::as_str),
+            "--out" => out = it.next().map(String::as_str),
             _ => {
                 eprintln!("{USAGE}");
                 return 2;
             }
         }
     }
-    let (Some(data), Some(cases)) = (data, cases) else {
+    let (Some(data), Some(cases), Some(Ok(pause_ms)), Some(out)) =
+        (data, cases, pause_ms.map(str::parse), out)
+    else {
         eprintln!("{USAGE}");
         return 2;
     };
@@ -93,7 +100,8 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             return 2;
         }
     };
-    let report = match eval::run_eval(state, std::path::Path::new(data), &cases).await {
+    let pause = std::time::Duration::from_millis(pause_ms);
+    let report = match eval::run_eval(state, std::path::Path::new(data), &cases, pause).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("eval: {e:?}");
@@ -107,6 +115,9 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             println!("SAI  {} {}\n     {}", case.id, case.question, case.detail);
         }
     }
+    for skipped in &report.skipped {
+        println!("bỏ qua {skipped}");
+    }
     println!(
         "accuracy: {}/{} ({:.1}%)",
         report.passed,
@@ -114,10 +125,10 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         report.accuracy * 100.0
     );
     if let Err(e) = std::fs::write(
-        "eval/result.json",
+        out,
         serde_json::to_string_pretty(&report).expect("report serializes"),
     ) {
-        eprintln!("eval: cannot write eval/result.json: {e}");
+        eprintln!("eval: cannot write {out}: {e}");
         return 2;
     }
     if let Some(path) = baseline {
