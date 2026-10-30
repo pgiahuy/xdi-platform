@@ -3,7 +3,7 @@
 File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. Đánh giá và bảng tóm tắt ở
 [LICENSES.md](LICENSES.md).
 
-397 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 550 gói npm
+407 crate Rust (từ `backend/Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux), 550 gói npm
 (từ `frontend/package-lock.json`). Giấy phép không thuộc nhóm cho phép thông dụng: 28.
 
 ## Không thuộc nhóm cho phép thông dụng
@@ -44,6 +44,9 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | Crate | Phiên bản | Giấy phép |
 | --- | --- | --- |
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 |
+| aead | 0.5.2 | MIT OR Apache-2.0 |
+| aes | 0.8.4 | MIT OR Apache-2.0 |
+| aes-gcm | 0.10.3 | Apache-2.0 OR MIT |
 | ahash | 0.8.12 | MIT OR Apache-2.0 |
 | aho-corasick | 1.1.5 | Unlicense OR MIT |
 | allocator-api2 | 0.2.21 | MIT OR Apache-2.0 |
@@ -88,6 +91,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | cfg_aliases | 0.2.2 | MIT |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
 | chrono | 0.4.45 | MIT OR Apache-2.0 |
+| cipher | 0.4.4 | MIT OR Apache-2.0 |
 | cmov | 0.5.4 | Apache-2.0 OR MIT |
 | codepage | 0.1.3 | Apache-2.0 OR MIT |
 | combine | 4.6.9 | MIT |
@@ -111,6 +115,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | crunchy | 0.2.4 | MIT |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 |
 | crypto-common | 0.2.2 | MIT OR Apache-2.0 |
+| ctr | 0.9.2 | MIT OR Apache-2.0 |
 | ctutils | 0.4.3 | Apache-2.0 OR MIT |
 | debug_unsafe | 0.1.4 | MIT OR Apache-2.0 |
 | der | 0.7.10 | Apache-2.0 OR MIT |
@@ -148,6 +153,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | getrandom | 0.2.17 | MIT OR Apache-2.0 |
 | getrandom | 0.3.4 | MIT OR Apache-2.0 |
 | getrandom | 0.4.3 | MIT OR Apache-2.0 |
+| ghash | 0.5.1 | Apache-2.0 OR MIT |
 | half | 2.7.1 | MIT OR Apache-2.0 |
 | hashbrown | 0.15.5 | MIT OR Apache-2.0 |
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 |
@@ -179,6 +185,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | idna | 1.1.0 | MIT OR Apache-2.0 |
 | idna_adapter | 1.2.2 | Apache-2.0 OR MIT |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT |
+| inout | 0.1.4 | MIT OR Apache-2.0 |
 | ipnet | 2.12.2 | MIT OR Apache-2.0 |
 | itoa | 1.0.18 | MIT OR Apache-2.0 |
 | jni | 0.22.4 | MIT OR Apache-2.0 |
@@ -225,6 +232,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
 | object | 0.39.1 | Apache-2.0 OR MIT |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
+| opaque-debug | 0.3.1 | MIT OR Apache-2.0 |
 | openssl-probe | 0.2.1 | MIT OR Apache-2.0 |
 | parking | 2.2.1 | Apache-2.0 OR MIT |
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
@@ -239,6 +247,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | pkcs8 | 0.10.2 | Apache-2.0 OR MIT |
 | pkg-config | 0.3.34 | MIT OR Apache-2.0 |
 | plain | 0.2.3 | MIT OR Apache-2.0 |
+| polyval | 0.6.2 | Apache-2.0 OR MIT |
 | potential_utf | 0.1.6 | Unicode-3.0 |
 | powerfmt | 0.2.1 | MIT OR Apache-2.0 |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
@@ -362,6 +371,7 @@ File này sinh bằng `make licenses` (scripts/licenses.mjs), không sửa tay. 
 | unicode-properties | 0.1.4 | MIT OR Apache-2.0 |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 |
 | unicode-width | 0.2.2 | MIT OR Apache-2.0 |
+| universal-hash | 0.5.1 | MIT OR Apache-2.0 |
 | untrusted | 0.9.0 | ISC |
 | ureq | 3.4.2 | MIT OR Apache-2.0 |
 | ureq-proto | 0.6.5 | MIT OR Apache-2.0 |

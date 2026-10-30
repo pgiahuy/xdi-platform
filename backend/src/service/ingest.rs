@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ingest.rs - nạp dữ liệu: đổi file người dùng gửi lên thành một phiên bản dataset, kèm hồ sơ cột lớp cấu trúc
-(service/profile.rs). Nguồn database (sau này) là bước riêng. Xem docs/ARCHITECTURE.md mục 5 và 7. Phần riêng của file
+(service/profile.rs). Bảng của nguồn database đi cùng đường này: service/sources/ chép bảng ra một file CSV rồi gọi
+upload với database_source. Xem docs/ARCHITECTURE.md mục 5 và 7. Phần riêng của file
 Excel (chọn sheet, đổi sheet sang CSV) ở service/excel.rs.
 
 Các bước, sắp để lỗi ở bước đầu không để lại gì:
@@ -94,6 +95,9 @@ pub struct StagedFile {
     pub name: String,
     /// SHA-256 dạng hex.
     pub sha256: String,
+    /// Kiểu DuckDB của từng cột, dạng (tên cột, kiểu), khi file là bản chụp bảng database (service/sources/). Rỗng với
+    /// file người dùng nạp: kiểu do DuckDB đoán.
+    pub column_types: Vec<(String, String)>,
 }
 
 pub struct Upload {
@@ -104,6 +108,9 @@ pub struct Upload {
     pub files: Vec<StagedFile>,
     /// Sheet cần nạp khi file là Excel; rỗng thì file phải chỉ có một sheet.
     pub sheets: Vec<String>,
+    /// Có thì files là một file CSV chép từ bảng của nguồn database này (service/sources/): dataset mới gắn vào nguồn
+    /// đó thay vì một nguồn file riêng, phiên bản ghi source_kind postgres.
+    pub database_source: Option<Uuid>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -174,7 +181,12 @@ pub async fn upload(
     upload: Upload,
 ) -> Result<UploadResult, AppError> {
     let ws = &member.workspace;
-    let format = common_format(&upload.files)?;
+    // Bản chụp bảng database có tên postgres://..., không có đuôi file để đoán định dạng; service/sources/ luôn ghi CSV
+    // bằng COPY, kèm kiểu từng cột.
+    let format = match upload.database_source {
+        Some(_) => FileFormat::DatabaseCsv,
+        None => common_format(&upload.files)?,
+    };
     reject_repeated_files(&upload.files)?;
     // Chọn sheet trước khi tính hash: cùng một file Excel mà khác sheet là hai bộ dữ liệu khác nhau.
     let sheets = if format == FileFormat::Xlsx {
@@ -244,7 +256,7 @@ pub async fn upload(
                 path: f.path.clone(),
                 name: f.name.clone(),
                 format,
-                timestamp_columns: Vec::new(),
+                column_types: f.column_types.clone(),
             })
             .collect(),
     };
@@ -273,7 +285,10 @@ pub async fn upload(
         None => {
             let name = dataset_name(&upload)?;
             let logical_table = free_logical_table(state, member, &name).await?;
-            let source = state.store.create_local_source(ws).await?;
+            let source = match upload.database_source {
+                Some(id) => id,
+                None => state.store.create_local_source(ws).await?,
+            };
             state
                 .store
                 .create_dataset(ws, source, &name, &logical_table, Some(member.user.id))
@@ -282,7 +297,10 @@ pub async fn upload(
     };
     let relative = format!("{}/{}/{}", ws.as_uuid(), dataset.id, Uuid::new_v4());
     let new_version = NewVersion {
-        source_kind: source_kind(format),
+        source_kind: match upload.database_source {
+            Some(_) => SourceKind::Postgres,
+            None => source_kind(format),
+        },
         file_hash: &content_hash,
         parquet_path: &relative,
         row_count: materialized.row_count,
@@ -579,6 +597,7 @@ fn source_kind(format: FileFormat) -> SourceKind {
         FileFormat::Csv => SourceKind::Csv,
         FileFormat::Parquet => SourceKind::Parquet,
         FileFormat::Xlsx => SourceKind::Xlsx,
+        FileFormat::DatabaseCsv => SourceKind::Postgres,
     }
 }
 
@@ -625,6 +644,7 @@ mod tests {
             path: PathBuf::new(),
             name: "x.csv".to_string(),
             sha256: h.to_string(),
+            column_types: Vec::new(),
         };
         let sheets = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
         assert_eq!(

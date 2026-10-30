@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* pages/DatasetsPage.tsx - trang Dữ liệu của workspace: danh sách dataset, và khung nạp file cho admin.
+/* pages/DatasetsPage.tsx - trang Dữ liệu của workspace: danh sách dataset, khung nạp file và khung kết nối database
+(DatabaseSources.tsx) cho admin.
 Vai lấy từ /auth/me (đã có trong bộ đệm, AppLayout vừa đọc). Ẩn khung nạp với member chỉ để giao diện gọn;
 quyền thật nằm ở backend, member gọi thẳng API vẫn nhận 403.
 Hồ sơ cột, chỉ số và biểu đồ dựng sẵn của từng dataset ở khung tổng quan (DatasetOverviewSection.tsx, #198), mở bằng
@@ -9,11 +10,13 @@ import { useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { useMe } from '@/api/auth'
 import { useDatasets, useDeleteDataset, type Dataset } from '@/api/datasets'
+import { useSnapshot } from '@/api/sources'
 import { DatasetList } from '@/components/datasets/DatasetList'
 import type { DatasetRow } from '@/components/datasets/types'
 import { EmptyState } from '@/components/EmptyState'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
+import { DatabaseSources } from './DatabaseSources'
 import { DatasetOverviewSection } from './DatasetOverviewSection'
 import { DatasetUpload } from './DatasetUpload'
 import { RouterLink } from './RouterLink'
@@ -29,7 +32,8 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
   const me = useMe()
   const datasets = useDatasets(ws)
   const deleteDataset = useDeleteDataset(ws)
-  const [deleteError, setDeleteError] = useState<string>()
+  const snapshot = useSnapshot(ws)
+  const [listError, setListError] = useState<string>()
   const [target, setTarget] = useState<Dataset>()
   const [overviewId, setOverviewId] = useState<string>()
   const overviewDataset = datasets.data?.find((d) => d.id === overviewId)
@@ -45,10 +49,23 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
     uploadHeading.current?.scrollIntoView({ block: 'start' })
   }
 
+  // Chụp lại dùng đúng bảng của lần chụp trước (backend nhớ theo dataset), nên chỉ cần nguồn và dataset.
+  const snapshotAgain = (row: DatasetRow) => {
+    const sourceId = datasets.data?.find((d) => d.id === row.id)?.source_id
+    if (!sourceId) return
+    snapshot.mutate(
+      { sourceId, dataset_id: row.id },
+      {
+        onError: (error) => setListError(error.message),
+        onSuccess: () => setListError(undefined),
+      },
+    )
+  }
+
   const remove = (row: DatasetRow) => {
     deleteDataset.mutate(row.id, {
-      onError: (error) => setDeleteError(error.message),
-      onSuccess: () => setDeleteError(undefined),
+      onError: (error) => setListError(error.message),
+      onSuccess: () => setListError(undefined),
     })
   }
 
@@ -62,6 +79,7 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
           headingRef={uploadHeading}
         />
       )}
+      {isAdmin && <DatabaseSources ws={ws} />}
 
       <section aria-labelledby="dataset-list-heading" className="flex flex-col gap-3">
         <h2 id="dataset-list-heading" className="text-[15px] font-semibold tracking-tight">
@@ -74,10 +92,12 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
           isAdmin={isAdmin}
           onOverview={(row) => setOverviewId(row.id)}
           onAddVersion={addVersion}
+          onSnapshotAgain={snapshotAgain}
+          snapshotPending={snapshot.isPending}
           onDelete={remove}
           deletePending={deleteDataset.isPending}
         />
-        {deleteError && <FormMessage kind="error">{deleteError}</FormMessage>}
+        {listError && <FormMessage kind="error">{listError}</FormMessage>}
       </section>
       {overviewDataset && (
         <DatasetOverviewSection ws={ws} dataset={overviewDataset} onClose={() => setOverviewId(undefined)} />
@@ -93,11 +113,15 @@ type ListBodyProps = {
   isAdmin: boolean
   onOverview: (row: DatasetRow) => void
   onAddVersion: (row: DatasetRow) => void
+  onSnapshotAgain: (row: DatasetRow) => void
+  snapshotPending: boolean
   onDelete: (row: DatasetRow) => void
   deletePending: boolean
 }
 
-function ListBody({ datasets, error, onRetry, isAdmin, onOverview, onAddVersion, onDelete, deletePending }: ListBodyProps) {
+function ListBody(props: ListBodyProps) {
+  const { datasets, error, onRetry, isAdmin, onOverview, onAddVersion, onSnapshotAgain, snapshotPending } = props
+  const { onDelete, deletePending } = props
   if (error && !datasets) {
     return (
       <EmptyState
@@ -124,12 +148,20 @@ function ListBody({ datasets, error, onRetry, isAdmin, onOverview, onAddVersion,
       />
     )
   }
-  const rows = datasets.map((d) => ({ id: d.id, name: d.name, tableName: d.logical_table, createdAt: d.created_at }))
+  const rows = datasets.map((d) => ({
+    id: d.id,
+    name: d.name,
+    tableName: d.logical_table,
+    createdAt: d.created_at,
+    snapshot: d.source_table ? { table: d.source_table, at: d.current_version_at } : undefined,
+  }))
   return (
     <DatasetList
       datasets={rows}
       onOverview={onOverview}
       onAddVersion={isAdmin ? onAddVersion : undefined}
+      onSnapshotAgain={isAdmin ? onSnapshotAgain : undefined}
+      snapshotPending={snapshotPending}
       onDelete={isAdmin ? onDelete : undefined}
       deletePending={deletePending}
       metricsHref={(row) => `${row.id}/metrics`}

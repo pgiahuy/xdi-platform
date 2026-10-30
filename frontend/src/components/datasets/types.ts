@@ -8,6 +8,8 @@ export type DatasetRow = {
   /** Tên bảng dùng trong SQL. */
   tableName: string
   createdAt: string
+  /** Dataset chụp từ bảng database: bảng nguồn và lần chụp gần nhất. Không có với dataset nạp từ file. */
+  snapshot?: { table: string; at: string | null }
 }
 
 export type SheetOption = {

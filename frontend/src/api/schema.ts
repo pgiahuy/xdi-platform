@@ -567,6 +567,98 @@ export interface paths {
         patch: operations["setMemberRole"];
         trace?: never;
     };
+    "/workspaces/{ws}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Database sources of the workspace, without passwords (admin only) */
+        get: operations["listSources"];
+        put?: never;
+        /**
+         * Add a Postgres source (admin only)
+         * @description The connection is tested before it is saved. The host must be listed in SOURCE_ALLOWED_HOSTS. Connection details are stored encrypted with SOURCE_SECRET_KEY.
+         */
+        post: operations["createSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/sources/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a source that has no datasets left (admin only) */
+        delete: operations["deleteSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/sources/{id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Snapshot a table as a new dataset, or as a new version of one (admin only)
+         * @description The table is copied once into a Parquet version, like an uploaded file. A snapshot with the same content as an existing version creates nothing and returns 200 with `created` false.
+         */
+        post: operations["snapshotSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/sources/{id}/tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tables and views the source account can read (admin only) */
+        get: operations["listSourceTables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/sources/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Connect to the source and count readable tables (admin only) */
+        post: operations["testSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -852,6 +944,21 @@ export interface components {
             conversation: components["schemas"]["ConversationItem"];
             turns: components["schemas"]["TurnItem"][];
         };
+        CreateSourceRequest: {
+            database: string;
+            /** @description Host name or IP; must be listed in SOURCE_ALLOWED_HOSTS. */
+            host: string;
+            /** @description Stored encrypted; never returned. */
+            password: string;
+            /**
+             * Format: int32
+             * @description Defaults to 5432.
+             */
+            port?: number | null;
+            /** @description `disable` or `prefer` (default). TLS-only servers are not supported yet. */
+            sslmode?: string | null;
+            user: string;
+        };
         CreateUserRequest: {
             display_name?: string;
             email: string;
@@ -870,6 +977,11 @@ export interface components {
              *     has no current version. The UI polls it to know when the semantic profile is done.
              */
             current_profile_status: string | null;
+            /**
+             * Format: date-time
+             * @description When the current version was created: upload time, or the last snapshot of a database source.
+             */
+            current_version_at: string | null;
             /** Format: uuid */
             current_version_id: string | null;
             domain: string | null;
@@ -884,6 +996,15 @@ export interface components {
              *     changes. Asking still works.
              */
             semantic_unavailable: boolean;
+            /**
+             * Format: uuid
+             * @description Database source the dataset was snapshotted from; null for uploaded files.
+             */
+            source_id: string | null;
+            /** @description Kind of the source (`local_file` or `postgres`); null right after creation. */
+            source_kind: string | null;
+            /** @description `schema.table` snapshotted from a database source; null for uploaded files. */
+            source_table: string | null;
             /**
              * @description Suggested questions of the current version, written by the semantic profile; empty while that step has not
              *     finished.
@@ -1377,6 +1498,37 @@ export interface components {
          * @enum {string}
          */
         SliceName: "base" | "compare";
+        SnapshotRequest: {
+            /**
+             * Format: uuid
+             * @description Snapshot again into this dataset as a new version.
+             */
+            dataset_id?: string | null;
+            /** @description Name of the new dataset; defaults to the table name. */
+            name?: string | null;
+            /** @description `schema.table` from the table list. Not needed with `dataset_id`: the table snapshotted before is used. */
+            table?: string | null;
+        };
+        /** @description A database source without its password. */
+        SourceResponse: {
+            /** Format: date-time */
+            created_at: string;
+            database: string;
+            host: string;
+            /** Format: uuid */
+            id: string;
+            kind: string;
+            /** Format: int32 */
+            port: number;
+            sslmode: string;
+            user: string;
+        };
+        SourceTable: {
+            /** @description `table` or `view`. */
+            kind: string;
+            name: string;
+            schema: string;
+        };
         /**
          * @description Step of the backend:
          *     - `context`: read the dataset profile and build the prompt.
@@ -1413,6 +1565,10 @@ export interface components {
          * @enum {string}
          */
         SummaryPointKind: "reason" | "outliers" | "even" | "largest" | "against" | "dropped";
+        TestSourceResponse: {
+            /** @description Number of tables and views the account can read. */
+            table_count: number;
+        };
         /**
          * @description Period of the time charts: by day when the data spans at most 92 days, else by month.
          * @enum {string}
@@ -3158,6 +3314,284 @@ export interface operations {
                 };
             };
             /** @description 400 invalid role or last admin, 401, 403 not admin, 404 */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"][];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401, 403 not admin, 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description SOURCE_SECRET_KEY not set: database sources are off */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 invalid form, host not allowed or cannot connect, 401, 403 not admin, 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Source id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 datasets still use it, 401, 403 not admin, 404 */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    snapshotSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Source id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description Same content as an existing version: nothing created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResult"];
+                };
+            };
+            /** @description New dataset or version created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResult"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 unknown table or cannot read it, 401, 403 not admin, 404, 413 more rows than SOURCE_MAX_ROWS or bigger than MAX_UPLOAD_MB */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listSourceTables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Source id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceTable"][];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 cannot connect, 401, 403 not admin, 404 */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    testSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Source id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connected */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestSourceResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 cannot connect, with how to fix it, 401, 403, 404 */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

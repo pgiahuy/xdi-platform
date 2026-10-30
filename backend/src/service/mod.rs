@@ -28,6 +28,7 @@ pub mod samples;
 #[cfg(test)]
 mod samples_tests;
 pub mod semantic;
+pub mod sources;
 pub mod understanding;
 pub mod users;
 pub mod workspaces;

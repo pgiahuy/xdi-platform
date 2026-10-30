@@ -27,6 +27,9 @@ pub enum FileFormat {
     Parquet,
     /// Một sheet Excel. Trong InputFile, path là file CSV do engine/excel.rs ghi từ sheet đó, không phải file .xlsx.
     Xlsx,
+    /// Bản chụp một bảng database: file CSV do lệnh COPY của Postgres ghi (service/sources/), kiểu từng cột lấy từ
+    /// Postgres và nằm trong InputFile.column_types. Không bao giờ đoán từ tên file.
+    DatabaseCsv,
 }
 
 impl FileFormat {
@@ -52,8 +55,9 @@ pub struct InputFile {
     /// Tên file người dùng gửi (với Xlsx: tên sheet), ghi vào SOURCE_COLUMN và vào thông báo lỗi.
     pub name: String,
     pub format: FileFormat,
-    /// Chỉ dùng với Xlsx: cột báo DuckDB đọc là TIMESTAMP (xem engine/excel.rs, SheetCsv). Rỗng với CSV, Parquet.
-    pub timestamp_columns: Vec<String>,
+    /// Cột đã biết kiểu, dạng (tên cột, kiểu DuckDB), để DuckDB không phải đoán. Xlsx: cột ngày giờ (xem
+    /// engine/excel.rs, SheetCsv). DatabaseCsv: mọi cột, kiểu đổi từ kiểu Postgres. Rỗng với CSV, Parquet.
+    pub column_types: Vec<(String, String)>,
 }
 
 impl InputFile {
@@ -253,16 +257,7 @@ fn open_reader(
         // cho DuckDB xem hết file trước khi chọn kiểu cột: cột như mã hàng có số ở đầu và chữ ở dòng thứ trăm nghìn
         // (85123A) mà chỉ xem phần đầu thì chọn kiểu số rồi lỗi khi gặp chữ.
         FileFormat::Xlsx => {
-            let types = if file.timestamp_columns.is_empty() {
-                String::new()
-            } else {
-                let pairs: Vec<String> = file
-                    .timestamp_columns
-                    .iter()
-                    .map(|name| format!("{}: 'TIMESTAMP'", sql_string(name)))
-                    .collect();
-                format!(", types = {{{}}}", pairs.join(", "))
-            };
+            let types = types_option(&file.column_types);
             let reader = format!(
                 "read_csv({path}, header = true, delim = ',', quote = '\"', escape = '\"', sample_size = -1{types})"
             );
@@ -270,7 +265,32 @@ fn open_reader(
                 describe(conn, &reader).map_err(|e| user_file_error(&file.label(), "đọc", e))?;
             Ok((reader, columns, None))
         }
+        // CSV do lệnh COPY của Postgres ghi: cũng biết chắc UTF-8, dấu phẩy, nháy kép. Kiểu từng cột lấy từ Postgres
+        // (service/sources/pg_types.rs), không để DuckDB đoán từ phần đầu file: cột mã chữ như '00123' sẽ thành số và
+        // mất số 0, cột mã có chữ sau vài chục nghìn dòng toàn số sẽ lỗi như file hỏng. allow_quoted_nulls = false
+        // vì COPY ghi chuỗi rỗng là "" còn NULL là ô trống; để mặc định thì DuckDB đọc cả hai thành NULL.
+        FileFormat::DatabaseCsv => {
+            let types = types_option(&file.column_types);
+            let reader = format!(
+                "read_csv({path}, header = true, delim = ',', quote = '\"', escape = '\"', allow_quoted_nulls = false{types})"
+            );
+            let columns =
+                describe(conn, &reader).map_err(|e| user_file_error(&file.label(), "đọc", e))?;
+            Ok((reader, columns, None))
+        }
     }
+}
+
+/// Phần ", types = {'cột': 'KIỂU', ...}" của read_csv; rỗng khi không có cột nào đã biết kiểu.
+fn types_option(column_types: &[(String, String)]) -> String {
+    if column_types.is_empty() {
+        return String::new();
+    }
+    let pairs: Vec<String> = column_types
+        .iter()
+        .map(|(name, data_type)| format!("{}: {}", sql_string(name), sql_string(data_type)))
+        .collect();
+    format!(", types = {{{}}}", pairs.join(", "))
 }
 
 pub(super) fn describe(conn: &Connection, from: &str) -> Result<Vec<Column>, duckdb::Error> {
@@ -361,7 +381,7 @@ mod tests {
                 path,
                 name: name.to_string(),
                 format: FileFormat::Csv,
-                timestamp_columns: Vec::new(),
+                column_types: Vec::new(),
             }
         }
 
@@ -386,6 +406,90 @@ mod tests {
         let mut stmt = conn.prepare(&sql).unwrap();
         let rows = stmt.query_map([], |row| row.get::<_, String>(0)).unwrap();
         rows.map(Result::unwrap).collect()
+    }
+
+    /// File CSV như lệnh COPY của Postgres ghi, đọc với kiểu cột cho sẵn (service/sources/pg_types.rs).
+    fn database_csv(tmp: &TempDir, body: &str, types: &[(&str, &str)]) -> InputFile {
+        let path = tmp.0.join("in").join("snapshot");
+        std::fs::write(&path, body).unwrap();
+        InputFile {
+            path,
+            name: "postgres://db/shop/public.items".to_string(),
+            format: FileFormat::DatabaseCsv,
+            column_types: types
+                .iter()
+                .map(|(name, t)| (name.to_string(), t.to_string()))
+                .collect(),
+        }
+    }
+
+    /// COPY ... (FORMAT csv, HEADER true) ghi chuỗi rỗng là "", NULL là ô trống. Cột sku toàn số trong 25.000 dòng đầu
+    /// (quá mẫu 20.480 dòng DuckDB dùng để đoán kiểu) rồi mới có chữ: để DuckDB đoán thì thành BIGINT và lỗi ở dòng có
+    /// chữ.
+    #[test]
+    fn database_snapshot_reads_postgres_types_not_guessed_ones() {
+        let tmp = TempDir::new();
+        let mut csv = String::from("code,sku,note,n,at,ok\n");
+        csv.push_str("00123,100001,\"\",1,2024-03-17 03:00:00+00,t\n");
+        csv.push_str("00124,100002,,2,2024-03-17 04:30:00.5+00,f\n");
+        csv.push_str("00125,100003,\"a,b\nc\",3,,\n");
+        for i in 0..25_000 {
+            csv.push_str(&format!(
+                "{:05},{},x,{i},2024-03-18 00:00:00+00,t\n",
+                200 + i,
+                100_200 + i
+            ));
+        }
+        csv.push_str("99999,85123A,x,9,2024-03-19 00:00:00+00,f\n");
+        let types = [
+            ("code", "VARCHAR"),
+            ("sku", "VARCHAR"),
+            ("note", "VARCHAR"),
+            ("n", "INTEGER"),
+            ("at", "TIMESTAMPTZ"),
+            ("ok", "BOOLEAN"),
+        ];
+        let file = database_csv(&tmp, &csv, &types);
+        let result = materialize(&[file], &tmp.out()).unwrap();
+        assert_eq!(result.row_count, 25_004);
+        let found: Vec<(&str, &str)> = result
+            .columns
+            .iter()
+            .map(|c| (c.name.as_str(), c.data_type.as_str()))
+            .take(6)
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("code", "VARCHAR"),
+                ("sku", "VARCHAR"),
+                ("note", "VARCHAR"),
+                ("n", "INTEGER"),
+                ("at", "TIMESTAMP WITH TIME ZONE"),
+                ("ok", "BOOLEAN"),
+            ]
+        );
+        let first = query_strings(
+            &tmp.out(),
+            "code || '|' || coalesce(note, 'NULL') FROM {t} WHERE n < 3 AND code < '00200' ORDER BY n",
+        );
+        assert_eq!(first, ["00123|", "00124|NULL"]);
+        let quoted = query_strings(&tmp.out(), "note FROM {t} WHERE code = '00125'");
+        assert_eq!(quoted, ["a,b\nc"]);
+        let last = query_strings(&tmp.out(), "sku FROM {t} WHERE code = '99999' AND NOT ok");
+        assert_eq!(last, ["85123A"]);
+    }
+
+    /// Bảng một cột có giá trị chứa dấu |: để DuckDB dò thì nó chọn | làm dấu ngăn cột và tách thành ba cột.
+    #[test]
+    fn database_snapshot_keeps_the_comma_delimiter() {
+        let tmp = TempDir::new();
+        let file = database_csv(&tmp, "label\na|b|1\na|b|2\n", &[("label", "VARCHAR")]);
+        let result = materialize(&[file], &tmp.out()).unwrap();
+        let names: Vec<&str> = result.columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["label", SOURCE_COLUMN]);
+        let labels = query_strings(&tmp.out(), "label FROM {t} ORDER BY 1");
+        assert_eq!(labels, ["a|b|1", "a|b|2"]);
     }
 
     #[test]
@@ -542,7 +646,7 @@ mod tests {
             path: source,
             name: "data.parquet".to_string(),
             format: FileFormat::Parquet,
-            timestamp_columns: Vec::new(),
+            column_types: Vec::new(),
         };
         let result = materialize(&[file], &tmp.out()).unwrap();
         assert_eq!(result.row_count, 1);

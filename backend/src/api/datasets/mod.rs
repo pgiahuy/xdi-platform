@@ -59,6 +59,7 @@ async fn receive(
         dataset_id: None,
         files: Vec::new(),
         sheets: Vec::new(),
+        database_source: None,
     };
     let limit = state.config.max_upload_bytes;
     let mut received: u64 = 0;
@@ -106,7 +107,12 @@ async fn receive(
                     .iter()
                     .map(|b| format!("{b:02x}"))
                     .collect();
-                upload.files.push(StagedFile { path, name, sha256 });
+                upload.files.push(StagedFile {
+                    path,
+                    name,
+                    sha256,
+                    column_types: Vec::new(),
+                });
             }
             "name" | "dataset_id" | "sheet" => {
                 // Trường chữ cũng đếm vào giới hạn, để không ai gửi một "tên" dài hàng GB.

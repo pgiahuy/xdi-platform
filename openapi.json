@@ -2786,6 +2786,397 @@
           }
         }
       }
+    },
+    "/workspaces/{ws}/sources": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Database sources of the workspace, without passwords (admin only)",
+        "operationId": "listSources",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceResponse"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401, 403 not admin, 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Add a Postgres source (admin only)",
+        "description": "The connection is tested before it is saved. The host must be listed in SOURCE_ALLOWED_HOSTS. Connection details are stored encrypted with SOURCE_SECRET_KEY.",
+        "operationId": "createSource",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 invalid form, host not allowed or cannot connect, 401, 403 not admin, 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SOURCE_SECRET_KEY not set: database sources are off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/sources/{id}": {
+      "delete": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Delete a source that has no datasets left (admin only)",
+        "operationId": "deleteSource",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "4XX": {
+            "description": "400 datasets still use it, 401, 403 not admin, 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/sources/{id}/snapshot": {
+      "post": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Snapshot a table as a new dataset, or as a new version of one (admin only)",
+        "description": "The table is copied once into a Parquet version, like an uploaded file. A snapshot with the same content as an existing version creates nothing and returns 200 with `created` false.",
+        "operationId": "snapshotSource",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnapshotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Same content as an existing version: nothing created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "New dataset or version created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 unknown table or cannot read it, 401, 403 not admin, 404, 413 more rows than SOURCE_MAX_ROWS or bigger than MAX_UPLOAD_MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/sources/{id}/tables": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Tables and views the source account can read (admin only)",
+        "operationId": "listSourceTables",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceTable"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 cannot connect, 401, 403 not admin, 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/sources/{id}/test": {
+      "post": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Connect to the source and count readable tables (admin only)",
+        "operationId": "testSource",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSourceResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 cannot connect, with how to fix it, 401, 403, 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3366,6 +3757,47 @@
           }
         }
       },
+      "CreateSourceRequest": {
+        "type": "object",
+        "required": [
+          "host",
+          "database",
+          "user",
+          "password"
+        ],
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string",
+            "description": "Host name or IP; must be listed in SOURCE_ALLOWED_HOSTS."
+          },
+          "password": {
+            "type": "string",
+            "description": "Stored encrypted; never returned."
+          },
+          "port": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Defaults to 5432.",
+            "minimum": 0
+          },
+          "sslmode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`disable` or `prefer` (default). TLS-only servers are not supported yet."
+          },
+          "user": {
+            "type": "string"
+          }
+        }
+      },
       "CreateUserRequest": {
         "type": "object",
         "required": [
@@ -3408,6 +3840,10 @@
           "current_profile_status",
           "suggested_questions",
           "semantic_unavailable",
+          "source_kind",
+          "source_id",
+          "source_table",
+          "current_version_at",
           "created_at"
         ],
         "properties": {
@@ -3421,6 +3857,14 @@
               "null"
             ],
             "description": "Profile status of the current version (`pending`, `structure`, `semantic`, `failed`); null while the dataset\nhas no current version. The UI polls it to know when the semantic profile is done."
+          },
+          "current_version_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the current version was created: upload time, or the last snapshot of a database source."
           },
           "current_version_id": {
             "type": [
@@ -3449,6 +3893,28 @@
           "semantic_unavailable": {
             "type": "boolean",
             "description": "True when the current version stays at `structure` because the semantic profile was already tried with the\nrunning LLM provider and its answer was not usable: no suggested questions will come until the provider\nchanges. Asking still works."
+          },
+          "source_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Database source the dataset was snapshotted from; null for uploaded files."
+          },
+          "source_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Kind of the source (`local_file` or `postgres`); null right after creation."
+          },
+          "source_table": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`schema.table` snapshotted from a database source; null for uploaded files."
           },
           "suggested_questions": {
             "type": "array",
@@ -4771,6 +5237,97 @@
           "compare"
         ]
       },
+      "SnapshotRequest": {
+        "type": "object",
+        "properties": {
+          "dataset_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Snapshot again into this dataset as a new version."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name of the new dataset; defaults to the table name."
+          },
+          "table": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`schema.table` from the table list. Not needed with `dataset_id`: the table snapshotted before is used."
+          }
+        }
+      },
+      "SourceResponse": {
+        "type": "object",
+        "description": "A database source without its password.",
+        "required": [
+          "id",
+          "kind",
+          "host",
+          "port",
+          "database",
+          "user",
+          "sslmode",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "database": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "sslmode": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        }
+      },
+      "SourceTable": {
+        "type": "object",
+        "required": [
+          "schema",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`table` or `view`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "string"
+          }
+        }
+      },
       "StepName": {
         "type": "string",
         "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `classify`: the language model tells a plain question from a question that asks for a cause; when the model\n  fails, the keyword rule decides and the step is not ok.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.\n- `record`: save the question in the history.",
@@ -4819,6 +5376,19 @@
           "against",
           "dropped"
         ]
+      },
+      "TestSourceResponse": {
+        "type": "object",
+        "required": [
+          "table_count"
+        ],
+        "properties": {
+          "table_count": {
+            "type": "integer",
+            "description": "Number of tables and views the account can read.",
+            "minimum": 0
+          }
+        }
       },
       "TimeGrain": {
         "type": "string",

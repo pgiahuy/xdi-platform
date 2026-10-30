@@ -218,6 +218,26 @@ sẵn (`charts`), mỗi cái có `result` và `chart` cùng dạng với câu tr
 Mã lỗi: 404 khi dataset không có hoặc thuộc workspace khác. Dataset chưa có dữ liệu hay đang lập hồ sơ vẫn trả 200, kèm
 `missing`.
 
+## Nguồn database
+
+Chỉ admin của workspace; member nhận 403 ở mọi route, kể cả liệt kê. Chi tiết cách chụp: [Dữ liệu](DATA.md), mục Nguồn
+database. Thiếu `SOURCE_SECRET_KEY` thì thêm và dùng nguồn trả 503 (`unavailable`).
+
+- `GET /api/workspaces/{ws}/sources`: nguồn của workspace (máy chủ, cổng, database, tài khoản, sslmode), không có mật
+  khẩu.
+- `POST /api/workspaces/{ws}/sources`: thêm nguồn Postgres (`host`, `port`, `database`, `user`, `password`, `sslmode`).
+  Backend thử kết nối trước khi lưu; máy chủ ngoài `SOURCE_ALLOWED_HOSTS`, sai mật khẩu, không tới được máy chủ đều trả
+  400 kèm lời báo cách sửa. 201 khi lưu xong.
+- `POST .../sources/{id}/test`: kết nối lại, trả số bảng và view đọc được.
+- `GET .../sources/{id}/tables`: bảng và view tài khoản đọc được (`schema`, `name`, `kind`).
+- `POST .../sources/{id}/snapshot`: `table` (`schema.table` lấy từ danh sách bảng) và `name` để tạo dataset mới, hoặc
+  `dataset_id` để chụp lại vào dataset đã chụp từ nguồn này. Response như nạp file (`UploadResult`): 201 khi tạo, 200
+  với `created: false` khi bảng không đổi; 413 khi quá `SOURCE_MAX_ROWS` hay `MAX_UPLOAD_MB`.
+- `DELETE .../sources/{id}`: 204; 400 khi còn dataset chụp từ nguồn này.
+
+Dataset trả qua API có thêm `source_kind`, `source_id`, `source_table` và `current_version_at` (lần nạp hay lần chụp
+gần nhất).
+
 ## Truy dòng nguồn
 
 `POST /api/workspaces/{ws}/datasets/{id}/drill` trả một trang dòng nguồn của một ô trong bảng kết quả hay của một dòng

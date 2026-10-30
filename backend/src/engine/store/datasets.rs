@@ -16,6 +16,7 @@ pub enum SourceKind {
     Csv,
     Parquet,
     Xlsx,
+    Postgres,
 }
 
 impl SourceKind {
@@ -24,6 +25,7 @@ impl SourceKind {
             SourceKind::Csv => "csv",
             SourceKind::Parquet => "parquet",
             SourceKind::Xlsx => "xlsx",
+            SourceKind::Postgres => "postgres",
         }
     }
 }
@@ -83,6 +85,22 @@ pub struct Dataset {
     #[serde(skip)]
     #[sqlx(default)]
     pub semantic_attempted_with: Option<String>,
+    /// Kind of the source (`local_file` or `postgres`); null right after creation.
+    #[schema(required)]
+    #[sqlx(default)]
+    pub source_kind: Option<String>,
+    /// Database source the dataset was snapshotted from; null for uploaded files.
+    #[schema(required)]
+    #[sqlx(default)]
+    pub source_id: Option<Uuid>,
+    /// `schema.table` snapshotted from a database source; null for uploaded files.
+    #[schema(required)]
+    #[sqlx(default)]
+    pub source_table: Option<String>,
+    /// When the current version was created: upload time, or the last snapshot of a database source.
+    #[schema(required)]
+    #[sqlx(default)]
+    pub current_version_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -147,10 +165,15 @@ const DATASET_COLUMNS: &str = "id, name, logical_table, domain, current_version_
 const DATASET_COLUMNS_D: &str =
     "d.id, d.name, d.logical_table, d.domain, d.current_version_id, d.created_at, \
     v.profile_status AS current_profile_status, v.semantic_attempted_with, \
-    COALESCE(v.suggested_questions, '[]'::jsonb) AS suggested_questions";
+    COALESCE(v.suggested_questions, '[]'::jsonb) AS suggested_questions, \
+    s.kind AS source_kind, v.created_at AS current_version_at, \
+    CASE WHEN s.kind = 'local_file' THEN NULL ELSE s.id END AS source_id, \
+    s.config->'tables'->>d.id::text AS source_table";
+// Nối nguồn để giao diện ghi rõ dataset đến từ file hay từ bảng nào của database (service/sources/).
 const CURRENT_VERSION_JOIN: &str =
     "FROM datasets d LEFT JOIN dataset_versions v ON v.workspace_id = d.workspace_id \
-    AND v.id = d.current_version_id";
+    AND v.id = d.current_version_id \
+    JOIN sources s ON s.workspace_id = d.workspace_id AND s.id = d.source_id";
 const VERSION_COLUMNS: &str =
     "id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status, created_at";
 // Cùng danh sách cột, có tiền tố bảng, dùng khi câu SQL nối với datasets.
@@ -372,9 +395,10 @@ impl Store {
             .execute(&mut *tx)
             .await
             .map_err(|e| db_error("delete dataset", e))?;
-        // Nguồn kiểu file tạo riêng cho từng dataset; khóa ngoại RESTRICT nên phải xóa sau dataset.
+        // Nguồn kiểu file tạo riêng cho từng dataset; khóa ngoại RESTRICT nên phải xóa sau dataset. Nguồn database dùng
+        // chung cho nhiều dataset và giữ thông tin kết nối, chỉ xóa qua API nguồn.
         sqlx::query(
-            "DELETE FROM sources s WHERE s.workspace_id = $1 AND s.id = $2
+            "DELETE FROM sources s WHERE s.workspace_id = $1 AND s.id = $2 AND s.kind = 'local_file'
                AND NOT EXISTS (SELECT 1 FROM datasets d WHERE d.source_id = s.id)",
         )
         .bind(ws.as_uuid())
@@ -427,10 +451,11 @@ impl Store {
             .execute(&mut *tx)
             .await
             .map_err(|e| db_error("delete dataset", e))?;
-        // Nguồn kiểu file tạo riêng cho từng dataset; khóa ngoại RESTRICT nên phải xóa sau dataset.
+        // Nguồn kiểu file tạo riêng cho từng dataset; khóa ngoại RESTRICT nên phải xóa sau dataset. Nguồn database dùng
+        // chung cho nhiều dataset và giữ thông tin kết nối, chỉ xóa qua API nguồn.
         if let Some(source) = source {
             sqlx::query(
-                "DELETE FROM sources s WHERE s.workspace_id = $1 AND s.id = $2
+                "DELETE FROM sources s WHERE s.workspace_id = $1 AND s.id = $2 AND s.kind = 'local_file'
                    AND NOT EXISTS (SELECT 1 FROM datasets d WHERE d.source_id = s.id)",
             )
             .bind(ws.as_uuid())
@@ -662,6 +687,10 @@ mod tests {
             suggested_questions: Vec::new(),
             semantic_unavailable: false,
             semantic_attempted_with: attempted_with.map(str::to_string),
+            source_kind: None,
+            source_id: None,
+            source_table: None,
+            current_version_at: None,
             created_at: Utc::now(),
         }
     }

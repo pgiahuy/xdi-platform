@@ -41,6 +41,9 @@ mod query;
 #[cfg(test)]
 mod roles_tests;
 mod security_headers;
+mod sources;
+#[cfg(test)]
+mod sources_tests;
 mod system;
 #[cfg(test)]
 mod test_support;
@@ -71,6 +74,7 @@ fn api_routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .merge(query::routes())
         .merge(conversations::routes())
         .merge(metrics::routes())
+        .merge(sources::routes())
 }
 
 /// Tách router API và đặc tả hoàn chỉnh (đã thêm phần chung ở openapi.rs). Server và lệnh in đặc tả cùng đi qua đây,
