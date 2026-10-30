@@ -23,6 +23,7 @@ fn column(name: &str, description: &str) -> ColumnProfile {
         values_complete: false,
         matched: false,
         unit: None,
+        aggregation: crate::engine::store::ColumnAggregation::Sum,
     }
 }
 

@@ -6,10 +6,13 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
+- API chỉ số của dataset (`/api/workspaces/{ws}/datasets/{id}/metrics`): admin tạo, sửa (thêm phiên bản), xóa chỉ số; công thức được chạy thử trước khi lưu, lỗi trả kèm tên trường sai; câu hỏi sau dùng đúng công thức đó (#185).
+- Cột số đo có cách gộp mặc định, tổng hay trung bình: mô hình đề xuất lúc nạp, admin đổi qua API; câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng (#185).
 - Postgres mẫu nhiều bảng có khóa chính, khóa ngoại (DataCo và OULAD) để thử kết nối cơ sở dữ liệu công ty: `data/postgres-demo/`.
 
 ### Changed
 
+- Dòng "Đo" của thẻ "Đã hiểu là" ghi cách tính bằng lời khi chỉ số không có mô tả, ví dụ "tổng cột Order Item Total" (#185).
 - Mô hình nhận ra câu hỏi tìm nguyên nhân thay cho so từ khóa, kể cả cách hỏi như "Doanh thu giảm do gì?"; câu đếm theo cột "lý do" vẫn là câu thường. Mô hình lỗi thì dùng luật từ khóa như trước; tab Các bước có thêm bước Phân loại câu hỏi.
 - Câu hỏi tìm nguyên nhân có lời tóm tắt do code viết: câu trả lời chính rồi lý do chính (số dòng, lượng và giá, cơ cấu), nhóm khác thường hay "không có nơi nào đặc biệt", và cột lời tóm tắt bỏ qua vì chỉ là tên khác của hai nhóm đang so (như hình thức thanh toán khi so trạng thái đơn) hay trùng cột khác; tên cột kèm nghĩa tiếng Việt.
 - Thẻ trả lời câu hỏi tìm nguyên nhân hiện lời tóm tắt (câu chính in đậm và các ý ngắn), số dòng của hai bên, phần trăm thay đổi cạnh chênh lệch, và tên cột kèm nghĩa tiếng Việt ở tiêu đề biểu đồ chênh lệch.

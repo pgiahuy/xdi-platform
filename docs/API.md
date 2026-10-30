@@ -71,6 +71,8 @@ Lỗi trả cùng một dạng body (`ErrorBody`), trừ hai ngoại lệ ở cu
   `message`.
 - `message`: lời giải thích tiếng Việt cho người dùng cuối, hiện nguyên văn được. Riêng lỗi 500 chỉ có câu chung, chi
   tiết nằm trong log của backend.
+- `field`: chỉ có khi lỗi 400 nằm ở một trường của body (hiện chỉ API chỉ số), là tên trường JSON đó, ví dụ
+  `expression`; giao diện hiện lời báo ngay dưới ô tương ứng. Lỗi khác không có trường này.
 
 | `code` | HTTP | Khi nào |
 |---|---|---|
@@ -165,6 +167,27 @@ cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả c
 hỏi: `query_id`, câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Đã hiểu là" dạng chữ). Bảng kết quả không
 lưu; hỏi lại câu đó để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, admin của workspace cũng không: cuộc của
 người khác, của dataset khác hay id không có đều trả 404.
+
+## Chỉ số và cách gộp
+
+Chỉ số của một dataset (`backend/src/service/metrics/`): `GET /api/workspaces/{ws}/datasets/{id}/metrics` trả
+`metrics` (mỗi tên một mục: bản đã xác nhận mới nhất, kèm `version`, `origin`) và `columns` (cột của phiên bản hiện
+hành, `aggregation` là `sum` hay `avg` với cột `measure`, null với cột khác); mọi thành viên gọi được. Chỉ admin, `member`
+nhận 403:
+
+- `POST .../metrics` tạo chỉ số (201), `origin` `ui`, đã xác nhận. Tên trùng một chỉ số có sẵn (không phân biệt hoa
+  thường và dấu thanh) trả 400 với `field` `name`.
+- `PUT .../metrics/{metric_id}` lưu phiên bản mới (`version` + 1) cùng tên, bản cũ giữ lại; đổi tên trả 400.
+  `metric_id` là id của bất kỳ phiên bản nào của chỉ số đó.
+- `DELETE .../metrics/{metric_id}` xóa chỉ số cùng mọi phiên bản (204). Câu hỏi cũ giữ câu SQL đã chạy.
+- `PUT .../columns/aggregation` với `{column, aggregation}` đổi cách gộp của một cột `measure` trong phiên bản hiện hành
+  (204); cột không có hay không phải `measure` trả 400 với `field` `column`.
+
+Trước khi lưu, backend kiểm tên không có dấu ngoặc kép, công thức và điều kiện không có chú thích SQL (`--`, `/* */`),
+công thức là một hàm gộp trên cột có thật, điều kiện không chứa hàm gộp, cột thời gian có thật, rồi chạy
+`SELECT <công thức> FROM <bảng> [WHERE <điều kiện>]` qua guard trên phiên bản hiện hành. Sai thì 400 với `field` là
+`name`, `expression`, `filter` hay `time_column`; lý do gốc của guard hay DuckDB chỉ ghi log. Chỉ số lưu xong vào
+prompt của câu hỏi kế tiếp.
 
 ## Xóa dataset
 

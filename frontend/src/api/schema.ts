@@ -380,6 +380,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/datasets/{id}/columns/aggregation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the default aggregation of a measure column (admin only)
+         * @description Applies to the current version. The SQL prompt asks for AVG on `avg` columns, and why questions on them compare the average per row.
+         */
+        put: operations["setColumnAggregation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/datasets/{id}/conversations": {
         parameters: {
             query?: never;
@@ -435,6 +455,51 @@ export interface paths {
          */
         post: operations["drill"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/datasets/{id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metrics of a dataset and the columns of its current version */
+        get: operations["listMetrics"];
+        put?: never;
+        /**
+         * Create a metric (admin only)
+         * @description The expression is run once on the current version, through the SQL guard, before it is saved. The metric is confirmed and used by the next question.
+         */
+        post: operations["createMetric"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/datasets/{id}/metrics/{metric_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save a new version of a metric (admin only)
+         * @description Adds a version with the next number and keeps the earlier ones. The name cannot change. Checked like a new metric.
+         */
+        put: operations["updateMetric"];
+        post?: never;
+        /**
+         * Delete a metric with all its versions (admin only)
+         * @description Earlier questions keep the SQL they ran.
+         */
+        delete: operations["deleteMetric"];
         options?: never;
         head?: never;
         patch?: never;
@@ -724,6 +789,17 @@ export interface components {
             name: string;
         };
         /**
+         * @description How the values of a measure column are combined when no metric says otherwise: `sum` for amounts and quantities,
+         *     `avg` for values that describe one row (age, score, credits, days).
+         * @enum {string}
+         */
+        ColumnAggregation: "sum" | "avg";
+        /** @description New default aggregation of one measure column of the current version. */
+        ColumnAggregationRequest: {
+            aggregation: components["schemas"]["ColumnAggregation"];
+            column: string;
+        };
+        /**
          * @description What a result column is:
          *     - `dimension`: a grouping key that is not time, for example a market.
          *     - `time`: a grouping key on time, for example a quarter.
@@ -881,6 +957,8 @@ export interface components {
         /** @description Error body returned by every endpoint on failure. */
         ErrorBody: {
             code: components["schemas"]["ErrorCode"];
+            /** @description Name of the request field the error is about, when it is about one field. Omitted otherwise. */
+            field?: string | null;
             /** @description Human-readable explanation in Vietnamese, meant to be shown to the end user as is. */
             message: string;
         };
@@ -1014,6 +1092,60 @@ export interface components {
             slug: string;
             /** Format: uuid */
             workspace_id: string;
+        };
+        /** @description A metric of the dataset: the version in use (the latest confirmed one). */
+        Metric: {
+            /** @description False for a draft nobody approved; the SQL prompt marks it as such. */
+            confirmed: boolean;
+            description: string;
+            /** @description Aggregate SQL expression over the dataset's columns, for example `SUM("Order Item Total")`. */
+            expression: string;
+            /** @description Row condition applied with the expression, for example `"Order Status" <> 'CANCELED'`. */
+            filter: string | null;
+            /**
+             * Format: uuid
+             * @description Id of this version; editing or deleting by it acts on the metric with this name.
+             */
+            id: string;
+            name: string;
+            /** @description `ui` (written on the metrics screen), `sample`, `formula_table` or `llm_suggested`. */
+            origin: string;
+            /** @description Column that dates the rows for this metric. */
+            time_column: string | null;
+            unit: string | null;
+            /**
+             * Format: int32
+             * @description Starts at 1; each edit adds a version and keeps the earlier ones.
+             */
+            version: number;
+        };
+        /** @description A column of the current version, for the column picker and the default aggregation of measure columns. */
+        MetricColumn: {
+            aggregation: components["schemas"]["ColumnAggregation"] | null;
+            /** @description DuckDB type, for example `DOUBLE`, `BIGINT`, `VARCHAR`. */
+            data_type: string;
+            description: string | null;
+            name: string;
+            /** @description `dimension`, `measure`, `time`, `key`, `text` or `ignore`. */
+            role: string;
+        };
+        /** @description A metric to create, or the new version of one. Errors name the wrong field in `field`. */
+        MetricRequest: {
+            description?: string;
+            /** @description One aggregate SQL expression over the dataset's columns, column names in double quotes. */
+            expression: string;
+            filter?: string | null;
+            /** @description Name users ask with, unique in the dataset ignoring case and accents. Cannot change when editing. */
+            name: string;
+            time_column?: string | null;
+            unit?: string | null;
+        };
+        /** @description Metrics of a dataset and the columns of its current version. */
+        MetricsResponse: {
+            /** @description Columns of the current version in table order; empty while the dataset has no profiled version. */
+            columns: components["schemas"]["MetricColumn"][];
+            /** @description One entry per metric name, sorted by name. */
+            metrics: components["schemas"]["Metric"][];
         };
         ResetPasswordResponse: {
             /** @description Shown once to hand to the user; not stored anywhere in plain text. */
@@ -2298,6 +2430,51 @@ export interface operations {
             };
         };
     };
+    setColumnAggregation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ColumnAggregationRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 no measure column of that name (`field` is `column`); 401; 403 not admin; 404 no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listConversations: {
         parameters: {
             query?: never;
@@ -2421,6 +2598,187 @@ export interface operations {
                 };
             };
             /** @description 400 invalid body, keys that do not match the result, a question that was rejected or failed, a question whose form cannot be traced yet (the message says why), a breakdown row of a question without that breakdown, or a deleted version; 401; 404 not a member, or no such question in this dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createMetric: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Metric"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 invalid metric, `field` names the field; 401; 403 not admin; 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    updateMetric: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+                /** @description Id of any version of the metric (UUID) */
+                metric_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricRequest"];
+            };
+        };
+        responses: {
+            /** @description The new version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Metric"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 invalid metric, `field` names the field; 401; 403 not admin; 404 no such dataset or metric */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteMetric: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+                /** @description Id of any version of the metric (UUID) */
+                metric_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 no such dataset or metric */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

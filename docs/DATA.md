@@ -151,7 +151,9 @@ trong workspace thì thêm `_2`, `_3`. Ví dụ "Bán hàng 2024" thành `ban_ha
   thêm `_2`, `_3`. Tên ở danh sách sheet trùng với tên cột sau khi nạp.
 
 Kết quả nạp (`UploadResult.columns`) trả tên và kiểu DuckDB của từng cột (`BIGINT`, `DOUBLE`, `VARCHAR`, `DATE`...),
-gồm cả `_source_file`. Hồ sơ đầy đủ của từng cột lưu ở bảng `columns` (mục dưới), chưa có API đọc.
+gồm cả `_source_file`. Hồ sơ đầy đủ của từng cột lưu ở bảng `columns` (mục dưới); API chỉ số
+(`GET .../datasets/{id}/metrics`) trả tên, kiểu, vai trò, mô tả và cách gộp của cột phiên bản hiện hành, phần còn lại
+chưa có API đọc.
 
 ## Hồ sơ cột
 
@@ -211,8 +213,8 @@ phiên bản ở `structure`.
 ## Hồ sơ lớp ngữ nghĩa
 
 Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
-(`service/semantic/mod.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, đơn vị của cột số đo, bí
-danh giá trị, câu hỏi gợi ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì
+(`service/semantic/mod.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, đơn vị và cách gộp của
+cột số đo, bí danh giá trị, câu hỏi gợi ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì
 `profile_status` là `semantic`; người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột
 của phiên bản là dòng mới. Câu trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của
 provider (Gemini chặn prompt vì nội dung, mock không có bảng) thì đánh dấu đã thử kèm tên provider
@@ -232,7 +234,8 @@ tổng tối đa 400 giá trị, bỏ giá trị dài quá 200 byte. Tên cột 
 Câu hỏi gợi ý: prompt xin câu khó trước, gồm hai câu "vì sao" giải thích chênh lệch của một số đo giữa hai kỳ (trong
 khoảng min, max của cột thời gian) hay giữa hai giá trị có trong danh sách, rồi một câu tỷ lệ, trung bình hoặc top N,
 còn lại là câu tổng hay phân rã đơn giản. Mô hình không thấy số liệu nên câu "vì sao" không được nói chiều ("tăng",
-"giảm", "cao hơn"), và số đo của nó phải cộng được qua các dòng (tiền, số lượng hàng, số dòng).
+"giảm", "cao hơn"). Số đo của nó là số dòng, tổng của cột mô hình ghi cách gộp `sum`, hoặc trung bình của cột ghi
+`avg` (gọi tên là trung bình); không bao giờ là tổng của cột `avg`.
 
 Cột nhạy cảm (`is_sensitive`) do lớp cấu trúc đánh dấu ngay lúc nạp (mục trên); trong câu trả lời của lớp ngữ nghĩa,
 mô hình đề xuất đánh dấu thêm qua `sensitive_columns` (chỉ chiều đặt, không bao giờ gỡ, có hiệu lực từ các lần sau).
@@ -255,6 +258,16 @@ vị sai hay đặt cho cột không phải `measure` thì bỏ riêng, phần c
 Luật biểu đồ hiện tại ([Kiến trúc](ARCHITECTURE.md), mục 6) chưa đọc đơn vị: chỉ theo vai trò cột, và biểu đồ đường
 chỉ vẽ độ đo đầu.
 
+**Cách gộp mặc định** (`columns.aggregation`, migration `0010_column_aggregation.sql`, #185) là `sum` hay `avg`, chưa ai
+chọn thì đọc là `sum`. Mô hình đề xuất cho cột `measure`: `sum` khi tổng có nghĩa (tiền, số lượng hàng), `avg` khi mỗi giá trị mô
+tả chính dòng của nó (tuổi, điểm, giá, tỷ lệ, số tín chỉ, số ngày). Đề xuất sai hay cho cột khác vai trò thì bỏ riêng,
+giữ `sum`. Lượt chạy nền của mô hình chỉ điền cột chưa có cách gộp, nên cách gộp admin đặt trong lúc mô hình chưa
+chạy xong được giữ. Admin đổi qua API chỉ số ([API](API.md), mục Chỉ số và cách gộp) cho phiên bản hiện hành; phiên bản nạp sau
+nhận đề xuất mới của mô hình, không chép từ phiên bản trước. Ba nơi đọc cách gộp: prompt sinh SQL ghi "one value per row:
+aggregate it with AVG, never SUM" cạnh cột `avg` (cột `sum` không thêm chữ gì); form câu "tại sao" đổi `sum` trên cột
+`avg` thành trung bình mỗi dòng (tử `SUM(cột)`, mẫu `COUNT(cột)`, như `AVG`) và phân rã thành phần cơ cấu và phần hiệu
+suất; luật câu gợi ý ở trên.
+
 Câu hỏi gợi ý lưu ở `dataset_versions.suggested_questions` (đi theo phiên bản) và trả ra trong
 `GET /api/workspaces/{ws}/datasets` và `.../datasets/{id}` (của phiên bản hiện hành), cùng
 `current_profile_status` để giao diện biết lớp ngữ nghĩa xong chưa và `semantic_unavailable` khi provider đang cấu
@@ -262,7 +275,8 @@ hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và
 
 ## Chưa có
 
-- API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm, mô tả, bí danh).
+- API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm, mô tả, bí danh); API chỉ số mới sửa được cách gộp.
+- Chép cách gộp admin đã đặt sang phiên bản nạp sau của cùng dataset.
 - So hồ sơ giữa hai phiên bản (cột mất, thêm, đổi kiểu) trước khi chuyển phiên bản hiện hành, như thiết kế ở
   [Kiến trúc](ARCHITECTURE.md), mục 7.
 - Chọn lại phiên bản cũ làm hiện hành, xóa riêng một phiên bản.
