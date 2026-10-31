@@ -60,6 +60,7 @@ export function AskConversation(props: Props) {
           <SavedTurnBody
             status={turn.status}
             understood={buildUnderstoodLines(turn.understood)}
+            answer={turn.answer && { text: turn.answer.text, warnings: turn.answer.warnings }}
             onAskAgain={() => props.onAskSaved(turn.question)}
             disabled={pending}
           />

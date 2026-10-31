@@ -40,6 +40,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - TLS tới nguồn Postgres: `sslmode` `require` và `verify-full`, kèm ô chứng chỉ CA cho CA riêng của tổ chức (#230).
 - Màn **Khái niệm ngành** (thanh bên): gói ngành lưu riêng cho từng workspace, admin thêm, sửa, tắt khái niệm, câu hỏi sau dùng bản vừa sửa; thêm gói giáo dục cho dữ liệu OULAD (#229).
 - Tab **Các bước** của khung Minh chứng ghi từng lượt gọi mô hình (thời gian, token); lệnh `xdi-backend llm-stats` tổng hợp theo loại câu; lập hồ sơ cột sau khi nạp chạy ba lượt gọi song song và hai bảng cùng lúc (`SEMANTIC_JOBS`); số đo ở `docs/PERFORMANCE.md` (#184).
+- Tải lại trang hay mở lại cuộc trò chuyện cũ vẫn thấy lời trả lời của từng lượt (kèm các chỗ chưa rõ nếu có), không chỉ câu hỏi; bảng và biểu đồ vẫn xem bằng nút Hỏi lại. Bảng `queries` thêm cột `answer`, API cuộc trò chuyện thêm `answer` cho mỗi lượt (#201).
 
 ### Changed
 

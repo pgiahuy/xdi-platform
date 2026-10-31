@@ -187,8 +187,11 @@ tới nó (không chứa tên cột, giá trị, năm trong đoạn SQL hay tên
 
 `GET /api/workspaces/{ws}/datasets/{id}/conversations` liệt kê tối đa 50 cuộc mới nhất của người gọi trên dataset, bỏ
 cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả cuộc đó kèm tối đa 200 lượt gần nhất theo thứ tự
-hỏi: `query_id`, câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Hệ thống đã hiểu là" dạng chữ). Bảng kết quả
-không lưu; hỏi lại câu đó để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, admin của workspace cũng không: cuộc
+hỏi: `query_id`, câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Hệ thống đã hiểu là" dạng chữ) và `answer`:
+lời trả lời đã hiện lúc hỏi (`text`; `by_model`; `verdict` của mô hình chấm, null khi không chạy; `warnings`, các chỗ chưa
+rõ của lời do mô hình viết), tức `answer_text` của câu thường hay `explanation.summary` của câu "tại sao"; null với câu
+không answered và câu ghi trước khi có trường này (#201). Bảng kết quả không lưu; hỏi lại câu đó để xem bảng và biểu
+đồ. Chỉ người tạo đọc và hỏi tiếp được một cuộc, admin của workspace cũng không: cuộc
 của người khác, của dataset khác hay id không có đều trả 404.
 
 ## Đánh giá câu trả lời và câu mẫu

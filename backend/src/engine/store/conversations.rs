@@ -38,6 +38,8 @@ pub struct StoredTurn {
     pub feedback_at: Option<DateTime<Utc>>,
     /// Admin đã duyệt câu làm câu mẫu.
     pub example_approved: bool,
+    /// Lời trả lời đã hiện cho người hỏi (queries.answer, migration 0015); None với câu không answered hay ghi trước đó.
+    pub answer: Option<serde_json::Value>,
 }
 
 impl Store {
@@ -113,7 +115,7 @@ impl Store {
             "SELECT * FROM (
                  SELECT id AS query_id, question, status, sql_generated, sql_guarded, understood, created_at,
                         feedback, feedback_reason, feedback_note, feedback_at,
-                        example_approved_at IS NOT NULL AS example_approved
+                        example_approved_at IS NOT NULL AS example_approved, answer
                  FROM queries WHERE workspace_id = $1 AND conversation_id = $2
                  ORDER BY created_at DESC LIMIT $3
              ) last ORDER BY created_at",
@@ -126,23 +128,25 @@ impl Store {
         .map_err(|e| db_error("list turns", e))
     }
 
-    /// Gắn một câu đã ghi vào cuộc trò chuyện, kèm phần đã hiểu dạng chữ. Gọi sau record_query của luồng hỏi, để hai
-    /// nhánh câu thường và câu "tại sao" không phải mang thêm trường (service/conversation/mod.rs).
+    /// Gắn một câu đã ghi vào cuộc trò chuyện, kèm phần đã hiểu dạng chữ và lời trả lời đã hiện. Gọi sau record_query
+    /// của luồng hỏi, để hai nhánh câu thường và câu "tại sao" không phải mang thêm trường (service/conversation/mod.rs).
     pub async fn attach_turn(
         &self,
         ws: &WorkspaceId,
         query_id: Uuid,
         conversation_id: Uuid,
         understood: Option<&str>,
+        answer: Option<&serde_json::Value>,
     ) -> Result<(), AppError> {
         sqlx::query(
-            "UPDATE queries SET conversation_id = $3, understood = $4
+            "UPDATE queries SET conversation_id = $3, understood = $4, answer = $5
              WHERE workspace_id = $1 AND id = $2",
         )
         .bind(ws.as_uuid())
         .bind(query_id)
         .bind(conversation_id)
         .bind(understood)
+        .bind(answer)
         .execute(&self.pool)
         .await
         .map_err(|e| db_error("attach turn", e))?;

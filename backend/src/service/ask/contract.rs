@@ -429,7 +429,7 @@ pub enum QuestionType {
 /// Verdict of the two checks on a text written by the language model: `match` (agrees with the computed numbers),
 /// `warning` (some parts can be read several ways, not certainly wrong), `mismatch` (wrong on every attempt; the model's
 /// text is replaced by a template sentence).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AnswerVerdict {
     Match,

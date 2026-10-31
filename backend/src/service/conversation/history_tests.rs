@@ -24,6 +24,7 @@ fn turn(question: &str, sql_generated: Option<&str>, understood: Option<&str>) -
         feedback_note: None,
         feedback_at: None,
         example_approved: false,
+        answer: None,
     }
 }
 

@@ -49,8 +49,9 @@ async fn list_conversations(
     tag = "query",
     operation_id = "getConversation",
     summary = "One conversation of the caller with its turns",
-    description = "Turns oldest first, each with its question, status, SQL and the short text of what was understood. \
-                   Results are not stored: ask a turn again to see its numbers.",
+    description = "Turns oldest first, each with its question, status, SQL, the short text of what was understood and \
+                   the answer text shown when it was asked. Result rows are not stored: ask a turn again to see its \
+                   table and chart.",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = String, Path, description = "Dataset id (UUID)"),
