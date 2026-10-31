@@ -328,9 +328,119 @@
     }
   },
   {
+    "task": "judge",
+    "question": "Tại sao doanh thu quý 3 năm 2017 giảm",
+    "answer": {
+      "verdict": "match",
+      "problems": []
+    }
+  },
+  {
     "task": "narrate",
     "question": "Tại sao doanh thu quý 3 năm 2017 giảm",
-    "answer": "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9.226.250,00."
+    "answer": {
+      "headline": "Doanh thu Quý 3/2017 giảm 1.283.400,00 (13,6%) so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00.",
+      "reasons": [
+        {
+          "lead": "Số đơn ít đi",
+          "text": "Số đơn giảm từ 5.000 xuống 4.400, làm doanh thu giảm 1.117.725,00, chiếm 87,1% mức giảm."
+        },
+        {
+          "lead": "Giá trị đơn trung bình thấp hơn",
+          "text": "Giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25, làm doanh thu giảm thêm 165.675,00."
+        },
+        {
+          "lead": "Thị trường Europe giảm nhiều nhất",
+          "text": "Europe giảm 639.780,25, sau đó là LATAM giảm 339.049,50."
+        }
+      ],
+      "claims": [
+        {
+          "field": "change",
+          "column": "",
+          "group": "",
+          "value": "-1.283.400,00"
+        },
+        {
+          "field": "percent_change",
+          "column": "",
+          "group": "",
+          "value": "-13,6"
+        },
+        {
+          "field": "base_value",
+          "column": "",
+          "group": "",
+          "value": "9.402.500,00"
+        },
+        {
+          "field": "compare_value",
+          "column": "",
+          "group": "",
+          "value": "8.119.100,00"
+        },
+        {
+          "field": "base_volume",
+          "column": "",
+          "group": "",
+          "value": "5.000"
+        },
+        {
+          "field": "compare_volume",
+          "column": "",
+          "group": "",
+          "value": "4.400"
+        },
+        {
+          "field": "volume_effect",
+          "column": "",
+          "group": "",
+          "value": "-1.117.725,00"
+        },
+        {
+          "field": "volume_share",
+          "column": "",
+          "group": "",
+          "value": "87,1"
+        },
+        {
+          "field": "base_price",
+          "column": "",
+          "group": "",
+          "value": "1.880,50"
+        },
+        {
+          "field": "compare_price",
+          "column": "",
+          "group": "",
+          "value": "1.845,25"
+        },
+        {
+          "field": "price_effect",
+          "column": "",
+          "group": "",
+          "value": "-165.675,00"
+        },
+        {
+          "field": "contribution",
+          "column": "Market",
+          "group": "Europe",
+          "value": "-639.780,25"
+        },
+        {
+          "field": "cause",
+          "column": "Market",
+          "group": "Europe",
+          "value": ""
+        },
+        {
+          "field": "contribution",
+          "column": "Market",
+          "group": "LATAM",
+          "value": "-339.049,50"
+        }
+      ]
+    }
   },
   {
     "task": "why",

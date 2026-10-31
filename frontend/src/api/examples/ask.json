@@ -21,6 +21,7 @@
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
     "question": "Doanh thu theo ngày giao hàng",
+    "question_type": "quantitative",
     "result": null,
     "sql_generated": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day",
     "sql_guarded": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day LIMIT 100000",
@@ -87,16 +88,16 @@
     "choices": [],
     "clarifications": [
       {
-        "id": "region_column",
-        "label": "\"Khu vực\" là cột nào?",
+        "id": "revenue_measure",
+        "label": "Doanh thu tính bằng cột nào?",
         "options": [
           {
-            "id": "order_region",
-            "label": "Order Region, ví dụ Western Europe"
+            "id": "order_item_total",
+            "label": "Order Item Total, sau giảm giá"
           },
           {
-            "id": "market",
-            "label": "Market, ví dụ Europe"
+            "id": "sales",
+            "label": "Sales, trước giảm giá"
           }
         ],
         "selected": null
@@ -105,19 +106,26 @@
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
     "insight": null,
-    "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
+    "message": "Doanh thu tính bằng cột nào?",
     "model": "gemini-2.5-flash",
     "query_id": null,
-    "question": "Doanh thu theo khu vực",
+    "question": "Doanh thu từng tháng năm 2017",
+    "question_type": "quantitative",
     "result": null,
     "sql_generated": null,
     "sql_guarded": null,
     "status": "needs_choice",
     "steps": [
       {
-        "detail": "\"khu vực\" khớp hai cột: Order Region, Market",
+        "detail": null,
         "duration_ms": 12,
         "name": "context",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 940,
+        "name": "llm",
         "ok": true
       }
     ],
@@ -139,6 +147,7 @@
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
     "question": "Xóa các đơn hàng bị hủy",
+    "question_type": "quantitative",
     "result": null,
     "sql_generated": "DELETE FROM dataco WHERE \"Order Status\" = 'CANCELED'",
     "sql_guarded": null,
@@ -235,6 +244,7 @@
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
     "question": "Doanh thu theo khu vực",
+    "question_type": "quantitative",
     "result": {
       "columns": [
         {
@@ -338,15 +348,15 @@
       "assumptions": [
         {
           "id": "region_column",
-          "label": "\"Khu vực\" là cột nào?",
+          "label": "Hiểu \"khu vực\" là",
           "options": [
             {
-              "id": "order_region",
-              "label": "Order Region, ví dụ Western Europe"
+              "id": "market",
+              "label": "5 nhóm, như Europe, LATAM, Pacific Asia (Market)"
             },
             {
-              "id": "market",
-              "label": "Market, ví dụ Europe"
+              "id": "order_region",
+              "label": "23 nhóm, như Western Europe, Central America, South America (Order Region)"
             }
           ],
           "selected": "market"
@@ -527,21 +537,28 @@
       "percent_change": "-13.6",
       "slice_column": null,
       "slice_column_label": null,
-      "summary": "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9.226.250,00.",
+      "summary": "Doanh thu Quý 3/2017 giảm 1.283.400,00 (13,6%) so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Số đơn ít đi: Số đơn giảm từ 5.000 xuống 4.400, làm doanh thu giảm 1.117.725,00, chiếm 87,1% mức giảm. Giá trị đơn trung bình thấp hơn: Giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25, làm doanh thu giảm thêm 165.675,00. Thị trường Europe giảm nhiều nhất: Europe giảm 639.780,25, sau đó là LATAM giảm 339.049,50.",
       "summary_by_model": true,
       "summary_points": [
         {
           "kind": "reason",
-          "lead": "Lý do chính",
-          "text": "chủ yếu do số đơn: Quý 2/2017 có 5.000, Quý 3/2017 có 4.400. Phần do số đơn giảm 1.117.725,00, phần do giá trị đơn trung bình giảm 165.675,00. Nếu số đơn giữ nguyên như Quý 2/2017, doanh thu Quý 3/2017 là 9.226.250,00."
+          "lead": "Số đơn ít đi",
+          "text": "Số đơn giảm từ 5.000 xuống 4.400, làm doanh thu giảm 1.117.725,00, chiếm 87,1% mức giảm."
         },
         {
-          "kind": "even",
-          "lead": "Không có nơi nào đặc biệt",
-          "text": "theo Market (thị trường) và Customer Segment (phân khúc khách hàng), không nhóm nào lệch hẳn mức chung (giảm 13,6%). Chênh lệch lớn nhất ở Europe và LATAM chỉ vì đây là những nhóm có doanh thu lớn nhất."
+          "kind": "reason",
+          "lead": "Giá trị đơn trung bình thấp hơn",
+          "text": "Giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25, làm doanh thu giảm thêm 165.675,00."
+        },
+        {
+          "kind": "reason",
+          "lead": "Thị trường Europe giảm nhiều nhất",
+          "text": "Europe giảm 639.780,25, sau đó là LATAM giảm 339.049,50."
         }
       ],
-      "summary_title": "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00.",
+      "summary_title": "Doanh thu Quý 3/2017 giảm 1.283.400,00 (13,6%) so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00.",
+      "summary_verdict": "match",
+      "summary_warnings": [],
       "volume_price": {
         "base_price": "1880.50",
         "base_volume": "5000",
@@ -560,6 +577,7 @@
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
     "question": "Tại sao doanh thu quý 3 năm 2017 giảm?",
+    "question_type": "causal",
     "result": {
       "columns": [
         {

@@ -35,14 +35,20 @@ impl LlmProvider for RecordingLlm {
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
         // Lớp ngữ nghĩa chạy nền sau khi nạp file cũng gọi mô hình; lỗi tạm thì nó bỏ qua (như ScriptedLlm).
-        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn. Bước phân
-        // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
+        // Lời của phần giải thích (task insight), insight của câu "tại sao" (task narrate) và mô hình chấm (task judge)
+        // cũng gọi mô hình; lỗi thì luồng hỏi dùng câu do code viết. Bước phân loại (task classify) lỗi thì dùng luật từ
+        // khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước. Insight câu "tại sao" và hai cổng kiểm có test riêng
+        // (service/ask/narrate_tests.rs).
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Classify | LlmTask::Insight
+            LlmTask::Profile
+                | LlmTask::Classify
+                | LlmTask::Insight
+                | LlmTask::Narrate
+                | LlmTask::Judge
         ) {
             return Err(AppError::Upstream(
-                "recording model has no profile or summary".to_string(),
+                "recording model has no profile, insight or narrate reply".to_string(),
             ));
         }
         self.prompts

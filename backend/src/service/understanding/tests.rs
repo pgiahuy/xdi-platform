@@ -98,7 +98,6 @@ fn choices(answer: &SqlAnswer) -> Vec<Choice> {
     let context = AskContext {
         columns: profile(),
         hints: vec![],
-        ambiguous: vec![],
         picks: vec![],
     };
     build_assumption_choices(answer, &context, &metrics())

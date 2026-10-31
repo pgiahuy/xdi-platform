@@ -43,8 +43,9 @@ use crate::service::explain::sql::{
     COMPARE_ROWS, COMPARE_VALUE, COMPARE_VOLUME,
 };
 use crate::service::explain::{
-    apply_dimension_order, build_decimal_text, build_dimension_score, build_group_contributions,
-    build_ranking_mode, build_volume_price, GroupValues, RankedDimension, PRICE_SCALE,
+    apply_dimension_order, build_decimal_text, build_dimension_score, build_entity_name,
+    build_group_contributions, build_ranking_mode, build_volume_price, GroupValues,
+    RankedDimension, PRICE_SCALE,
 };
 
 /// Bảng, trần dòng và giới hạn chạy, chung cho mọi câu của một câu hỏi.
@@ -285,6 +286,8 @@ pub async fn build_breakdown(
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: false,
+        summary_warnings: Vec::new(),
+        summary_verdict: None,
         notes,
     })))
 }
@@ -408,7 +411,8 @@ pub(super) fn build_slice_labels(plan: &WhyPlan) -> (String, String) {
 }
 
 /// VolumePrice khi plan có lượng và cả hai lượng khác 0 (build_volume_price trả None khi một lượng bằng 0). Nhãn do
-/// code ghép (#40): "Số <cột>", "<độ đo> trên số <cột>".
+/// code ghép (#40) từ tên tiếng Việt của cột lượng khi hồ sơ có: "Số đơn hàng", "Doanh thu trên mỗi đơn hàng"
+/// (build_entity_name); chưa có thì từ tên cột.
 fn build_volume(plan: &WhyPlan, totals: &SliceTotals) -> Option<VolumePrice> {
     let column = plan.volume.as_ref()?;
     let (base_volume, compare_volume) = totals.volume?;
@@ -419,9 +423,10 @@ fn build_volume(plan: &WhyPlan, totals: &SliceTotals) -> Option<VolumePrice> {
         totals.compare,
         PRICE_SCALE,
     )?;
+    let entity = build_entity_name(column, plan.labels.get(column).map(String::as_str));
     Some(VolumePrice {
-        volume_label: format!("Số {column}"),
-        price_label: format!("{} trên số {column}", plan.measure.label),
+        volume_label: format!("Số {entity}"),
+        price_label: format!("{} trên mỗi {entity}", plan.measure.label),
         sql: totals.sql.clone(),
         base_volume: numbers.base_volume,
         compare_volume: numbers.compare_volume,

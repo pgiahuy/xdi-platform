@@ -2,28 +2,31 @@
 /* service/ask/narrate_tests.rs - test bước narrate (#41, service/ask/narrate.rs và phần chữ ở explain/mod.rs): bước kiểm
 số nhận summary của mẫu why và câu khuôn, loại số lạ, số thiếu chữ số thập phân, cách viết thô hay kiểu Anh, số trước ký
 hiệu hay chữ chỉ tỷ lệ (kể cả khi có khoảng trắng ở giữa), chữ số ngoài ASCII, và số lấy từ câu hỏi hay từ giá trị
-nhóm; mô hình lỗi, quá giờ, trả câu trống hay quá dài thì rơi về câu khuôn với bước narrate ok = false; chênh lệch
-bằng 0 không gọi mô hình. Cách viết số kiểu Việt Nam (explain/number.rs) test ở cuối file. Mô hình giả trả câu viết
-sẵn; không cần DuckDB hay Postgres. */
+nhóm; mô hình lỗi, quá giờ, trả câu trống hay quá dài thì rơi về câu khuôn với bước narrate ok = false; trượt cổng 1
+hay cổng 2 (#201) thì viết lại một lần kèm lý do, trượt cả hai lần thì dùng câu khuôn; mô hình chấm cảnh báo thì giữ
+lời kèm cảnh báo; chênh lệch bằng 0 không gọi mô hình. Cách viết số kiểu Việt Nam (explain/number.rs) test ở cuối
+file. Mô hình giả trả câu viết sẵn; không cần DuckDB hay Postgres. */
 
+use std::sync::Mutex;
 use std::time::Duration;
 
 use async_trait::async_trait;
 
 use crate::engine::llm::mock::Mock;
-use crate::engine::llm::{LlmProvider, LlmRequest};
+use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::error::AppError;
 use crate::service::ask::contract::{
-    CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice, GroupContribution,
-    MeasureKind, StepName, ValueKind,
+    AnswerVerdict, CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice,
+    GroupContribution, MeasureKind, StepName, ValueKind,
 };
 use crate::service::ask::examples::build_why_example;
 use crate::service::ask::narrate::narrate;
 use crate::service::explain::annotate::{annotate_dimensions, build_value_presences, Totals};
 use crate::service::explain::build_direction_text;
+use crate::service::explain::claims_tests::build_example_reply;
 use crate::service::explain::number::{build_number_text, MAX_FRACTION_DIGITS};
 use crate::service::explain::{
-    build_direction_check, build_narrate_prompt, build_number_check, build_template_summary,
+    build_narrate_prompt, build_number_check, build_template_summary, MAX_REASONS,
     MAX_SUMMARY_CHARS,
 };
 
@@ -90,6 +93,8 @@ fn small_explanation(
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: false,
+        summary_warnings: Vec::new(),
+        summary_verdict: None,
         notes: Default::default(),
     };
     apply_notes(&mut explanation);
@@ -119,7 +124,27 @@ fn apply_notes(explanation: &mut Explanation) {
     explanation.notes = annotate_dimensions(&explanation.dimensions, &presences, totals);
 }
 
-/// Mô hình giả: trả câu viết sẵn hoặc một lỗi viết sẵn.
+/// Kết luận "match" của mô hình chấm (cổng 2).
+const JUDGE_MATCH: &str = r#"{"verdict": "match", "problems": []}"#;
+
+/// Câu trả lời narrate đúng khuôn {headline, reasons, claims}, với một ý không có số.
+fn json_reply(headline: &str, claims: serde_json::Value) -> String {
+    json_insight(
+        headline,
+        &[("Thị trường", "Europe giảm nhiều nhất.")],
+        claims,
+    )
+}
+
+fn json_insight(headline: &str, reasons: &[(&str, &str)], claims: serde_json::Value) -> String {
+    let reasons: Vec<serde_json::Value> = reasons
+        .iter()
+        .map(|(lead, text)| serde_json::json!({ "lead": lead, "text": text }))
+        .collect();
+    serde_json::json!({ "headline": headline, "reasons": reasons, "claims": claims }).to_string()
+}
+
+/// Mô hình giả: trả câu viết sẵn hoặc một lỗi viết sẵn cho lần viết lời; lần chấm (cổng 2) luôn trả "match".
 enum Reply {
     Text(String),
     Upstream(String),
@@ -136,7 +161,10 @@ impl LlmProvider for StubLlm {
         "stub".to_string()
     }
 
-    async fn complete(&self, _request: &LlmRequest<'_>) -> Result<String, AppError> {
+    async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        if request.task == LlmTask::Judge {
+            return Ok(JUDGE_MATCH.to_string());
+        }
         match &self.reply {
             Reply::Text(text) => Ok(text.clone()),
             Reply::Upstream(text) => Err(AppError::Upstream(text.clone())),
@@ -174,21 +202,17 @@ impl LlmProvider for NeverCalled {
     }
 }
 
-/// Tiêu chí của #41: summary của mẫu why (ask/examples.rs) qua bước kiểm số.
-#[test]
-fn sample_summary_passes_the_number_check() {
-    let explanation = example();
-    check(&explanation.summary, &explanation).unwrap();
-}
-
-/// Lời narrate của mock (mock_answers.json) phải qua bước kiểm số trên đúng Explanation của mẫu why: lời mock và
-/// mẫu là hai chỗ viết tay, lệch nhau thì chạy thử bằng mock luôn ra câu khuôn.
+/// Insight narrate của mock (mock_answers.json) phải qua hai cổng trên đúng Explanation của mẫu why và trùng insight
+/// của mẫu: hai chỗ viết tay, lệch nhau thì chạy thử bằng mock luôn ra câu khuôn.
 #[tokio::test]
-async fn mock_narrate_answer_passes_the_number_check() {
+async fn mock_narrate_answer_passes_both_gates() {
     let explanation = example();
     let outcome = narrate(&Mock::new(), QUESTION, &explanation, TIMEOUT, &[]).await;
-    assert!(outcome.summary_by_model);
+    assert!(outcome.summary_by_model, "{:?}", outcome.step.detail);
     assert_eq!(outcome.summary, explanation.summary);
+    let insight = outcome.insight.expect("insight");
+    assert_eq!(insight.title, explanation.summary_title);
+    assert_eq!(insight.points.len(), explanation.summary_points.len());
 }
 
 /// Tiêu chí của #41: câu khuôn cũng qua chính bước kiểm đó.
@@ -206,12 +230,10 @@ fn template_works_without_dimensions_and_volume_price() {
     explanation.dimensions = vec![];
     explanation.volume_price = None;
     let template = build_template_summary(&explanation);
-    // Không còn chiều nào, nhưng số dòng hai bên vẫn cho biết chênh lệch đến từ đâu.
+    // Không còn chiều nào, không có lượng: chỉ còn câu chính. Không tách theo số dòng (explain/split.rs).
     assert_eq!(
         template,
-        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Lý do chính: \
-         số dòng dữ liệu hai bên khác nhau: Quý 2/2017 có 6.200 dòng, Quý 3/2017 có 5.480 dòng, còn trung bình mỗi \
-         dòng hai bên gần như nhau."
+        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00."
     );
     check(&template, &explanation).unwrap();
 }
@@ -324,25 +346,6 @@ fn non_ascii_digits_are_checked_too() {
         &explanation
     )
     .is_err());
-}
-
-/// Số trong câu hỏi không vào tập số được phép: câu hỏi chứa "1283400" không làm "giảm 1283400." hợp lệ.
-#[tokio::test]
-async fn numbers_in_the_question_are_not_allowed() {
-    let explanation = example();
-    let llm = StubLlm {
-        reply: Reply::Text("Doanh thu giảm 1283400.".to_string()),
-    };
-    let outcome = narrate(
-        &llm,
-        "Tại sao doanh thu giảm 1283400?",
-        &explanation,
-        TIMEOUT,
-        &[],
-    )
-    .await;
-    assert!(!outcome.summary_by_model);
-    assert_eq!(outcome.summary, build_template_summary(&explanation));
 }
 
 /// Giá trị nhóm là dữ liệu người dùng, có thể chứa chữ gài lệnh và số: số trong đó không vào tập được phép, nên câu
@@ -487,9 +490,8 @@ fn template_lowercases_labels_mid_sentence() {
     let explanation = example();
     let template = build_template_summary(&explanation);
     assert!(
-        template.contains(
-            "Nếu số đơn giữ nguyên như Quý 2/2017, doanh thu Quý 3/2017 là 9.226.250,00."
-        ),
+        template
+            .contains("Nếu số đơn giữ như Quý 2/2017, doanh thu Quý 3/2017 sẽ là 9.226.250,00."),
         "{template}"
     );
 }
@@ -501,7 +503,7 @@ fn template_keeps_all_caps_abbreviations() {
     explanation.measure = "GMV".to_string();
     let template = build_template_summary(&explanation);
     assert!(
-        template.contains("GMV Quý 3/2017 là 9.226.250,00"),
+        template.contains("GMV Quý 3/2017 sẽ là 9.226.250,00"),
         "{template}"
     );
 }
@@ -535,13 +537,25 @@ fn prompt_sends_two_dimensions_with_three_groups_each() {
     let prompt = build_narrate_prompt(QUESTION, &explanation);
     assert!(prompt.contains(QUESTION));
     assert!(prompt.contains("\"measure\": \"Doanh thu\""));
+    // Chênh lệch có chiều và độ lớn không dấu cho lời, cùng số có dấu cho khẳng định.
     let change =
-        "\"change\": {\n    \"amount\": \"1.283.400,00\",\n    \"direction\": \"giảm\"\n  }";
+        "\"change\": {\n    \"amount\": \"1.283.400,00\",\n    \"direction\": \"giảm\",\n    \
+                  \"value\": \"-1.283.400,00\"\n  }";
     assert!(prompt.contains(change), "{prompt}");
     assert!(prompt.contains("\"value\": \"9.402.500,00\""), "{prompt}");
     assert!(!prompt.contains("-1283400.00"), "{prompt}");
-    // Hai chiều, ba nhóm mỗi chiều, cộng nhóm chính (main_group) mà câu thứ hai phải nói tới.
-    assert_eq!(prompt.matches("\"contribution\"").count(), 2 * 3 + 1);
+    // Hai chiều, ba nhóm mỗi chiều, cộng nhóm chính (main_group). Ghi chú gửi dạng số và cờ, không câu chữ nào của câu
+    // khuôn.
+    let json = prompt.rsplit("JSON:\n").next().expect("json part");
+    assert_eq!(json.matches("\"contribution\"").count(), 2 * 3 + 1);
+    assert!(prompt.contains("\"volume_share\": \"87,1\""), "{prompt}");
+    assert!(prompt.contains("\"presence\": \"both\""), "{prompt}");
+    assert!(!prompt.contains("Lý do chính"), "{prompt}");
+    // Luật chung cho mọi ngành: phần luật không có ví dụ lấy từ một bộ dữ liệu.
+    let rules = prompt.split("Question:").next().expect("rules part");
+    for example in ["Corporate", "Consumer", "Withdrawn", "payment type"] {
+        assert!(!rules.contains(example), "{example}");
+    }
     assert!(prompt.contains("\"main_group\""), "{prompt}");
     assert!(prompt.contains("\"column\": \"Market\""));
     assert!(prompt.contains("\"column\": \"Customer Segment\""));
@@ -553,16 +567,20 @@ fn prompt_sends_two_dimensions_with_three_groups_each() {
 #[tokio::test]
 async fn model_summary_is_used_when_it_passes_the_check() {
     let explanation = example();
-    let summary = explanation.summary.clone();
     let llm = StubLlm {
-        reply: Reply::Text(summary.clone()),
+        reply: Reply::Text(build_example_reply().to_string()),
     };
     let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
-    assert_eq!(outcome.summary, summary);
+    assert_eq!(outcome.summary, explanation.summary);
     assert!(outcome.summary_by_model);
     assert!(outcome.step.ok);
     assert_eq!(outcome.step.name, StepName::Narrate);
-    assert_eq!(outcome.step.detail, None);
+    assert_eq!(
+        outcome.step.detail.as_deref(),
+        Some(
+            "Đã đối soát 14 khẳng định với bảng phân rã; mô hình chấm thấy lời khớp các khẳng định"
+        )
+    );
 }
 
 /// Mô hình lỗi: dùng câu khuôn, summary_by_model = false, bước narrate ok = false kèm lý do.
@@ -615,7 +633,24 @@ async fn timeout_falls_back_to_the_template() {
 #[tokio::test]
 async fn empty_or_too_long_reply_falls_back_to_the_template() {
     let explanation = example();
-    for reply in ["  \n ".to_string(), "a".repeat(MAX_SUMMARY_CHARS + 1)] {
+    let reason = ("Thị trường", "Europe giảm nhiều nhất.");
+    let replies = [
+        "Doanh thu giảm.".to_string(),
+        json_reply("  \n ", serde_json::json!([])),
+        json_reply(&"a".repeat(MAX_SUMMARY_CHARS + 1), serde_json::json!([])),
+        json_insight("Doanh thu giảm.", &[], serde_json::json!([])),
+        json_insight(
+            "Doanh thu giảm.",
+            &[reason; MAX_REASONS + 1],
+            serde_json::json!([]),
+        ),
+        json_insight(
+            "Doanh thu giảm.",
+            &[("", "Europe giảm.")],
+            serde_json::json!([]),
+        ),
+    ];
+    for reply in replies {
         let llm = StubLlm {
             reply: Reply::Text(reply),
         };
@@ -626,20 +661,25 @@ async fn empty_or_too_long_reply_falls_back_to_the_template() {
     }
 }
 
-/// Câu của mô hình có số ngoài bảng phân rã: dùng câu khuôn, detail liệt kê số sai.
+/// Khẳng định chép sai ô cả hai lần (cổng 1): dùng câu khuôn, detail nêu khẳng định sai và số lần viết.
 #[tokio::test]
-async fn wrong_numbers_fall_back_to_the_template() {
+async fn wrong_claims_twice_fall_back_to_the_template() {
     let explanation = example();
     let llm = StubLlm {
-        // 13,6% là % thay đổi code đã tính nên được phép; 14% thì mô hình tự làm tròn, không có trong bảng.
-        reply: Reply::Text("Doanh thu quý 3/2017 giảm 14% so với quý 2/2017.".to_string()),
+        reply: Reply::Text(json_reply(
+            "Doanh thu quý 3/2017 giảm 1.300.000,00 so với quý 2/2017.",
+            serde_json::json!([{
+                "field": "change", "column": "", "group": "", "value": "-1.300.000,00"
+            }]),
+        )),
     };
     let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
     assert_eq!(outcome.summary, build_template_summary(&explanation));
     assert!(!outcome.summary_by_model);
     assert!(!outcome.step.ok);
     let detail = outcome.step.detail.expect("detail");
-    assert!(detail.contains("14"), "{detail}");
+    assert!(detail.contains("bảng ghi -1.283.400,00"), "{detail}");
+    assert!(detail.contains("sau 2 lần viết"), "{detail}");
 }
 
 /// Chênh lệch bằng 0: không gọi mô hình, câu khuôn nói "không đổi", bước narrate vẫn ok kèm detail nói lý do.
@@ -713,31 +753,9 @@ fn a_comma_between_numbers_does_not_join_them() {
     check("Quý 3, quý 2 năm 2017: giảm 1.283.400,00.", &explanation).unwrap();
 }
 
-/// Bước kiểm số không bắt được câu nói ngược chiều ("nhóm B tăng 400,00" khi nhóm B giảm 400,00); bước kiểm chiều thì
-/// bắt được, và không bắt nhầm câu đúng chiều.
-#[test]
-fn direction_check_catches_a_change_told_the_wrong_way() {
-    let explanation = small_explanation(
-        "1000.00",
-        "900.00",
-        "-100.00",
-        &[(Some("A"), "300.00"), (Some("B"), "-400.00")],
-    );
-    let right =
-        "Doanh thu Quý 3/2017 giảm 100,00 so với Quý 2/2017. Riêng nhóm B, doanh thu giảm 400,00.";
-    build_direction_check(right, &explanation).unwrap();
-    let wrong =
-        "Doanh thu Quý 3/2017 giảm 100,00 so với Quý 2/2017. Riêng nhóm B, doanh thu tăng 400,00.";
-    check(wrong, &explanation).unwrap();
-    assert_eq!(
-        build_direction_check(wrong, &explanation).unwrap_err(),
-        ["400,00"]
-    );
-}
-
-/// So hai nhóm: không gọi mô hình, dùng câu khuôn; bước narrate vẫn ok vì đây là lựa chọn, không phải lỗi.
+/// So hai nhóm cũng do mô hình viết rồi qua hai cổng như so hai kỳ.
 #[tokio::test]
-async fn two_groups_use_the_template_without_the_model() {
+async fn two_groups_are_written_by_the_model_and_checked() {
     let mut explanation = small_explanation(
         "1000.00",
         "900.00",
@@ -745,11 +763,232 @@ async fn two_groups_use_the_template_without_the_model() {
         &[(Some("A"), "300.00"), (Some("B"), "-400.00")],
     );
     explanation.comparison = Comparison::Groups;
-    let llm = StubLlm {
-        reply: Reply::Text("Câu của mô hình.".to_string()),
-    };
+    let reply = json_insight(
+        "Bên được so thấp hơn bên gốc 100,00.",
+        &[("Nhóm B thấp hơn hẳn", "B thấp hơn 400,00.")],
+        serde_json::json!([{ "field": "change", "column": "", "group": "", "value": "-100,00" }]),
+    );
+    let llm = SequenceLlm::new(vec![reply]);
     let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
-    assert_eq!(outcome.summary, build_template_summary(&explanation));
-    assert!(!outcome.summary_by_model);
+    assert!(outcome.summary_by_model, "{:?}", outcome.step.detail);
+    // Mô hình chấm biết đây là hai nhóm cùng lúc, không có trước sau, để bắt lời đảo nhóm nào cao hơn.
+    let judged = llm.prompts(LlmTask::Judge);
+    assert!(
+        judged[0].contains("\"comparison\": \"groups\""),
+        "{}",
+        judged[0]
+    );
+}
+
+/// Mô hình giả trả lần lượt từng câu viết sẵn, riêng cho lần viết lời và lần chấm (hết câu chấm thì "match"), và ghi
+/// lại prompt mỗi lần được gọi.
+struct SequenceLlm {
+    replies: Mutex<Vec<String>>,
+    judge_replies: Mutex<Vec<Result<String, AppError>>>,
+    prompts: Mutex<Vec<(LlmTask, String)>>,
+}
+
+impl SequenceLlm {
+    fn new(replies: Vec<String>) -> Self {
+        Self::with_judge(replies, Vec::new())
+    }
+
+    fn with_judge(replies: Vec<String>, judge_replies: Vec<Result<String, AppError>>) -> Self {
+        Self {
+            replies: Mutex::new(replies),
+            judge_replies: Mutex::new(judge_replies),
+            prompts: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn prompts(&self, task: LlmTask) -> Vec<String> {
+        let prompts = self.prompts.lock().unwrap();
+        prompts
+            .iter()
+            .filter(|(t, _)| *t == task)
+            .map(|(_, p)| p.clone())
+            .collect()
+    }
+}
+
+#[async_trait]
+impl LlmProvider for SequenceLlm {
+    fn name(&self) -> String {
+        "sequence".to_string()
+    }
+
+    async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        self.prompts
+            .lock()
+            .unwrap()
+            .push((request.task, request.prompt.to_string()));
+        if request.task == LlmTask::Judge {
+            let mut judged = self.judge_replies.lock().unwrap();
+            return if judged.is_empty() {
+                Ok(JUDGE_MATCH.to_string())
+            } else {
+                judged.remove(0)
+            };
+        }
+        Ok(self.replies.lock().unwrap().remove(0))
+    }
+}
+
+/// Lần đầu gán số của LATAM cho Europe nên trượt cổng 1; lần viết lại nhận lý do trong prompt và viết đúng.
+#[tokio::test]
+async fn failed_gate_one_is_rewritten_once() {
+    let explanation = example();
+    let wrong = json_reply(
+        "Thị trường Europe giảm 339.049,50.",
+        serde_json::json!([{
+            "field": "contribution", "column": "Market", "group": "Europe", "value": "-339.049,50"
+        }]),
+    );
+    let llm = SequenceLlm::new(vec![wrong, build_example_reply().to_string()]);
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
+    assert!(outcome.summary_by_model);
+    assert_eq!(outcome.summary, explanation.summary);
+    let detail = outcome.step.detail.expect("detail");
+    assert!(detail.contains("sau một lần viết lại"), "{detail}");
+    let prompts = llm.prompts(LlmTask::Narrate);
+    assert_eq!(prompts.len(), 2);
+    assert!(
+        prompts[1].contains("Your previous reply did not pass the checks below"),
+        "{}",
+        prompts[1]
+    );
+    assert!(
+        prompts[1].contains("bảng ghi -639.780,25"),
+        "{}",
+        prompts[1]
+    );
+}
+
+/// Lời qua cổng 1 nhưng mô hình chấm thấy lời gán số cho nhầm nhóm: viết lại một lần, prompt viết lại có lỗi mô hình
+/// chấm nêu; lần chấm sau khớp thì dùng lời của mô hình. Mô hình chấm nhận lời, tên hai bên và khẳng định, không nhận
+/// phần còn lại của bảng.
+#[tokio::test]
+async fn gate_two_mismatch_is_rewritten_once() {
+    let explanation = example();
+    let mismatch =
+        r#"{"verdict": "mismatch", "problems": ["\"LATAM giảm 639.780,25\" là số của Europe"]}"#;
+    let llm = SequenceLlm::with_judge(
+        vec![
+            build_example_reply().to_string(),
+            build_example_reply().to_string(),
+        ],
+        vec![Ok(mismatch.to_string())],
+    );
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
+    assert!(outcome.summary_by_model);
+    let detail = outcome.step.detail.expect("detail");
+    assert!(detail.contains("mô hình chấm thấy lời khớp"), "{detail}");
+    assert!(detail.contains("sau một lần viết lại"), "{detail}");
+    let rewrite = &llm.prompts(LlmTask::Narrate)[1];
+    assert!(
+        rewrite.contains("Mô hình chấm: \"LATAM giảm 639.780,25\""),
+        "{rewrite}"
+    );
+    let judged = llm.prompts(LlmTask::Judge);
+    assert_eq!(judged.len(), 2);
+    assert!(judged[0].contains("\"group\": \"Europe\""), "{}", judged[0]);
+    assert!(
+        judged[0].contains("\"base\": \"Quý 2/2017\""),
+        "{}",
+        judged[0]
+    );
+    // Nhóm USCA có trong bảng phân rã nhưng không có trong khẳng định nào: mô hình chấm không thấy nó.
+    assert!(!judged[0].contains("USCA"), "{}", judged[0]);
+}
+
+/// Mô hình chấm thấy chỗ chưa rõ: gửi các chỗ đó cho mô hình viết lại, như lỗi; lần viết lại khớp thì dùng nó.
+#[tokio::test]
+async fn gate_two_warning_is_rewritten_with_the_unclear_points() {
+    let explanation = example();
+    let warning = r#"{"verdict": "warning", "problems": ["\"giảm nhiều nhất\" chưa rõ là theo số hay theo phần trăm"]}"#;
+    let matched = r#"{"verdict": "match", "problems": []}"#;
+    let llm = SequenceLlm::with_judge(
+        vec![
+            build_example_reply().to_string(),
+            build_example_reply().to_string(),
+        ],
+        vec![Ok(warning.to_string()), Ok(matched.to_string())],
+    );
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
+    assert!(outcome.summary_by_model);
+    assert!(outcome.warnings.is_empty());
+    assert_eq!(outcome.verdict, Some(AnswerVerdict::Match));
+    let rewrite = &llm.prompts(LlmTask::Narrate)[1];
+    assert!(
+        rewrite.contains("Mô hình chấm thấy chưa rõ: \"giảm nhiều nhất\" chưa rõ"),
+        "{rewrite}"
+    );
+}
+
+/// Lần viết lại sau chỗ chưa rõ lại sai: giữ lời đầu kèm các chỗ chưa rõ, không rơi về câu khuôn.
+#[tokio::test]
+async fn unclear_text_is_kept_when_the_rewrite_is_wrong() {
+    let explanation = example();
+    let warning = r#"{"verdict": "warning", "problems": ["\"giảm nhiều nhất\" chưa rõ là theo số hay theo phần trăm"]}"#;
+    let mismatch = r#"{"verdict": "mismatch", "problems": ["Lời nêu thêm lý do khuyến mãi"]}"#;
+    let llm = SequenceLlm::with_judge(
+        vec![
+            build_example_reply().to_string(),
+            build_example_reply().to_string(),
+        ],
+        vec![Ok(warning.to_string()), Ok(mismatch.to_string())],
+    );
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
+    assert!(outcome.summary_by_model);
+    assert_eq!(outcome.summary, explanation.summary);
+    assert_eq!(
+        outcome.warnings,
+        ["\"giảm nhiều nhất\" chưa rõ là theo số hay theo phần trăm"]
+    );
+    assert_eq!(outcome.verdict, Some(AnswerVerdict::Warning));
     assert!(outcome.step.ok);
+    let detail = outcome.step.detail.expect("detail");
+    assert!(detail.contains("giữ lời đầu"), "{detail}");
+}
+
+/// Mô hình chấm chê cả hai lần: dùng câu khuôn, detail nêu lỗi của lần chấm cuối.
+#[tokio::test]
+async fn gate_two_mismatch_twice_falls_back() {
+    let explanation = example();
+    let mismatch = r#"{"verdict": "mismatch", "problems": ["Lời nêu thêm lý do khuyến mãi"]}"#;
+    let llm = SequenceLlm::with_judge(
+        vec![
+            build_example_reply().to_string(),
+            build_example_reply().to_string(),
+        ],
+        vec![Ok(mismatch.to_string()), Ok(mismatch.to_string())],
+    );
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
+    assert!(!outcome.summary_by_model);
+    assert_eq!(outcome.summary, build_template_summary(&explanation));
+    let detail = outcome.step.detail.expect("detail");
+    assert!(
+        detail.contains("Mô hình chấm: Lời nêu thêm lý do khuyến mãi"),
+        "{detail}"
+    );
+}
+
+/// Mô hình chấm lỗi hay trả câu không đọc được: không biết lời đúng sai nên dùng câu khuôn ngay, không viết lại.
+#[tokio::test]
+async fn judge_failure_falls_back_without_rewriting() {
+    let explanation = example();
+    for judged in [
+        Err(AppError::Upstream(
+            "Mô hình không trả lời, thử lại sau".to_string(),
+        )),
+        Ok("không phải JSON".to_string()),
+    ] {
+        let llm = SequenceLlm::with_judge(vec![build_example_reply().to_string()], vec![judged]);
+        let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
+        assert!(!outcome.summary_by_model);
+        assert!(!outcome.step.ok);
+        let detail = outcome.step.detail.expect("detail");
+        assert!(detail.to_lowercase().contains("mô hình chấm"), "{detail}");
+        assert_eq!(llm.prompts(LlmTask::Narrate).len(), 1);
+    }
 }

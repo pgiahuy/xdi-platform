@@ -45,6 +45,10 @@ pub enum LlmTask {
     /// Phân loại câu hỏi trước khi viết SQL hay điền form (service/ask/classify.rs): câu thường hay câu hỏi tìm nguyên
     /// nhân. Câu hỏi là câu hỏi gốc; câu trả lời là object JSON {kind, reason}.
     Classify,
+    /// Mô hình chấm (cổng 2, #201): so lời diễn giải với các khẳng định đã qua cổng 1 (service/ask/judge.rs), trong
+    /// một lần gọi riêng không chung ngữ cảnh với lần viết lời. Câu hỏi là câu hỏi gốc; câu trả lời là object JSON
+    /// {verdict, problems}.
+    Judge,
 }
 
 /// Một lần nhờ mô hình. Tách câu hỏi gốc khỏi prompt: prompt còn chứa các câu mẫu làm ví dụ, nên mock không tìm câu
@@ -83,7 +87,10 @@ pub fn from_config(config: &Config) -> Arc<dyn LlmProvider> {
             }
             Arc::new(gemini::Gemini::new(
                 gemini::API_URL,
-                config.gemini_api_key.clone(),
+                vec![
+                    config.gemini_api_key.clone(),
+                    config.gemini_backup_api_key.clone(),
+                ],
                 config.gemini_model.clone(),
                 config.gemini_timeout,
             ))

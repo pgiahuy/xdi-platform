@@ -543,3 +543,16 @@ fn small_grid_adds_up_everywhere() {
         }
     }
 }
+
+/// Nhãn số lượng đọc "Số đơn hàng" chứ không phải "Số Mã đơn hàng": bỏ chữ "mã" đứng đầu tên tiếng Việt; chưa có tên
+/// tiếng Việt thì dùng tên cột.
+#[test]
+fn entity_name_drops_the_leading_code_word() {
+    assert_eq!(
+        build_entity_name("Order Id", Some("Mã đơn hàng")),
+        "đơn hàng"
+    );
+    assert_eq!(build_entity_name("Order Id", Some("Đơn hàng")), "đơn hàng");
+    assert_eq!(build_entity_name("Order Id", Some("  ")), "Order Id");
+    assert_eq!(build_entity_name("Order Id", None), "Order Id");
+}

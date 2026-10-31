@@ -3,8 +3,8 @@
 backend/prompts/, mỗi prompt một file; module này nhúng các file đó vào binary và điền chỗ trống. Người gọi: luật của
 guard (engine/guard/prompt_rules.rs), prompt sinh SQL và sửa SQL (service/ask/prompt.rs, ask/repair.rs), form câu "tại
 sao" và sửa form (ask/why_prompt.rs, explain/form.rs), đoạn trả lời (ask/summary.rs), lời của phần giải thích
-(insight/narrate.rs), phân loại câu hỏi
-(ask/classify.rs), hồ sơ ngữ nghĩa (semantic/mod.rs).
+(insight/narrate.rs), phân loại câu hỏi (ask/classify.rs), mô hình chấm lời diễn giải (explain/judge.rs), hồ sơ ngữ
+nghĩa (semantic/mod.rs).
 Phần dữ liệu (dòng cột, danh sách giá trị, JSON, lượt hỏi trước) vẫn do các file đó dựng rồi điền vào chỗ trống.
 
 Đặt ở engine vì cả guard (engine) lẫn service cần; service gọi xuống engine, không ngược lại.
@@ -89,6 +89,19 @@ pub const LESSONS: PromptFile = PromptFile {
 pub const INSIGHT: PromptFile = PromptFile {
     name: "insight.txt",
     text: include_str!("../../prompts/insight.txt"),
+};
+
+/// Prompt của mô hình chấm (cổng 2, #201): so lời với các khẳng định đã qua cổng 1 (service/explain/judge.rs). Luật
+/// dùng chung cho hai loại câu; nghĩa các khóa của JSON điền vào chỗ {{meaning}} từ một trong hai file dưới.
+pub const JUDGE_ANSWER: PromptFile = PromptFile {
+    name: "judge_answer.txt",
+    text: include_str!("../../prompts/judge_answer.txt"),
+};
+
+/// Nghĩa các khóa của JSON gửi mô hình chấm cho lời diễn giải câu "tại sao" (khẳng định trên bảng phân rã).
+pub const JUDGE_MEANING_WHY: PromptFile = PromptFile {
+    name: "judge_meaning_why.txt",
+    text: include_str!("../../prompts/judge_meaning_why.txt"),
 };
 
 /// Prompt phân loại câu hỏi: câu thường hay câu hỏi tìm nguyên nhân (service/ask/classify.rs).

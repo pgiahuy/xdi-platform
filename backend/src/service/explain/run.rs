@@ -14,9 +14,8 @@ guard từ chối hay DuckDB lỗi thì không sửa: mô hình không viết c�
 kỳ so sánh do người hỏi chọn (why:base) không có dòng nào: lựa chọn đè lên base của form, mô hình sửa form cũng không
 đổi được kỳ đó, nên trả ngay bảng tổng kèm explanation_unavailable; giả định why:base vẫn trên thẻ để chọn kỳ khác.
 
-Hỏi lại (needs_choice) trước khi gọi mô hình khi một cụm khớp nhiều cột gần nhau (AskContext::ambiguous, #28; endpoint
-có thể đã hỏi lại trước, kiểm lại ở đây để run_why đúng khi gọi riêng), và sau khi gọi khi form không nêu độ đo mà
-dataset có chỉ số để chọn. Form báo dữ liệu không có thông tin (unanswerable, #164) thì trả rejected ngay, không kiểm
+Hỏi lại (needs_choice) sau khi gọi mô hình khi form không nêu độ đo mà dataset có chỉ số để chọn. Cụm khớp nhiều cột
+không hỏi lại: ngữ cảnh đã chọn cột đầu và ghi các cột khác thành giả định đổi được (ask/context.rs). Form báo dữ liệu không có thông tin (unanswerable, #164) thì trả rejected ngay, không kiểm
 form, không chạy SQL. Giả định đổi được (kỳ so sánh, chỉ số chưa xác nhận) dựng ở explain/choices.rs. */
 
 use std::sync::Arc;
@@ -30,8 +29,7 @@ use crate::engine::store::ProfileColumn;
 use crate::error::AppError;
 use crate::service::ask::choices::build_clarify_choice;
 use crate::service::ask::contract::{
-    AskStatus, AskStep, Choice, ChoiceOption, Explanation, ResultTable, StepName, Warning,
-    WarningCode,
+    AskStatus, AskStep, Choice, Explanation, ResultTable, StepName, Warning, WarningCode,
 };
 use crate::service::ask::failures::{FailedStep, StepFailure};
 use crate::service::ask::narrate::narrate;
@@ -58,9 +56,6 @@ use crate::service::explain::premise::{build_premise_labels, build_premise_warni
 use crate::service::explain::source::RelatedTables;
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
 use crate::service::explain::summary::apply_summary_parts;
-
-/// Lời cho needs_choice, như mẫu needs_choice của ask/examples.rs.
-const NEEDS_CHOICE_MESSAGE: &str = "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.";
 
 /// Đầu vào của run_why, trừ mô hình. #33 đọc từ Postgres và AppState rồi truyền vào.
 pub struct WhyInput<'a> {
@@ -140,9 +135,6 @@ async fn run_why_rounds(
     input: WhyInput<'_>,
     failures: &mut Vec<StepFailure>,
 ) -> Result<WhyOutcome, AppError> {
-    if let Some(outcome) = build_ambiguous_outcome(&input) {
-        return Ok(outcome);
-    }
     let mut steps = Vec::new();
     let prompt = build_why_prompt(&input.prompt);
     let started = Instant::now();
@@ -402,6 +394,13 @@ async fn run_plan(
     outcome.failures.extend(narrated.failure);
     explanation.summary = narrated.summary;
     explanation.summary_by_model = narrated.summary_by_model;
+    // Insight của mô hình đã qua hai cổng thay câu chính và các ý của câu khuôn; không có thì giữ câu khuôn.
+    if let Some(insight) = narrated.insight {
+        explanation.summary_title = insight.title;
+        explanation.summary_points = insight.points;
+    }
+    explanation.summary_warnings = narrated.warnings;
+    explanation.summary_verdict = narrated.verdict;
     steps.push(narrated.step);
     outcome.explanation = Some(explanation);
     Ok(Round::Done(Box::new(build_finished(outcome, steps))))
@@ -497,38 +496,6 @@ pub(super) fn build_empty(status: AskStatus) -> WhyOutcome {
         steps: Vec::new(),
         failures: Vec::new(),
     }
-}
-
-/// needs_choice trước khi gọi mô hình: cụm khớp nhiều cột gần nhau mà người hỏi chưa chọn. Id là id của #28 (cụm
-/// đã bỏ dấu), để lần hỏi sau build_ask_context áp đúng lựa chọn; phương án là các cột #28 đã tìm thấy trong hồ sơ.
-fn build_ambiguous_outcome(input: &WhyInput<'_>) -> Option<WhyOutcome> {
-    let clarifications: Vec<Choice> = input
-        .prompt
-        .context
-        .ambiguous
-        .iter()
-        .map(|word| Choice {
-            id: word.choice_id.clone(),
-            label: format!("\"{}\" là cột nào?", word.phrase),
-            selected: None,
-            options: word
-                .columns
-                .iter()
-                .map(|column| ChoiceOption {
-                    id: column.clone(),
-                    label: column.clone(),
-                })
-                .collect(),
-        })
-        .collect();
-    if clarifications.is_empty() {
-        return None;
-    }
-    Some(WhyOutcome {
-        message: Some(NEEDS_CHOICE_MESSAGE.to_string()),
-        clarifications,
-        ..build_empty(AskStatus::NeedsChoice)
-    })
 }
 
 /// rejected khi form báo dữ liệu không có thông tin. form để None: không có form nào chạy, queries.explanation trống

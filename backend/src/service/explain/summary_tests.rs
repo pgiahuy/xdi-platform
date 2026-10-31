@@ -106,6 +106,8 @@ fn build(case: Case) -> Explanation {
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: false,
+        summary_warnings: Vec::new(),
+        summary_verdict: None,
         notes,
     }
 }
@@ -214,14 +216,12 @@ fn complete_canceled_drops_the_columns_that_rename_the_groups() {
     let template = build_template_summary(&explanation);
     assert_eq!(
         template,
-        "Tổng Benefit per order của Order Status (trạng thái đơn hàng) CANCELED thấp hơn COMPLETE 1.246.390,12 \
-         (75.345,63 so với 1.321.735,75). Lý do chính: số dòng dữ liệu hai bên khác nhau: COMPLETE có 1.450 dòng, \
-         CANCELED có 82 dòng, còn trung bình mỗi dòng hai bên gần như nhau. Không có nơi nào đặc biệt: theo Customer \
-         Country (quốc gia khách hàng) và Customer Segment (phân khúc khách hàng), không nhóm nào lệch hẳn mức chung \
-         (thấp hơn 94,3%). Bỏ qua Type (hình thức thanh toán) và Delivery Status (trạng thái giao hàng): theo Type, \
-         COMPLETE chỉ có DEBIT, CANCELED chỉ có TRANSFER; theo Delivery Status, COMPLETE chỉ có Late delivery, \
-         Advance shipping và Shipping on time, CANCELED chỉ có Shipping canceled. Các cột này chỉ là tên khác của \
-         hai nhóm đang so, không giải thích được gì."
+        "Tổng Benefit per order của trạng thái đơn hàng CANCELED thấp hơn COMPLETE 1.246.390,12 (75.345,63 so với \
+         1.321.735,75). Không nhóm nào khác thường: theo quốc gia khách hàng và phân khúc khách hàng, không nhóm nào \
+         thay đổi khác hẳn mức chung (thấp hơn 94,3%). Bỏ qua hình thức thanh toán và trạng thái giao hàng: theo \
+         hình thức thanh toán, COMPLETE chỉ có DEBIT, CANCELED chỉ có TRANSFER; theo trạng thái giao hàng, COMPLETE \
+         chỉ có Late delivery, Advance shipping và Shipping on time, CANCELED chỉ có Shipping canceled. Các cột này \
+         chỉ là tên khác của hai nhóm đang so, không giải thích được gì."
     );
     build_number_check(&template, &explanation).unwrap();
 }
@@ -263,20 +263,15 @@ fn the_breakdown_keeps_the_dimensions_the_summary_skips() {
 fn consumer_corporate_is_even_and_the_largest_groups_lead() {
     let explanation = consumer_corporate();
     let (title, points) = build_summary_parts(&explanation);
-    assert!(title.starts_with(
-        "Tổng Sales của Customer Segment (phân khúc khách hàng) Corporate thấp hơn Consumer"
-    ));
+    assert!(title.starts_with("Tổng Sales của phân khúc khách hàng Corporate thấp hơn Consumer"));
     let kinds: Vec<SummaryPointKind> = points.iter().map(|p| p.kind).collect();
     assert_eq!(kinds, [SummaryPointKind::Even, SummaryPointKind::Dropped]);
     assert_eq!(
         points[0].text,
-        "theo Department Name (bộ phận), không nhóm nào lệch hẳn mức chung (thấp hơn 41,5%). Chênh lệch lớn nhất ở \
-         Fan Shop và Apparel chỉ vì đây là những nhóm có tổng Sales lớn nhất."
+        "theo bộ phận, không nhóm nào thay đổi khác hẳn mức chung (thấp hơn 41,5%). Chênh lệch lớn nhất ở Fan Shop \
+         và Apparel chỉ vì đây là những nhóm có tổng Sales lớn nhất."
     );
-    assert_eq!(
-        points[1].text,
-        "Department Id (mã bộ phận) chia nhóm giống hệt Department Name."
-    );
+    assert_eq!(points[1].text, "Mã bộ phận chia nhóm giống hệt bộ phận.");
     build_number_check(&build_template_summary(&explanation), &explanation).unwrap();
 }
 
@@ -288,11 +283,9 @@ fn may_april_names_the_new_states_and_the_one_that_fell() {
         title,
         "Doanh thu Tháng 5/2017 tăng 1.348,10 so với Tháng 4/2017, từ 2.580,45 lên 3.928,55."
     );
+    // Không có lượng (số đơn) nên không có ý "Lý do chính": các nhóm khác thường đứng đầu.
     assert_eq!(points[0].kind, SummaryPointKind::Outliers);
-    assert_eq!(
-        points[0].lead,
-        "Khác thường theo Customer State (bang khách hàng)"
-    );
+    assert_eq!(points[0].lead, "Khác thường theo bang khách hàng");
     assert_eq!(
         points[0].text,
         "CA tăng 71,2% trong khi mức chung tăng 52,2%, chiếm 40,7% chênh lệch; IL mới có ở Tháng 5/2017 (tăng \

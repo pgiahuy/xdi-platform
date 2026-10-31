@@ -168,6 +168,8 @@ pub(super) async fn build_ratio_breakdown(
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: false,
+        summary_warnings: Vec::new(),
+        summary_verdict: None,
         notes,
     })))
 }

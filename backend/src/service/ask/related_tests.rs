@@ -163,7 +163,6 @@ fn sales_context() -> AskContext {
             total,
         ],
         hints: Vec::new(),
-        ambiguous: Vec::new(),
         picks: Vec::new(),
     }
 }
@@ -361,7 +360,6 @@ fn six_tables_fit_in_the_prompt_limit() {
     let context = AskContext {
         columns: build_columns(names[0]),
         hints: Vec::new(),
-        ambiguous: Vec::new(),
         picks: Vec::new(),
     };
     let group = GroupPrompt {

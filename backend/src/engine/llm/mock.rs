@@ -18,8 +18,9 @@ với cùng kỳ năm trước" so từng tháng của năm mới nhất trong d
 chạy được với cả DataCo đầy đủ lẫn bản nhỏ): hai tổng tiền theo 12 tháng, để thử luật biểu đồ vẽ hai đường trên một
 thang đo (service/ask/chart.rs). "Doanh thu theo quý của từng thị trường" ra thời gian, nhóm và một tổng, để thử
 cột chồng. Câu narrate cho câu
-"tại sao" mẫu là lời diễn giải viết sẵn; mọi số trong đó có trong bảng phân rã mẫu (service/ask/examples.rs) nên qua
-được bước kiểm số của #41.
+"tại sao" mẫu là lời diễn giải viết sẵn kèm khẳng định; mọi số trong đó có trong bảng phân rã mẫu
+(service/ask/examples.rs) nên qua được bước kiểm số của #41 và cổng 1 của #201. Câu judge của cùng câu hỏi là kết luận
+"match" của mô hình chấm (cổng 2).
 Câu trả lời của task sql và repair là object {terms, assumptions, sql} như mô hình thật bị ép trả (service/ask/reply.rs);
 terms ghi cách hiểu từng cụm chữ ("châu Âu" là Market = Europe) để luồng hỏi có dữ liệu thử phần kiểm cách hiểu. Câu
 trả lời của task why là form câu "tại sao" (service/ask/why_prompt.rs); lần sửa form cũng là task why nên mock trả lại
@@ -149,6 +150,7 @@ mod tests {
         assert_eq!(count(LlmTask::Sql), 16);
         assert_eq!(count(LlmTask::Repair), 3);
         assert_eq!(count(LlmTask::Narrate), 1);
+        assert_eq!(count(LlmTask::Judge), 1);
         assert_eq!(count(LlmTask::Why), 5);
         assert_eq!(count(LlmTask::Classify), 21);
         let profile = &answers[&(LlmTask::Profile, "dataco".to_string())];

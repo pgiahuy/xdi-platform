@@ -134,6 +134,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `DB_ACQUIRE_TIMEOUT_SECS` | `5` | Số giây một request chờ lấy kết nối Postgres khi mọi kết nối đang bận; quá thì request nhận lỗi thay vì treo |
 | `LLM_PROVIDER` | `mock` | `mock` không gọi ra ngoài; `gemini` cần `GEMINI_API_KEY`; `ollama` cần máy chạy Ollama ở `OLLAMA_URL` |
 | `EVAL_GEMINI_API_KEY` | không đặt | Khóa Gemini riêng cho các lệnh đánh giá (`xdi-backend eval`, `eval-classify`), thường của một tài khoản Google khác, để chạy cả bộ câu không ăn vào hạn mức lượt gọi của `GEMINI_API_KEY`. Không đặt thì lệnh đánh giá dùng `GEMINI_API_KEY`; server không bao giờ đọc biến này |
+| `GEMINI_BACKUP_API_KEY` | trống | Khóa Gemini dự phòng: khóa chính hết hạn mức (lỗi 429) thì backend gọi lại bằng khóa này ngay trong lần gọi đó; lỗi khác không đổi khóa |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini khi `LLM_PROVIDER=gemini` |
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
 | `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB; quá thì câu bị dừng, trừ phần DuckDB tính trước khi chạy ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |
@@ -701,7 +702,8 @@ câu trả lời thì các nút trong khung tạm tắt. Nút ở góc trên ph�
 hiện câu hỏi và tóm tắt phần đã hiểu, vì bảng kết quả không được lưu; bấm **Hỏi lại** để chạy lại câu đó. Đường dẫn
 của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cuộc.
 
-Câu có cụm khớp nhiều cột thì backend hỏi lại trước khi viết SQL: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
+Câu có cụm khớp nhiều cột thì backend trả lời ngay bằng một cột, cột còn lại hiện trong thẻ **Hệ thống đã hiểu là**;
+bấm cột khác là hỏi lại theo cột đó. Mô hình chưa rõ câu hỏi thì hỏi lại: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
 SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
 
 Chưa biết dataset có gì thì mở mục **Tổng quan dữ liệu** trên thanh bên rồi chọn dataset ở ô **Dataset** đầu trang (nút

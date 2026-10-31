@@ -79,11 +79,13 @@ export type BreakdownView = {
   /** Chiều giải thích chênh lệch tốt nhất đứng đầu, đúng thứ tự backend gửi. */
   dimensions: DimensionView[]
   volumePrice: VolumePriceView | null
-  /** Câu trả lời chính và các ý ngắn, do code viết từ số đã tính nên luôn khớp số. */
+  /** Câu trả lời chính và các ý ngắn: do mô hình viết khi byModel (đã qua hai cổng kiểm của backend), không thì câu
+   * khuôn do code viết từ số đã tính. */
   summaryTitle: string
   summaryPoints: SummaryPointView[]
-  /** Lời giải thích do mô hình viết lại từ chính các ý trên, đã qua kiểm số và kiểm chiều; null khi dùng câu khuôn. */
-  modelSummary: string | null
+  byModel: boolean
+  /** Chỗ mô hình chấm thấy chưa rõ nghĩa (không chắc sai) trong insight của mô hình; rỗng khi không có. */
+  warnings: string[]
 }
 
 export type SummaryPointView = {
@@ -141,4 +143,10 @@ export type StepView = {
   detail: string | null
   /** Bước có gọi mô hình ngôn ngữ. */
   byModel: boolean
+  /** Cờ kết quả của bước, thay cho nhãn "có mô hình": loại câu ở bước phân loại (quantitative, causal), kết luận hai
+   * cổng kiểm ở bước viết lời (match, warning, mismatch: lời không hiện, thay bằng câu khuôn); null ở bước khác hay khi
+   * backend không gửi. */
+  flag: StepFlag | null
 }
+
+export type StepFlag = 'quantitative' | 'causal' | 'match' | 'warning' | 'mismatch'

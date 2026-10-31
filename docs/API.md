@@ -145,12 +145,21 @@ theo nhóm, `explanation` là bảng phân rã; không phân rã được thì `
 - `explanation.measure_kind` cho biết cách đọc số: `total` (tổng, đếm; đóng góp là hiệu hai lát cắt) hay `ratio` (chỉ
   số tỷ lệ hay trung bình; giá trị là tỷ lệ, đóng góp của nhóm là `mix_effect + rate_effect`, mỗi chiều có tổng
   `mix_effect`, `rate_effect`). Với `total` bốn trường này là null.
-- `explanation.comparison` là `periods` (hai kỳ) hay `groups` (hai nhóm cùng lúc). Với `groups`, `explanation.summary`
-  luôn là câu khuôn do backend viết, không gọi mô hình (`summary_by_model` là `false`); `slice_column` và
+- `explanation.comparison` là `periods` (hai kỳ) hay `groups` (hai nhóm cùng lúc). Với `groups`, `slice_column` và
   `slice_column_label` là cột của hai nhóm và nghĩa tiếng Việt của nó.
-- `explanation.summary_title` và `summary_points` là lời tóm tắt do backend viết từ số đã tính: câu chính và các ý, mỗi
-  ý có `kind` (`reason`, `outliers`, `even`, `largest`, `against`, `dropped`), `lead` (đầu ý, in đậm) và `text`.
-  `summary` là đoạn chữ của mô hình khi `summary_by_model`, không thì là câu chính nối các ý.
+- `explanation.summary_title` và `summary_points` là insight: câu chính và các ý, mỗi ý có `kind` (`reason`,
+  `outliers`, `even`, `largest`, `against`, `dropped`), `lead` (đầu ý, in đậm) và `text`. Khi `summary_by_model`, mô
+  hình viết cả hai từ số backend đã tính và insight đã qua hai cổng kiểm (#201); mọi ý của mô hình có `kind` là
+  `reason`. Không thì backend viết theo khuôn. `summary` là câu chính nối các ý thành một đoạn.
+- `explanation.summary_warnings` là các chỗ trong insight của mô hình mà mô hình chấm (cổng 2, #201) thấy đọc được
+  nhiều nghĩa nhưng không chắc sai, mỗi chỗ một câu tiếng Việt do mô hình chấm viết; hiện cùng insight. Trống khi
+  không có chỗ nào như vậy hay insight là câu khuôn.
+- `explanation.summary_verdict` là kết luận của hai cổng cho insight của mô hình: `match`, `warning` (insight vẫn dùng,
+  các chỗ chưa rõ ở `summary_warnings`), `mismatch` (insight trượt mọi lần viết, `summary` là câu khuôn), null khi không
+  cổng nào chạy xong (chênh lệch bằng 0, mô hình lỗi hay quá giờ). Tab Các bước hiện kết luận này thành cờ màu ở bước
+  `narrate`.
+- `question_type` (ngoài `explanation`) là loại câu bước phân loại chọn: `quantitative` (câu thường) hay `causal` (câu
+  "tại sao"); null khi câu dừng trước bước phân loại.
 - `explanation.base.rows`, `compare.rows` là số dòng của mỗi lát cắt; `percent_change` là % thay đổi chung (null khi
   lát gốc không dương); `counts_rows` cho biết độ đo là phép đếm.
 - Mỗi chiều có `label`: nghĩa tiếng Việt của cột, null khi hồ sơ chưa có. `dimensions` vẫn đủ mọi chiều theo thứ tự

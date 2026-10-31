@@ -39,6 +39,7 @@ mod fanout_grain;
 mod fanout_tests;
 pub mod filter_values;
 pub mod group_prompt;
+pub mod judge;
 pub mod lessons;
 #[cfg(test)]
 mod lessons_tests;
@@ -89,8 +90,8 @@ use crate::service::ask::choices::{build_assumption_choices, build_clarify_choic
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
 use crate::service::ask::context::{build_ask_context_with_keys, AskContext};
 use crate::service::ask::contract::{
-    AskResponse, AskStatus, AskStep, ChosenOption, Insight, ResultTable, StepName, Understanding,
-    Warning, WarningCode,
+    AskResponse, AskStatus, AskStep, ChosenOption, Insight, QuestionType, ResultTable, StepName,
+    Understanding, Warning, WarningCode,
 };
 use crate::service::ask::fanout::{build_join_links, JoinLink};
 use crate::service::ask::group_prompt::{
@@ -105,8 +106,7 @@ use crate::service::ask::related::{build_group_related, load_group};
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
 use crate::service::ask::response_choices::{
-    build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
-    build_unapplied_warnings, build_used_choices,
+    build_pick_choices, build_unapplied_warnings, build_used_choices,
 };
 pub use crate::service::ask::row_filters::load_row_filters;
 use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
@@ -184,33 +184,16 @@ pub async fn ask(
         .store
         .list_active_lessons(ws, dataset.id, LESSON_POOL)
         .await?;
-    let detail = build_ambiguity_detail(&context);
-    let mut steps = vec![build_step(
-        StepName::Context,
-        started,
-        true,
-        detail.as_deref(),
-    )];
-    // Hỏi lại trước khi gọi mô hình: cột nào cũng đoán thì SQL có thể đọc sai cột mà không ai biết.
-    if !context.ambiguous.is_empty() {
-        let used = build_used_choices(&context, &[]);
-        return Ok(AskResponse {
-            message: Some(build_ambiguity_message(&context)),
-            warnings: build_unapplied_warnings(choices, &used),
-            choices: used,
-            clarifications: build_ambiguity_choices(&context),
-            steps,
-            ..build_base_response(state, &version, question, AskStatus::NeedsChoice)
-        });
-    }
+    let mut steps = vec![build_step(StepName::Context, started, true, None)];
 
-    // Sau bước hỏi lại: câu còn mơ hồ thì không cần đọc các bảng liên quan. Lượt phân loại nhận metadata cột của mọi
-    // bảng; cột nó chọn quyết định cột nào được gửi đủ danh sách giá trị ở lượt viết SQL (ask/context.rs).
+    // Lượt phân loại nhận metadata cột của mọi bảng; cột nó chọn quyết định cột nào được gửi đủ danh sách giá trị ở
+    // lượt viết SQL (ask/context.rs). Một cụm khớp nhiều cột không hỏi lại ở đây: ngữ cảnh đã chọn cột đầu và ghi các cột
+    // khác thành giả định đổi được.
     let mut question_tables = load_question_tables(state, member, &group, question).await?;
     let table = dataset.logical_table.as_str();
     let restricted = group.is_restricted();
     apply_question_columns(&mut context, table, &mut question_tables, &[], restricted);
-    // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
+    // Phân loại sau bước ngữ cảnh: prompt phân loại cần metadata cột của các bảng vừa đọc.
     let classify_input = ClassifyInput {
         table,
         question,
@@ -264,7 +247,9 @@ pub async fn ask(
             related: &related,
             steps,
         };
-        return ask_why(state, member, why).await;
+        let mut response = ask_why(state, member, why).await?;
+        response.question_type = Some(QuestionType::Causal);
+        return Ok(response);
     }
 
     // Mức chi tiết của prompt: danh sách giá trị nào thật sự đã gửi (ask/value_retry.rs).
@@ -352,7 +337,8 @@ pub async fn ask(
         assumptions: outcome.assumptions.clone(),
         sql: outcome.sql_generated.clone().unwrap_or_default(),
     };
-    let assumptions = build_assumption_choices(&answer, &context, &metrics);
+    let mut assumptions = build_pick_choices(&context);
+    assumptions.extend(build_assumption_choices(&answer, &context, &metrics));
     let used = build_used_choices(&context, &assumptions);
     let mut warnings = build_unapplied_warnings(choices, &used);
     // Gọi trước nhánh hỏi lại: câu chưa answered vẫn được báo giá trị mô hình nêu mà cột không có.
@@ -376,6 +362,7 @@ pub async fn ask(
                     warnings,
                     clarifications: vec![choice],
                     steps,
+                    question_type: Some(QuestionType::Quantitative),
                     ..build_base_response(state, &version, question, AskStatus::NeedsChoice)
                 });
             }
@@ -461,6 +448,7 @@ pub async fn ask(
         insight,
         answer_text,
         answer_text_by_model,
+        question_type: Some(QuestionType::Quantitative),
         steps,
         ..build_base_response(state, &version, question, outcome.status)
     })
@@ -731,6 +719,7 @@ pub(super) fn build_base_response(
         insight: None,
         answer_text: None,
         answer_text_by_model: None,
+        question_type: None,
         clarifications: vec![],
         steps: vec![],
     }

@@ -44,7 +44,7 @@ const stepLabels: Record<StepName, string> = {
   run: 'Chạy SQL',
   repair: 'Mô hình sửa SQL',
   explain: 'Tính phân rã',
-  narrate: 'Mô hình viết lời giải thích',
+  narrate: 'Mô hình viết lời, qua hai cổng kiểm',
   record: 'Lưu vào lịch sử',
 }
 const modelSteps: StepName[] = ['classify', 'llm', 'repair', 'narrate']
@@ -162,13 +162,20 @@ function buildGuardedMissing(response: AskResponse, lastGuard: AskResponse['step
 
 function buildSteps(response: AskResponse): TabData<StepView[]> {
   if (response.steps.length === 0) return { data: null, reason: 'Backend không gửi các bước cho câu này.' }
+  // Loại câu thuộc bước phân loại; kết luận hai cổng kiểm thuộc bước viết lời của câu "tại sao". Backend cũ không có
+  // các trường này.
+  const questionType = response.question_type ?? null
+  const verdict = response.explanation?.summary_verdict ?? null
   return {
     data: response.steps.map((step) => ({
       label: stepLabels[step.name],
       durationMs: step.duration_ms,
       ok: step.ok,
-      detail: step.detail,
+      // Bước phân loại đạt thì cờ đã nói loại câu, lý do của mô hình chỉ lặp lại điều đó; bước lỗi giữ chi tiết để thấy vì
+      // sao phải dùng luật từ khóa.
+      detail: step.name === 'classify' && step.ok && questionType ? null : step.detail,
       byModel: modelSteps.includes(step.name),
+      flag: step.name === 'classify' ? questionType : step.name === 'narrate' ? verdict : null,
     })),
   }
 }
