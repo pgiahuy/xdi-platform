@@ -25,6 +25,13 @@ viện C/C++ trong thư mục `third_party` của nó (re2, zstd, lz4, snappy, b
 utf8proc và các thư viện nhỏ khác), theo giấy phép cho phép như MIT, BSD, Apache-2.0, Boost, zlib; zstd cho chọn thêm
 GPL, dự án dùng theo nhánh BSD.
 
+Extension `postgres` của DuckDB (`postgres_scanner.duckdb_extension`, MIT, của DuckDB Foundation,
+[duckdb-postgres](https://github.com/duckdb/duckdb-postgres)) đi kèm image Docker và gói binary trong Release, dạng
+file nhị phân do DuckDB build sẵn, không sửa; backend nạp nó khi `SOURCE_SNAPSHOT_MODE=direct` (#246). File này liên
+kết tĩnh libpq (PostgreSQL License) và OpenSSL 3 (Apache-2.0). Ba văn bản giấy phép, kèm phiên bản và nguồn tải, ở
+`backend/third-party/duckdb-postgres-extension-licenses.txt`, đi cùng file extension trong image (`/usr/local/lib/xdi/`)
+và trong gói Release. Không phải crate nên không có trong `licenses-dependencies.md`.
+
 `webpki-roots` (CDLA-Permissive-2.0, danh sách chứng chỉ gốc) chỉ là phụ thuộc lúc build của `libduckdb-sys`, cho nhánh
 tải thư viện DuckDB dựng sẵn; dự án biên dịch DuckDB từ mã nguồn kèm trong crate nên nhánh đó không chạy, và crate
 này không có trong binary.
@@ -77,8 +84,8 @@ Thông báo bản quyền: Copyright (c) 2023 shadcn. Văn bản MIT ở cuối 
 | Bản phân phối | Kèm theo |
 |---|---|
 | Giao diện đã build (`frontend/dist`, trong image) | `licenses.md`: giấy phép của mọi gói JavaScript đã đóng vào bundle, do Vite sinh lúc build, phục vụ ở `/licenses.md`; văn bản OFL của font |
-| Image Docker | Như trên, cộng binary backend; binary phục vụ thông báo giấy phép của Swagger UI ở `/api/docs/licenses.txt`. Image nền `debian:bookworm-slim` mang giấy phép của từng gói Debian; phần mềm chỉ chạy trên đó, không sửa hay liên kết tĩnh |
-| Gói binary trong Release | `LICENSE`, `LICENSES.md`, `licenses-dependencies.md`, `swagger-ui-5.32.6-licenses.txt` |
+| Image Docker | Như trên, cộng binary backend; binary phục vụ thông báo giấy phép của Swagger UI ở `/api/docs/licenses.txt`. Extension `postgres` của DuckDB kèm `duckdb-postgres-extension-licenses.txt` ở `/usr/local/lib/xdi/`. Image nền `debian:bookworm-slim` mang giấy phép của từng gói Debian; phần mềm chỉ chạy trên đó, không sửa hay liên kết tĩnh |
+| Gói binary trong Release | `LICENSE`, `LICENSES.md`, `licenses-dependencies.md`, `swagger-ui-5.32.6-licenses.txt`, `postgres_scanner.duckdb_extension` kèm `duckdb-postgres-extension-licenses.txt` |
 | Tarball mã nguồn | Toàn bộ repo, gồm các file trên |
 
 ## Dịch vụ và phần mềm chạy bên cạnh
