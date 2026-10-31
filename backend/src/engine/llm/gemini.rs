@@ -2,7 +2,10 @@
 /* engine/llm/gemini.rs - gọi Gemini API (generateContent, REST, không stream) qua HTTPS.
 Khóa lấy từ GEMINI_API_KEY và chỉ đi trong header x-goog-api-key, không đặt vào URL: lỗi của reqwest in URL đầy đủ,
 khóa nằm trong query string thì sẽ theo lỗi vào log. Header đánh dấu nhạy cảm để reqwest không in nó khi debug.
-Mọi chữ ghi vào log đi qua redact(), phòng khi Gemini trả lại khóa trong thông báo lỗi. */
+Mọi chữ ghi vào log đi qua redact(), phòng khi Gemini trả lại khóa trong thông báo lỗi.
+Có GEMINI_BACKUP_API_KEY thì khóa đầu hết hạn mức (429) chuyển sang khóa dự phòng ngay trong lần gọi đó: hạn mức theo
+phút của khóa miễn phí hết giữa một câu hỏi (mỗi câu "tại sao" gọi mô hình nhiều lần) làm cả câu hỏi rơi về câu khuôn.
+Lỗi khác (khóa sai, mô hình không có, máy chủ lỗi) không đổi khóa: khóa khác cũng gặp đúng lỗi đó. */
 
 use std::time::Duration;
 
@@ -19,7 +22,8 @@ pub const API_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 pub struct Gemini {
     /// Địa chỉ đầy đủ của generateContent cho mô hình đã chọn.
     endpoint: String,
-    api_key: Secret,
+    /// Khóa chính rồi khóa dự phòng, chỉ các khóa không rỗng.
+    api_keys: Vec<Secret>,
     model: String,
     timeout: Duration,
     /// Lỗi dựng client (máy không có chứng chỉ CA) giữ lại để báo khi có câu hỏi, không làm backend dừng.
@@ -27,7 +31,7 @@ pub struct Gemini {
 }
 
 impl Gemini {
-    pub fn new(base_url: &str, api_key: Secret, model: String, timeout: Duration) -> Self {
+    pub fn new(base_url: &str, api_keys: Vec<Secret>, model: String, timeout: Duration) -> Self {
         let client = http::build_client(timeout, http::CONNECT_TIMEOUT);
         if let Err(err) = &client {
             tracing::error!(error = %err, "cannot build HTTP client for Gemini");
@@ -37,19 +41,18 @@ impl Gemini {
                 "{}/models/{model}:generateContent",
                 base_url.trim_end_matches('/')
             ),
-            api_key,
+            api_keys: api_keys.into_iter().filter(|k| !k.is_empty()).collect(),
             model,
             timeout,
             client,
         }
     }
 
-    /// Thay khóa bằng [redacted] trong chữ sắp ghi vào log.
+    /// Thay mọi khóa bằng [redacted] trong chữ sắp ghi vào log.
     fn redact(&self, text: &str) -> String {
-        if self.api_key.is_empty() {
-            return text.to_string();
-        }
-        text.replace(self.api_key.expose(), "[redacted]")
+        self.api_keys.iter().fold(text.to_string(), |text, key| {
+            text.replace(key.expose(), "[redacted]")
+        })
     }
 
     /// Lỗi khi gửi hoặc nhận (không có response, hoặc đứt giữa chừng).
@@ -127,7 +130,7 @@ impl LlmProvider for Gemini {
     }
 
     async fn complete_with_usage(&self, request: &LlmRequest<'_>) -> Result<LlmReply, AppError> {
-        if self.api_key.is_empty() {
+        if self.api_keys.is_empty() {
             return Err(AppError::Unavailable(
                 "Thiếu khóa Gemini: đặt GEMINI_API_KEY trong .env rồi khởi động lại backend"
                     .to_string(),
@@ -138,12 +141,6 @@ impl LlmProvider for Gemini {
                 "Máy chủ không tạo được kết nối HTTPS tới Gemini, xem log của backend".to_string(),
             )
         })?;
-        // Lỗi của from_str không chứa giá trị header, nên không lộ khóa.
-        let mut key = HeaderValue::from_str(self.api_key.expose()).map_err(|_| {
-            AppError::Unavailable("GEMINI_API_KEY chứa ký tự không hợp lệ".to_string())
-        })?;
-        key.set_sensitive(true);
-
         let mut body = serde_json::json!({
             "contents": [{ "role": "user", "parts": [{ "text": request.prompt }] }]
         });
@@ -155,24 +152,40 @@ impl LlmProvider for Gemini {
                 "responseJsonSchema": schema,
             });
         }
-        let response = client
-            .post(&self.endpoint)
-            .header("x-goog-api-key", key)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|err| self.transport_error(err))?;
-        let status = response.status();
-        // Đọc body dạng chữ trước rồi mới parse: body lỗi cũng cần đọc, và timeout lúc đang nhận body vẫn là lỗi
-        // đường truyền.
-        let text = response
-            .text()
-            .await
-            .map_err(|err| self.transport_error(err))?;
-        if !status.is_success() {
-            return Err(self.status_error(status, &text));
+        for (index, api_key) in self.api_keys.iter().enumerate() {
+            // Lỗi của from_str không chứa giá trị header, nên không lộ khóa.
+            let mut key = HeaderValue::from_str(api_key.expose()).map_err(|_| {
+                AppError::Unavailable("Khóa Gemini chứa ký tự không hợp lệ".to_string())
+            })?;
+            key.set_sensitive(true);
+            let response = client
+                .post(&self.endpoint)
+                .header("x-goog-api-key", key)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|err| self.transport_error(err))?;
+            let status = response.status();
+            // Đọc body dạng chữ trước rồi mới parse: body lỗi cũng cần đọc, và timeout lúc đang nhận body vẫn là lỗi
+            // đường truyền.
+            let text = response
+                .text()
+                .await
+                .map_err(|err| self.transport_error(err))?;
+            let has_next = index + 1 < self.api_keys.len();
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS && has_next {
+                tracing::warn!(
+                    key_index = index,
+                    "gemini key is out of quota, trying the backup key"
+                );
+                continue;
+            }
+            if !status.is_success() {
+                return Err(self.status_error(status, &text));
+            }
+            return build_answer(&text);
         }
-        build_answer(&text)
+        unreachable!("the loop returns on the last key")
     }
 }
 
@@ -335,7 +348,7 @@ mod tests {
     fn gemini(base_url: &str, key: &str, timeout: Duration) -> Gemini {
         Gemini::new(
             base_url,
-            Secret::new(key),
+            vec![Secret::new(key)],
             "gemini-test".to_string(),
             timeout,
         )
@@ -349,6 +362,42 @@ mod tests {
             json_schema: None,
         };
         provider.complete(&request).await
+    }
+
+    /// Khóa chính hết hạn mức (429) thì cùng lần gọi đó chuyển sang khóa dự phòng; máy chủ giả trả 429 cho khóa chính và
+    /// trả lời bình thường cho khóa dự phòng.
+    #[tokio::test]
+    async fn backup_key_is_used_when_the_first_is_out_of_quota() {
+        let _serial = SERIAL.lock().await;
+        let app = axum::Router::new().fallback(|headers: axum::http::HeaderMap| async move {
+            let key = headers
+                .get("x-goog-api-key")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+            if key == KEY {
+                (
+                    axum::http::StatusCode::TOO_MANY_REQUESTS,
+                    r#"{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}"#,
+                )
+            } else {
+                (axum::http::StatusCode::OK, OK_BODY)
+            }
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let url = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let two_keys = Gemini::new(
+            &url,
+            vec![Secret::new(KEY), Secret::new("AIzaTEST-backup-key")],
+            "gemini-test".to_string(),
+            Duration::from_secs(5),
+        );
+        assert_eq!(ask(&two_keys).await.unwrap(), "SELECT 1");
+        // Chỉ có khóa chính thì vẫn báo hết hạn mức như trước.
+        let (_, message) = failure(ask(&gemini(&url, KEY, Duration::from_secs(5))).await);
+        assert!(message.contains("hạn mức"), "{message}");
     }
 
     /// Mã HTTP mà lỗi sẽ trả, kèm lời báo.

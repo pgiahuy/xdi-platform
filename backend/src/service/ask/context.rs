@@ -3,8 +3,7 @@
 gợi ý giá trị khớp chính xác, lấy từ hồ sơ cột của đúng phiên bản được hỏi (engine/store/columns.rs, do
 service/profile.rs và #23 ghi). Prompt sinh SQL (#29) ghép AskContext vào prompt; mô hình tự ánh xạ chữ người dùng sang
 giá trị trong danh sách ("miền Nam" thành South) và trả `{terms, sql}`, #33 kiểm `terms` với column_values. Endpoint hỏi
-(#33) gọi build_ask_context, đổi `ambiguous` thành câu hỏi lại (`needs_choice`) và `picks` có cột khác thành giả định
-(#35).
+(#33) gọi build_ask_context và đổi `picks` có cột khác thành giả định đổi được (#35).
 
 Không có dòng dữ liệu nào ở đây: chỉ tên cột, mô tả, bí danh và giá trị của cột chiều (column_values), cột nhạy cảm
 không kèm giá trị nào. Rủi ro còn lại: bảng nhỏ có cột chữ ít giá trị như tên người, địa chỉ thì cột đó là cột chiều,
@@ -14,15 +13,16 @@ tới khi admin hay #23 đánh dấu (docs/PRIVACY.md).
 Các bước:
 - Tách câu hỏi thành cụm (service/ask/phrases.rs).
 - Chọn cột: cụm bằng tên hay bí danh cột (service/ask/matching.rs). Cụm dài trước; cụm đè lên chữ của một cụm đã khớp
-  thì bỏ qua ("doanh thu" khớp rồi thì không tìm "doanh" nữa). Một cột: dùng cột đó. Nhiều cột: điểm cao nhất hơn cột
-  sau từ CLOSE_SCORE trở lên thì chọn nó và ghi lại để hiện giả định; gần nhau hơn thì câu hỏi mơ hồ, trừ khi người hỏi
-  đã chọn. Giá trị không sinh mơ hồ: cùng một chữ có ở hai cột thì mô hình chọn theo ngữ cảnh của câu.
+  thì bỏ qua ("doanh thu" khớp rồi thì không tìm "doanh" nữa). Người hỏi đã chọn một cột cho cụm thì dùng cột đó.
+  Không thì một cột khớp: dùng cột đó; nhiều cột: cột điểm cao nhất (bằng điểm thì cột đứng trước trong bảng), các cột
+  còn lại ghi lại để hiện giả định đổi được. Bước này không hỏi lại. Giá trị cũng không sinh hỏi lại: cùng một chữ có ở
+  hai cột thì mô hình chọn theo ngữ cảnh của câu.
 - Mọi cột của mọi bảng câu hỏi đọc luôn được gửi đủ metadata (tên, kiểu, vai trò, bí danh, mô tả, đơn vị, cách gộp)
   cho cả lượt phân loại lẫn lượt viết SQL (#230): mô hình phải biết mọi cột có thật, kể cả cột câu hỏi không gọi đúng
   tên. Chỉ khi tổng metadata vượt COLUMN_METADATA_MAX_CHARS (cỡ 600 cột) thì cột ngoài nhóm liên quan (is_related)
   mới rút về dòng gọn (brief: tên, kiểu, vai trò). Cột liên quan: cột khớp một cụm hay có gợi ý giá trị, cột lượt
   phân loại chọn (picked), cột thời gian, cột khóa nối bảng, cột dùng trong công thức chỉ số. Khớp cụm vẫn dùng cho
-  gợi ý giá trị, câu hỏi lại và để chọn cột liên quan, không dùng để bỏ cột.
+  gợi ý giá trị, giả định đổi được và để chọn cột liên quan, không dùng để bỏ cột.
 - Danh sách giá trị của cột chiều chỉ đi vào lượt viết SQL, không vào lượt phân loại (apply_group_values): tổng giá trị
   của mọi cột chiều không nhạy cảm tới ASK_VALUES_ALL_MAX thì gửi đủ mọi cột; vượt thì chỉ cột liên quan nhận đủ giá
   trị, tới RELATED_COLUMN_VALUES_MAX mỗi cột. Gợi ý khớp chính xác (build_value_hints) tìm trên danh sách đầy đủ, nên
@@ -48,9 +48,6 @@ use crate::{error::AppError, state::AppState};
 /// quan về dòng gọn: cỡ 600 cột, mỗi cột khoảng 100 ký tự tên, mô tả và bí danh. DataCo 53 cột chưa tới 6 000 ký tự,
 /// nên schema thường không bao giờ chạm trần; trần chỉ để một schema hàng nghìn cột không làm prompt quá lớn.
 pub const COLUMN_METADATA_MAX_CHARS: usize = 60_000;
-
-/// Hai cột có điểm chênh dưới ngần này là gần nhau: câu hỏi mơ hồ. Chênh từ đây trở lên thì chọn cột điểm cao.
-pub const CLOSE_SCORE: f32 = 0.1;
 
 /// Cột chiều có tới ngần này giá trị thì gửi đủ danh sách, để mô hình ánh xạ được mọi cách gọi của người dùng sang
 /// đúng giá trị. DataCo: Category Name có đúng 50 giá trị, Order Region 23, Market 5.
@@ -122,19 +119,8 @@ pub struct ValueHint {
     pub matched_text: String,
 }
 
-/// Một cụm khớp tên hay bí danh của nhiều cột với điểm gần nhau mà người hỏi chưa chọn. #33 đổi thành `Choice` với id
-/// `choice_id`, mỗi cột một lựa chọn, id lựa chọn là tên cột.
-#[derive(Debug, Clone, PartialEq)]
-pub struct AmbiguousWord {
-    pub choice_id: String,
-    /// Cụm như người hỏi gõ.
-    pub phrase: String,
-    /// Các cột gần nhau, điểm cao trước.
-    pub columns: Vec<String>,
-}
-
-/// Cột đã dùng cho một cụm. `others` có cột thì đây là giả định người dùng đổi được (#35 hiện thẻ, cùng `choice_id`
-/// như AmbiguousWord); rỗng thì chỉ một cột khớp.
+/// Cột đã dùng cho một cụm. `others` có cột thì đây là giả định người dùng đổi được (#35 hiện thẻ; id lựa chọn là
+/// `choice_id`, id phương án là tên cột); rỗng thì chỉ một cột khớp.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColumnPick {
     pub choice_id: String,
@@ -155,7 +141,6 @@ pub struct AskContext {
     pub columns: Vec<ColumnProfile>,
     /// Cụm dài trước, mỗi giá trị một lần.
     pub hints: Vec<ValueHint>,
-    pub ambiguous: Vec<AmbiguousWord>,
     pub picks: Vec<ColumnPick>,
 }
 
@@ -301,7 +286,6 @@ pub fn build_context(
     let mut context = AskContext {
         columns: Vec::new(),
         hints: build_value_hints(phrases, index, &open),
-        ambiguous: Vec::new(),
         picks: Vec::new(),
     };
     // Cột khớp một cụm hoặc có gợi ý giá trị, theo chỉ số trong columns.
@@ -503,8 +487,10 @@ pub fn apply_group_values(tables: &mut [(&mut Vec<ColumnProfile>, &ValueIndex)])
 
 /// Lựa chọn cột người hỏi gửi cho một cụm mà bước chấm điểm ở trên không thấy cột nào khớp: câu hỏi lại của mô hình
 /// (ví dụ "doanh thu tính bằng cột nào?" khi dataset chưa có chỉ số, ask/choices.rs) cho chọn cột theo cụm đó. Không
-/// ghi thành pick thì lựa chọn không vào prompt, câu gửi lại bị hỏi lại y nguyên và kèm choice_not_applied. Chỉ nhận
-/// khi cụm còn trong câu hỏi và cột có thật; còn lại bỏ qua như trước (choice_not_applied).
+/// ghi thành pick thì lựa chọn không vào prompt, câu gửi lại bị hỏi lại y nguyên và kèm choice_not_applied. Nhận mọi
+/// lựa chọn trỏ tới một cột có thật, kể cả khi cụm mô hình hỏi không khớp cụm nào bộ tách cụm thấy trong câu (mô hình
+/// ghi cụm khác chữ người hỏi gõ, hay không ghi cụm): người hỏi đã trả lời câu hỏi lại của hệ thống, bỏ lựa chọn đó rồi
+/// báo "không áp dụng được" là bắt họ chọn cho có. Cột không có thật thì bỏ qua (choice_not_applied).
 fn apply_user_columns(
     context: &mut AskContext,
     phrases: &[Phrase],
@@ -522,18 +508,25 @@ fn apply_user_columns(
         {
             continue;
         }
-        let Some(phrase) = phrases
-            .iter()
-            .find(|p| build_column_choice_id(p) == choice.choice_id)
-        else {
+        let Some(folded) = choice.choice_id.strip_prefix("column:") else {
             continue;
         };
         let Some(i) = columns.iter().position(|c| c.name == choice.option_id) else {
             continue;
         };
+        // Cụm như người hỏi gõ khi bộ tách cụm thấy nó; không thì cụm đã bỏ dấu trong id, hay một lời chung khi mô hình
+        // hỏi lại không kèm cụm (id column:default).
+        let phrase = phrases
+            .iter()
+            .find(|p| build_column_choice_id(p) == choice.choice_id)
+            .map(|p| p.text.clone())
+            .unwrap_or_else(|| match folded {
+                "" | "default" => "the measure in the question".to_string(),
+                other => other.to_string(),
+            });
         context.picks.push(ColumnPick {
             choice_id: choice.choice_id.clone(),
-            phrase: phrase.text.clone(),
+            phrase,
             column: columns[i].name.clone(),
             others: Vec::new(),
             chosen_by_user: true,
@@ -542,8 +535,7 @@ fn apply_user_columns(
     }
 }
 
-/// Chọn cột cho một cụm có ứng viên và ghi vào context (picks hoặc ambiguous). Trả các cột dùng cho cụm: một cột khi
-/// đã chọn được, các cột gần nhau khi còn mơ hồ.
+/// Chọn cột cho một cụm có ứng viên và ghi vào context.picks. Trả cột dùng cho cụm.
 fn apply_choice(
     context: &mut AskContext,
     phrase: &Phrase,
@@ -553,34 +545,22 @@ fn apply_choice(
 ) -> Vec<usize> {
     let choice_id = build_column_choice_id(phrase);
     let name = |i: usize| columns[i].name.clone();
+    // Lựa chọn của người hỏi nhận mọi cột có thật, không chỉ ứng viên của cụm: câu hỏi lại của mô hình có thể đưa
+    // phương án theo nghĩa (cột không có bí danh là cụm đó). Chỉ nhận ứng viên thì người hỏi chọn xong vẫn bị báo
+    // choice_not_applied.
     let user_pick = choices
         .iter()
         .filter(|c| c.choice_id == choice_id)
-        .find_map(|c| {
-            candidates
-                .iter()
-                .find(|(i, _)| columns[*i].name == c.option_id)
-        });
-    let top = candidates[0];
-    let close: Vec<usize> = candidates
-        .iter()
-        .filter(|(_, score)| top.1 - score < CLOSE_SCORE)
-        .map(|(i, _)| *i)
-        .collect();
-
+        .find_map(|c| columns.iter().position(|column| column.name == c.option_id));
+    // Nhiều cột khớp, kể cả bằng điểm nhau, thì không hỏi lại: dùng cột đầu danh sách ứng viên (điểm cao nhất, bằng điểm
+    // thì cột đứng trước trong bảng, ask/matching.rs), trả lời ngay, các cột còn lại thành giả định đổi được trên thẻ
+    // "Hệ thống đã hiểu là" (build_pick_choices ở ask/response_choices.rs). Hỏi trước rồi mới trả lời bắt người hỏi chọn
+    // cả khi cách hiểu mặc định đã đúng.
     let (column, chosen_by_user) = match user_pick {
         // Người hỏi đã chọn một ứng viên (kể cả khi chỉ có một): ghi là lựa chọn của họ, để #33 không báo
         // choice_not_applied cho một lựa chọn đã áp dụng.
-        Some(&(i, _)) => (i, true),
-        _ if close.len() > 1 => {
-            context.ambiguous.push(AmbiguousWord {
-                choice_id,
-                phrase: phrase.text.clone(),
-                columns: close.iter().map(|&i| name(i)).collect(),
-            });
-            return close;
-        }
-        _ => (top.0, false),
+        Some(i) => (i, true),
+        None => (candidates[0].0, false),
     };
     context.picks.push(ColumnPick {
         choice_id,

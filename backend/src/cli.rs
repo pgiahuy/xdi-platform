@@ -4,9 +4,11 @@
 Ai chạy được binary trên máy chủ (và đọc được DATABASE_URL) là chủ bản cài, nên các lệnh này không hỏi đăng nhập.
 Đây là đường cứu khi quản trị hệ thống duy nhất quên mật khẩu. Không có tham số thì main chạy server như thường. */
 
+use crate::config::Config;
+use crate::engine::llm;
 use crate::error::AppError;
 use crate::service::llm_stats::{build_question_stat, build_report, TokenPrice};
-use crate::service::{eval, eval_classify, users};
+use crate::service::{eval, eval_classify, eval_judge, users};
 use crate::state::AppState;
 
 const USAGE: &str = "usage:
@@ -25,6 +27,9 @@ const USAGE: &str = "usage:
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
                                               exit 2 on infrastructure errors
+  xdi-backend eval-judge --cases <json> [--pause-ms <ms>]
+                                              measure the judge model of gate 2 on labelled explanations,
+                                              without a database; exit 2 on infrastructure errors
   xdi-backend llm-stats [--since <rfc3339>] [--price-in <usd> --price-out <usd>]
                                               time, model calls and tokens of recorded questions, by question
                                               kind and by model task; prices are USD per million tokens";
@@ -321,5 +326,86 @@ async fn run_eval_classify(state: &AppState, args: &[String]) -> i32 {
         report.fallbacks
     );
     println!("classify step median: {} ms", report.median_ms);
+    0
+}
+
+/// Lệnh eval-judge (#201): bộ đo mô hình chấm của cổng 2. In từng ca kèm kết luận đúng, kết luận của mô hình (SAI khi
+/// lệch) và chỗ mô hình nêu, rồi tỷ lệ đúng, số bỏ lọt và số chỉ cảnh báo trên số ca sai, số chặn nhầm và số cảnh báo
+/// thừa trên số ca đúng, số ca không chấm được và trung vị thời gian. Chỉ báo số, không so với baseline. main.rs gọi thẳng lệnh này trước khi kết nối database.
+pub async fn run_eval_judge(config: &Config, args: &[String]) -> i32 {
+    let mut cases = None;
+    let mut pause_ms = Some("0");
+    let mut it = args.iter();
+    while let Some(flag) = it.next() {
+        match flag.as_str() {
+            "--cases" => cases = it.next(),
+            "--pause-ms" => pause_ms = it.next().map(String::as_str),
+            _ => {
+                eprintln!("{USAGE}");
+                return 2;
+            }
+        }
+    }
+    let (Some(cases), Some(Ok(pause_ms))) = (cases, pause_ms.map(str::parse)) else {
+        eprintln!("{USAGE}");
+        return 2;
+    };
+    let cases = match eval_judge::load_judge_cases(std::path::Path::new(cases)) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("eval-judge: {e:?}");
+            return 2;
+        }
+    };
+    let pause = std::time::Duration::from_millis(pause_ms);
+    let provider = llm::from_config(config);
+    let report = eval_judge::run_eval_judge(provider.as_ref(), config, &cases, pause).await;
+    // Mỗi ca một dòng: id, kết luận đúng, loại lỗi cài vào, kết luận của mô hình (SAI khi lệch), thời gian; dòng sau là
+    // lỗi mô hình nêu hay lý do không chấm được.
+    for case in &report.cases {
+        let got = case.got.as_deref().unwrap_or("none");
+        let mark = if case.got.as_deref() == Some(case.expected.as_str()) {
+            ""
+        } else {
+            " SAI"
+        };
+        println!(
+            "{} expected={} error={} judge={got}{mark} {} ms\n     {}",
+            case.id, case.expected, case.error, case.duration_ms, case.detail
+        );
+    }
+    let percent = |n: usize, of: usize| n as f64 * 100.0 / of.max(1) as f64;
+    println!(
+        "correct: {}/{} ({:.1}%)",
+        report.correct,
+        report.total,
+        percent(report.correct, report.total)
+    );
+    println!(
+        "missed (wrong text judged match): {}/{} ({:.1}%)",
+        report.missed,
+        report.mismatch_total,
+        percent(report.missed, report.mismatch_total)
+    );
+    println!(
+        "warned only (wrong text judged warning): {}/{} ({:.1}%)",
+        report.warned_wrong,
+        report.mismatch_total,
+        percent(report.warned_wrong, report.mismatch_total)
+    );
+    println!(
+        "false alarms (right text judged mismatch): {}/{} ({:.1}%)",
+        report.false_alarms,
+        report.match_total,
+        percent(report.false_alarms, report.match_total)
+    );
+    println!(
+        "extra warnings (right text judged warning): {}/{} ({:.1}%)",
+        report.warned_right,
+        report.match_total,
+        percent(report.warned_right, report.match_total)
+    );
+    println!("not judged: {}", report.unavailable);
+    println!("judge median: {} ms", report.median_ms);
     0
 }

@@ -80,6 +80,11 @@ async fn run(args: Vec<String>) {
     {
         tracing::info!("evaluation uses EVAL_GEMINI_API_KEY");
     }
+    // Bộ đo mô hình chấm (cli.rs, #201) chỉ cần cấu hình mô hình, không cần database: rẽ ra trước khi kết nối Postgres,
+    // để đo được trên máy chưa có Postgres.
+    if args.first().map(String::as_str) == Some("eval-judge") {
+        std::process::exit(cli::run_eval_judge(&config, &args[1..]).await);
+    }
     let addr = format!("0.0.0.0:{}", config.port);
 
     // Migration chạy trước khi nhận request, để mọi request đều thấy schema đúng.

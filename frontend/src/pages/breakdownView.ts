@@ -53,9 +53,9 @@ export function buildBreakdown(response: AskResponse): TabData<BreakdownView> {
       },
       summaryTitle: explanation.summary_title,
       summaryPoints: explanation.summary_points.map((point) => ({ lead: point.lead, text: point.text })),
-      // explanation.summary là lời của mô hình chỉ khi summary_by_model; ngược lại nó là các ý trên nối lại, không hiện
-      // lần nữa.
-      modelSummary: explanation.summary_by_model ? explanation.summary : null,
+      // explanation.summary là câu chính và các ý trên nối lại, không hiện lần nữa.
+      byModel: explanation.summary_by_model,
+      warnings: explanation.summary_warnings,
     },
   }
 }

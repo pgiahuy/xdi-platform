@@ -17,7 +17,7 @@ BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
 DEMO_DB_PORT ?= 5440
 SAMPLE_DATABASE_URL ?= postgres://analyst:analyst@127.0.0.1:$(DEMO_DB_PORT)/company_demo
 
-.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-lessons eval-classify
+.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-lessons eval-classify eval-judge
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -123,6 +123,10 @@ eval-classify: ## Bộ câu thử phân loại câu hỏi (#197): tỷ lệ đú
 	cd backend && cargo build -q
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=$(or $(LLM_PROVIDER),mock) DATA_DIR=backend/target/eval-data \
 	  $(CARGO_TARGET)/debug/xdi-backend eval-classify --data data/samples/dataco.csv --cases eval/classify.json $(if $(PAUSE_MS),--pause-ms $(PAUSE_MS))
+
+eval-judge: ## Bộ đo mô hình chấm của cổng 2 (#201): số ca đúng trên tổng, bỏ lọt, chặn nhầm; không cần database; LLM_PROVIDER=gemini và GEMINI_API_KEY để đo thật, mock không có câu chấm
+	cd backend && cargo build -q
+	LLM_PROVIDER=$(or $(LLM_PROVIDER),mock) $(CARGO_TARGET)/debug/xdi-backend eval-judge --cases eval/judge.json $(if $(PAUSE_MS),--pause-ms $(PAUSE_MS))
 
 openapi: ## Sinh openapi.json, response mẫu của ask và kiểu TypeScript frontend/src/api/schema.ts từ code; commit cả ba
 	@# Lệnh openapi và ask-examples của backend không kết nối database, chạy được khi chưa có Postgres. Ghi ra file tạm

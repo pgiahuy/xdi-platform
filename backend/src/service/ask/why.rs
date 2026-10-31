@@ -24,7 +24,9 @@ use crate::service::ask::checks::build_empty_warning;
 use crate::service::ask::contract::{AskResponse, AskStatus, AskStep, Explanation, TableRead};
 use crate::service::ask::prompt::PromptInput;
 use crate::service::ask::related::TableGroup;
-use crate::service::ask::response_choices::{build_unapplied_warnings, build_used_choices};
+use crate::service::ask::response_choices::{
+    build_pick_choices, build_unapplied_warnings, build_used_choices,
+};
 use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::{build_base_response, build_value_warnings, record_query, Recorded};
@@ -88,6 +90,10 @@ pub(super) async fn ask_why(
     };
     let mut outcome = run_why(state.llm.as_ref(), input).await?;
     steps.append(&mut outcome.steps);
+    // Cụm khớp nhiều cột: cột đang dùng là giả định đổi được, đứng trước giả định của câu "tại sao".
+    let mut assumptions = build_pick_choices(context);
+    assumptions.append(&mut outcome.assumptions);
+    outcome.assumptions = assumptions;
     let used = build_used_choices(context, &outcome.assumptions);
     let mut warnings = build_unapplied_warnings(choices, &used);
     warnings.extend(build_value_warnings(context, &outcome.terms));

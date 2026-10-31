@@ -1238,6 +1238,7 @@
                       "model_calls": [],
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
                       "question": "Doanh thu theo ngày giao hàng",
+                      "question_type": "quantitative",
                       "result": null,
                       "sql_generated": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day",
                       "sql_guarded": "SELECT CAST(strptime(\"shipping date (DateOrders)\", '%d/%m/%Y %H:%M') AS DATE) AS ship_day, SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY ship_day ORDER BY ship_day LIMIT 100000",
@@ -1307,16 +1308,16 @@
                       "choices": [],
                       "clarifications": [
                         {
-                          "id": "region_column",
-                          "label": "\"Khu vực\" là cột nào?",
+                          "id": "revenue_measure",
+                          "label": "Doanh thu tính bằng cột nào?",
                           "options": [
                             {
-                              "id": "order_region",
-                              "label": "Order Region, ví dụ Western Europe"
+                              "id": "order_item_total",
+                              "label": "Order Item Total, sau giảm giá"
                             },
                             {
-                              "id": "market",
-                              "label": "Market, ví dụ Europe"
+                              "id": "sales",
+                              "label": "Sales, trước giảm giá"
                             }
                           ],
                           "selected": null
@@ -1325,20 +1326,27 @@
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
                       "insight": null,
-                      "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
+                      "message": "Doanh thu tính bằng cột nào?",
                       "model": "gemini-2.5-flash",
                       "model_calls": [],
                       "query_id": null,
-                      "question": "Doanh thu theo khu vực",
+                      "question": "Doanh thu từng tháng năm 2017",
+                      "question_type": "quantitative",
                       "result": null,
                       "sql_generated": null,
                       "sql_guarded": null,
                       "status": "needs_choice",
                       "steps": [
                         {
-                          "detail": "\"khu vực\" khớp hai cột: Order Region, Market",
+                          "detail": null,
                           "duration_ms": 12,
                           "name": "context",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 940,
+                          "name": "llm",
                           "ok": true
                         }
                       ],
@@ -1364,6 +1372,7 @@
                       "model_calls": [],
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
                       "question": "Xóa các đơn hàng bị hủy",
+                      "question_type": "quantitative",
                       "result": null,
                       "sql_generated": "DELETE FROM dataco WHERE \"Order Status\" = 'CANCELED'",
                       "sql_guarded": null,
@@ -1479,6 +1488,7 @@
                       ],
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
                       "question": "Doanh thu theo khu vực",
+                      "question_type": "quantitative",
                       "result": {
                         "columns": [
                           {
@@ -1582,15 +1592,15 @@
                         "assumptions": [
                           {
                             "id": "region_column",
-                            "label": "\"Khu vực\" là cột nào?",
+                            "label": "Hiểu \"khu vực\" là",
                             "options": [
                               {
-                                "id": "order_region",
-                                "label": "Order Region, ví dụ Western Europe"
+                                "id": "market",
+                                "label": "5 nhóm, như Europe, LATAM, Pacific Asia (Market)"
                               },
                               {
-                                "id": "market",
-                                "label": "Market, ví dụ Europe"
+                                "id": "order_region",
+                                "label": "23 nhóm, như Western Europe, Central America, South America (Order Region)"
                               }
                             ],
                             "selected": "market"
@@ -1774,21 +1784,28 @@
                         "percent_change": "-13.6",
                         "slice_column": null,
                         "slice_column_label": null,
-                        "summary": "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý 3/2017 là 9.226.250,00.",
+                        "summary": "Doanh thu Quý 3/2017 giảm 1.283.400,00 (13,6%) so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Số đơn ít đi: Số đơn giảm từ 5.000 xuống 4.400, làm doanh thu giảm 1.117.725,00, chiếm 87,1% mức giảm. Giá trị đơn trung bình thấp hơn: Giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25, làm doanh thu giảm thêm 165.675,00. Thị trường Europe giảm nhiều nhất: Europe giảm 639.780,25, sau đó là LATAM giảm 339.049,50.",
                         "summary_by_model": true,
                         "summary_points": [
                           {
                             "kind": "reason",
-                            "lead": "Lý do chính",
-                            "text": "chủ yếu do số đơn: Quý 2/2017 có 5.000, Quý 3/2017 có 4.400. Phần do số đơn giảm 1.117.725,00, phần do giá trị đơn trung bình giảm 165.675,00. Nếu số đơn giữ nguyên như Quý 2/2017, doanh thu Quý 3/2017 là 9.226.250,00."
+                            "lead": "Số đơn ít đi",
+                            "text": "Số đơn giảm từ 5.000 xuống 4.400, làm doanh thu giảm 1.117.725,00, chiếm 87,1% mức giảm."
                           },
                           {
-                            "kind": "even",
-                            "lead": "Không có nơi nào đặc biệt",
-                            "text": "theo Market (thị trường) và Customer Segment (phân khúc khách hàng), không nhóm nào lệch hẳn mức chung (giảm 13,6%). Chênh lệch lớn nhất ở Europe và LATAM chỉ vì đây là những nhóm có doanh thu lớn nhất."
+                            "kind": "reason",
+                            "lead": "Giá trị đơn trung bình thấp hơn",
+                            "text": "Giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25, làm doanh thu giảm thêm 165.675,00."
+                          },
+                          {
+                            "kind": "reason",
+                            "lead": "Thị trường Europe giảm nhiều nhất",
+                            "text": "Europe giảm 639.780,25, sau đó là LATAM giảm 339.049,50."
                           }
                         ],
-                        "summary_title": "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00.",
+                        "summary_title": "Doanh thu Quý 3/2017 giảm 1.283.400,00 (13,6%) so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00.",
+                        "summary_verdict": "match",
+                        "summary_warnings": [],
                         "volume_price": {
                           "base_price": "1880.50",
                           "base_volume": "5000",
@@ -1808,6 +1825,7 @@
                       "model_calls": [],
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
                       "question": "Tại sao doanh thu quý 3 năm 2017 giảm?",
+                      "question_type": "causal",
                       "result": {
                         "columns": [
                           {
@@ -4175,6 +4193,15 @@
           }
         }
       },
+      "AnswerVerdict": {
+        "type": "string",
+        "description": "Verdict of the two checks on a text written by the language model: `match` (agrees with the computed numbers),\n`warning` (some parts can be read several ways, not certainly wrong), `mismatch` (wrong on every attempt; the model's\ntext is replaced by a template sentence).",
+        "enum": [
+          "match",
+          "warning",
+          "mismatch"
+        ]
+      },
       "AskRequest": {
         "type": "object",
         "required": [
@@ -4224,6 +4251,7 @@
           "insight",
           "answer_text",
           "answer_text_by_model",
+          "question_type",
           "clarifications",
           "steps",
           "model_calls"
@@ -4323,6 +4351,17 @@
           "question": {
             "type": "string",
             "description": "The question exactly as sent in `AskRequest.question`."
+          },
+          "question_type": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/QuestionType",
+                "description": "Kind of the question chosen by the classify step; null when the question stopped before that step."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "result": {
             "oneOf": [
@@ -5749,7 +5788,9 @@
           "summary",
           "summary_title",
           "summary_points",
-          "summary_by_model"
+          "summary_by_model",
+          "summary_warnings",
+          "summary_verdict"
         ],
         "properties": {
           "base": {
@@ -5810,22 +5851,40 @@
           },
           "summary": {
             "type": "string",
-            "description": "Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown."
+            "description": "Plain-language summary for the end user (Vietnamese), as one text: `summary_title` then each point as\n\"lead: text\". When `summary_by_model` the model wrote it from the numbers the backend computed, its claims were\nchecked against this breakdown and an independent model call compared the meaning of the text with the claims\nand the names of the two slices; otherwise the backend wrote it from a template."
           },
           "summary_by_model": {
             "type": "boolean",
-            "description": "False when the model's text failed the number check, or the model was not reached, and `summary` is a template\nsentence written by the backend."
+            "description": "False when `summary` is a template sentence written by the backend: the change is zero (the model is not\ncalled), the model was not reached, the independent check could not judge the text, or\nthe text failed the checks twice (one rewrite is asked)."
           },
           "summary_points": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SummaryPoint"
             },
-            "description": "Points under the main answer, written by the backend from the numbers above; each is said only when the numbers\nsupport it."
+            "description": "Points under the main answer (Vietnamese). When `summary_by_model`, the main causes the model wrote, all of kind\n`reason`; otherwise written by the backend, each said only when the numbers support it."
           },
           "summary_title": {
             "type": "string",
-            "description": "Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese)."
+            "description": "Main answer, one sentence (Vietnamese): written by the model when `summary_by_model`, otherwise by the backend\nfrom the numbers above."
+          },
+          "summary_verdict": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AnswerVerdict",
+                "description": "Outcome of the two checks on the model's text: `match` or `warning` when `summary` is the model's text,\n`mismatch` when the model's text failed every attempt and `summary` is the template, null when no check ran (no\nchange to explain, or the model or the checking model failed)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary_warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Parts of the model's text that the independent check found unclear but not certainly wrong, one Vietnamese\nsentence each, written by the checking model; show them with `summary`. Empty when nothing was unclear or\n`summary` is a template sentence."
           },
           "volume_price": {
             "oneOf": [
@@ -6236,7 +6295,8 @@
           "narrate",
           "why",
           "insight",
-          "classify"
+          "classify",
+          "judge"
         ]
       },
       "LoginRequest": {
@@ -6880,6 +6940,14 @@
           }
         }
       },
+      "QuestionType": {
+        "type": "string",
+        "description": "Kind of question by the purpose of the analysis, as the classify step decided: `quantitative` (a number, a list or\na comparison, answered by one SQL query) or `causal` (why a number changed or differs between two groups, answered by\na breakdown).",
+        "enum": [
+          "quantitative",
+          "causal"
+        ]
+      },
       "Rating": {
         "type": "string",
         "description": "`good` is the button for a good answer, `bad` the one for an answer that falls short.",
@@ -7405,7 +7473,7 @@
       },
       "SummaryPointKind": {
         "type": "string",
-        "description": "- `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the\n  rate).\n- `outliers`: groups that changed much more or much less than the whole, or exist on one side only.\n- `even`: no group stands out; the largest contributions are the largest groups.\n- `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow\n  comparing groups with the whole (a base slice of zero or less, or a change too close to zero).\n- `against`: a group that moved the other way.\n- `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.",
+        "description": "- `reason`: what mostly makes the change (the volume and the value per unit, or the mix and the rate); every point\n  written by the model has this kind.\n- `outliers`: groups that changed much more or much less than the whole, or exist on one side only.\n- `even`: no group stands out; the largest contributions are the largest groups.\n- `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow\n  comparing groups with the whole (a base slice of zero or less, or a change too close to zero).\n- `against`: a group that moved the other way.\n- `dropped`: dimensions the summary leaves out and why; they stay in `Explanation.dimensions`.",
         "enum": [
           "reason",
           "outliers",

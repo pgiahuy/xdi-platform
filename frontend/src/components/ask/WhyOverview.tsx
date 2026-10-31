@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/WhyOverview.tsx - phần đầu câu trả lời của câu "tại sao": lời giải thích và căn cứ (AnswerSummary.tsx),
-một hàng ba số (lát gốc, lát so sánh kèm số dòng của từng lát, chênh lệch) không khung riêng, để thẻ trả lời không
-thành nhiều khung lồng nhau, rồi chênh lệch của từng nhóm theo chiều đầu tiên (ContributionBars.tsx). Mọi số lấy từ
+/* components/ask/WhyOverview.tsx - phần đầu câu trả lời của câu "tại sao": insight (WhyInsight.tsx),
+một hàng ba số chia đều ba cột (lát gốc, lát so sánh, chênh lệch) không khung riêng, để thẻ trả lời không thành nhiều
+khung lồng nhau; số dòng của mỗi lát không hiện ở đây vì không giúp đọc câu trả lời (tab Phân rã vẫn có), rồi chênh lệch của từng nhóm theo chiều đầu tiên (ContributionBars.tsx). Mọi số lấy từ
 explanation của response, cùng dữ liệu với tab Phân rã của pane bằng chứng; ở đây chỉ hiện gọn để đọc câu trả lời mà
 không phải mở pane. Số là chuỗi chữ số của backend, chỉ nhóm nghìn (formatDecimal), không làm tròn.
 Chênh lệch luôn kèm dấu và chữ chiều ("tăng", "giảm" giữa hai kỳ; "cao hơn", "thấp hơn" giữa hai nhóm): không để màu
@@ -9,11 +9,18 @@ một mình nói chiều thay đổi. */
 
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { AnswerSummary } from './AnswerSummary'
+import { WhyInsight } from './WhyInsight'
 import { columnText } from './columnText'
 import { formatDecimal } from './cellFormat'
 import { ContributionBars } from './ContributionBars'
-import { changeDirection, directionTextClass, directionWord, formatPercent, formatSigned } from './changeFormat'
+import {
+  changeDirection,
+  directionSoftClass,
+  directionTextClass,
+  directionWord,
+  formatPercent,
+  formatSigned,
+} from './changeFormat'
 import type { BreakdownView, Comparison } from './evidenceTypes'
 
 type Props = {
@@ -22,18 +29,16 @@ type Props = {
 
 export function WhyOverview({ breakdown: b }: Props) {
   const first = b.dimensions[0]
-  // Độ đo đếm dòng mà số đo bằng đúng số dòng thì dòng "N dòng" chỉ nhắc lại số ở trên.
-  const rows = (value: string, count: string) => (b.countsRows && value === count ? null : count)
   return (
     <>
-      <AnswerSummary title={b.summaryTitle} points={b.summaryPoints} modelSummary={b.modelSummary} />
+      <WhyInsight title={b.summaryTitle} points={b.summaryPoints} byModel={b.byModel} warnings={b.warnings} />
       <div className="flex flex-col gap-1">
         {b.sliceColumn && (
           <p className="text-xs text-muted-foreground">So theo {columnText(b.sliceColumn, b.sliceColumnLabel)}</p>
         )}
-        <dl className="flex flex-wrap gap-x-8 gap-y-3 tabular-nums">
-          <Stat label={b.baseLabel} value={b.baseValue} rows={rows(b.baseValue, b.baseRows)} />
-          <Stat label={b.compareLabel} value={b.compareValue} rows={rows(b.compareValue, b.compareRows)} />
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 tabular-nums sm:grid-cols-3">
+          <Stat label={b.baseLabel} value={b.baseValue} />
+          <Stat label={b.compareLabel} value={b.compareValue} />
           <ChangeStat change={b.change} percent={b.percentChange} baseLabel={b.baseLabel} comparison={b.comparison} />
         </dl>
       </div>
@@ -49,12 +54,11 @@ export function WhyOverview({ breakdown: b }: Props) {
   )
 }
 
-function Stat({ label, value, rows }: { label: string; value: string; rows: string | null }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className="text-lg font-semibold tracking-tight break-all">{formatDecimal(value)}</dd>
-      {rows !== null && <dd className="text-xs text-muted-foreground">{formatDecimal(rows)} dòng</dd>}
     </div>
   )
 }
@@ -73,12 +77,19 @@ function ChangeStat({ change, percent, baseLabel, comparison }: ChangeStatProps)
       : [word, amount, 'so với', baseLabel].filter(Boolean).join(' ')
   const tone = directionTextClass(direction)
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-1">
       <dt className="text-xs font-medium text-muted-foreground">Chênh lệch</dt>
-      <dd className="flex flex-wrap items-baseline gap-x-2">
-        <span className={cn('text-lg font-semibold tracking-tight break-all', tone)}>{formatSigned(change)}</span>
-        <span className={cn('inline-flex items-center gap-1 text-xs', tone)}>
-          {direction !== 'flat' && <Icon aria-hidden className="size-3.5" />}
+      <dd className={cn('text-lg font-semibold tracking-tight break-all', tone)}>{formatSigned(change)}</dd>
+      {/* Nhãn "tăng 5,7% so với ..." là điều người đọc cần thấy trước nhất: chữ đậm, cỡ lớn hơn, nền nhạt cùng màu chiều. */}
+      <dd>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-semibold',
+            tone,
+            directionSoftClass(direction),
+          )}
+        >
+          {direction !== 'flat' && <Icon aria-hidden className="size-4" />}
           {text}
         </span>
       </dd>

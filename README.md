@@ -78,8 +78,10 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
   đồ, tải CSV, thẻ "Hệ thống đã hiểu là" và cảnh báo khi kết quả đáng ngờ.
 - **Câu hỏi tìm nguyên nhân** (vì sao một số tăng, giảm hay khác nhau giữa hai nhóm): mô hình điền form (đo gì, hai kỳ
   hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần chênh lệch của từng nhóm (cộng lại bằng đúng chênh
-  lệch). Lời giải thích nói bằng lời thường; mọi số trong lời của mô hình, và chữ "tăng", "giảm" đứng trước mỗi chênh
-  lệch, được kiểm với bảng đã tính, sai thì dùng câu do code viết.
+  lệch). Code tính các nhận định, mô hình viết insight (câu mở đầu và các nguyên nhân chính) kèm khai từng số và nhóm
+  nó dùng; code so mỗi khai báo với đúng ô của bảng đã tính, rồi một lần gọi mô hình riêng so nghĩa của lời với các
+  khai báo. Sai hay có chỗ đọc được nhiều nghĩa thì mô hình viết lại một lần, kèm các lỗi đó; vẫn sai thì dùng câu do
+  code viết, còn chỗ chưa rõ mà không chắc sai thì giữ insight, kèm cảnh báo.
 - **Chỉ số:** admin định nghĩa chỉ số của từng dataset (chọn phép tính và cột, hoặc viết SQL; chạy thử trước khi lưu)
   và đặt cột số đo nào lấy tổng, cột nào lấy trung bình; câu hỏi sau dùng đúng công thức đó.
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
@@ -87,7 +89,9 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
 - **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên file DataCo, và khi database mẫu đang chạy thì thêm 17 câu trên
   ảnh chụp của nó (10 câu bán hàng, 7 câu học tập, phần lớn nối bảng), so với SQL đúng viết tay; CI chạy phần DataCo và
-  báo khi tỷ lệ đúng giảm.
+  báo khi tỷ lệ đúng giảm. `make eval-judge LLM_PROVIDER=gemini` đo mô hình chấm lời giải thích câu "tại sao" trên 55 ca
+  có nhãn: số ca đúng trên tổng, số lời sai bị bỏ lọt hay chỉ bị cảnh báo, số lời đúng bị chặn nhầm hay bị cảnh báo
+  thừa.
 
 ## Chưa có
 

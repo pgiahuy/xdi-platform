@@ -436,21 +436,22 @@ pub(crate) fn build_dimension_candidates(
         .collect()
 }
 
-/// Lượng của #40: đúng một cột vai trò key và cột đó lặp lại (ít giá trị khác nhau hơn số dòng, như Order Id khi một
-/// đơn có nhiều dòng). Nhiều cột key thì không đoán cột nào là đơn. Cột key không lặp thì đếm nó chỉ là đếm dòng.
-/// metrics chưa có trường đánh dấu chỉ số nào là lượng, nên chưa lấy lượng từ metrics.
+/// Lượng của #40: trong các cột vai trò key có lặp lại (ít giá trị khác nhau hơn số dòng, như Order Id khi một đơn có
+/// nhiều dòng), cột có nhiều giá trị khác nhau nhất. Đó là đơn vị nhỏ nhất mà nhiều dòng cùng thuộc về, như đơn hàng
+/// với các dòng hàng trong đơn; mã khách hay mã danh mục cũng lặp nhưng ít giá trị hơn. Cột key không lặp thì đếm nó
+/// chỉ là đếm dòng, không có nghĩa kinh doanh, nên bỏ. Hồ sơ ngữ nghĩa đổi mọi cột mã sang key
+/// (backend/prompts/semantic_profile.txt), nên thường có nhiều cột key. metrics chưa có trường đánh dấu chỉ số nào là
+/// lượng, nên chưa lấy lượng từ metrics. Phần giải thích của câu thường (insight/plan.rs) dùng cùng hàm này.
 pub(crate) fn build_volume(profile: &WhyProfile) -> Option<String> {
-    let keys: Vec<&ProfileColumn> = profile
+    let rows = profile.row_count?;
+    profile
         .columns
         .iter()
         .filter(|c| c.role == ProfileRole::Key.as_str())
-        .collect();
-    let [key] = keys.as_slice() else {
-        return None;
-    };
-    let repeats =
-        matches!((key.distinct_count, profile.row_count), (Some(d), Some(rows)) if d < rows);
-    repeats.then(|| key.name.clone())
+        .filter_map(|c| Some((c, c.distinct_count?)))
+        .filter(|(_, distinct)| *distinct < rows)
+        .max_by_key(|(_, distinct)| *distinct)
+        .map(|(c, _)| c.name.clone())
 }
 
 // Bí danh của hồ sơ ngữ nghĩa là tiếng Việt (luật của prompt lập hồ sơ); bí danh đầu là tên mô hình thấy hợp nhất.

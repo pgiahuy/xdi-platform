@@ -102,8 +102,10 @@ fn column_values(context: &AskContext, name: &str) -> Vec<String> {
         .collect()
 }
 
+/// Hai cột khớp gần bằng nhau: không hỏi lại, dùng cột điểm cao nhất và để cột kia làm phương án đổi được; người hỏi
+/// chọn cột kia thì dùng đúng cột đó.
 #[test]
-fn close_columns_are_ambiguous_until_the_user_picks() {
+fn close_columns_default_to_the_best_and_keep_the_others() {
     let columns = vec![
         profile("Market", "dimension", &["thị trường", "khu vực"]),
         profile("Order Region", "dimension", &["khu vực"]),
@@ -111,16 +113,15 @@ fn close_columns_are_ambiguous_until_the_user_picks() {
     ];
     let empty = ValueIndex::default();
     let phrases = build_phrases("Doanh thu theo khu vực");
+    let default_pick = ColumnPick {
+        choice_id: "column:khu vuc".to_string(),
+        phrase: "khu vực".to_string(),
+        column: "Market".to_string(),
+        others: vec!["Order Region".to_string()],
+        chosen_by_user: false,
+    };
     let context = build_context(&phrases, columns.clone(), &empty, &[]);
-    assert_eq!(
-        context.ambiguous,
-        [AmbiguousWord {
-            choice_id: "column:khu vuc".to_string(),
-            phrase: "khu vực".to_string(),
-            columns: vec!["Market".to_string(), "Order Region".to_string()],
-        }]
-    );
-    assert!(context.picks.is_empty());
+    assert_eq!(context.picks, std::slice::from_ref(&default_pick));
 
     let picked = build_context(
         &phrases,
@@ -128,7 +129,6 @@ fn close_columns_are_ambiguous_until_the_user_picks() {
         &empty,
         &[chosen("column:khu vuc", "Order Region")],
     );
-    assert!(picked.ambiguous.is_empty());
     assert_eq!(
         picked.picks,
         [ColumnPick {
@@ -140,18 +140,39 @@ fn close_columns_are_ambiguous_until_the_user_picks() {
         }]
     );
 
-    // Lựa chọn trỏ tới cột không phải ứng viên, hay của cụm khác, thì bỏ qua: vẫn mơ hồ.
-    for wrong in [
-        chosen("column:khu vuc", "Sales"),
-        chosen("column:thi truong", "Order Region"),
-    ] {
-        let context = build_context(&phrases, columns.clone(), &empty, &[wrong]);
-        assert_eq!(context.ambiguous.len(), 1);
-    }
+    // Lựa chọn trỏ tới cột có thật mà không phải ứng viên của cụm (câu hỏi lại của mô hình đưa phương án theo nghĩa)
+    // vẫn được dùng; cột không có thật thì bỏ qua, vẫn dùng cột mặc định.
+    let context = build_context(
+        &phrases,
+        columns.clone(),
+        &empty,
+        &[chosen("column:khu vuc", "Sales")],
+    );
+    assert_eq!(context.picks[0].column, "Sales");
+    assert!(context.picks[0].chosen_by_user);
+    assert_eq!(context.picks[0].others, ["Market", "Order Region"]);
+    let context = build_context(
+        &phrases,
+        columns.clone(),
+        &empty,
+        &[chosen("column:khu vuc", "Country")],
+    );
+    assert_eq!(context.picks, std::slice::from_ref(&default_pick));
+    // Lựa chọn cho một cụm không có trong câu (câu hỏi lại của mô hình ghi cụm khác chữ người hỏi gõ) vẫn được dùng,
+    // vì người hỏi chỉ gửi lựa chọn khi hệ thống đã hỏi lại.
+    let context = build_context(
+        &phrases,
+        columns.clone(),
+        &empty,
+        &[chosen("column:thi truong", "Order Region")],
+    );
+    assert_eq!(context.picks.len(), 2);
+    assert_eq!(context.picks[0], default_pick);
+    assert_eq!(context.picks[1].column, "Order Region");
+    assert!(context.picks[1].chosen_by_user);
 }
 
-/// Cả hai bên có dấu thì so có dấu, đúng nguyên văn hơn sau bỏ dấu đủ CLOSE_SCORE nên chọn luôn và ghi thành giả định
-/// có cột khác; một bên không dấu ("khu vuc", cột khu_vuc) thì so sau bỏ dấu. Gõ dạng tổ hợp cho cùng kết quả.
+/// Cả hai bên có dấu thì so có dấu, đúng nguyên văn điểm cao hơn sau bỏ dấu nên được chọn và cột kia thành giả định; một bên không dấu ("khu vuc", cột khu_vuc) thì so sau bỏ dấu. Gõ dạng tổ hợp cho cùng kết quả.
 #[test]
 fn column_names_compare_accents_when_both_sides_have_them() {
     let columns = vec![
@@ -164,7 +185,6 @@ fn column_names_compare_accents_when_both_sides_have_them() {
         "doanh thu theo khu vu\u{31b}\u{323}c",
     ] {
         let context = build_context(&build_phrases(question), columns.clone(), &empty, &[]);
-        assert!(context.ambiguous.is_empty(), "{question}");
         assert_eq!(context.picks.len(), 1);
         assert_eq!(context.picks[0].column, "Order Region");
         assert_eq!(context.picks[0].others, ["Market"]);
@@ -337,7 +357,6 @@ fn hints_are_exact_matches_of_multi_syllable_phrases() {
         hints(&context),
         [("region", "South"), ("khu_vuc", "Mien Nam")]
     );
-    assert!(context.ambiguous.is_empty());
     for question in [
         "doanh thu từng miền năm 2017",
         "doanh thu theo miền năm 2017",
@@ -356,7 +375,6 @@ fn hints_are_exact_matches_of_multi_syllable_phrases() {
     ] {
         let context = ask(question);
         assert!(context.hints.is_empty(), "{question}: {:?}", context.hints);
-        assert!(context.ambiguous.is_empty(), "{question}");
     }
     // Cột nhạy cảm: không có giá trị, không có gợi ý.
     let context = ask("doanh thu nguyen van a");
@@ -796,7 +814,6 @@ async fn dataco_sample_sends_group_values_and_exact_hints() {
         Some("Order Item Total")
     );
     assert_eq!(hints(&context), [("Market", "Europe")]);
-    assert!(context.ambiguous.is_empty());
 
     // Khớp chính xác ra gợi ý đúng.
     for (question, expected) in [
@@ -831,7 +848,8 @@ async fn dataco_sample_sends_group_values_and_exact_hints() {
         assert!(context.hints.is_empty(), "{question}: {:?}", context.hints);
     }
 
-    // "khu vực" chỉ là bí danh của Order Region; thêm vào Market thì mơ hồ, chọn rồi thì hết.
+    // "khu vực" chỉ là bí danh của Order Region; thêm vào Market thì hai cột cùng khớp: dùng Market (đứng trước trong
+    // bảng), Order Region thành giả định đổi được; chọn Order Region thì dùng nó.
     let context = ask(&state, &ws, &v, "Doanh thu theo khu vực").await;
     assert_eq!(
         column_of(&context, "khu vực").as_deref(),
@@ -845,13 +863,17 @@ async fn dataco_sample_sends_group_values_and_exact_hints() {
     )
     .await;
     let context = ask(&state, &ws, &v, "Doanh thu theo khu vực").await;
-    assert_eq!(context.ambiguous.len(), 1);
-    assert_eq!(context.ambiguous[0].columns, ["Market", "Order Region"]);
-    let choice = chosen(&context.ambiguous[0].choice_id, "Order Region");
+    let pick = context
+        .picks
+        .iter()
+        .find(|p| p.phrase == "khu vực")
+        .unwrap();
+    assert_eq!(pick.column, "Market");
+    assert_eq!(pick.others, ["Order Region"]);
+    let choice = chosen(&pick.choice_id, "Order Region");
     let context = build_ask_context(&state, &ws, &v, "Doanh thu theo khu vực", &[choice])
         .await
         .unwrap();
-    assert!(context.ambiguous.is_empty());
     assert_eq!(
         column_of(&context, "khu vực").as_deref(),
         Some("Order Region")

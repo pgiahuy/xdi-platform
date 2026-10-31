@@ -23,6 +23,7 @@ use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileColumn, P
 use crate::service::ask::phrases::build_key;
 use crate::service::explain::check::{find_column, WhyProfile};
 use crate::service::explain::form::{FieldError, FormAgg, WhyForm};
+use crate::service::explain::lower_first;
 use crate::service::explain::sql::{build_ident, build_total_aggregate};
 use crate::service::profile::is_integer_type;
 
@@ -96,22 +97,36 @@ pub(super) fn check_measure(
             // mẫu COUNT(x), phân rã thành phần cơ cấu và phần hiệu suất (explain/ratio.rs).
             if column.aggregation == ColumnAggregation::Avg.as_str() {
                 let rows = Additive::Count { value: Some(ident) };
-                return build_plan_measure(
-                    format!("Trung bình {}", column.name),
-                    None,
-                    additive,
-                    Some(rows),
-                );
+                let label = match build_vietnamese_name(column) {
+                    Some(name) => format!("Trung bình {}", lower_first(name)),
+                    None => format!("Trung bình {}", column.name),
+                };
+                return build_plan_measure(label, None, additive, Some(rows));
             }
-            build_plan_measure(format!("Tổng {}", column.name), None, additive, None)
+            // Tên tiếng Việt của hồ sơ ("Doanh thu") đọc tự nhiên hơn "Tổng Sales"; chưa có thì ghép từ tên cột.
+            let label = match build_vietnamese_name(column) {
+                Some(name) => name.to_string(),
+                None => format!("Tổng {}", column.name),
+            };
+            build_plan_measure(label, None, additive, None)
         }
-        FormAgg::Count => build_plan_measure(
-            format!("Số dòng có {}", column.name),
-            None,
-            Additive::Count { value: Some(ident) },
-            None,
-        ),
+        FormAgg::Count => {
+            let label = match build_vietnamese_name(column) {
+                Some(name) => format!("Số dòng có {}", lower_first(name)),
+                None => format!("Số dòng có {}", column.name),
+            };
+            build_plan_measure(label, None, Additive::Count { value: Some(ident) }, None)
+        }
     }
+}
+
+/// Tên tiếng Việt của cột: bí danh đầu tiên trong hồ sơ ngữ nghĩa, như build_labels của explain/check.rs.
+fn build_vietnamese_name(column: &ProfileColumn) -> Option<&str> {
+    column
+        .aliases
+        .iter()
+        .map(|a| a.trim())
+        .find(|a| !a.is_empty())
 }
 
 fn build_plan_measure(

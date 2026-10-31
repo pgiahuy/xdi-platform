@@ -27,6 +27,8 @@ pub struct Config {
     /// "mock", "gemini" hoặc "ollama". Mặc định mock để chạy được không cần khóa.
     pub llm_provider: String,
     pub gemini_api_key: Secret,
+    /// Khóa Gemini dự phòng (GEMINI_BACKUP_API_KEY), dùng khi khóa chính hết hạn mức; rỗng thì không có.
+    pub gemini_backup_api_key: Secret,
     pub gemini_model: String,
     /// Thời gian tối đa cho một lần gọi Gemini, kể cả lúc chờ mô hình trả lời.
     pub gemini_timeout: Duration,
@@ -107,6 +109,7 @@ impl Config {
             max_upload_bytes: upload_limit_bytes(env::var("MAX_UPLOAD_MB").ok().as_deref()),
             llm_provider: var_or("LLM_PROVIDER", "mock"),
             gemini_api_key: Secret::new(var_or("GEMINI_API_KEY", "")),
+            gemini_backup_api_key: Secret::new(var_or("GEMINI_BACKUP_API_KEY", "")),
             gemini_model: var_or("GEMINI_MODEL", "gemini-3.5-flash-lite"),
             gemini_timeout: timeout_secs("GEMINI_TIMEOUT_SECS", 60),
             ollama_url: var_or("OLLAMA_URL", "http://localhost:11434"),
