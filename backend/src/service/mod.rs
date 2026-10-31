@@ -19,6 +19,9 @@ mod eval_classify_tests;
 pub mod eval_judge;
 #[cfg(test)]
 mod eval_judge_tests;
+pub mod eval_pace;
+#[cfg(test)]
+mod eval_pace_tests;
 #[cfg(test)]
 mod eval_tests;
 pub mod excel;

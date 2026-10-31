@@ -18,6 +18,8 @@ pub mod meter;
 pub(crate) mod mock;
 mod ollama;
 
+pub use gemini::QUOTA_MESSAGE as GEMINI_QUOTA_MESSAGE;
+
 use std::sync::Arc;
 
 use async_trait::async_trait;

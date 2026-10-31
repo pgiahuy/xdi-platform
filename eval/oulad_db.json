@@ -1,0 +1,927 @@
+[
+  {
+    "id": "ou-w01",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B?",
+    "variants": [
+      "tai sao ty le bo hoc ky 2014J cao hon ky 2014B",
+      "Tỷ lệ bỏ học của kỳ 2014J so với 2014B cao hơn, vì sao vậy?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"code_presentation\" = '2014B' OR \"code_presentation\" = '2014J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Nguyên nhân cài sẵn: Scotland và nhóm tuổi 0-35; 2014J 37,4% so với 2014B 33,5%."
+  },
+  {
+    "id": "ou-w02",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Trong kỳ 2014J, vì sao vùng Scotland có tỷ lệ bỏ học cao hơn các vùng khác?",
+    "variants": [
+      "vi sao ky 2014J scotland bo hoc nhieu hon cac vung khac (theo ty le)",
+      "Kỳ 2014J, Scotland có tỷ lệ bỏ học cao hơn những vùng còn lại là do đâu?"
+    ],
+    "expected_sql": [
+      "SELECT \"region\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE \"code_presentation\" = '2014J' AND (\"region\" <> 'Scotland' OR \"region\" = 'Scotland') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Một nhóm so với các nhóm còn lại (#255): bảng tổng có một dòng mỗi nhóm của cột, dòng trống không thuộc lát nào. Kỳ 2014J là giá trị của cột chiều nên vào filters. Nguyên nhân cài sẵn: Scotland 52,9%, vùng kế tiếp 40,4%."
+  },
+  {
+    "id": "ou-w03",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ bỏ học môn CCC cao hơn môn AAA?",
+    "variants": [
+      "tai sao mon CCC co ty le bo hoc cao hon mon AAA",
+      "Môn CCC bỏ học theo tỷ lệ nhiều hơn AAA, nguyên nhân là gì?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"code_module\" = 'AAA' OR \"code_module\" = 'CCC') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE."
+  },
+  {
+    "id": "ou-w04",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ trượt ở vùng Wales cao hơn South Region?",
+    "variants": [
+      "tai sao ty le truot o Wales cao hon South Region",
+      "Wales có tỷ lệ sinh viên trượt cao hơn South Region, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"region\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Fail' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"region\" = 'South Region' OR \"region\" = 'Wales') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE."
+  },
+  {
+    "id": "ou-w05",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ bỏ học của sinh viên không có bằng cấp chính thức cao hơn sinh viên có bằng đại học?",
+    "variants": [
+      "tai sao sinh vien No Formal quals bo hoc (ty le) cao hon HE Qualification",
+      "Nhóm No Formal quals có tỷ lệ bỏ học cao hơn nhóm HE Qualification, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"highest_education\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"highest_education\" = 'HE Qualification' OR \"highest_education\" = 'No Formal quals') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Không có bằng cấp chính thức là No Formal quals, bằng đại học là HE Qualification."
+  },
+  {
+    "id": "ou-w06",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ trượt của nhóm imd_band 0-10% cao hơn nhóm 90-100%?",
+    "variants": [
+      "tai sao ty le truot nhom 0-10% cao hon nhom 90-100%",
+      "Sinh viên ở nơi thiếu thốn nhất (0-10%) trượt theo tỷ lệ nhiều hơn nhóm 90-100%, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"imd_band\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Fail' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"imd_band\" = '90-100%' OR \"imd_band\" = '0-10%') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE."
+  },
+  {
+    "id": "ou-w07",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ đạt loại giỏi của môn GGG cao hơn môn AAA?",
+    "variants": [
+      "tai sao ty le Distinction mon GGG cao hon AAA",
+      "Môn GGG có tỷ lệ sinh viên đạt Distinction cao hơn AAA là do đâu?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Distinction' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"code_module\" = 'AAA' OR \"code_module\" = 'GGG') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Loại giỏi là Distinction."
+  },
+  {
+    "id": "ou-w08",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ bỏ học của nhóm tuổi 0-35 cao hơn nhóm 35-55?",
+    "variants": [
+      "tai sao nhom tuoi 0-35 bo hoc (ty le) cao hon nhom 35-55",
+      "Sinh viên 0-35 tuổi có tỷ lệ bỏ học cao hơn nhóm 35-55, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"age_band\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"age_band\" = '35-55' OR \"age_band\" = '0-35') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE."
+  },
+  {
+    "id": "ou-w09",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao môn CCC có tỷ lệ bỏ học cao hơn các môn còn lại?",
+    "variants": [
+      "tai sao mon CCC bo hoc (ty le) cao hon cac mon khac",
+      "So với những môn khác, tỷ lệ bỏ học của CCC cao hơn, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"code_module\" <> 'CCC' OR \"code_module\" = 'CCC') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Một nhóm so với các nhóm còn lại (#255): bảng tổng có một dòng mỗi nhóm của cột, dòng trống không thuộc lát nào."
+  },
+  {
+    "id": "ou-w10",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao sinh viên không có bằng cấp chính thức có tỷ lệ bỏ học cao hơn các nhóm trình độ khác?",
+    "variants": [
+      "tai sao nhom No Formal quals co ty le bo hoc cao hon cac nhom trinh do con lai",
+      "Nhóm No Formal quals bỏ học theo tỷ lệ nhiều hơn mọi nhóm trình độ khác, do đâu?"
+    ],
+    "expected_sql": [
+      "SELECT \"highest_education\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"highest_education\" <> 'No Formal quals' OR \"highest_education\" = 'No Formal quals') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Một nhóm so với các nhóm còn lại (#255): bảng tổng có một dòng mỗi nhóm của cột, dòng trống không thuộc lát nào."
+  },
+  {
+    "id": "ou-w11",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ trượt của vùng Wales cao hơn các vùng khác?",
+    "variants": [
+      "tai sao Wales truot (ty le) nhieu hon cac vung con lai",
+      "Wales có tỷ lệ trượt cao nhất so với các vùng còn lại, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"region\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Fail' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"region\" <> 'Wales' OR \"region\" = 'Wales') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Một nhóm so với các nhóm còn lại (#255): bảng tổng có một dòng mỗi nhóm của cột, dòng trống không thuộc lát nào."
+  },
+  {
+    "id": "ou-w12",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Trong môn FFF, vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2013J?",
+    "variants": [
+      "mon FFF tai sao ty le bo hoc ky 2014J cao hon 2013J",
+      "Với môn FFF, kỳ 2014J có tỷ lệ bỏ học cao hơn kỳ 2013J, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE \"code_module\" = 'FFF' AND (\"code_presentation\" = '2013J' OR \"code_presentation\" = '2014J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Bộ lọc môn FFF."
+  },
+  {
+    "id": "ou-w13",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Ở vùng Scotland, vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B?",
+    "variants": [
+      "o scotland tai sao ty le bo hoc ky 2014J cao hon 2014B",
+      "Riêng Scotland, kỳ 2014J bỏ học theo tỷ lệ nhiều hơn 2014B, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE \"region\" = 'Scotland' AND (\"code_presentation\" = '2014B' OR \"code_presentation\" = '2014J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Bộ lọc vùng Scotland; trên nguyên nhân cài sẵn, phân rã phải chỉ ra nhóm tuổi 0-35."
+  },
+  {
+    "id": "ou-w14",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Với sinh viên đăng ký từ 120 tín chỉ trở lên, vì sao tỷ lệ bỏ học môn DDD cao hơn môn BBB?",
+    "variants": [
+      "sinh vien tu 120 tin chi tro len, tai sao ty le bo hoc mon DDD cao hon BBB",
+      "Nhóm học từ 120 tín chỉ: môn DDD có tỷ lệ bỏ học cao hơn BBB, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE \"studied_credits\" >= 120 AND (\"code_module\" = 'BBB' OR \"code_module\" = 'DDD') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Bộ lọc khoảng (#255): studied_credits >= 120."
+  },
+  {
+    "id": "ou-w15",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao số sinh viên bỏ học kỳ 2014J nhiều hơn kỳ 2013J?",
+    "variants": [
+      "tai sao so sinh vien bo hoc ky 2014J nhieu hon ky 2013J",
+      "Kỳ 2014J có nhiều sinh viên bỏ học hơn kỳ 2013J, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", COUNT(*) AS measure FROM students WHERE \"final_result\" = 'Withdrawn' AND (\"code_presentation\" = '2013J' OR \"code_presentation\" = '2014J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Độ đo đếm dòng (COUNT(*)) với bộ lọc final_result = Withdrawn; mỗi dòng students là một sinh viên trong một học phần."
+  },
+  {
+    "id": "ou-w16",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao số sinh viên học môn FFF kỳ 2014J nhiều hơn kỳ 2013J?",
+    "variants": [
+      "tai sao mon FFF ky 2014J co nhieu sinh vien hon 2013J",
+      "Môn FFF: kỳ 2014J đông sinh viên hơn kỳ 2013J, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", COUNT(*) AS measure FROM students WHERE \"code_module\" = 'FFF' AND (\"code_presentation\" = '2013J' OR \"code_presentation\" = '2014J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Độ đo đếm dòng, bộ lọc môn FFF."
+  },
+  {
+    "id": "ou-w17",
+    "kind": "why_ratio",
+    "dataset": "student_assessments",
+    "question": "Vì sao điểm trung bình môn GGG cao hơn môn AAA?",
+    "variants": [
+      "tai sao diem trung binh mon GGG cao hon mon AAA",
+      "Môn GGG có điểm trung bình cao hơn AAA là do đâu?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(SUM(CAST(\"score\" AS DECIMAL(18, 2))) / NULLIF(COUNT(\"score\"), 0), 4) AS measure FROM student_assessments WHERE (\"code_module\" = 'AAA' OR \"code_module\" = 'GGG') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Chỉ số mẫu Điểm trung bình AVG(score) của student_assessments, code dựng thành SUM / COUNT."
+  },
+  {
+    "id": "ou-w18",
+    "kind": "why_ratio",
+    "dataset": "student_assessments",
+    "question": "Vì sao điểm trung bình kỳ 2014J thấp hơn kỳ 2013J?",
+    "variants": [
+      "tai sao diem trung binh ky 2014J thap hon ky 2013J",
+      "Kỳ 2014J điểm trung bình kém hơn kỳ 2013J, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", ROUND(SUM(CAST(\"score\" AS DECIMAL(18, 2))) / NULLIF(COUNT(\"score\"), 0), 4) AS measure FROM student_assessments WHERE (\"code_presentation\" = '2013J' OR \"code_presentation\" = '2014J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Chỉ số mẫu Điểm trung bình AVG(score) của student_assessments, code dựng thành SUM / COUNT."
+  },
+  {
+    "id": "ou-w19",
+    "kind": "why_ratio",
+    "dataset": "student_assessments",
+    "question": "Vì sao môn EEE có điểm trung bình cao hơn các môn khác?",
+    "variants": [
+      "tai sao mon EEE co diem trung binh cao hon cac mon con lai",
+      "So với các môn còn lại, điểm trung bình của EEE cao hơn, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(SUM(CAST(\"score\" AS DECIMAL(18, 2))) / NULLIF(COUNT(\"score\"), 0), 4) AS measure FROM student_assessments WHERE (\"code_module\" <> 'EEE' OR \"code_module\" = 'EEE') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Chỉ số mẫu Điểm trung bình AVG(score) của student_assessments, code dựng thành SUM / COUNT. Một nhóm so với các nhóm còn lại (#255): bảng tổng có một dòng mỗi nhóm của cột, dòng trống không thuộc lát nào."
+  },
+  {
+    "id": "ou-w20",
+    "kind": "why_ratio",
+    "dataset": "student_assessments",
+    "question": "Trong môn DDD, vì sao điểm trung bình kỳ 2014J cao hơn kỳ 2013J?",
+    "variants": [
+      "mon DDD tai sao diem trung binh ky 2014J cao hon 2013J",
+      "Riêng môn DDD, kỳ 2014J điểm trung bình cao hơn 2013J, do đâu?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", ROUND(SUM(CAST(\"score\" AS DECIMAL(18, 2))) / NULLIF(COUNT(\"score\"), 0), 4) AS measure FROM student_assessments WHERE \"code_module\" = 'DDD' AND (\"code_presentation\" = '2013J' OR \"code_presentation\" = '2014J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Chỉ số mẫu Điểm trung bình AVG(score) của student_assessments, code dựng thành SUM / COUNT. Bộ lọc môn DDD; ngược chiều với cả bộ (cả bộ 2014J thấp hơn 2013J, xem ou-w18)."
+  },
+  {
+    "id": "ou-w21",
+    "kind": "why_no_keyword",
+    "dataset": "students",
+    "question": "Điều gì khiến tỷ lệ bỏ học môn DDD cao hơn môn EEE?",
+    "variants": [
+      "dieu gi khien ty le bo hoc mon DDD cao hon EEE",
+      "Yếu tố nào làm môn DDD có tỷ lệ bỏ học cao hơn môn EEE?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"code_module\" = 'EEE' OR \"code_module\" = 'DDD') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE."
+  },
+  {
+    "id": "ou-w22",
+    "kind": "why_no_keyword",
+    "dataset": "student_assessments",
+    "question": "Yếu tố nào làm điểm trung bình môn CCC thấp hơn môn FFF?",
+    "variants": [
+      "yeu to nao lam diem trung binh mon CCC thap hon FFF",
+      "Cái gì kéo điểm trung bình môn CCC xuống thấp hơn môn FFF?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(SUM(CAST(\"score\" AS DECIMAL(18, 2))) / NULLIF(COUNT(\"score\"), 0), 4) AS measure FROM student_assessments WHERE (\"code_module\" = 'FFF' OR \"code_module\" = 'CCC') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Chỉ số mẫu Điểm trung bình AVG(score) của student_assessments, code dựng thành SUM / COUNT."
+  },
+  {
+    "id": "ou-w23",
+    "kind": "why_no_keyword",
+    "dataset": "students",
+    "question": "Cái gì làm tỷ lệ trượt của nhóm imd_band 0-10% cao hơn nhóm 50-60%?",
+    "variants": [
+      "cai gi lam ty le truot nhom 0-10% cao hon nhom 50-60%",
+      "Điều gì khiến nhóm 0-10% trượt theo tỷ lệ nhiều hơn nhóm 50-60%?"
+    ],
+    "expected_sql": [
+      "SELECT \"imd_band\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Fail' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"imd_band\" = '50-60%' OR \"imd_band\" = '0-10%') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE."
+  },
+  {
+    "id": "ou-w24",
+    "kind": "why_no_keyword",
+    "dataset": "students",
+    "question": "Tỷ lệ bỏ học của London Region cao hơn Ireland là do yếu tố nào?",
+    "variants": [
+      "ty le bo hoc London Region cao hon Ireland la do yeu to nao",
+      "Điều gì làm London Region có tỷ lệ bỏ học cao hơn Ireland?"
+    ],
+    "expected_sql": [
+      "SELECT \"region\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"region\" = 'Ireland' OR \"region\" = 'London Region') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE."
+  },
+  {
+    "id": "ou-w25",
+    "kind": "why_false_premise",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ bỏ học kỳ 2014J thấp hơn kỳ 2014B?",
+    "variants": [
+      "tai sao ty le bo hoc ky 2014J thap hon ky 2014B",
+      "Kỳ 2014J có tỷ lệ bỏ học thấp hơn 2014B, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Withdrawn' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"code_presentation\" = '2014B' OR \"code_presentation\" = '2014J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Tiền đề sai: 2014J cao hơn 2014B, hệ thống phải cảnh báo premise_mismatch (bộ chấm hiện chưa kiểm cảnh báo)."
+  },
+  {
+    "id": "ou-w26",
+    "kind": "why_false_premise",
+    "dataset": "student_assessments",
+    "question": "Vì sao điểm trung bình môn GGG thấp hơn môn CCC?",
+    "variants": [
+      "tai sao diem trung binh mon GGG thap hon mon CCC",
+      "Môn GGG điểm trung bình kém hơn CCC, do đâu?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_module\", ROUND(SUM(CAST(\"score\" AS DECIMAL(18, 2))) / NULLIF(COUNT(\"score\"), 0), 4) AS measure FROM student_assessments WHERE (\"code_module\" = 'CCC' OR \"code_module\" = 'GGG') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Chỉ số mẫu Điểm trung bình AVG(score) của student_assessments, code dựng thành SUM / COUNT. Tiền đề sai: GGG cao hơn CCC."
+  },
+  {
+    "id": "ou-w27",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ trượt của sinh viên nam cao hơn sinh viên nữ?",
+    "variants": [
+      "tai sao sinh vien nam truot (ty le) nhieu hon sinh vien nu",
+      "Nam có tỷ lệ trượt cao hơn nữ, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"gender\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Fail' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"gender\" = 'F' OR \"gender\" = 'M') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Nam là M, nữ là F."
+  },
+  {
+    "id": "ou-w28",
+    "kind": "why_groups",
+    "dataset": "students",
+    "question": "Vì sao tỷ lệ đạt loại Pass của kỳ 2013J cao hơn kỳ 2014J?",
+    "variants": [
+      "tai sao ty le Pass ky 2013J cao hon ky 2014J",
+      "Kỳ 2013J có tỷ lệ sinh viên đạt Pass cao hơn kỳ 2014J, vì sao?"
+    ],
+    "expected_sql": [
+      "SELECT \"code_presentation\", ROUND(COUNT(CASE WHEN \"final_result\" = 'Pass' THEN 1 END) / NULLIF(COUNT(*), 0), 4) AS measure FROM students WHERE (\"code_presentation\" = '2014J' OR \"code_presentation\" = '2013J') GROUP BY 1 ORDER BY 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng tổng của đường \"tại sao\": tỷ lệ là share của final_result (#244), làm tròn 4 chữ số như TOTAL_RATE_SCALE. Share chỉ nhận một giá trị, nên câu hỏi nói rõ loại Pass (không gồm Distinction)."
+  },
+  {
+    "id": "ou-p01",
+    "kind": "plain_join_trap",
+    "dataset": "student_assessments",
+    "question": "Tổng số tín chỉ sinh viên đăng ký theo vùng",
+    "variants": [
+      "tong so tin chi dang ky cua sinh vien theo vung",
+      "Mỗi vùng sinh viên đăng ký tổng cộng bao nhiêu tín chỉ?"
+    ],
+    "expected_sql": [
+      "SELECT region, SUM(studied_credits) AS credits FROM students GROUP BY region"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Hỏi trên student_assessments: nối thẳng sang students rồi cộng studied_credits thì mỗi sinh viên bị cộng một lần cho mỗi bài nộp. Đáp án cộng trên students."
+  },
+  {
+    "id": "ou-p02",
+    "kind": "plain_join_trap",
+    "dataset": "student_assessments",
+    "question": "Số sinh viên đã nộp bài theo loại bài đánh giá",
+    "variants": [
+      "so sinh vien da nop bai theo loai bai danh gia",
+      "Mỗi loại bài đánh giá có bao nhiêu sinh viên nộp?"
+    ],
+    "expected_sql": [
+      "SELECT a.assessment_type, COUNT(DISTINCT sa.id_student) AS students FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment GROUP BY a.assessment_type",
+      "SELECT assessment_type, COUNT(*) AS students FROM (SELECT DISTINCT a.assessment_type, sa.code_module, sa.code_presentation, sa.id_student FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment) t GROUP BY assessment_type"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Đếm sinh viên khác nhau, không đếm bài nộp. Đáp án 1 đếm mã sinh viên; đáp án 2 đếm sinh viên trong từng học phần."
+  },
+  {
+    "id": "ou-p03",
+    "kind": "plain_join_trap",
+    "dataset": "student_assessments",
+    "question": "Tổng trọng số của các bài đánh giá theo môn",
+    "variants": [
+      "tong trong so cac bai danh gia theo mon",
+      "Mỗi môn các bài đánh giá cộng lại được bao nhiêu trọng số?"
+    ],
+    "expected_sql": [
+      "SELECT code_module, SUM(weight) AS total_weight FROM assessments GROUP BY code_module"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Hỏi trên student_assessments: cộng weight sau khi nối với bài nộp thì mỗi bài bị cộng một lần cho mỗi sinh viên. Đáp án cộng trên assessments."
+  },
+  {
+    "id": "ou-p04",
+    "kind": "plain_join_trap",
+    "dataset": "students",
+    "question": "Số tài liệu học trực tuyến theo môn",
+    "variants": [
+      "so tai lieu hoc truc tuyen theo mon",
+      "Mỗi môn có bao nhiêu tài liệu trên hệ thống VLE?"
+    ],
+    "expected_sql": [
+      "SELECT code_module, COUNT(*) AS materials FROM vle_materials GROUP BY code_module"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Hỏi trên students, vle_materials cách hai bước qua courses: nối qua students thì mỗi tài liệu bị đếm một lần cho mỗi sinh viên."
+  },
+  {
+    "id": "ou-p05",
+    "kind": "plain_top_n_in_group",
+    "dataset": "students",
+    "question": "2 vùng có nhiều sinh viên bỏ học nhất của từng môn",
+    "variants": [
+      "2 vung co nhieu sinh vien bo hoc nhat cua moi mon",
+      "Mỗi môn, hai vùng nào có số sinh viên bỏ học cao nhất?"
+    ],
+    "expected_sql": [
+      "SELECT code_module, region, students FROM (SELECT code_module, region, COUNT(*) AS students, ROW_NUMBER() OVER (PARTITION BY code_module ORDER BY COUNT(*) DESC) AS rk FROM students WHERE final_result = 'Withdrawn' GROUP BY code_module, region) t WHERE rk <= 2"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Đếm dòng bỏ học theo (môn, vùng), lấy hai vùng đầu mỗi môn. Không lấy top 3: môn GGG có hai vùng bằng nhau ở hạng 3 (30 sinh viên)."
+  },
+  {
+    "id": "ou-p06",
+    "kind": "plain_top_n_in_group",
+    "dataset": "students",
+    "question": "Trong mỗi kỳ, môn nào có tỷ lệ bỏ học cao nhất?",
+    "variants": [
+      "moi ky mon nao co ty le bo hoc cao nhat",
+      "Kỳ nào thì môn nào bỏ học theo tỷ lệ nhiều nhất?"
+    ],
+    "expected_sql": [
+      "SELECT code_presentation, code_module, rate FROM (SELECT code_presentation, code_module, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate, ROW_NUMBER() OVER (PARTITION BY code_presentation ORDER BY AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) DESC) AS rk FROM students GROUP BY code_presentation, code_module) t WHERE rk = 1",
+      "SELECT code_presentation, code_module, rate * 100 AS rate FROM (SELECT code_presentation, code_module, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate, ROW_NUMBER() OVER (PARTITION BY code_presentation ORDER BY AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) DESC) AS rk FROM students GROUP BY code_presentation, code_module) t WHERE rk = 1"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Một dòng mỗi kỳ; tỷ lệ là phân số hay phần trăm."
+  },
+  {
+    "id": "ou-p07",
+    "kind": "plain_top_n_in_group",
+    "dataset": "student_assessments",
+    "question": "2 bài đánh giá có điểm trung bình thấp nhất của mỗi môn",
+    "variants": [
+      "2 bai danh gia co diem trung binh thap nhat cua moi mon",
+      "Mỗi môn, hai bài nào có điểm trung bình thấp nhất?"
+    ],
+    "expected_sql": [
+      "SELECT code_module, id_assessment, avg_score FROM (SELECT code_module, id_assessment, AVG(score) AS avg_score, ROW_NUMBER() OVER (PARTITION BY code_module ORDER BY AVG(score)) AS rk FROM student_assessments GROUP BY code_module, id_assessment) t WHERE rk <= 2"
+    ],
+    "required_columns": [
+      0,
+      1,
+      2
+    ],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bài đánh giá theo id_assessment; chỉ tính bài có người nộp."
+  },
+  {
+    "id": "ou-p08",
+    "kind": "plain_no_diacritics",
+    "dataset": "students",
+    "question": "ty le bo hoc cua mon ccc",
+    "variants": [
+      "ti le bo hoc mon ccc la bao nhieu",
+      "mon ccc bo hoc bao nhieu phan tram"
+    ],
+    "expected_sql": [
+      "SELECT AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate FROM students WHERE code_module = 'CCC'",
+      "SELECT AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) * 100 AS rate FROM students WHERE code_module = 'CCC'",
+      "SELECT code_module, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate FROM students WHERE code_module = 'CCC' GROUP BY code_module",
+      "SELECT code_module, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) * 100 AS rate FROM students WHERE code_module = 'CCC' GROUP BY code_module"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Giá trị gõ thường 'ccc' phải khớp 'CCC'. Phân số hay phần trăm, có hay không cột môn."
+  },
+  {
+    "id": "ou-p09",
+    "kind": "plain_no_diacritics",
+    "dataset": "students",
+    "question": "so sinh vien bi truot o vung scotland",
+    "variants": [
+      "co bao nhieu sinh vien truot o scotland",
+      "scotland bao nhieu sv bi fail"
+    ],
+    "expected_sql": [
+      "SELECT COUNT(*) AS students FROM students WHERE region = 'Scotland' AND final_result = 'Fail'",
+      "SELECT COUNT(DISTINCT id_student) AS students FROM students WHERE region = 'Scotland' AND final_result = 'Fail'"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Trượt là Fail. Đếm dòng (sinh viên trong học phần) hay mã sinh viên khác nhau."
+  },
+  {
+    "id": "ou-p10",
+    "kind": "plain_no_diacritics",
+    "dataset": "student_assessments",
+    "question": "diem trung binh bai thi exam",
+    "variants": [
+      "diem trung binh cua cac bai thi cuoi ky",
+      "bai exam trung binh duoc bao nhieu diem"
+    ],
+    "expected_sql": [
+      "SELECT AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment WHERE a.assessment_type = 'Exam'"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bài thi cuối kỳ là assessment_type = Exam, ở bảng assessments."
+  },
+  {
+    "id": "ou-p11",
+    "kind": "plain_no_diacritics",
+    "dataset": "students",
+    "question": "sinh vien nu khong co bang cap chinh thuc dat loai gioi bao nhieu nguoi",
+    "variants": [
+      "bao nhieu sinh vien nu no formal quals dat distinction",
+      "so sv nu khong bang cap dat gioi"
+    ],
+    "expected_sql": [
+      "SELECT COUNT(*) AS students FROM students WHERE gender = 'F' AND highest_education = 'No Formal quals' AND final_result = 'Distinction'",
+      "SELECT COUNT(DISTINCT id_student) AS students FROM students WHERE gender = 'F' AND highest_education = 'No Formal quals' AND final_result = 'Distinction'"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Nữ là F, không có bằng cấp chính thức là No Formal quals, loại giỏi là Distinction."
+  },
+  {
+    "id": "ou-p12",
+    "kind": "plain_same_period",
+    "dataset": "students",
+    "question": "Số sinh viên bỏ học kỳ 2014J so với kỳ 2013J theo từng môn",
+    "variants": [
+      "so sinh vien bo hoc ky 2014J so voi 2013J theo tung mon",
+      "Mỗi môn, kỳ 2014J và 2013J có bao nhiêu sinh viên bỏ học?"
+    ],
+    "expected_sql": [
+      "SELECT code_module, COUNT(CASE WHEN code_presentation = '2014J' THEN 1 END) AS y2014j, COUNT(CASE WHEN code_presentation = '2013J' THEN 1 END) AS y2013j FROM students WHERE final_result = 'Withdrawn' AND code_presentation IN ('2013J', '2014J') GROUP BY code_module",
+      "SELECT code_module, COUNT(CASE WHEN code_presentation = '2013J' THEN 1 END) AS y2013j, COUNT(CASE WHEN code_presentation = '2014J' THEN 1 END) AS y2014j FROM students WHERE final_result = 'Withdrawn' AND code_presentation IN ('2013J', '2014J') GROUP BY code_module",
+      "SELECT code_module, code_presentation, COUNT(*) AS students FROM students WHERE final_result = 'Withdrawn' AND code_presentation IN ('2013J', '2014J') GROUP BY code_module, code_presentation"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Bảng ngang (một cột mỗi kỳ, hai thứ tự cột) hay bảng dọc (môn, kỳ, số). Môn chỉ mở một trong hai kỳ thì bảng ngang có số 0, bảng dọc thiếu dòng."
+  },
+  {
+    "id": "ou-p13",
+    "kind": "plain_same_period",
+    "dataset": "students",
+    "question": "Tỷ lệ đạt (Pass hoặc Distinction) kỳ 2014B so với cùng kỳ năm trước",
+    "variants": [
+      "ty le dat ky 2014B so voi cung ky nam truoc",
+      "Kỳ 2014B tỷ lệ đạt thế nào so với kỳ B năm trước?"
+    ],
+    "expected_sql": [
+      "SELECT AVG(CASE WHEN code_presentation = '2014B' THEN CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END END) AS rate_2014b, AVG(CASE WHEN code_presentation = '2013B' THEN CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END END) AS rate_2013b FROM students",
+      "SELECT AVG(CASE WHEN code_presentation = '2013B' THEN CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END END) AS rate_2013b, AVG(CASE WHEN code_presentation = '2014B' THEN CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END END) AS rate_2014b FROM students",
+      "SELECT code_presentation, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) AS rate FROM students WHERE code_presentation IN ('2013B', '2014B') GROUP BY code_presentation",
+      "SELECT code_presentation, AVG(CASE WHEN final_result IN ('Pass', 'Distinction') THEN 1.0 ELSE 0.0 END) * 100 AS rate FROM students WHERE code_presentation IN ('2013B', '2014B') GROUP BY code_presentation"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Cùng kỳ năm trước của 2014B là 2013B. Bảng ngang (hai thứ tự cột) hay bảng dọc, phân số hay phần trăm."
+  },
+  {
+    "id": "ou-p14",
+    "kind": "plain_simple",
+    "dataset": "students",
+    "question": "Tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B bao nhiêu?",
+    "variants": [
+      "ty le bo hoc ky 2014J cao hon 2014B bao nhieu",
+      "Kỳ 2014J bỏ học nhiều hơn 2014B mấy phần trăm (theo tỷ lệ)?"
+    ],
+    "expected_sql": [
+      "SELECT AVG(CASE WHEN code_presentation = '2014J' THEN CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END END) - AVG(CASE WHEN code_presentation = '2014B' THEN CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END END) AS diff FROM students",
+      "SELECT (AVG(CASE WHEN code_presentation = '2014J' THEN CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END END) - AVG(CASE WHEN code_presentation = '2014B' THEN CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END END)) * 100 AS diff FROM students",
+      "SELECT AVG(CASE WHEN code_presentation = '2014J' THEN CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END END) AS rate_2014j, AVG(CASE WHEN code_presentation = '2014B' THEN CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END END) AS rate_2014b, AVG(CASE WHEN code_presentation = '2014J' THEN CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END END) - AVG(CASE WHEN code_presentation = '2014B' THEN CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END END) AS diff FROM students"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Câu thường trông như câu \"tại sao\" (có \"cao hơn\" nhưng chỉ hỏi chênh lệch): phải đi đường câu thường. Chênh lệch phân số, điểm phần trăm, hoặc kèm hai tỷ lệ."
+  },
+  {
+    "id": "ou-p15",
+    "kind": "plain_simple",
+    "dataset": "student_assessments",
+    "question": "Điểm trung bình môn GGG cao hơn môn AAA bao nhiêu điểm?",
+    "variants": [
+      "diem trung binh mon GGG cao hon AAA bao nhieu",
+      "GGG hơn AAA mấy điểm trung bình?"
+    ],
+    "expected_sql": [
+      "SELECT AVG(CASE WHEN code_module = 'GGG' THEN score END) - AVG(CASE WHEN code_module = 'AAA' THEN score END) AS diff FROM student_assessments",
+      "SELECT AVG(CASE WHEN code_module = 'GGG' THEN score END) AS ggg, AVG(CASE WHEN code_module = 'AAA' THEN score END) AS aaa, AVG(CASE WHEN code_module = 'GGG' THEN score END) - AVG(CASE WHEN code_module = 'AAA' THEN score END) AS diff FROM student_assessments"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Câu thường trông như câu \"tại sao\": chỉ hỏi chênh lệch."
+  },
+  {
+    "id": "ou-p16",
+    "kind": "plain_simple",
+    "dataset": "registrations",
+    "question": "Ngày đăng ký trung bình (so với ngày bắt đầu học phần) theo kết quả cuối khóa",
+    "variants": [
+      "ngay dang ky trung binh theo ket qua cuoi khoa",
+      "Sinh viên mỗi loại kết quả trung bình đăng ký trước ngày bắt đầu bao nhiêu ngày?"
+    ],
+    "expected_sql": [
+      "SELECT s.final_result, AVG(r.date_registration) AS avg_day FROM registrations r JOIN students s ON r.code_module = s.code_module AND r.code_presentation = s.code_presentation AND r.id_student = s.id_student GROUP BY s.final_result",
+      "SELECT s.final_result, -AVG(r.date_registration) AS avg_days_before FROM registrations r JOIN students s ON r.code_module = s.code_module AND r.code_presentation = s.code_presentation AND r.id_student = s.id_student GROUP BY s.final_result"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "registrations nối một-một với students. Số ngày âm là đăng ký trước; đáp án 2 đổi dấu cho cách hỏi thứ hai."
+  },
+  {
+    "id": "ou-p17",
+    "kind": "plain_simple",
+    "dataset": "registrations",
+    "question": "Tỷ lệ sinh viên hủy đăng ký theo môn",
+    "variants": [
+      "ty le sinh vien huy dang ky theo mon",
+      "Mỗi môn có bao nhiêu phần trăm sinh viên hủy đăng ký?"
+    ],
+    "expected_sql": [
+      "SELECT code_module, AVG(CASE WHEN date_unregistration IS NOT NULL THEN 1.0 ELSE 0.0 END) AS rate FROM registrations GROUP BY code_module",
+      "SELECT code_module, AVG(CASE WHEN date_unregistration IS NOT NULL THEN 1.0 ELSE 0.0 END) * 100 AS rate FROM registrations GROUP BY code_module"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Hủy đăng ký là date_unregistration có giá trị. Phân số hay phần trăm."
+  },
+  {
+    "id": "ou-p18",
+    "kind": "plain_simple",
+    "dataset": "student_assessments",
+    "question": "Điểm trung bình bài TMA theo trình độ học vấn",
+    "variants": [
+      "diem trung binh bai TMA theo trinh do hoc van",
+      "Mỗi trình độ học vấn có điểm TMA trung bình bao nhiêu?"
+    ],
+    "expected_sql": [
+      "SELECT s.highest_education, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student WHERE a.assessment_type = 'TMA' GROUP BY s.highest_education"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Nối ba bảng: loại bài ở assessments, trình độ ở students."
+  },
+  {
+    "id": "ou-p19",
+    "kind": "plain_simple",
+    "dataset": "students",
+    "question": "Tỷ lệ bỏ học theo độ dài học phần",
+    "variants": [
+      "ty le bo hoc theo do dai hoc phan",
+      "Học phần dài bao nhiêu ngày thì tỷ lệ bỏ học bao nhiêu?"
+    ],
+    "expected_sql": [
+      "SELECT c.module_presentation_length, AVG(CASE WHEN s.final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS rate FROM students s JOIN courses c ON s.code_module = c.code_module AND s.code_presentation = c.code_presentation GROUP BY c.module_presentation_length",
+      "SELECT c.module_presentation_length, AVG(CASE WHEN s.final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) * 100 AS rate FROM students s JOIN courses c ON s.code_module = c.code_module AND s.code_presentation = c.code_presentation GROUP BY c.module_presentation_length"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Độ dài ở courses, nối nhiều-một từ students: tỷ lệ tính trên dòng students nên không có cộng lặp."
+  },
+  {
+    "id": "ou-p20",
+    "kind": "plain_simple",
+    "dataset": "vle_materials",
+    "question": "Số tài liệu theo loại hoạt động của môn FFF kỳ 2014J",
+    "variants": [
+      "so tai lieu theo loai hoat dong mon FFF ky 2014J",
+      "Môn FFF kỳ 2014J có bao nhiêu tài liệu mỗi loại hoạt động?"
+    ],
+    "expected_sql": [
+      "SELECT activity_type, COUNT(*) AS materials FROM vle_materials WHERE code_module = 'FFF' AND code_presentation = '2014J' GROUP BY activity_type"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Một bảng, hai bộ lọc."
+  },
+  {
+    "id": "ou-p21",
+    "kind": "plain_simple",
+    "dataset": "student_assessments",
+    "question": "Tỷ lệ bài nộp bị trượt (dưới 40 điểm) theo loại bài đánh giá",
+    "variants": [
+      "ty le bai nop bi truot duoi 40 diem theo loai bai",
+      "Mỗi loại bài có bao nhiêu phần trăm bài dưới 40 điểm?"
+    ],
+    "expected_sql": [
+      "SELECT a.assessment_type, AVG(CASE WHEN sa.score < 40 THEN 1.0 WHEN sa.score IS NOT NULL THEN 0.0 END) AS rate FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment GROUP BY a.assessment_type",
+      "SELECT a.assessment_type, AVG(CASE WHEN sa.score < 40 THEN 1.0 ELSE 0.0 END) AS rate FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment GROUP BY a.assessment_type",
+      "SELECT a.assessment_type, AVG(CASE WHEN sa.score < 40 THEN 1.0 WHEN sa.score IS NOT NULL THEN 0.0 END) * 100 AS rate FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment GROUP BY a.assessment_type"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Mẫu số là bài có điểm (đáp án 1, 3) hay mọi bài nộp kể cả điểm trống (đáp án 2)."
+  },
+  {
+    "id": "ou-p22",
+    "kind": "plain_simple",
+    "dataset": "students",
+    "question": "Số sinh viên học lại theo môn",
+    "variants": [
+      "so sinh vien hoc lai theo mon",
+      "Mỗi môn có bao nhiêu sinh viên đã học môn đó trước đây ít nhất một lần?"
+    ],
+    "expected_sql": [
+      "SELECT code_module, COUNT(*) AS students FROM students WHERE num_of_prev_attempts > 0 GROUP BY code_module",
+      "SELECT code_module, COUNT(DISTINCT id_student) AS students FROM students WHERE num_of_prev_attempts > 0 GROUP BY code_module"
+    ],
+    "required_columns": [],
+    "ordered": false,
+    "author": "nlminuong",
+    "reviewers": [],
+    "note": "Học lại là num_of_prev_attempts > 0. Đếm dòng hay mã sinh viên khác nhau."
+  }
+]
