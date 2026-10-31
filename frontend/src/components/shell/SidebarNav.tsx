@@ -6,8 +6,11 @@ workspace đang mở với mục của quản trị hệ thống.
 Mục đang mở có vạch hổ phách bên trái và icon hổ phách: màu nhấn duy nhất của giao diện, nhìn là biết đang ở đâu; trình
 đọc màn hình vẫn nghe "trang hiện tại" qua aria-current, không chỉ dựa vào màu.
 Thanh bên thu gọn (compact): mỗi mục chỉ còn icon, tên mục ở aria-label và title (chú thích khi rê chuột); nhãn nhóm
-thành một vạch ngăn. */
+thành một vạch ngăn.
+leading chèn một phần đứng đầu danh sách, ngay dưới nhãn nhóm đầu tiên, ví dụ nút menu lịch sử trò chuyện
+(SidebarContent.tsx). */
 
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { LinkComponent, NavItem } from './types'
 
@@ -17,9 +20,11 @@ type Props = {
   /** Gọi khi bấm một mục; trên điện thoại dùng để đóng ngăn kéo. */
   onNavigate?: () => void
   compact?: boolean
+  /** Phần đứng đầu danh sách, ngay dưới nhãn nhóm đầu tiên. */
+  leading?: ReactNode
 }
 
-export function SidebarNav({ items, link: Link, onNavigate, compact = false }: Props) {
+export function SidebarNav({ items, link: Link, onNavigate, compact = false, leading }: Props) {
   // Vùng điều hướng rỗng vẫn được trình đọc màn hình liệt kê như một landmark; không có mục thì không vẽ.
   if (items.length === 0) return null
   return (
@@ -40,6 +45,7 @@ export function SidebarNav({ items, link: Link, onNavigate, compact = false }: P
               {item.section}
             </p>
           )}
+          {index === 0 && leading}
           <Link
             href={item.href}
             aria-current={item.active ? 'page' : undefined}

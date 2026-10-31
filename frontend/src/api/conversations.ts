@@ -6,7 +6,7 @@ useAsk làm mới danh sách (conversationsKey).
 Lượt đã ghi chỉ có câu hỏi, trạng thái, dòng tóm tắt "Đã hiểu là" và SQL đã chạy, không có bảng kết quả: trang hiện
 những gì có và cho hỏi lại, không dựng lại câu trả lời. */
 
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
 import type { components } from './schema'
 
@@ -30,6 +30,31 @@ export function useConversations(ws: string, datasetId: string) {
     queryFn: () =>
       apiGet<Schemas['ConversationListResponse']>(conversationsPath(ws, datasetId)).then((r) => r.conversations),
     enabled: datasetId !== '',
+  })
+}
+
+/** Một cuộc trong danh sách của mọi dataset, kèm dataset của nó. */
+export type WorkspaceConversation = ConversationItem & { datasetId: string; datasetName: string }
+
+/** Cuộc trò chuyện của người gọi trên mọi dataset của workspace, mới trước: mỗi cuộc gắn với một dataset, nên lịch sử
+ * gộp danh sách của từng dataset (cùng khóa conversationsKey, nên hỏi xong làm mới danh sách của dataset đó là đủ).
+ * Backend chưa có route liệt kê theo workspace; số dataset của một workspace nhỏ nên mỗi dataset một lần gọi. */
+export function useWorkspaceConversations(ws: string, datasets: { id: string; name: string }[]) {
+  return useQueries({
+    queries: datasets.map((dataset) => ({
+      queryKey: conversationsKey(ws, dataset.id),
+      queryFn: () =>
+        apiGet<Schemas['ConversationListResponse']>(conversationsPath(ws, dataset.id)).then((r) => r.conversations),
+    })),
+    combine: (results) => ({
+      data: results
+        .flatMap((result, i) =>
+          (result.data ?? []).map((c) => ({ ...c, datasetId: datasets[i].id, datasetName: datasets[i].name })),
+        )
+        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      isPending: results.some((result) => result.isPending),
+      error: results.find((result) => result.error)?.error ?? null,
+    }),
   })
 }
 

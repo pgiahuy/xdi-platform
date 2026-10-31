@@ -112,9 +112,9 @@ lần khi lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (g
 xong hay lập lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu mock không có câu trả lời mẫu; 404 dataset không có;
 502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào.
 
-Câu answered có thẻ "Đã hiểu là", vai trò cột và gợi ý biểu đồ. Câu thường answered có ít nhất một dòng kết quả thì có
-`answer_text`: một đến hai câu tiếng Việt trả lời câu hỏi, do mô hình viết từ tối đa 10 dòng đầu của kết quả (mọi số
-trong câu có nguyên văn trong các dòng đó, không thì backend thay bằng câu khuôn), và `answer_text_by_model` cho biết
+Câu answered có thẻ "Hệ thống đã hiểu là", vai trò cột và gợi ý biểu đồ. Câu thường answered có ít nhất một dòng kết quả
+thì có `answer_text`: một đến hai câu tiếng Việt trả lời câu hỏi, do mô hình viết từ tối đa 10 dòng đầu của kết quả (mọi
+số trong câu có nguyên văn trong các dòng đó, không thì backend thay bằng câu khuôn), và `answer_text_by_model` cho biết
 câu đó do mô hình viết (`true`) hay theo khuôn (`false`). Hai trường null với câu "tại sao" (đã có
 `explanation.summary`) và câu không answered. Bước này hiện trong `steps` dưới tên `narrate`. `ANSWER_TEXT=false` thì
 luôn là câu khuôn, không gọi mô hình.
@@ -164,9 +164,9 @@ tới nó (không chứa tên cột, giá trị, năm trong đoạn SQL hay tên
 
 `GET /api/workspaces/{ws}/datasets/{id}/conversations` liệt kê tối đa 50 cuộc mới nhất của người gọi trên dataset, bỏ
 cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả cuộc đó kèm tối đa 200 lượt gần nhất theo thứ tự
-hỏi: `query_id`, câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Đã hiểu là" dạng chữ). Bảng kết quả không
-lưu; hỏi lại câu đó để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, admin của workspace cũng không: cuộc của
-người khác, của dataset khác hay id không có đều trả 404.
+hỏi: `query_id`, câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Hệ thống đã hiểu là" dạng chữ). Bảng kết quả
+không lưu; hỏi lại câu đó để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, admin của workspace cũng không: cuộc
+của người khác, của dataset khác hay id không có đều trả 404.
 
 ## Chỉ số và cách gộp
 

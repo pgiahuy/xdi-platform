@@ -2,8 +2,8 @@
 /* components/overview/DataOverview.tsx - nội dung khung "Tổng quan dữ liệu" (#198): dataset có gì trước khi hỏi. Thứ
 tự đọc: tóm tắt (số dòng, khoảng thời gian), phần chưa có (hồ sơ đang lập, lọc theo vai), biểu đồ dựng sẵn
 (OverviewCharts.tsx, độ đo chính theo tháng đứng đầu), các cột theo nhóm (ColumnGroups.tsx), chỉ số đã định nghĩa.
-Trang hỏi và trang Dữ liệu cùng dùng; mỗi trang tự quyết bấm một mục thì làm gì (onPick): trang hỏi điền câu vào ô hỏi,
-trang Dữ liệu mở trang hỏi với câu đó. Không mục nào gửi câu hỏi đi. */
+Trang hỏi và trang Tổng quan dữ liệu cùng dùng; mỗi trang tự quyết bấm một mục thì làm gì (onPick): trang hỏi điền câu
+vào ô hỏi, trang Tổng quan dữ liệu mở trang hỏi với câu đó. Không mục nào gửi câu hỏi đi. */
 
 import type { ReactNode } from 'react'
 import { ColumnGroups } from './ColumnGroups'

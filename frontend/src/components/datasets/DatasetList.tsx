@@ -3,9 +3,9 @@
 Mỗi dataset một dòng xuống hàng được, không dùng bảng: màn 320px không đủ chỗ cho ba cột.
 onAddVersion, onSnapshotAgain và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. Dataset
 chụp từ database ghi bảng nguồn, lần chụp gần nhất, các dataset liên quan theo khóa ngoại, và có nút "Chụp lại" thay
-cho nạp phiên bản mới; xóa dataset có liên quan thì hộp xác nhận báo quan hệ bị xóa theo. onOverview mở khung
-tổng quan dữ liệu của dataset (#198), cho mọi vai. Link Chỉ số (màn chỉ số của dataset) hiện với mọi người khi trang
-truyền metricsHref. */
+cho nạp phiên bản mới; xóa dataset có liên quan thì hộp xác nhận báo quan hệ bị xóa theo. Link Tổng quan (trang Tổng
+quan dữ liệu mở sẵn dataset đó, #198) và link Chỉ số (màn chỉ số của dataset) hiện với mọi người khi trang truyền
+overviewHref, metricsHref. */
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { LinkComponent } from '@/components/shell/types'
@@ -14,7 +14,8 @@ import type { DatasetRow } from './types'
 
 type Props = {
   datasets: DatasetRow[]
-  onOverview?: (dataset: DatasetRow) => void
+  /** Đường dẫn tới trang Tổng quan dữ liệu của dataset; mở bằng component link như metricsHref. */
+  overviewHref?: (dataset: DatasetRow) => string
   onAddVersion?: (dataset: DatasetRow) => void
   onSnapshotAgain?: (dataset: DatasetRow) => void
   snapshotPending?: boolean
@@ -40,8 +41,8 @@ function deleteText(dataset: DatasetRow): string {
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
 export function DatasetList(props: Props) {
-  const { datasets, onOverview, onAddVersion, onSnapshotAgain, snapshotPending, onDelete, deletePending } = props
-  const { metricsHref, link: Link } = props
+  const { datasets, onAddVersion, onSnapshotAgain, snapshotPending, onDelete, deletePending } = props
+  const { overviewHref, metricsHref, link: Link } = props
   return (
     <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {datasets.map((dataset) => (
@@ -72,15 +73,14 @@ export function DatasetList(props: Props) {
               </p>
             )}
           </div>
-          {onOverview && (
-            <Button
-              variant="outline"
-              size="sm"
+          {overviewHref && Link && (
+            <Link
+              href={overviewHref(dataset)}
               aria-label={`Tổng quan dữ liệu của ${dataset.name}`}
-              onClick={() => onOverview(dataset)}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
               Tổng quan
-            </Button>
+            </Link>
           )}
           {metricsHref && Link && (
             <Link

@@ -216,3 +216,25 @@
     @apply font-sans;
     }
 }
+
+/* Thanh cuộn tinh tế hơn mức chung ở trên, cho khung nổi (menu lịch sử trò chuyện): ngón cuộn nhạt, rê chuột vào vùng
+   cuộn thì đậm lên. Firefox và Chrome (từ bản 121) đọc scrollbar-width, scrollbar-color; khối
+   ::-webkit-scrollbar cho trình duyệt còn dùng cách cũ này. Màu lấy từ token nên theo cả chế độ tối. */
+@utility scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent) transparent;
+  &:hover {
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 70%, transparent) transparent;
+  }
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
+  }
+}

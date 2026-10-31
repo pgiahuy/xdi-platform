@@ -38,9 +38,4 @@ src/router.tsx    bảng đường dẫn; trang trong workspace nằm dưới /w
 Đổi API: sửa backend rồi chạy `make openapi` ở gốc repo; lệnh này ghi lại `../openapi.json`, `src/api/examples/ask.json`
 và `src/api/schema.ts` (qua `npm run api:types`). Hook trong `src/api` lấy kiểu từ `schema.ts`, không khai lại.
 
-Trang hỏi dữ liệu khi chạy `npm run dev` có công tắc "Dữ liệu mẫu": trả lời bằng các response mẫu trong
-`src/api/examples/ask.json` và dòng nguồn mẫu (`src/api/drillSamples.ts`) thay vì gọi backend, để làm giao diện khi
-không có mô hình ngôn ngữ hay dataset DataCo. Bản build không có công tắc này và
-không chứa file mẫu.
-
 Quy tắc chung của dự án ở [AGENTS.md](../AGENTS.md).

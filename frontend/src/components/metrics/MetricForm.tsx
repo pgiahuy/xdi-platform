@@ -90,7 +90,7 @@ export function MetricForm({ columns, editing, pending, error: serverError, onSu
       <FormField
         id={fieldIds.description}
         label="Mô tả"
-        hint="Hiện ở dòng Đo của thẻ Đã hiểu là và gửi kèm cho mô hình."
+        hint="Hiện ở dòng Đo của thẻ Hệ thống đã hiểu là và gửi kèm cho mô hình."
         error={errorOf('description')}
         value={draft.description}
         onChange={(e) => set('description')(e.target.value)}

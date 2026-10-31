@@ -57,11 +57,6 @@ function RowsBody({ rows, onPageChange }: BodyProps) {
     case 'ready':
       return (
         <>
-          {rows.sample && (
-            <p className="w-fit rounded-md border border-dashed px-2 py-0.5 text-xs font-medium">
-              Dữ liệu mẫu: vài dòng minh họa để xem bố cục, không lấy từ dataset
-            </p>
-          )}
           <ResultTable result={rows.result} heading="Dòng nguồn" nowrap />
           <PageNav page={rows.page} onPageChange={onPageChange} />
           <details className="text-xs">

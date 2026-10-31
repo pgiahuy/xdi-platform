@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/workspaceNav.ts - đường dẫn của trang trong một workspace và các mục điều hướng, theo thứ tự trên thanh bên.
 path khớp với route con của workspaceRoute trong router.tsx; '' là trang đầu của workspace. Thêm trang là thêm route ở
-router.tsx và một dòng ở workspaceNav. Trang quản trị hệ thống không thuộc workspace nào, đường dẫn ở globalNav.ts. */
+router.tsx và một dòng ở workspaceNav. Trang quản trị hệ thống không thuộc workspace nào, đường dẫn ở globalNav.ts.
+Trang hỏi ('' là trang đầu) không có mục riêng: vào workspace là mở nó, và nút "Lịch sử trò chuyện" đứng đầu thanh bên mở
+một cuộc cũ hay cuộc mới trên trang đó. */
 
 import type { LucideIcon } from 'lucide-react'
-import { Database, MessageSquareText, Users } from 'lucide-react'
+import { ChartColumn, Database, Users } from 'lucide-react'
 
 export type WorkspaceNavEntry = {
   path: string
@@ -21,8 +23,11 @@ export const accountPath = 'account'
 
 export const membersPath = 'members'
 
+/** Trang Tổng quan dữ liệu; dataset đang xem nằm trong đường dẫn (?dataset=...). */
+export const overviewPath = 'overview'
+
 export const workspaceNav: WorkspaceNavEntry[] = [
-  { path: '', label: 'Hỏi dữ liệu', icon: MessageSquareText },
+  { path: overviewPath, label: 'Tổng quan dữ liệu', icon: ChartColumn },
   { path: 'datasets', label: 'Dữ liệu', icon: Database },
   { path: membersPath, label: 'Thành viên', icon: Users },
 ].map((entry) => ({ ...entry, section: 'Workspace' }))
@@ -31,4 +36,9 @@ export const workspaceNav: WorkspaceNavEntry[] = [
 export function workspaceHref(slug: string, path: string): string {
   const base = workspaceRoute.replace(':ws', encodeURIComponent(slug))
   return path ? `${base}/${path}` : base
+}
+
+/** Trang Tổng quan dữ liệu mở sẵn một dataset. */
+export function overviewHref(slug: string, datasetId: string): string {
+  return `${workspaceHref(slug, overviewPath)}?${new URLSearchParams({ dataset: datasetId }).toString()}`
 }
