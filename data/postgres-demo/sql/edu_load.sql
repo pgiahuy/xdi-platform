@@ -1,4 +1,4 @@
--- sql/edu_load.sql - đổ dữ liệu OULAD từ schema staging (mọi cột text, xem sql/staging.sql) sang schema edu.
+-- sql/edu_load.sql - đổ dữ liệu OULAD từ schema staging (mọi cột text, xem sql/staging_edu.sql) sang schema edu.
 -- load.sh chạy file này sau sql/edu_schema.sql, trong cùng một giao dịch: lỗi ở bất kỳ dòng nào thì không bảng nào
 -- đổi. Thứ tự INSERT theo khóa ngoại: bảng được tham chiếu nạp trước.
 --

@@ -1,0 +1,32 @@
+{% extends 'admin/master.html' %}
+{% block body %}
+<h3>Cơ sở dữ liệu mẫu</h3>
+<p class="text-muted">Chỉ đọc, kết nối bằng người dùng <code>analyst</code>. Bấm tên bảng để xem dòng, lọc và tìm.
+Rê chuột lên tên cột để xem mô tả.</p>
+{% for group in groups %}
+<h4 class="mt-4">Database <code>{{ group.database }}</code></h4>
+{% if group.error %}
+<p class="text-danger">Không đọc được database này: {{ group.error }}. Nạp bằng <code>sh data/postgres-demo/load.sh</code>
+rồi khởi động lại màn này.</p>
+{% else %}
+<table class="table table-sm table-hover">
+  <thead>
+    <tr><th>Bảng</th><th>Mô tả</th><th class="text-right">Số dòng</th><th class="text-right">Số cột</th>
+      <th>Khóa chính</th><th>Khóa ngoại</th></tr>
+  </thead>
+  <tbody>
+    {% for t in group.tables %}
+    <tr>
+      <td><a href="{{ url_for(t.endpoint) }}"><b>{{ t.name }}</b></a></td>
+      <td>{{ t.comment }}</td>
+      <td class="text-right">{{ "{:,}".format(t.rows).replace(",", ".") }}</td>
+      <td class="text-right">{{ t.columns }}</td>
+      <td><code>{{ t.primary_key }}</code></td>
+      <td>{% for fk in t.foreign_keys %}<code>{{ fk }}</code><br>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endfor %}
+{% endblock %}

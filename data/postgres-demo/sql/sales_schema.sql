@@ -1,5 +1,5 @@
--- sql/sales_schema.sql - schema "sales": dữ liệu bán hàng DataCo, từ một file phẳng một dòng mỗi dòng hàng, tách
--- thành bảng phòng ban, danh mục, sản phẩm, khách hàng, đơn hàng và dòng hàng (bảng sự kiện).
+-- sql/sales_schema.sql - schema "sales" của database sales_demo: dữ liệu bán hàng DataCo, từ một file phẳng một dòng
+-- mỗi dòng hàng, tách thành bảng phòng ban, danh mục, sản phẩm, khách hàng, đơn hàng và dòng hàng (bảng sự kiện).
 -- load.sh chạy file này mỗi lần nạp: xóa schema cũ rồi tạo lại. Dữ liệu đổ vào trong sql/sales_load.sql.
 --
 -- Cột nào thuộc bảng nào đã kiểm bằng phụ thuộc hàm trên cả 180 519 dòng (README.md, mục "Tách bảng DataCo"):
