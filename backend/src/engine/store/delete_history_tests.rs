@@ -68,7 +68,7 @@ async fn dataset_with_history(
             .unwrap();
         if in_conversation {
             store
-                .attach_turn(ws, id, conversation, Some("revenue by market"))
+                .attach_turn(ws, id, conversation, Some("revenue by market"), None)
                 .await
                 .unwrap();
         }

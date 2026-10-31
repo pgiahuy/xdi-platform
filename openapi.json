@@ -2215,7 +2215,7 @@
           "query"
         ],
         "summary": "One conversation of the caller with its turns",
-        "description": "Turns oldest first, each with its question, status, SQL and the short text of what was understood. Results are not stored: ask a turn again to see its numbers.",
+        "description": "Turns oldest first, each with its question, status, SQL, the short text of what was understood and the answer text shown when it was asked. Result rows are not stored: ask a turn again to see its table and chart.",
         "operationId": "getConversation",
         "parameters": [
           {
@@ -7421,6 +7421,44 @@
           "non_negative"
         ]
       },
+      "SavedAnswer": {
+        "type": "object",
+        "description": "The answer text of a recorded question, as shown when it was asked: `answer_text` of a plain question, or\n`explanation.summary` of a \"why\" question. Result rows are not stored.",
+        "required": [
+          "text",
+          "by_model",
+          "verdict",
+          "warnings"
+        ],
+        "properties": {
+          "by_model": {
+            "type": "boolean",
+            "description": "True when a language model wrote the text and it passed the checks; false when the backend wrote it."
+          },
+          "text": {
+            "type": "string",
+            "description": "Vietnamese text for the end user."
+          },
+          "verdict": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AnswerVerdict",
+                "description": "Verdict of the independent model call that compared the meaning of the model's text with the computed facts\n(`match`, `warning`, `mismatch`); null when the check did not run."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Points the check found unclear in the model's text; empty when `by_model` is false."
+          }
+        }
+      },
       "SetRoleRequest": {
         "type": "object",
         "required": [
@@ -7742,9 +7780,21 @@
           "sql",
           "understood",
           "created_at",
-          "feedback"
+          "feedback",
+          "answer"
         ],
         "properties": {
+          "answer": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SavedAnswer",
+                "description": "The answer text shown when the question was asked; null unless answered, and for questions recorded before\nanswers were stored."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"

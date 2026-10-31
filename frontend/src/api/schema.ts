@@ -429,7 +429,7 @@ export interface paths {
         };
         /**
          * One conversation of the caller with its turns
-         * @description Turns oldest first, each with its question, status, SQL and the short text of what was understood. Results are not stored: ask a turn again to see its numbers.
+         * @description Turns oldest first, each with its question, status, SQL, the short text of what was understood and the answer text shown when it was asked. Result rows are not stored: ask a turn again to see its table and chart.
          */
         get: operations["getConversation"];
         put?: never;
@@ -2186,6 +2186,19 @@ export interface components {
          * @enum {string}
          */
         SanityCheckKind: "value_range" | "non_negative";
+        /**
+         * @description The answer text of a recorded question, as shown when it was asked: `answer_text` of a plain question, or
+         *     `explanation.summary` of a "why" question. Result rows are not stored.
+         */
+        SavedAnswer: {
+            /** @description True when a language model wrote the text and it passed the checks; false when the backend wrote it. */
+            by_model: boolean;
+            /** @description Vietnamese text for the end user. */
+            text: string;
+            verdict: components["schemas"]["AnswerVerdict"] | null;
+            /** @description Points the check found unclear in the model's text; empty when `by_model` is false. */
+            warnings: string[];
+        };
         SetRoleRequest: {
             /** @description `admin` or `member`. */
             role: string;
@@ -2324,6 +2337,7 @@ export interface components {
         TimeGrain: "day" | "month";
         /** @description One recorded question of a conversation. Questions waiting for a choice (`needs_choice`) are not recorded. */
         TurnItem: {
+            answer: components["schemas"]["SavedAnswer"] | null;
             /** Format: date-time */
             created_at: string;
             feedback: components["schemas"]["QueryFeedback"] | null;

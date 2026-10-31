@@ -116,6 +116,7 @@ mod tests {
             feedback_note: None,
             feedback_at: None,
             example_approved: false,
+            answer: None,
         }
     }
 
