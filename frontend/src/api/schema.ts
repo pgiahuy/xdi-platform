@@ -1332,6 +1332,11 @@ export interface components {
             columns: components["schemas"]["OverviewColumn"][];
             /** Format: uuid */
             dataset_id: string;
+            /**
+             * @description Description of the table written in the source database (`COMMENT ON TABLE`) for the current version; null for
+             *     uploaded files and tables without a comment.
+             */
+            description: string | null;
             main_measure: components["schemas"]["MainMeasure"] | null;
             /** @description Defined metrics, one per name: the latest confirmed definition, else the latest draft. */
             metrics: components["schemas"]["OverviewMetric"][];
@@ -1367,6 +1372,11 @@ export interface components {
             created_at: string;
             /** Format: uuid */
             dataset_id: string;
+            /**
+             * @description Description of the snapshotted table written in the source database (`COMMENT ON TABLE`); null for uploaded
+             *     files and tables without a comment.
+             */
+            description: string | null;
             file_hash: string | null;
             /** Format: uuid */
             id: string;
@@ -1856,6 +1866,11 @@ export interface components {
             /** @description DuckDB type, for example `DOUBLE`, `BIGINT`, `VARCHAR`. */
             data_type: string;
             description: string | null;
+            /**
+             * @description Who wrote `description`: `database` (a `COMMENT ON COLUMN` of the source database) or `model` (the semantic
+             *     profile); null when there is no description.
+             */
+            description_source: string | null;
             name: string;
             /** @description `dimension`, `measure`, `time`, `key`, `text` or `ignore`. */
             role: string;
@@ -1917,6 +1932,11 @@ export interface components {
         OverviewChartKind: "measure_over_time" | "rows_over_time" | "rows_by_value";
         OverviewColumn: {
             description: string | null;
+            /**
+             * @description Who wrote `description`: `database` (a `COMMENT ON COLUMN` of the source database) or `model` (the semantic
+             *     profile); null when there is no description.
+             */
+            description_source: string | null;
             /**
              * Format: int64
              * @description Exact number of different values; null when `summary.restricted`.

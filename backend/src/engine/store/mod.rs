@@ -49,8 +49,8 @@ mod workspaces;
 pub use accounts::{Membership, NewAdmin, User};
 pub use aggregation::ColumnAggregation;
 pub use columns::{
-    ColumnUnit, ColumnValue, NewColumn, NewColumnValue, ProfileColumn, ProfileRole,
-    SemanticColumnUpdate, SemanticValueUpdate, ValueRow,
+    ColumnUnit, ColumnValue, DescriptionSource, NewColumn, NewColumnValue, ProfileColumn,
+    ProfileRole, SemanticColumnUpdate, SemanticValueUpdate, ValueRow,
 };
 pub use conversations::{Conversation, StoredTurn};
 #[allow(unused_imports)]

@@ -6,6 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
+- Chụp bảng Postgres đọc luôn mô tả bảng và cột ghi trong database (`COMMENT ON`) làm mô tả trong hồ sơ cột; mô hình không viết lại các mô tả này, giao diện ghi nguồn "từ database" hay "do mô hình viết" (#245).
 - Chụp bảng Postgres nhanh hơn: DuckDB đọc thẳng bảng bằng extension `postgres` đóng gói sẵn (không tải lúc chạy) và ghi Parquet một bước; bảng 1,8 triệu dòng của database mẫu chụp trong khoảng 0,9 giây thay vì 16 giây. `SOURCE_SNAPSHOT_MODE=copy` giữ cách cũ, và là đường dự phòng khi extension không nạp được (#246).
 - Insight của câu hỏi tìm nguyên nhân do mô hình viết toàn bộ (câu mở đầu và mục "Nguyên nhân chính") từ số và cờ code đã tính, prompt không còn câu do code viết hay ví dụ theo bộ dữ liệu; khi insight qua kiểm thì không hiện mục "Căn cứ" nữa (#201).
 - Câu hỏi tìm nguyên nhân so hai nhóm (như hai thị trường) cũng do mô hình viết insight và qua hai cổng kiểm, thay cho câu khuôn (#201).

@@ -32,6 +32,7 @@ async fn dataset_with_history(
                 file_hash: name,
                 parquet_path: "x.parquet",
                 row_count: 1,
+                description: None,
             },
             &[],
         )

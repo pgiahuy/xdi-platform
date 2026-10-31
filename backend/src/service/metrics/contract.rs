@@ -61,6 +61,10 @@ pub struct MetricColumn {
     pub role: String,
     #[schema(required)]
     pub description: Option<String>,
+    /// Who wrote `description`: `database` (a `COMMENT ON COLUMN` of the source database) or `model` (the semantic
+    /// profile); null when there is no description.
+    #[schema(required)]
+    pub description_source: Option<String>,
     /// Default aggregation; null unless the role is `measure`.
     #[schema(required)]
     pub aggregation: Option<ColumnAggregation>,
@@ -78,6 +82,7 @@ impl From<ProfileColumn> for MetricColumn {
             data_type: c.data_type,
             role: c.role,
             description: c.description,
+            description_source: c.description_source,
             aggregation,
         }
     }

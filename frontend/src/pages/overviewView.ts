@@ -10,6 +10,7 @@ import { buildChartView, buildResultView } from './resultView'
 export function buildOverviewView(overview: DatasetOverview): OverviewView {
   return {
     name: overview.name,
+    description: overview.description,
     version: overview.version?.number ?? null,
     rowCount: overview.summary.row_count,
     timeColumn: overview.summary.time_column,
@@ -20,6 +21,7 @@ export function buildOverviewView(overview: DatasetOverview): OverviewView {
       name: column.name,
       label: column.label,
       description: column.description,
+      descriptionSource: column.description_source,
       role: column.role,
       unit: column.unit,
       sensitive: column.sensitive,

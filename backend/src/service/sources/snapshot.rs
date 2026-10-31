@@ -9,7 +9,8 @@ Các bước:
 2. Chép: một kết nối, một giao dịch REPEATABLE READ. Đếm dòng mọi bảng trước (giới hạn SOURCE_MAX_ROWS), rồi chép mỗi
    bảng ra file riêng (giới hạn MAX_UPLOAD_MB), kèm kiểu cột Postgres: COPY ra CSV trong chính giao dịch đó, hoặc với
    SOURCE_SNAPSHOT_MODE=direct thì DuckDB đọc thẳng ra Parquet trong một giao dịch REPEATABLE READ riêng của nó
-   (direct.rs). Cách nào thì mọi bảng cũng là ảnh của một thời điểm. Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS.
+   (direct.rs). Cách nào thì mọi bảng cũng là ảnh của một thời điểm. Comment của bảng, của cột (comments.rs) đọc bằng
+   sqlx trong giao dịch của bước này, cách chép nào cũng vậy. Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS.
 3. Nạp từng bảng. Bảng đã từng chụp từ nguồn này thì thêm phiên bản vào đúng dataset đó (một bảng nguồn, một dataset),
    nên bảng chiều dùng chung bởi hai bảng sự kiện không bị nhân đôi.
 4. Ghi quan hệ giữa các bảng trong nhóm, trong một giao dịch.
@@ -23,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use super::comments;
 use super::direct::{self, DirectError, DirectTable};
 use super::postgres::{self, ConnectInfo, SourceTable, TableCopy};
 use super::relations::{self, ForeignKey};
@@ -30,7 +32,7 @@ use super::{find_table_in, load, pg_types, recorded_table, source_file_label};
 use crate::auth::Member;
 use crate::config::SnapshotMode;
 use crate::engine::store::{DatasetRelation, NewRelation, SourceRow};
-use crate::service::ingest::{self, StagedFile, Staging, Upload, UploadResult};
+use crate::service::ingest::{self, SourceDescriptions, StagedFile, Staging, Upload, UploadResult};
 use crate::{error::AppError, state::AppState};
 
 /// Số bảng tối đa của một lần chụp: mỗi bảng giữ một file tạm tới MAX_UPLOAD_MB trên đĩa cho tới khi nạp xong.
@@ -70,6 +72,7 @@ struct CopiedTable {
     staging: Staging,
     path: PathBuf,
     copy: TableCopy,
+    descriptions: SourceDescriptions,
 }
 
 pub async fn snapshot(
@@ -222,7 +225,11 @@ async fn copy_group(
             let rows = postgres::count_rows(&mut conn, table).await?;
             check_row_count(table, rows, max_rows)?;
         }
-        let copied = copy_tables(state, info, &mut conn, &tables).await?;
+        let mut copied = copy_tables(state, info, &mut conn, &tables).await?;
+        // Comment đọc bằng sqlx trong giao dịch của conn, cách chép nào (COPY hay DuckDB) cũng vậy.
+        for c in &mut copied {
+            c.descriptions = comments::read_descriptions(&mut conn, &c.table).await?;
+        }
         let mut keys = Vec::new();
         for table in &tables {
             keys.extend(relations::list_foreign_keys(&mut conn, table).await?);
@@ -274,6 +281,7 @@ async fn copy_tables(
             staging,
             path,
             copy,
+            descriptions: SourceDescriptions::default(),
         });
     }
     Ok(copied)
@@ -310,6 +318,7 @@ async fn copy_direct(
             path: staging.upload_path(0),
             staging,
             copy,
+            descriptions: SourceDescriptions::default(),
         })
         .collect())
 }
@@ -337,8 +346,13 @@ async fn ingest_table(
     };
     let label = source_file_label(info, &full_name);
     // Băm cả nhãn nguồn lẫn nội dung: cùng nội dung mà từ bảng khác hay từ một file nạp tay thì vẫn là dữ liệu khác,
-    // không bị coi là trùng phiên bản đã có ở dataset khác.
-    let sha256 = Sha256::digest(format!("{label}\n{}", copied.copy.sha256).as_bytes())
+    // không bị coi là trùng phiên bản đã có ở dataset khác. Comment cũng vào hash (build_comment_part).
+    let hashed = format!(
+        "{label}\n{}{}",
+        copied.copy.sha256,
+        build_comment_part(&copied.descriptions)
+    );
+    let sha256 = Sha256::digest(hashed.as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
@@ -354,6 +368,7 @@ async fn ingest_table(
         sheets: Vec::new(),
         database_source: Some(row.id),
         format: Some(copied.copy.format),
+        descriptions: copied.descriptions,
     };
     let result = ingest::upload(state, member, copied.staging, upload).await?;
     state
@@ -361,6 +376,20 @@ async fn ingest_table(
         .record_source_table(&member.workspace, row.id, result.dataset.id, &full_name)
         .await?;
     Ok(result)
+}
+
+/// Phần comment trong hash của bản chụp: chỉ đổi comment mà dữ liệu giữ nguyên thì chụp lại vẫn ra phiên bản mới mang
+/// comment mới (comment nằm trên phiên bản). Bảng không có comment nào thì chuỗi rỗng, nên hash giữ như trước #245 và
+/// chụp lại bảng không đổi không tạo phiên bản thừa.
+pub(super) fn build_comment_part(descriptions: &SourceDescriptions) -> String {
+    if descriptions.table.is_none() && descriptions.columns.is_empty() {
+        return String::new();
+    }
+    let mut part = format!("\ncomments:{:?}", descriptions.table);
+    for (name, text) in &descriptions.columns {
+        part.push_str(&format!("\n{name:?}={text:?}"));
+    }
+    part
 }
 
 /// Khóa ngoại giữa các bảng của nhóm, đổi bảng thành dataset vừa nạp.

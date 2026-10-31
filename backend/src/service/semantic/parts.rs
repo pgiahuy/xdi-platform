@@ -57,6 +57,8 @@ pub struct PartInput<'a> {
     pub dataset: &'a Dataset,
     pub version_id: Uuid,
     pub row_count: Option<i64>,
+    /// Comment của bảng nguồn database (COMMENT ON TABLE); None với file nạp tay.
+    pub table_description: Option<&'a str>,
     pub columns: &'a [ProfileColumn],
     pub values: &'a [ColumnValue],
 }
@@ -95,6 +97,7 @@ async fn ask_part(state: &AppState, part: ProfilePart, input: &PartInput<'_>) ->
         part,
         &input.dataset.name,
         &input.dataset.logical_table,
+        input.table_description,
         input.row_count,
         input.columns,
         input.values,

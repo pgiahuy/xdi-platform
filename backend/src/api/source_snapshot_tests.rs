@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/source_snapshot_tests.rs - SOURCE_SNAPSHOT_MODE=direct qua route thật (#246): extension postgres của DuckDB
-thiếu hay hỏng thì lần chụp vẫn xong bằng COPY, cùng số dòng và kiểu cột. So dữ liệu hai cách chép trên cùng một bảng
+thiếu hay hỏng thì lần chụp vẫn xong bằng COPY, cùng số dòng và kiểu cột; có extension thì comment của bảng (#245) vẫn
+thành mô tả như cách COPY. So dữ liệu hai cách chép trên cùng một bảng
 ở service/sources/direct_tests.rs. Không có DATABASE_URL thì bỏ qua. */
 
 use axum::http::StatusCode;
@@ -10,11 +11,13 @@ use super::ask_tests::scripted;
 use super::sources_tests::{start_with_snapshot_mode, KEY, SHOP};
 use crate::api::test_support::call;
 use crate::config::SnapshotMode;
+use crate::engine::store::test_support::exec;
 
 /// Chụp public.orders (bảng của sources_tests::start) với SOURCE_SNAPSHOT_MODE=direct và extension ở đường dẫn cho sẵn.
 async fn snapshot_orders(extension: std::path::PathBuf) -> Option<Value> {
     let mode = Some((SnapshotMode::Direct, extension));
     let s = start_with_snapshot_mode(Some(KEY), scripted(&[]), None, mode).await?;
+    exec(&s.db.store, "COMMENT ON TABLE orders IS 'Orders by region'").await;
     let url = format!("{SHOP}/sources");
     let (status, _, source) = call(&s.app, "POST", &url, Some(&s.lan), Some(s.form.clone())).await;
     assert_eq!(status, StatusCode::CREATED, "{source}");
@@ -50,6 +53,25 @@ fn assert_orders_copied(result: &Value) {
         types.contains(&"\"ordered_at\" \"DATE\"".to_string()),
         "{types:?}"
     );
+    assert_eq!(
+        dataset["version"]["description"], "Orders by region",
+        "{result}"
+    );
+}
+
+/// Có file extension thật (make duckdb-extension): chụp bằng DuckDB, comment của bảng vẫn đọc trong giao dịch chụp.
+#[tokio::test]
+async fn direct_snapshot_keeps_types_and_comments() {
+    let extension = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../duckdb-extensions/postgres_scanner.duckdb_extension");
+    if !extension.is_file() {
+        eprintln!("skipping: no DuckDB postgres extension (make duckdb-extension)");
+        return;
+    }
+    let Some(result) = snapshot_orders(extension).await else {
+        return;
+    };
+    assert_orders_copied(&result);
 }
 
 #[tokio::test]
