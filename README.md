@@ -9,8 +9,8 @@ hỏi nguyên nhân, như vì sao doanh thu tháng này giảm, hệ thống tí
 xem các dòng nguồn đứng sau nó.
 
 Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ nhận metadata của bảng và cột, danh sách giá trị của cột phân
-loại không nhạy cảm và các con số code đã tính; nó không nhận nội dung file hay bảng. Những gì gửi cho mô hình, kể cả
-các ngoại lệ: [docs/PRIVACY.md](docs/PRIVACY.md).
+loại không nhạy cảm và các con số code đã tính. Nó không nhận nội dung file hay dòng dữ liệu, trừ hai ngoại lệ hẹp: ô
+của kết quả chỉ một dòng và giá trị mà lời báo lỗi của DuckDB chép lại. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0. Tài liệu:
 https://pgiahuy.github.io/xdi-platform/
