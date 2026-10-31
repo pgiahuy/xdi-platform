@@ -9,8 +9,10 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::engine::guard::{AllowedTable, RowFilter};
-use crate::engine::store::DatasetRelation;
-use crate::service::ask::row_filters::{build_parent_ids, build_row_filters, PolicyTable};
+use crate::engine::store::{DatasetRelation, StoredPolicy};
+use crate::service::ask::row_filters::{
+    build_member_filters, build_parent_ids, build_row_filters, PolicyTable,
+};
 
 const ORDER_ITEMS: u128 = 1;
 const ORDERS: u128 = 2;
@@ -108,6 +110,11 @@ fn describe(filters: &[RowFilter]) -> Vec<String> {
                 parent.name,
                 describe(&parent.row_filters).join(", ")
             ),
+            RowFilter::AnyOf(groups) => groups
+                .iter()
+                .map(|g| format!("({})", describe(g).join(" AND ")))
+                .collect::<Vec<_>>()
+                .join(" OR "),
         })
         .collect()
 }
@@ -187,4 +194,99 @@ fn cycles_stop_and_unreadable_parents_hide_every_row() {
         describe(&build_row_filters(id(ORDERS), &shop(), &tables)),
         ["customer_id="]
     );
+}
+
+const SOUTH: u128 = 100;
+const NORTH: u128 = 101;
+const ELECTRONICS: u128 = 102;
+
+fn policy(role: u128, table: u128, column: &str, values: &[&str]) -> StoredPolicy {
+    StoredPolicy {
+        data_role_id: id(role),
+        table_id: id(table),
+        column: column.to_string(),
+        allowed_values: values.iter().map(|v| v.to_string()).collect(),
+    }
+}
+
+/// Mọi bảng cha của shop đọc được, như load_row_filters đọc khi có luật trên bảng cha.
+fn readable_tables() -> HashMap<Uuid, Option<AllowedTable>> {
+    [
+        (ORDERS, "orders"),
+        (CUSTOMERS, "customers"),
+        (PRODUCTS, "products"),
+        (REGIONS, "regions"),
+    ]
+    .iter()
+    .map(|&(n, name)| (id(n), readable(name)))
+    .collect()
+}
+
+/// Một vai: đúng điều kiện như trước khi có nhiều vai (không bọc AnyOf); AND trong vai giữ nguyên.
+#[test]
+fn one_role_keeps_its_filters_as_before() {
+    let policies = [
+        policy(SOUTH, CUSTOMERS, "region_code", &["S"]),
+        policy(SOUTH, CUSTOMERS, "segment", &["Consumer"]),
+    ];
+    let filters = build_member_filters(id(CUSTOMERS), &shop(), &policies, &readable_tables());
+    assert_eq!(describe(&filters), ["region_code=S", "segment=Consumer"]);
+}
+
+/// Hai vai cùng giới hạn một bảng: OR giữa hai vai, AND trong từng vai; đường lan sang bảng con cũng mang OR đó.
+#[test]
+fn two_roles_on_one_table_are_joined_with_or() {
+    let policies = [
+        policy(SOUTH, CUSTOMERS, "region_code", &["S"]),
+        policy(SOUTH, CUSTOMERS, "segment", &["Consumer"]),
+        policy(NORTH, CUSTOMERS, "region_code", &["N"]),
+    ];
+    let filters = build_member_filters(id(CUSTOMERS), &shop(), &policies, &readable_tables());
+    assert_eq!(
+        describe(&filters),
+        ["(region_code=S AND segment=Consumer) OR (region_code=N)"]
+    );
+    let filters = build_member_filters(id(ORDERS), &shop(), &policies, &readable_tables());
+    assert_eq!(
+        describe(&filters),
+        ["(customer_id->customers[region_code=S, segment=Consumer]) OR (customer_id->customers[region_code=N])"]
+    );
+}
+
+/// Vai không có luật trên bảng đang đọc (hay bảng nó trỏ tới) không mở thêm dòng nào của bảng đó: người mang vai
+/// "Miền Nam" (customers) và vai "Điện tử" (products) chỉ thấy khách miền Nam. Bảng nối tới cả hai thì OR.
+#[test]
+fn role_without_rules_on_the_table_does_not_widen_it() {
+    let policies = [
+        policy(SOUTH, CUSTOMERS, "region_code", &["S"]),
+        policy(ELECTRONICS, PRODUCTS, "category", &["Electronics"]),
+    ];
+    let tables = readable_tables();
+    let filters = build_member_filters(id(CUSTOMERS), &shop(), &policies, &tables);
+    assert_eq!(describe(&filters), ["region_code=S"]);
+    let filters = build_member_filters(id(PRODUCTS), &shop(), &policies, &tables);
+    assert_eq!(describe(&filters), ["category=Electronics"]);
+    let filters = build_member_filters(id(REGIONS), &shop(), &policies, &tables);
+    assert!(filters.is_empty());
+    let filters = build_member_filters(id(ORDER_ITEMS), &shop(), &policies, &tables);
+    let text = describe(&filters).join("; ");
+    assert!(text.starts_with("(") && text.contains(") OR ("), "{text}");
+    assert!(
+        text.contains("customers[region_code=S]")
+            && text.contains("products[category=Electronics]"),
+        "{text}"
+    );
+}
+
+/// Hai vai cùng điều kiện trên bảng này thì giữ một nhóm; không vai nào có luật thì không lọc.
+#[test]
+fn same_filters_of_two_roles_are_kept_once() {
+    let policies = [
+        policy(SOUTH, CUSTOMERS, "region_code", &["S"]),
+        policy(NORTH, CUSTOMERS, "region_code", &["S"]),
+        policy(NORTH, PRODUCTS, "category", &["Toys"]),
+    ];
+    let filters = build_member_filters(id(CUSTOMERS), &shop(), &policies, &readable_tables());
+    assert_eq!(describe(&filters), ["region_code=S"]);
+    assert!(build_member_filters(id(CUSTOMERS), &shop(), &[], &readable_tables()).is_empty());
 }

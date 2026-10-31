@@ -10,7 +10,7 @@ use std::ops::ControlFlow;
 
 use sqlparser::ast::{
     BinaryOperator, DataType, DateTimeField, DuplicateTreatment, Expr, Function, FunctionArg,
-    FunctionArgExpr, FunctionArguments, Value, Visit, Visitor,
+    FunctionArgExpr, FunctionArguments, SetExpr, TableFactor, Value, Visit, Visitor,
 };
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
@@ -343,30 +343,67 @@ fn build_literal_list(list: &[Expr]) -> Option<String> {
     values.map(|values| values.join(", "))
 }
 
-/// Nhãn của một điều kiện phân quyền guard thêm (GuardedSql::row_filters). Guard viết nó dạng `"cột" IN ('a', 'b')`,
-/// hoặc FALSE khi vai dữ liệu không được thấy giá trị nào (engine/guard/mod.rs, build_column_condition).
+/// Đầu nhãn của điều kiện lọc dòng theo vai dữ liệu. Lịch sử hội thoại (conversation/history.rs) nhận ra mục này bằng
+/// đầu nhãn để không đưa nó cho mô hình.
+pub const ROW_FILTER_LABEL_PREFIX: &str = "Lọc theo quyền xem:";
+
+/// Nhãn của một điều kiện lọc dòng guard thêm (GuardedSql::row_filters), ví dụ "Lọc theo quyền xem: vùng (region) là
+/// South". Guard viết nó dạng `"cột" IN ('a', 'b')`, FALSE khi vai không được thấy giá trị nào, `"fk" IN (SELECT ...)`
+/// khi lan theo khóa ngoại, và `(... OR ...)` khi người hỏi mang nhiều vai (engine/guard/mod.rs). Dạng khác thì nhãn
+/// chép nguyên câu SQL.
 pub fn build_row_filter_label(sql: &str, profile: &[ColumnProfile]) -> String {
-    let parsed = Parser::new(&DuckDbDialect {})
+    let described = Parser::new(&DuckDbDialect {})
         .try_with_sql(sql)
-        .and_then(|mut parser| parser.parse_expr());
-    let described = match &parsed {
-        Ok(Expr::InList {
+        .and_then(|mut parser| parser.parse_expr())
+        .ok()
+        .and_then(|expr| describe_row_filter(&expr, profile));
+    format!(
+        "{ROW_FILTER_LABEL_PREFIX} {}",
+        described.unwrap_or_else(|| sql.to_string())
+    )
+}
+
+/// Lời cho một điều kiện lọc dòng; None khi có phần không đọc được thành lời.
+fn describe_row_filter(expr: &Expr, profile: &[ColumnProfile]) -> Option<String> {
+    match expr {
+        Expr::Nested(inner) => describe_row_filter(inner, profile),
+        Expr::InList {
             expr,
             list,
             negated: false,
-        }) => build_literal_list(list).map(|values| {
+        } => build_literal_list(list).map(|values| {
             let column = build_subject_label(expr, profile, true);
-            format!("chỉ thấy {column} là {values}")
+            format!("{column} là {values}")
         }),
-        Ok(Expr::Value(value)) if value.value == Value::Boolean(false) => {
+        Expr::Value(value) if value.value == Value::Boolean(false) => {
             Some("không được thấy dòng nào".to_string())
         }
+        Expr::InSubquery {
+            subquery,
+            negated: false,
+            ..
+        } => {
+            let SetExpr::Select(select) = subquery.body.as_ref() else {
+                return None;
+            };
+            let TableFactor::Table { name, .. } = &select.from.first()?.relation else {
+                return None;
+            };
+            let name = name.0.last()?.as_ident()?.value.clone();
+            Some(format!("chỉ dòng nối tới dòng được thấy của bảng {name}"))
+        }
+        Expr::BinaryOp { left, op, right } => {
+            let word = match op {
+                BinaryOperator::Or => "hoặc",
+                BinaryOperator::And => "và",
+                _ => return None,
+            };
+            let left = describe_row_filter(left, profile)?;
+            let right = describe_row_filter(right, profile)?;
+            Some(format!("{left} {word} {right}"))
+        }
         _ => None,
-    };
-    format!(
-        "Phân quyền: {}",
-        described.unwrap_or_else(|| sql.to_string())
-    )
+    }
 }
 
 /// Nhãn ngắn (để ghép vào mục sắp xếp) và nhãn đủ của một cột tổng hợp. Trùng biểu thức của một chỉ số thì "<tên chỉ

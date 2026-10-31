@@ -398,6 +398,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/data-roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Data roles of the workspace with their row rules and members (admin only)
+         * @description A member who holds data roles sees only the rows their roles allow. Within one role, rules apply together (AND); between roles a row is visible when one role allows it (OR), counting only roles with a rule on the table read or on a table it points to. Admins are never filtered.
+         */
+        get: operations["listDataRoles"];
+        put?: never;
+        /** Create a data role without rules (admin only) */
+        post: operations["createDataRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/data-roles/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Data roles of the signed-in member, without their rules */
+        get: operations["listMyDataRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/data-roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a data role and its rules (admin only)
+         * @description Refused while a member holds the role: a member left without roles would see every row.
+         */
+        delete: operations["deleteDataRole"];
+        options?: never;
+        head?: never;
+        /** Rename a data role or change its description (admin only) */
+        patch: operations["updateDataRole"];
+        trace?: never;
+    };
+    "/workspaces/{ws}/data-roles/{role_id}/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the row rules of a data role (admin only)
+         * @description Each rule names a table, a dimension column of its current version and the values the role sees. Values missing from the column profile are saved with a warning. Takes effect from the next request of each member.
+         */
+        put: operations["setDataRolePolicies"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/datasets": {
         parameters: {
             query?: never;
@@ -575,6 +654,23 @@ export interface paths {
          * @description A JSON array in the format of the case files in `eval/` (`id`, `question`, `expected_sql`, `ordered`). The SQL is the one the model wrote; review every case before adding it to a case file.
          */
         get: operations["exportExamples"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/datasets/{id}/filter-columns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Columns of a table a row rule can use, with their known values (admin only) */
+        get: operations["listFilterColumns"];
         put?: never;
         post?: never;
         delete?: never;
@@ -851,6 +947,26 @@ export interface paths {
          * @description The workspace always keeps at least one admin.
          */
         patch: operations["setMemberRole"];
+        trace?: never;
+    };
+    "/workspaces/{ws}/members/{user_id}/data-roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the data roles of a member (admin only)
+         * @description An empty list removes every role: the member then sees every row. Only roles with at least one rule can be given.
+         */
+        put: operations["setMemberDataRoles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/workspaces/{ws}/queries/{query_id}/feedback": {
@@ -1410,6 +1526,31 @@ export interface components {
             partial: boolean;
             to: string;
         };
+        /** @description Create or rename a data role. */
+        DataRoleRequest: {
+            /** @description Optional, at most 500 characters. */
+            description?: string | null;
+            /** @description 1 to 60 characters, unique in the workspace (case-insensitive), for example `Sales South`. */
+            name: string;
+        };
+        /** @description A data role with its row rules and the members who hold it. */
+        DataRoleResponse: {
+            description: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description Account ids of the members who hold the role. */
+            member_ids: string[];
+            name: string;
+            /** @description Rules of the role, by table and column. Rules on one table all apply together (AND). */
+            policies: components["schemas"]["RolePolicy"][];
+        };
+        /** @description A data role of the workspace. */
+        DataRoleRow: {
+            description?: string | null;
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         Dataset: {
             /** Format: date-time */
             created_at: string;
@@ -1907,6 +2048,17 @@ export interface components {
             rating: components["schemas"]["Rating"];
             reason?: components["schemas"]["FeedbackReason"] | null;
         };
+        /** @description A column a row rule can use: a dimension column of the table's current version. */
+        FilterColumnResponse: {
+            /** @description Vietnamese label: the first alias written by the semantic profile; null until then. */
+            label: string | null;
+            name: string;
+            /**
+             * @description Known values of the column from its profile, most rows first; empty for a sensitive column or one with too
+             *     many values to list. A rule may still use other values.
+             */
+            values: string[];
+        };
         /** @description One group of a dimension. `value` is null for the group of rows where the dimension column is null. */
         GroupContribution: {
             base_value: string;
@@ -2120,6 +2272,10 @@ export interface components {
          * @enum {string}
          */
         MeasureKind: "total" | "ratio";
+        /** @description The full set of data roles of a member; empty removes every role. */
+        MemberDataRolesRequest: {
+            role_ids: string[];
+        };
         /** @description A member of a workspace. */
         MemberRow: {
             display_name: string;
@@ -2455,6 +2611,21 @@ export interface components {
             /** @description True when `rows` holds fewer rows than `total_rows`. */
             truncated: boolean;
         };
+        /**
+         * @description A row rule of a data role: members with this role see only the rows of table `table_id` whose `column` is one of
+         *     `allowed_values`.
+         */
+        RolePolicy: {
+            /** @description Values of `column` the role sees; empty means no rows of the table. */
+            allowed_values: string[];
+            /** @description A dimension column of the table. */
+            column: string;
+            /**
+             * Format: uuid
+             * @description Table id (`DatasetTable.id` in the catalog).
+             */
+            table_id: string;
+        };
         /** @description A plausibility rule for values of the concept. `min` and `max` only with `value_range`, at least one of them. */
         SanityCheck: {
             kind: components["schemas"]["SanityCheckKind"];
@@ -2479,6 +2650,17 @@ export interface components {
             text: string;
             verdict: components["schemas"]["AnswerVerdict"] | null;
             /** @description Points the check found unclear in the model's text; empty when `by_model` is false. */
+            warnings: string[];
+        };
+        /** @description The full rule set of a role; replaces the previous one. */
+        SetPoliciesRequest: {
+            /** @description One rule per table and column. Each `column` must be a dimension column of the table's current version. */
+            policies: components["schemas"]["RolePolicy"][];
+        };
+        SetPoliciesResponse: {
+            /** @description Rules as saved: values trimmed, without duplicates, sorted. */
+            policies: components["schemas"]["RolePolicy"][];
+            /** @description Vietnamese notes for the admin, for example a value not found in the column profile. The rules are saved. */
             warnings: string[];
         };
         SetRoleRequest: {
@@ -3838,6 +4020,264 @@ export interface operations {
             };
         };
     };
+    listDataRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataRoleResponse"][];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createDataRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataRoleRow"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 empty, too long or taken name; 401; 403 not admin; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listMyDataRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataRoleRow"][];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteDataRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Data role id */
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 still held by members; 401; 403 not admin; 404 not a member or no such role */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    updateDataRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Data role id */
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataRoleRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataRoleRow"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 empty, too long or taken name; 401; 403 not admin; 404 not a member or no such role */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    setDataRolePolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Data role id */
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPoliciesRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetPoliciesResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 unknown table or column, not a dimension column, two rules on one column, same rules as another role, or no rules left on a role held by members; 401; 403 not admin; 404 not a member or no such role */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listDatasets: {
         parameters: {
             query?: never;
@@ -4337,6 +4777,48 @@ export interface operations {
                 };
             };
             /** @description 401; 403 not admin; 404 not a member or invalid dataset id */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listFilterColumns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Table id (`DatasetTable.id`) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilterColumnResponse"][];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 unknown table or no data yet; 401; 403 not admin; 404 not a member */
             "4XX": {
                 headers: {
                     [name: string]: unknown;
@@ -5201,6 +5683,51 @@ export interface operations {
                 };
             };
             /** @description 400 invalid role or last admin, 401, 403 not admin, 404 */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    setMemberDataRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Account id of the member */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberDataRolesRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 a role not in this workspace or without rules; 401; 403 not admin; 404 not a member */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

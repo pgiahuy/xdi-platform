@@ -391,7 +391,7 @@ fn row_filters_of_the_guard_are_labelled_as_permission() {
     let card = build_card(&sql, policy, &[]);
     let question = format!("{MARKET} là Europe");
     let permission =
-        "Phân quyền: chỉ thấy thị trường nơi giao đơn hàng (Market) là Europe, LATAM".to_string();
+        "Lọc theo quyền xem: thị trường nơi giao đơn hàng (Market) là Europe, LATAM".to_string();
     assert_eq!(
         pairs(&card.understanding.filters),
         [
@@ -412,7 +412,30 @@ fn row_filter_hiding_everything_says_so() {
     let u = build_card(&sql, policy, &[]).understanding;
     assert_eq!(
         pairs(&u.filters),
-        [("Phân quyền: không được thấy dòng nào", "false")]
+        [("Lọc theo quyền xem: không được thấy dòng nào", "false")]
+    );
+}
+
+/// Người mang hai vai (#45): một mục lọc theo quyền xem, hai vế nối bằng "hoặc".
+#[test]
+fn row_filter_of_two_roles_reads_as_or() {
+    let sql = mock_answers().remove(0).1.sql;
+    let market = |values: &[&str]| RowFilter::Column {
+        column: "Market".to_string(),
+        allowed_values: values.iter().map(|v| v.to_string()).collect(),
+    };
+    let policy = vec![RowFilter::AnyOf(vec![
+        vec![market(&["Europe"])],
+        vec![market(&["LATAM"])],
+    ])];
+    let u = build_card(&sql, policy, &[]).understanding;
+    let column = "thị trường nơi giao đơn hàng (Market)";
+    assert_eq!(
+        pairs(&u.filters),
+        [(
+            format!("Lọc theo quyền xem: {column} là Europe hoặc {column} là LATAM").as_str(),
+            r#"("Market" IN ('Europe') OR "Market" IN ('LATAM'))"#
+        )]
     );
 }
 
