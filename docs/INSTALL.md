@@ -91,8 +91,8 @@ lập chỉ dùng được một lần. Khởi động lại backend mà vẫn c
 
 Luồng chính là kết nối database: mục **Dữ liệu** ở thanh bên, khung **Kết nối database**, nhập thông tin Postgres rồi
 chụp bảng cần hỏi kèm các bảng liên quan (từng bước ở mục 7, bước 3). Backend trong compose tới được máy chủ database
-theo tên máy hay IP như mọi container; máy chủ phải có trong `SOURCE_ALLOWED_HOSTS` và cần `SOURCE_SECRET_KEY` riêng
-cho bản chạy thật (Cấu hình bên dưới). Dữ liệu chưa nằm trong database thì nạp file: cùng trang, nút **Nạp file CSV,
+theo tên máy hay IP như mọi container; máy chủ phải có trong `SOURCE_ALLOWED_HOSTS`, và bản chạy thật nên đặt `SOURCE_SECRET_KEY`
+(Cấu hình bên dưới). Dữ liệu chưa nằm trong database thì nạp file: cùng trang, nút **Nạp file CSV,
 Parquet hoặc Excel**, chọn một hoặc nhiều file rồi bấm **Nạp**. Chỉ `admin` của workspace thấy hai phần này. Tên
 dataset để trống thì lấy theo tên file hay tên bảng. API của nguồn database: [API.md](API.md), mục Nguồn database.
 
@@ -143,7 +143,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `SEED_SAMPLE` | `true` | Thiết lập lần đầu cho workspace đầu tiên dữ liệu mẫu (mục 7, bước 1): chụp database mẫu, hay nạp DataCo từ file khi không có database mẫu; `false` để workspace trống |
 | `SAMPLE_DATABASE_URL` | compose: `postgres://analyst:analyst@demo-db:5432/company_demo`; ngoài compose: trống | Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp các bảng ghi trong `data/samples/sample_database.json`. Đặt rỗng (`SAMPLE_DATABASE_URL=` trong `.env`) để nạp `data/samples/dataco.csv` như trước; database mẫu không tới được thì backend ghi cảnh báo và cũng nạp file đó. `make dev` đặt sẵn cổng `DEMO_DB_PORT` |
 | `DEMO_DB_PORT` | `5434` | Cổng của database mẫu (`demo-db`) trên `127.0.0.1` của máy host, cho `make dev` và `make eval`. Make không đọc `.env`: đổi cổng ở `.env` thì chạy kèm cùng giá trị, ví dụ `DEMO_DB_PORT=5437 make eval` |
-| `SOURCE_SECRET_KEY` | compose: khóa mẫu; bản chạy thật và ngoài compose: trống (tắt) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`); để trống thì không thêm được nguồn database. Khóa mẫu trong `docker-compose.yml` ai cũng biết, chỉ để chụp database mẫu trên máy; backend cảnh báo khi khởi động với nó, nên đặt khóa riêng trước khi kết nối database thật. Đổi khóa thì phải thêm lại các nguồn |
+| `SOURCE_SECRET_KEY` | trống (tự sinh) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`). Để trống thì lần đầu khởi động backend tự sinh một khóa ngẫu nhiên, ghi vào `DATA_DIR/source_secret.key` (quyền 0600; compose: volume `xdidata`) và các lần sau đọc lại file đó; log ghi một dòng khi sinh, không in khóa. Mất file đó (xóa volume, `docker compose down -v`) là mất mật khẩu của mọi nguồn đã lưu: phải thêm lại nguồn. `make backup` chép cả file này, nên ai có bản sao lưu là giải mã được thông tin kết nối. Bản chạy thật nên đặt biến này và giữ khóa ngoài máy chủ. Đổi khóa thì phải thêm lại các nguồn |
 | `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối, trừ máy của `SAMPLE_DATABASE_URL` luôn được phép. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp |
 | `SOURCE_MAX_ROWS`, `SOURCE_TIMEOUT_SECS` | `1000000`, `300` | Trần số dòng và thời gian một lần chụp bảng; dung lượng theo `MAX_UPLOAD_MB` |
 | `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
@@ -289,10 +289,10 @@ Cần:
      khẩu mẫu.
    - `PUBLIC_URL` bắt đầu bằng `https://` thì cookie đăng nhập có cờ `Secure`: trình duyệt không gửi nó qua HTTP thường.
    - Hai container tự chạy lại khi máy chủ khởi động lại.
-   - Không chạy database mẫu `demo-db` và không dùng khóa mẫu của `SOURCE_SECRET_KEY`: thiết lập lần đầu nạp
-     `data/samples/dataco.csv`, và kết nối database của tổ chức cần đặt `SOURCE_SECRET_KEY` riêng
-     (`openssl rand -base64 32`) cùng `SOURCE_ALLOWED_HOSTS` trong `.env`. Muốn thử database mẫu trên máy chủ thì chạy
-     thêm `--profile demo` và đặt `SAMPLE_DATABASE_URL`, `SOURCE_SECRET_KEY` trước lần thiết lập đầu.
+   - Không chạy database mẫu `demo-db`: thiết lập lần đầu nạp `data/samples/dataco.csv`. Kết nối database của tổ chức
+     cần `SOURCE_ALLOWED_HOSTS` trong `.env`, và nên đặt `SOURCE_SECRET_KEY` (`openssl rand -base64 32`) thay vì để
+     backend tự sinh khóa trong volume dữ liệu (Cấu hình, mục 1). Muốn thử database mẫu trên máy chủ thì chạy thêm
+     `--profile demo` và đặt `SAMPLE_DATABASE_URL` trước lần thiết lập đầu.
 
    Chọn cách đè thêm một file thay vì một file compose đầy đủ thứ hai, vì người cài chỉ thêm một dòng vào `.env` mà
    không phải nhớ `-f` ở mỗi lệnh, và hai file không lệch nhau khi file gốc đổi. Cần Docker Compose 2.24.4 trở lên
@@ -593,8 +593,8 @@ Người tạo thành `admin` của workspace mới và giao diện mở trang �
 
 Mục **Dữ liệu** ở thanh bên.
 
-Kết nối database (chỉ `admin`, cần `SOURCE_SECRET_KEY` và `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình; compose có sẵn khóa
-mẫu cho máy dev): khung **Kết nối database** đứng đầu trang **Dữ liệu**, form mở sẵn khi workspace chưa có nguồn nào,
+Kết nối database (chỉ `admin`, máy chủ phải có trong `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình; `SOURCE_SECRET_KEY` để
+trống thì backend tự sinh khóa): khung **Kết nối database** đứng đầu trang **Dữ liệu**, form mở sẵn khi workspace chưa có nguồn nào,
 không thì bấm **Thêm database**. Nhập máy chủ, cổng, database, tài khoản, mật khẩu và `sslmode`: `prefer` (mặc định),
 `require` khi máy chủ bắt buộc TLS, `verify-full` để kiểm chứng chỉ máy chủ (kèm ô **Chứng chỉ CA** cho CA riêng của tổ
 chức; bảng ở [Dữ liệu](DATA.md), mục Nguồn database). Bấm **Kết nối**: backend thử kết nối trước khi lưu. Chọn bảng hay

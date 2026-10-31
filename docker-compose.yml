@@ -93,10 +93,9 @@ services:
       SAMPLE_DATABASE_URL: ${SAMPLE_DATABASE_URL-postgres://analyst:analyst@demo-db:5432/company_demo}
       ANSWER_TEXT: ${ANSWER_TEXT:-true}
       INSIGHT_TEXT: ${INSIGHT_TEXT:-true}
-      # Nguồn database (docs/DATA.md): khóa trống thì tính năng tắt, danh sách máy chủ trống thì không thêm được nguồn
-      # (máy của SAMPLE_DATABASE_URL luôn được phép). Khóa mặc định là khóa mẫu, chỉ để chạy trên máy như mật khẩu
-      # Postgres mẫu; backend cảnh báo khi khởi động. Bản chạy thật không dùng khóa này (docker-compose.prod.yml).
-      SOURCE_SECRET_KEY: ${SOURCE_SECRET_KEY:-eGRpIHNhbXBsZSBrZXksIGxvY2FsIHVzZSBvbmx5ISE=}
+      # Nguồn database (docs/DATA.md): khóa trống thì backend sinh một khóa và lưu ở /data/source_secret.key (volume
+      # xdidata); danh sách máy chủ trống thì không thêm được nguồn (máy của SAMPLE_DATABASE_URL luôn được phép).
+      SOURCE_SECRET_KEY: ${SOURCE_SECRET_KEY:-}
       SOURCE_ALLOWED_HOSTS: ${SOURCE_ALLOWED_HOSTS:-}
       SOURCE_MAX_ROWS: ${SOURCE_MAX_ROWS:-1000000}
       SOURCE_TIMEOUT_SECS: ${SOURCE_TIMEOUT_SECS:-300}

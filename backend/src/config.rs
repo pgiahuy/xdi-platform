@@ -66,8 +66,8 @@ pub struct Config {
     pub sample_database: Option<SampleDatabase>,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
     pub excel_worker: ExcelWorker,
-    /// Khóa mã hóa thông tin kết nối của nguồn database (SOURCE_SECRET_KEY, 32 byte dạng base64). Rỗng thì tính năng
-    /// nối database tắt; service/sources/secret.rs kiểm độ dài khóa.
+    /// Khóa mã hóa thông tin kết nối của nguồn database (SOURCE_SECRET_KEY, 32 byte dạng base64). Biến rỗng thì main.rs
+    /// đặt khóa sinh sẵn trong DATA_DIR (service/sources/key_file.rs); service/sources/secret.rs kiểm độ dài khóa.
     pub source_secret_key: Secret,
     /// Máy chủ database được phép thêm làm nguồn (SOURCE_ALLOWED_HOSTS, cách nhau bằng dấu phẩy). Rỗng thì không thêm
     /// được nguồn nào: backend không bị dùng để dò máy trong mạng nội bộ.
@@ -169,12 +169,6 @@ impl Config {
     /// In cảnh báo về cấu hình chưa an toàn khi đưa lên mạng. Server gọi một lần lúc khởi động; không chặn khởi động,
     /// vì chạy trên máy để thử thì các giá trị mẫu là bình thường.
     pub fn log_warnings(&self) {
-        if self.source_secret_key.expose() == SAMPLE_SOURCE_SECRET_KEY {
-            tracing::warn!(
-                "SOURCE_SECRET_KEY is the sample key from docker-compose.yml; fine on a local machine, but set your own \
-                 key (openssl rand -base64 32) before connecting a real database (docs/INSTALL.md, section 3)"
-            );
-        }
         if database_password(&self.database_url) == Some(SAMPLE_DB_PASSWORD) {
             tracing::warn!(
                 "DATABASE_URL uses the sample Postgres password; fine on a local machine, but set POSTGRES_PASSWORD \
@@ -210,11 +204,6 @@ const OLLAMA_NUM_CTX_DEFAULT: u32 = 12_288;
 
 /// Mật khẩu mẫu trong docker-compose.yml và .env.example.
 const SAMPLE_DB_PASSWORD: &str = "xdi";
-
-/// Khóa mẫu của SOURCE_SECRET_KEY trong docker-compose.yml và Makefile (base64 của "xdi sample key, local use only!!"),
-/// để bản cài trên máy chụp được database mẫu mà không phải tạo khóa. Ai đọc repo cũng biết khóa này, nên khởi động
-/// với nó thì cảnh báo.
-const SAMPLE_SOURCE_SECRET_KEY: &str = "eGRpIHNhbXBsZSBrZXksIGxvY2FsIHVzZSBvbmx5ISE=";
 
 /// SAMPLE_DATABASE_URL sai dạng thì cảnh báo và bỏ qua (thiết lập lần đầu nạp dataco.csv), không làm backend chết lúc
 /// khởi động.

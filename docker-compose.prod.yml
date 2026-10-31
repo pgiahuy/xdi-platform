@@ -19,9 +19,8 @@ services:
 
   backend:
     environment:
-      # Không dùng khóa mẫu của docker-compose.yml: để trống thì tính năng nguồn database tắt cho tới khi đặt khóa riêng
-      # (docs/INSTALL.md mục 3). Không có database mẫu, thiết lập lần đầu nạp data/samples/dataco.csv.
-      SOURCE_SECRET_KEY: ${SOURCE_SECRET_KEY:-}
+      # Không có database mẫu: thiết lập lần đầu nạp data/samples/dataco.csv. SOURCE_SECRET_KEY nên đặt trong .env
+      # (docs/INSTALL.md mục 3); để trống thì backend tự sinh khóa trong volume dữ liệu như bản chạy trên máy.
       SAMPLE_DATABASE_URL: ${SAMPLE_DATABASE_URL:-}
       DATABASE_URL: postgres://xdi:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/xdi
       # Bắt đầu bằng https:// thì cookie phiên có cờ Secure.

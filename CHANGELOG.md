@@ -19,6 +19,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Mọi câu trả lời có phần giải thích kết quả nói lên điều gì, chọn theo hình dạng kết quả: so với kỳ trước, kỳ đổi mạnh nhất kèm phân rã, tỷ trọng và mức tập trung của các nhóm, hay chỉ số dòng; chênh lệch nhỏ hay ít dòng thì ghi không có thay đổi đáng kể. Trên bảng chụp từ database, phân rã xét cả cột của bảng liên quan (#227).
 - Hai nút **Tốt** và **Chưa đạt** dưới mỗi câu trả lời (Chưa đạt kèm lý do và ghi chú); màn **Câu mẫu** cho admin duyệt câu Tốt thành ví dụ trong prompt của câu hỏi sau có từ chung, và xuất câu đã duyệt thành ca ứng viên cho bộ đánh giá (#212).
 - Bản cài mới có sẵn database mẫu nhỏ nhiều bảng (dịch vụ `demo-db`, bán hàng và học tập): thiết lập lần đầu kết nối và chụp 13 bảng kèm quan hệ, câu mẫu của `mock` và `make eval` chạy trên các bảng đó; `SAMPLE_DATABASE_URL=` để nạp DataCo từ file như trước (#230).
+- `SOURCE_SECRET_KEY` để trống thì backend tự sinh khóa lần đầu và lưu ở `DATA_DIR/source_secret.key`; nguồn database không còn tắt khi chưa đặt khóa (#230).
 - TLS tới nguồn Postgres: `sslmode` `require` và `verify-full`, kèm ô chứng chỉ CA cho CA riêng của tổ chức (#230).
 
 ### Changed

@@ -257,7 +257,8 @@ Mã lỗi: 404 khi dataset không có hoặc thuộc workspace khác. Dataset ch
 ## Nguồn database
 
 Chỉ admin của workspace; member nhận 403 ở mọi route, kể cả liệt kê. Chi tiết cách chụp: [Dữ liệu](DATA.md), mục Nguồn
-database. Thiếu `SOURCE_SECRET_KEY` thì thêm và dùng nguồn trả 503 (`unavailable`).
+database. Không có khóa mã hóa dùng được (`SOURCE_SECRET_KEY` sai dạng, hay biến trống mà file khóa tự sinh trong `DATA_DIR`
+hỏng, không ghi được) thì thêm và dùng nguồn trả 503 (`unavailable`).
 
 - `GET /api/workspaces/{ws}/sources`: nguồn của workspace (máy chủ, cổng, database, tài khoản, sslmode), không có mật
   khẩu.

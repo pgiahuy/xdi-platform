@@ -66,7 +66,12 @@ async fn run(args: Vec<String>) {
         .with_writer(std::io::stderr)
         .init();
 
-    let config = config::Config::from_env();
+    let mut config = config::Config::from_env();
+    // SOURCE_SECRET_KEY trống: khóa sinh một lần và lưu trong DATA_DIR (service/sources/key_file.rs). Trước nhánh lệnh
+    // quản trị, vì make eval chụp database mẫu cũng cần khóa.
+    if let Err(why) = service::sources::apply_key_file(&mut config) {
+        tracing::warn!(%why, "database sources are off until SOURCE_SECRET_KEY is set or the key file is fixed");
+    }
     let addr = format!("0.0.0.0:{}", config.port);
 
     // Migration chạy trước khi nhận request, để mọi request đều thấy schema đúng.

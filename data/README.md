@@ -25,7 +25,7 @@ thêm chỉ số mẫu. Hồ sơ cột và câu gợi ý của `mock` cho 13 b�
 `backend/src/engine/llm/mock_answers_database.json`.
 
 Không có `SAMPLE_DATABASE_URL` (để rỗng, hay chạy binary ngoài compose và `make dev`), hoặc chụp lỗi (database mẫu chưa
-chạy, thiếu `SOURCE_SECRET_KEY`), backend ghi cảnh báo và nạp `<SAMPLES_DIR>/dataco.csv` thành dataset tên `DataCo`
+chạy, không có khóa mã hóa dùng được), backend ghi cảnh báo và nạp `<SAMPLES_DIR>/dataco.csv` thành dataset tên `DataCo`
 (bảng `dataco`, bảng mà các câu mẫu DataCo của `LLM_PROVIDER=mock` viết cho), qua đúng đường nạp file ở trang **Dữ
 liệu**, kể cả hồ sơ cột. Sau đó ghi các chỉ số trong `dataco.metrics.json` vào bảng `metrics` của dataset đó (`origin`
 là `sample`, đã xác nhận); chỉ số nào không qua guard hay không chạy được trên dữ liệu thì bỏ qua và ghi log. Prompt

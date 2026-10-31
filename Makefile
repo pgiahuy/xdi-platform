@@ -12,10 +12,9 @@ BACKUP_DIR ?= $(HOME)/xdi-backups
 CARGO_TARGET := $(if $(filter /%,$(CARGO_TARGET_DIR)),$(CARGO_TARGET_DIR),backend/$(or $(CARGO_TARGET_DIR),target))
 BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
 # Database mẫu nhỏ của compose (dịch vụ demo-db, data/demo-db/README.md), mở trên 127.0.0.1 cho backend chạy ngoài
-# Docker (make dev, make eval). Khóa mẫu của SOURCE_SECRET_KEY như docker-compose.yml, chỉ dùng khi biến chưa đặt.
+# Docker (make dev, make eval). SOURCE_SECRET_KEY không đặt thì backend tự sinh khóa trong DATA_DIR.
 DEMO_DB_PORT ?= 5434
 SAMPLE_DATABASE_URL ?= postgres://analyst:analyst@127.0.0.1:$(DEMO_DB_PORT)/company_demo
-SAMPLE_SOURCE_SECRET_KEY := eGRpIHNhbXBsZSBrZXksIGxvY2FsIHVzZSBvbmx5ISE=
 
 .PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-classify
 
@@ -24,7 +23,7 @@ help: ## In danh sách target
 
 dev: ## Postgres và database mẫu trong Docker, backend chạy local với cargo run
 	$(COMPOSE) up -d --wait postgres demo-db
-	cd backend && SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" SOURCE_SECRET_KEY="$${SOURCE_SECRET_KEY:-$(SAMPLE_SOURCE_SECRET_KEY)}" cargo run
+	cd backend && SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" cargo run
 
 dev-frontend: ## Giao diện chạy dev ở cổng 5173; /api chuyển sang backend
 	cd frontend && npm install && npm run dev
@@ -104,7 +103,7 @@ eval: ## Bộ đánh giá câu hỏi mẫu (#37, #230): mock trên database mẫ
 	cd backend && cargo build -q
 	@# Lần đầu: các bảng chụp từ database mẫu, như thiết lập lần đầu của bản cài mới. Lần hai: dataset DataCo từ file.
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
-	  SAMPLES_DIR=data/samples SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" SOURCE_SECRET_KEY="$${SOURCE_SECRET_KEY:-$(SAMPLE_SOURCE_SECRET_KEY)}" \
+	  SAMPLES_DIR=data/samples SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" \
 	  $(CARGO_TARGET)/debug/xdi-backend eval --sample-database --cases eval/sales_joins.json --cases eval/edu.json \
 	  --baseline eval/baseline.json --out eval/result-database.json
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \

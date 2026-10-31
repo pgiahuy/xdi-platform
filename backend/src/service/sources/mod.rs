@@ -16,6 +16,7 @@ Bảo vệ:
 - Thông tin kết nối mã hóa bằng SOURCE_SECRET_KEY trước khi lưu; mật khẩu không bao giờ có trong response, log hay
   prompt. Cột _source_file ghi postgres://máy/database/schema.bảng, không có tài khoản hay mật khẩu. */
 
+mod key_file;
 mod pg_types;
 mod postgres;
 mod relations;
@@ -34,6 +35,7 @@ use crate::auth::Member;
 use crate::engine::store::SourceRow;
 use crate::{error::AppError, state::AppState};
 
+pub use key_file::apply_key_file;
 pub use postgres::SourceTable;
 use postgres::{ConnectInfo, SSL_MODES};
 pub use relations::{RelationsRequest, RelationsResponse};
