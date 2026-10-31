@@ -46,3 +46,6 @@ eval/result-edu_demo.json
 
 # Extension postgres của DuckDB tải bằng make duckdb-extension (scripts/fetch-duckdb-extension.sh)
 duckdb-extensions/
+
+# File HTML trung gian của sơ đồ (docs/images/src/luong-cau-hoi.py sinh, chụp thành PNG)
+docs/images/src/*.html
