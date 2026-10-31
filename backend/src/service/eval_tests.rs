@@ -243,11 +243,12 @@ fn edu_cases_pass_the_guard() {
     }
 }
 
-/// Bộ câu OULAD trên database mẫu của #202 (eval/oulad_db.json và các câu chờ runner ở eval/oulad_db_pending.json): mọi
+/// Bộ câu OULAD trên database mẫu của #202 (eval/oulad_db.json, gồm cả câu phải từ chối và câu tiếp nối): mọi
 /// expected_sql qua guard với sáu bảng edu như ảnh chụp database mẫu (data/samples/sample_database.json) và đúng khóa
 /// ngoại của data/postgres-demo/sql/edu_schema.sql. Không đòi đọc bảng của trường "dataset" như edu_cases_pass_the_guard:
 /// câu bẫy nhân dòng (kind plain_join_trap) hỏi trên một bảng mà đáp án đúng cố ý chỉ đọc bảng khác. load_cases đọc được
-/// file chính dù có các trường của #202 (kind, variants, note...), vì runner hiện tại bỏ qua trường lạ.
+/// file dù có các trường chỉ người đọc dùng (author, reviewers, note), vì runner bỏ qua trường lạ. Câu tiếp nối trỏ tới
+/// câu gốc đứng trước nó trong file (service/eval.rs chỉ đọc được cuộc của câu đã hỏi), câu phải từ chối không có đáp án.
 #[test]
 fn oulad_db_cases_pass_the_guard() {
     use crate::engine::guard::{build_guarded_sql, AllowedTable, JoinLink};
@@ -359,16 +360,25 @@ fn oulad_db_cases_pass_the_guard() {
     ];
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../eval/");
     let main = format!("{dir}oulad_db.json");
-    assert!(load_cases(std::path::Path::new(&main)).unwrap().len() >= 50);
-    for file in [main, format!("{dir}oulad_db_pending.json")] {
-        let cases: Vec<serde_json::Value> =
-            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
-        for case in &cases {
-            for sql in case["expected_sql"].as_array().unwrap() {
-                let sql = sql.as_str().unwrap();
-                build_guarded_sql(sql, &tables, &links, 1000)
-                    .unwrap_or_else(|e| panic!("{}: {e:?}\n{sql}", case["id"]));
-            }
+    let cases = load_cases(std::path::Path::new(&main)).unwrap();
+    assert!(cases.len() >= 50);
+    for (i, case) in cases.iter().enumerate() {
+        assert_eq!(
+            case.must_refuse,
+            case.expected_sql.is_empty(),
+            "{}",
+            case.id
+        );
+        if let Some(parent) = &case.follow_up_of {
+            assert!(
+                cases[..i].iter().any(|c| &c.id == parent),
+                "{}: parent {parent} must come first",
+                case.id
+            );
+        }
+        for sql in &case.expected_sql {
+            build_guarded_sql(sql, &tables, &links, 1000)
+                .unwrap_or_else(|e| panic!("{}: {e:?}\n{sql}", case.id));
         }
     }
 }

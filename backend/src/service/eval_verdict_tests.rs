@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/eval_verdict_tests.rs - ca test của bước chấm một câu ở service/eval.rs (#202), thuần không cần Postgres:
 ba trạng thái đạt, trượt, cần xem lại theo lỗi của nhà cung cấp mô hình, status, phần giải thích của câu tìm nguyên
-nhân, nhiều đáp án. Câu trả lời lấy từ response mẫu ở service/ask/examples.rs. */
+nhân, nhiều đáp án, câu phải từ chối. Câu trả lời lấy từ response mẫu ở service/ask/examples.rs. */
 
 use super::ask::contract::{AskResponse, CellValue};
-use super::ask::examples::{build_needs_choice_example, build_simple_example, build_why_example};
-use super::eval::{build_answer_verdict, build_ask_error_verdict, EvalCase, Verdict};
+use super::ask::examples::{
+    build_failed_example, build_needs_choice_example, build_rejected_example, build_simple_example,
+    build_why_example,
+};
+use super::eval::{
+    build_answer_verdict, build_ask_error_verdict, build_refuse_error_verdict,
+    build_refuse_verdict, EvalCase, Verdict,
+};
 use crate::engine::llm::GEMINI_QUOTA_MESSAGE;
 use crate::error::AppError;
 
@@ -106,4 +112,28 @@ fn cases_without_kind_are_graded_as_before() {
         build_answer_verdict(&response, &old, &[rows_of(&response)]).0,
         Verdict::Pass
     );
+}
+
+#[test]
+fn refuse_cases_pass_only_when_the_system_refuses() {
+    assert_eq!(
+        build_refuse_verdict(&build_rejected_example()).0,
+        Verdict::Pass
+    );
+    let (verdict, detail) = build_refuse_verdict(&build_simple_example());
+    assert_eq!(verdict, Verdict::Fail);
+    assert!(detail.contains("thay vì từ chối"), "{detail}");
+    assert_eq!(
+        build_refuse_verdict(&build_failed_example()).0,
+        Verdict::Fail
+    );
+    assert_eq!(
+        build_refuse_verdict(&build_needs_choice_example()).0,
+        Verdict::Review
+    );
+    // Lỗi 400 có thể là mô hình chặn vì nội dung, cũng có thể là mock không có câu này: cần người xem, không tự đạt.
+    let blocked = AppError::BadRequest("câu hỏi bị chặn".to_string());
+    assert_eq!(build_refuse_error_verdict(&blocked).0, Verdict::Review);
+    let quota = AppError::Upstream(GEMINI_QUOTA_MESSAGE.to_string());
+    assert_eq!(build_refuse_error_verdict(&quota).0, Verdict::Review);
 }

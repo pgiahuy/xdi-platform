@@ -25,6 +25,9 @@ mod eval_judge_tests;
 pub mod eval_pace;
 #[cfg(test)]
 mod eval_pace_tests;
+pub mod eval_report;
+#[cfg(test)]
+mod eval_report_tests;
 #[cfg(test)]
 mod eval_tests;
 #[cfg(test)]
