@@ -135,6 +135,10 @@ pub struct DatasetVersion {
     #[schema(required)]
     pub row_count: Option<i64>,
     pub profile_status: String,
+    /// Description of the snapshotted table written in the source database (`COMMENT ON TABLE`); null for uploaded
+    /// files and tables without a comment.
+    #[schema(required)]
+    pub description: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -144,6 +148,8 @@ pub struct NewVersion<'a> {
     pub file_hash: &'a str,
     pub parquet_path: &'a str,
     pub row_count: i64,
+    /// Comment của bảng nguồn database (COMMENT ON TABLE), đã làm sạch; None với file nạp tay.
+    pub description: Option<&'a str>,
 }
 
 /// Phiên bản chưa lập hồ sơ cột, ở bất kỳ workspace nào (xem list_pending_versions).
@@ -181,11 +187,11 @@ const CURRENT_VERSION_JOIN: &str =
     AND v.id = d.current_version_id \
     JOIN sources s ON s.workspace_id = d.workspace_id AND s.id = d.source_id";
 const VERSION_COLUMNS: &str =
-    "id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status, created_at";
+    "id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status, description, created_at";
 // Cùng danh sách cột, có tiền tố bảng, dùng khi câu SQL nối với datasets.
 const VERSION_COLUMNS_V: &str =
     "v.id, v.dataset_id, v.version, v.source_kind, v.file_hash, v.parquet_path, \
-    v.row_count, v.profile_status, v.created_at";
+    v.row_count, v.profile_status, v.description, v.created_at";
 
 impl Store {
     /// Nguồn kiểu file nạp lên. Nguồn database thêm khi có tính năng nối database.
@@ -323,8 +329,9 @@ impl Store {
         };
         let sql = format!(
             "INSERT INTO dataset_versions
-                 (workspace_id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status)
-             SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5, $6, $7
+                 (workspace_id, dataset_id, version, source_kind, file_hash, parquet_path, row_count, profile_status,
+                  description)
+             SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5, $6, $7, $8
              FROM dataset_versions WHERE workspace_id = $1 AND dataset_id = $2
              RETURNING {VERSION_COLUMNS}"
         );
@@ -341,6 +348,7 @@ impl Store {
             .bind(new.parquet_path)
             .bind(new.row_count)
             .bind(status.as_str())
+            .bind(new.description)
             .fetch_one(&mut *tx)
             .await
             .map_err(|e| db_error("create version", e))?;
@@ -680,6 +688,7 @@ mod tests {
             file_hash: hash,
             parquet_path: "/data/x.parquet",
             row_count: 10,
+            description: None,
         }
     }
 
@@ -849,6 +858,7 @@ mod tests {
                     file_hash: &hash,
                     parquet_path: "/data/x.parquet",
                     row_count: 1,
+                    description: None,
                 };
                 store.create_version(&ws, ds.id, &new, &[]).await
             }));

@@ -7,8 +7,8 @@ Các bước:
 1. Danh sách bảng: bảng bắt đầu và các bảng chọn kèm, tối đa MAX_SNAPSHOT_TABLES. Chụp lại (dataset_id) lấy cả nhóm
    dataset nối với nhau qua quan hệ, cùng nguồn.
 2. Chép: một kết nối, một giao dịch REPEATABLE READ, nên mọi bảng cùng là ảnh của một thời điểm. Mỗi bảng đếm dòng
-   (giới hạn SOURCE_MAX_ROWS) rồi COPY ra file riêng (giới hạn MAX_UPLOAD_MB), kèm kiểu cột Postgres. Cả bước chung một
-   giới hạn SOURCE_TIMEOUT_SECS.
+   (giới hạn SOURCE_MAX_ROWS) rồi COPY ra file riêng (giới hạn MAX_UPLOAD_MB), kèm kiểu cột Postgres và comment của
+   bảng, của cột (comments.rs). Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS.
 3. Nạp từng bảng. Bảng đã từng chụp từ nguồn này thì thêm phiên bản vào đúng dataset đó (một bảng nguồn, một dataset),
    nên bảng chiều dùng chung bởi hai bảng sự kiện không bị nhân đôi.
 4. Ghi quan hệ giữa các bảng trong nhóm, trong một giao dịch.
@@ -22,12 +22,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use super::comments;
 use super::postgres::{self, ConnectInfo, CsvCopy, SourceTable};
 use super::relations::{self, ForeignKey};
 use super::{find_table_in, load, recorded_table, source_file_label};
 use crate::auth::Member;
 use crate::engine::store::{DatasetRelation, NewRelation, SourceRow};
-use crate::service::ingest::{self, StagedFile, Staging, Upload, UploadResult};
+use crate::service::ingest::{self, SourceDescriptions, StagedFile, Staging, Upload, UploadResult};
 use crate::{error::AppError, state::AppState};
 
 /// Số bảng tối đa của một lần chụp: mỗi bảng giữ một file tạm tới MAX_UPLOAD_MB trên đĩa cho tới khi nạp xong.
@@ -67,6 +68,7 @@ struct CopiedTable {
     staging: Staging,
     path: PathBuf,
     copy: CsvCopy,
+    descriptions: SourceDescriptions,
 }
 
 pub async fn snapshot(
@@ -222,11 +224,13 @@ async fn copy_group(
             let staging = Staging::new(&state.config.data_dir)?;
             let path = staging.upload_path(0);
             let copy = postgres::copy_to_csv(&mut conn, table, max_rows, max_bytes, &path).await?;
+            let descriptions = comments::read_descriptions(&mut conn, table).await?;
             copied.push(CopiedTable {
                 table: table.clone(),
                 staging,
                 path,
                 copy,
+                descriptions,
             });
         }
         let mut keys = Vec::new();
@@ -268,8 +272,13 @@ async fn ingest_table(
     };
     let label = source_file_label(info, &full_name);
     // Băm cả nhãn nguồn lẫn nội dung: cùng nội dung mà từ bảng khác hay từ một file nạp tay thì vẫn là dữ liệu khác,
-    // không bị coi là trùng phiên bản đã có ở dataset khác.
-    let sha256 = Sha256::digest(format!("{label}\n{}", copied.copy.sha256).as_bytes())
+    // không bị coi là trùng phiên bản đã có ở dataset khác. Comment cũng vào hash (build_comment_part).
+    let hashed = format!(
+        "{label}\n{}{}",
+        copied.copy.sha256,
+        build_comment_part(&copied.descriptions)
+    );
+    let sha256 = Sha256::digest(hashed.as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
@@ -284,6 +293,7 @@ async fn ingest_table(
         }],
         sheets: Vec::new(),
         database_source: Some(row.id),
+        descriptions: copied.descriptions,
     };
     let result = ingest::upload(state, member, copied.staging, upload).await?;
     state
@@ -291,6 +301,20 @@ async fn ingest_table(
         .record_source_table(&member.workspace, row.id, result.dataset.id, &full_name)
         .await?;
     Ok(result)
+}
+
+/// Phần comment trong hash của bản chụp: chỉ đổi comment mà dữ liệu giữ nguyên thì chụp lại vẫn ra phiên bản mới mang
+/// comment mới (comment nằm trên phiên bản). Bảng không có comment nào thì chuỗi rỗng, nên hash giữ như trước #245 và
+/// chụp lại bảng không đổi không tạo phiên bản thừa.
+pub(super) fn build_comment_part(descriptions: &SourceDescriptions) -> String {
+    if descriptions.table.is_none() && descriptions.columns.is_empty() {
+        return String::new();
+    }
+    let mut part = format!("\ncomments:{:?}", descriptions.table);
+    for (name, text) in &descriptions.columns {
+        part.push_str(&format!("\n{name:?}={text:?}"));
+    }
+    part
 }
 
 /// Khóa ngoại giữa các bảng của nhóm, đổi bảng thành dataset vừa nạp.

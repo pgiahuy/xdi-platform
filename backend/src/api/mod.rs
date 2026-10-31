@@ -59,6 +59,8 @@ mod roles_tests;
 mod row_filter_fk_tests;
 mod security_headers;
 #[cfg(test)]
+mod source_comments_tests;
+#[cfg(test)]
 mod source_relations_tests;
 mod sources;
 #[cfg(test)]

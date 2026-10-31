@@ -33,6 +33,7 @@ pub fn build_columns(
                 name: column.name.clone(),
                 label: column.aliases.first().cloned(),
                 description: column.description.clone(),
+                description_source: column.description_source.clone(),
                 role,
                 unit: column.unit.clone(),
                 sensitive: column.is_sensitive,

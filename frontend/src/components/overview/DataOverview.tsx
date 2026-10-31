@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/overview/DataOverview.tsx - nội dung khung "Tổng quan dữ liệu" (#198): dataset có gì trước khi hỏi. Thứ
-tự đọc: tóm tắt (số dòng, khoảng thời gian), phần chưa có (hồ sơ đang lập, lọc theo vai), biểu đồ dựng sẵn
+tự đọc: tóm tắt (số dòng, khoảng thời gian), mô tả bảng ghi trong database nguồn nếu có, phần chưa có (hồ sơ đang lập, lọc theo vai), biểu đồ dựng sẵn
 (OverviewCharts.tsx, độ đo chính theo tháng đứng đầu), các cột theo nhóm (ColumnGroups.tsx), chỉ số đã định nghĩa.
 Trang hỏi và trang Tổng quan dữ liệu cùng dùng; mỗi trang tự quyết bấm một mục thì làm gì (onPick): trang hỏi điền câu
 vào ô hỏi, trang Tổng quan dữ liệu mở trang hỏi với câu đó. Không mục nào gửi câu hỏi đi. */
 
 import type { ReactNode } from 'react'
+import { DescriptionText } from '../DescriptionText'
 import { ColumnGroups } from './ColumnGroups'
 import { OverviewCharts } from './OverviewCharts'
 import { buildMetricQuestion } from './questions'
@@ -25,6 +26,7 @@ export function DataOverview({ overview, onPick }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm">{buildSummary(overview)}</p>
+      {overview.description && <DescriptionText text={overview.description} source="database" />}
       {overview.missing.length > 0 && (
         <ul role="status" className="flex flex-col gap-1 text-xs text-muted-foreground">
           {overview.missing.map((message) => (

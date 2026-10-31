@@ -3,6 +3,7 @@
 bình (giá trị mô tả một dòng như tuổi, điểm, số tín chỉ). Câu hỏi không nhắc chỉ số nào thì mô hình gộp cột theo cách
 này, và câu "vì sao" trên cột trung bình so trung bình mỗi dòng. onChange chỉ truyền vào khi người xem là admin. */
 
+import { DescriptionText } from '../DescriptionText'
 import { NativeSelect } from './NativeSelect'
 import type { Aggregation, ColumnItem } from './types'
 
@@ -31,7 +32,7 @@ export function AggregationList({ columns, onChange, pendingColumn }: Props) {
               <label htmlFor={onChange ? id : undefined} className="block truncate text-sm font-medium" title={column.name}>
                 {column.name}
               </label>
-              {column.description && <p className="text-xs text-muted-foreground">{column.description}</p>}
+              {column.description && <DescriptionText text={column.description} source={column.descriptionSource} />}
             </div>
             {onChange ? (
               <NativeSelect
