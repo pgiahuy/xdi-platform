@@ -83,6 +83,8 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
   nó dùng; code so mỗi khai báo với đúng ô của bảng đã tính, rồi một lần gọi mô hình riêng so nghĩa của lời với các
   khai báo. Sai hay có chỗ đọc được nhiều nghĩa thì mô hình viết lại một lần, kèm các lỗi đó; vẫn sai thì dùng câu do
   code viết, còn chỗ chưa rõ mà không chắc sai thì giữ insight, kèm cảnh báo.
+- **Vai dữ liệu:** admin tạo vai, đặt luật lọc dòng (bảng, cột, giá trị) ở màn **Vai dữ liệu** và gán vai cho thành
+  viên; người mang vai chỉ thấy dòng được phép khi hỏi, xem tổng quan hay truy dòng nguồn, admin không bị lọc.
 - **Chỉ số:** admin định nghĩa chỉ số của từng dataset (chọn phép tính và cột, hoặc viết SQL; chạy thử trước khi lưu)
   và đặt cột số đo nào lấy tổng, cột nào lấy trung bình; câu hỏi sau dùng đúng công thức đó.
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
@@ -96,7 +98,6 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 
 ## Chưa có
 
-- Gán vai dữ liệu cho thành viên: guard đã lọc dòng theo vai dữ liệu, nhưng chưa có API hay màn để đặt.
 - Chế độ demo, màn xem lịch sử câu hỏi, màn sửa mô tả, bí danh và vai trò cột.
 - Nguồn MySQL, SQLite; truy vấn thẳng database ngoài lúc hỏi (hiện là chụp bảng); `sslmode=verify-ca` và chứng chỉ phía
   client.
