@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres), luồng chính của trang
 (#230, nạp file là lựa chọn phụ bên dưới): nút mở form thêm nguồn, workspace chưa có nguồn nào thì form mở sẵn,
-rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chọn bảng chụp kèm, chụp vào dataset của database (#257). DatasetsPage chỉ hiện khung
-này cho admin; backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel,
-RelatedTablePicker). Cách chọn sẵn, mở thêm một bước và giới hạn số bảng ở relatedTablesView.ts. */
+rồi với mỗi nguồn đã có: thử kết nối, danh sách mọi bảng đọc được tick sẵn, admin bỏ tick, một nút chụp vào dataset
+của database (#247, #257). DatasetsPage chỉ hiện khung này cho admin; backend vẫn trả 403 cho member. Nối hook
+(src/api/sources.ts) với component (ConnectForm, SourcePanel, SourceTablePicker). Bảng nào tick sẵn, câu báo khi bỏ
+tick bảng danh mục và thân của lần chụp ở sourceTablesView.ts. */
 
 import { useState } from 'react'
 import {
   useCreateSource,
   useDeleteSource,
   useSnapshot,
-  useSourceRelations,
   useSourceTables,
   useSources,
   useTestSource,
@@ -18,12 +18,18 @@ import {
   type Source,
 } from '@/api/sources'
 import { ConnectForm, type ConnectValues } from '@/components/datasets/ConnectForm'
-import { RelatedTablePicker } from '@/components/datasets/RelatedTablePicker'
 import { SourcePanel } from '@/components/datasets/SourcePanel'
-import type { SnapshotTableResult } from '@/components/datasets/types'
+import { SourceTablePicker } from '@/components/datasets/SourceTablePicker'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
-import { buildRelatedView, MAX_SNAPSHOT_TABLES, type RelationChoice } from './relatedTablesView'
+import {
+  buildSnapshotRequest,
+  buildSnapshotSummary,
+  buildSourceTableGroups,
+  isFirstSnapshot,
+  isTicked,
+  type TickChoice,
+} from './sourceTablesView'
 
 // Khớp SSL_MODES của backend (service/sources/postgres.rs), nghĩa như sslmode của libpq.
 const SSL_MODES = [
@@ -85,8 +91,9 @@ export function DatabaseSources({ ws }: { ws: string }) {
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        Mỗi database kết nối là một dataset; chụp bảng Postgres của tổ chức vào dataset đó, kèm các bảng liên quan theo
-        khóa ngoại, để câu hỏi nối được nhiều bảng. Mỗi lần chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
+        Mỗi database kết nối là một dataset. Mọi bảng tài khoản đọc được tick sẵn, bỏ tick bảng không cần rồi chụp một
+        lần, kèm mọi quan hệ khóa ngoại giữa các bảng đã chụp. Mỗi lần chụp là một phiên bản, chụp lại khi dữ liệu bên đó
+        đổi.
       </p>
       {formOpen && (
         <ConnectForm
@@ -112,43 +119,28 @@ function sourceLabel(source: Source): string {
   return `${source.host}:${source.port}/${source.database} (${source.user})`
 }
 
-function toResult(result: SnapshotResponse): { tables: SnapshotTableResult[]; relationCount: number } {
-  return {
-    tables: result.datasets.map((d) => ({
-      datasetName: d.dataset.name,
-      created: d.created,
-      version: d.version.version,
-      rowCount: d.version.row_count,
-    })),
-    relationCount: result.relations.length,
-  }
-}
-
 function SourceItem({ ws, source }: { ws: string; source: Source }) {
   const tables = useSourceTables(ws, source.id)
   const snapshot = useSnapshot(ws)
   const remove = useDeleteSource(ws)
   const testSource = useTestSource(ws)
-  const [table, setTable] = useState('')
-  // Lựa chọn gắn với bảng bắt đầu: đổi bảng thì lựa chọn cũ không còn áp dụng. Suy ra lúc dựng thay vì đặt lại trong
-  // effect, để không có lần vẽ nào dùng lựa chọn của bảng trước.
-  const [saved, setChoice] = useState<RelationChoice>()
-  const choice: RelationChoice = saved?.start === table ? saved : { start: table, picked: {}, expanded: [] }
-  const relations = useSourceRelations(ws, source.id, table === '' ? [] : [table, ...choice.expanded])
-  const [name, setName] = useState('')
+  const [choice, setChoice] = useState<TickChoice>({})
+  // undefined: chưa bấm gì, theo mặc định (mở khi nguồn chưa chụp bảng nào).
+  const [open, setOpen] = useState<boolean>()
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string }>()
   const [result, setResult] = useState<SnapshotResponse>()
 
-  const startData = relations[0]?.data
-  const view = startData ? buildRelatedView(startData, relations, choice) : undefined
+  const list = tables.data
+  const first = list ? isFirstSnapshot(list) : true
+  const groups = list ? buildSourceTableGroups(list, choice) : undefined
+  const tickedCount = list ? list.filter(isTicked(list, choice)).length : 0
 
-  const toggle = (picked: string, checked: boolean) =>
-    setChoice({ ...choice, picked: { ...choice.picked, [picked]: checked } })
-  const expand = (opened: string, open: boolean) =>
-    setChoice({
-      ...choice,
-      expanded: open ? [...choice.expanded, opened] : choice.expanded.filter((t) => t !== opened),
-    })
+  const toggle = (table: string, ticked: boolean) => setChoice({ ...choice, [table]: ticked })
+  const toggleSchema = (schema: string, ticked: boolean) => {
+    const next = { ...choice }
+    for (const t of list ?? []) if (t.schema === schema) next[t.table] = ticked
+    setChoice(next)
+  }
 
   const test = () => {
     setResult(undefined)
@@ -162,14 +154,17 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
   }
 
   const take = () => {
+    if (!list) return
     setMessage(undefined)
     setResult(undefined)
     snapshot.mutate(
-      { sourceId: source.id, table, name: name.trim() || null, tables: view?.selected ?? [] },
+      { sourceId: source.id, ...buildSnapshotRequest(list, choice) },
       {
         onSuccess: (done) => {
           setResult(done)
-          setName('')
+          // Bảng vừa chụp thành bảng nguồn đang giữ; lựa chọn tay không cần giữ nữa.
+          setChoice({})
+          setOpen(false)
         },
         onError: (error) => setMessage({ kind: 'error', text: error.message }),
       },
@@ -179,35 +174,27 @@ function SourceItem({ ws, source }: { ws: string; source: Source }) {
   return (
     <SourcePanel
       label={sourceLabel(source)}
-      tables={tables.data?.map((t) => ({ fullName: `${t.schema}.${t.name}`, kind: t.kind }))}
       tablesLoading={tables.isLoading}
       tablesError={tables.error?.message}
-      table={table}
-      onTableChange={setTable}
-      relations={
-        table === '' ? undefined : view ? (
-          <RelatedTablePicker
-            start={view.start}
-            nested={view.nested}
-            expandable={view.expandable}
-            selected={view.selected}
-            max={MAX_SNAPSHOT_TABLES}
+      picker={
+        groups && (
+          <SourceTablePicker
+            groups={groups}
+            tickedCount={tickedCount}
             onToggle={toggle}
-            onExpand={expand}
+            onToggleSchema={toggleSchema}
+            onSnapshot={take}
+            busy={snapshot.isPending}
           />
-        ) : relations[0]?.error ? (
-          <FormMessage kind="error">{relations[0].error.message}</FormMessage>
-        ) : (
-          <p className="text-sm text-muted-foreground">Đang đọc khóa ngoại của bảng...</p>
         )
       }
-      name={name}
-      onNameChange={setName}
+      pickerOpen={first && result === undefined ? undefined : (open ?? false)}
+      onPickerOpenChange={setOpen}
       busy={snapshot.isPending || testSource.isPending || remove.isPending}
+      snapshotting={snapshot.isPending ? tickedCount : undefined}
       message={message}
-      result={result ? toResult(result) : undefined}
+      result={result ? buildSnapshotSummary(result) : undefined}
       onTest={test}
-      onSnapshot={take}
       onDelete={() =>
         remove.mutate(source.id, { onError: (error) => setMessage({ kind: 'error', text: error.message }) })
       }
