@@ -41,6 +41,7 @@ mod queries;
 mod relations;
 #[cfg(test)]
 mod relations_tests;
+mod reports;
 #[cfg(test)]
 mod schema_tests;
 mod source_tables;
@@ -76,6 +77,7 @@ pub use policies::{DataRoleOutcome, PoliciesOutcome, RowPolicy};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, PromptExample, QueryStatus, QueryTimings, StoredQuery};
 pub use relations::{build_related, DatasetRelation, NewRelation};
+pub use reports::{NewReport, ReportItemRow, ReportRow, VersionLabel};
 pub use source_tables::{MetadataColumn, MetadataTableRow, NewMetadataTable};
 pub use sources::SourceRow;
 pub use users::{Deactivated, UserSummary};

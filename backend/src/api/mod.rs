@@ -61,6 +61,9 @@ mod overview_tests;
 mod profile_tests;
 mod query;
 #[cfg(test)]
+mod report_tests;
+mod reports;
+#[cfg(test)]
 mod roles_tests;
 #[cfg(test)]
 mod row_filter_fk_tests;
@@ -111,6 +114,7 @@ fn api_routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .merge(metrics::routes())
         .merge(domains::routes())
         .merge(sources::routes())
+        .merge(reports::routes())
 }
 
 /// Tách router API và đặc tả hoàn chỉnh (đã thêm phần chung ở openapi.rs). Server và lệnh in đặc tả cùng đi qua đây,
