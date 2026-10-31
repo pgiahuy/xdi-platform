@@ -8,7 +8,7 @@ use axum::http::StatusCode;
 use serde_json::{json, Value};
 
 use crate::api::test_support::{app_with, call, multipart, send_raw, CODE};
-use crate::engine::store::test_support::{exec, fresh_database};
+use crate::engine::store::test_support::{exec, fresh_database, give_data_role};
 
 const PASSWORD: &str = "a long password";
 const SHOP: &str = "/api/workspaces/cua-hang";
@@ -189,18 +189,11 @@ async fn row_filters_of_the_viewer_apply_and_profile_counts_are_left_out() {
     let app = app_with(db.store.clone(), Some(CODE), |c| c.data_dir = dir.clone());
     let (lan, minh) = lan_and_minh(&app).await;
     let dataset_id = upload(&app, &lan).await;
-    exec(
+    give_data_role(
         &db.store,
-        "UPDATE memberships SET data_role = 'latam'
-         WHERE user_id = (SELECT id FROM users WHERE email = 'minh@example.com')",
-    )
-    .await;
-    exec(
-        &db.store,
-        &format!(
-            "INSERT INTO rls_policies (workspace_id, dataset_id, data_role, column_name, allowed_values)
-             SELECT workspace_id, id, 'latam', 'Market', ARRAY['LATAM'] FROM datasets WHERE id = '{dataset_id}'"
-        ),
+        "minh@example.com",
+        "latam",
+        &[(&dataset_id, "Market", &["LATAM"])],
     )
     .await;
 

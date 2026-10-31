@@ -177,7 +177,7 @@ pub async fn tables(
         &stats,
         &keys,
         &held,
-        state.config.source_max_rows,
+        &plan::Limits::from_config(&state.config),
     ))
 }
 

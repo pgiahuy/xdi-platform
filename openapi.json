@@ -1203,6 +1203,372 @@
         }
       }
     },
+    "/workspaces/{ws}/data-roles": {
+      "get": {
+        "tags": [
+          "data-roles"
+        ],
+        "summary": "Data roles of the workspace with their row rules and members (admin only)",
+        "description": "A member who holds data roles sees only the rows their roles allow. Within one role, rules apply together (AND); between roles a row is visible when one role allows it (OR), counting only roles with a rule on the table read or on a table it points to. Admins are never filtered.",
+        "operationId": "listDataRoles",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DataRoleResponse"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "data-roles"
+        ],
+        "summary": "Create a data role without rules (admin only)",
+        "operationId": "createDataRole",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataRoleRow"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 empty, too long or taken name; 401; 403 not admin; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/data-roles/mine": {
+      "get": {
+        "tags": [
+          "data-roles"
+        ],
+        "summary": "Data roles of the signed-in member, without their rules",
+        "operationId": "listMyDataRoles",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DataRoleRow"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/data-roles/{role_id}": {
+      "delete": {
+        "tags": [
+          "data-roles"
+        ],
+        "summary": "Delete a data role and its rules (admin only)",
+        "description": "Refused while a member holds the role: a member left without roles would see every row.",
+        "operationId": "deleteDataRole",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "description": "Data role id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "4XX": {
+            "description": "400 still held by members; 401; 403 not admin; 404 not a member or no such role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "data-roles"
+        ],
+        "summary": "Rename a data role or change its description (admin only)",
+        "operationId": "updateDataRole",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "description": "Data role id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataRoleRow"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 empty, too long or taken name; 401; 403 not admin; 404 not a member or no such role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/data-roles/{role_id}/policies": {
+      "put": {
+        "tags": [
+          "data-roles"
+        ],
+        "summary": "Replace the row rules of a data role (admin only)",
+        "description": "Each rule names a table, a dimension column of its current version and the values the role sees. Values missing from the column profile are saved with a warning. Takes effect from the next request of each member.",
+        "operationId": "setDataRolePolicies",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "description": "Data role id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPoliciesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetPoliciesResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 unknown table or column, not a dimension column, two rules on one column, same rules as another role, or no rules left on a role held by members; 401; 403 not admin; 404 not a member or no such role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/datasets": {
       "get": {
         "tags": [
@@ -2771,6 +3137,70 @@
         }
       }
     },
+    "/workspaces/{ws}/datasets/{id}/filter-columns": {
+      "get": {
+        "tags": [
+          "data-roles"
+        ],
+        "summary": "Columns of a table a row rule can use, with their known values (admin only)",
+        "operationId": "listFilterColumns",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Table id (`DatasetTable.id`)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FilterColumnResponse"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 unknown table or no data yet; 401; 403 not admin; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/datasets/{id}/metrics": {
       "get": {
         "tags": [
@@ -3985,6 +4415,72 @@
         }
       }
     },
+    "/workspaces/{ws}/members/{user_id}/data-roles": {
+      "put": {
+        "tags": [
+          "data-roles"
+        ],
+        "summary": "Replace the data roles of a member (admin only)",
+        "description": "An empty list removes every role: the member then sees every row. Only roles with at least one rule can be given.",
+        "operationId": "setMemberDataRoles",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "Account id of the member",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberDataRolesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Saved"
+          },
+          "4XX": {
+            "description": "400 a role not in this workspace or without rules; 401; 403 not admin; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/queries/{query_id}/feedback": {
       "put": {
         "tags": [
@@ -4982,7 +5478,7 @@
           "sources"
         ],
         "summary": "Snapshot tables of the source, every readable table by default, one dataset per table (admin only)",
-        "description": "Without `table`, `tables` and `dataset_id`, every table and view the account can read is snapshotted; `tables` lists the ticked tables instead, and one name snapshots that table alone (for example one kept as metadata only). All tables are copied in one read-only REPEATABLE READ transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from this source gets a new version of its dataset, and one with unchanged content creates nothing (`created` false). Every declared foreign key between tables snapshotted from this source is recorded as a relation; relations are never inferred. A table over SOURCE_MAX_ROWS, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (Postgres sizes, smallest tables first), keeps columns, types, keys and comments only (`metadata_only`). MAX_UPLOAD_MB still applies to each copied table. `dataset_id` snapshots that dataset again with every dataset linked to it.",
+        "description": "Without `table`, `tables` and `dataset_id`, every table and view the account can read is snapshotted; `tables` lists the ticked tables instead, and one name snapshots that table alone (for example one kept as metadata only). All tables are copied in one read-only REPEATABLE READ transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from this source gets a new version of its dataset, and one with unchanged content creates nothing (`created` false). Every declared foreign key between tables snapshotted from this source is recorded as a relation; relations are never inferred. Limits are checked on Postgres sizes before copying: a table over SOURCE_TABLE_MAX_MB, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (smallest tables first), or over SOURCE_MAX_ROWS when that is set, keeps columns, types, keys and comments only (`metadata_only`). There is no row limit by default. `dataset_id` snapshots that dataset again with every dataset linked to it.",
         "operationId": "snapshotSource",
         "parameters": [
           {
@@ -5037,7 +5533,7 @@
             }
           },
           "4XX": {
-            "description": "400 unknown table, cannot read it or cannot connect, 401, 403 not admin, 404, 413 a copied table is bigger than MAX_UPLOAD_MB",
+            "description": "400 unknown table, cannot read it or cannot connect, 401, 403 not admin, 404, 413 a copied view (no size known before copying) is bigger than SOURCE_TABLE_MAX_MB",
             "content": {
               "application/json": {
                 "schema": {
@@ -5065,7 +5561,7 @@
           "sources"
         ],
         "summary": "Tables and views the source account can read, for picking what to snapshot (admin only)",
-        "description": "Every table and view the account can read (its SELECT grants decide the scope), with the row estimate and size from Postgres statistics, the table comment, foreign keys in and out among readable tables, `is_referenced` when another table points to it (warn before unticking a lookup table), `over_row_limit` when the estimate is above SOURCE_MAX_ROWS, and what this source already holds for it (`state`).",
+        "description": "Every table and view the account can read (its SELECT grants decide the scope), with the row estimate and size from Postgres statistics, the table comment, foreign keys in and out among readable tables, `is_referenced` when another table points to it (warn before unticking a lookup table), `over_limit` when the table alone is over SOURCE_TABLE_MAX_MB (or SOURCE_MAX_ROWS when set), and what this source already holds for it (`state`).",
         "operationId": "listSourceTables",
         "parameters": [
           {
@@ -6193,6 +6689,90 @@
             "description": "True when the SQL that ran filters on a date after the last day with data: the period asked about is not fully\ncovered (or not covered at all)."
           },
           "to": {
+            "type": "string"
+          }
+        }
+      },
+      "DataRoleRequest": {
+        "type": "object",
+        "description": "Create or rename a data role.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional, at most 500 characters."
+          },
+          "name": {
+            "type": "string",
+            "description": "1 to 60 characters, unique in the workspace (case-insensitive), for example `Sales South`."
+          }
+        }
+      },
+      "DataRoleResponse": {
+        "type": "object",
+        "description": "A data role with its row rules and the members who hold it.",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "policies",
+          "member_ids"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "member_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Account ids of the members who hold the role."
+          },
+          "name": {
+            "type": "string"
+          },
+          "policies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RolePolicy"
+            },
+            "description": "Rules of the role, by table and column. Rules on one table all apply together (AND)."
+          }
+        }
+      },
+      "DataRoleRow": {
+        "type": "object",
+        "description": "A data role of the workspace.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
             "type": "string"
           }
         }
@@ -7420,6 +8000,34 @@
           }
         }
       },
+      "FilterColumnResponse": {
+        "type": "object",
+        "description": "A column a row rule can use: a dimension column of the table's current version.",
+        "required": [
+          "name",
+          "label",
+          "values"
+        ],
+        "properties": {
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vietnamese label: the first alias written by the semantic profile; null until then."
+          },
+          "name": {
+            "type": "string"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Known values of the column from its profile, most rows first; empty for a sensitive column or one with too\nmany values to list. A rule may still use other values."
+          }
+        }
+      },
       "GroupContribution": {
         "type": "object",
         "description": "One group of a dimension. `value` is null for the group of rows where the dimension column is null.",
@@ -7882,6 +8490,22 @@
           "ratio"
         ]
       },
+      "MemberDataRolesRequest": {
+        "type": "object",
+        "description": "The full set of data roles of a member; empty removes every role.",
+        "required": [
+          "role_ids"
+        ],
+        "properties": {
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
       "MemberRow": {
         "type": "object",
         "description": "A member of a workspace.",
@@ -8016,7 +8640,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Rows counted, or estimated by Postgres when far over SOURCE_MAX_ROWS."
+            "description": "Rows estimated by Postgres, or counted when SOURCE_MAX_ROWS is set; null when Postgres has no statistics yet."
           },
           "size_bytes": {
             "type": [
@@ -9226,6 +9850,33 @@
           }
         }
       },
+      "RolePolicy": {
+        "type": "object",
+        "description": "A row rule of a data role: members with this role see only the rows of table `table_id` whose `column` is one of\n`allowed_values`.",
+        "required": [
+          "table_id",
+          "column",
+          "allowed_values"
+        ],
+        "properties": {
+          "allowed_values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Values of `column` the role sees; empty means no rows of the table."
+          },
+          "column": {
+            "type": "string",
+            "description": "A dimension column of the table."
+          },
+          "table_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Table id (`DatasetTable.id` in the catalog)."
+          }
+        }
+      },
       "SanityCheck": {
         "type": "object",
         "description": "A plausibility rule for values of the concept. `min` and `max` only with `value_range`, at least one of them.",
@@ -9296,6 +9947,45 @@
               "type": "string"
             },
             "description": "Points the check found unclear in the model's text; empty when `by_model` is false."
+          }
+        }
+      },
+      "SetPoliciesRequest": {
+        "type": "object",
+        "description": "The full rule set of a role; replaces the previous one.",
+        "required": [
+          "policies"
+        ],
+        "properties": {
+          "policies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RolePolicy"
+            },
+            "description": "One rule per table and column. Each `column` must be a dimension column of the table's current version."
+          }
+        }
+      },
+      "SetPoliciesResponse": {
+        "type": "object",
+        "required": [
+          "policies",
+          "warnings"
+        ],
+        "properties": {
+          "policies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RolePolicy"
+            },
+            "description": "Rules as saved: values trimmed, without duplicates, sorted."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Vietnamese notes for the admin, for example a value not found in the column profile. The rules are saved."
           }
         }
       },
@@ -9454,7 +10144,7 @@
             "items": {
               "$ref": "#/components/schemas/MetadataOnlyTable"
             },
-            "description": "Tables over SOURCE_MAX_ROWS or the SOURCE_SNAPSHOT_MAX_MB total: no rows copied, metadata kept."
+            "description": "Tables over SOURCE_TABLE_MAX_MB, the SOURCE_SNAPSHOT_MAX_MB total, or SOURCE_MAX_ROWS when set: no rows copied,\nmetadata kept."
           },
           "relations": {
             "type": "array",
@@ -9536,7 +10226,7 @@
           "references",
           "referenced_by",
           "is_referenced",
-          "over_row_limit",
+          "over_limit",
           "state",
           "dataset_id",
           "reason"
@@ -9581,9 +10271,16 @@
           "name": {
             "type": "string"
           },
-          "over_row_limit": {
-            "type": "boolean",
-            "description": "True when the row estimate is above SOURCE_MAX_ROWS: a snapshot keeps its metadata only."
+          "over_limit": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SkipCause",
+                "description": "Limit this table alone is over, from Postgres statistics: `size_limit` above SOURCE_TABLE_MAX_MB, `row_limit`\nabove SOURCE_MAX_ROWS when set. A snapshot keeps its metadata only. Null when it fits (the SOURCE_SNAPSHOT_MAX_MB\ntotal depends on the other ticked tables and is not checked here)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reason": {
             "type": [

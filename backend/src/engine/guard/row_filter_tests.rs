@@ -212,3 +212,49 @@ fn guarded_results_match_tables_holding_only_allowed_rows() {
 
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+fn column(name: &str, values: &[&str]) -> RowFilter {
+    RowFilter::Column {
+        column: name.to_string(),
+        allowed_values: values.iter().map(|v| v.to_string()).collect(),
+    }
+}
+
+/// Người mang hai vai (#45): vai một có hai luật trên sales (South hoặc North, và South hoặc East: AND ra South), vai hai
+/// thấy East. Hợp hai vai là South và East, đúng tập của tables_with_policies, nên mọi dạng câu phải ra cùng đáp án.
+#[test]
+fn two_roles_give_the_union_of_their_rows() {
+    let dir = std::env::temp_dir().join(format!("xdi-guard-roles-{}", uuid::Uuid::new_v4()));
+    let full = Connection::open_in_memory().unwrap();
+    write_full_data(&full, &dir);
+    let allowed_only = open_allowed_only();
+    let mut tables = tables_with_policies(&dir);
+    tables[0].row_filters = vec![RowFilter::AnyOf(vec![
+        vec![
+            column("region", &["South", "North"]),
+            column("region", &["South", "East"]),
+        ],
+        vec![column("region", &["East"])],
+    ])];
+
+    let mut failures = Vec::new();
+    for (sales, customers) in TABLE_SPELLINGS {
+        for shape in QUERY_SHAPES {
+            let sql = shape.replace("{S}", sales).replace("{C}", customers);
+            if let Some(failure) = check_one_query(&full, &allowed_only, &tables, &sql) {
+                failures.push(failure);
+            }
+        }
+    }
+    let guarded =
+        build_guarded_sql("SELECT region FROM sales", &tables, &links(), NO_ROW_LIMIT).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert_eq!(
+        guarded.row_filters,
+        [
+            r#"(("region" IN ('South', 'North') AND "region" IN ('South', 'East')) OR "region" IN ('East'))"#
+        ]
+    );
+}

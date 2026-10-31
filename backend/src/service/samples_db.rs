@@ -45,7 +45,7 @@ pub async fn seed_database(
         metrics: 0,
     };
     // Mọi bảng đọc được, như admin kết nối database rồi bấm chụp không bỏ tick bảng nào (#247). Bảng quá trần chỉ lưu
-    // metadata (với database mẫu: edu.student_daily_clicks khi SOURCE_MAX_ROWS mặc định).
+    // metadata; với cấu hình mặc định mọi bảng của database mẫu đều vừa trần dung lượng.
     let request = SnapshotRequest {
         table: None,
         tables: Vec::new(),

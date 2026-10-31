@@ -8,7 +8,7 @@ Mỗi UnderstoodItem.sql là một đoạn nguyên văn của sql_guarded (Query
 đọc đối chiếu được. Các phần của thẻ:
 - measures: cột kết quả tổng hợp.
 - filters: vế lọc của câu, trừ khoảng thời gian; rồi vế HAVING; rồi điều kiện phân quyền guard thêm
-  (GuardedSql::row_filters), nhãn "Phân quyền: ...". Vế phân quyền nằm trong hộp đọc bảng của guard nên được nhận ra
+  (GuardedSql::row_filters), nhãn "Lọc theo quyền xem: ...". Vế phân quyền nằm trong hộp đọc bảng của guard nên được nhận ra
   bằng chữ và không lặp lại như vế của câu.
 - time_range: cụm vế liền nhau đầu tiên trong WHERE câu ngoài cùng mà mỗi vế so một biểu thức thời gian với một hằng;
   vế thời gian khác ở lại filters. Chỉ xét WHERE câu ngoài cùng vì đoạn SQL của cụm phải liền một khúc trong câu.
