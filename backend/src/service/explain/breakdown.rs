@@ -7,7 +7,7 @@ Mọi câu đi qua guard với đúng bảng và bộ lọc dòng theo vai dữ 
 của mô hình: người chỉ được thấy Europe thì phân rã cũng chỉ tính trên dòng Europe, và tổng các chiều vẫn khớp tổng hai
 lát cắt vì mọi câu cùng bị lọc như nhau.
 
-Mọi cột ứng viên đều chạy câu từng chiều (run_candidates); explain/dimension_pick.rs bỏ chiều trùng và chiều không so
+Mọi cột ứng viên đều chạy câu từng chiều, cùng lúc trong giới hạn của DuckDB (run_candidates); explain/dimension_pick.rs bỏ chiều trùng và chiều không so
 được gì, rồi phần chấm điểm xếp các chiều còn lại, chiều giải thích tốt nhất trước; không chiều nào bị bỏ vì xếp sau.
 Độ đo tỷ lệ đi nhánh riêng ở explain/ratio_breakdown.rs, dùng chung run_candidates và build_slice_labels ở đây.
 
@@ -17,6 +17,7 @@ các chiều khác vẫn dùng; không còn chiều nào thì không có phân r
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::future::join_all;
 use rust_decimal::Decimal;
 use tokio::sync::Semaphore;
 
@@ -289,16 +290,24 @@ pub async fn build_breakdown(
     })))
 }
 
-/// Câu từng chiều của mọi cột ứng viên (WhyPlan::dimensions), lần lượt; chiều lỗi thì bỏ (run_dimension_rows ghi log).
+/// Câu từng chiều của mọi cột ứng viên (WhyPlan::dimensions); chiều lỗi thì bỏ (run_dimension_rows ghi log).
 /// numbers: số ô số sau giá trị nhóm, 2 với độ đo cộng được, 4 với độ đo tỷ lệ.
+/// Các câu độc lập nhau nên gửi cùng lúc (#184); mỗi câu vẫn chờ lượt ở semaphore query_jobs của DuckDB
+/// (run_query_in_turn), nên số câu chạy thật cùng lúc không vượt giới hạn đó. join_all giữ đúng thứ tự cột của plan, nên
+/// kết quả như khi chạy lần lượt; lỗi máy chủ của một câu (Err) vẫn làm cả bước lỗi, như trước.
 pub(super) async fn run_candidates(
     env: &QueryEnv<'_>,
     plan: &WhyPlan,
     numbers: usize,
 ) -> Result<Vec<Candidate>, AppError> {
+    let queries = plan
+        .dimensions
+        .iter()
+        .map(|column| run_dimension_rows(env, plan, column, numbers));
+    let results = join_all(queries).await;
     let mut candidates = Vec::new();
-    for column in &plan.dimensions {
-        if let Some(rows) = run_dimension_rows(env, plan, column, numbers).await? {
+    for (column, result) in plan.dimensions.iter().zip(results) {
+        if let Some(rows) = result? {
             candidates.push(Candidate {
                 column: column.clone(),
                 rows,
