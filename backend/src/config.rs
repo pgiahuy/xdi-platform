@@ -45,6 +45,10 @@ pub struct Config {
     /// Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM), và prompt dài hơn bị bỏ phần
     /// đầu, tức phần luật, mà không báo lỗi.
     pub ollama_num_ctx: u32,
+    /// Số lượt lập hồ sơ ngữ nghĩa (service/semantic/mod.rs) gọi mô hình cùng lúc (SEMANTIC_JOBS). Mỗi lượt gửi ba
+    /// prompt song song, nên mặc định 2 là tối đa sáu request cùng lúc: gói miễn phí của Gemini giới hạn số request mỗi
+    /// phút, đặt cao hơn thì dễ gặp lỗi 429 khi nạp nhiều bảng liền.
+    pub semantic_jobs: u32,
     /// Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB (QUERY_TIMEOUT_SECS); quá thì câu bị dừng, trừ phần
     /// DuckDB tính lúc chuẩn bị câu (engine/query.rs).
     pub query_timeout: Duration,
@@ -116,6 +120,11 @@ impl Config {
                 "OLLAMA_NUM_CTX",
                 env::var("OLLAMA_NUM_CTX").ok().as_deref(),
                 OLLAMA_NUM_CTX_DEFAULT,
+            ),
+            semantic_jobs: positive_number(
+                "SEMANTIC_JOBS",
+                env::var("SEMANTIC_JOBS").ok().as_deref(),
+                2,
             ),
             query_timeout: timeout_secs("QUERY_TIMEOUT_SECS", 30),
             ask_max_rows: u64::from(positive_number(

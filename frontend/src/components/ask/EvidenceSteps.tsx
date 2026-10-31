@@ -4,14 +4,17 @@ bước một dòng có thời gian, đạt hay lỗi, chi tiết. Bước có g
 và lời, còn số do code tính. Bước phân loại và bước viết lời thay nhãn "có mô hình" bằng cờ màu: loại câu
 (Quantitative, Causal) và kết luận hai cổng kiểm (#201: match, warning, mismatch); mô hình chấm không đúng tuyệt
 đối, nên người đọc cần thấy nó đã kết luận gì. Một bước có thể lặp lại (run trước và sau repair), nên khóa theo vị trí.
-Vẽ như dòng thời gian: mỗi bước một chấm tròn có dấu tick xanh lá (đỏ khi lỗi) nối bằng vạch dọc. */
+Vẽ như dòng thời gian: mỗi bước một chấm tròn có dấu tick xanh lá (đỏ khi lỗi) nối bằng vạch dọc. Dưới dòng thời gian
+là các lần gọi mô hình của câu (#184): loại việc, thời gian, số token, để thấy thời gian chờ nằm ở mô hình hay ở
+backend. */
 
 import { CircleAlert, CircleCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { StepFlag, StepView } from './evidenceTypes'
+import type { ModelCallView, StepFlag, StepView } from './evidenceTypes'
 
 type Props = {
   steps: StepView[]
+  calls: ModelCallView[]
 }
 
 const msFormat = new Intl.NumberFormat('vi-VN')
@@ -26,7 +29,16 @@ const flags: Record<StepFlag, { text: string; className: string }> = {
   mismatch: { text: 'mismatch', className: 'border-destructive/30 bg-destructive/10 text-destructive' },
 }
 
-export function EvidenceSteps({ steps }: Props) {
+export function EvidenceSteps({ steps, calls }: Props) {
+  return (
+    <div className="flex flex-col gap-2">
+      <StepList steps={steps} />
+      {calls.length > 0 && <ModelCalls calls={calls} />}
+    </div>
+  )
+}
+
+function StepList({ steps }: { steps: StepView[] }) {
   return (
     <ol className="flex flex-col">
       {steps.map((step, index) => (
@@ -67,5 +79,34 @@ export function EvidenceSteps({ steps }: Props) {
         </li>
       ))}
     </ol>
+  )
+}
+
+function buildTokenText(input: number | null, output: number | null): string | null {
+  if (input === null || output === null) return null
+  return `${msFormat.format(input)} token vào, ${msFormat.format(output)} token ra`
+}
+
+function ModelCalls({ calls }: { calls: ModelCallView[] }) {
+  const totalMs = calls.reduce((sum, call) => sum + call.durationMs, 0)
+  return (
+    <section className="flex flex-col gap-1 border-t pt-2">
+      <h3 className="text-sm font-medium">
+        Lượt gọi mô hình: {calls.length}, tổng {msFormat.format(totalMs)} ms
+      </h3>
+      <ul className="flex flex-col gap-0.5">
+        {calls.map((call, index) => {
+          const tokens = buildTokenText(call.inputTokens, call.outputTokens)
+          return (
+            <li key={index} className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
+              <span className={cn('text-foreground', !call.ok && 'text-destructive')}>{call.label}</span>
+              <span className="tabular-nums">{msFormat.format(call.durationMs)} ms</span>
+              {!call.ok && <span className="text-destructive">lỗi</span>}
+              {tokens && <span className="tabular-nums">{tokens}</span>}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

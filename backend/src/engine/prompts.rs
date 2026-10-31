@@ -117,10 +117,31 @@ pub const CLASSIFY_QUESTION: PromptFile = PromptFile {
     text: include_str!("../../prompts/classify_question.txt"),
 };
 
-/// Prompt hồ sơ ngữ nghĩa lúc nạp dataset (service/semantic/mod.rs).
-pub const SEMANTIC_PROFILE: PromptFile = PromptFile {
-    name: "semantic_profile.txt",
-    text: include_str!("../../prompts/semantic_profile.txt"),
+// Hồ sơ ngữ nghĩa lúc nạp dataset (service/semantic/mod.rs) chia ba prompt chạy song song (#184): luật của từng phần,
+// rồi cùng một phần dữ liệu (SEMANTIC_PROFILE_DATA) nối sau.
+
+/// Luật phần cột của hồ sơ ngữ nghĩa: mô tả, bí danh, đơn vị, cách gộp, đổi vai trò, cột nhạy cảm.
+pub const SEMANTIC_PROFILE_COLUMNS: PromptFile = PromptFile {
+    name: "semantic_profile_columns.txt",
+    text: include_str!("../../prompts/semantic_profile_columns.txt"),
+};
+
+/// Luật phần bí danh giá trị của hồ sơ ngữ nghĩa.
+pub const SEMANTIC_PROFILE_VALUES: PromptFile = PromptFile {
+    name: "semantic_profile_values.txt",
+    text: include_str!("../../prompts/semantic_profile_values.txt"),
+};
+
+/// Luật phần câu hỏi gợi ý của hồ sơ ngữ nghĩa.
+pub const SEMANTIC_PROFILE_QUESTIONS: PromptFile = PromptFile {
+    name: "semantic_profile_questions.txt",
+    text: include_str!("../../prompts/semantic_profile_questions.txt"),
+};
+
+/// Phần dữ liệu chung của ba prompt hồ sơ ngữ nghĩa: tên dataset, các cột, giá trị cột dimension.
+pub const SEMANTIC_PROFILE_DATA: PromptFile = PromptFile {
+    name: "semantic_profile_data.txt",
+    text: include_str!("../../prompts/semantic_profile_data.txt"),
 };
 
 /// Chữ của file với mọi chỗ trống đã điền. values là các cặp (tên chỗ trống, giá trị). Panic khi file và values không

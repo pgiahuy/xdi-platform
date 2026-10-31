@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::engine::llm::meter::LlmCall;
 use crate::service::explain::annotate::BreakdownNotes;
 
 // Kết quả bình thường của một câu hỏi, kể cả khi không có số. Câu không trả lời được vẫn là 200 có trạng thái trong
@@ -127,6 +128,9 @@ pub struct AskResponse {
     /// What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a
     /// `repair`.
     pub steps: Vec<AskStep>,
+    /// Every call to the language model for this question, in the order the calls finished, with wall time and tokens.
+    /// The sum of `duration_ms` is the time spent waiting for the model; the rest of the step time is the backend.
+    pub model_calls: Vec<LlmCall>,
 }
 
 /// A dataset the SQL of an answer read.

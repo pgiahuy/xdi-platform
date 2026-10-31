@@ -129,6 +129,7 @@ data/        nguồn và giấy phép dataset, samples/ (DataCo mẫu), postgres
 | [GUARD.md](docs/GUARD.md) | Guard SQL: luật, hạn chế đã biết |
 | [DATA.md](docs/DATA.md) | Định dạng file nhận, phiên bản, tên cột |
 | [PRIVACY.md](docs/PRIVACY.md) | Dữ liệu nằm ở đâu, gửi gì cho mô hình |
+| [PERFORMANCE.md](docs/PERFORMANCE.md) | Thời gian, số lượt gọi mô hình và chi phí mỗi câu hỏi, đã đo |
 
 ## Tham gia
 

@@ -55,6 +55,7 @@ Chưa có: gán vai dữ liệu cho thành viên, chế độ demo, màn xem l�
 | [Guard SQL](GUARD.md) | Câu SQL nào được chạy, câu nào bị từ chối |
 | [Dữ liệu](DATA.md) | Định dạng file nhận, giới hạn, phiên bản, tên bảng và tên cột |
 | [Dữ liệu và quyền riêng tư](PRIVACY.md) | Dữ liệu nằm ở đâu, gửi gì cho mô hình, cách xóa |
+| [Thời gian và số lượt gọi mô hình](PERFORMANCE.md) | Một câu hỏi mất bao lâu, gọi mô hình mấy lần, tốn bao nhiêu |
 | [Gói khái niệm ngành](DOMAINS.md) | Khái niệm chung của một ngành, cách thêm một ngành |
 | [Phát hành](RELEASING.md) | Quy trình ra phiên bản mới |
 | [Giấy phép](LICENSES.md) | Giấy phép của các thành phần bên thứ ba |

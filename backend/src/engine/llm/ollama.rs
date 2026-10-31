@@ -9,7 +9,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use serde::Deserialize;
 
-use super::{http, LlmProvider, LlmRequest};
+use super::{http, LlmProvider, LlmReply, LlmRequest, TokenUsage};
 use crate::error::AppError;
 
 pub struct Ollama {
@@ -122,6 +122,12 @@ impl LlmProvider for Ollama {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        self.complete_with_usage(request)
+            .await
+            .map(|reply| reply.text)
+    }
+
+    async fn complete_with_usage(&self, request: &LlmRequest<'_>) -> Result<LlmReply, AppError> {
         let client = self.client.as_ref().map_err(|_| {
             AppError::Unavailable(
                 "Máy chủ không tạo được client HTTP để gọi Ollama, xem log của backend".to_string(),
@@ -156,8 +162,8 @@ impl LlmProvider for Ollama {
     }
 }
 
-/// Lấy văn bản trả lời từ body của /api/generate.
-fn build_answer(body: &str) -> Result<String, AppError> {
+/// Lấy văn bản trả lời và số token từ body của /api/generate.
+fn build_answer(body: &str) -> Result<LlmReply, AppError> {
     let response: GenerateResponse = serde_json::from_str(body).map_err(|err| {
         // Chỉ ghi lỗi parse, không ghi body: body có thể chứa dữ liệu của người dùng.
         tracing::warn!(error = %err, "ollama response is not valid JSON of the expected shape");
@@ -181,13 +187,26 @@ fn build_answer(body: &str) -> Result<String, AppError> {
             "Ollama không trả về nội dung. Thử lại hoặc diễn đạt lại câu hỏi".to_string(),
         ));
     }
-    Ok(response.response)
+    // Thiếu một trong hai số đếm thì không ghi số token, để tổng token không bị đếm thiếu mà không ai biết.
+    let usage = match (response.prompt_eval_count, response.eval_count) {
+        (Some(input), Some(output)) => Some(TokenUsage {
+            input_tokens: input,
+            output_tokens: output,
+        }),
+        _ => None,
+    };
+    Ok(LlmReply {
+        text: response.response,
+        usage,
+    })
 }
 
 #[derive(Deserialize)]
 struct GenerateResponse {
     response: String,
     done_reason: Option<String>,
+    prompt_eval_count: Option<u64>,
+    eval_count: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -237,6 +256,23 @@ mod tests {
             Err(AppError::Unavailable(message)) => (503, message),
             other => panic!("expected a model error, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn reads_token_counts() {
+        let (url, _) = spawn(200, OK_BODY, Duration::ZERO).await;
+        let request = LlmRequest {
+            task: LlmTask::Sql,
+            question: "số đơn theo khu vực",
+            prompt: PROMPT,
+            json_schema: None,
+        };
+        let reply = ollama(&url, Duration::from_secs(5))
+            .complete_with_usage(&request)
+            .await
+            .expect("answer");
+        let usage = reply.usage.expect("usage");
+        assert_eq!((usage.input_tokens, usage.output_tokens), (12, 3));
     }
 
     #[tokio::test]

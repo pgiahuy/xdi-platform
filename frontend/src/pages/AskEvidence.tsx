@@ -14,7 +14,7 @@ import type {
   EvidenceTab,
   RowsView,
   SqlView,
-  StepView,
+  StepsView,
   TabData,
 } from '@/components/ask/evidenceTypes'
 import { cn } from '@/lib/utils'
@@ -48,6 +48,20 @@ const stepLabels: Record<StepName, string> = {
   record: 'Lưu vào lịch sử',
 }
 const modelSteps: StepName[] = ['classify', 'llm', 'repair', 'narrate']
+
+type ModelTask = AskResponse['model_calls'][number]['task']
+
+// Nhãn tiếng Việt của loại việc nhờ mô hình (engine/llm/mod.rs, LlmTask).
+const taskLabels: Record<ModelTask, string> = {
+  sql: 'Viết SQL',
+  repair: 'Sửa SQL',
+  profile: 'Lập hồ sơ cột',
+  narrate: 'Viết lời phân rã',
+  why: 'Điền form câu hỏi tìm nguyên nhân',
+  insight: 'Viết lời giải thích',
+  classify: 'Phân loại câu hỏi',
+  judge: 'Chấm lời giải thích',
+}
 
 export function AskEvidence({ ws, answer, pending, view }: Props) {
   const { response, variables } = answer
@@ -160,7 +174,7 @@ function buildGuardedMissing(response: AskResponse, lastGuard: AskResponse['step
   return 'Câu SQL chưa qua guard.'
 }
 
-function buildSteps(response: AskResponse): TabData<StepView[]> {
+function buildSteps(response: AskResponse): TabData<StepsView> {
   if (response.steps.length === 0) return { data: null, reason: 'Backend không gửi các bước cho câu này.' }
   // Loại câu thuộc bước phân loại; kết luận hai cổng kiểm thuộc bước viết lời: của câu "tại sao" hay của phần giải thích
   // câu thường (phân rã tự động của câu thường không qua bước viết lời của câu "tại sao", nên summary_verdict null).
@@ -168,15 +182,24 @@ function buildSteps(response: AskResponse): TabData<StepView[]> {
   const questionType = response.question_type ?? null
   const verdict = response.explanation?.summary_verdict ?? response.insight?.summary_verdict ?? null
   return {
-    data: response.steps.map((step) => ({
-      label: stepLabels[step.name],
-      durationMs: step.duration_ms,
-      ok: step.ok,
-      // Bước phân loại đạt thì cờ đã nói loại câu, lý do của mô hình chỉ lặp lại điều đó; bước lỗi giữ chi tiết để thấy vì
-      // sao phải dùng luật từ khóa.
-      detail: step.name === 'classify' && step.ok && questionType ? null : step.detail,
-      byModel: modelSteps.includes(step.name),
-      flag: step.name === 'classify' ? questionType : step.name === 'narrate' ? verdict : null,
-    })),
+    data: {
+      steps: response.steps.map((step) => ({
+        label: stepLabels[step.name],
+        durationMs: step.duration_ms,
+        ok: step.ok,
+        // Bước phân loại đạt thì cờ đã nói loại câu, lý do của mô hình chỉ lặp lại điều đó; bước lỗi giữ chi tiết để thấy
+        // vì sao phải dùng luật từ khóa.
+        detail: step.name === 'classify' && step.ok && questionType ? null : step.detail,
+        byModel: modelSteps.includes(step.name),
+        flag: step.name === 'classify' ? questionType : step.name === 'narrate' ? verdict : null,
+      })),
+      calls: response.model_calls.map((call) => ({
+        label: taskLabels[call.task],
+        durationMs: call.duration_ms,
+        ok: call.ok,
+        inputTokens: call.input_tokens,
+        outputTokens: call.output_tokens,
+      })),
+    },
   }
 }

@@ -1235,6 +1235,7 @@
                       "insight": null,
                       "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
                       "model": "gemini-2.5-flash",
+                      "model_calls": [],
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
                       "question": "Doanh thu theo ngày giao hàng",
                       "question_type": "quantitative",
@@ -1327,6 +1328,7 @@
                       "insight": null,
                       "message": "Doanh thu tính bằng cột nào?",
                       "model": "gemini-2.5-flash",
+                      "model_calls": [],
                       "query_id": null,
                       "question": "Doanh thu từng tháng năm 2017",
                       "question_type": "quantitative",
@@ -1367,6 +1369,7 @@
                       "insight": null,
                       "message": "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.",
                       "model": "gemini-2.5-flash",
+                      "model_calls": [],
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
                       "question": "Xóa các đơn hàng bị hủy",
                       "question_type": "quantitative",
@@ -1469,6 +1472,22 @@
                       },
                       "message": null,
                       "model": "gemini-2.5-flash",
+                      "model_calls": [
+                        {
+                          "duration_ms": 630,
+                          "input_tokens": 410,
+                          "ok": true,
+                          "output_tokens": 25,
+                          "task": "classify"
+                        },
+                        {
+                          "duration_ms": 1100,
+                          "input_tokens": 2900,
+                          "ok": true,
+                          "output_tokens": 120,
+                          "task": "sql"
+                        }
+                      ],
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
                       "question": "Doanh thu theo khu vực",
                       "question_type": "quantitative",
@@ -1805,6 +1824,7 @@
                       "insight": null,
                       "message": null,
                       "model": "gemini-2.5-flash",
+                      "model_calls": [],
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
                       "question": "Tại sao doanh thu quý 3 năm 2017 giảm?",
                       "question_type": "causal",
@@ -4235,7 +4255,8 @@
           "answer_text_by_model",
           "question_type",
           "clarifications",
-          "steps"
+          "steps",
+          "model_calls"
         ],
         "properties": {
           "answer_text": {
@@ -4313,6 +4334,13 @@
           "model": {
             "type": "string",
             "description": "Language model configured for the question, for example `gemini-2.5-flash` or `mock`."
+          },
+          "model_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LlmCall"
+            },
+            "description": "Every call to the language model for this question, in the order the calls finished, with wall time and tokens.\nThe sum of `duration_ms` is the time spent waiting for the model; the rest of the step time is the backend."
           },
           "query_id": {
             "type": [
@@ -6234,6 +6262,64 @@
             "description": "One Excel `.xlsx` file."
           }
         }
+      },
+      "LlmCall": {
+        "type": "object",
+        "description": "One call to the language model, in the order the calls finished.",
+        "required": [
+          "task",
+          "duration_ms",
+          "ok",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Wall time from sending the request to reading the whole answer, in milliseconds.",
+            "minimum": 0
+          },
+          "input_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Prompt tokens as counted by the provider; null when it did not say (mock, an error, a cancelled call).",
+            "minimum": 0
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "False when the provider returned an error, or when the caller stopped waiting (its own timeout)."
+          },
+          "output_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Answer tokens as counted by the provider, thinking tokens included; null when it did not say.",
+            "minimum": 0
+          },
+          "task": {
+            "$ref": "#/components/schemas/LlmTask"
+          }
+        }
+      },
+      "LlmTask": {
+        "type": "string",
+        "description": "What the language model was asked to do in one call.",
+        "enum": [
+          "sql",
+          "repair",
+          "profile",
+          "narrate",
+          "why",
+          "insight",
+          "classify",
+          "judge"
+        ]
       },
       "LoginRequest": {
         "type": "object",

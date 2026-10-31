@@ -139,6 +139,32 @@ impl Store {
     }
 }
 
+/// Một câu hỏi đã ghi, chỉ những gì lệnh llm-stats (service/llm_stats.rs) cần.
+#[derive(Debug, sqlx::FromRow)]
+pub struct QueryTimings {
+    pub question: String,
+    pub status: String,
+    /// Bản ghi trước #184 là mảng các bước (không có lần gọi mô hình); từ #184 là object steps, model_calls, elapsed_ms.
+    pub timings: serde_json::Value,
+}
+
+impl Store {
+    /// Các câu hỏi ghi từ since trở đi, của mọi workspace, cũ trước. Chỉ lệnh quản trị trên máy chủ dùng (cli.rs),
+    /// không có API nào gọi: kết quả không lọc theo workspace của ai cả.
+    pub async fn list_query_timings(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<QueryTimings>, AppError> {
+        sqlx::query_as(
+            "SELECT question, status, timings FROM queries WHERE created_at >= $1 ORDER BY created_at",
+        )
+        .bind(since)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| db_error("list query timings", e))
+    }
+}
+
 /// [{"dataset_id": ..., "version_id": ...}], hay None khi danh sách rỗng.
 fn build_read_versions(pairs: &[(Uuid, Uuid)]) -> Option<serde_json::Value> {
     if pairs.is_empty() {

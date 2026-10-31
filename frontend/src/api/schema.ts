@@ -961,6 +961,11 @@ export interface components {
             /** @description Language model configured for the question, for example `gemini-2.5-flash` or `mock`. */
             model: string;
             /**
+             * @description Every call to the language model for this question, in the order the calls finished, with wall time and tokens.
+             *     The sum of `duration_ms` is the time spent waiting for the model; the rest of the step time is the backend.
+             */
+            model_calls: components["schemas"]["LlmCall"][];
+            /**
              * Format: uuid
              * @description Id of the question in the history (`queries`); null for `needs_choice`.
              */
@@ -1750,6 +1755,32 @@ export interface components {
              */
             file: string;
         };
+        /** @description One call to the language model, in the order the calls finished. */
+        LlmCall: {
+            /**
+             * Format: int64
+             * @description Wall time from sending the request to reading the whole answer, in milliseconds.
+             */
+            duration_ms: number;
+            /**
+             * Format: int64
+             * @description Prompt tokens as counted by the provider; null when it did not say (mock, an error, a cancelled call).
+             */
+            input_tokens: number | null;
+            /** @description False when the provider returned an error, or when the caller stopped waiting (its own timeout). */
+            ok: boolean;
+            /**
+             * Format: int64
+             * @description Answer tokens as counted by the provider, thinking tokens included; null when it did not say.
+             */
+            output_tokens: number | null;
+            task: components["schemas"]["LlmTask"];
+        };
+        /**
+         * @description What the language model was asked to do in one call.
+         * @enum {string}
+         */
+        LlmTask: "sql" | "repair" | "profile" | "narrate" | "why" | "insight" | "classify" | "judge";
         LoginRequest: {
             email: string;
             password: string;
