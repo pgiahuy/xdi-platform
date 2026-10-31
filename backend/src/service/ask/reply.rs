@@ -12,6 +12,8 @@ Câu trả lời là một object:
 - clarify: câu hỏi lại, chỉ khi không có cách hiểu mặc định hợp lý; khi đó sql rỗng.
 - unanswerable: dữ liệu không có cột nào chứa thông tin câu hỏi cần (#164), ví dụ hỏi mức hài lòng mà không có cột
   đánh giá, hay hỏi dự báo; khi đó sql rỗng.
+- needed_tables: tên các bảng chỉ có trong danh sách gọn mà câu hỏi cần (#249); ask/missing_tables.rs đọc trường này
+  để gửi lại một lần kèm chi tiết bảng. Không bắt buộc, build_answer_from_reply bỏ qua.
 - sql: một câu SELECT trên tên bảng logic.
 
 Ở đây không sửa hay kiểm SQL: câu đọc ra đi thẳng vào guard (engine/guard/). Sửa ở đây thì guard kiểm câu khác với câu
@@ -290,6 +292,11 @@ pub fn build_sql_reply_schema() -> serde_json::Value {
                 "required": ["kind", "question", "options"]
             },
             "unanswerable": build_unanswerable_schema(),
+            "needed_tables": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Only when the question needs tables listed under Other tables: their names; then sql is an empty string"
+            },
             "sql": {
                 "type": "string",
                 "description": "One DuckDB SELECT statement, or an empty string with clarify or unanswerable"

@@ -6,8 +6,11 @@ bảng và cột của chỉ số. ask/mod.rs gọi theo thứ tự:
    cột của mọi bảng).
 2. apply_question_columns: sau lượt phân loại, đánh dấu cột mô hình chọn, rồi trần metadata và trần giá trị tính chung
    cho mọi bảng, kể cả bảng đang chọn. Gọi được hai lần (trước lượt phân loại, chưa có cột chọn), mỗi lần tính lại.
-3. build_group_prompt: GroupPrompt cho prompt SQL khi nhóm có hơn một bảng; ask/prompt.rs in một khối cột mỗi bảng và
-   danh sách quan hệ. */
+3. build_group_prompt: GroupPrompt cho prompt SQL khi nhóm có hơn một bảng hay database còn bảng chỉ gửi tên;
+   ask/prompt.rs in một khối cột mỗi bảng, danh sách quan hệ và danh sách gọn các bảng còn lại (#249).
+
+Khi database vượt trần metadata (ask/table_pick.rs), ask/mod.rs đọc bước 1 cho mọi bảng, rồi build_subset giữ đúng các
+bảng gửi chi tiết trước bước 2: trần giá trị và trần metadata chỉ tính trên các bảng đó. */
 
 use std::sync::Arc;
 
@@ -23,6 +26,7 @@ use crate::service::ask::values::{load_value_index, ValueIndex};
 use crate::{error::AppError, state::AppState};
 
 /// Một bảng liên quan như prompt SQL cần.
+#[derive(Clone)]
 pub struct TableContext {
     /// Tên bảng logic (datasets.logical_table).
     pub table: String,
@@ -42,13 +46,28 @@ pub struct JoinLine {
     pub one_to_one: bool,
 }
 
-/// Phần của prompt SQL về các bảng liên quan; ask/mod.rs chỉ dựng khi nhóm có hơn một bảng.
+/// Một bảng của database chỉ gửi tên và một dòng mô tả (danh sách gọn, #249): bảng không được chọn gửi chi tiết, hay
+/// bảng chưa chụp, mới có metadata (#247).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompactTable {
+    /// Tên bảng logic (với bảng chưa chụp: tên bảng trong nguồn, không kèm schema).
+    pub table: String,
+    /// Mô tả bảng (COMMENT ON TABLE); không có thì tên vài cột đầu, để mô hình đoán được bảng giữ gì.
+    pub description: String,
+    /// Bảng chưa có dữ liệu: câu cần nó không trả lời được (ask/unsnapshotted.rs).
+    pub unsnapshotted: bool,
+}
+
+/// Phần của prompt SQL về các bảng liên quan; ask/mod.rs chỉ dựng khi nhóm có hơn một bảng hay others không rỗng.
 pub struct GroupPrompt {
     pub tables: Vec<TableContext>,
     pub joins: Vec<JoinLine>,
+    /// Bảng chỉ có trong danh sách gọn.
+    pub others: Vec<CompactTable>,
 }
 
 /// Các bảng câu hỏi đọc: bảng liên quan (rỗng khi câu chỉ đọc bảng đang chọn) và chỉ mục giá trị của mọi bảng.
+#[derive(Clone)]
 pub struct QuestionTables {
     pub related: Vec<TableContext>,
     /// Chỉ mục giá trị (ask/values.rs): phần tử đầu là của bảng đang chọn, sau đó theo thứ tự của related.
@@ -83,6 +102,23 @@ pub async fn load_question_tables(
         indexes.push(index);
     }
     Ok(QuestionTables { related, indexes })
+}
+
+impl QuestionTables {
+    /// Chỉ các bảng liên quan có tên trong tables (bảng logic), giữ thứ tự; chỉ mục của bảng đang chọn luôn giữ.
+    pub fn build_subset(&self, tables: &[String]) -> QuestionTables {
+        let mut subset = QuestionTables {
+            related: Vec::new(),
+            indexes: vec![self.indexes[0].clone()],
+        };
+        for (table, index) in self.related.iter().zip(self.indexes.iter().skip(1)) {
+            if tables.contains(&table.table) {
+                subset.related.push(table.clone());
+                subset.indexes.push(index.clone());
+            }
+        }
+        subset
+    }
 }
 
 /// Bước 2: cột lượt phân loại chọn (picked, cặp bảng logic và cột), trần metadata (apply_metadata_cap) và danh sách
@@ -130,9 +166,13 @@ pub fn apply_no_values(columns: &mut [ColumnProfile]) {
     }
 }
 
-/// Bước 3: phần của prompt SQL về các bảng liên quan; None khi nhóm chỉ có bảng đang chọn.
-pub fn build_group_prompt(group: &TableGroup, tables: QuestionTables) -> Option<GroupPrompt> {
-    if tables.related.is_empty() {
+/// Bước 3: phần của prompt SQL về các bảng liên quan; None khi nhóm chỉ có bảng đang chọn và không còn bảng nào khác.
+pub fn build_group_prompt(
+    group: &TableGroup,
+    tables: QuestionTables,
+    others: Vec<CompactTable>,
+) -> Option<GroupPrompt> {
+    if tables.related.is_empty() && others.is_empty() {
         return None;
     }
     let joins = group
@@ -151,5 +191,6 @@ pub fn build_group_prompt(group: &TableGroup, tables: QuestionTables) -> Option<
     Some(GroupPrompt {
         tables: tables.related,
         joins,
+        others,
     })
 }

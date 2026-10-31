@@ -1,17 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/scope.rs - câu hỏi trên cả một dataset (#257) bắt đầu từ bảng nào. Phạm vi của câu là mọi bảng của
-dataset; luồng hỏi (ask/mod.rs) vẫn đọc một bảng bắt đầu cùng các bảng nối với nó qua quan hệ, trong giới hạn
-MAX_HOPS bước và MAX_GROUP_TABLES bảng (ask/related.rs). Hàm pick_start_table ở đây là chỗ duy nhất chọn bảng bắt đầu
-khi người hỏi không ghim bảng; #249 thay nó bằng cách chọn các bảng theo câu hỏi.
+/* service/ask/scope.rs - câu hỏi trên cả một dataset (#257, #249) bắt đầu từ bảng nào. Câu đọc được mọi bảng đã chụp
+của database (ask/related.rs); bảng bắt đầu là bảng neo của câu: ngữ cảnh cột, lựa chọn, chỉ số, câu mẫu, lịch sử câu
+hỏi và truy dòng nguồn đi theo bảng này. Hàm pick_start_table ở đây là chỗ duy nhất chọn bảng bắt đầu khi người hỏi
+không ghim bảng.
 
-Luật hiện tại, cố ý đơn giản để giải thích được: bảng có nhiều cụm từ của câu hỏi trùng tên bảng, tên cột hay bí
-danh cột nhất; bằng nhau thì bảng của lượt trước trong cùng cuộc trò chuyện (câu nối tiếp như "còn năm 2017 thì sao"
-không nhắc tên cột nào); rồi bảng giữ nhiều khóa ngoại nhất (bảng sự kiện như order_items, đi tới được nhiều bảng chiều
-nhất trong hai bước); rồi bảng nhiều dòng hơn. Chỉ xét bảng hỏi được (đã có hồ sơ cấu trúc). */
+Luật, cố ý đơn giản để giải thích được, so lần lượt:
+1. Bảng giữ cột số đo câu hỏi nhắc tới (tên hay bí danh của cột vai trò measure, như "doanh thu" là
+   order_items.item_total): bảng sự kiện giữ con số được cộng, nên phân rã và truy dòng nguồn đứng trên đúng dòng của
+   con số. "Doanh thu theo phân khúc khách hàng" nhắc hai cụm của customers mà chỉ một cụm của order_items; đếm cụm
+   thôi thì bảng bắt đầu thành customers.
+2. Bảng có nhiều cụm từ của câu hỏi trùng tên bảng, tên cột hay bí danh cột nhất.
+3. Bảng có nhiều cụm trùng mô tả bảng hay mô tả cột nhất ("theo vùng" khớp mô tả "Vùng địa lý" của students.region).
+4. Bảng của lượt trước trong cùng cuộc trò chuyện (câu nối tiếp như "còn năm 2017 thì sao" không nhắc tên cột nào).
+5. Bảng giữ nhiều khóa ngoại nhất (bảng sự kiện như order_items), rồi bảng nhiều dòng hơn.
+Chỉ xét bảng hỏi được (đã có hồ sơ cấu trúc). */
 
 use uuid::Uuid;
 
-use crate::engine::store::{CatalogColumnRow, Dataset, DatasetRelation, ProfileStatus};
+use crate::engine::store::{
+    CatalogColumnRow, Dataset, DatasetRelation, ProfileRole, ProfileStatus,
+};
 use crate::service::ask::phrases::{build_phrases, fold};
 
 /// Bảng bắt đầu của câu hỏi trên dataset có các bảng `tables` (cùng một dataset). None khi dataset không có bảng nào.
@@ -28,10 +36,12 @@ pub fn pick_start_table(
         .filter(|p| !p.has_stop)
         .map(|p| p.folded)
         .collect();
+    let count = |text: &str| phrases.iter().filter(|p| contains_words(text, p)).count();
     let ready = tables.iter().filter(|t| is_ready(t));
     let best = ready.max_by_key(|t| {
-        let text = build_table_text(t, columns);
-        let score = phrases.iter().filter(|p| contains_words(&text, p)).count();
+        let measures = build_measure_text(t, columns);
+        let names = build_table_text(t, columns);
+        let descriptions = build_description_text(t, columns);
         let held_keys = relations
             .iter()
             .filter(|r| r.from_dataset_id == t.id)
@@ -39,7 +49,9 @@ pub fn pick_start_table(
         // Bộ so sánh của tuple đi từ trái sang phải; tên bảng đảo chiều (Reverse) để cùng điểm thì bảng tên xếp
         // trước thắng, kết quả không đổi theo thứ tự đọc từ Postgres.
         (
-            score,
+            count(&measures),
+            count(&names),
+            count(&descriptions),
             previous == Some(t.id),
             held_keys,
             t.row_count.unwrap_or(0),
@@ -63,6 +75,31 @@ fn build_table_text(table: &Dataset, columns: &[CatalogColumnRow]) -> String {
         parts.push(fold(&c.name));
         parts.extend(c.aliases.iter().map(|a| fold(a)));
     }
+    join_parts(parts)
+}
+
+/// Tên và bí danh của các cột số đo của bảng.
+fn build_measure_text(table: &Dataset, columns: &[CatalogColumnRow]) -> String {
+    let mut parts = Vec::new();
+    let measures = columns
+        .iter()
+        .filter(|c| c.table_id == table.id && c.role == ProfileRole::Measure.as_str());
+    for c in measures {
+        parts.push(fold(&c.name));
+        parts.extend(c.aliases.iter().map(|a| fold(a)));
+    }
+    join_parts(parts)
+}
+
+/// Mô tả bảng và mô tả các cột của bảng.
+fn build_description_text(table: &Dataset, columns: &[CatalogColumnRow]) -> String {
+    let mut parts: Vec<String> = table.description.iter().map(|d| fold(d)).collect();
+    let described = columns.iter().filter(|c| c.table_id == table.id);
+    parts.extend(described.filter_map(|c| c.description.as_deref().map(fold)));
+    join_parts(parts)
+}
+
+fn join_parts(parts: Vec<String>) -> String {
     format!(" {} ", parts.join(" | "))
 }
 
@@ -147,6 +184,64 @@ mod tests {
         );
         // Không cụm nào khớp: bảng giữ nhiều khóa ngoại nhất.
         assert_eq!(pick("Tổng quan"), Some(Uuid::from_u128(1)));
+    }
+
+    fn measure(table: u128, name: &str, aliases: &[&str]) -> CatalogColumnRow {
+        CatalogColumnRow {
+            role: "measure".to_string(),
+            ..column(table, name, aliases)
+        }
+    }
+
+    /// Bảng giữ cột số đo câu hỏi nhắc tới thắng bảng khớp nhiều cụm hơn (#249): "Doanh thu theo phân khúc khách hàng"
+    /// khớp hai cụm của customers (bảng, cột segment) mà chỉ một cụm của order_items, nhưng doanh thu là cột của
+    /// order_items, nên bắt đầu ở đó.
+    #[test]
+    fn the_table_of_the_measure_wins() {
+        let mut customers = table(3, "customers", 100);
+        customers.name = "khách hàng".to_string();
+        let tables = vec![table(1, "order_items", 900), customers];
+        let columns = vec![
+            measure(1, "item_total", &["doanh thu"]),
+            column(3, "segment", &["phân khúc khách hàng"]),
+        ];
+        let picked = pick_start_table(
+            "Doanh thu theo phân khúc khách hàng",
+            &tables,
+            &columns,
+            &[],
+            None,
+        );
+        assert_eq!(picked, Some(Uuid::from_u128(1)));
+        // Không cụm nào là cột số đo: bảng khớp nhiều cụm nhất.
+        let picked = pick_start_table(
+            "Số khách hàng theo phân khúc khách hàng",
+            &tables,
+            &columns,
+            &[],
+            None,
+        );
+        assert_eq!(picked, Some(Uuid::from_u128(3)));
+    }
+
+    /// Cụm chỉ khớp mô tả cột vẫn chọn được bảng: "theo vùng" khớp mô tả của students.region.
+    #[test]
+    fn descriptions_break_ties() {
+        let tables = vec![
+            table(1, "student_assessments", 900),
+            table(3, "students", 500),
+        ];
+        let mut region = column(3, "region", &[]);
+        region.description = Some("Vùng địa lý nơi sinh viên sống".to_string());
+        let relations = vec![relation(1, 3)];
+        let picked = pick_start_table(
+            "Tỷ lệ rút học theo vùng",
+            &tables,
+            &[region],
+            &relations,
+            None,
+        );
+        assert_eq!(picked, Some(Uuid::from_u128(3)));
     }
 
     /// Câu nối tiếp không nhắc cột nào ở lại bảng của lượt trước.

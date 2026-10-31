@@ -107,6 +107,7 @@ async fn run(llm: &dyn LlmProvider, question: &str) -> (QuestionKind, bool, bool
         columns: &columns,
         related: &[],
         earlier: &[],
+        others: &[],
     };
     let classified = classify(llm, &input, TIMEOUT).await;
     assert_eq!(classified.step.name, StepName::Classify);
@@ -129,6 +130,7 @@ fn classify_prompt_matches_the_fixture() {
         columns: &columns,
         related: &[],
         earlier: &earlier,
+        others: &[],
     };
     check_fixture("classify_prompt.txt", &build_classify_prompt(&input));
 }
@@ -142,6 +144,7 @@ fn prompt_has_column_names_and_aliases_but_no_values() {
         columns: &columns,
         related: &[],
         earlier: &[],
+        others: &[],
     };
     let prompt = build_classify_prompt(&input);
     assert!(
@@ -226,6 +229,7 @@ async fn timeout_falls_back_to_keywords() {
         columns: &columns,
         related: &[],
         earlier: &[],
+        others: &[],
     };
     let classified = classify(&SlowLlm, &input, Duration::from_millis(10)).await;
     assert_eq!(classified.kind, QuestionKind::Why);
@@ -276,6 +280,7 @@ fn long_prompt_keeps_every_column_with_its_metadata() {
         columns: &columns,
         related: &related,
         earlier: &[],
+        others: &[],
     };
     let prompt = build_classify_prompt(&input);
     assert!(prompt.chars().count() > PROMPT_MAX_CHARS);
@@ -307,6 +312,7 @@ async fn reply_columns_keep_only_real_columns() {
         columns: &columns,
         related: &related,
         earlier: &[],
+        others: &[],
     };
     let llm = StubLlm(Ok(Box::leak(reply.to_string().into_boxed_str())));
     let classified = classify(&llm, &input, TIMEOUT).await;

@@ -1,0 +1,4 @@
+Other tables of this database, listed by name only; their columns are not shown:
+{{tables}}
+- If the question needs one of these tables, put its name in needed_tables and leave sql empty: the system then sends the columns of that table and asks again. Never guess the columns of a table listed here.
+- A table marked "no data yet" has no rows to read. If the question needs it, reply with unanswerable and name the table in the reason.
