@@ -3,12 +3,13 @@
 chép một bảng ra file CSV. service/sources/mod.rs gọi các hàm ở đây, rồi đưa file vào đường nạp sẵn có
 (service/ingest.rs).
 
-Chép dữ liệu có hai cách, chọn bằng SOURCE_SNAPSHOT_MODE (snapshot.rs). copy: lệnh COPY ... TO STDOUT (FORMAT csv) ở
+Chép dữ liệu có hai cách, chọn bằng SOURCE_SNAPSHOT_MODE (snapshot.rs); direct là mặc định vì nhanh hơn và tốn ít đĩa
+tạm hơn (docs/PERFORMANCE.md, mục Chụp bảng), copy là đường dự phòng. copy: lệnh COPY ... TO STDOUT (FORMAT csv) ở
 đây để Postgres tự ghi mọi kiểu cột thành chữ, DuckDB đọc lại file đó với kiểu từng cột lấy từ Postgres (pg_types.rs),
 không đoán như với file CSV nạp tay. direct (direct.rs): DuckDB đọc thẳng Postgres bằng extension postgres và ghi
 Parquet một bước. Trước #246 dự án tránh extension này vì INSTALL postgres tải nó từ extensions.duckdb.org lúc chạy:
 image chạy bằng user không có thư mục home, máy cài có thể không ra Internet. Nay file extension đúng bản DuckDB được
-đóng sẵn lúc build và nạp bằng đường dẫn cục bộ; không nạp được thì quay về COPY. Danh sách bảng, đếm dòng, kiểu cột
+đóng sẵn lúc build và nạp bằng đường dẫn cục bộ; không nạp được thì quay về COPY ở đây. Danh sách bảng, đếm dòng, kiểu cột
 và khóa ngoại luôn đọc bằng sqlx ở đây, cách nào cũng vậy.
 
 Kết nối luôn chỉ đọc: phiên đặt default_transaction_read_only, kèm statement_timeout. Vẫn nên cấp cho xdi một tài

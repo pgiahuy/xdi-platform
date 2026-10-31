@@ -105,19 +105,29 @@ Các trường hợp sau bị từ chối (400). Lời báo ghi tên file, trừ
 và truy vấn thẳng database ngoài lúc hỏi để sau ([#165](https://github.com/pgiahuy/xdi-platform/issues/165)).
 Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
 
-- Chụp là chép một lần: backend đọc bảng bằng `COPY (SELECT * FROM schema.bảng) TO STDOUT (FORMAT csv)` rồi đi đúng
-  đường nạp CSV ở trên (Parquet, hồ sơ cột, phiên bản). Hồ sơ, bằng chứng, dòng nguồn và câu hỏi cũ trỏ đúng phiên bản
-  đã chụp. "Chụp lại" tạo phiên bản mới của cùng dataset, đọc lại đúng bảng của lần trước; bảng không đổi thì trả
+- Chụp là chép một lần, rồi đi đúng đường nạp ở trên (Parquet, hồ sơ cột, phiên bản). Hồ sơ, bằng chứng, dòng nguồn và
+  câu hỏi cũ trỏ đúng phiên bản đã chụp. Hai cách chép, chọn bằng `SOURCE_SNAPSHOT_MODE` (#246):
+  - `direct` (mặc định): DuckDB đọc thẳng bảng bằng extension `postgres` của nó, qua giao thức `COPY` nhị phân của
+    Postgres, và ghi Parquet một bước, không có file CSV tạm. Extension là file đóng gói sẵn đúng bản DuckDB của backend,
+    nạp từ đĩa, không tải lúc chạy ([INSTALL.md](INSTALL.md), mục 2). Không nạp được (thiếu file, lệch bản) hay libpq
+    của extension không kết nối được thì log ghi cảnh báo và lần chụp dùng `copy`.
+  - `copy` (dự phòng, hoặc đặt tay): backend đọc bảng bằng `COPY (SELECT * FROM schema.bảng) TO STDOUT (FORMAT csv)` ra file CSV
+    tạm, DuckDB đọc lại file đó và ghi Parquet.
+
+  Hai cách cho cùng kiểu cột và cùng dữ liệu (test `both_modes_give_the_same_types_and_rows` so từng dòng trên một bảng
+  đủ loại kiểu); số đo thời gian, đĩa tạm, bộ nhớ ở [PERFORMANCE.md](PERFORMANCE.md). Đổi cách chép làm nội dung file
+  khác đi, nên lần chụp lại đầu tiên sau khi đổi tạo một phiên bản mới dù bảng không đổi. "Chụp lại" tạo phiên bản mới của cùng dataset, đọc lại đúng bảng của lần trước; bảng không đổi thì trả
   `created: false` như nạp trùng.
 - Kiểu cột lấy từ Postgres, DuckDB không đoán như với file CSV nạp tay: số nguyên thành `INTEGER` hay `BIGINT`,
   `real` và `double precision` thành `DOUBLE`, `numeric(p,s)` thành `DECIMAL(p,s)` (`numeric` không khai báo, hay
   rộng hơn 38 chữ số, thành `DOUBLE`, chỉ giữ chính xác khoảng 15 chữ số), `boolean`, `date`, `timestamp`,
   `timestamptz` giữ kiểu tương ứng. Mọi kiểu khác (`text`, `varchar`, `uuid`, `json`, mảng, enum) thành chữ, nên mã
   như `00123` giữ nguyên số 0 ở đầu. Chuỗi rỗng và `NULL` vẫn khác nhau sau khi chụp.
-- Giới hạn: `SOURCE_MAX_ROWS` dòng và `MAX_UPLOAD_MB` dung lượng CSV cho mỗi bảng (đếm trước, quá thì từ chối cả lần
-  chụp, không chụp thiếu), tối đa 10 bảng một lần chụp, `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
-- Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`). Máy chủ phải nằm trong
-  `SOURCE_ALLOWED_HOSTS`.
+- Giới hạn: `SOURCE_MAX_ROWS` dòng cho mỗi bảng (đếm mọi bảng trước khi chép, quá thì từ chối cả lần chụp, không chụp
+  thiếu), `MAX_UPLOAD_MB` cho file chép ra của mỗi bảng (CSV với `copy`, Parquet nén với `direct`, nên cùng một bảng
+  `direct` chịu được bảng lớn hơn), tối đa 10 bảng một lần chụp, `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
+- Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`; với `direct` thêm `ATTACH ... READ_ONLY`),
+  mọi bảng của một lần chụp đọc trong một giao dịch `REPEATABLE READ`. Máy chủ phải nằm trong `SOURCE_ALLOWED_HOSTS`.
 - **TLS** (#230), bằng rustls, nghĩa `sslmode` như libpq:
 
   | `sslmode` | TLS | Kiểm chứng chỉ máy chủ |
@@ -126,6 +136,10 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   | `prefer` (mặc định) | Có nếu máy chủ nhận, không thì kết nối thường. Máy chủ nhận TLS mà bắt tay lỗi (chỉ có TLS 1.0, 1.1, chứng chỉ quá yếu) thì báo lỗi, không quay về kết nối thường như libpq | Không |
   | `require` | Bắt buộc | Không: chống nghe lén trên đường truyền, không chống máy giả mạo |
   | `verify-full` | Bắt buộc | Có: do CA tin cậy cấp và đúng tên máy đã nhập (`host`) |
+
+  Với `direct`, phần chép dữ liệu đi qua libpq của extension với cùng `sslmode`; khác ở `verify-full` có dán CA: libpq
+  chỉ tin CA dán vào, không cộng thêm CA của hệ thống (không dán CA thì dùng CA của hệ thống). Mật khẩu và CA ghi ra
+  file tạm quyền 0600 cho libpq đọc, xóa ngay sau lần chụp.
 
   CA tin cậy là kho CA của hệ thống (image Docker cài `ca-certificates`), cộng chứng chỉ CA dạng PEM admin dán vào ô
   "Chứng chỉ CA" (trường `ssl_root_cert`) khi máy chủ dùng CA riêng của tổ chức; ô này chỉ nhận với `verify-full`. Chứng

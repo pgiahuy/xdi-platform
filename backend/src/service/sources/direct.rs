@@ -13,8 +13,9 @@ và chép bằng COPY.
 Giữ đúng như cách COPY:
 - Chỉ đọc: ATTACH ... READ_ONLY, và phiên Postgres đặt default_transaction_read_only cùng statement_timeout qua options
   của chuỗi kết nối libpq.
-- Một ảnh chụp: mọi bảng chép trong một giao dịch DuckDB; extension giữ một giao dịch REPEATABLE READ phía Postgres cho
-  cả giao dịch đó.
+- Một ảnh chụp: mọi bảng chép trong một giao dịch DuckDB; extension mở một giao dịch REPEATABLE READ READ ONLY phía
+  Postgres cho cả giao dịch đó (ghi rõ ISOLATION_LEVEL khi ATTACH, không dựa vào mặc định của extension), và
+  postgres_query chạy trên chính kết nối của giao dịch này.
 - Kiểu cột: mỗi cột ép về đúng kiểu DuckDB mà pg_types.rs chọn. Cột đọc thành VARCHAR hay DOUBLE thì Postgres đổi sang
   chữ trước, bằng hàm xuất của kiểu như COPY, nên ra đúng chữ mà COPY ghi: mảng, json, uuid, interval, float4 giữ dạng chữ của Postgres thay vì
   dạng chữ của DuckDB, và float4 0.1 vẫn là 0.1 chứ không thành 0.10000000149011612.
@@ -118,7 +119,7 @@ fn run(
     ))
     .map_err(|e| DirectError::Unavailable(format!("load {}: {e}", extension.display())))?;
     conn.execute_batch(&format!(
-        "ATTACH {} AS {ALIAS} (TYPE postgres, READ_ONLY)",
+        "ATTACH {} AS {ALIAS} (TYPE postgres, READ_ONLY, ISOLATION_LEVEL 'REPEATABLE READ')",
         sql_string(conninfo)
     ))
     .map_err(|e| DirectError::Unavailable(format!("attach: {e}")))?;

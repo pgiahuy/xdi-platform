@@ -367,7 +367,9 @@ fn snapshot_mode(raw: Option<&str>) -> SnapshotMode {
     }
 }
 
-const DEFAULT_SNAPSHOT_MODE: SnapshotMode = SnapshotMode::Copy;
+/// direct nhanh hơn và tốn ít đĩa tạm hơn copy trên database mẫu (docs/PERFORMANCE.md, #246); copy vẫn là đường dự phòng
+/// khi extension không nạp được.
+const DEFAULT_SNAPSHOT_MODE: SnapshotMode = SnapshotMode::Direct;
 
 fn timeout_secs(key: &str, default: u32) -> Duration {
     Duration::from_secs(u64::from(positive_number(
