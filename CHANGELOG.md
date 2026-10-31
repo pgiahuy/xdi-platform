@@ -6,6 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
+- Chụp bảng Postgres đọc luôn mô tả bảng và cột ghi trong database (`COMMENT ON`) làm mô tả trong hồ sơ cột; mô hình không viết lại các mô tả này, giao diện ghi nguồn "từ database" hay "do mô hình viết" (#245).
 - Câu hỏi tìm nguyên nhân hiểu thêm các dạng hay gặp: một nhóm so với các nhóm còn lại, bộ lọc khoảng (`in`, `between`, lớn hơn, nhỏ hơn), trung bình, tỷ lệ dòng có một giá trị, số khách không trùng, tuần, ngày, cùng kỳ năm trước, và tìm kỳ hay nhóm bất thường (#244).
 - Insight của câu hỏi tìm nguyên nhân do mô hình viết toàn bộ (câu mở đầu và mục "Nguyên nhân chính") từ số và cờ code đã tính, prompt không còn câu do code viết hay ví dụ theo bộ dữ liệu; khi insight qua kiểm thì không hiện mục "Căn cứ" nữa (#201).
 - Câu hỏi tìm nguyên nhân so hai nhóm (như hai thị trường) cũng do mô hình viết insight và qua hai cổng kiểm, thay cho câu khuôn (#201).

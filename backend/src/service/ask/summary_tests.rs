@@ -227,6 +227,7 @@ fn profile_column(name: &str, role: &str, sensitive: bool) -> ProfileColumn {
         data_type: "VARCHAR".to_string(),
         role: role.to_string(),
         description: None,
+        description_source: None,
         aliases: Vec::new(),
         is_sensitive: sensitive,
         null_count: Some(0),

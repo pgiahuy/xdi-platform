@@ -39,6 +39,7 @@ function toItems(data: MetricsResponse): { metrics: MetricItem[]; columns: Colum
       dataType: c.data_type,
       role: c.role,
       description: c.description,
+      descriptionSource: c.description_source,
       aggregation: c.aggregation,
     })),
   }

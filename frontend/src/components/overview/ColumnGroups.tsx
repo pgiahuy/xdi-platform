@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/overview/ColumnGroups.tsx - các cột của dataset trong khung tổng quan, xếp theo nhóm dễ hiểu thay vì theo
 vai trò kỹ thuật: Số đo, Chia nhóm theo, Thời gian, Mã, Chữ khác. Mỗi cột ghi tên trong file, nhãn tiếng Việt trong
-ngoặc, mô tả, đơn vị, % ô trống và số giá trị khác nhau; cột chia nhóm có thêm các giá trị nhiều dòng nhất.
+ngoặc, mô tả kèm nguồn (từ database hay do mô hình viết), đơn vị, % ô trống và số giá trị khác nhau; cột chia nhóm có thêm các giá trị nhiều dòng nhất.
 Bấm tên cột hay một giá trị thì điền câu hỏi vào ô hỏi (onPick, câu dựng ở questions.ts). Nhóm dùng details của trình
 duyệt: mở, đóng bằng bàn phím và trình đọc màn hình đọc được mà không cần thêm mã. Mọi nhóm đóng sẵn, dòng tiêu đề ghi
 vài tên cột đầu: dataset vài chục cột mà mở hết thì biểu đồ bị đẩy xuống rất xa. */
 
 import { useState } from 'react'
+import { DescriptionText } from '../DescriptionText'
 import { buildColumnQuestion, buildValueQuestion } from './questions'
 import type { OverviewColumnView, OverviewRole, OverviewView } from './types'
 import { buildUnitText } from './units'
@@ -80,7 +81,7 @@ function ColumnItem({ column, overview, onPick }: ItemProps) {
         {column.name}
         {column.label && <span className="font-normal text-muted-foreground"> ({column.label})</span>}
       </button>
-      {column.description && <p className="text-xs text-muted-foreground">{column.description}</p>}
+      {column.description && <DescriptionText text={column.description} source={column.descriptionSource} />}
       {facts && <p className="text-xs text-muted-foreground">{facts}</p>}
       {column.values.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

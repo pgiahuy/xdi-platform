@@ -398,6 +398,7 @@ fn new_column(position: i32, name: &str, role: ProfileRole, values: &[&str]) -> 
         min_value: None,
         max_value: None,
         time_format: None,
+        description: None,
         // Tần suất giảm dần theo thứ tự truyền vào, để thứ tự giá trị biết trước.
         values: values
             .iter()
@@ -462,6 +463,7 @@ async fn new_version(
         file_hash: hash,
         parquet_path: "x",
         row_count: 10,
+        description: None,
     };
     store
         .create_version(ws, dataset, &new, columns)

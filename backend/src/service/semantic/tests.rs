@@ -29,6 +29,7 @@ fn column(id: Uuid, name: &str, data_type: &str, role: ProfileRole) -> ProfileCo
         data_type: data_type.to_string(),
         role: role.as_str().to_string(),
         description: None,
+        description_source: None,
         aliases: Vec::new(),
         is_sensitive: false,
         null_count: Some(0),
@@ -96,6 +97,7 @@ fn prompt_has_only_metadata_and_dimension_values() {
         ProfilePart::Columns,
         "DataCo",
         "dataco",
+        None,
         Some(100),
         &columns,
         &values,
@@ -137,6 +139,7 @@ fn values_cannot_forge_prompt_lines() {
         ProfilePart::Columns,
         "DataCo",
         "dataco",
+        None,
         Some(10),
         &[market],
         &values,
@@ -183,7 +186,8 @@ fn profile_prompt_matches_the_fixture() {
         (ProfilePart::Values, "profile_prompt_values.txt"),
         (ProfilePart::Questions, "profile_prompt_questions.txt"),
     ] {
-        let prompt = build_profile_prompt(part, "DataCo", "dataco", Some(100), &columns, &values);
+        let prompt =
+            build_profile_prompt(part, "DataCo", "dataco", None, Some(100), &columns, &values);
         check_fixture(name, &prompt);
     }
 
@@ -191,6 +195,7 @@ fn profile_prompt_matches_the_fixture() {
         ProfilePart::Columns,
         "DataCo",
         "dataco",
+        None,
         None,
         &[market],
         &[],
@@ -220,6 +225,7 @@ fn prompt_value_caps() {
         ProfilePart::Columns,
         "DataCo",
         "dataco",
+        None,
         Some(1000),
         std::slice::from_ref(&big),
         &values,
@@ -249,6 +255,7 @@ fn prompt_value_caps() {
         ProfilePart::Columns,
         "DataCo",
         "dataco",
+        None,
         Some(1000),
         &columns,
         &values,
@@ -379,6 +386,7 @@ fn sensitive_columns_are_detected_by_name_and_values() {
         ProfilePart::Columns,
         "DataCo",
         "dataco",
+        None,
         Some(10),
         &[email, market],
         &values,
@@ -740,6 +748,7 @@ fn new_column(
         min_value: None,
         max_value: None,
         time_format: None,
+        description: None,
         values: values
             .iter()
             .map(|(value, frequency)| NewColumnValue {
@@ -785,6 +794,7 @@ async fn dataco(store: &Store, ws: &WorkspaceId) -> (Dataset, DatasetVersion) {
         file_hash: "h1",
         parquet_path: "x",
         row_count: 12,
+        description: None,
     };
     let v = store
         .create_version(ws, ds.id, &version, &columns)
@@ -1003,6 +1013,7 @@ async fn unusable_answers_are_marked_with_the_provider() {
         file_hash: "h1",
         parquet_path: "x",
         row_count: 2,
+        description: None,
     };
     let v = store
         .create_version(&ws, ds.id, &version, &columns)
@@ -1077,6 +1088,7 @@ async fn startup_pass_skips_versions_attempted_meanwhile() {
         file_hash: "h1",
         parquet_path: "x",
         row_count: 2,
+        description: None,
     };
     let v = store
         .create_version(&ws, ds.id, &version, &columns)
@@ -1185,6 +1197,7 @@ fn measure_dataco_like_prompt() {
             part,
             "DataCo Supply Chain",
             "dataco",
+            None,
             Some(180_519),
             &columns,
             &values,
@@ -1251,7 +1264,8 @@ fn part_prompts_share_the_data_section() {
     let values = vec![value(market.id, "Europe", 5)];
     let columns = [market];
     let data = |part| {
-        let prompt = build_profile_prompt(part, "DataCo", "dataco", Some(10), &columns, &values);
+        let prompt =
+            build_profile_prompt(part, "DataCo", "dataco", None, Some(10), &columns, &values);
         let start = prompt.find("Everything after this paragraph").unwrap();
         prompt[start..].to_string()
     };
@@ -1339,4 +1353,47 @@ async fn one_failed_part_keeps_the_others() {
     assert_eq!(ds.suggested_questions.len(), 5);
 
     drop_workspace(&store, ws).await;
+}
+
+/// Cột có mô tả từ database (#245): mô tả đi vào prompt làm ngữ cảnh, kèm mô tả bảng; mô tả mô hình vẫn viết cho cột
+/// đó bị bỏ, bí danh và đơn vị của cùng mục vẫn giữ. Cột có mô tả do mô hình viết không in mô tả vào prompt.
+#[test]
+fn database_descriptions_are_context_and_never_replaced() {
+    let mut region = column(Uuid::new_v4(), "region", "VARCHAR", ProfileRole::Dimension);
+    region.description = Some("Vùng \"giao\" hàng".to_string());
+    region.description_source = Some("database".to_string());
+    let mut amount = column(Uuid::new_v4(), "amount", "DOUBLE", ProfileRole::Measure);
+    amount.description = Some("Model text".to_string());
+    amount.description_source = Some("model".to_string());
+    let columns = vec![region.clone(), amount.clone()];
+    let prompt = build_profile_prompt(
+        ProfilePart::Columns,
+        "Orders",
+        "orders",
+        Some("Đơn hàng bán ra"),
+        Some(10),
+        &columns,
+        &[],
+    );
+    assert!(
+        prompt.contains(r#""region" | VARCHAR | dimension | null 0% | 3 distinct | description: "Vùng \"giao\" hàng""#),
+        "{prompt}"
+    );
+    assert!(!prompt.contains("Model text"), "{prompt}");
+    assert!(
+        prompt.contains("Table description: \"Đơn hàng bán ra\""),
+        "{prompt}"
+    );
+
+    let answer = serde_json::json!({
+        "columns": [
+            {"name": "region", "description": "Mô hình viết lại", "aliases": ["khu vực"]},
+            {"name": "amount", "description": "Số tiền", "aliases": [], "unit": "money"}
+        ]
+    });
+    let profile = build_profile_answer(&answer.to_string(), &columns, &[]).unwrap();
+    let by_id = |id: Uuid| profile.columns.iter().find(|c| c.column_id == id).unwrap();
+    assert_eq!(by_id(region.id).description, None);
+    assert_eq!(by_id(region.id).aliases, ["khu vực"]);
+    assert_eq!(by_id(amount.id).description.as_deref(), Some("Số tiền"));
 }
