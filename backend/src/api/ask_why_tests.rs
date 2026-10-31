@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 
 use super::ask_tests::{scripted, scripted_with_kind, sql_reply, start_on, step_names, Asking};
 use crate::api::test_support::call;
-use crate::engine::store::test_support::{exec, fetch_count, fetch_text};
+use crate::engine::store::test_support::{fetch_count, fetch_text, give_data_role};
 
 const CSV: &str = "Market,Customer Segment,order date (DateOrders),Order Item Total\n\
                    Europe,Consumer,5/15/2017 10:00,100.5\n\
@@ -226,15 +226,12 @@ async fn member_data_role_filters_every_why_query() {
     assert_eq!(status, StatusCode::CREATED);
     let login = json!({"email": "minh@example.com", "password": "a long password"});
     let (_, minh, _) = call(&asking.app, "POST", "/api/auth/login", None, Some(login)).await;
-    exec(
+    let dataset = fetch_text(&asking.db.store, "SELECT id::text FROM datasets").await;
+    give_data_role(
         &asking.db.store,
-        "UPDATE memberships SET data_role = 'latam' WHERE user_id = (SELECT id FROM users WHERE email = 'minh@example.com')",
-    )
-    .await;
-    exec(
-        &asking.db.store,
-        "INSERT INTO rls_policies (workspace_id, dataset_id, data_role, column_name, allowed_values)
-         SELECT workspace_id, id, 'latam', 'Market', ARRAY['LATAM'] FROM datasets",
+        "minh@example.com",
+        "latam",
+        &[(&dataset, "Market", &["LATAM"])],
     )
     .await;
     asking.session = minh.unwrap();
@@ -258,9 +255,10 @@ async fn member_data_role_filters_every_why_query() {
     }
     let filters = response["understanding"]["filters"].as_array().unwrap();
     assert!(
-        filters
-            .iter()
-            .any(|f| f["label"].as_str().unwrap().starts_with("Phân quyền")),
+        filters.iter().any(|f| f["label"]
+            .as_str()
+            .unwrap()
+            .starts_with("Lọc theo quyền xem")),
         "{filters:?}"
     );
 }

@@ -12,7 +12,7 @@ use super::ask_tests::sql_reply;
 use super::source_relations_tests::{add_source, dataset_id, snapshot};
 use super::sources_tests::{start, Setup, KEY, SHOP};
 use crate::api::test_support::call;
-use crate::engine::store::test_support::{exec, fetch_count};
+use crate::engine::store::test_support::{fetch_count, give_data_role};
 
 /// Hỏi một câu trên dataset, bằng phiên của session.
 pub(super) async fn ask(s: &Setup, session: &str, dataset: &str, question: &str) -> Value {
@@ -35,21 +35,13 @@ pub(super) fn tables_read(answer: &Value) -> Vec<&str> {
 
 /// Minh có vai dữ liệu north; mỗi cặp (dataset, cột, giá trị) là một chính sách của vai đó.
 pub(super) async fn give_north_role(s: &Setup, policies: &[(&str, &str, &str)]) {
-    exec(
-        &s.db.store,
-        "UPDATE memberships SET data_role = 'north' WHERE user_id = (SELECT id FROM users WHERE email = 'minh@example.com')",
-    )
-    .await;
-    for (dataset, column, value) in policies {
-        exec(
-            &s.db.store,
-            &format!(
-                "INSERT INTO rls_policies (workspace_id, dataset_id, data_role, column_name, allowed_values)
-                 SELECT workspace_id, id, 'north', '{column}', ARRAY['{value}'] FROM datasets WHERE id = '{dataset}'"
-            ),
-        )
-        .await;
-    }
+    let rules: Vec<(&str, &str, [&str; 1])> =
+        policies.iter().map(|(t, c, v)| (*t, *c, [*v])).collect();
+    let rules: Vec<(&str, &str, &[&str])> = rules
+        .iter()
+        .map(|(t, c, v)| (*t, *c, v.as_slice()))
+        .collect();
+    give_data_role(&s.db.store, "minh@example.com", "north", &rules).await;
 }
 
 const QTY_BY_REGION: &str = "SELECT c.region_code, SUM(oi.qty) AS qty FROM order_items oi \

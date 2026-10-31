@@ -34,6 +34,9 @@ mod catalog_tests;
 #[cfg(test)]
 mod conversation_tests;
 mod conversations;
+mod data_roles;
+#[cfg(test)]
+mod data_roles_tests;
 mod datasets;
 mod domains;
 #[cfg(test)]
@@ -100,6 +103,7 @@ fn api_routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .merge(auth::routes())
         .merge(admin::routes())
         .merge(workspaces::routes())
+        .merge(data_roles::routes())
         .merge(datasets::routes(max_upload_bytes))
         .merge(catalog::routes())
         .merge(query::routes())

@@ -25,16 +25,24 @@ Luật đã chốt:
   được dòng nào trỏ tới phần được thấy.
 
 Đi theo mọi quan hệ trong workspace, không giới hạn số bước như nhóm bảng của câu hỏi (ask/related.rs): dừng ở bước
-thứ ba thì bảng xa hơn một bước lại thấy hết. Test phần dựng điều kiện ở ask/row_filters_tests.rs, qua route ở
-api/row_filter_fk_tests.rs. */
+thứ ba thì bảng xa hơn một bước lại thấy hết.
 
-use std::collections::HashMap;
+Nhiều vai (#45): một thành viên mang được nhiều vai dữ liệu. Điều kiện của từng vai dựng riêng như trên (AND trong một
+vai: mọi luật của vai trên bảng và mọi đường lan); giữa các vai là OR (RowFilter::AnyOf), tức người đó thấy hợp phần
+được thấy của các vai. Chỉ vai có điều kiện trên bảng đang đọc mới tính: vai không có luật nào trên bảng đó (hay trên
+bảng nó trỏ tới) không mở thêm dòng nào của bảng. Không có luật này thì người mang vai "Miền Nam" (luật trên customers)
+và vai "Điện tử" (luật trên products) sẽ thấy mọi khách hàng, vì vai "Điện tử" không giới hạn customers. Thành viên
+không mang vai nào, hay không vai nào có điều kiện trên bảng, thấy mọi dòng như trước (docs/ARCHITECTURE.md mục 4b).
+
+Test phần dựng điều kiện ở ask/row_filters_tests.rs, qua route ở api/row_filter_fk_tests.rs và api/data_roles_tests.rs. */
+
+use std::collections::{BTreeMap, HashMap};
 
 use uuid::Uuid;
 
 use crate::auth::{Member, Role};
 use crate::engine::guard::{AllowedTable, RowFilter};
-use crate::engine::store::DatasetRelation;
+use crate::engine::store::{DatasetRelation, StoredPolicy};
 use crate::{error::AppError, state::AppState};
 
 /// Những gì cần về một dataset để dựng điều kiện của nó và của các bảng trỏ tới nó.
@@ -45,8 +53,8 @@ pub struct PolicyTable {
     pub table: Option<AllowedTable>,
 }
 
-/// Điều kiện lọc dòng của member trên dataset_id: chính sách riêng cộng điều kiện lan theo khóa ngoại. Admin không bị
-/// lọc: họ tự sửa được chính sách, lọc với họ không bảo vệ được gì (#45).
+/// Điều kiện lọc dòng của member trên dataset_id: chính sách riêng cộng điều kiện lan theo khóa ngoại, của từng vai, ghép
+/// OR giữa các vai. Admin không bị lọc: họ tự sửa được chính sách, lọc với họ không bảo vệ được gì (#45).
 pub async fn load_row_filters(
     state: &AppState,
     member: &Member,
@@ -58,21 +66,73 @@ pub async fn load_row_filters(
     let ws = &member.workspace;
     let relations = state.store.list_relations(ws, None).await?;
     let ids = build_parent_ids(dataset_id, &relations);
-    let mut tables = HashMap::new();
-    for &id in &ids {
-        let own = state.store.list_row_filters(ws, id, member.user.id).await?;
-        tables.insert(id, PolicyTable { own, table: None });
+    let policies = state
+        .store
+        .list_member_policies(ws, member.user.id, &ids)
+        .await?;
+    // Thường người hỏi không mang vai nào có luật trên đường: khỏi đọc phiên bản và hồ sơ cột.
+    if policies.is_empty() {
+        return Ok(Vec::new());
     }
-    // Thường không bảng nào trên đường có chính sách (người không có data_role): khỏi đọc phiên bản và hồ sơ cột.
-    if ids.iter().skip(1).any(|id| !tables[id].own.is_empty()) {
+    let mut readable = HashMap::new();
+    if policies.iter().any(|p| p.table_id != dataset_id) {
         for &id in ids.iter().skip(1) {
-            let table = load_readable_table(state, member, id).await?;
-            if let Some(entry) = tables.get_mut(&id) {
-                entry.table = table;
-            }
+            readable.insert(id, load_readable_table(state, member, id).await?);
         }
     }
-    Ok(build_row_filters(dataset_id, &relations, &tables))
+    Ok(build_member_filters(
+        dataset_id, &relations, &policies, &readable,
+    ))
+}
+
+/// Điều kiện của dataset_id cho một người từ luật của mọi vai họ mang (policies) và bảng đọc được của các bảng cha
+/// (readable, None khi chưa đọc được). Một vai có điều kiện thì trả đúng điều kiện đó, như trước khi có nhiều vai; từ
+/// hai vai thì một RowFilter::AnyOf. Không đọc gì thêm nên test được không cần Postgres.
+pub fn build_member_filters(
+    dataset_id: Uuid,
+    relations: &[DatasetRelation],
+    policies: &[StoredPolicy],
+    readable: &HashMap<Uuid, Option<AllowedTable>>,
+) -> Vec<RowFilter> {
+    // BTreeMap để thứ tự các vai cố định, câu SQL sau guard giống nhau giữa các lần hỏi.
+    let mut by_role: BTreeMap<Uuid, Vec<&StoredPolicy>> = BTreeMap::new();
+    for policy in policies {
+        by_role.entry(policy.data_role_id).or_default().push(policy);
+    }
+    let mut groups: Vec<Vec<RowFilter>> = Vec::new();
+    for role_policies in by_role.values() {
+        let mut tables: HashMap<Uuid, PolicyTable> = readable
+            .iter()
+            .map(|(id, table)| {
+                let entry = PolicyTable {
+                    own: Vec::new(),
+                    table: table.clone(),
+                };
+                (*id, entry)
+            })
+            .collect();
+        for policy in role_policies {
+            let entry = tables.entry(policy.table_id).or_insert(PolicyTable {
+                own: Vec::new(),
+                table: None,
+            });
+            entry.own.push(RowFilter::Column {
+                column: policy.column.clone(),
+                allowed_values: policy.allowed_values.clone(),
+            });
+        }
+        let filters = build_row_filters(dataset_id, relations, &tables);
+        // Vai không có điều kiện trên bảng này không mở thêm dòng nào (chú thích đầu file); hai vai cùng điều kiện
+        // trên bảng này thì giữ một.
+        if !filters.is_empty() && !groups.contains(&filters) {
+            groups.push(filters);
+        }
+    }
+    match groups.len() {
+        0 => Vec::new(),
+        1 => groups.remove(0),
+        _ => vec![RowFilter::AnyOf(groups)],
+    }
 }
 
 /// dataset_id ở đầu, rồi mọi dataset đi được từ nó theo chiều from -> to, mỗi dataset một lần.

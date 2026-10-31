@@ -4,7 +4,7 @@ truyền vào, cộng quan hệ suy ra từ điều kiện lan theo khóa ngoạ
 hai bảng có đúng bằng cột của một khóa không (key_matches), hai cột có cùng miền giá trị không (same_domain), và lời
 từ chối nêu đúng các khóa nối được giữa hai bảng (describe_keys). Tên bảng và cột so theo chữ thường, như guard. */
 
-use super::{AllowedTable, RowFilter};
+use super::{find_parent_paths, AllowedTable};
 
 /// Một quan hệ khóa ngoại giữa hai bảng, theo tên bảng logic (tên câu SQL dùng). Service dựng từ dataset_relations
 /// (service/ask/fanout.rs, build_join_links); guard dùng để kiểm điều kiện nối, ask/fanout.rs để chặn cộng lặp,
@@ -50,22 +50,15 @@ impl Keys {
         let mut all: Vec<JoinLink> = links.iter().map(lowercase_link).collect();
         let mut pending: Vec<&AllowedTable> = tables.iter().collect();
         while let Some(table) = pending.pop() {
-            for filter in &table.row_filters {
-                if let RowFilter::Parent {
-                    columns,
-                    parent_columns,
-                    parent,
-                } = filter
-                {
-                    all.push(lowercase_link(&JoinLink {
-                        many: table.name.clone(),
-                        many_columns: columns.clone(),
-                        one: parent.name.clone(),
-                        one_columns: parent_columns.clone(),
-                        fans_out: true,
-                    }));
-                    pending.push(parent);
-                }
+            for (columns, parent_columns, parent) in find_parent_paths(&table.row_filters) {
+                all.push(lowercase_link(&JoinLink {
+                    many: table.name.clone(),
+                    many_columns: columns.to_vec(),
+                    one: parent.name.clone(),
+                    one_columns: parent_columns.to_vec(),
+                    fans_out: true,
+                }));
+                pending.push(parent);
             }
         }
         Keys { links: all }
