@@ -1,0 +1,3 @@
+Các bảng khác của database này, chỉ nêu tên; cột của chúng không được liệt kê:
+{{tables}}
+- "tables": tên các bảng trong danh sách này mà câu hỏi cần, viết đúng như trong danh sách. Để trống khi các bảng đã liệt kê cột ở trên là đủ.
