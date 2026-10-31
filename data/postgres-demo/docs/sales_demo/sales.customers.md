@@ -20,12 +20,6 @@ Khách hàng. Email và mật khẩu trong nguồn đã bị che (cùng một gi
 | latitude    | numeric |         | false    |                                 |         | Vĩ độ. Mô tả của DataCo gọi là vị trí cửa hàng, nhưng trong dữ liệu mỗi khách chỉ có một giá trị                               |
 | longitude   | numeric |         | false    |                                 |         | Kinh độ, cùng ghi chú với latitude                                                                                             |
 
-## Viewpoints
-
-| Name                        | Definition                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [sales](viewpoint-sales.md) | Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments. |
-
 ## Constraints
 
 | Name           | Type        | Definition                |

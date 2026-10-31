@@ -1,0 +1,614 @@
+{
+  "name": "sales_demo",
+  "desc": "Cơ sở dữ liệu mẫu bán hàng dựng từ DataCo (schema sales). Bảng sự kiện order_items nối về orders, customers, products, categories, departments. Cách dựng ở data/postgres-demo/README.md.",
+  "tables": [
+    {
+      "name": "sales.departments",
+      "type": "BASE TABLE",
+      "comment": "Phòng ban (nhóm hàng lớn) của cửa hàng",
+      "columns": [
+        {
+          "name": "department_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã phòng ban (Department Id)"
+        },
+        {
+          "name": "department_name",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tên phòng ban, ví dụ Fitness, Apparel (Department Name)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "departments_pkey",
+          "def": "CREATE UNIQUE INDEX departments_pkey ON sales.departments USING btree (department_id)",
+          "table": "sales.departments",
+          "columns": [
+            "department_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "departments_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (department_id)",
+          "table": "sales.departments",
+          "referenced_table": "",
+          "columns": [
+            "department_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.categories",
+      "type": "BASE TABLE",
+      "comment": "Danh mục sản phẩm; mỗi danh mục thuộc một phòng ban",
+      "columns": [
+        {
+          "name": "category_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã danh mục (Category Id, trùng Product Category Id)"
+        },
+        {
+          "name": "category_name",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tên danh mục, ví dụ Cleats, Fishing (Category Name)"
+        },
+        {
+          "name": "department_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Phòng ban chứa danh mục, khóa ngoại tới sales.departments"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "categories_pkey",
+          "def": "CREATE UNIQUE INDEX categories_pkey ON sales.categories USING btree (category_id)",
+          "table": "sales.categories",
+          "columns": [
+            "category_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "categories_department_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (department_id) REFERENCES sales.departments(department_id)",
+          "table": "sales.categories",
+          "referenced_table": "sales.departments",
+          "columns": [
+            "department_id"
+          ],
+          "referenced_columns": [
+            "department_id"
+          ]
+        },
+        {
+          "name": "categories_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (category_id)",
+          "table": "sales.categories",
+          "referenced_table": "",
+          "columns": [
+            "category_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.products",
+      "type": "BASE TABLE",
+      "comment": "Sản phẩm; mỗi sản phẩm thuộc một danh mục",
+      "columns": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã sản phẩm (Product Card Id, trùng Order Item Cardprod Id)"
+        },
+        {
+          "name": "product_name",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tên sản phẩm (Product Name)"
+        },
+        {
+          "name": "category_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Danh mục của sản phẩm, khóa ngoại tới sales.categories"
+        },
+        {
+          "name": "price",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Giá niêm yết của sản phẩm, đô la Mỹ (Product Price)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "products_pkey",
+          "def": "CREATE UNIQUE INDEX products_pkey ON sales.products USING btree (product_id)",
+          "table": "sales.products",
+          "columns": [
+            "product_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "products_category_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (category_id) REFERENCES sales.categories(category_id)",
+          "table": "sales.products",
+          "referenced_table": "sales.categories",
+          "columns": [
+            "category_id"
+          ],
+          "referenced_columns": [
+            "category_id"
+          ]
+        },
+        {
+          "name": "products_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (product_id)",
+          "table": "sales.products",
+          "referenced_table": "",
+          "columns": [
+            "product_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.customers",
+      "type": "BASE TABLE",
+      "comment": "Khách hàng. Email và mật khẩu trong nguồn đã bị che (cùng một giá trị XXXXXXXXX) nên không đưa vào",
+      "columns": [
+        {
+          "name": "customer_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã khách hàng (Customer Id, trùng Order Customer Id)"
+        },
+        {
+          "name": "first_name",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tên (Customer Fname)"
+        },
+        {
+          "name": "last_name",
+          "type": "text",
+          "nullable": true,
+          "comment": "Họ (Customer Lname). Nguồn để trống ở 8 dòng"
+        },
+        {
+          "name": "segment",
+          "type": "text",
+          "nullable": false,
+          "comment": "Phân khúc khách: Consumer (cá nhân), Corporate (doanh nghiệp), Home Office (văn phòng tại nhà)"
+        },
+        {
+          "name": "street",
+          "type": "text",
+          "nullable": true,
+          "comment": "Địa chỉ đường phố của khách. Trống ở 3 khách bị lệch cột trong nguồn (xem sql/sales_load.sql)"
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "nullable": false,
+          "comment": "Thành phố nơi khách ở"
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "nullable": false,
+          "comment": "Bang nơi khách ở, mã hai chữ, ví dụ CA, PR"
+        },
+        {
+          "name": "country",
+          "type": "text",
+          "nullable": false,
+          "comment": "Nước nơi khách ở, như trong nguồn: EE. UU. (Hoa Kỳ) hoặc Puerto Rico"
+        },
+        {
+          "name": "zipcode",
+          "type": "text",
+          "nullable": true,
+          "comment": "Mã bưu chính, như trong nguồn (số 0 ở đầu đã mất, ví dụ 725 là 00725). Không trống ở khách nào sau khi dời 3 khách bị lệch cột"
+        },
+        {
+          "name": "latitude",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Vĩ độ. Mô tả của DataCo gọi là vị trí cửa hàng, nhưng trong dữ liệu mỗi khách chỉ có một giá trị"
+        },
+        {
+          "name": "longitude",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Kinh độ, cùng ghi chú với latitude"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "customers_pkey",
+          "def": "CREATE UNIQUE INDEX customers_pkey ON sales.customers USING btree (customer_id)",
+          "table": "sales.customers",
+          "columns": [
+            "customer_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "customers_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (customer_id)",
+          "table": "sales.customers",
+          "referenced_table": "",
+          "columns": [
+            "customer_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.orders",
+      "type": "BASE TABLE",
+      "comment": "Đơn hàng: ai đặt, khi nào, giao đi đâu, giao thế nào. Một đơn có một hoặc nhiều dòng hàng",
+      "columns": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã đơn hàng (Order Id)"
+        },
+        {
+          "name": "customer_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Khách đặt đơn, khóa ngoại tới sales.customers"
+        },
+        {
+          "name": "order_date",
+          "type": "timestamp without time zone",
+          "nullable": false,
+          "comment": "Thời điểm đặt hàng (order date (DateOrders))"
+        },
+        {
+          "name": "shipping_date",
+          "type": "timestamp without time zone",
+          "nullable": false,
+          "comment": "Thời điểm giao hàng (shipping date (DateOrders))"
+        },
+        {
+          "name": "payment_type",
+          "type": "text",
+          "nullable": false,
+          "comment": "Hình thức thanh toán: DEBIT, TRANSFER, CASH, PAYMENT (cột Type trong nguồn)"
+        },
+        {
+          "name": "order_status",
+          "type": "text",
+          "nullable": false,
+          "comment": "Trạng thái đơn, ví dụ COMPLETE, PENDING, CANCELED, SUSPECTED_FRAUD"
+        },
+        {
+          "name": "delivery_status",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tình trạng giao: Advance shipping (sớm), Shipping on time (đúng hạn), Late delivery (trễ), Shipping canceled (hủy)"
+        },
+        {
+          "name": "late_delivery_risk",
+          "type": "boolean",
+          "nullable": false,
+          "comment": "Giao trễ hay không: true đúng với các đơn có delivery_status = Late delivery (Late_delivery_risk = 1). Đơn hủy (Shipping canceled) luôn là false, kể cả khi số ngày giao thực tế vượt lịch"
+        },
+        {
+          "name": "days_for_shipping_real",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Số ngày giao thực tế"
+        },
+        {
+          "name": "days_for_shipment_scheduled",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Số ngày giao theo lịch"
+        },
+        {
+          "name": "shipping_mode",
+          "type": "text",
+          "nullable": false,
+          "comment": "Cách giao: Standard Class, Second Class, First Class, Same Day"
+        },
+        {
+          "name": "market",
+          "type": "text",
+          "nullable": false,
+          "comment": "Thị trường nơi giao hàng: Africa, Europe, LATAM, Pacific Asia, USCA"
+        },
+        {
+          "name": "order_region",
+          "type": "text",
+          "nullable": false,
+          "comment": "Vùng nơi giao hàng, ví dụ Southeast Asia, Western Europe"
+        },
+        {
+          "name": "order_country",
+          "type": "text",
+          "nullable": false,
+          "comment": "Nước nơi giao hàng, tên tiếng Tây Ban Nha như trong nguồn"
+        },
+        {
+          "name": "order_state",
+          "type": "text",
+          "nullable": false,
+          "comment": "Bang hoặc tỉnh nơi giao hàng"
+        },
+        {
+          "name": "order_city",
+          "type": "text",
+          "nullable": false,
+          "comment": "Thành phố nơi giao hàng"
+        },
+        {
+          "name": "order_zipcode",
+          "type": "text",
+          "nullable": true,
+          "comment": "Mã bưu chính nơi giao hàng. Nguồn chỉ có ở một phần đơn tại Hoa Kỳ, còn lại trống"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "orders_pkey",
+          "def": "CREATE UNIQUE INDEX orders_pkey ON sales.orders USING btree (order_id)",
+          "table": "sales.orders",
+          "columns": [
+            "order_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "orders_customer_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (customer_id) REFERENCES sales.customers(customer_id)",
+          "table": "sales.orders",
+          "referenced_table": "sales.customers",
+          "columns": [
+            "customer_id"
+          ],
+          "referenced_columns": [
+            "customer_id"
+          ]
+        },
+        {
+          "name": "orders_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (order_id)",
+          "table": "sales.orders",
+          "referenced_table": "",
+          "columns": [
+            "order_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.order_items",
+      "type": "BASE TABLE",
+      "comment": "Dòng hàng (bảng sự kiện): một sản phẩm trong một đơn, kèm số lượng, tiền, giảm giá, lợi nhuận. Mỗi dòng của file DataCo là một dòng ở đây",
+      "columns": [
+        {
+          "name": "order_item_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã dòng hàng (Order Item Id)"
+        },
+        {
+          "name": "order_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Đơn chứa dòng hàng, khóa ngoại tới sales.orders"
+        },
+        {
+          "name": "product_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Sản phẩm bán, khóa ngoại tới sales.products"
+        },
+        {
+          "name": "quantity",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Số lượng (Order Item Quantity)"
+        },
+        {
+          "name": "unit_price",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Đơn giá lúc bán, đô la Mỹ (Order Item Product Price). Trong dữ liệu luôn bằng sales.products.price"
+        },
+        {
+          "name": "sales",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Doanh số trước giảm giá, bằng đơn giá nhân số lượng (Sales)"
+        },
+        {
+          "name": "discount",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Số tiền giảm giá (Order Item Discount)"
+        },
+        {
+          "name": "discount_rate",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Tỷ lệ giảm giá, từ 0 đến 1 (Order Item Discount Rate)"
+        },
+        {
+          "name": "item_total",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Thành tiền sau giảm giá (Order Item Total; cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng)"
+        },
+        {
+          "name": "profit",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order; cột Benefit per order có cùng giá trị ở mọi dòng). Tên nguồn nói \"per order\" nhưng giá trị đổi theo từng dòng hàng"
+        },
+        {
+          "name": "profit_ratio",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Tỷ suất lợi nhuận, bằng profit chia item_total (Order Item Profit Ratio)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "order_items_pkey",
+          "def": "CREATE UNIQUE INDEX order_items_pkey ON sales.order_items USING btree (order_item_id)",
+          "table": "sales.order_items",
+          "columns": [
+            "order_item_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "order_items_product_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (product_id) REFERENCES sales.products(product_id)",
+          "table": "sales.order_items",
+          "referenced_table": "sales.products",
+          "columns": [
+            "product_id"
+          ],
+          "referenced_columns": [
+            "product_id"
+          ]
+        },
+        {
+          "name": "order_items_order_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (order_id) REFERENCES sales.orders(order_id)",
+          "table": "sales.order_items",
+          "referenced_table": "sales.orders",
+          "columns": [
+            "order_id"
+          ],
+          "referenced_columns": [
+            "order_id"
+          ]
+        },
+        {
+          "name": "order_items_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (order_item_id)",
+          "table": "sales.order_items",
+          "referenced_table": "",
+          "columns": [
+            "order_item_id"
+          ]
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "table": "sales.categories",
+      "columns": [
+        "department_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.departments",
+      "parent_columns": [
+        "department_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (department_id) REFERENCES sales.departments(department_id)"
+    },
+    {
+      "table": "sales.products",
+      "columns": [
+        "category_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.categories",
+      "parent_columns": [
+        "category_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (category_id) REFERENCES sales.categories(category_id)"
+    },
+    {
+      "table": "sales.orders",
+      "columns": [
+        "customer_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.customers",
+      "parent_columns": [
+        "customer_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (customer_id) REFERENCES sales.customers(customer_id)"
+    },
+    {
+      "table": "sales.order_items",
+      "columns": [
+        "product_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.products",
+      "parent_columns": [
+        "product_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (product_id) REFERENCES sales.products(product_id)"
+    },
+    {
+      "table": "sales.order_items",
+      "columns": [
+        "order_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.orders",
+      "parent_columns": [
+        "order_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (order_id) REFERENCES sales.orders(order_id)"
+    }
+  ],
+  "driver": {
+    "name": "postgres",
+    "database_version": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "meta": {
+      "current_schema": "public",
+      "search_paths": [
+        "analyst",
+        "public"
+      ],
+      "dict": {
+        "Functions": "Stored procedures and functions"
+      }
+    }
+  }
+}

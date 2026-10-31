@@ -16,12 +16,6 @@
 | is_banked         | boolean |         | false    |          |                                       | Điểm chuyển từ lần học trước (true) hay làm trong lần này (false)                  |
 | score             | numeric |         | true     |          |                                       | Điểm từ 0 đến 100; dưới 40 là trượt bài. Rỗng khi nguồn ghi "?"                    |
 
-## Viewpoints
-
-| Name                    | Definition                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [edu](viewpoint-edu.md) | Dữ liệu học tập OULAD. Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses. |
-
 ## Constraints
 
 | Name                                                            | Type        | Definition                                                                                                                   |

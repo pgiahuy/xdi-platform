@@ -1,0 +1,19 @@
+# data/postgres-demo/.tbls.sales_demo.yml - cấu hình tbls (https://github.com/k1LoW/tbls, giấy phép MIT) để sinh tài
+# liệu bảng và sơ đồ ER của sales_demo vào docs/sales_demo/. Chạy bằng docs.sh, không gọi tbls thẳng: docs.sh đặt cổng
+# mặc định. Mô tả bảng và cột lấy từ COMMENT trong sql/sales_schema.sql, nên sửa mô tả ở đó rồi sinh lại. Cấu hình của
+# edu_demo ở .tbls.edu_demo.yml.
+
+name: sales_demo
+desc: Cơ sở dữ liệu mẫu bán hàng dựng từ DataCo (schema sales). Bảng sự kiện order_items nối về orders, customers, products, categories, departments. Cách dựng ở data/postgres-demo/README.md.
+# Kết nối bằng analyst: người dùng chỉ đọc, không thấy schema staging, đúng như ứng dụng thấy.
+dsn: postgres://analyst:analyst@127.0.0.1:${DEMO_DB_PORT}/sales_demo?sslmode=disable
+docPath: docs/sales_demo
+include:
+  - sales.*
+format:
+  adjust: true
+er:
+  format: svg
+  # Không đưa mô tả cột vào sơ đồ: mô tả dài làm sơ đồ quá rộng; mô tả nằm trong file Markdown của từng bảng.
+  comment: false
+  hideDef: true

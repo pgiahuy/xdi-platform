@@ -26,12 +26,6 @@
 | order_city                  | text                        |         | false    |                                           |                                       | Thành phố nơi giao hàng                                                                                                                                                                    |
 | order_zipcode               | text                        |         | true     |                                           |                                       | Mã bưu chính nơi giao hàng. Nguồn chỉ có ở một phần đơn tại Hoa Kỳ, còn lại trống                                                                                                          |
 
-## Viewpoints
-
-| Name                        | Definition                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [sales](viewpoint-sales.md) | Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments. |
-
 ## Constraints
 
 | Name                    | Type        | Definition                                                        |
