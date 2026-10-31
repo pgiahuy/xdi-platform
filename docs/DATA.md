@@ -1,69 +1,71 @@
 # Dữ liệu
 
-Tài liệu này ghi hệ thống nhận file dữ liệu nào, đổi chúng thành gì, giữ phiên bản ra sao và đặt tên bảng, tên cột thế
-nào. Cách nạp trên giao diện và bằng `curl`: [Cài đặt](INSTALL.md), mục Nạp dữ liệu. Dữ liệu nằm ở đâu và gửi gì cho
-mô hình ngôn ngữ: [Dữ liệu và quyền riêng tư](PRIVACY.md).
+Trang này nói hệ thống nhận file nào, chụp database Postgres thế nào, giữ phiên bản ra sao, đặt tên bảng, tên cột và
+lập hồ sơ cột thế nào. Cách làm trên giao diện: [Dùng lần đầu](USAGE.md); nạp bằng `curl`: [Cài đặt](INSTALL.md).
+Dữ liệu nằm ở đâu và gửi gì cho mô hình ngôn ngữ: [Dữ liệu và quyền riêng tư](PRIVACY.md).
 
-Một dataset là một database đã kết nối hay một file đã nạp; bảng nằm bên trong dataset (#257). Một file là một dataset
-có một bảng; mỗi bảng chụp từ một database là một bảng của dataset đó. Phiên bản theo từng bảng. Cách lưu trong
-Postgres và vì sao giữ tên cũ: [Kiến trúc](ARCHITECTURE.md), mục 5. Dưới đây "dataset" ở các route và trường cũ
-(`dataset_id`, `name` của lần nạp) là bảng.
+Đã có: nạp CSV, Parquet, Excel; chụp mọi bảng đọc được của một database Postgres thành Parquet; phiên bản theo bảng;
+hồ sơ cột lớp cấu trúc và lớp ngữ nghĩa. Phần chưa có ở mục cuối.
 
-Nạp file: `POST /api/workspaces/{ws}/datasets`, dạng `multipart/form-data`, chỉ `admin` của workspace gọi được
-([API](API.md)). Các trường: `file` (lặp lại để gửi nhiều file), `name` (tên dataset mới), `dataset_id` (thêm phiên bản
-cho dataset có sẵn), `sheet` (sheet cần nạp của file Excel). Code: `backend/src/api/datasets/`,
-`backend/src/service/ingest.rs`, `backend/src/engine/analytics.rs`.
+## Dataset và bảng
 
-## Định dạng nhận
+Một dataset là một database đã kết nối hay một file đã nạp; bảng nằm trong dataset. Một file là một dataset có một
+bảng; mỗi bảng chụp từ database là một bảng của dataset đó. Phiên bản, hồ sơ cột và chỉ số theo từng bảng. Trong
+Postgres, dataset là bảng `sources`, bảng là bảng `datasets` ([SCHEMA.md](SCHEMA.md)); vì vậy ở các route và trường cũ
+(`dataset_id`, `name` của lần nạp), "dataset" nghĩa là bảng.
 
-Định dạng đoán theo đuôi tên file, không phân biệt hoa thường. Đuôi khác bị từ chối (400).
+## Nạp file
+
+`POST /api/workspaces/{ws}/datasets`, dạng `multipart/form-data`, chỉ `admin` gọi được. Các trường: `file` (lặp lại để
+gửi nhiều file), `name` (tên dataset mới), `dataset_id` (thêm phiên bản cho bảng có sẵn), `sheet` (sheet của file
+Excel). Code: `backend/src/api/datasets/`, `backend/src/service/ingest.rs`, `backend/src/engine/analytics.rs`.
+
+### Định dạng nhận
+
+Định dạng đoán theo đuôi tên file, không phân biệt hoa thường; đuôi khác bị từ chối (400). Mọi file của một lần nạp
+cùng định dạng; file Excel nạp từng file một.
 
 | Định dạng | Đuôi | Cách đọc |
 |---|---|---|
-| CSV | `.csv` | DuckDB đọc, dòng đầu là tiêu đề; DuckDB tự dò dấu ngăn cột (phẩy, chấm phẩy...) và kiểu từng cột |
+| CSV | `.csv` | DuckDB đọc, dòng đầu là tiêu đề, tự dò dấu ngăn cột và kiểu từng cột |
 | Parquet | `.parquet` | DuckDB đọc, giữ cột và kiểu trong file |
 | Excel | `.xlsx` | Crate `calamine` đọc trong một tiến trình con; mỗi sheet được chọn ghi thành CSV rồi đi tiếp như CSV |
 
-Mọi file của một lần nạp phải cùng định dạng: toàn CSV hoặc toàn Parquet. File Excel nạp từng file một.
-
 ### Mã hóa của CSV
 
-`backend/src/engine/csv_encoding.rs`.
+Code: `backend/src/engine/csv_encoding.rs`.
 
-- Đọc theo UTF-8 trước. DuckDB báo file không phải UTF-8 thì backend đổi file sang UTF-8 theo bảng mã windows-1252 rồi
-  đọc lại. windows-1252 là bảng mã của file xuất từ phần mềm Windows cũ; ở mọi byte ngoài khoảng 0x80 đến 0x9F nó cho
-  cùng ký tự với latin-1, nên file latin-1 cũng đọc đúng.
-- Byte lạ nằm sâu trong file (sau phần DuckDB xem trước để dò cột) cũng được đổi, khi ghi Parquet.
-- File có chữ UTF-8 lẫn byte không phải UTF-8 thì không đổi mà báo lỗi kèm tên file và số dòng đầu tiên có byte hỏng:
-  đổi theo windows-1252 lúc đó sẽ làm sai các chữ UTF-8 đang đúng. Lưu lại file dạng UTF-8 rồi nạp lại.
+- Đọc theo UTF-8 trước. File không phải UTF-8 thì đổi sang UTF-8 theo bảng mã windows-1252 rồi đọc lại; file latin-1
+  cũng đọc đúng vì hai bảng mã chỉ khác ở byte 0x80 tới 0x9F.
+- Byte lạ nằm sâu trong file (sau phần DuckDB xem trước) cũng được đổi, khi ghi Parquet.
+- File có chữ UTF-8 lẫn byte không phải UTF-8 thì báo lỗi kèm tên file và số dòng đầu tiên có byte hỏng, vì đổi lúc đó
+  làm sai các chữ UTF-8 đang đúng. Lưu lại file dạng UTF-8 rồi nạp lại.
 - UTF-16 không được hỗ trợ.
 
 ### File Excel
 
-`backend/src/service/excel.rs`, `backend/src/engine/excel.rs`, `backend/src/engine/excel_worker.rs`.
+Code: `backend/src/service/excel.rs`, `backend/src/engine/excel.rs`, `backend/src/engine/excel_worker.rs`.
 
-- `POST /api/workspaces/{ws}/datasets/sheets` nhận một file `.xlsx`, trả từng sheet: tên, sheet có bị ẩn không, tên
-  cột, số dòng ước lượng (theo vùng dữ liệu file tự ghi, có thể tính cả dòng trống). File không được lưu lại.
+- `POST /api/workspaces/{ws}/datasets/sheets` nhận một file `.xlsx`, trả từng sheet: tên, có bị ẩn không, tên cột, số
+  dòng ước lượng (theo vùng dữ liệu file tự ghi). File không được lưu lại.
 - Chọn sheet bằng trường `sheet`, lặp lại để chọn nhiều sheet. Không chọn thì file phải có đúng một sheet đang hiện.
-  Các sheet chọn cùng lúc phải cùng tên cột và gộp thành một bảng; sheet khác cột thì nạp riêng từng lần, mỗi lần một
-  dataset.
-- Dòng đầu có dữ liệu là dòng tiêu đề; các cột tính từ ô tiêu đề trái nhất đến ô tiêu đề phải nhất. Ô có dữ liệu nằm
-  ngoài các cột đó thì báo lỗi. Dòng trống bị bỏ qua; ô lỗi công thức (`#DIV/0!`) thành ô trống.
-- Ô ngày giờ ghi dạng `2009-12-01 07:45:00` (chỉ ngày: `2009-12-01`, chỉ giờ: `07:45:00`) để DuckDB nhận kiểu
-  `TIMESTAMP`, `DATE`, `TIME`. Cột có cả ô chỉ ngày lẫn ô có giờ được đọc là `TIMESTAMP`; cột trộn ô chỉ giờ với ô ngày
-  thành cột chữ.
-- Ô gộp và tiêu đề lệch dòng chưa hỗ trợ.
-- File `.xls` bị từ chối vì sai đuôi, như mọi đuôi không nhận. File có mật khẩu (hay file `.xls` đổi đuôi thành `.xlsx`)
-  bị từ chối với lời báo hướng dẫn bỏ mật khẩu hoặc lưu lại dạng `.xlsx`.
+  Các sheet chọn cùng lúc phải cùng tên cột và gộp thành một bảng.
+- Dòng đầu có dữ liệu là dòng tiêu đề; cột tính từ ô tiêu đề trái nhất đến phải nhất, ô có dữ liệu ngoài các cột đó thì
+  báo lỗi. Dòng trống bị bỏ; ô lỗi công thức (`#DIV/0!`) thành ô trống.
+- Ô ngày giờ ghi dạng `2009-12-01 07:45:00` (chỉ ngày `2009-12-01`, chỉ giờ `07:45:00`), để DuckDB nhận `TIMESTAMP`,
+  `DATE`, `TIME`. Cột có cả ô chỉ ngày lẫn ô có giờ là `TIMESTAMP`; cột trộn ô chỉ giờ với ô ngày thành cột chữ.
+- Ô gộp và tiêu đề lệch dòng chưa hỗ trợ. File `.xls` bị từ chối vì sai đuôi; file có mật khẩu (hay `.xls` đổi đuôi)
+  bị từ chối kèm hướng dẫn bỏ mật khẩu hay lưu lại dạng `.xlsx`.
 
-calamine tin những con số file tự khai, nên một file nhỏ cố ý làm sai có thể khiến nó cấp phát rất nhiều bộ nhớ hay đọc
+calamine tin các con số file tự khai, nên một file nhỏ cố ý làm sai có thể khiến nó cấp phát rất nhiều bộ nhớ hay đọc
 rất lâu. Vì vậy file Excel được đọc trong tiến trình con `xdi-backend excel-worker`, mỗi lúc một tiến trình, với các
-trần sau. Vượt trần thì chỉ request đó lỗi, backend vẫn phục vụ người khác: ba trần về kích thước giải nén, bảng chuỗi
-dùng chung và dung lượng CSV trả 413, các trần khác trả 400.
+trần dưới đây. Vượt trần thì chỉ request đó lỗi: ba trần kích thước giải nén, bảng chuỗi dùng chung và dung lượng CSV
+trả 413, các trần khác trả 400. Một file chạm trần giữ lượt đọc Excel tới khi bị dừng, người khác nạp Excel lúc đó phải
+chờ.
 
 | Trần | Giá trị |
 |---|---|
-| RAM ảo của tiến trình con | 2 GB (đặt bằng `setrlimit`, chỉ trên hệ Unix) |
+| RAM ảo của tiến trình con | 2 GB (`setrlimit`, chỉ trên hệ Unix) |
 | Thời gian CPU của tiến trình con | 5 phút (`setrlimit`, chỉ trên hệ Unix) |
 | Thời gian chờ phía backend | 6 phút |
 | Tổng kích thước giải nén của file | 10 lần `MAX_UPLOAD_MB` |
@@ -75,9 +77,7 @@ dùng chung và dung lượng CSV trả 413, các trần khác trả 400.
 | Độ dài một dòng | 16 MB |
 | Tổng tên sheet và tên cột trong danh sách sheet | 1 MB |
 
-Một file chạm trần vẫn giữ lượt đọc Excel tới khi bị dừng, nên người khác nạp Excel lúc đó phải chờ.
-
-## Giới hạn của một lần nạp
+### Giới hạn của một lần nạp
 
 | Giới hạn | Giá trị | Vượt thì |
 |---|---|---|
@@ -86,380 +86,289 @@ Một file chạm trần vẫn giữ lượt đọc Excel tới khi bị dừng,
 | Độ dài tên file | 255 ký tự; phần thư mục trong tên bị bỏ | 400 |
 | Độ dài tên dataset (`name`) | 100 ký tự | 400 |
 
-`MAX_UPLOAD_MB` đặt sai (không phải số dương) thì backend cảnh báo trong log và dùng 200. File được ghi xuống đĩa từng
-đoạn trong lúc nhận, không giữ cả file trong bộ nhớ.
+`MAX_UPLOAD_MB` không phải số dương thì backend cảnh báo trong log và dùng 200. File được ghi xuống đĩa từng đoạn
+trong lúc nhận, không giữ cả file trong bộ nhớ.
 
-Các trường hợp sau bị từ chối (400). Lời báo ghi tên file, trừ hai trường hợp cuối, vì chúng chỉ lộ ra khi đọc cả bảng
-đã gộp:
+Bị từ chối (400), lời báo ghi tên file trừ hai trường hợp cuối (chỉ lộ ra khi đọc cả bảng đã gộp):
 
-- Hai file cùng nội dung, hoặc hai file cùng tên, trong một lần nạp.
-- File rỗng (0 byte).
-- CSV có dòng thiếu hoặc thừa cột làm DuckDB không tách được cột.
-- Các file không cùng tên cột (phân biệt hoa thường); lời báo ghi cột thiếu và cột thừa. Thứ tự cột được phép khác
-  nhau.
+- Hai file cùng nội dung, hay cùng tên, trong một lần nạp. File rỗng (0 byte).
+- CSV có dòng thiếu hay thừa cột làm DuckDB không tách được cột.
+- Các file không cùng tên cột (phân biệt hoa thường; thứ tự được khác); lời báo ghi cột thiếu và cột thừa.
 - File đã có cột tên `_source_file` (không phân biệt hoa thường).
-- Cùng tên cột nhưng kiểu không gộp được, ví dụ file này là số, file kia là ngày. Kiểu gộp được thì DuckDB nâng kiểu:
-  số nguyên ở file này và số thập phân ở file kia thành `DOUBLE`.
-- Bảng đã gộp không có dòng dữ liệu nào, ví dụ file duy nhất chỉ có dòng tiêu đề. File chỉ có tiêu đề nạp cùng file có
-  dữ liệu thì không bị báo.
+- Cùng tên cột mà kiểu không gộp được (số với ngày). Kiểu gộp được thì DuckDB nâng kiểu: số nguyên và số thập phân
+  thành `DOUBLE`.
+- Bảng đã gộp không có dòng nào. File chỉ có tiêu đề nạp cùng file có dữ liệu thì không bị báo.
 
 ## Nguồn database (Postgres)
 
-`admin` của workspace thêm được một database Postgres làm nguồn (trang Dữ liệu, "Kết nối database", hay
-`POST /api/workspaces/{ws}/sources`), rồi chụp các bảng, view của nó thành dataset: mặc định mọi bảng tài khoản đọc
-được (#247), admin bỏ tick bảng không muốn. Bản này chỉ có Postgres; MySQL, SQLite
-và truy vấn thẳng database ngoài lúc hỏi để sau ([#165](https://github.com/pgiahuy/xdi-platform/issues/165)).
-Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
+`admin` thêm một database Postgres làm nguồn (trang **Dữ liệu**, khung **Kết nối database**, hay
+`POST /api/workspaces/{ws}/sources`), rồi chụp các bảng, view của nó. Mỗi database là một dataset, tên theo tên
+database. Bản này chỉ có Postgres và chỉ chụp: câu hỏi chạy trên bản chụp Parquet, không truy vấn thẳng database nguồn.
+Code: `backend/src/service/sources/`; route ở [API.md](API.md#nguồn-database).
 
-- Chụp là chép một lần, rồi đi đúng đường nạp ở trên (Parquet, hồ sơ cột, phiên bản). Hồ sơ, bằng chứng, dòng nguồn và
-  câu hỏi cũ trỏ đúng phiên bản đã chụp. Hai cách chép, chọn bằng `SOURCE_SNAPSHOT_MODE` (#246):
-  - `direct` (mặc định): DuckDB đọc thẳng bảng bằng extension `postgres` của nó, qua giao thức `COPY` nhị phân của
-    Postgres, và ghi Parquet một bước, không có file CSV tạm. Extension là file đóng gói sẵn đúng bản DuckDB của backend,
-    nạp từ đĩa, không tải lúc chạy ([INSTALL.md](INSTALL.md), mục 2). Không nạp được (thiếu file, lệch bản) hay libpq
-    của extension không kết nối được thì log ghi cảnh báo và lần chụp dùng `copy`.
-  - `copy` (dự phòng, hoặc đặt tay): backend đọc bảng bằng `COPY (SELECT * FROM schema.bảng) TO STDOUT (FORMAT csv)` ra file CSV
-    tạm, DuckDB đọc lại file đó và ghi Parquet.
+- Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`; với cách chép `direct` thêm
+  `ATTACH ... READ_ONLY`). Máy chủ phải nằm trong `SOURCE_ALLOWED_HOSTS`.
+- Mật khẩu và chứng chỉ CA mã hóa bằng `SOURCE_SECRET_KEY` (hay file khóa tự sinh trong `DATA_DIR`); response chỉ ghi
+  `custom_ca`.
+- Xóa nguồn chỉ được khi không còn bảng nào chụp từ nó; xóa bảng không xóa nguồn.
 
-  Hai cách cho cùng kiểu cột và cùng dữ liệu (test `both_modes_give_the_same_types_and_rows` so từng dòng trên một bảng
-  đủ loại kiểu); số đo thời gian, đĩa tạm, bộ nhớ ở [PERFORMANCE.md](PERFORMANCE.md). Đổi cách chép làm nội dung file
-  khác đi, nên lần chụp lại đầu tiên sau khi đổi tạo một phiên bản mới dù bảng không đổi. "Chụp lại" tạo phiên bản mới của cùng dataset, đọc lại đúng bảng của lần trước; bảng không đổi thì trả
-  `created: false` như nạp trùng.
-- Kiểu cột lấy từ Postgres, DuckDB không đoán như với file CSV nạp tay: số nguyên thành `INTEGER` hay `BIGINT`,
-  `real` và `double precision` thành `DOUBLE`, `numeric(p,s)` thành `DECIMAL(p,s)` (`numeric` không khai báo, hay
-  rộng hơn 38 chữ số, thành `DOUBLE`, chỉ giữ chính xác khoảng 15 chữ số), `boolean`, `date`, `timestamp`,
-  `timestamptz` giữ kiểu tương ứng. Mọi kiểu khác (`text`, `varchar`, `uuid`, `json`, mảng, enum) thành chữ, nên mã
-  như `00123` giữ nguyên số 0 ở đầu. Chuỗi rỗng và `NULL` vẫn khác nhau sau khi chụp.
-- Mô tả có sẵn trong database (#245): cùng lần chụp, trong cùng giao dịch chỉ đọc, backend đọc comment của bảng
-  (`COMMENT ON TABLE`, qua `obj_description`) và của từng cột (`COMMENT ON COLUMN`, qua `col_description`) từ catalog,
-  không đọc thêm dòng dữ liệu nào (`backend/src/service/sources/comments.rs`). Comment rỗng hay chỉ có khoảng trắng coi
-  như không có; xuống dòng và khoảng trắng liền nhau gộp thành một dấu cách, ký tự vô hình bị bỏ, quá 300 ký tự thì cắt
-  ở khoảng trắng gần nhất và thêm `...`. Comment của cột thành mô tả cột trong hồ sơ, ghi nguồn `database`
-  (`description_source`); comment của bảng ghi trên phiên bản (`description` của phiên bản và của tổng quan dataset).
-  Cột không có comment vẫn nhận mô tả do mô hình viết (nguồn `model`) như cũ. Lớp ngữ nghĩa không viết lại và không ghi
-  đè mô tả nguồn `database` (mục Hồ sơ lớp ngữ nghĩa). Comment tính vào hash của bản chụp khi bảng có ít nhất một
-  comment: chỉ sửa comment rồi chụp lại cũng ra phiên bản mới mang comment mới; bảng không có comment giữ hash như trước.
-- Giới hạn tính bằng dung lượng Postgres báo, không bằng số dòng: `SOURCE_TABLE_MAX_MB` (mặc định 2048) cho mỗi bảng
-  và `SOURCE_SNAPSHOT_MAX_MB` (mặc định 4096) cho tổng các bảng chép trong một lần chụp (mục Chụp mọi bảng đọc được);
-  bảng vượt trần không bị chụp thiếu mà chỉ lưu metadata. Không có trần dòng, trừ khi admin đặt `SOURCE_MAX_ROWS`.
-  `MAX_UPLOAD_MB` chỉ dành cho nạp file, không áp cho chụp bảng. `SOURCE_TIMEOUT_SECS` (mặc định 300) cho cả bước chép;
-  quá thì bỏ cả lần chụp: câu đang đọc trên nguồn bị ngắt, file tạm bị xóa, không tạo phiên bản nào. Không giới hạn
-  số bảng. Số đo để đặt các mặc định này: [PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn.
-- Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`; với `direct` thêm `ATTACH ... READ_ONLY`),
-  mọi bảng của một lần chụp đọc trong một giao dịch `REPEATABLE READ`. Máy chủ phải nằm trong `SOURCE_ALLOWED_HOSTS`.
-- **TLS** (#230), bằng rustls, nghĩa `sslmode` như libpq:
+### TLS
 
-  | `sslmode` | TLS | Kiểm chứng chỉ máy chủ |
-  |---|---|---|
-  | `disable` | Không | Không |
-  | `prefer` (mặc định) | Có nếu máy chủ nhận, không thì kết nối thường. Máy chủ nhận TLS mà bắt tay lỗi (chỉ có TLS 1.0, 1.1, chứng chỉ quá yếu) thì báo lỗi, không quay về kết nối thường như libpq | Không |
-  | `require` | Bắt buộc | Không: chống nghe lén trên đường truyền, không chống máy giả mạo |
-  | `verify-full` | Bắt buộc | Có: do CA tin cậy cấp và đúng tên máy đã nhập (`host`) |
+Bằng rustls, nghĩa `sslmode` như libpq:
 
-  Với `direct`, phần chép dữ liệu đi qua libpq của extension với cùng `sslmode`; khác ở `verify-full` có dán CA: libpq
-  chỉ tin CA dán vào, không cộng thêm CA của hệ thống (không dán CA thì dùng CA của hệ thống). Mật khẩu và CA ghi ra
-  file tạm quyền 0600 cho libpq đọc, xóa ngay sau lần chụp.
+| `sslmode` | TLS | Kiểm chứng chỉ máy chủ |
+|---|---|---|
+| `disable` | Không | Không |
+| `prefer` (mặc định) | Có nếu máy chủ nhận, không thì kết nối thường. Máy chủ nhận TLS mà bắt tay lỗi (chỉ có TLS 1.0, 1.1, chứng chỉ quá yếu) thì báo lỗi, không quay về kết nối thường như libpq | Không |
+| `require` | Bắt buộc | Không: chống nghe lén, không chống máy giả mạo |
+| `verify-full` | Bắt buộc | Có: do CA tin cậy cấp và đúng tên máy đã nhập (`host`) |
 
-  CA tin cậy là kho CA của hệ thống (image Docker cài `ca-certificates`), cộng chứng chỉ CA dạng PEM admin dán vào ô
-  "Chứng chỉ CA" (trường `ssl_root_cert`) khi máy chủ dùng CA riêng của tổ chức; ô này chỉ nhận với `verify-full`. Chứng
-  chỉ CA được mã hóa cùng thông tin kết nối, response chỉ ghi `custom_ca`. Chưa có `verify-ca` và chứng chỉ phía
-  client. Đã thử trên máy dev với một Postgres 17 bật `ssl=on` và chứng chỉ do CA tự tạo cấp cho `localhost`:
-  `require` kết nối được; `verify-full` không dán CA bị từ chối (CA lạ), dán CA thì kết nối được, nối bằng `127.0.0.1`
-  bị từ chối (sai tên máy); `require` tới máy chủ không bật TLS bị từ chối kèm lời báo chọn `prefer` hay `disable`.
-- Không dùng extension `postgres` của DuckDB vì `INSTALL postgres` tải extension từ Internet lúc chạy, đúng bản DuckDB
-  đã biên dịch; image Docker không có thư mục home cho user chạy backend, và máy cài có thể không ra được Internet.
-- Xóa nguồn chỉ được khi không còn dataset nào chụp từ nó; xóa dataset không xóa nguồn.
-
-Database mẫu để thử: hai database Postgres nhiều bảng trong cùng một container, `sales_demo` dựng từ DataCo và
-`edu_demo` dựng từ OULAD, chạy trên máy bằng Docker
-([data/postgres-demo](https://github.com/pgiahuy/xdi-platform/tree/main/data/postgres-demo)). Sơ đồ ER và mô tả từng
-bảng, cột (sinh bằng tbls):
-[sales_demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/docs/sales_demo/README.md),
-[edu_demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/docs/edu_demo/README.md).
+CA tin cậy là kho CA của hệ thống (image Docker cài `ca-certificates`), cộng chứng chỉ CA dạng PEM admin dán vào ô
+**Chứng chỉ CA** (`ssl_root_cert`, chỉ nhận với `verify-full`). Với cách chép `direct`, phần chép đi qua libpq của
+extension với cùng `sslmode`; khi đã dán CA thì libpq chỉ tin CA đó, không cộng CA của hệ thống. Chưa có `verify-ca` và
+chứng chỉ phía client.
 
 ### Chụp mọi bảng đọc được
 
-Phạm vi dữ liệu do tổ chức quyết bằng quyền của tài khoản nguồn: bảng, view nào tài khoản có quyền `SELECT` thì
-xdi thấy và mặc định chụp, bảng không có quyền thì không thấy (#247). Code: `backend/src/service/sources/catalog.rs`
-(danh sách), `plan.rs` (trần), `copy.rs` (chép), `snapshot.rs` (nạp, quan hệ), `schedule.rs` (lịch).
+Phạm vi dữ liệu do quyền của tài khoản nguồn quyết định: bảng, view nào tài khoản có quyền `SELECT` thì xdi thấy và mặc
+định chụp; muốn giới hạn dữ liệu thì cấp quyền hẹp. Code: `catalog.rs` (danh sách), `plan.rs` (trần), `copy.rs` và
+`direct.rs` (chép), `snapshot.rs` (nạp, quan hệ), `schedule.rs` (lịch).
 
 - **Danh sách bảng** (`GET .../sources/{id}/tables`): mọi bảng, view đọc được, kèm số dòng ước lượng và dung lượng theo
-  thống kê của Postgres (`pg_class.reltuples`, `pg_table_size`; null khi bảng chưa `ANALYZE` hay với view), comment
-  bảng, số cột, khóa ngoại ra (`references`) và vào (`referenced_by`) giữa các bảng đọc được, `is_referenced` khi bảng
-  khác trỏ tới nó (bảng danh mục: bỏ tick thì các bảng kia mất quan hệ), `over_limit` khi riêng bảng đã quá
-  trần (`size_limit`: dung lượng quá `SOURCE_TABLE_MAX_MB`; `row_limit`: ước lượng quá `SOURCE_MAX_ROWS` khi đặt), và nguồn đang giữ bảng thế nào (`state`: `snapshotted` kèm `dataset_id`, `metadata_only` kèm
-  `reason`, hay null). Chỉ đọc catalog, không đọc dòng nào.
-- **Chụp** (`POST .../sources/{id}/snapshot`): không gửi `table`, `tables`, `dataset_id` thì chụp mọi bảng đọc được;
-  gửi `tables` là đúng các bảng được tick; một tên là chụp riêng bảng đó. Mọi bảng trong một giao dịch như mục dưới.
-- **Trần và bảng chỉ có metadata:** xét trước khi chép, theo dung lượng Postgres báo (`pg_table_size`, là cỡ file thật
-  trên đĩa, không phải ước lượng), nên bảng quá trần không có file nào được ghi. Bảng quá `SOURCE_TABLE_MAX_MB` không
-  chép dòng nào. Các bảng còn lại xếp từ nhỏ tới lớn và lấy dần cho tới `SOURCE_SNAPSHOT_MAX_MB`, để khi quá trần thì
-  bảng lớn nhất bị để lại. View không có dung lượng trước (tính 0): file chép ra của view quá `SOURCE_TABLE_MAX_MB` thì
-  cả lần chụp bị từ chối (413); với `copy`, file CSV có thể lớn hơn bảng nên cũng theo luật đó. Khi admin đặt
-  `SOURCE_MAX_ROWS`, mỗi bảng đếm dòng thật (bảng mà ước lượng đã quá gấp đôi trần thì dùng ước lượng), bảng quá trần
-  không chép dòng nào; không đặt thì không đếm. Bảng bị để lại vẫn lưu cột, kiểu Postgres, khóa chính, comment bảng và cột (bảng
-  `source_metadata_tables`, migration 0018) và có trong `metadata_only` của response kèm lý do. Câu hỏi cần bảng đó
-  (câu SQL mô hình viết có tên bảng, hay cụm từ của câu hỏi có trong tên, mô tả bảng, tên, mô tả cột) mà không trả lời
-  được thì lời báo nêu đúng tên bảng, nói bảng chưa được chụp và lý do, thay cho lời "không có thông tin"
-  (`backend/src/service/ask/unsnapshotted.rs`). Chụp riêng bảng đó sau (cùng route, `tables` một tên); chụp được thì
-  bảng thành dataset và dòng metadata bị xóa. Bảng đã có dataset từ trước mà lần này quá trần thì dataset giữ phiên bản
-  cũ, không ghi metadata.
-- **Chụp lại cả dataset** (`POST .../catalog/{id}/snapshot`, nút "Chụp lại" của dataset là database): mọi bảng
-  dataset đang giữ (bảng đã chụp còn trong workspace và bảng chỉ có metadata), không gồm bảng admin bỏ tick lúc kết
-  nối; một giao dịch, cùng các trần, không giới hạn số bảng. Bảng không đổi không tạo phiên bản mới. Bảng tài khoản
-  không còn đọc được (đã xóa, mất quyền) bị bỏ qua và ghi trong `unreadable`, bảng của nó giữ phiên bản cũ.
-  `SOURCE_RESNAPSHOT_HOURS` (mặc định tắt) chạy đúng việc này cho mọi nguồn Postgres theo lịch trong backend, lần lượt
-  từng nguồn, nhân danh admin vào workspace sớm nhất; vòng đầu chạy sau một khoảng lịch, không chạy lúc khởi động.
-  Thêm bảng sau này: chụp riêng bảng đó ở màn kết nối (`tables` một tên).
-  Bỏ một bảng khỏi dataset: xóa bảng đó (`DELETE .../datasets/{id}`).
+  thống kê của Postgres (`pg_class.reltuples`, `pg_table_size`; null khi bảng chưa `ANALYZE` hay với view), comment,
+  số cột, khóa ngoại ra (`references`) và vào (`referenced_by`), `is_referenced` (bảng danh mục: bỏ tick thì bảng khác
+  mất quan hệ), `over_limit` khi riêng bảng đã quá trần, và `state` (`snapshotted` kèm `dataset_id`, `metadata_only`
+  kèm `reason`, hay null). Chỉ đọc catalog, không đọc dòng nào.
+- **Chụp** (`POST .../sources/{id}/snapshot`): thân rỗng chụp mọi bảng đọc được; `tables` là đúng các bảng được tick;
+  một tên là chụp riêng bảng đó. Không giới hạn số bảng. Bảng đã chụp từ nguồn này thì thêm phiên bản vào đúng bảng
+  đó, nên bảng chiều dùng chung chỉ có một bảng. Bảng không đổi nội dung thì không tạo phiên bản (`created: false`).
+- **Một ảnh chụp nhất quán:** mọi bảng của một lần chụp đọc trong một giao dịch `REPEATABLE READ READ ONLY`, nên các
+  bảng cùng là ảnh của một thời điểm: không có dòng hàng trỏ tới đơn chưa có trong bản chụp `orders`. Đổi lại, suốt
+  bước chép database nguồn không dọn được dòng cũ (`VACUUM`) mà giao dịch còn thấy. Đo ngày 01/11/2026 trên một máy
+  ([PERFORMANCE.md](PERFORMANCE.md#chụp-bảng-lớn)): một bảng 1 860 MB giữ giao dịch khoảng 19 giây, năm bảng 2 625 MB
+  cùng lần khoảng 15 giây. Database nguồn bận ghi thì chụp bảng lớn riêng, hay hạ `SOURCE_SNAPSHOT_MAX_MB`.
+- **Lỗi giữa chừng:** các bảng nạp lần lượt sau khi chép xong; một bảng nạp lỗi thì các bảng trước đó đã có phiên bản
+  mới, còn quan hệ của lần này chưa ghi. Chụp lại là đủ.
 
-### Chụp nhiều bảng liên quan
+**Trần.** Tính bằng dung lượng Postgres báo (`pg_table_size`), xét trước khi chép, nên bảng quá trần không có file nào
+được ghi. `MAX_UPLOAD_MB` không áp cho chụp bảng. Số đo để đặt các mặc định: [PERFORMANCE.md](PERFORMANCE.md#chụp-bảng-lớn).
 
-Database của tổ chức thường tách dữ liệu ra nhiều bảng: `order_items` (mỗi dòng một dòng hàng) trỏ tới `orders`,
-`products`; `orders` trỏ tới `customers`. Mỗi bảng thành một
-dataset riêng, khóa ngoại giữa chúng ghi thành quan hệ giữa các dataset (bảng `dataset_relations`). Không nối thành một
-bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộng nhầm. Code: `backend/src/service/sources/relations.rs`
-(tìm quan hệ), `snapshot.rs` (chụp), `backend/src/engine/store/relations.rs` (lưu).
+| Biến | Mặc định | Nghĩa |
+|---|---|---|
+| `SOURCE_TABLE_MAX_MB` | 2048 | Một bảng lớn hơn thì chỉ lưu cấu trúc |
+| `SOURCE_SNAPSHOT_MAX_MB` | 4096 | Tổng một lần chụp; bảng xếp từ nhỏ tới lớn và lấy dần tới trần, bảng còn lại chỉ lưu cấu trúc |
+| `SOURCE_MAX_ROWS` | trống, không có trần dòng | Đặt thì mỗi bảng được đếm dòng; bảng quá trần chỉ lưu cấu trúc |
+| `SOURCE_TIMEOUT_SECS` | 300 | Cả bước chép; quá thì bỏ cả lần chụp: câu đang đọc bị ngắt, file tạm bị xóa, không tạo phiên bản |
 
-- **Bảng liên quan** (`POST .../sources/{id}/relations`): đọc khóa ngoại trong `pg_catalog`, kể cả khóa nhiều cột,
-  một bước quanh bảng đang chọn, theo cả hai chiều: bảng nó trỏ tới (`many_to_one`) và bảng trỏ vào nó (`one_to_many`).
-  Một bảng chụp kèm được khi tài khoản có quyền đọc nó và cột được trỏ tới là khóa duy nhất (khóa chính, ràng buộc
-  `UNIQUE` hay chỉ mục `UNIQUE` trên cột thường, không điều kiện; Postgres chỉ cho khóa ngoại trỏ tới cột như vậy); không
-  thì có `reason`. Giao diện không còn dùng route này: danh sách bảng ở mục trên đã có khóa ngoại của mọi bảng.
-- **Một ảnh chụp nhất quán:** mọi bảng chép trong một giao dịch `REPEATABLE READ READ ONLY` (với `direct`, DuckDB mở
-  thêm một giao dịch như vậy cho phần chép), nên các bảng cùng là ảnh của một thời điểm (MVCC của Postgres): không có
-  dòng hàng trỏ tới đơn chưa có trong bản chụp `orders`. Đổi lại, trong suốt bước chép database nguồn không dọn được
-  dòng cũ (`VACUUM`) mà giao dịch còn có thể thấy. Đã đo trên một máy: một bảng 1,86 GB giữ giao dịch khoảng 19 giây,
-  năm bảng 2,6 GB cùng lần khoảng 15 giây ([PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn). Không tách thành một giao dịch mỗi bảng vì
-  khóa ngoại giữa các bảng có thể lệch; database nguồn bận ghi thì chụp bảng lớn riêng, hay hạ `SOURCE_SNAPSHOT_MAX_MB`.
-- **Một database, một dataset:** mọi bảng chụp từ một nguồn là bảng của cùng một dataset, tên theo tên database
-  (`GET .../catalog`); bảng chỉ có metadata nằm trong `metadata_only` của dataset đó.
-- **Một bảng nguồn, một bảng của dataset:** bảng đã chụp từ nguồn này (tra theo `sources.config.tables`) thì lần chụp
-  sau thêm phiên bản vào đúng bảng đó. Bảng chiều dùng chung, ví dụ `orders` được cả `order_items` và `returns` trỏ
-  tới, nên chỉ có một bảng dù chụp trong hai lần khác nhau. Bảng không đổi thì không tạo phiên bản mới (`created:
-  false`).
-- **Quan hệ:** ghi mọi khóa ngoại khai báo ở database nguồn nối hai bảng đã chụp từ nguồn này, không giới hạn một bước
-  quanh bảng nào, khi ít nhất một đầu là bảng vừa chụp, và cột được trỏ tới là khóa duy nhất như trên. Guard chỉ nhận
-  `JOIN` theo các quan hệ này. Không đoán quan hệ từ tên cột.
-  Mỗi quan hệ có dataset phía nhiều (giữ khóa ngoại) và cột của nó, dataset phía một và cột của nó, tên ràng buộc, và
-  `cardinality` (`one_to_one` khi cột khóa ngoại cũng là khóa chính hay `UNIQUE`, còn lại `many_to_one`). Lần chụp sau
-  thay toàn bộ quan hệ giữa các bảng vừa chụp; quan hệ giữa hai bảng không có trong lần này giữ nguyên. Xóa một
-  dataset thì quan hệ của nó mất theo. API trả quan hệ trong `relations` của mỗi dataset cho mọi thành viên.
-- **Chụp lại** (`dataset_id`): chụp lại dataset đó cùng mọi dataset cùng nguồn nối với nó qua quan hệ, đi hết các bước.
-- **Lỗi giữa chừng:** các bảng nạp lần lượt sau khi chép xong. Một bảng nạp lỗi thì các bảng nạp trước đó đã có phiên
-  bản mới, còn quan hệ của lần này chưa ghi. Chụp lại là đủ: bảng không đổi trùng hash nội dung nên không tạo phiên bản
-  trùng.
-- **Hỏi:** câu thường trên một dataset của nhóm được đọc mọi bảng đã chụp của cùng database (#249), mô hình viết
-  `JOIN` theo đúng các quan hệ đó; khung Minh chứng ghi các bảng câu đã đọc. Câu "tại sao" vẫn đọc một bảng chính
-  (phân rã xét thêm cột của bảng liên quan, #227). Bấm một số của câu nối bảng thì truy dòng nguồn trả dòng của bảng
-  mà độ đo cộng, kèm cột khóa và cột lọc của bảng nối; giới hạn ở [ARCHITECTURE.md](ARCHITECTURE.md), mục 8. Cách
-  chọn bảng và luật cho người bị lọc dòng:
-  [ARCHITECTURE.md](ARCHITECTURE.md), mục 6.
+View không biết cỡ trước (tính 0): file chép ra của một view quá `SOURCE_TABLE_MAX_MB` thì cả lần chụp bị từ chối
+(413).
 
-## Gộp nhiều file và cột `_source_file`
+**Bảng chỉ có cấu trúc.** Bảng quá trần vẫn lưu cột, kiểu Postgres, khóa chính, comment bảng và cột (bảng
+`source_metadata_tables`), có trong `metadata_only` của response và của dataset kèm lý do (`cause` là `size_limit`
+hay `row_limit`). Câu hỏi không trả lời được mà cần bảng đó thì lời báo nêu đúng tên bảng, nói bảng chưa được chụp và
+cách chụp (`backend/src/service/ask/unsnapshotted.rs`). Chụp riêng bảng đó sau (`tables` một tên); chụp được thì dòng
+cấu trúc bị xóa. Bảng đã có dữ liệu từ trước mà lần này quá trần thì giữ phiên bản cũ.
 
-Mỗi file (hay mỗi sheet Excel) ghi thành một phần `part-NNNN.parquet` trong thư mục của phiên bản, kèm cột
-`_source_file` ở cuối, ghi tên file gốc (hay tên sheet) của từng dòng. Khi đọc, DuckDB đọc cả thư mục như một bảng
-(`read_parquet('<thư mục>/*.parquet', union_by_name = true)`), ghép cột theo tên. Nhờ vậy nhiều file cùng cột (mỗi tháng
-một file) thành một bảng, và truy dòng nguồn ([#34](https://github.com/pgiahuy/xdi-platform/issues/34), route `.../drill`)
-trả cột này cùng mỗi dòng để chỉ dòng đến từ file nào. Dataset chụp từ database ghi
-`postgres://máy/database/schema.bảng`, không có tài khoản hay mật khẩu. Guard SQL đổi bảng logic thành đúng biểu thức
-đọc này ([Guard SQL](GUARD.md)).
+**Chụp lại.** Nút **Chụp lại** của dataset (`POST .../catalog/{id}/snapshot`) chụp lại mọi bảng dataset đang giữ, gồm
+bảng chỉ có cấu trúc, không gồm bảng admin bỏ tick lúc kết nối; một giao dịch, cùng các trần. Bảng tài khoản không còn
+đọc được (đã xóa, mất quyền) ghi trong `unreadable` và giữ phiên bản cũ. `SOURCE_RESNAPSHOT_HOURS` (mặc định tắt) chạy
+đúng việc này cho mọi nguồn Postgres theo lịch, lần lượt từng nguồn; vòng đầu chạy sau một khoảng lịch, không chạy lúc
+khởi động. Thêm bảng sau này: chụp riêng bảng đó ở màn kết nối. Bỏ một bảng: xóa bảng đó.
 
-## Phiên bản và hash
+### Cách chép: direct và copy
 
-Mỗi lần nạp thành công tạo một phiên bản mới của dataset, số phiên bản tăng dần, không ghi đè phiên bản cũ. Phiên bản
-vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset).
+Chọn bằng `SOURCE_SNAPSHOT_MODE`. Chụp là chép một lần rồi đi đúng đường nạp file (Parquet, hồ sơ cột, phiên bản), nên
+hồ sơ, minh chứng, dòng nguồn và câu hỏi cũ trỏ đúng phiên bản đã chụp.
 
-- Backend tính SHA-256 của từng file trong lúc nhận. Hash của cả lần nạp là SHA-256 của danh sách hash từng file đã sắp
-  xếp, nên thứ tự chọn file không đổi kết quả. Với file Excel, hash tính thêm tên các sheet đã chọn và phiên bản cách
-  đọc Excel của backend: cùng file mà chọn sheet khác là dữ liệu khác.
-- Hash chỉ tính trên nội dung, không tính tên file.
+- `direct` (mặc định): DuckDB đọc thẳng bảng bằng extension `postgres` qua giao thức `COPY` nhị phân và ghi Parquet một
+  bước, không có file CSV tạm. Extension là file đóng gói sẵn đúng bản DuckDB của backend, nạp từ đĩa
+  (`SOURCE_POSTGRES_EXTENSION`), không tải lúc chạy. Mật khẩu và CA ghi ra một file tạm quyền 0600 cho libpq đọc, xóa
+  ngay sau lần chụp. Không nạp được extension (thiếu file, lệch bản) hay libpq không kết nối được thì log ghi cảnh báo
+  và lần chụp dùng `copy`.
+- `copy` (dự phòng, hay đặt tay): backend đọc bảng bằng `COPY (SELECT * FROM schema.bảng) TO STDOUT (FORMAT csv)` ra
+  file CSV tạm, DuckDB đọc lại và ghi Parquet. File CSV có thể lớn hơn bảng nên cũng theo trần `SOURCE_TABLE_MAX_MB`.
+
+Hai cách cho cùng kiểu cột và cùng dữ liệu (test `both_modes_give_the_same_types_and_rows`). Nội dung file khác nhau,
+nên lần chụp lại đầu tiên sau khi đổi cách chép tạo phiên bản mới dù bảng không đổi. Số đo thời gian, đĩa tạm, bộ
+nhớ: [PERFORMANCE.md](PERFORMANCE.md).
+
+### Kiểu cột và mô tả
+
+- Kiểu cột lấy từ Postgres, không đoán như CSV: số nguyên thành `INTEGER` hay `BIGINT`, `real` và `double precision`
+  thành `DOUBLE`, `numeric(p,s)` thành `DECIMAL(p,s)` (`numeric` không khai báo hay rộng hơn 38 chữ số thành `DOUBLE`,
+  giữ chính xác khoảng 15 chữ số), `boolean`, `date`, `timestamp`, `timestamptz` giữ kiểu tương ứng. Kiểu khác (`text`,
+  `varchar`, `uuid`, `json`, mảng, enum) thành chữ, nên mã như `00123` giữ số 0 ở đầu. Chuỗi rỗng và `NULL` vẫn khác
+  nhau.
+- Cùng lần chụp, trong cùng giao dịch, backend đọc `COMMENT ON TABLE` và `COMMENT ON COLUMN` từ catalog
+  (`backend/src/service/sources/comments.rs`). Comment rỗng coi như không có; xuống dòng và khoảng trắng liền nhau gộp
+  thành một dấu cách, ký tự vô hình bị bỏ, quá 300 ký tự thì cắt ở khoảng trắng gần nhất và thêm `...`.
+- Comment của cột thành mô tả cột, nguồn `database` (`description_source`); lớp ngữ nghĩa không ghi đè mô tả này. Cột
+  không có comment nhận mô tả do mô hình viết (nguồn `model`). Comment của bảng ghi trên phiên bản.
+- Bảng có comment thì comment tính vào hash của bản chụp: chỉ sửa comment rồi chụp lại cũng ra phiên bản mới.
+
+### Quan hệ
+
+Mỗi bảng nguồn thành một bảng của dataset; bảng không nối thành bảng phẳng, nên không có cột lặp để cộng nhầm. Mọi
+khóa ngoại khai báo ở database nguồn giữa hai bảng đã chụp, khi ít nhất một đầu là bảng vừa chụp và cột được trỏ tới
+là khóa duy nhất (khóa chính, `UNIQUE`), ghi vào `dataset_relations`, kể cả khóa nhiều cột. Không đoán quan hệ từ tên
+cột.
+
+- Mỗi quan hệ có bảng phía nhiều (giữ khóa ngoại) và cột của nó, bảng phía một và cột của nó, tên ràng buộc, và
+  `cardinality` (`one_to_one` khi cột khóa ngoại cũng là khóa chính hay `UNIQUE`, còn lại `many_to_one`).
+- Lần chụp sau thay toàn bộ quan hệ giữa các bảng vừa chụp; quan hệ giữa hai bảng không có trong lần này giữ nguyên.
+  Xóa một bảng thì quan hệ của nó mất theo. `GET .../catalog` trả quan hệ cho mọi thành viên.
+- Câu hỏi đọc được mọi bảng đã chụp của dataset, guard chỉ nhận `JOIN` theo các quan hệ này, và code chặn câu nối làm
+  cộng lặp: [Kiến trúc](ARCHITECTURE.md), [Guard SQL](GUARD.md).
+
+Database mẫu để thử: `sales_demo` (DataCo) và `edu_demo` (OULAD) trong một container
+([data/postgres-demo](../data/postgres-demo/README.md)), kèm sơ đồ ER và mô tả từng bảng, cột sinh bằng tbls.
+
+## Phiên bản, hash và file
+
+Mỗi lần nạp hay chụp có thay đổi tạo một phiên bản mới của bảng, số phiên bản tăng dần, không ghi đè phiên bản cũ.
+Phiên bản vừa tạo thành phiên bản hiện hành (`current_version_id`).
+
+- Backend tính SHA-256 của từng file trong lúc nhận; hash của lần nạp là SHA-256 của danh sách hash từng file đã sắp
+  xếp, nên thứ tự chọn file không đổi kết quả. Với Excel, hash tính thêm tên các sheet đã chọn và phiên bản cách đọc
+  Excel. Hash không tính tên file.
 - Nạp trùng: có `dataset_id` thì so với các phiên bản của bảng đó; không có thì so với mọi phiên bản trong workspace.
   Bảng mới chụp từ database không so cả workspace: cùng một database kết nối hai lần thì mỗi dataset có bảng riêng.
-  Trùng thì không tạo gì, trả 200 với `created: false` và phiên bản đã có. Tạo mới thì trả 201.
-- File Parquet nằm ở `<DATA_DIR>/<id workspace>/<id dataset>/<id bảng>/<thư mục phiên bản>/`; database lưu đường dẫn
-  tương đối với `DATA_DIR`, nên phiên bản ghi trước #257 (ở `<id workspace>/<id bảng>/<thư mục phiên bản>/`) vẫn đọc
-  được mà không phải chuyển file. Trong lúc nạp, file nằm ở thư mục tạm `<DATA_DIR>/staging/`, xóa khi xong hay khi lỗi;
-  backend dừng giữa chừng thì lần khởi động sau xóa.
-- Phiên bản lưu số dòng (`row_count`) và trạng thái hồ sơ `profile_status`: `structure` khi đã có hồ sơ cột (mục
-  dưới), `semantic` khi xong lớp ngữ nghĩa, `pending` khi chưa, `failed` khi lớp cấu trúc lỗi do dữ liệu.
-- Xóa dataset (`DELETE /api/workspaces/{ws}/datasets/{id}`, chỉ `admin`) xóa mọi phiên bản cùng hồ sơ cột, chỉ số và
-  lịch sử câu hỏi trong Postgres, rồi xóa thư mục Parquet của từng phiên bản trên đĩa ([API](API.md), mục Xóa
-  dataset). File xóa sau khi giao dịch Postgres xong: lỗi lúc xóa file chỉ để lại file thừa trên đĩa, không làm lệch
-  dữ liệu.
-
-## Dataset mẫu
-
-Thiết lập lần đầu tạo xong workspace đầu tiên mà tới được database mẫu (`SAMPLE_DATABASE_URL`, nhiều chuỗi cách nhau
-bằng dấu phẩy; compose trỏ vào `sales_demo` và `edu_demo` của dịch vụ `demo-db` trong
-[data/postgres-demo](../data/postgres-demo/README.md) khi bật `--profile demo`, `make dev` trỏ vào hai database đó ở
-`127.0.0.1:5440`) thì thêm mỗi database làm một dataset (nguồn Postgres) và chụp mọi bảng tài khoản `analyst` đọc được
-trong database đó, đúng như admin kết nối mà không bỏ tick bảng nào (mục Chụp mọi bảng đọc được): với
-cấu hình mặc định, hai dataset (`sales_demo` 6 bảng, `edu_demo` 7 bảng, gồm `edu.student_daily_clicks` 1,8 triệu
-dòng) kèm 12 quan hệ; cộng chỉ số mẫu của bảng có file `<bảng>.metrics.json`
-(`backend/src/service/samples_db.rs`).
-Một database lỗi thì giữ database còn lại. Không có database mẫu, hay không database nào chụp được, thì nạp `dataco.csv`
-trong `SAMPLES_DIR` thành dataset `DataCo` qua đường nạp file, kèm các chỉ số mẫu (`backend/src/service/samples.rs`).
-Tắt cả hai bằng `SEED_SAMPLE=false`. Chi tiết, nguồn và giấy phép: [data/README.md](../data/README.md).
+  Trùng thì trả 200 với `created: false` và phiên bản đã có; tạo mới thì 201.
+- File Parquet nằm ở `<DATA_DIR>/<id workspace>/<id dataset>/<id bảng>/<thư mục phiên bản>/`; Postgres lưu đường dẫn
+  tương đối với `DATA_DIR`. Trong lúc nạp, file nằm ở `<DATA_DIR>/staging/`, xóa khi xong hay khi lỗi; backend dừng
+  giữa chừng thì lần khởi động sau xóa.
+- Mỗi file (hay mỗi sheet Excel) là một phần `part-NNNN.parquet` của phiên bản, kèm cột `_source_file` ở cuối ghi tên
+  file gốc (hay tên sheet) của từng dòng; bảng chụp từ database có `_source_file` là
+  `postgres://máy/database/schema.bảng`, không có tài khoản hay mật khẩu. DuckDB đọc cả thư mục như một bảng
+  (`read_parquet('<thư mục>/*.parquet', union_by_name = true)`), nên nhiều file cùng cột (mỗi tháng một file) thành một
+  bảng, và truy dòng nguồn chỉ được dòng đến từ file nào.
+- Phiên bản lưu số dòng và `profile_status`: `structure` khi có hồ sơ cột, `semantic` khi xong lớp ngữ nghĩa, `pending`
+  khi chưa, `failed` khi lớp cấu trúc lỗi do dữ liệu.
+- Xóa bảng (`DELETE .../datasets/{id}`, chỉ `admin`) xóa mọi phiên bản cùng hồ sơ cột, chỉ số, lịch sử câu hỏi trong
+  Postgres, rồi xóa thư mục Parquet trên đĩa ([API](API.md#dataset-và-bảng)). File xóa sau khi giao dịch Postgres xong:
+  lỗi lúc xóa file chỉ để lại file thừa.
 
 ## Tên bảng và tên cột
 
-**Tên dataset** là trường `name`; bỏ trống thì lấy tên file đầu tiên bỏ đuôi, cắt còn 100 ký tự.
+**Tên dataset**: với database là tên database; với file là trường `name`, bỏ trống thì lấy tên file đầu tiên bỏ đuôi,
+cắt còn 100 ký tự.
 
-**Tên bảng logic** (`logical_table`) là tên mô hình ngôn ngữ dùng trong SQL và guard kiểm. Đặt một lần khi tạo dataset,
-từ tên dataset: bỏ dấu, viết thường, mỗi dãy ký tự không phải chữ hay số thành một `_`, bỏ `_` ở hai đầu, cắt còn 48
-ký tự; sau khi cắt, tên bắt đầu bằng số thì thêm `t_` ở đầu; không còn ký tự nào thì là `dataset`; trùng tên bảng khác
-trong cùng dataset thì thêm `_2`, `_3`. Hai dataset khác nhau được có bảng cùng tên: hai database cùng có `orders`, hay
-file `orders.csv` cạnh database có bảng `orders`, đều giữ `orders`, vì một câu hỏi chỉ đọc bảng của một dataset. Bảng
-đặt tên trước #257 giữ tên cũ (có thể là `orders_2`), vì SQL đã lưu của câu hỏi cũ dùng tên đó.
-Ví dụ "Bán hàng 2024" thành `ban_hang_2024`, "2024 sales" thành `t_2024_sales`.
+**Tên bảng logic** (`logical_table`) là tên mô hình dùng trong SQL và guard kiểm. Đặt một lần khi tạo bảng, từ tên
+bảng nguồn hay tên dataset file: bỏ dấu, viết thường, mỗi dãy ký tự không phải chữ hay số thành một `_`, bỏ `_` ở hai
+đầu, cắt còn 48 ký tự; tên bắt đầu bằng số thì thêm `t_`; không còn ký tự nào thì là `dataset`; trùng tên bảng khác
+trong cùng dataset thì thêm `_2`, `_3`. Hai dataset khác nhau được có bảng cùng tên, vì một câu hỏi chỉ đọc bảng của
+một dataset. Ví dụ "Bán hàng 2024" thành `ban_hang_2024`, "2024 sales" thành `t_2024_sales`. Bảng tạo trước khi có
+dataset nhiều bảng có thể giữ tên như `orders_2`, vì SQL đã lưu dùng tên đó.
 
 **Tên cột**:
 
-- CSV và Parquet: giữ như DuckDB đọc từ file, backend không đổi tên, không bỏ dấu. Tên có khoảng trắng hay dấu viết
-  trong nháy kép khi dùng trong SQL (`"Order Item Total"`). Guard so tên cột không phân biệt hoa thường.
-- Excel: bỏ khoảng trắng hai đầu; ô tiêu đề trống lấy chữ cột Excel (`C`, `AA`); tên trùng (không phân biệt hoa thường)
-  thêm `_2`, `_3`. Tên ở danh sách sheet trùng với tên cột sau khi nạp.
+- CSV và Parquet: giữ như DuckDB đọc, không đổi tên, không bỏ dấu. Tên có khoảng trắng hay dấu viết trong nháy kép
+  trong SQL (`"Order Item Total"`). Guard so tên cột không phân biệt hoa thường.
+- Excel: bỏ khoảng trắng hai đầu; ô tiêu đề trống lấy chữ cột Excel (`C`, `AA`); tên trùng (không phân biệt hoa
+  thường) thêm `_2`, `_3`. Tên ở danh sách sheet trùng với tên cột sau khi nạp.
 
-Kết quả nạp (`UploadResult.columns`) trả tên và kiểu DuckDB của từng cột (`BIGINT`, `DOUBLE`, `VARCHAR`, `DATE`...),
-gồm cả `_source_file`. Hồ sơ đầy đủ của từng cột lưu ở bảng `columns` (mục dưới), đọc qua route tổng quan dataset
-([API](API.md), mục Tổng quan dataset); API chỉ số (`GET .../datasets/{id}/metrics`) trả tên, kiểu, vai trò, mô tả và
-cách gộp của cột phiên bản hiện hành.
+Kết quả nạp (`UploadResult.columns`) trả tên và kiểu DuckDB của từng cột, gồm `_source_file`. Hồ sơ đầy đủ đọc qua
+[tổng quan bảng](API.md#tổng-quan-bảng) và API chỉ số.
 
 ## Hồ sơ cột
 
-Mỗi phiên bản có hồ sơ cột lớp cấu trúc, do code tính trên Parquet, không gọi mô hình ngôn ngữ (chạy như nhau với
-`LLM_PROVIDER=mock`). Phiên bản và hồ sơ ghi trong một giao dịch, xong trước khi route nạp trả 201, với `profile_status`
-là `structure`; ghi lỗi thì không còn phiên bản nào (dataset vừa tạo cho lần nạp đó cũng bị xóa), nạp lại được như lần
-đầu. Nạp trùng không lập lại hồ sơ. Phiên bản nạp trước khi có bước này (`profile_status` còn `pending`) được lập hồ sơ
-nền mỗi lần backend khởi động; lỗi ở một phiên bản chỉ ghi log: lỗi do dữ liệu (Parquet hỏng, tên cột không lưu được)
-đặt `failed`, lỗi có thể tự hết (thiếu thư mục Parquet, Postgres lỗi) giữ `pending` để lần khởi động sau thử lại.
+### Lớp cấu trúc
 
-Mỗi cột, kể cả `_source_file`, là một dòng `columns`: kiểu DuckDB, số ô trống (`null_count`), số giá trị khác nhau đếm
-chính xác (`distinct_count`), giá trị nhỏ nhất và lớn nhất dạng chữ, vai trò, và `time_format` với cột ngày dạng chữ.
-Cột có từ 1 tới 200 giá trị khác nhau có thêm mỗi giá trị một dòng `column_values` kèm số dòng mang giá trị đó
-(`frequency`). Postgres không lưu được ký tự NUL (mã 0) và từ chối giá trị quá dài trong chỉ mục, nên cột có giá trị
-dài quá 1000 byte hoặc có ký tự NUL thì không ghi `column_values`; min, max bỏ ký tự NUL. Tên cột dài quá 1000 byte hoặc
-có ký tự NUL thì lần nạp bị từ chối (400).
+Do code tính trên Parquet, không gọi mô hình (chạy như nhau với `LLM_PROVIDER=mock`). Phiên bản và hồ sơ ghi trong một
+giao dịch, xong trước khi route nạp trả 201; ghi lỗi thì không còn phiên bản nào, nạp lại được như lần đầu. Phiên bản
+còn `pending` được lập hồ sơ nền mỗi lần backend khởi động: lỗi do dữ liệu đặt `failed`, lỗi có thể tự hết giữ
+`pending`.
 
-**Cột ngày dạng chữ.** Lúc đọc CSV (sheet Excel cũng được đổi sang CSV trước), DuckDB tự nhận một số dạng ngày và đổi
-cột thành `DATE` hay `TIMESTAMP`. Dạng nào được nhận còn tùy cả file, nên cột ngày vẫn có thể là `VARCHAR`; DataCo ghi
-`1/31/2018 22:56` và hai cột ngày của nó là `VARCHAR`. Với cột `VARCHAR`, hồ sơ thử một danh sách ngắn định dạng
-`strptime` (`%Y-%m-%d`, `%d/%m/%Y`, `%m/%d/%Y`, có hoặc không kèm giờ). Một định dạng chỉ được tính khi đọc được mọi ô
-không trống với năm từ 1900 tới 2100 (`1/2/3` hay `12/3/45` không phải ngày). Định dạng chọn được ghi vào `time_format`,
-còn min và max là thời điểm đã đọc theo định dạng đó (`2015-01-01 00:00:00`). Giá trị đọc được cả ngày/tháng lẫn
-tháng/ngày (mọi ngày đều không quá 12) thì giữ định dạng của cột cùng tên ở phiên bản hiện hành của dataset nếu định
-dạng đó vẫn đọc được, không thì theo ngày/tháng; backend ghi log mỗi lần phải chọn như vậy. Kiểu cột trong Parquet không
-đổi: SQL dùng `strptime("cột", '<time_format>')`.
+Mỗi cột, kể cả `_source_file`, là một dòng `columns`: kiểu DuckDB, số ô trống, số giá trị khác nhau đếm chính xác, min
+và max dạng chữ, vai trò, và `time_format` với cột ngày dạng chữ. Cột có từ 1 tới 200 giá trị khác nhau có thêm mỗi giá
+trị một dòng `column_values` kèm số dòng. Cột có giá trị dài quá 1000 byte hay có ký tự NUL thì không ghi
+`column_values`; tên cột như vậy làm lần nạp bị từ chối (400).
 
-**Vai trò cột** thử từng luật theo thứ tự, luật đầu tiên khớp thắng. Luật chỉ nhìn kiểu và số đo, không nhìn tên cột:
+**Cột ngày dạng chữ.** DuckDB tự nhận một số dạng ngày lúc đọc CSV, nhưng cột ngày vẫn có thể là `VARCHAR` (DataCo ghi
+`1/31/2018 22:56`). Với cột `VARCHAR`, hồ sơ thử một danh sách ngắn định dạng `strptime` (`%Y-%m-%d`, `%d/%m/%Y`,
+`%m/%d/%Y`, có hay không kèm giờ); một định dạng chỉ được tính khi đọc được mọi ô không trống với năm từ 1900 tới 2100.
+Định dạng chọn được ghi vào `time_format`, min và max là thời điểm đã đọc. Đọc được cả ngày/tháng lẫn tháng/ngày thì
+giữ định dạng của cột cùng tên ở phiên bản hiện hành nếu còn đọc được, không thì theo ngày/tháng (backend ghi log). SQL
+dùng `strptime("cột", '<time_format>')`.
+
+**Vai trò cột**: thử từng luật theo thứ tự, luật đầu khớp thắng; luật chỉ nhìn kiểu và số đo, không nhìn tên cột.
 
 | Thứ tự | Điều kiện | Vai trò |
 |---|---|---|
 | 1 | Cột toàn ô trống, hoặc là `_source_file` | `ignore` |
 | 2 | Kiểu `DATE`, `TIMESTAMP`, `TIMESTAMP WITH TIME ZONE`, hoặc cột chữ có `time_format` | `time` |
 | 3 | Bảng hơn 2 dòng; số nguyên, không ô trống, mỗi dòng một giá trị khác nhau | `key` |
-| 4 | Bảng hơn 2 dòng; số (nguyên, thực, `DECIMAL`) có tối đa 2 giá trị khác nhau, như cột cờ 0/1 | `dimension` |
+| 4 | Bảng hơn 2 dòng; số có tối đa 2 giá trị khác nhau, như cột cờ 0/1 | `dimension` |
 | 5 | Số còn lại | `measure` |
 | 6 | `BOOLEAN`, hoặc chữ có tối đa 200 giá trị khác nhau và có `column_values` | `dimension` |
-| 7 | Còn lại: chữ nhiều giá trị, chữ ít giá trị mà không ghi được `column_values`, `TIME`, `UUID`, `INTERVAL`, `JSON`, `BLOB`, kiểu lồng nhau | `text` |
-
-Bảng một hai dòng thì cột số nào cũng mỗi dòng một giá trị và có tối đa 2 giá trị, nên luật 3 và 4 không áp dụng.
+| 7 | Còn lại: chữ nhiều giá trị, chữ không ghi được `column_values`, `TIME`, `UUID`, `INTERVAL`, `JSON`, `BLOB`, kiểu lồng nhau | `text` |
 
 Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order City` (3597 thành phố) là `text`,
-`Order Item Id` là `key`, hai cột `... (DateOrders)` là `time`. Số nguyên lặp lại như `Order Id` hay `Customer Id` ra
-`measure` theo luật; lớp ngữ nghĩa (mục dưới) sửa được một số ca như vậy trong phạm vi hẹp.
+`Order Item Id` là `key`, hai cột `... (DateOrders)` là `time`. Số nguyên lặp lại như `Order Id` ra `measure` theo
+luật; lớp ngữ nghĩa sửa được một số ca như vậy.
 
-**Cột nhạy cảm** (`is_sensitive`) được đánh dấu ngay trong lượt lập hồ sơ cấu trúc, cùng giao dịch ghi hồ sơ, trước
-khi phiên bản dùng được: tên cột có một cụm như email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên (danh
-sách ở `SENSITIVE_NAME_PHRASES`, service/profile.rs) hay bắt đầu bằng "điện thoại", hoặc phần lớn giá trị của cột
-(chỉ xét cột có tối đa 200 giá trị khác nhau, tức cột có danh sách giá trị) trông như email hay số điện thoại (dạng
-`0912 345 678`, `(028) 3823 4567`, `+84 912 345 678`, `+1 415 555 0100`, `84912345678`). Tên cột được bỏ dấu,
-chuyển chữ thường và tách từ (cả camelCase và chỗ chữ liền số, như `Address1`) rồi so theo từ, nên "Hotel" không khớp
-"tel", "Dòng điện thoại" không thành nhạy cảm. Luật cố ý đơn giản và nghiêng về đánh dấu nhầm còn hơn bỏ sót. Phiên
-bản nạp trước khi có luật này được quét đánh dấu lại mỗi lần khởi động (chỉ bật cờ, không tắt; đồng bộ trước khi
-server nhận request). Giá trị của cột nhạy cảm không vào prompt của lớp ngữ nghĩa lẫn ngữ cảnh hỏi (#28), ngay từ khi
-phiên bản ở `structure`.
+**Cột nhạy cảm** (`is_sensitive`) được đánh dấu trong lượt lập hồ sơ cấu trúc, trước khi phiên bản dùng được: tên cột
+có một cụm như email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên (`SENSITIVE_NAME_PHRASES` ở
+`backend/src/service/profile.rs`), hay phần lớn giá trị của cột có danh sách giá trị trông như email hoặc số điện
+thoại. Tên được bỏ dấu, chữ thường, tách từ (cả camelCase và chỗ chữ liền số) rồi so theo từ, nên "Hotel" không khớp
+"tel". Luật nghiêng về đánh dấu nhầm hơn bỏ sót. Phiên bản cũ được quét lại mỗi lần khởi động (chỉ bật cờ, không tắt).
+Giá trị của cột nhạy cảm không vào prompt nào.
 
-## Hồ sơ lớp ngữ nghĩa
+### Lớp ngữ nghĩa
 
-Sau khi nạp xong (route đã trả 201), backend gọi mô hình ngôn ngữ một lần cho phiên bản mới, chạy nền
-(`service/semantic/mod.rs`, tối đa một lượt mỗi lúc): mô hình đề xuất mô tả và bí danh cột, đơn vị và cách gộp của
-cột số đo, bí danh giá trị, câu hỏi gợi ý, cột cần đánh dấu nhạy cảm thêm, và sửa vai trò cột trong phạm vi hẹp. Xong thì
-`profile_status` là `semantic`; người nạp không nhận lỗi. Nạp phiên bản mới của cùng dataset gọi lại mô hình, vì cột
-của phiên bản là dòng mới. Câu trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của
-provider (Gemini chặn prompt vì nội dung, mock không có bảng) thì đánh dấu đã thử kèm tên provider
-(`semantic_attempted_with`): việc khởi động không gọi lại với cùng provider, đổi `LLM_PROVIDER` thì thử lại, và nạp
-lại đúng bộ file cũ luôn là đường thử lại tường minh. Mọi lỗi khác (mô hình quá tải, timeout, thiếu cấu hình,
-Postgres lỗi) giữ `structure` và không đánh dấu gì: lần khởi động sau thử lại. Gemini báo câu trả lời bị cắt ở
-`MAX_TOKENS`, bị dừng vì `SAFETY` và mã 400 không phải khóa sai cũng bằng lỗi tạm, nên các lỗi này được thử lại mỗi
-lần khởi động dù gọi lại có thể vẫn hỏng.
+Nạp xong (route đã trả 201), backend lập hồ sơ ngữ nghĩa chạy nền (`backend/src/service/semantic/`): mô hình viết mô
+tả và bí danh cột, đơn vị và cách gộp của cột số đo, bí danh giá trị, câu hỏi gợi ý, đề xuất thêm cột nhạy cảm (chỉ
+chiều bật), và sửa vai trò cột trong phạm vi hẹp. Mỗi phiên bản ba prompt song song; tối đa `SEMANTIC_JOBS` phiên bản
+cùng lúc (mặc định 2). Người nạp không phải chờ và không nhận lỗi; xong thì `profile_status` là `semantic`.
 
-Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: tên dataset, tên bảng logic, số dòng, mô tả bảng từ database
-nếu có; mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác nhau, mô tả từ database nếu có; min, max chỉ kèm cột `time` và `measure` số thực không nhạy cảm (min, max
-của cột chữ hay mã số nguyên như mã đơn, số điện thoại là dữ liệu thật); danh sách giá trị chỉ gửi cho cột `dimension`
-không nhạy cảm, mỗi giá trị kèm số dòng, tối đa 50 giá trị một cột (cột nhiều hơn gửi 20 giá trị nhiều dòng nhất),
-tổng tối đa 400 giá trị, bỏ giá trị dài quá 200 byte. Tên cột và giá trị in dạng chuỗi JSON nên dữ liệu không chèn
-được dòng giả vào prompt. Giá trị của cột `text`, `key` hay cột nhạy cảm không bao giờ vào prompt.
+- Câu trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của provider (nội dung bị chặn,
+  `mock` không có bảng) thì đánh dấu đã thử kèm tên provider (`semantic_attempted_with`): khởi động không gọi lại với
+  cùng provider, đổi `LLM_PROVIDER` thì thử lại, nạp lại đúng bộ file cũ là đường thử lại tường minh. Lỗi khác (quá
+  tải, quá giờ, thiếu cấu hình, Postgres lỗi) giữ `structure`, lần khởi động sau thử lại.
+- Prompt chỉ có siêu dữ liệu: tên dataset, tên bảng, số dòng, mô tả từ database; mỗi cột tên, kiểu, vai trò, tỷ lệ ô
+  trống, số giá trị khác nhau; min, max chỉ của cột `time` và cột `measure` số thực không nhạy cảm; giá trị chỉ của cột
+  `dimension` không nhạy cảm, kèm số dòng, tối đa 50 giá trị một cột (nhiều hơn thì 20 giá trị nhiều dòng nhất), tổng
+  tối đa 400, bỏ giá trị dài quá 200 byte. Prompt lập hồ sơ không có giá trị của cột `text`, `key` hay cột nhạy cảm.
+- Câu trả lời được kiểm từng mục trước khi ghi, mục sai bỏ riêng (`build_profile_answer`): cột và giá trị phải có
+  thật, mô tả tối đa 300 ký tự, tối đa 8 bí danh mỗi mục (mỗi bí danh tối đa 60 ký tự), tối đa 5 câu gợi ý (mỗi câu
+  tối đa 200 ký tự). Đổi vai trò chỉ nhận cột số nguyên `measure` thành `key` hay `dimension` (khi không quá 200 giá
+  trị), và cột `dimension` thành `text`.
+- Câu hỏi gợi ý: prompt xin hai câu hỏi nguyên nhân (chênh lệch giữa hai kỳ hay hai giá trị có trong danh sách, không
+  nói chiều vì mô hình không thấy số), một câu tỷ lệ, trung bình hay top N, còn lại là câu tổng hay phân rã đơn giản.
+  Câu gợi ý lưu theo phiên bản và trả ra trong danh sách dataset, chi tiết dataset, cùng `current_profile_status` và
+  `semantic_unavailable` (provider đang cấu hình đã thử mà không lập được).
 
-Câu hỏi gợi ý: prompt xin câu khó trước, gồm hai câu "vì sao" giải thích chênh lệch của một số đo giữa hai kỳ (trong
-khoảng min, max của cột thời gian) hay giữa hai giá trị có trong danh sách, rồi một câu tỷ lệ, trung bình hoặc top N,
-còn lại là câu tổng hay phân rã đơn giản. Mô hình không thấy số liệu nên câu "vì sao" không được nói chiều ("tăng",
-"giảm", "cao hơn"). Số đo của nó là số dòng, tổng của cột mô hình ghi cách gộp `sum`, hoặc trung bình của cột ghi
-`avg` (gọi tên là trung bình); không bao giờ là tổng của cột `avg`.
+### Đơn vị và cách gộp
 
-Cột nhạy cảm (`is_sensitive`) do lớp cấu trúc đánh dấu ngay lúc nạp (mục trên); trong câu trả lời của lớp ngữ nghĩa,
-mô hình đề xuất đánh dấu thêm qua `sensitive_columns` (chỉ chiều đặt, không bao giờ gỡ, có hiệu lực từ các lần sau).
+- **Đơn vị** (`columns.unit`) chỉ cho cột `measure`, một trong năm chữ: `money`, `quantity`, `percent`, `duration`,
+  `other`; chưa có thì null. Luật chọn biểu đồ dùng đơn vị để vẽ các số đo chung một thang hay mỗi số đo một biểu đồ
+  (`backend/src/service/ask/chart.rs`; [Kiến trúc](ARCHITECTURE.md)).
+- **Cách gộp** (`columns.aggregation`) là `sum` hay `avg`, chưa ai chọn thì đọc là `sum`. Mô hình đề xuất `sum` khi
+  tổng có nghĩa (tiền, số lượng), `avg` khi mỗi giá trị mô tả chính dòng của nó (tuổi, điểm, giá, tỷ lệ). Lượt nền chỉ
+  điền cột chưa có cách gộp, nên cách gộp admin đặt trước đó được giữ. Admin đổi ở màn **Chỉ số** cho phiên bản hiện
+  hành.
+- Ba nơi đọc cách gộp: prompt viết SQL ghi "aggregate it with AVG, never SUM" cạnh cột `avg`; form câu hỏi nguyên nhân
+  đổi `sum` trên cột `avg` thành trung bình mỗi dòng và phân rã thành phần cơ cấu và phần hiệu suất; luật câu gợi ý
+  (không bao giờ là tổng của cột `avg`).
 
-Câu trả lời được kiểm từng mục trước khi ghi, mục sai bỏ riêng: cột và giá trị phải có thật (giá trị phải nằm trong
-`column_values`), mô tả tối đa 300 ký tự, tối đa 8 bí danh mỗi mục và mỗi bí danh tối đa 60 ký tự, tối đa 5 câu gợi
-ý và mỗi câu tối đa 200 ký tự; câu gợi ý còn chỗ trống của khuôn trong prompt (có `<` hay `>`) bị bỏ. Chuỗi rỗng sau
-trim hay có ký tự điều khiển (NUL, xuống dòng) bị bỏ: một chuỗi như vậy nếu qua sẽ làm Postgres từ chối cả giao dịch
-ghi. Bí danh không được trùng (sau khi bỏ dấu, chữ thường) với tên bất kỳ cột nào (kể cả chính cột đó), giá trị khác
-cùng cột, hay bí danh đã nhận của cùng mục. Đổi vai trò chỉ nhận hai chiều: cột số nguyên đang là `measure` thành
-`key` (mã lặp lại như `Order Id`) hoặc thành `dimension` khi có không quá 200 giá trị khác nhau (năm, tháng dạng số;
-nhiều hơn thì cột chiều mới sẽ không có danh sách giá trị), và cột `dimension` thành `text` (đường dẫn ảnh, mô tả
-dài). Mỗi đổi vai trò được ghi log (tên cột, vai trò cũ, mới). Cột thành `text` thì giá trị của nó không đi vào
-prompt về sau, vì các bước sau chọn giá trị theo vai trò.
+## Dataset mẫu
 
-Cột đã có mô tả từ database (`description_source` là `database`, mục Nguồn database) thì mô tả đó đi vào prompt làm ngữ
-cảnh cho bí danh, đơn vị, cách gộp và câu gợi ý, và luật phần cột dặn mô hình không viết mô tả cho cột đó. Mô tả mô hình
-vẫn viết cho cột này bị bỏ khi kiểm câu trả lời, và câu `UPDATE` của store giữ mô tả nguồn `database` dù nhận gì; mô
-tả mô hình viết ghi nguồn `model`. Chưa có màn cho người dùng sửa mô tả cột.
-
-Đơn vị (`columns.unit`) chỉ nhận cho cột `measure` và chỉ một trong năm chữ: `money` (tiền), `quantity` (số lượng
-hàng), `percent` (tỷ lệ), `duration` (số ngày, số giờ), `other`. Danh sách cố định để so được bằng dấu bằng: luật
-biểu đồ sau này cần biết hai số đo cùng hay khác đơn vị, mà chữ tự do ("ngày", "days") cùng nghĩa vẫn khác chữ. Đơn
-vị sai hay đặt cho cột không phải `measure` thì bỏ riêng, phần còn lại của mục vẫn giữ; chưa có đơn vị thì null.
-Luật biểu đồ hiện tại ([Kiến trúc](ARCHITECTURE.md), mục 6) chưa đọc đơn vị: chỉ theo vai trò cột, và biểu đồ đường
-chỉ vẽ độ đo đầu.
-
-**Cách gộp mặc định** (`columns.aggregation`, migration `0010_column_aggregation.sql`, #185) là `sum` hay `avg`, chưa ai
-chọn thì đọc là `sum`. Mô hình đề xuất cho cột `measure`: `sum` khi tổng có nghĩa (tiền, số lượng hàng), `avg` khi mỗi giá trị mô
-tả chính dòng của nó (tuổi, điểm, giá, tỷ lệ, số tín chỉ, số ngày). Đề xuất sai hay cho cột khác vai trò thì bỏ riêng,
-giữ `sum`. Lượt chạy nền của mô hình chỉ điền cột chưa có cách gộp, nên cách gộp admin đặt trong lúc mô hình chưa
-chạy xong được giữ. Admin đổi ở màn **Chỉ số** ([API](API.md), mục Chỉ số và cách gộp) cho phiên bản hiện hành; phiên bản nạp sau
-nhận đề xuất mới của mô hình, không chép từ phiên bản trước. Ba nơi đọc cách gộp: prompt sinh SQL ghi "one value per row:
-aggregate it with AVG, never SUM" cạnh cột `avg` (cột `sum` không thêm chữ gì); form câu "tại sao" đổi `sum` trên cột
-`avg` thành trung bình mỗi dòng (tử `SUM(cột)`, mẫu `COUNT(cột)`, như `AVG`) và phân rã thành phần cơ cấu và phần hiệu
-suất; luật câu gợi ý ở trên.
-
-Câu hỏi gợi ý lưu ở `dataset_versions.suggested_questions` (đi theo phiên bản) và trả ra trong
-`GET /api/workspaces/{ws}/datasets` và `.../datasets/{id}` (của phiên bản hiện hành), cùng
-`current_profile_status` để giao diện biết lớp ngữ nghĩa xong chưa và `semantic_unavailable` khi provider đang cấu
-hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và dòng báo theo hai trường này.
+Thiết lập lần đầu tới được database mẫu (`SAMPLE_DATABASE_URL`) thì thêm mỗi database làm một dataset và chụp mọi bảng
+tài khoản `analyst` đọc được, như admin kết nối mà không bỏ tick bảng nào, cộng chỉ số mẫu của bảng có file
+`<bảng>.metrics.json` (`backend/src/service/samples_db.rs`). Một database lỗi thì giữ database còn lại. Không có
+database mẫu nào chụp được thì nạp `dataco.csv` trong `SAMPLES_DIR` thành dataset `DataCo`. Tắt cả hai bằng
+`SEED_SAMPLE=false`. Chi tiết, nguồn và giấy phép: [data/README.md](../data/README.md).
 
 ## Chưa có
 
-- API và màn xem, sửa hồ sơ cột (vai trò, cột nhạy cảm, mô tả, bí danh); màn Chỉ số mới sửa được cách gộp.
-- Chép cách gộp admin đã đặt sang phiên bản nạp sau của cùng dataset.
-- So hồ sơ giữa hai phiên bản (cột mất, thêm, đổi kiểu) trước khi chuyển phiên bản hiện hành, như thiết kế ở
-  [Kiến trúc](ARCHITECTURE.md), mục 7.
-- Chọn lại phiên bản cũ làm hiện hành, xóa riêng một phiên bản.
+- Màn và API xem, sửa hồ sơ cột (vai trò, cột nhạy cảm, mô tả, bí danh); màn Chỉ số mới sửa được cách gộp.
+- Chép cách gộp admin đã đặt sang phiên bản sau của cùng bảng.
+- So hồ sơ giữa hai phiên bản (cột mất, thêm, đổi kiểu) trước khi chuyển phiên bản hiện hành; chọn lại phiên bản cũ,
+  xóa riêng một phiên bản.
 - Nạp nguyên tử: ghi phiên bản vào Postgres và chuyển file Parquet về chỗ cuối chưa nằm trong một giao dịch, lỗi giữa
-  hai bước có thể để lại dòng thừa trong Postgres ([#79](https://github.com/pgiahuy/xdi-platform/issues/79)).
-- Nguồn dữ liệu là MySQL, SQLite, hay truy vấn thẳng database ngoài lúc hỏi; TLS tới Postgres.
-- Câu "tại sao" có bảng chính là bảng khác ngoài bảng đang chọn; chặn cộng lặp khi `JOIN` bằng code
-  ([#214](https://github.com/pgiahuy/xdi-platform/issues/214)).
-- Truy dòng nguồn của câu cộng trên bảng tạm hay câu con đã gộp nhóm (tổng theo đơn rồi nối khách): một dòng của bảng
-  tạm đó là tổng của nhiều dòng, nên truy dòng nguồn từ chối thay vì trả dòng đã gộp.
+  hai bước có thể để lại dòng thừa trong Postgres.
+- Nguồn MySQL, SQLite; truy vấn thẳng database ngoài lúc hỏi; `sslmode=verify-ca` và chứng chỉ phía client.
+- Câu hỏi nguyên nhân có độ đo ở bảng khác bảng bắt đầu (form chỉ nêu cột của bảng bắt đầu; phân rã xét thêm cột của
+  bảng nối nhiều-một tới hai bước).
+- Truy dòng nguồn của câu cộng trên bảng tạm hay câu con đã gộp nhóm, và các dạng liệt kê ở
+  [API.md](API.md#truy-dòng-nguồn).

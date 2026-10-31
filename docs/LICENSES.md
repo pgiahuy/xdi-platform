@@ -11,7 +11,7 @@ sinh bằng `make licenses`. Chạy lại lệnh này mỗi khi đổi `Cargo.lo
 
 | Nhóm | Số lượng | Giấy phép | Đánh giá |
 |---|---|---|---|
-| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 397 | MIT, Apache-2.0, ISC, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD | Cho phép, dùng chung được |
+| Crate Rust (trong `Cargo.lock`, gồm cả crate chỉ dùng trên nền tảng khác Linux) | 407 | MIT, Apache-2.0, ISC, Unicode-3.0, Unlicense, Zlib, BSL-1.0, BSD, CC0-1.0, 0BSD; CDLA-Permissive-2.0 (hai crate không có trong binary, xem bên dưới) | Cho phép, dùng chung được |
 | Gói npm | 550 | Phần lớn MIT; ISC, BSD, Apache-2.0, BlueOak, 0BSD, CC0-1.0, CC-BY-4.0 (dữ liệu `caniuse-lite`) | Cho phép, dùng chung được |
 | Gói npm `lightningcss` | 2 phiên bản, mỗi phiên bản kèm bản build cho từng nền tảng | MPL-2.0 | Xem bên dưới |
 | Font Be Vietnam Pro (`@fontsource/be-vietnam-pro`), JetBrains Mono (`@fontsource-variable/jetbrains-mono`) | 2 | OFL-1.1 | Xem bên dưới |
@@ -27,22 +27,21 @@ GPL, dự án dùng theo nhánh BSD.
 
 Extension `postgres` của DuckDB (`postgres_scanner.duckdb_extension`, MIT, của DuckDB Foundation,
 [duckdb-postgres](https://github.com/duckdb/duckdb-postgres)) đi kèm image Docker và gói binary trong Release, dạng
-file nhị phân do DuckDB build sẵn, không sửa; backend nạp nó khi `SOURCE_SNAPSHOT_MODE=direct` (#246). File này liên
+file nhị phân do DuckDB build sẵn, không sửa; backend nạp nó khi `SOURCE_SNAPSHOT_MODE=direct` (mặc định). File này liên
 kết tĩnh libpq (PostgreSQL License) và OpenSSL 3 (Apache-2.0). Ba văn bản giấy phép, kèm phiên bản và nguồn tải, ở
 `backend/third-party/duckdb-postgres-extension-licenses.txt`, đi cùng file extension trong image (`/usr/local/lib/xdi/`)
 và trong gói Release. Không phải crate nên không có trong `licenses-dependencies.md`.
 
-`webpki-roots` (CDLA-Permissive-2.0, danh sách chứng chỉ gốc) chỉ là phụ thuộc lúc build của `libduckdb-sys`, cho nhánh
-tải thư viện DuckDB dựng sẵn; dự án biên dịch DuckDB từ mã nguồn kèm trong crate nên nhánh đó không chạy, và crate
-này không có trong binary.
+`webpki-roots` và `webpki-root-certs` (CDLA-Permissive-2.0, danh sách chứng chỉ gốc) có trong `Cargo.lock` nhưng không
+có trong binary Linux: cái đầu chỉ dùng khi `libduckdb-sys` tải DuckDB dựng sẵn (dự án biên dịch DuckDB từ mã nguồn),
+cái sau chỉ khi build cho WebAssembly. Trên Linux, client HTTP gọi mô hình ngôn ngữ (`reqwest` với `rustls`) đọc chứng
+chỉ gốc của hệ thống.
 
-`webpki-root-certs` (cũng CDLA-Permissive-2.0) là phụ thuộc của `rustls-platform-verifier` chỉ khi build cho
-WebAssembly; trên Linux, client HTTP gọi mô hình ngôn ngữ (`reqwest` với `rustls`) đọc chứng chỉ gốc của hệ thống, nên
-crate này không có trong binary. Bộ mã hóa của `rustls` là `ring` (Apache-2.0 AND ISC); không dùng OpenSSL.
+Client HTTP và kết nối Postgres của backend dùng `rustls` với bộ mã hóa `ring` (Apache-2.0 AND ISC), không dùng
+OpenSSL; chỉ extension `postgres` ở trên liên kết tĩnh OpenSSL 3.
 
-`rust_decimal` (MIT, số thập phân chính xác cho phân rã câu "tại sao") dùng với feature `std`, chỉ kéo thêm `arrayvec`
-và `num-traits`. `Cargo.lock` ghi cả các phụ thuộc tùy chọn của nó (`borsh`, `rand` 0.9, `proc-macro-crate`,
-`toml_edit` và vài crate khác, đều cho phép); các feature đó tắt nên chúng không được biên dịch, không có trong binary.
+Crate tùy chọn có trong `Cargo.lock` mà feature tắt thì không được biên dịch, không có trong binary; ví dụ các phụ thuộc
+tùy chọn của `rust_decimal` (`borsh`, `rand` 0.9, `toml_edit` và vài crate khác, đều cho phép).
 
 Swagger UI 5.32.6 (Apache-2.0, của SmartBear) được đóng vào binary backend để phục vụ trang `/api/docs`: crate
 `utoipa-swagger-ui-vendored` kèm sẵn file zip của Swagger UI, `utoipa-swagger-ui` giải nén thư mục `dist` lúc build và
@@ -85,7 +84,7 @@ Thông báo bản quyền: Copyright (c) 2023 shadcn. Văn bản MIT ở cuối 
 |---|---|
 | Giao diện đã build (`frontend/dist`, trong image) | `licenses.md`: giấy phép của mọi gói JavaScript đã đóng vào bundle, do Vite sinh lúc build, phục vụ ở `/licenses.md`; văn bản OFL của font |
 | Image Docker | Như trên, cộng binary backend; binary phục vụ thông báo giấy phép của Swagger UI ở `/api/docs/licenses.txt`. Extension `postgres` của DuckDB kèm `duckdb-postgres-extension-licenses.txt` ở `/usr/local/lib/xdi/`. Image nền `debian:bookworm-slim` mang giấy phép của từng gói Debian; phần mềm chỉ chạy trên đó, không sửa hay liên kết tĩnh |
-| Gói binary trong Release | `LICENSE`, `LICENSES.md`, `licenses-dependencies.md`, `swagger-ui-5.32.6-licenses.txt`, `postgres_scanner.duckdb_extension` kèm `duckdb-postgres-extension-licenses.txt` |
+| Gói binary trong Release | `LICENSE`, `README.md`, `LICENSES.md`, `licenses-dependencies.md`, `swagger-ui-5.32.6-licenses.txt`, `postgres_scanner.duckdb_extension` kèm `duckdb-postgres-extension-licenses.txt` |
 | Tarball mã nguồn | Toàn bộ repo, gồm các file trên |
 
 ## Dịch vụ và phần mềm chạy bên cạnh
@@ -99,7 +98,7 @@ Không được đóng gói vào phần mềm; người cài chọn và chịu �
 | Mô hình mặc định cho Ollama, `qwen2.5-coder:7b` | Apache-2.0 | Tải về máy người dùng qua Ollama, không đi kèm repo |
 | Gemini API | Dịch vụ của Google, theo điều khoản của Google | Tùy chọn, `LLM_PROVIDER=gemini`, cần khóa API. Mặc định không dùng |
 
-Mặc định (`LLM_PROVIDER=mock`) phần mềm chạy hoàn toàn không cần dịch vụ hay khóa API đóng.
+Với `LLM_PROVIDER=mock` (mặc định), phần mềm chạy không cần dịch vụ hay khóa API trả phí.
 
 Dữ liệu mẫu: nguồn và giấy phép từng dataset ghi ở
 [data/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/data/README.md).
