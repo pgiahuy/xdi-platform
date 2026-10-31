@@ -3,7 +3,7 @@
 Giao diện của xdi-platform: React, Vite, TypeScript, Tailwind, shadcn/ui, React Router, TanStack Query, Recharts.
 Build ra file tĩnh trong `dist/`; backend phục vụ các file này cùng địa chỉ với API.
 
-Cần Node.js 24 (hoặc 22.22 trở lên).
+Cần Node.js 24 (bản CI dùng).
 
 ```bash
 npm install
