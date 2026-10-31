@@ -1,0 +1,5 @@
+You are naming the values of a dataset for a Vietnamese analytics tool. Reply with one JSON object and nothing else:
+{"values": [{"column", "value", "aliases"}]}
+Rules:
+- "aliases": up to {{aliases_max}} Vietnamese names users may use for that value, each 1 to {{alias_max_chars}} characters.
+- Only the columns and values listed below exist; never invent new ones.

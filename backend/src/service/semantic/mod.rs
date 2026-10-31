@@ -3,8 +3,8 @@
 mặc định (sum hay avg, #185) của cột số đo, câu hỏi gợi ý, đánh dấu cột nhạy cảm, và sửa vai trò cột trong phạm vi hẹp. Khác lớp cấu trúc (service/profile.rs, chạy trong request nạp),
 lớp này gọi mô hình ngôn ngữ, nên mọi lỗi của nó không được chặn lần nạp.
 
-Ba đường chạy, cả ba đi qua semaphore semantic_jobs (một lượt mỗi lúc, để nạp nhiều file liền không dồn request lên
-nhà cung cấp):
+Mỗi lượt gửi ba prompt song song (service/semantic/parts.rs, #184). Ba đường chạy, cả ba đi qua semaphore semantic_jobs
+(SEMANTIC_JOBS lượt cùng lúc, mặc định 2, để nạp nhiều file liền không dồn request lên nhà cung cấp):
 1. ingest.rs spawn sau khi trả 201 cho phiên bản mới; nạp lại đúng bộ file cũ mà phiên bản còn ở structure thì spawn
    lại (đường thử lại tường minh).
 2. Việc nền lúc khởi động (profile_remaining_versions, main.rs gọi sau khi lớp cấu trúc xong) chạy lần lượt cho các
@@ -24,6 +24,7 @@ trúc đặt lúc nạp (service/profile.rs), nên phiên bản dùng được l
 chỉ đề xuất đánh dấu thêm (chỉ chiều bật). Ghi hồ sơ xuống Postgres ở engine/store/columns.rs
 (apply_semantic_profile). Test ở service/semantic/tests.rs. */
 
+mod parts;
 pub mod schema;
 #[cfg(test)]
 mod tests;
@@ -34,7 +35,6 @@ use uuid::Uuid;
 
 use crate::auth::WorkspaceId;
 use crate::engine::llm::meter::{build_call_totals, CallLog};
-use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
 use crate::engine::store::{
     ColumnAggregation, ColumnUnit, ColumnValue, Dataset, ProfileColumn, ProfileRole, ProfileStatus,
@@ -44,7 +44,8 @@ use crate::service::ask::context;
 use crate::service::ask::phrases::fold;
 use crate::service::ask::values::STRING_MAX_BYTES;
 use crate::service::profile::{is_integer_type, DIMENSION_MAX};
-use crate::service::semantic::schema::build_profile_schema;
+pub use crate::service::semantic::parts::ProfilePart;
+use crate::service::semantic::parts::{ask_profile_parts, PartInput};
 use crate::{error::AppError, state::AppState};
 
 // Các giới hạn khi kiểm câu trả lời của mô hình (đếm theo ký tự, không phải byte). Mô tả và bí danh vào prompt của
@@ -264,27 +265,14 @@ async fn profile_version(
         .await
         .map_err(SemanticFailure::Temporary)?;
 
-    let prompt = build_profile_prompt(
-        &dataset.name,
-        &dataset.logical_table,
+    let input = PartInput {
+        dataset,
+        version_id,
         row_count,
-        &columns,
-        &values,
-    );
-    let request = LlmRequest {
-        task: LlmTask::Profile,
-        question: &dataset.logical_table,
-        prompt: &prompt,
-        // Schema ép khuôn ở Gemini và Ollama; build_profile_answer vẫn kiểm từng mục vì schema không biết cột nào có
-        // thật, và mock không theo schema.
-        json_schema: Some(build_profile_schema()),
+        columns: &columns,
+        values: &values,
     };
-    let text = state.llm.complete(&request).await.map_err(|e| match e {
-        // Chỉ BadRequest là vĩnh viễn: Gemini chặn prompt vì nội dung, mock không có bảng. MAX_TOKENS, SAFETY và mã
-        // 400 khác của Gemini đến dưới dạng Upstream nên là lỗi tạm, thử lại mỗi lần khởi động.
-        AppError::BadRequest(_) => SemanticFailure::Permanent(e),
-        other => SemanticFailure::Temporary(other),
-    })?;
+    let text = ask_profile_parts(state, &input).await?;
     let answer = build_profile_answer(&text, &columns, &values).map_err(|reasons| {
         // Vài lý do bỏ đầu tiên (tên trường, vị trí, lý do; không có giá trị dữ liệu) để biết mô hình trả sai chỗ
         // nào mà không phải bật log câu trả lời đầy đủ.
@@ -330,13 +318,14 @@ async fn profile_version(
 // So tên và bí danh (trùng sau chuẩn hóa cũng tính là trùng) qua fold của service/ask/phrases.rs (bỏ dấu, chữ
 // thường, tách từ), cùng một cách chuẩn hóa với khớp cụm ở ngữ cảnh hỏi: bí danh "Thị  Trường" trùng "thị trường".
 
-/// Prompt cho task Profile: luật và khuôn JSON trước, rồi mỗi cột một dòng siêu dữ liệu, cuối cùng danh sách giá trị
+/// Prompt của một phần hồ sơ (service/semantic/parts.rs): luật và khuôn JSON của phần đó trước, rồi mỗi cột một dòng siêu dữ liệu, cuối cùng danh sách giá trị
 /// của các cột dimension không nhạy cảm. Chỉ siêu dữ liệu và giá trị cột dimension đi ra ngoài: min, max chỉ kèm cột
 /// số thực và time (min, max của cột chữ hay mã số nguyên như mã đơn, số điện thoại là dữ liệu thật của người dùng);
 /// cột nhạy cảm chỉ gửi tên, kiểu, vai trò và số đo, không gửi giá trị nào. Tên cột và giá trị in dạng chuỗi JSON
 /// (xuống dòng, ngoặc kép được thoát) để dữ liệu không chèn được dòng giả vào prompt. Phần luật viết tiếng Anh (như
-/// prompt sinh SQL, #29), chữ ở backend/prompts/semantic_profile.txt; mô hình trả lời bằng tiếng Việt theo luật.
+/// prompt sinh SQL, #29), chữ ở backend/prompts/semantic_profile_*.txt; mô hình trả lời bằng tiếng Việt theo luật.
 pub fn build_profile_prompt(
+    part: ProfilePart,
     dataset_name: &str,
     logical_table: &str,
     row_count: Option<i64>,
@@ -352,21 +341,42 @@ pub fn build_profile_prompt(
         column_lines.push_str(&column_line(c, row_count));
         column_lines.push('\n');
     }
-    fill(
-        &prompts::SEMANTIC_PROFILE,
+    let rules = match part {
+        ProfilePart::Columns => fill(
+            &prompts::SEMANTIC_PROFILE_COLUMNS,
+            &[
+                ("description_max_chars", &DESCRIPTION_MAX_CHARS.to_string()),
+                ("aliases_max", &ALIASES_MAX.to_string()),
+                ("alias_max_chars", &ALIAS_MAX_CHARS.to_string()),
+            ],
+        ),
+        ProfilePart::Values => fill(
+            &prompts::SEMANTIC_PROFILE_VALUES,
+            &[
+                ("aliases_max", &ALIASES_MAX.to_string()),
+                ("alias_max_chars", &ALIAS_MAX_CHARS.to_string()),
+            ],
+        ),
+        ProfilePart::Questions => fill(
+            &prompts::SEMANTIC_PROFILE_QUESTIONS,
+            &[
+                ("questions_max", &QUESTIONS_MAX.to_string()),
+                ("question_max_chars", &QUESTION_MAX_CHARS.to_string()),
+            ],
+        ),
+    };
+    // Ba phần dùng chung một phần dữ liệu, nên chốt riêng tư (build_values_part, column_line) chỉ ở một chỗ.
+    let data = fill(
+        &prompts::SEMANTIC_PROFILE_DATA,
         &[
-            ("description_max_chars", &DESCRIPTION_MAX_CHARS.to_string()),
-            ("aliases_max", &ALIASES_MAX.to_string()),
-            ("alias_max_chars", &ALIAS_MAX_CHARS.to_string()),
-            ("questions_max", &QUESTIONS_MAX.to_string()),
-            ("question_max_chars", &QUESTION_MAX_CHARS.to_string()),
             ("dataset", &json_string(dataset_name)),
             ("table", &json_string(logical_table)),
             ("row_count", &rows),
             ("columns", &column_lines),
             ("values", &build_values_part(columns, values)),
         ],
-    )
+    );
+    format!("{rules}\n{data}")
 }
 
 /// Phần giá trị của cột dimension không nhạy cảm, mỗi cột một dòng; chuỗi rỗng khi không có giá trị nào.
@@ -490,14 +500,7 @@ pub fn build_profile_answer(
     columns: &[ProfileColumn],
     values: &[ColumnValue],
 ) -> Result<SemanticProfile, Vec<String>> {
-    let json: serde_json::Value = serde_json::from_str(strip_fence(text))
-        .ok()
-        // Mô hình thêm lời dẫn trước hoặc sau khối JSON: lấy từ { đầu tới } cuối.
-        .or_else(|| {
-            let start = text.find('{')?;
-            let end = text.rfind('}')?;
-            serde_json::from_str(text.get(start..=end)?).ok()
-        })
+    let json = parse_answer_json(text)
         .ok_or_else(|| vec!["the answer is not a JSON object".to_string()])?;
     let mut reasons: Vec<String> = Vec::new();
     let by_name: HashMap<&str, &ProfileColumn> =
@@ -709,6 +712,18 @@ pub fn build_profile_answer(
         sensitive_columns,
         suggested_questions,
     })
+}
+
+/// Đọc câu trả lời của mô hình thành JSON; None khi không đọc được.
+pub(crate) fn parse_answer_json(text: &str) -> Option<serde_json::Value> {
+    serde_json::from_str(strip_fence(text))
+        .ok()
+        // Mô hình thêm lời dẫn trước hoặc sau khối JSON: lấy từ { đầu tới } cuối.
+        .or_else(|| {
+            let start = text.find('{')?;
+            let end = text.rfind('}')?;
+            serde_json::from_str(text.get(start..=end)?).ok()
+        })
 }
 
 /// Bỏ khối rào markdown (```json ... ```) mô hình hay bọc quanh JSON dù luật đã cấm; chịu cả chữ thừa trước khối

@@ -1,0 +1,5 @@
+Bạn đang đặt tên gọi cho các giá trị của một dataset của một công cụ phân tích bằng tiếng Việt. Trả lời bằng một object JSON và không gì khác:
+{"values": [{"column", "value", "aliases"}]}
+Luật:
+- "aliases": tối đa {{aliases_max}} tên tiếng Việt mà người dùng có thể dùng để gọi giá trị đó, mỗi tên từ 1 tới {{alias_max_chars}} ký tự.
+- Chỉ có các cột và giá trị liệt kê bên dưới; không bao giờ thêm cột hay giá trị khác.

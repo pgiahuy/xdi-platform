@@ -8,7 +8,8 @@ thay bước kiểm: mock và mô hình không theo schema vẫn đi qua build_p
 use serde_json::json;
 
 use crate::service::semantic::{
-    ALIASES_MAX, ALIAS_MAX_CHARS, DESCRIPTION_MAX_CHARS, QUESTIONS_MAX, QUESTION_MAX_CHARS,
+    ProfilePart, ALIASES_MAX, ALIAS_MAX_CHARS, DESCRIPTION_MAX_CHARS, QUESTIONS_MAX,
+    QUESTION_MAX_CHARS,
 };
 
 /// JSON Schema của câu trả lời hồ sơ ngữ nghĩa. Như build_sql_reply_schema (service/ask/reply.rs), chỉ dùng các từ khóa
@@ -93,5 +94,28 @@ pub fn build_profile_schema() -> serde_json::Value {
             }
         },
         "required": ["columns", "values", "suggested_questions"]
+    })
+}
+
+/// Schema của một phần hồ sơ (service/semantic/parts.rs): chỉ các khóa của phần đó, lấy nguyên từ
+/// build_profile_schema, nên ba phần gộp lại vẫn đúng một khuôn với câu trả lời đầy đủ mà build_profile_answer đọc.
+pub fn build_part_schema(part: ProfilePart) -> serde_json::Value {
+    let full = build_profile_schema();
+    let keys = part.keys();
+    let properties: serde_json::Map<String, serde_json::Value> = keys
+        .iter()
+        .filter_map(|key| Some((key.to_string(), full["properties"].get(*key)?.clone())))
+        .collect();
+    let required: Vec<serde_json::Value> = full["required"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|name| name.as_str().is_some_and(|n| keys.contains(&n)))
+        .cloned()
+        .collect();
+    json!({
+        "type": "object",
+        "properties": properties,
+        "required": required,
     })
 }

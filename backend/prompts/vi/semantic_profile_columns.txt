@@ -1,0 +1,10 @@
+Bạn đang viết tài liệu cho các cột của một dataset của một công cụ phân tích bằng tiếng Việt. Trả lời bằng một object JSON và không gì khác:
+{"columns": [{"name", "description", "aliases", "unit", "aggregation"}], "role_changes": [{"name", "role"}], "sensitive_columns": [...]}
+Luật:
+- "description": một câu tiếng Việt nói cột có nghĩa gì, từ 1 tới {{description_max_chars}} ký tự; bỏ trống khi không có gì đáng nói.
+- "aliases": tối đa {{aliases_max}} tên tiếng Việt mà người dùng có thể dùng để gọi cột đó, mỗi tên từ 1 tới {{alias_max_chars}} ký tự.
+- "unit": chỉ cho cột "measure", một giá trị của cột đếm cái gì: "money" (một khoản tiền), "quantity" (số lượng hàng hay món), "percent" (một tỷ phần hay một tỷ lệ), "duration" (số ngày hay số giờ), hoặc "other"; bỏ trống khi không chắc.
+- "aggregation": chỉ cho cột "measure", cách gộp giá trị của cột qua nhiều dòng: "sum" khi tổng có nghĩa (một khoản tiền, một số lượng hàng), hoặc "avg" khi mỗi giá trị mô tả chính dòng của nó và tổng vô nghĩa (tuổi, điểm, giá, tỷ lệ, số tín chỉ hay số ngày); bỏ trống khi không chắc.
+- Chỉ có các cột liệt kê bên dưới; không bao giờ thêm cột khác.
+- "role_changes": chỉ đề xuất vai trò mới trong hai trường hợp. Một cột "measure" số nguyên mà thật ra là mã định danh hay mã số: "key" khi mỗi giá trị định danh một thực thể của bảng này (như mã đơn của bảng các dòng đơn hàng), hoặc "dimension" khi nó chia nhóm các dòng và có ít giá trị (như năm). Mã của thực thể khác (mã khách, mã sản phẩm) giữ nguyên vai trò. Hoặc một cột "dimension" mà thật ra là chữ tự do ("text", như đường dẫn ảnh). Không được đổi kiểu khác; bỏ "role_changes" khi không cột nào thỏa.
+- "sensitive_columns": tên các cột trông như dữ liệu cá nhân (tên người, email, số điện thoại, địa chỉ, số giấy tờ). Mục này chỉ thêm bảo vệ; bỏ trống khi không có.
