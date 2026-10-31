@@ -2239,6 +2239,112 @@
      }
     ]
    }
+  },
+  {
+   "id": "j71",
+   "expected": "mismatch",
+   "error": "missing_scale",
+   "text": "Tổng lợi nhuận của CANCELED thấp hơn COMPLETE 14.971,35 (thấp hơn 95,5%). Chênh lệch chủ yếu do phương thức vận chuyển Standard Class, thấp hơn 12.362,75. COMPLETE có 597 đơn hàng, CANCELED có 19 đơn hàng.",
+   "facts": {
+    "measure": "Tổng lợi nhuận",
+    "comparison": "groups",
+    "base": "COMPLETE",
+    "compare": "CANCELED",
+    "volume_label": "Số đơn hàng",
+    "price_label": "Lợi nhuận trên mỗi đơn hàng",
+    "scale_main": true,
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "-14.971,35"
+     },
+     {
+      "field": "percent_change",
+      "column": "",
+      "group": "",
+      "value": "-95,5"
+     },
+     {
+      "field": "contribution",
+      "column": "Shipping Mode",
+      "group": "Standard Class",
+      "value": "-12.362,75"
+     },
+     {
+      "field": "cause",
+      "column": "Shipping Mode",
+      "group": "Standard Class",
+      "value": ""
+     },
+     {
+      "field": "base_volume",
+      "column": "",
+      "group": "",
+      "value": "597"
+     },
+     {
+      "field": "compare_volume",
+      "column": "",
+      "group": "",
+      "value": "19"
+     }
+    ]
+   }
+  },
+  {
+   "id": "j72",
+   "expected": "match",
+   "error": "none",
+   "text": "Tổng lợi nhuận của CANCELED thấp hơn COMPLETE 14.971,35 (thấp hơn 95,5%). Chênh lệch chủ yếu do số đơn hàng: COMPLETE có 597 đơn hàng, CANCELED chỉ có 19 đơn hàng; lợi nhuận trên mỗi đơn hàng của CANCELED còn cao hơn (37,06 so với 26,26).",
+   "facts": {
+    "measure": "Tổng lợi nhuận",
+    "comparison": "groups",
+    "base": "COMPLETE",
+    "compare": "CANCELED",
+    "volume_label": "Số đơn hàng",
+    "price_label": "Lợi nhuận trên mỗi đơn hàng",
+    "scale_main": true,
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "-14.971,35"
+     },
+     {
+      "field": "percent_change",
+      "column": "",
+      "group": "",
+      "value": "-95,5"
+     },
+     {
+      "field": "base_volume",
+      "column": "",
+      "group": "",
+      "value": "597"
+     },
+     {
+      "field": "compare_volume",
+      "column": "",
+      "group": "",
+      "value": "19"
+     },
+     {
+      "field": "base_price",
+      "column": "",
+      "group": "",
+      "value": "26,26"
+     },
+     {
+      "field": "compare_price",
+      "column": "",
+      "group": "",
+      "value": "37,06"
+     }
+    ]
+   }
   }
  ]
 }
