@@ -39,6 +39,21 @@ trong [ARCHITECTURE.md](ARCHITECTURE.md).
 | Tài khoản: email, tên, mật khẩu đã băm (Argon2id) | Postgres; không lưu mật khẩu gốc |
 | Phiên đăng nhập: mã băm SHA-256, người dùng, hạn | Postgres; mã gốc chỉ nằm trong cookie của trình duyệt, xóa khi đăng xuất |
 
+## Ai thấy dòng nào
+
+- Admin của workspace thấy mọi dòng của mọi bảng trong workspace, kể cả khi mang vai dữ liệu: họ tự sửa được luật, lọc
+  với họ không bảo vệ được gì.
+- Member không mang vai dữ liệu nào thấy mọi dòng. Member mang vai chỉ thấy dòng các vai của mình cho phép: trong một
+  vai mọi luật nối AND, giữa các vai nối OR, chỉ tính vai có luật trên bảng đang đọc hay bảng nó trỏ tới; bảng trỏ tới
+  bảng bị lọc (đơn hàng của khách) bị lọc theo. Luật áp cho mọi SQL chạy trên dữ liệu thay mặt người đó: câu hỏi, câu
+  "tại sao" và bảng phân rã, truy dòng nguồn, tổng quan dataset. Người bị lọc không nhận danh sách giá trị nào trong
+  prompt (mục dưới) và không thấy số đếm của hồ sơ cột.
+- Vai, luật và người mang vai chỉ admin xem và sửa (`/data-roles`). Member chỉ xem được tên và mô tả các vai của
+  chính mình (trang Thành viên); thẻ "Hệ thống đã hiểu là" của họ ghi điều kiện đã áp ("Lọc theo quyền xem: ..."),
+  gồm cả các giá trị họ được thấy. Admin thấy vai của mọi thành viên ở trang Thành viên và màn Vai dữ liệu.
+- Vai và luật nằm trong Postgres (`data_roles`, `member_data_roles`, `rls_policies`), xóa theo workspace. Đổi vai hay
+  luật có hiệu lực từ request kế tiếp; câu trả lời cũ trong lịch sử giữ kết quả đã tính lúc hỏi.
+
 ## Gửi gì cho mô hình ngôn ngữ
 
 Tùy biến `LLM_PROVIDER`:
