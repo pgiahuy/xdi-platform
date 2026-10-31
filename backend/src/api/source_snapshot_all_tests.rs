@@ -87,12 +87,13 @@ async fn every_readable_table_is_snapshotted_by_default() {
     assert_eq!(customers["comment"], Value::Null);
     assert_eq!(customers["state"], Value::Null);
     let items = find(&tables, "shop.order_items");
-    let refs: Vec<&str> = items["references"]
+    let mut refs: Vec<&str> = items["references"]
         .as_array()
         .unwrap()
         .iter()
         .map(|l| l["to_table"].as_str().unwrap())
         .collect();
+    refs.sort();
     // shop.secrets không đọc được nên không có.
     assert_eq!(
         refs,

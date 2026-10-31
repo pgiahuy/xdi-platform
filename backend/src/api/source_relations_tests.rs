@@ -324,13 +324,29 @@ async fn shared_dimension_is_reused() {
     // orders không đổi: cùng dataset, không tạo phiên bản mới.
     assert_eq!(dataset_id(&result, "orders"), orders);
     assert_eq!(summary(&result)[1], ("orders".to_string(), 1, false));
-    let names: Vec<&str> = result["relations"]
+    // Mọi khóa ngoại giữa các bảng đã chụp (#247): thêm order_items -> customers (khách nhận quà, customers chụp từ
+    // nhóm trước), cùng orders -> customers đã ghi từ trước.
+    let mut names: Vec<(&str, &str)> = result["relations"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|r| r["to_dataset_name"].as_str().unwrap())
+        .map(|r| {
+            (
+                r["from_dataset_name"].as_str().unwrap(),
+                r["to_dataset_name"].as_str().unwrap(),
+            )
+        })
         .collect();
-    assert_eq!(names, ["products", "orders"]);
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            ("order_items", "customers"),
+            ("order_items", "orders"),
+            ("order_items", "products"),
+            ("orders", "customers")
+        ]
+    );
 
     let returns = json!({"table": "shop.returns", "tables": ["shop.orders"]});
     let (status, result) = snapshot(&s, &id, returns).await;
