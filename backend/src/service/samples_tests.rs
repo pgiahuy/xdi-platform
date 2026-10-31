@@ -249,11 +249,11 @@ async fn build_sample_database(
     sample
 }
 
-fn with_sample_database(mut state: AppState, sample: SampleDatabase) -> AppState {
+fn with_sample_databases(mut state: AppState, samples: Vec<SampleDatabase>) -> AppState {
     let mut config = (*state.config).clone();
     config.source_secret_key = Secret::new(KEY);
-    config.source_allowed_hosts = vec![sample.host.clone()];
-    config.sample_database = Some(sample);
+    config.source_allowed_hosts = vec![samples[0].host.clone()];
+    config.sample_databases = samples;
     state.config = std::sync::Arc::new(config);
     state
 }
@@ -267,9 +267,9 @@ async fn setup_snapshots_the_sample_database() {
     let data = TempDir::new();
     let samples = TempDir::new();
     let sample = build_sample_database(&db, &samples.0).await;
-    let state = with_sample_database(
+    let state = with_sample_databases(
         build_state(db.store.clone(), &data.0, &samples.0, true),
-        sample,
+        vec![sample],
     );
     let member = setup(&state).await;
 
@@ -337,9 +337,9 @@ async fn unreachable_sample_database_falls_back_to_the_csv() {
     )
     .unwrap()
     .unwrap();
-    let state = with_sample_database(
+    let state = with_sample_databases(
         build_state(db.store.clone(), &data.0, &repo_samples(), true),
-        sample,
+        vec![sample],
     );
     let member = setup(&state).await;
 
@@ -347,6 +347,55 @@ async fn unreachable_sample_database_falls_back_to_the_csv() {
     assert_eq!(
         datasets.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
         [SAMPLE_NAME]
+    );
+    db.drop().await;
+}
+
+/// Hai database mẫu, một tới được, một không (như sales_demo chạy mà edu_demo chưa nạp): database tới được vẫn thành
+/// nguồn với đúng các lần chụp ghi tên nó trong kế hoạch, không nạp dataco.csv. Lần chụp ghi tên database khác bị bỏ
+/// qua.
+#[tokio::test]
+async fn one_unreachable_sample_database_keeps_the_other() {
+    let Some(db) = fresh_database().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let data = TempDir::new();
+    let samples = TempDir::new();
+    let sample = build_sample_database(&db, &samples.0).await;
+    // Kế hoạch có tên database: orders cho database của test, một bảng không có cho database không tới được.
+    std::fs::write(
+        samples.0.join(PLAN_FILE),
+        format!(
+            r#"{{"snapshots": [
+                {{"database": "{}", "table": "shop.orders", "tables": ["shop.customers"]}},
+                {{"database": "missing_demo", "table": "shop.missing"}}
+            ]}}"#,
+            db.name()
+        ),
+    )
+    .unwrap();
+    let mut unreachable = sample.clone();
+    unreachable.port = 1;
+    unreachable.database = "missing_demo".to_string();
+    let state = with_sample_databases(
+        build_state(db.store.clone(), &data.0, &samples.0, true),
+        vec![sample, unreachable],
+    );
+    let member = setup(&state).await;
+
+    let datasets = state.store.list_datasets(&member.workspace).await.unwrap();
+    let mut tables: Vec<&str> = datasets.iter().map(|d| d.logical_table.as_str()).collect();
+    tables.sort();
+    assert_eq!(tables, ["customers", "orders"]);
+    assert_eq!(
+        state
+            .store
+            .list_sources(&member.workspace)
+            .await
+            .unwrap()
+            .len(),
+        1
     );
     db.drop().await;
 }

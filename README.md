@@ -37,11 +37,11 @@ DataCo (1500 dòng, từ `data/samples/dataco.csv`). Mô hình mặc định là
 ví dụ "Doanh thu theo thị trường". Kết nối database của bạn ở trang **Dữ liệu**, khung **Kết nối database**. Hỏi câu tự
 do thì đặt `LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hoặc `ollama`) trong `.env`, rồi chạy lại `docker compose up -d`.
 
-Thử luồng database với database mẫu nhiều bảng (DataCo và OULAD đầy đủ, 13 bảng có khóa ngoại,
-[data/postgres-demo](data/postgres-demo/README.md)): tải và nạp một lần (`sh data/download.sh dataco`,
-`sh data/download.sh oulad`, `sh data/postgres-demo/load.sh`, rồi gỡ container chạy riêng đó, xem README ở đó), sau đó
-chạy `docker compose --profile demo up -d --build` trước lần thiết lập đầu. Thiết lập lần đầu thêm database này làm nguồn và
-chụp 12 bảng kèm quan hệ thành dataset; câu mẫu của `mock` trên đó có "Tỷ lệ bỏ học theo môn học" trên `students` và
+Thử luồng database với database mẫu nhiều bảng (hai database `sales_demo` với DataCo và `edu_demo` với OULAD, đầy đủ,
+13 bảng có khóa ngoại, [data/postgres-demo](data/postgres-demo/README.md)): tải và nạp một lần (`sh data/download.sh
+dataco`, `sh data/download.sh oulad`, `sh data/postgres-demo/load.sh`, rồi gỡ container chạy riêng đó, xem README ở
+đó), sau đó chạy `docker compose --profile demo up -d --build` trước lần thiết lập đầu. Thiết lập lần đầu thêm hai
+database này làm hai nguồn và chụp 12 bảng kèm quan hệ thành dataset; câu mẫu của `mock` trên đó có "Tỷ lệ bỏ học theo môn học" trên `students` và
 "Doanh thu theo phân khúc khách hàng" trên `order_items` (nối `orders`, `customers`).
 
 Build lần đầu biên dịch Rust và DuckDB (đo trên máy 16 nhân: 8 phút) và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy

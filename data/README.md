@@ -14,17 +14,18 @@ thêm một file JSON.
 ## Dataset mẫu nạp sẵn
 
 Khi màn thiết lập lần đầu tạo xong workspace đầu tiên, nếu tới được database mẫu ([postgres-demo](postgres-demo/README.md),
-đã nạp bằng `load.sh`; compose gốc trỏ `SAMPLE_DATABASE_URL` vào dịch vụ `demo-db` khi bật `--profile demo`, `make dev` trỏ
-vào cổng `DEMO_DB_PORT` trên `127.0.0.1`) thì backend thêm database đó làm nguồn Postgres của workspace, rồi chụp từng
-nhóm bảng trong `sample_database.json` (bảng bắt đầu và các bảng chụp kèm, như request chụp ở trang **Dữ liệu**): mỗi
-bảng một dataset, khóa ngoại ghi thành quan hệ. Kế hoạch chụp 12 bảng; bỏ `edu.student_daily_clicks` (1,8 triệu dòng,
+đã nạp bằng `load.sh`; compose gốc trỏ `SAMPLE_DATABASE_URL` vào hai database `sales_demo` và `edu_demo` của dịch vụ
+`demo-db` khi bật `--profile demo`, `make dev` trỏ vào cổng `DEMO_DB_PORT` trên `127.0.0.1`) thì backend thêm mỗi
+database làm một nguồn Postgres của workspace, rồi chụp các nhóm bảng ghi cho database đó (trường `database`) trong
+`sample_database.json` (bảng bắt đầu và các bảng chụp kèm, như request chụp ở trang **Dữ liệu**): mỗi bảng một
+dataset, khóa ngoại ghi thành quan hệ. Lần chụp không ghi `database` áp cho mọi database mẫu. Kế hoạch chụp 12 bảng; bỏ `edu.student_daily_clicks` (1,8 triệu dòng,
 quá `SOURCE_MAX_ROWS` mặc định). Bảng nào có `<tên bảng>.metrics.json` (hiện có `order_items.metrics.json`,
 `student_assessments.metrics.json`) thì ghi thêm chỉ số mẫu. Hồ sơ cột và câu gợi ý của `mock` cho các bảng này nằm ở
 `backend/src/engine/llm/mock_answers_database.json`.
 
 Không có `SAMPLE_DATABASE_URL` (để rỗng, hay chạy binary trực tiếp không đặt biến này; `make dev` luôn đặt nó trỏ vào
-`127.0.0.1:5440`), hoặc chụp lỗi (database mẫu không
-chạy hay chưa nạp, không có khóa mã hóa dùng được), backend ghi cảnh báo và nạp `<SAMPLES_DIR>/dataco.csv` thành dataset tên `DataCo`
+`127.0.0.1:5440`), hoặc không database nào chụp được (database mẫu không chạy hay chưa nạp, không có khóa mã hóa dùng
+được), backend ghi cảnh báo và nạp `<SAMPLES_DIR>/dataco.csv` thành dataset tên `DataCo`
 (bảng `dataco`, bảng mà các câu mẫu DataCo của `LLM_PROVIDER=mock` viết cho), qua đúng đường nạp file ở trang **Dữ
 liệu**, kể cả hồ sơ cột. Sau đó ghi các chỉ số trong `dataco.metrics.json` vào bảng `metrics` của dataset đó (`origin`
 là `sample`, đã xác nhận); chỉ số nào không qua guard hay không chạy được trên dữ liệu thì bỏ qua và ghi log. Prompt

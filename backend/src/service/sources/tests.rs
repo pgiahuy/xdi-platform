@@ -75,7 +75,7 @@ fn old_connect_info_without_ca_still_decodes() {
 #[test]
 fn host_must_be_listed() {
     let mut config = crate::config::Config::from_env();
-    config.sample_database = None;
+    config.sample_databases = Vec::new();
     config.source_allowed_hosts = vec!["db.example.com".to_string()];
     assert!(check_host_allowed(&config, "db.example.com", 5432).is_ok());
     assert!(check_host_allowed(&config, "169.254.169.254", 5432).is_err());

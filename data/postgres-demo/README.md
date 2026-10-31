@@ -1,21 +1,26 @@
 # Postgres mẫu: cơ sở dữ liệu công ty nhiều bảng
 
-Một Postgres 17 riêng (container `xdi-demo-db`, cổng 5440 trên localhost, cơ sở dữ liệu `company_demo`) chứa hai bộ
-dữ liệu mà repo đã dùng, tách thành nhiều bảng có khóa chính và khóa ngoại thật, để thử việc kết nối cơ sở dữ liệu
-của một công ty thay vì nạp file. Container này tách khỏi Postgres của ứng dụng (`docker-compose.yml` ở gốc repo).
+Một Postgres 17 riêng (container `xdi-demo-db`, cổng 5440 trên localhost) chứa hai cơ sở dữ liệu, mỗi cơ sở dữ liệu
+một mảng nghiệp vụ: `sales_demo` (bán hàng, DataCo) và `edu_demo` (học tập, OULAD). Hai bộ dữ liệu mà repo đã dùng được
+tách thành nhiều bảng có khóa chính và khóa ngoại thật, để thử việc kết nối cơ sở dữ liệu của một công ty thay vì nạp
+file. Container này tách khỏi Postgres của ứng dụng (`docker-compose.yml` ở gốc repo).
 
 Trạng thái: đã chạy và kiểm trên máy dev (số liệu ở mục "Đã kiểm"). Chỉ dùng trên máy: mật khẩu ghi ngay trong file
 này và cổng chỉ mở trên `127.0.0.1`. Mặc định `load.sh` cài sẵn hai nguyên nhân biết trước: giao trễ ở
-`sales.orders` (tháng 11/2016) và bỏ học ở `edu.students` (kỳ 2014J), xem mục "Nguyên nhân cài sẵn";
+`sales.orders` của `sales_demo` (tháng 11/2016) và bỏ học ở `edu.students` của `edu_demo` (kỳ 2014J), xem mục
+"Nguyên nhân cài sẵn";
 `SKIP_DEMO_CAUSE=1` để giữ dữ liệu đúng như CSV.
 
-| Schema | Nguồn | Bảng |
+| Database, schema | Nguồn | Bảng |
 |---|---|---|
-| `sales` | DataCo Smart Supply Chain (`DataCoSupplyChainDataset.csv`, một dòng mỗi dòng hàng) | `departments`, `categories`, `products`, `customers`, `orders`, `order_items` |
-| `edu` | OULAD (7 file CSV trong `oulad/`) | `courses`, `students`, `registrations`, `assessments`, `student_assessments`, `vle_materials`, `student_daily_clicks` |
+| `sales_demo`, schema `sales` | DataCo Smart Supply Chain (`DataCoSupplyChainDataset.csv`, một dòng mỗi dòng hàng) | `departments`, `categories`, `products`, `customers`, `orders`, `order_items` |
+| `edu_demo`, schema `edu` | OULAD (7 file CSV trong `oulad/`) | `courses`, `students`, `registrations`, `assessments`, `student_assessments`, `vle_materials`, `student_daily_clicks` |
 
-Mỗi bảng và mỗi cột có mô tả tiếng Việt (`COMMENT ON`), xem bằng `\d+ sales.orders` trong psql, đọc
-`sql/sales_schema.sql`, `sql/edu_schema.sql`, hoặc đọc tài liệu bảng sinh sẵn trong [docs/](docs/README.md).
+Mỗi database giữ tên schema cũ (`sales`, `edu`), không chuyển về `public`: dùng lại nguyên các file SQL, tên bảng mà
+ứng dụng chụp về (`orders`, `students`) không đổi, nên bộ đánh giá và câu mẫu của `mock` chạy như trước. Mỗi bảng và
+mỗi cột có mô tả tiếng Việt (`COMMENT ON`), xem bằng `\d+ sales.orders` trong psql (database `sales_demo`), đọc
+`sql/sales_schema.sql`, `sql/edu_schema.sql`, hoặc đọc tài liệu bảng sinh sẵn:
+[docs/sales_demo](docs/sales_demo/README.md), [docs/edu_demo](docs/edu_demo/README.md).
 
 ## Chạy
 
@@ -28,35 +33,42 @@ docker compose -f data/postgres-demo/docker-compose.yml up -d
 sh data/postgres-demo/load.sh
 ```
 
-`load.sh` chép CSV vào schema `staging` (mọi cột kiểu text), tạo lại `edu` và `sales`, đổ dữ liệu bằng
-`INSERT ... SELECT`, chạy hai bước cài nguyên nhân (`sql/plant_demo_cause_sales.sql`, `sql/plant_demo_cause_edu.sql`),
-cấp quyền cho `analyst`, rồi xóa `staging`. Mọi bước chạy trong một giao dịch: lỗi giữa chừng thì
-dữ liệu cũ còn nguyên. Chạy lại bao nhiêu lần cũng ra cùng kết quả. Trên máy dev 16 nhân, `time sh load.sh` đo được
-từ 37 đến 46 giây, có lần tới 1 phút 50 giây; sau khi nạp, hai schema chiếm khoảng 320 MB
-(`staging` thêm khoảng 730 MB nếu giữ).
+`load.sh` tạo `sales_demo` và `edu_demo` nếu chưa có, rồi với từng database: chép CSV vào schema `staging` của
+database đó (mọi cột kiểu text), tạo lại schema dữ liệu (`sales` hay `edu`), đổ dữ liệu bằng `INSERT ... SELECT`, chạy
+bước cài nguyên nhân của mảng đó (`sql/plant_demo_cause_sales.sql`, `sql/plant_demo_cause_edu.sql`), cấp quyền cho
+`analyst`, rồi xóa `staging`. Mỗi database nạp trong một giao dịch: lỗi giữa chừng thì dữ liệu cũ của database đó còn
+nguyên. Chạy lại bao nhiêu lần cũng ra cùng kết quả. Nạp riêng một database: `sh data/postgres-demo/load.sh sales` (hay
+`edu`). Database khác trong container (ví dụ `company_demo` của bản cũ) không bị đụng tới. Đo trên máy dev 16 nhân
+ngày 31/10/2026, `time sh load.sh` cho cả hai database: 62,6 giây khi container đang chạy, 146,7 giây ở lần đầu sau khi
+đổi `docker-compose.yml` (compose tạo lại container). Sau khi nạp, `sales_demo` chiếm 47 MB và `edu_demo` 204 MB
+(`pg_database_size`); `staging` thêm khoảng 730 MB nếu giữ.
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `DEMO_DB_PORT` | `5440` | Cổng trên localhost |
 | `DEMO_ADMINER_PORT` | `8090` | Cổng của Adminer trên localhost, khi bật profile `adminer` |
+| `DEMO_ADMIN_PORT` | `8091` | Cổng của màn xem nhanh (Flask-Admin) trên localhost, khi bật profile `admin` |
+| `DEMO_DB_CONTAINER` | `xdi-demo-db` | Tên container; chỉ đổi khi cần bản thứ hai bên cạnh bản đang chạy (kèm `COMPOSE_PROJECT_NAME` và `DEMO_DB_PORT` khác) |
 | `DEMO_DB_PASSWORD` | `demo` | Mật khẩu của người dùng chủ `demo`, chỉ đặt được trước lần chạy đầu |
 | `DEMO_DATA_DIR` | `../downloads` | Thư mục chứa CSV, tính từ thư mục này, gắn chỉ đọc vào container ở `/downloads` |
-| `KEEP_STAGING` | không đặt | `KEEP_STAGING=1 sh load.sh` giữ schema `staging` để chạy `sql/verify.sql` |
+| `KEEP_STAGING` | không đặt | `KEEP_STAGING=1 sh load.sh` giữ schema `staging` để chạy `sql/verify_sales.sql`, `sql/verify_edu.sql` |
 | `SKIP_DEMO_CAUSE` | không đặt | `SKIP_DEMO_CAUSE=1 sh load.sh` bỏ cả hai bước cài nguyên nhân, `sales` và `edu` đúng như CSV |
 
 Kết nối:
 
 | Người dùng | Mật khẩu | Quyền |
 |---|---|---|
-| `analyst` | `analyst` | Chỉ `SELECT` trên `edu` và `sales`, giao dịch mặc định chỉ đọc, không thấy `staging` |
+| `analyst` | `analyst` | Chỉ `SELECT` trên `sales` của `sales_demo` và `edu` của `edu_demo`, giao dịch mặc định chỉ đọc, không thấy `staging` |
 | `demo` | `demo` | Chủ cơ sở dữ liệu, `load.sh` dùng |
 
-Chuỗi kết nối cho ứng dụng chạy trên máy (`make dev`): `postgres://analyst:analyst@127.0.0.1:5440/company_demo`.
+Chuỗi kết nối cho ứng dụng chạy trên máy (`make dev`), mỗi database một nguồn:
+`postgres://analyst:analyst@127.0.0.1:5440/sales_demo` và `postgres://analyst:analyst@127.0.0.1:5440/edu_demo`.
 Backend chạy bằng `docker-compose.yml` ở gốc repo: compose gốc có cùng dịch vụ `demo-db` (khai `extends` từ file này) trong
 profile `demo`, chung mạng với backend. Nạp xong ở đây thì gỡ container của bản chạy riêng, volume giữ nguyên
 (`docker compose -f data/postgres-demo/docker-compose.yml rm -sf demo-db`), rồi ở gốc repo chạy
-`docker compose --profile demo up -d`; backend dùng `postgres://analyst:analyst@demo-db:5432/company_demo`
-(`SAMPLE_DATABASE_URL` mặc định của compose). Hai cách dùng chung volume `xdi-demo-db_demo-db-data` và cùng tên
+`docker compose --profile demo up -d`; backend dùng `postgres://analyst:analyst@demo-db:5432/sales_demo` và
+`postgres://analyst:analyst@demo-db:5432/edu_demo` (`SAMPLE_DATABASE_URL` mặc định của compose, hai chuỗi cách nhau bằng
+dấu phẩy). Hai cách dùng chung volume `xdi-demo-db_demo-db-data` và cùng tên
 container `xdi-demo-db`, nên không phải nạp lại, và Docker không cho hai bản chạy cùng lúc trên một volume (hai Postgres
 trên một thư mục dữ liệu làm hỏng dữ liệu). Nạp lại bằng `load.sh` thì gỡ container ở gốc repo trước
 (`docker compose rm -sf demo-db`). Compose gốc in cảnh báo volume có sẵn không do project này tạo: bình thường.
@@ -68,29 +80,67 @@ docker compose -f data/postgres-demo/docker-compose.yml --profile adminer up -d
 ```
 
 Mở http://127.0.0.1:8090 (đổi cổng bằng `DEMO_ADMINER_PORT`), chọn System là PostgreSQL, Server để sẵn `demo-db`,
-Username và Password `analyst`, Database `company_demo`. Đăng nhập bằng `analyst` thì chỉ đọc được, như ứng dụng.
+Username và Password `analyst`, Database `sales_demo` hay `edu_demo`. Đăng nhập bằng `analyst` thì chỉ đọc được, như ứng dụng.
 Tắt: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer stop adminer`. `load.sh` chỉ bật
 `demo-db`, không bật Adminer.
 
-Xóa hẳn: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer down -v`.
+Xóa hẳn: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer --profile admin down -v`.
+
+## Xóa company_demo của bản cũ
+
+Volume nạp trước khi tách có database `company_demo` (cả hai schema). `load.sh` thêm hai database mới bên cạnh, không
+xóa nó. Khi không còn gì dùng `company_demo` (bản cài đã thiết lập với nó, `SAMPLE_DATABASE_URL` tự đặt, nhánh khác
+đang chạy `make eval` trên nó), xóa riêng nó, hai database mới và volume giữ nguyên:
+
+```bash
+docker compose -f data/postgres-demo/docker-compose.yml exec -T demo-db dropdb -U demo --if-exists --force company_demo
+```
+
+Chạy bằng compose gốc (`--profile demo`) thì dùng `docker compose exec -T demo-db dropdb -U demo --if-exists --force
+company_demo` ở gốc repo. `--force` ngắt các kết nối còn mở tới `company_demo`.
+
+## Xem nhanh dữ liệu
+
+Màn chỉ đọc bằng Flask-Admin (`admin/`), đóng vai hệ thống nội bộ của công ty, để khi trình diễn đối chiếu số ứng
+dụng trả lời với dòng dữ liệu gốc. Trang tổng quan liệt kê mọi bảng của `sales_demo` và `edu_demo` kèm mô tả, số
+dòng, khóa chính, khóa ngoại; menu có một nhóm cho mỗi database. Bấm tên bảng để xem dòng, sắp xếp, lọc theo từng
+cột (nút "Thêm bộ lọc"), tìm trên cột chữ. Rê chuột lên tên cột để xem mô tả (`COMMENT ON COLUMN`).
+
+```bash
+docker compose -f data/postgres-demo/docker-compose.yml --profile admin up -d --build
+```
+
+Mở http://127.0.0.1:8091 (đổi cổng bằng `DEMO_ADMIN_PORT`). Chỉ đọc hai lớp: màn kết nối bằng `analyst` (chỉ
+`SELECT`), và mọi trang đã tắt thêm, sửa, xóa (mở `/<bảng>/new/` thì bị chuyển về danh sách). Database nào chưa nạp
+thì trang tổng quan ghi lỗi của database đó, database còn lại vẫn xem được. Chạy không cần Docker:
+`pip install -r admin/requirements.txt` rồi `python admin/app.py`, đọc `DEMO_SERVER_URL` (mặc định
+`postgresql+psycopg://analyst:analyst@127.0.0.1:5440`) và `DEMO_DATABASES` (mặc định `sales_demo,edu_demo`). Tắt:
+`docker compose -f data/postgres-demo/docker-compose.yml --profile admin stop admin`.
+
+Kịch bản đối chiếu một con số, với câu "Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so với tháng 10/2016?" (đáp án ở mục
+"Nguyên nhân cài sẵn"): mở `sales_demo`, bảng `orders`, bấm "Thêm bộ lọc" ba lần: `order_date` nằm giữa 2016-11-01
+và 2016-11-30 23:59:59, `market` bằng `Pacific Asia`, `shipping_mode` bằng `Standard Class`. Danh sách ra 323 đơn,
+đúng nhóm mà câu trả lời nêu; thêm bộ lọc `delivery_status` bằng `Late delivery` thì còn 309 đơn (95,7%).
 
 ## Sơ đồ quan hệ
 
-Sơ đồ ER và tài liệu từng bảng (cột, kiểu, mô tả, khóa) trong [docs/](docs/README.md), sinh bằng
-[tbls](https://github.com/k1LoW/tbls) (giấy phép MIT) từ database đang chạy; mô tả lấy từ `COMMENT`.
+Sơ đồ ER và tài liệu từng bảng (cột, kiểu, mô tả, khóa) trong [docs/sales_demo](docs/sales_demo/README.md) và
+[docs/edu_demo](docs/edu_demo/README.md), sinh bằng [tbls](https://github.com/k1LoW/tbls) (giấy phép MIT) từ database
+đang chạy; mô tả lấy từ `COMMENT`.
 
-![Sơ đồ ER schema edu](docs/viewpoint-edu.svg)
+![Sơ đồ ER của edu_demo](docs/edu_demo/schema.svg)
 
-![Sơ đồ ER schema sales](docs/viewpoint-sales.svg)
+![Sơ đồ ER của sales_demo](docs/sales_demo/schema.svg)
 
 Sinh lại sau khi đổi schema: chạy `load.sh`, rồi `TBLS=/đường/dẫn/tbls sh data/postgres-demo/docs.sh`. tbls không nằm
 trong repo; tải bản cho máy ở https://github.com/k1LoW/tbls/releases (bản đã dùng: v1.96.1, linux amd64). `docs.sh`
-kết nối bằng `analyst` theo `.tbls.yml`, chỉ lấy hai schema `edu` và `sales`, và xóa `docs/` trước khi sinh.
+kết nối bằng `analyst` theo `.tbls.sales_demo.yml` và `.tbls.edu_demo.yml`, mỗi database chỉ lấy schema dữ liệu của
+nó, và xóa thư mục đích trước khi sinh.
 
 Bản chữ dưới đây: mũi tên đi từ bảng "nhiều" sang bảng "một", theo khóa ngoại. PK là khóa chính.
 
 ```
-sales
+sales_demo, schema sales
   order_items (PK order_item_id)            bảng sự kiện, 1 dòng = 1 dòng hàng
     order_id    -> orders (PK order_id)
                      customer_id -> customers (PK customer_id)
@@ -98,7 +148,7 @@ sales
                      category_id -> categories (PK category_id)
                                       department_id -> departments (PK department_id)
 
-edu
+edu_demo, schema edu
   student_assessments (PK id_assessment, id_student)
     id_assessment                              -> assessments (PK id_assessment)
                                                     (code_module, code_presentation) -> courses
@@ -178,10 +228,10 @@ bưu chính nằm ở cột bang) được dời về đúng cột, địa chỉ
 Không ghi gì về hai việc sửa này vào COMMENT của bảng hay cột, để mô hình ngôn ngữ không đọc được đáp án; vì vậy sơ
 đồ và tài liệu bảng trong `docs/` (sinh từ COMMENT) cũng không nhắc tới.
 
-| Schema | Câu hỏi mong đợi | Đáp án |
+| Database | Câu hỏi mong đợi | Đáp án |
 |---|---|---|
-| `sales` | "Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so với tháng 10/2016?" | Pacific Asia và Standard Class |
-| `edu` | "Vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B?" | Scotland và nhóm tuổi 0-35 |
+| `sales_demo` | "Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so với tháng 10/2016?" | Pacific Asia và Standard Class |
+| `edu_demo` | "Vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B?" | Scotland và nhóm tuổi 0-35 |
 
 ### Giao trễ ở `sales`
 
@@ -230,13 +280,15 @@ West Midlands Region 40,4%). Tỷ lệ đạt (`Pass`) của 2014J giảm từ 3
 
 ## Đã kiểm
 
-`KEEP_STAGING=1 sh load.sh`, rồi
-`docker compose -f data/postgres-demo/docker-compose.yml exec -T demo-db psql -U demo -d company_demo -f - < data/postgres-demo/sql/verify.sql`.
-Lần chạy gần nhất (31/10/2026, có hai bước cài nguyên nhân) cả 41 dòng `ok` là `t`:
+`KEEP_STAGING=1 sh load.sh`, rồi với từng database
+`docker compose -f data/postgres-demo/docker-compose.yml exec -T demo-db psql -U demo -d sales_demo -f - < data/postgres-demo/sql/verify_sales.sql`
+(`edu_demo` với `sql/verify_edu.sql`). Lần chạy gần nhất (31/10/2026, có hai bước cài nguyên nhân) cả 42 dòng `ok` là
+`t` (25 của `sales_demo`, 17 của `edu_demo`). Lúc tách, nội dung 13 bảng của hai database mới cũng được so với
+`company_demo` (md5 của mọi dòng mỗi bảng): giống hệt, kể cả hai nguyên nhân cài sẵn.
 
 - Số dòng mỗi bảng bằng số dòng CSV hoặc số khóa khác nhau trong CSV (bảng "Số dòng"); tổng `sum_click` bằng tổng
   trên `studentVle.csv` (39 605 099).
-- Có đủ 12 khóa ngoại (edu 7, sales 5).
+- Có đủ 12 khóa ngoại (`edu_demo` 7, `sales_demo` 5).
 - Nối bảng sự kiện với mọi bảng chiều không đổi số dòng.
 - Tổng `item_total` và `profit` theo Market, tổng `sales` theo phòng ban, điểm trung bình theo kết quả cuối khóa: bằng
   đúng số tính trên `staging`. Riêng tổng `Order Item Total` theo Market còn tính lại thẳng từ CSV bằng Python
@@ -288,15 +340,16 @@ Bảng ở đây là bản đã biến đổi từ dữ liệu gốc: tách bả
 
 | File | Vai trò |
 |---|---|
-| `docker-compose.yml` | Container `xdi-demo-db`; Adminer `xdi-demo-adminer` trong profile `adminer` |
+| `docker-compose.yml` | Container `xdi-demo-db`; Adminer `xdi-demo-adminer` trong profile `adminer`; màn xem nhanh `xdi-demo-admin` trong profile `admin` |
 | `init/01_roles.sql` | Tạo người dùng `analyst`, chạy một lần khi volume trống |
-| `load.sh` | Nạp từ CSV, chạy lại được |
-| `sql/staging.sql` | Bảng staging, mọi cột text |
+| `load.sh` | Tạo `sales_demo`, `edu_demo` nếu chưa có, nạp từ CSV, chạy lại được |
+| `sql/staging_sales.sql`, `sql/staging_edu.sql` | Bảng staging của từng database, mọi cột text |
 | `sql/edu_schema.sql`, `sql/edu_load.sql` | Schema `edu` và cách đổ dữ liệu |
 | `sql/sales_schema.sql`, `sql/sales_load.sql` | Schema `sales` và cách đổ dữ liệu |
 | `sql/plant_demo_cause_sales.sql` | Cài một nguyên nhân biết trước vào `sales.orders`, bỏ qua bằng `SKIP_DEMO_CAUSE=1` |
 | `sql/plant_demo_cause_edu.sql` | Cài một nguyên nhân biết trước vào `edu.students`, bỏ qua cùng cờ |
-| `sql/grants.sql` | Quyền chỉ đọc cho `analyst` |
-| `sql/row_counts.sql`, `sql/verify.sql` | Đếm dòng; kiểm so với CSV |
-| `.tbls.yml`, `docs.sh` | Cấu hình tbls và lệnh sinh lại `docs/` |
-| `docs/` | Tài liệu bảng (Markdown) và sơ đồ ER (SVG), sinh bằng tbls, không sửa tay |
+| `sql/grants.sql` | Quyền chỉ đọc cho `analyst` trên một database |
+| `sql/row_counts.sql`, `sql/verify_sales.sql`, `sql/verify_edu.sql` | Đếm dòng; kiểm so với CSV |
+| `.tbls.sales_demo.yml`, `.tbls.edu_demo.yml`, `docs.sh` | Cấu hình tbls và lệnh sinh lại `docs/` |
+| `docs/sales_demo/`, `docs/edu_demo/` | Tài liệu bảng (Markdown) và sơ đồ ER (SVG), sinh bằng tbls, không sửa tay |
+| `admin/` | Màn xem nhanh chỉ đọc (Flask-Admin): `app.py`, `templates/`, `requirements.txt` cố định phiên bản, `Dockerfile` |

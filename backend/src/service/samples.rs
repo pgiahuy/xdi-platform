@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/samples.rs - dataset mẫu đóng gói sẵn: khi thiết lập lần đầu tạo xong workspace đầu tiên, có
-SAMPLE_DATABASE_URL thì thêm database mẫu làm nguồn và chụp các nhóm bảng của nó (service/samples_db.rs, luồng chính,
-compose trỏ vào dịch vụ demo-db của data/postgres-demo khi bật profile demo). Không có, hay chụp lỗi, thì nạp <SAMPLES_DIR>/dataco.csv thành dataset "DataCo"
+SAMPLE_DATABASE_URL thì thêm mỗi database mẫu làm một nguồn và chụp các nhóm bảng của nó (service/samples_db.rs, luồng
+chính, compose trỏ vào sales_demo và edu_demo của dịch vụ demo-db trong data/postgres-demo khi bật profile demo). Không
+có, hay không database nào chụp được, thì nạp <SAMPLES_DIR>/dataco.csv thành dataset "DataCo"
 (bảng dataco) qua đúng đường nạp file thường (service/ingest.rs, kể cả hồ sơ cột), rồi ghi các chỉ số trong
 dataco.metrics.json vào bảng metrics. Câu mẫu của mock viết cho cả hai (engine/llm/mock_answers.json). Bộ đánh giá câu
 hỏi mẫu (service/eval.rs) nạp file qua cùng hàm upload_local_file.
@@ -40,8 +41,9 @@ pub enum SeedOutcome {
     AlreadyPresent,
     /// Đã nạp, kèm số chỉ số ghi được.
     Seeded { metrics: u64 },
-    /// Đã thêm database mẫu làm nguồn và chụp bảng: số dataset, quan hệ, chỉ số.
+    /// Đã thêm database mẫu làm nguồn và chụp bảng: số nguồn (database) chụp được, số dataset, quan hệ, chỉ số.
     SeededDatabase {
+        sources: usize,
         datasets: usize,
         relations: usize,
         metrics: u64,
@@ -64,32 +66,59 @@ pub async fn seed_first_workspace(state: &AppState, user: &User, slug: &str) {
     }
 }
 
-/// Nạp dataset mẫu vào workspace của member (admin): database mẫu nếu có SAMPLE_DATABASE_URL, không thì hay lỗi thì
-/// file dataco.csv. Gọi lại trên cùng workspace không tạo thêm gì.
+/// Nạp dataset mẫu vào workspace của member (admin): các database mẫu nếu có SAMPLE_DATABASE_URL, không thì hay không
+/// database nào chụp được thì file dataco.csv. Gọi lại trên cùng workspace không tạo thêm gì.
 pub async fn seed_workspace(state: &AppState, member: &Member) -> Result<SeedOutcome, AppError> {
     if !state.config.seed_sample {
         return Ok(SeedOutcome::Disabled);
     }
-    if let Some(db) = &state.config.sample_database {
+    if let Some(outcome) = seed_databases(state, member).await {
+        return Ok(outcome);
+    }
+    seed_csv(state, member).await
+}
+
+/// Thêm từng database mẫu làm một nguồn và chụp bảng của nó. None khi không có database mẫu, hay không database nào
+/// chụp được (không chạy, chưa nạp, không có khóa mã hóa): khi đó workspace đầu tiên vẫn nhận dataco.csv để hỏi ngay.
+/// Một database lỗi trong khi database khác chụp được thì chỉ ghi cảnh báo; bảng đã chụp trước lúc lỗi (nếu có) vẫn
+/// giữ.
+async fn seed_databases(state: &AppState, member: &Member) -> Option<SeedOutcome> {
+    let databases = &state.config.sample_databases;
+    if databases.is_empty() {
+        return None;
+    }
+    let (mut sources, mut datasets, mut relations, mut metrics) = (0, 0, 0, 0);
+    let mut already_present = false;
+    for db in databases {
         match samples_db::seed_database(state, member, db).await {
             Ok(Some(seed)) => {
-                return Ok(SeedOutcome::SeededDatabase {
-                    datasets: seed.datasets,
-                    relations: seed.relations,
-                    metrics: seed.metrics,
-                })
+                sources += 1;
+                datasets += seed.datasets;
+                relations += seed.relations;
+                metrics += seed.metrics;
             }
-            Ok(None) => return Ok(SeedOutcome::AlreadyPresent),
-            // Lỗi kết nối hay chụp (database mẫu không chạy hay chưa nạp, không có khóa mã hóa): vẫn cho workspace đầu tiên một
-            // dataset để hỏi ngay. Bảng đã chụp trước lúc lỗi (nếu có) vẫn giữ.
+            Ok(None) => already_present = true,
             Err(e) => tracing::warn!(
                 error = ?e,
                 host = %db.host,
-                "cannot snapshot the sample database, loading dataco.csv instead (data/postgres-demo/README.md)"
+                database = %db.database,
+                "cannot snapshot the sample database (data/postgres-demo/README.md)"
             ),
         }
     }
-    seed_csv(state, member).await
+    if sources > 0 {
+        return Some(SeedOutcome::SeededDatabase {
+            sources,
+            datasets,
+            relations,
+            metrics,
+        });
+    }
+    if already_present {
+        return Some(SeedOutcome::AlreadyPresent);
+    }
+    tracing::warn!("no sample database could be snapshotted, loading dataco.csv instead");
+    None
 }
 
 /// Nạp dataco.csv và chỉ số của nó.

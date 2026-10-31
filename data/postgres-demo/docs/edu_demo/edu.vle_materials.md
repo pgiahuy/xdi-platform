@@ -15,12 +15,6 @@ Tài liệu và hoạt động trên hệ thống học trực tuyến (VLE) c�
 | week_from         | integer |         | true     |          |                               | Tuần dự kiến bắt đầu dùng tài liệu. Rỗng khi nguồn ghi "?"                                                      |
 | week_to           | integer |         | true     |          |                               | Tuần dự kiến thôi dùng tài liệu. Rỗng khi nguồn ghi "?"                                                         |
 
-## Viewpoints
-
-| Name                    | Definition                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [edu](viewpoint-edu.md) | Dữ liệu học tập OULAD. Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses. |
-
 ## Constraints
 
 | Name                                             | Type        | Definition                                                                                          |

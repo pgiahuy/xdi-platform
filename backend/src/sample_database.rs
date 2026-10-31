@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-/* sample_database.rs - đọc SAMPLE_DATABASE_URL: database mẫu mà thiết lập lần đầu kết nối làm nguồn và chụp bảng
-(service/samples.rs). config.rs gọi build_sample_database lúc đọc cấu hình; đúng máy và cổng của database mẫu được phép thêm
-làm nguồn (Config::source_host_allowed), vì người cài đã chọn nó.
+/* sample_database.rs - đọc SAMPLE_DATABASE_URL: các database mẫu mà thiết lập lần đầu kết nối làm nguồn và chụp
+bảng (service/samples.rs), mỗi database một nguồn. config.rs gọi build_sample_database cho từng chuỗi lúc đọc cấu
+hình; đúng máy và cổng của database mẫu được phép thêm làm nguồn (Config::source_host_allowed), vì người cài đã chọn
+nó.
 
-Chỉ nhận dạng postgres://tài-khoản:mật-khẩu@máy:cổng/database?sslmode=..., đủ cho compose (demo-db) và cho máy dev.
-Ký tự đặc biệt trong tài khoản, mật khẩu, tên database viết dạng %XX như mọi chuỗi kết nối Postgres. */
+SAMPLE_DATABASE_URL là một hay nhiều chuỗi cách nhau bằng dấu phẩy (compose mặc định hai: sales_demo và edu_demo của
+data/postgres-demo). Một chuỗi như bản cũ vẫn đọc được. Chỉ nhận dạng
+postgres://tài-khoản:mật-khẩu@máy:cổng/database?sslmode=..., đủ cho compose (demo-db) và cho máy dev. Ký tự đặc biệt
+trong tài khoản, mật khẩu, tên database viết dạng %XX như mọi chuỗi kết nối Postgres; dấu phẩy viết %2C. */
 
 use crate::config::Secret;
 
@@ -59,6 +62,15 @@ pub fn build_sample_database(raw: &str) -> Result<Option<SampleDatabase>, String
     }))
 }
 
+/// Tách SAMPLE_DATABASE_URL theo dấu phẩy, bỏ phần rỗng. Mật khẩu chứa dấu phẩy phải viết %2C, không thì chuỗi bị
+/// cắt đôi và cả hai nửa sai dạng.
+pub fn split_sample_urls(raw: &str) -> Vec<&str> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
 /// Đổi %XX thành byte tương ứng, rồi đọc kết quả là UTF-8.
 fn decode_percent(text: &str) -> Result<String, String> {
     let bytes = text.as_bytes();
@@ -99,6 +111,17 @@ mod tests {
         assert_eq!(db.user, "analyst");
         assert_eq!(db.password.expose(), "p@ss");
         assert_eq!(db.sslmode.as_deref(), Some("require"));
+    }
+
+    #[test]
+    fn several_urls_are_split_on_commas() {
+        let raw = " postgres://a:b@demo-db/sales_demo , postgres://a:b%2Cc@demo-db/edu_demo,, ";
+        let parts = split_sample_urls(raw);
+        assert_eq!(parts.len(), 2);
+        let edu = build_sample_database(parts[1]).unwrap().unwrap();
+        assert_eq!(edu.database, "edu_demo");
+        assert_eq!(edu.password.expose(), "b,c");
+        assert!(split_sample_urls(" ").is_empty());
     }
 
     #[test]
