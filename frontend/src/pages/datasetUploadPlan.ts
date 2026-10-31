@@ -2,7 +2,10 @@
 /* pages/datasetUploadPlan.ts - các hàm thuần của luồng nạp file (DatasetUpload.tsx): từ lựa chọn của người dùng ra
 danh sách lần gửi, lý do chưa nạp được, tên dataset cho từng nhóm sheet, và trạng thái hiện ra từ kết quả backend. */
 
-import type { Dataset, UploadRequest, UploadResult } from '@/api/datasets'
+import type { UploadRequest, UploadResult } from '@/api/datasets'
+
+/** Bảng của file nhận phiên bản mới (id bảng, tên hiện ra). */
+export type UploadTarget = { id: string; name: string }
 import type { SheetGroup } from '@/components/datasets/sheetGroups'
 import type { SheetOption, UploadStatus } from '@/components/datasets/types'
 
@@ -36,7 +39,7 @@ export function buildRequests(
   files: File[],
   groups: SheetGroup[],
   name: string,
-  target: Dataset | undefined,
+  target: UploadTarget | undefined,
 ): PlannedRequest[] {
   const datasetId = target?.id
   // Thêm phiên bản thì backend giữ tên dataset có sẵn, không gửi tên.
@@ -76,7 +79,7 @@ export function blocker(
   files: File[],
   sheets: SheetsState,
   groups: SheetGroup[],
-  target: Dataset | undefined,
+  target: UploadTarget | undefined,
 ): string | undefined {
   if (files.length === 0) return 'Chọn file để nạp.'
   // Gửi đi backend cũng từ chối; chặn trước để khỏi phải gửi cả file mới biết.

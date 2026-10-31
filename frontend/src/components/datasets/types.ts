@@ -2,16 +2,38 @@
 /* components/datasets/types.ts - kiểu dữ liệu các component của trang Dữ liệu nhận từ trang.
 Trang dựng các kiểu này từ dữ liệu backend (src/api/datasets.ts), để component không phụ thuộc dạng JSON của API. */
 
-export type DatasetRow = {
+/** Một bảng của dataset trên thẻ dataset (#257). */
+export type TableRow = {
   id: string
   name: string
-  /** Tên bảng dùng trong SQL. */
-  tableName: string
-  createdAt: string
-  /** Dataset chụp từ bảng database: bảng nguồn và lần chụp gần nhất. Không có với dataset nạp từ file. */
-  snapshot?: { table: string; at: string | null }
-  /** Dataset khác nối với dataset này theo khóa ngoại của database nguồn, mỗi dataset một lần (#165). */
-  related: { id: string; name: string }[]
+  /** Schema trong database nguồn; null với file. */
+  schema: string | null
+  /** Số dòng của phiên bản hiện hành; null khi chưa có dữ liệu. */
+  rowCount: number | null
+  /** Mô tả bảng ghi trong database nguồn (COMMENT ON TABLE); null khi không có. */
+  description: string | null
+}
+
+/** Một quan hệ khóa ngoại giữa hai bảng của dataset: bảng from giữ khóa, trỏ tới bảng to. */
+export type RelationRow = {
+  key: string
+  from: string
+  fromColumns: string[]
+  to: string
+  toColumns: string[]
+}
+
+/** Một dataset trên trang Dữ liệu: một database đã kết nối hay một file. */
+export type DatasetCardView = {
+  id: string
+  name: string
+  kind: 'database' | 'file'
+  /** máy:cổng/database của database; chỉ admin có (backend chỉ trả nguồn cho admin). */
+  connection?: string
+  /** Lần chụp hay nạp gần nhất; null khi chưa bảng nào có dữ liệu. */
+  updatedAt: string | null
+  tables: TableRow[]
+  relations: RelationRow[]
 }
 
 /** Một bảng nối với một bảng của nhóm theo một khóa ngoại, chụp kèm được thành dataset riêng. */

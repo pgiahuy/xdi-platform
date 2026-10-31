@@ -1,43 +1,46 @@
 // SPDX-License-Identifier: Apache-2.0
-/* pages/AskPage.tsx - trang đầu của một workspace: hỏi dữ liệu. Chọn dataset, gõ câu hỏi, xem thẻ "Đã hiểu là", đổi
+/* pages/AskPage.tsx - trang đầu của một workspace: hỏi dữ liệu. Chọn dataset (một database hay một file, #257; mở
+database ra thì ghim được một bảng bắt đầu, askScope.ts), gõ câu hỏi, xem thẻ "Đã hiểu là", đổi
 giả định hoặc trả lời câu hỏi lại; phần hiện response ở AskOutcome.tsx, pane bằng chứng ở AskEvidence.tsx.
 Quy tắc gửi lựa chọn theo hợp đồng (ARCHITECTURE mục 8): đổi giả định hay trả lời câu hỏi lại thì gửi lại đúng câu
 hỏi đó kèm choices của response gần nhất (buildChoicesWith); gõ câu khác là câu mới, choices rỗng. Response gần nhất
 giữ trong state kèm request đã gửi, vì hỏi lại cần cả hai và useMutation xóa data khi bắt đầu lần gọi mới.
-Câu gợi ý lấy từ dataset đang chọn (suggested_questions, lớp hồ sơ ngữ nghĩa viết sau khi nạp); danh sách dataset tự
-tải lại khi còn dataset đang lập hồ sơ (useDatasets, watchProfiles), nên câu gợi ý hiện ra mà không phải tải lại trang.
+Câu gợi ý lấy từ bảng ghim hay các bảng của dataset đang chọn (suggested_questions, lớp hồ sơ ngữ nghĩa viết sau khi
+nạp); danh sách dataset tự tải lại khi còn bảng đang lập hồ sơ (useCatalog, watchProfiles), nên câu gợi ý hiện ra mà không phải tải lại trang.
 Chưa hỏi gì thì khung trò chuyện là một dòng nhắc bước tiếp theo (AskIdle) cùng câu gợi ý. Pane bằng chứng chỉ hiện
 khi đã có câu trả lời; mở hay thu gọn nhớ trong localStorage (storedFlag.ts) cho mọi workspace, vì đó là thói quen của
 người dùng, không phải của từng dataset.
 Hỏi theo cuộc trò chuyện (#164): mỗi câu trả lời thành một lượt của khung trò chuyện (AskConversation.tsx), câu sau
 gửi kèm conversation_id của cuộc để mô hình đọc nó như câu tiếp nối; ô hỏi dính đáy cột chính. Đổi giả định hay trả lời
-câu hỏi lại ở lượt cuối thì thay lượt đó, ở lượt cũ hơn thì thêm lượt mới. Đổi dataset bắt đầu cuộc mới. Pane bằng
+câu hỏi lại ở lượt cuối thì thay lượt đó, ở lượt cũ hơn thì thêm lượt mới. Đổi dataset bắt đầu cuộc mới; đổi bảng ghim
+thì vẫn hỏi tiếp cuộc đang mở, vì cuộc tiếp được từ mọi bảng của cùng dataset. Pane bằng
 chứng hiện của lượt đang chọn, mặc định lượt mới nhất.
 Danh sách cuộc cũ và nút mở cuộc mới nằm ở menu "Lịch sử trò chuyện" trên thanh bên (SidebarConversations.tsx), không ở
-trang này. Đường dẫn mang dataset và id cuộc (?dataset=...&c=...), nên tải lại trang mở đúng cuộc; cuộc vừa tạo bằng câu
+trang này. Đường dẫn mang dataset, bảng ghim và id cuộc (?dataset=...&table=...&c=...), nên tải lại trang mở đúng cuộc; cuộc vừa tạo bằng câu
 đầu tiên cũng ghi id vào đường dẫn. Menu mở một cuộc (hay cuộc mới) bằng cách chuyển tới đường dẫn đó kèm dấu của menu
 (askNav.ts); AskPage thấy dấu thì dựng lại WorkspaceAsk, và trang đọc đường dẫn như khi tải lại. Mở lại một cuộc thì
 hiện các lượt đã lưu (chỉ câu hỏi và tóm tắt, backend không lưu bảng kết quả) và hỏi tiếp vào cuộc đó. Chỉ cuộc mở từ
-đường dẫn (openedId) mới tải lượt đã lưu: cuộc đang hỏi trong phiên đã có đủ response. */
+đường dẫn (openedId) mới tải lượt đã lưu: cuộc đang hỏi trong phiên đã có đủ response. Cuộc nằm trên một bảng
+(ConversationItem.table_id), nên trang tìm bảng đó trong danh sách cuộc của dataset rồi mới mở. */
 
 import { useState } from 'react'
 import { useLocation, useParams, useSearchParams } from 'react-router'
 import { buildChoicesWith, isRepeatedClarification, useAsk, type AskVariables, type ChosenOption } from '@/api/ask'
 import { useMe } from '@/api/auth'
-import { useConversation } from '@/api/conversations'
-import { isProfiling, useDatasets, type Dataset } from '@/api/datasets'
+import { useCatalog } from '@/api/catalog'
+import { useCatalogConversations, useConversation } from '@/api/conversations'
 import { AskIdle } from '@/components/ask/AskIdle'
 import { AskLayout } from '@/components/ask/AskLayout'
-import { DatasetPicker } from '@/components/ask/DatasetPicker'
+import { DatasetScopePicker } from '@/components/ask/DatasetScopePicker'
 import { QuestionForm } from '@/components/ask/QuestionForm'
 import { SuggestedQuestions } from '@/components/ask/SuggestedQuestions'
-import type { ProfileProgress } from '@/components/ask/types'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { AskDatasetStatus } from './AskDatasetStatus'
 import { AskEvidence } from './AskEvidence'
 import { AskConversation } from './AskConversation'
 import type { Answer } from './AskOutcome'
 import { isFromConversationMenu } from './askNav'
+import { buildScopeOptions, buildScopeProgress, buildScopeSuggestions, resolveAskScope } from './askScope'
 import { useEvidenceView } from './evidenceView'
 import { useStoredFlag } from './storedFlag'
 import { workspaceHref } from './workspaceNav'
@@ -59,12 +62,13 @@ export function AskPage() {
 
 function WorkspaceAsk({ ws }: { ws: string }) {
   const me = useMe()
-  const datasets = useDatasets(ws, { watchProfiles: true })
+  const datasets = useCatalog(ws, { watchProfiles: true })
   const ask = useAsk(ws)
   const [params, setParams] = useSearchParams()
   // ?q= điền sẵn ô hỏi: trang Tổng quan dữ liệu mở trang này với câu bấm từ khung tổng quan (#198).
   const [question, setQuestion] = useState(() => params.get('q') ?? '')
-  const [pickedDataset, setPickedDataset] = useState(() => params.get('dataset') ?? undefined)
+  const [pickedDataset, setPickedDataset] = useState(() => params.get('dataset'))
+  const [pickedTable, setPickedTable] = useState(() => params.get('table'))
   // Cuộc mở lại từ đường dẫn; null khi đang ở cuộc mới (kể cả cuộc vừa tạo trong phiên này).
   const [openedId, setOpenedId] = useState(() => params.get('c'))
   const [turns, setTurns] = useState<Answer[]>([])
@@ -76,12 +80,22 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   const lastTurn = turns.at(-1)
   const evidenceView = useEvidenceView(answer ? evidenceKey(answer) : '')
 
-  // Chưa chọn thì hỏi dataset mới nhất (backend trả mới tạo trước); dataset trong đường dẫn đã bị xóa cũng vậy.
-  const picked = datasets.data?.find((d) => d.id === pickedDataset)
-  const dataset = picked ?? datasets.data?.[0]
+  // Chưa chọn thì hỏi database đầu tiên; dataset trong đường dẫn đã bị xóa cũng vậy (resolveAskScope).
+  const scope = resolveAskScope(datasets.data ?? [], pickedDataset, pickedTable)
+  const { dataset, table } = scope
   const datasetId = dataset?.id ?? ''
-  // Dataset trong đường dẫn không còn thì id cuộc đi kèm cũng không mở được.
-  const opened = useConversation(ws, datasetId, picked || !pickedDataset ? openedId : null)
+  // Cuộc nằm trên bảng bắt đầu của câu đầu: tìm bảng đó trong danh sách cuộc của dataset rồi mới mở. Không có trong
+  // danh sách (dataset trong đường dẫn đã xóa, cuộc của người khác) thì không mở được.
+  const conversations = useCatalogConversations(ws, openedId === null ? '' : datasetId)
+  const openedItem = conversations.data?.find((c) => c.id === openedId)
+  const opened = useConversation(ws, openedItem?.table_id ?? '', openedItem ? openedId : null)
+  const openMissing = openedId !== null && conversations.data !== undefined && openedItem === undefined
+  const openingConversation =
+    openedId !== null &&
+    datasetId !== '' &&
+    !openMissing &&
+    !conversations.error &&
+    (conversations.isPending || opened.isPending)
   const savedTurns = opened.data?.turns ?? []
   const isAdmin = me.data?.workspaces.find((m) => m.slug === ws)?.role === 'admin'
 
@@ -99,7 +113,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
         setTurns(next)
         setSelected(next.length - 1)
         // Ghi id cuộc vào đường dẫn để tải lại trang mở đúng cuộc.
-        writeUrl(variables.datasetId, response.conversation_id, true)
+        writeUrl(variables.catalogId, variables.tableId, response.conversation_id, true)
       },
       onSettled: () => setPendingTurn(null),
     })
@@ -112,26 +126,30 @@ function WorkspaceAsk({ ws }: { ws: string }) {
     const trimmed = text.trim()
     if (!trimmed) return
     // Hỏi lại đúng câu của lượt cuối thì giữ các giả định đã đổi và thay lượt đó; sửa chữ là câu mới.
-    const same = lastTurn?.variables.datasetId === datasetId && lastTurn.variables.question === trimmed
+    const same =
+      lastTurn?.variables.catalogId === datasetId &&
+      lastTurn.variables.tableId === table?.id &&
+      lastTurn.variables.question === trimmed
     const choices = same ? lastTurn.response.choices : []
     // Xóa ô ngay khi gửi: câu đã hiện thành bong bóng của lượt đang chờ, để lại trong ô dễ tưởng chưa gửi. Hỏi lại một
     // lượt đã lưu thì ô có thể đang chứa câu khác người dùng đang gõ: chỉ xóa khi ô chứa đúng câu vừa gửi.
     setQuestion((current) => (current.trim() === trimmed ? '' : current))
-    send({ datasetId, question: trimmed, choices, conversationId }, same)
+    send({ catalogId: datasetId, tableId: table?.id, question: trimmed, choices, conversationId }, same)
   }
 
   // answered: id các câu hỏi lại vừa trả lời, để nhận ra backend hỏi lại đúng chỗ đó (isRepeatedClarification).
   const askAgainWith = (index: number, picks: ChosenOption[], answered: string[] = []) => {
     const turn = turns[index]
     if (!turn) return
-    const { datasetId: id, question: text } = turn.variables
+    const { catalogId, tableId, question: text } = turn.variables
     const choices = buildChoicesWith(turn.response.choices, picks)
-    send({ datasetId: id, question: text, choices, conversationId, answered }, index === turns.length - 1)
+    send({ catalogId, tableId, question: text, choices, conversationId, answered }, index === turns.length - 1)
   }
 
   // replace: thay mục lịch sử của trình duyệt thay vì thêm, cho thay đổi trang tự làm (cuộc vừa tạo có id).
-  const writeUrl = (dataset: string, conversation: string | null, replace = false) => {
+  const writeUrl = (dataset: string, tableId: string | undefined, conversation: string | null, replace = false) => {
     const next = new URLSearchParams({ dataset })
+    if (tableId) next.set('table', tableId)
     if (conversation) next.set('c', conversation)
     setParams(next, { replace })
   }
@@ -142,11 +160,17 @@ function WorkspaceAsk({ ws }: { ws: string }) {
     ask.reset()
   }
 
-  const changeDataset = (id: string) => {
+  // Cùng dataset, chỉ đổi bảng ghim: giữ cuộc đang mở, câu sau hỏi tiếp cuộc đó từ bảng mới.
+  const changeScope = (id: string, tableId: string | undefined) => {
+    setPickedTable(tableId ?? null)
+    if (id === datasetId) {
+      writeUrl(id, tableId, conversationId ?? null, true)
+      return
+    }
     setPickedDataset(id)
     clearTurns()
     setOpenedId(null)
-    writeUrl(id, null)
+    writeUrl(id, tableId, null)
   }
 
   const showEvidence = (index: number) => {
@@ -159,7 +183,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
   const pickSuggestion = (text: string) => askQuestion(text)
 
   const hasDatasets = (datasets.data?.length ?? 0) > 0
-  const suggestions = dataset?.suggested_questions ?? []
+  const suggestions = buildScopeSuggestions(scope)
   const canAsk = hasDatasets
   const empty = turns.length === 0 && savedTurns.length === 0
   const pendingQuestion = ask.isPending && pendingTurn === null ? (ask.variables?.question ?? null) : null
@@ -184,19 +208,23 @@ function WorkspaceAsk({ ws }: { ws: string }) {
         // Dòng dataset dính dưới thanh trên (h-16) khi cuộn cuộc trò chuyện dài: luôn thấy đang hỏi trên dataset nào.
         // Lề âm khớp lề trong của khung trò chuyện (AskLayout: p-3, từ sm p-5) để nền dính phủ hết bề ngang khung.
         <div className="sticky top-16 z-10 -mx-3 -mt-3 bg-secondary px-3 pt-3 pb-2 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5">
-          <DatasetPicker
-            datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
+          <DatasetScopePicker
+            datasets={buildScopeOptions(datasets.data ?? [])}
             datasetId={datasetId}
-            onDatasetChange={changeDataset}
-            profile={buildProfileProgress(dataset)}
+            tableId={table?.id}
+            onChange={changeScope}
+            profile={buildScopeProgress(scope)}
             disabled={ask.isPending}
           />
         </div>
       )}
-      {opened.isPending && openedId !== null && datasetId !== '' && (
-        <p className="text-sm text-muted-foreground">Đang mở cuộc trò chuyện...</p>
+      {openingConversation && <p className="text-sm text-muted-foreground">Đang mở cuộc trò chuyện...</p>}
+      {(opened.error ?? conversations.error) && (
+        <FormMessage kind="error">{`Không mở được cuộc trò chuyện: ${(opened.error ?? conversations.error)?.message}`}</FormMessage>
       )}
-      {opened.error && <FormMessage kind="error">{`Không mở được cuộc trò chuyện: ${opened.error.message}`}</FormMessage>}
+      {openMissing && turns.length === 0 && (
+        <FormMessage kind="error">Không mở được cuộc trò chuyện: không có cuộc này trên dataset đang chọn.</FormMessage>
+      )}
       {(!empty || pendingQuestion !== null) && (
         <AskConversation
           ws={ws}
@@ -218,7 +246,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
           pending={ask.isPending}
         />
       )}
-      {canAsk && empty && !ask.isPending && !opened.isFetching && (
+      {canAsk && empty && !ask.isPending && !openingConversation && (
         <div className="flex flex-col gap-4">
           {!ask.error && <AskIdle pending={false} hasSuggestions={suggestions.length > 0} />}
           {suggestions.length > 0 && (
@@ -266,13 +294,6 @@ function WorkspaceAsk({ ws }: { ws: string }) {
 // hỏi là một khóa riêng.
 function evidenceKey({ variables, response }: Answer): string {
   return `${response.query_id ?? ''}:${JSON.stringify(variables)}`
-}
-
-function buildProfileProgress(dataset: Dataset | undefined): ProfileProgress {
-  if (dataset && isProfiling(dataset)) return 'profiling'
-  if (dataset?.current_profile_status === 'failed') return 'failed'
-  if (dataset?.semantic_unavailable) return 'no_suggestions'
-  return 'ready'
 }
 
 function announce(pending: boolean, answer: Answer | undefined): string {

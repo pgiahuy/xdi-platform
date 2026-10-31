@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: Apache-2.0
+/* pages/askScope.ts - đọc dataset và bảng ghim của trang hỏi, trang Tổng quan từ đường dẫn (?dataset=...&table=...) và
+dựng dữ liệu cho ô chọn (DatasetScopePicker). Một dataset là một database hay một file (#257).
+Đường dẫn cũ ghi id bảng vào ?dataset= (trước #257 mỗi bảng là một dataset; link Tổng quan, cuộc trò chuyện đã lưu):
+id đó là một bảng thì mở dataset chứa nó và ghim đúng bảng đó, nên link cũ vẫn mở đúng chỗ. */
+
+import { isTableProfiling, type CatalogDataset, type CatalogTable } from '@/api/catalog'
+import type { ProfileProgress, ScopeDatasetOption } from '@/components/ask/types'
+
+export type AskScope = {
+  dataset: CatalogDataset | undefined
+  /** Bảng ghim; undefined khi để backend chọn (với file cũng vậy: file chỉ có một bảng). */
+  table: CatalogTable | undefined
+}
+
+/** datasetParam không khớp gì (chưa ghi, đã xóa) thì lấy database đầu tiên, không có database thì dataset đầu tiên. */
+export function resolveAskScope(catalog: CatalogDataset[], datasetParam: string | null, tableParam: string | null): AskScope {
+  const direct = catalog.find((d) => d.id === datasetParam)
+  if (direct) return { dataset: direct, table: direct.tables.find((t) => t.id === tableParam) }
+  const parent = catalog.find((d) => d.tables.some((t) => t.id === datasetParam))
+  if (parent) return { dataset: parent, table: parent.tables.find((t) => t.id === datasetParam) }
+  return { dataset: catalog.find((d) => d.kind === 'database') ?? catalog[0], table: undefined }
+}
+
+export function buildScopeOptions(catalog: CatalogDataset[]): ScopeDatasetOption[] {
+  return catalog.map((d) => ({
+    id: d.id,
+    name: d.name,
+    kind: d.kind,
+    tables: d.tables.map((t) => ({ id: t.id, name: t.name, schema: t.schema })),
+  }))
+}
+
+/** Hồ sơ của bảng ghim, không ghim thì của cả dataset: còn bảng đang lập thì báo đang lập; chỉ báo lỗi hay không có câu
+ * gợi ý khi mọi bảng như vậy, vì một bảng lỗi thì câu hỏi vẫn bắt đầu được từ bảng khác. */
+export function buildScopeProgress({ dataset, table }: AskScope): ProfileProgress {
+  const tables = table ? [table] : (dataset?.tables ?? [])
+  if (tables.length === 0) return 'ready'
+  if (tables.some(isTableProfiling)) return 'profiling'
+  if (tables.every((t) => t.current_profile_status === 'failed')) return 'failed'
+  if (tables.every((t) => t.semantic_unavailable)) return 'no_suggestions'
+  return 'ready'
+}
+
+const MAX_SUGGESTIONS = 6
+
+/** Câu gợi ý của bảng ghim; không ghim thì lấy lần lượt từng bảng một câu, để vài bảng đầu không chiếm hết chỗ. */
+export function buildScopeSuggestions({ dataset, table }: AskScope): string[] {
+  const lists = (table ? [table] : (dataset?.tables ?? [])).map((t) => t.suggested_questions)
+  const picked: string[] = []
+  for (let round = 0; picked.length < MAX_SUGGESTIONS && lists.some((l) => l.length > round); round++) {
+    for (const list of lists) {
+      const question = list[round]
+      if (question !== undefined && !picked.includes(question) && picked.length < MAX_SUGGESTIONS) picked.push(question)
+    }
+  }
+  return picked
+}

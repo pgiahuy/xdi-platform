@@ -2,23 +2,32 @@
 /* pages/DatasetsPage.tsx - trang Dữ liệu của workspace: khung kết nối database (DatabaseSources.tsx, luồng chính, #230),
 danh sách dataset, và nạp file là lựa chọn phụ cho admin: một nút mở khung nạp (DatasetUpload.tsx). Bấm "Nạp phiên bản
 mới" ở một dataset nạp từ file thì khung nạp tự mở.
+Một dataset là một database đã kết nối hay một file (#257, api/catalog.ts): mỗi dataset một thẻ (DatasetCard.tsx);
+thẻ database mở ra thấy bảng nhóm theo schema và quan hệ, "Chụp lại" chụp lại mọi bảng của database trong một giao
+dịch. Máy chủ của database lấy từ danh sách nguồn (chỉ admin đọc được; id dataset là id nguồn).
 Vai lấy từ /auth/me (đã có trong bộ đệm, AppLayout vừa đọc). Ẩn khung nạp với member chỉ để giao diện gọn;
 quyền thật nằm ở backend, member gọi thẳng API vẫn nhận 403.
-Hồ sơ cột, chỉ số và biểu đồ dựng sẵn của từng dataset ở trang Tổng quan dữ liệu (OverviewPage.tsx, #198); nút Tổng
-quan của dòng dataset mở trang đó với đúng dataset. */
+Hồ sơ cột, chỉ số và biểu đồ dựng sẵn của từng bảng ở trang Tổng quan dữ liệu (OverviewPage.tsx, #198); nút Tổng
+quan của một bảng mở trang đó với đúng bảng. */
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useMe } from "@/api/auth";
-import { useDatasets, useDeleteDataset, type Dataset } from "@/api/datasets";
-import { useSnapshot } from "@/api/sources";
-import { DatasetList } from "@/components/datasets/DatasetList";
-import type { DatasetRow } from "@/components/datasets/types";
+import {
+  useCatalog,
+  useSnapshotCatalog,
+  type CatalogDataset,
+  type CatalogSnapshotResponse,
+} from "@/api/catalog";
+import { useDeleteDataset } from "@/api/datasets";
+import { useSources, type Source } from "@/api/sources";
+import { DatasetCard, type DatasetCardProps } from "@/components/datasets/DatasetCard";
+import type { DatasetCardView, TableRow } from "@/components/datasets/types";
 import { EmptyState } from "@/components/EmptyState";
-import { FormMessage } from "@/components/forms/FormMessage";
 import { Button } from "@/components/ui/button";
 import { DatabaseSources } from "./DatabaseSources";
 import { DatasetUpload } from "./DatasetUpload";
+import type { UploadTarget } from "./datasetUploadPlan";
 import { RouterLink } from "./RouterLink";
 import { overviewHref } from "./workspaceNav";
 import { cn } from "@/lib/utils";
@@ -30,18 +39,21 @@ export function DatasetsPage() {
   return <WorkspaceDatasets key={ws} ws={ws} />;
 }
 
+type CardMessage = { id: string; kind: "error" | "success"; text: string };
+
 function WorkspaceDatasets({ ws }: { ws: string }) {
   const me = useMe();
-  const datasets = useDatasets(ws);
-  const deleteDataset = useDeleteDataset(ws);
-  const snapshot = useSnapshot(ws);
-  const [listError, setListError] = useState<string>();
-  const [target, setTarget] = useState<Dataset>();
+  const datasets = useCatalog(ws);
+  const deleteTable = useDeleteDataset(ws);
+  const snapshot = useSnapshotCatalog(ws);
+  const [message, setMessage] = useState<CardMessage>();
+  const [target, setTarget] = useState<UploadTarget>();
   const [uploadOpen, setUploadOpen] = useState(false);
   const uploadHeading = useRef<HTMLHeadingElement>(null);
 
   const isAdmin =
     me.data?.workspaces.find((m) => m.slug === ws)?.role === "admin";
+  const sources = useSources(ws, isAdmin);
   // Khung chỉ đóng khi người dùng bấm đóng: nạp phiên bản mới xong (target về undefined) hay bỏ chọn dataset vẫn giữ
   // khung, để kết quả nạp và file đã chọn còn đó.
   const showUpload = uploadOpen;
@@ -54,30 +66,41 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
     uploadHeading.current?.scrollIntoView({ block: "start" });
   }, [target]);
 
-  const addVersion = (row: DatasetRow) => {
-    setTarget(datasets.data?.find((d) => d.id === row.id));
+  // File có một bảng; phiên bản mới nạp vào bảng đó, tên hiện ra là tên dataset.
+  const addVersion = (dataset: CatalogDataset, table: TableRow) => {
+    setTarget({ id: table.id, name: dataset.name });
     setUploadOpen(true);
   };
 
-  // Chụp lại dùng đúng bảng của lần chụp trước (backend nhớ theo dataset) và chụp lại cả các dataset liên quan, nên
-  // chỉ cần nguồn và dataset.
-  const snapshotAgain = (row: DatasetRow) => {
-    const sourceId = datasets.data?.find((d) => d.id === row.id)?.source_id;
-    if (!sourceId) return;
-    snapshot.mutate(
-      { sourceId, dataset_id: row.id },
-      {
-        onError: (error) => setListError(error.message),
-        onSuccess: () => setListError(undefined),
-      },
-    );
+  const snapshotAgain = (dataset: CatalogDataset) => {
+    snapshot.mutate(dataset.id, {
+      onError: (error) => setMessage({ id: dataset.id, kind: "error", text: error.message }),
+      onSuccess: (result) => setMessage({ id: dataset.id, kind: "success", text: snapshotText(result) }),
+    });
   };
 
-  const remove = (row: DatasetRow) => {
-    deleteDataset.mutate(row.id, {
-      onError: (error) => setListError(error.message),
-      onSuccess: () => setListError(undefined),
+  const remove = (dataset: CatalogDataset, table: TableRow) => {
+    deleteTable.mutate(table.id, {
+      onError: (error) => setMessage({ id: dataset.id, kind: "error", text: error.message }),
+      onSuccess: () => setMessage(undefined),
     });
+  };
+
+  const cardProps = (dataset: CatalogDataset): DatasetCardProps => {
+    const source = sources.data?.find((s) => s.id === dataset.id);
+    const shown = message?.id === dataset.id ? message : undefined;
+    return {
+      dataset: buildCardView(dataset, source),
+      link: RouterLink,
+      overviewHref: (table) => overviewHref(ws, dataset.id, table.id),
+      metricsHref: (table) => `${table.id}/metrics`,
+      onSnapshot: isAdmin ? () => snapshotAgain(dataset) : undefined,
+      snapshotPending: snapshot.isPending && snapshot.variables === dataset.id,
+      onAddVersion: isAdmin ? (table) => addVersion(dataset, table) : undefined,
+      onDeleteTable: isAdmin ? (table) => remove(dataset, table) : undefined,
+      deletePending: deleteTable.isPending,
+      message: shown && { kind: shown.kind, text: shown.text },
+    };
   };
 
   return (
@@ -139,59 +162,26 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
           Dataset của workspace
         </h2>
         <ListBody
-          ws={ws}
           datasets={datasets.data}
           error={datasets.error}
           onRetry={() => datasets.refetch()}
           isAdmin={isAdmin}
-          onAddVersion={addVersion}
-          onSnapshotAgain={snapshotAgain}
-          snapshotPending={snapshot.isPending}
-          onDelete={remove}
-          deletePending={deleteDataset.isPending}
+          cardProps={cardProps}
         />
-        {listError && <FormMessage kind="error">{listError}</FormMessage>}
       </section>
     </div>
   );
 }
 
-/** Hai dataset có thể nối nhau theo nhiều khóa ngoại (hai chiều, hai cột); danh sách chỉ ghi mỗi dataset một lần. */
-function relatedDatasets(dataset: Dataset): { id: string; name: string }[] {
-  const byId = new Map(
-    dataset.relations.map((r) => [
-      r.dataset_id,
-      { id: r.dataset_id, name: r.name },
-    ]),
-  );
-  return [...byId.values()];
-}
-
 type ListBodyProps = {
-  ws: string;
-  datasets: Dataset[] | undefined;
+  datasets: CatalogDataset[] | undefined;
   error: Error | null;
   onRetry: () => void;
   isAdmin: boolean;
-  onAddVersion: (row: DatasetRow) => void;
-  onSnapshotAgain: (row: DatasetRow) => void;
-  snapshotPending: boolean;
-  onDelete: (row: DatasetRow) => void;
-  deletePending: boolean;
+  cardProps: (dataset: CatalogDataset) => DatasetCardProps;
 };
 
-function ListBody(props: ListBodyProps) {
-  const {
-    ws,
-    datasets,
-    error,
-    onRetry,
-    isAdmin,
-    onAddVersion,
-    onSnapshotAgain,
-    snapshotPending,
-  } = props;
-  const { onDelete, deletePending } = props;
+function ListBody({ datasets, error, onRetry, isAdmin, cardProps }: ListBodyProps) {
   if (error && !datasets) {
     return (
       <EmptyState
@@ -219,27 +209,43 @@ function ListBody(props: ListBodyProps) {
       />
     );
   }
-  const rows = datasets.map((d) => ({
-    id: d.id,
-    name: d.name,
-    tableName: d.logical_table,
-    createdAt: d.created_at,
-    snapshot: d.source_table
-      ? { table: d.source_table, at: d.current_version_at }
-      : undefined,
-    related: relatedDatasets(d),
-  }));
   return (
-    <DatasetList
-      datasets={rows}
-      overviewHref={(row) => overviewHref(ws, row.id)}
-      onAddVersion={isAdmin ? onAddVersion : undefined}
-      onSnapshotAgain={isAdmin ? onSnapshotAgain : undefined}
-      snapshotPending={snapshotPending}
-      onDelete={isAdmin ? onDelete : undefined}
-      deletePending={deletePending}
-      metricsHref={(row) => `${row.id}/metrics`}
-      link={RouterLink}
-    />
+    <ul className="flex flex-col gap-3">
+      {datasets.map((d) => (
+        <DatasetCard key={d.id} {...cardProps(d)} />
+      ))}
+    </ul>
   );
+}
+
+function buildCardView(dataset: CatalogDataset, source: Source | undefined): DatasetCardView {
+  const names = new Map(dataset.tables.map((t) => [t.id, t.name]));
+  return {
+    id: dataset.id,
+    name: dataset.name,
+    kind: dataset.kind,
+    connection: source ? `${source.host}:${source.port}/${source.database}` : undefined,
+    updatedAt: dataset.updated_at,
+    tables: dataset.tables.map((t) => ({
+      id: t.id,
+      name: t.name,
+      schema: t.schema,
+      rowCount: t.row_count,
+      description: t.description,
+    })),
+    relations: dataset.relations.map((r) => ({
+      key: r.constraint_name + r.from_dataset_id,
+      from: names.get(r.from_dataset_id) ?? r.from_dataset_name,
+      fromColumns: r.from_columns,
+      to: names.get(r.to_dataset_id) ?? r.to_dataset_name,
+      toColumns: r.to_columns,
+    })),
+  };
+}
+
+function snapshotText(result: CatalogSnapshotResponse): string {
+  const changed = result.datasets.filter((d) => d.created).length;
+  const total = result.datasets.length;
+  if (changed === 0) return `Đã chụp lại ${total} bảng, không bảng nào đổi.`;
+  return `Đã chụp lại ${total} bảng, ${changed} bảng có phiên bản mới.`;
 }

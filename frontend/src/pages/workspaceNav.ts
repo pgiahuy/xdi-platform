@@ -28,7 +28,7 @@ export const membersPath = 'members'
 /** Trang Khái niệm ngành: gói ngành của workspace, admin sửa khái niệm. */
 export const domainsPath = 'domains'
 
-/** Trang Tổng quan dữ liệu; dataset đang xem nằm trong đường dẫn (?dataset=...). */
+/** Trang Tổng quan dữ liệu; dataset và bảng đang xem nằm trong đường dẫn (?dataset=...&table=...). */
 export const overviewPath = 'overview'
 
 /** Màn Câu mẫu (#212): admin duyệt câu trả lời được đánh giá Tốt. */
@@ -52,7 +52,9 @@ export function workspaceHref(slug: string, path: string): string {
   return path ? `${base}/${path}` : base
 }
 
-/** Trang Tổng quan dữ liệu mở sẵn một dataset. */
-export function overviewHref(slug: string, datasetId: string): string {
-  return `${workspaceHref(slug, overviewPath)}?${new URLSearchParams({ dataset: datasetId }).toString()}`
+/** Trang Tổng quan dữ liệu mở sẵn một dataset, và một bảng của nó khi có tableId (#257). */
+export function overviewHref(slug: string, datasetId: string, tableId?: string): string {
+  const params = new URLSearchParams({ dataset: datasetId })
+  if (tableId) params.set('table', tableId)
+  return `${workspaceHref(slug, overviewPath)}?${params.toString()}`
 }
