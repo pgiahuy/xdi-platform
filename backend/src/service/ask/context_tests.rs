@@ -746,7 +746,7 @@ async fn dataco_sample_sends_group_values_and_exact_hints() {
     let ws = temp_workspace(&store).await;
     let v = dataco_version(&store, &ws).await;
 
-    // 53 cột, dưới ngưỡng: cả schema; cột nhóm có đủ giá trị, cột 164 nước gửi 20 giá trị nhiều dòng nhất.
+    // 53 cột, tổng giá trị dưới trần 1000: mọi cột chiều có đủ giá trị, kể cả cột 164 nước (#230).
     let context = ask(&state, &ws, &v, "Doanh thu theo thị trường").await;
     assert_eq!(context.columns.len(), 53);
     for (name, count) in [
@@ -765,13 +765,13 @@ async fn dataco_sample_sends_group_values_and_exact_hints() {
     assert_eq!(market.values[0].value, "Europe");
     assert_eq!(market.values[0].aliases, ["châu Âu"]);
     let country = column(&context, "Order Country");
-    assert_eq!(country.values.len(), 20);
-    assert!(!country.values_complete);
+    assert_eq!(country.values.len(), 164);
+    assert!(country.values_complete);
     for name in ["Customer Email", "Customer Password"] {
         assert!(column(&context, name).values.is_empty(), "{name}");
     }
     let sent: usize = context.columns.iter().map(|c| c.values.len()).sum();
-    assert!(sent <= CONTEXT_VALUES_MAX);
+    assert!(sent <= ASK_VALUES_ALL_MAX);
 
     let column_of = |context: &AskContext, phrase: &str| {
         context
@@ -957,13 +957,19 @@ fn a_choice_for_a_single_candidate_counts_as_applied() {
 /// Cột nhiều giá trị chỉ gửi 20 giá trị nhiều dòng nhất, nhưng gợi ý vẫn có cho giá trị nằm ngoài 20 giá trị đó.
 #[test]
 fn hints_reach_values_beyond_the_sample_of_a_large_column() {
-    let columns = vec![profile("Order Country", "dimension", &[])];
-    let names: Vec<String> = (1..=60).map(|i| format!("Country {i:03}")).collect();
+    // Vượt trần 1000 giá trị: cột nước (300 giá trị) chỉ gửi 200 giá trị đầu, Puerto Rico đứng cuối, ngoài 200 đó.
+    let columns = vec![
+        profile("Order Country", "dimension", &[]),
+        profile("Order City", "dimension", &[]),
+    ];
+    let names: Vec<String> = (1..=300).map(|i| format!("Country {i:03}")).collect();
+    let cities: Vec<String> = (1..=800).map(|i| format!("City {i:03}")).collect();
     let mut rows: Vec<(&str, &str, &[&str])> = names
         .iter()
         .map(|n| ("Order Country", n.as_str(), &[][..]))
         .collect();
     rows.push(("Order Country", "Puerto Rico", &[]));
+    rows.extend(cities.iter().map(|n| ("Order City", n.as_str(), &[][..])));
     let context = build_context(
         &build_phrases("doanh thu Puerto Rico"),
         columns,
@@ -971,10 +977,14 @@ fn hints_reach_values_beyond_the_sample_of_a_large_column() {
         &[],
     );
     let country = column(&context, "Order Country");
-    assert_eq!(country.values.len(), 20);
+    assert_eq!(country.values.len(), RELATED_COLUMN_VALUES_MAX);
     assert!(!country.values_complete);
     assert!(!column_values(&context, "Order Country").contains(&"Puerto Rico".to_string()));
     assert_eq!(hints(&context), [("Order Country", "Puerto Rico")]);
+    assert!(
+        column(&context, "Order City").values.is_empty(),
+        "unrelated column over the cap"
+    );
 }
 
 /// values_complete: false khi một giá trị bị bỏ vì quá dài; true với cột chiều không có giá trị nào, trừ khi giá trị
@@ -1072,4 +1082,86 @@ async fn measure_dataco_values() {
     );
     drop_workspace(&store, ws).await;
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Cột chiều name có n giá trị trong chỉ mục.
+fn value_rows(name: &str, n: usize) -> Vec<ValueRow> {
+    (0..n)
+        .map(|i| ValueRow {
+            column_id: column_id(name),
+            column_name: name.to_string(),
+            value: format!("{name} value {i}"),
+            aliases: Vec::new(),
+        })
+        .collect()
+}
+
+fn dimension_table(sizes: &[(&str, usize)]) -> (Vec<ColumnProfile>, ValueIndex) {
+    let columns = sizes
+        .iter()
+        .map(|(name, _)| profile(name, "dimension", &[]))
+        .collect();
+    let rows: Vec<ValueRow> = sizes
+        .iter()
+        .flat_map(|(name, n)| value_rows(name, *n))
+        .collect();
+    (columns, ValueIndex::build(&rows))
+}
+
+/// Tổng tới 1000 giá trị (#230): mọi cột chiều nhận đủ danh sách, kể cả cột không liên quan; cột nhạy cảm không có.
+#[test]
+fn values_under_the_cap_are_sent_for_every_column() {
+    let (mut columns, index) = dimension_table(&[("Region", 400), ("City", 400), ("Email", 150)]);
+    columns[2].is_sensitive = true;
+    apply_group_values(&mut [(&mut columns, &index)]);
+    assert_eq!(columns[0].values.len(), 400);
+    assert_eq!(columns[1].values.len(), 400);
+    assert!(columns[0].values_complete && columns[1].values_complete);
+    assert!(columns[2].values.is_empty() && !columns[2].values_complete);
+}
+
+/// Vượt 1000 giá trị: chỉ cột liên quan nhận đủ giá trị (tới 200); cột lượt phân loại chọn được thêm giá trị; cột không
+/// liên quan không có danh sách; cột nhạy cảm không bao giờ có, kể cả khi liên quan.
+#[test]
+fn values_over_the_cap_go_to_related_columns_only() {
+    let (mut columns, index) = dimension_table(&[
+        ("Region", 120),
+        ("City", 600),
+        ("Country", 300),
+        ("Email", 150),
+        ("Segment", 3),
+    ]);
+    columns[0].matched = true;
+    columns[3].is_sensitive = true;
+    columns[3].matched = true;
+    apply_picked_columns("t", &mut columns, &[("t".to_string(), "City".to_string())]);
+    apply_group_values(&mut [(&mut columns, &index)]);
+    let sent: Vec<(usize, bool)> = columns
+        .iter()
+        .map(|c| (c.values.len(), c.values_complete))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            (120, true),
+            (RELATED_COLUMN_VALUES_MAX, false),
+            (0, false),
+            (0, false),
+            (0, false)
+        ]
+    );
+}
+
+/// Trần 1000 tính chung cho mọi bảng của câu hỏi: hai bảng mỗi bảng 600 giá trị là vượt.
+#[test]
+fn the_value_cap_is_shared_by_the_tables() {
+    let (mut first, first_index) = dimension_table(&[("Segment", 600)]);
+    let (mut second, second_index) = dimension_table(&[("City", 600)]);
+    second[0].join_key = true;
+    apply_group_values(&mut [(&mut first, &first_index), (&mut second, &second_index)]);
+    assert!(first[0].values.is_empty());
+    assert_eq!(second[0].values.len(), RELATED_COLUMN_VALUES_MAX);
+    let (mut small, small_index) = dimension_table(&[("Segment", 300)]);
+    apply_group_values(&mut [(&mut small, &small_index), (&mut second, &second_index)]);
+    assert_eq!((small[0].values.len(), second[0].values.len()), (300, 600));
 }

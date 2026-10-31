@@ -23,7 +23,10 @@ Các bước:
   mới rút về dòng gọn (brief: tên, kiểu, vai trò). Cột liên quan: cột khớp một cụm hay có gợi ý giá trị, cột lượt
   phân loại chọn (picked), cột thời gian, cột khóa nối bảng, cột dùng trong công thức chỉ số. Khớp cụm vẫn dùng cho
   gợi ý giá trị, câu hỏi lại và để chọn cột liên quan, không dùng để bỏ cột.
-- Danh sách giá trị của từng cột chiều được gửi (build_column_values), và gợi ý khớp chính xác (build_value_hints). */
+- Danh sách giá trị của cột chiều chỉ đi vào lượt viết SQL, không vào lượt phân loại (apply_group_values): tổng giá trị
+  của mọi cột chiều không nhạy cảm tới ASK_VALUES_ALL_MAX thì gửi đủ mọi cột; vượt thì chỉ cột liên quan nhận đủ giá
+  trị, tới RELATED_COLUMN_VALUES_MAX mỗi cột. Gợi ý khớp chính xác (build_value_hints) tìm trên danh sách đầy đủ, nên
+  cột có giá trị khớp câu hỏi luôn là cột liên quan. Cột nhạy cảm không bao giờ có giá trị. */
 
 use std::collections::{HashMap, HashSet};
 
@@ -57,10 +60,18 @@ pub const COLUMN_VALUES_ALL_MAX: usize = 50;
 /// cách viết giá trị (ngôn ngữ, hoa thường, viết tắt). DataCo: Order Country có 164 nước.
 pub const COLUMN_VALUES_SOME: usize = 20;
 
-/// Tổng số giá trị (không tính bí danh) gửi trong một ngữ cảnh. Vượt thì hạ một trần chung cho mọi cột tới khi tổng
-/// vừa: cột nhiều giá trị bị cắt trước, cột ít giá trị (thường là cột người dùng hay nhắc tên giá trị: thị trường,
-/// phân khúc) giữ đủ. Số đo trên DataCo thật ở chú thích của build_column_values.
+/// Trần tổng giá trị của build_column_values (prompt hồ sơ ngữ nghĩa, service/semantic/mod.rs). Vượt thì hạ một trần
+/// chung cho mọi cột tới khi tổng vừa. Ngữ cảnh hỏi dùng ASK_VALUES_ALL_MAX, không dùng trần này.
 pub const CONTEXT_VALUES_MAX: usize = 400;
+
+/// Ngữ cảnh hỏi: tổng giá trị (không tính bí danh) của mọi cột chiều không nhạy cảm của mọi bảng tới ngần này thì gửi đủ
+/// danh sách của mọi cột (#230), để mô hình ánh xạ được cách gọi của người dùng sang đúng giá trị ở cả cột câu hỏi
+/// không gọi tên. Trên mức này chỉ cột liên quan có danh sách. 1000 giá trị cỡ 10 000 đến 20 000 ký tự.
+pub const ASK_VALUES_ALL_MAX: usize = 1000;
+
+/// Khi tổng vượt ASK_VALUES_ALL_MAX, mỗi cột liên quan nhận tới ngần này giá trị nhiều dòng nhất; cũng là số giá trị tối
+/// đa hồ sơ lưu cho một cột (service/profile.rs), nên thường là đủ danh sách.
+pub const RELATED_COLUMN_VALUES_MAX: usize = 200;
 
 /// Một cột như prompt cần.
 #[derive(Debug, Clone, PartialEq)]
@@ -414,9 +425,10 @@ pub fn apply_picked_columns(
     }
 }
 
-/// Số giá trị gửi cho mỗi cột, theo thứ tự của counts (số giá trị có của từng cột): đủ khi tới COLUMN_VALUES_ALL_MAX,
-/// COLUMN_VALUES_SOME khi nhiều hơn; tổng vượt CONTEXT_VALUES_MAX thì hạ một trần chung cho mọi cột, từ số lớn nhất
-/// xuống, tới khi tổng vừa.
+/// Số giá trị gửi cho mỗi cột trong prompt hồ sơ ngữ nghĩa (service/semantic/mod.rs), theo thứ tự của counts (số giá
+/// trị có của từng cột): đủ khi tới COLUMN_VALUES_ALL_MAX, COLUMN_VALUES_SOME khi nhiều hơn; tổng vượt
+/// CONTEXT_VALUES_MAX thì hạ một trần chung cho mọi cột, từ số lớn nhất xuống, tới khi tổng vừa. Trước #230 ngữ cảnh
+/// hỏi cũng chia giá trị bằng hàm này; số đo dưới đây là của lúc đó.
 ///
 /// Đã đo trên DataCo thật (DataCoSupplyChainDataset.csv, 180 519 dòng, 53 cột), bằng test measure_dataco_values ở
 /// ask/context_tests.rs: file đi qua đúng đường nạp (materialize, rồi lập hồ sơ của service/profile.rs), Customer Email
@@ -445,10 +457,13 @@ pub fn build_column_values(counts: &[usize]) -> Vec<usize> {
     wanted.into_iter().map(|w| w.min(cap)).collect()
 }
 
-/// Gắn danh sách giá trị vào các cột chiều không nhạy cảm, không gọn (brief), theo build_column_values. Mỗi phần tử của tables là
-/// cột của một bảng cùng chỉ mục giá trị của phiên bản bảng đó; mọi bảng của một câu hỏi chung một trần
-/// CONTEXT_VALUES_MAX (#213), nên thêm bảng liên quan không làm prompt dài gấp mấy lần. Gọi lại trên cột đã có giá trị
-/// thì giá trị được tính lại từ đầu.
+/// Gắn danh sách giá trị vào các cột chiều không nhạy cảm, không gọn (brief), cho lượt viết SQL. Mỗi phần tử của tables
+/// là cột của một bảng cùng chỉ mục giá trị của phiên bản bảng đó; mọi bảng của một câu hỏi chung một trần (#213):
+/// - tổng giá trị của mọi cột đó tới ASK_VALUES_ALL_MAX: mọi cột nhận đủ danh sách;
+/// - vượt: chỉ cột liên quan (is_related, gồm cột lượt phân loại chọn) nhận tới RELATED_COLUMN_VALUES_MAX giá trị, cột
+///   khác không có danh sách (values_complete = false, nên luật filter_value_not_found không kết luận trên chúng).
+///
+/// Gọi lại trên cột đã có giá trị thì giá trị được tính lại từ đầu.
 pub fn apply_group_values(tables: &mut [(&mut Vec<ColumnProfile>, &ValueIndex)]) {
     // (bảng, cột, giá trị của cột) của mọi cột có danh sách giá trị.
     let mut found: Vec<(usize, usize, &ColumnValues)> = Vec::new();
@@ -458,7 +473,7 @@ pub fn apply_group_values(tables: &mut [(&mut Vec<ColumnProfile>, &ValueIndex)])
         for (i, column) in columns.iter_mut().enumerate() {
             column.values = Vec::new();
             column.values_complete = false;
-            // Cột gọn không có danh sách giá trị, và không chiếm phần của trần CONTEXT_VALUES_MAX.
+            // Cột gọn không có danh sách giá trị.
             if column.role != ProfileRole::Dimension.as_str() || column.is_sensitive || column.brief
             {
                 continue;
@@ -470,11 +485,19 @@ pub fn apply_group_values(tables: &mut [(&mut Vec<ColumnProfile>, &ValueIndex)])
             }
         }
     }
-    let counts: Vec<usize> = found.iter().map(|(_, _, v)| v.values.len()).collect();
-    for ((t, i, values), sent) in found.into_iter().zip(build_column_values(&counts)) {
+    let total: usize = found.iter().map(|(_, _, v)| v.values.len()).sum();
+    let send_all = total <= ASK_VALUES_ALL_MAX;
+    for (t, i, values) in found {
         let column = &mut tables[t].0[i];
+        let sent = if send_all {
+            values.values.len()
+        } else if is_related(column) {
+            values.values.len().min(RELATED_COLUMN_VALUES_MAX)
+        } else {
+            0
+        };
         column.values = values.values[..sent].to_vec();
-        column.values_complete = sent == values.values.len() && !values.dropped;
+        column.values_complete = sent > 0 && sent == values.values.len() && !values.dropped;
     }
 }
 

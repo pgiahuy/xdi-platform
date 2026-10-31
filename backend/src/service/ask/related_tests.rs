@@ -5,14 +5,12 @@ bước và số bảng, và prompt SQL nhiều bảng của ask/prompt.rs (kh�
 
 use uuid::Uuid;
 
-use crate::engine::store::{ColumnAggregation, DatasetRelation, MetricDefinition, ValueRow};
-use crate::service::ask::context::{
-    apply_group_values, apply_metadata_cap, AskContext, ColumnProfile, CONTEXT_VALUES_MAX,
-};
+use crate::engine::store::{ColumnAggregation, DatasetRelation, MetricDefinition};
+use crate::service::ask::context::{apply_metadata_cap, AskContext, ColumnProfile};
 use crate::service::ask::group_prompt::{GroupPrompt, JoinLine, TableContext};
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput, PROMPT_MAX_CHARS};
 use crate::service::ask::related::{build_group_ids, MAX_GROUP_TABLES};
-use crate::service::ask::values::{ValueEntry, ValueIndex};
+use crate::service::ask::values::ValueEntry;
 use crate::service::prompt_fixtures::check_fixture;
 
 /// Id cố định theo số, để lời báo của assert đọc được.
@@ -435,34 +433,4 @@ fn metadata_cap_counts_every_table() {
 
     apply_metadata_cap(&mut [&mut items, &mut orders]);
     assert_eq!((brief(&items), brief(&orders)), (0, 0));
-}
-
-/// Hai bảng, mỗi bảng mười cột chiều 40 giá trị (800 giá trị, mỗi bảng riêng đã 400): tổng gửi không vượt
-/// CONTEXT_VALUES_MAX, và cột của cả hai bảng đều có giá trị.
-#[test]
-fn value_budget_is_shared_by_the_tables() {
-    let table = |name: &str| {
-        let mut columns = Vec::new();
-        let mut rows = Vec::new();
-        for c in 0..10 {
-            let column = column(&format!("{name}_{c}"), "VARCHAR", "dimension");
-            rows.extend((0..40).map(|i| ValueRow {
-                column_id: column.id,
-                column_name: column.name.clone(),
-                value: format!("{name} {c} {i}"),
-                aliases: Vec::new(),
-            }));
-            columns.push(column);
-        }
-        (columns, ValueIndex::build(&rows))
-    };
-    let (mut first, first_index) = table("segment");
-    let (mut second, second_index) = table("city");
-    apply_group_values(&mut [(&mut first, &first_index), (&mut second, &second_index)]);
-    let count = |columns: &[ColumnProfile]| columns.iter().map(|c| c.values.len()).sum::<usize>();
-    assert!(count(&first) + count(&second) <= CONTEXT_VALUES_MAX);
-    assert_eq!(count(&first), count(&second));
-    assert!(first
-        .iter()
-        .all(|c| !c.values.is_empty() && !c.values_complete));
 }
