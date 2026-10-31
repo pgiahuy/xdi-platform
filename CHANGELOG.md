@@ -95,6 +95,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Fixed
 
+- Chạy bằng Docker Compose: `GEMINI_BACKUP_API_KEY` đặt trong `.env` nay tới được backend; trước đây compose không truyền biến này nên khóa dự phòng không có tác dụng.
 - Điều kiện lọc có câu con hay "hoặc" không còn in nguyên câu SQL vào câu trả lời và thẻ "Hệ thống đã hiểu là": hai vế "hoặc" đọc thành lời, câu con thành "theo một giá trị tính từ dữ liệu (xem câu SQL)" (#201).
 - Câu thường nối bảng (như orders với order_items): thẻ "Hệ thống đã hiểu là" và câu trả lời đọc hồ sơ cột của cả bảng nối, nên gọi số đo bằng mô tả tiếng Việt của cột, như "tổng doanh thu trước chiết khấu của mục hàng" thay cho "Tổng sales" (#201).
 - Câu hỏi ra kết quả toàn ô trống (ví dụ hỏi doanh thu của một năm không có dữ liệu): câu trả lời không còn cụt kiểu "Tổng Sales là ." mà nói rõ không có dữ liệu khớp; cảnh báo kèm khoảng thời gian dữ liệu có khi câu lọc theo thời gian; lời trả lời của mô hình được nhắc lại số có trong câu hỏi (năm, top N) mà không bị bước kiểm số loại.
