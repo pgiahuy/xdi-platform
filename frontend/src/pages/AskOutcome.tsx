@@ -156,7 +156,12 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
   return (
     <>
       {response.answer_text && (
-        <AnswerText text={response.answer_text} byModel={response.answer_text_by_model ?? false} />
+        <AnswerText
+          text={response.answer_text}
+          byModel={response.answer_text_by_model ?? false}
+          // Đoạn trả lời là lời của phần giải thích khi do mô hình viết, nên các chỗ chưa rõ của lời đó đi kèm.
+          warnings={response.answer_text_by_model ? (response.insight?.summary_warnings ?? []) : []}
+        />
       )}
       {response.insight ? (
         // Câu thường: phần giải thích theo hình dạng kết quả (#227). Phân rã tự động của nó (explanation) chỉ hiện ở tab

@@ -515,6 +515,8 @@ fn build_group_insight(rows: &[(&str, f64)]) -> Insight {
         title: parts.title,
         points: parts.points,
         summary_by_model: false,
+        summary_warnings: Vec::new(),
+        summary_verdict: None,
         notable: parts.notable,
     }
 }

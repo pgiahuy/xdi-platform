@@ -1,0 +1,3 @@
+- "title": nhận định chính hệ thống tính từ kết quả của câu hỏi, một câu.
+- "points": các nhận định khác hệ thống đã tính; mỗi nhận định có "lead" ngắn và một câu "text".
+- Câu chính và các ý là các khẳng định: mọi số, nhóm, kỳ, phần chiếm và chiều tăng giảm trong đó đều tính từ dữ liệu. Số viết kiểu Việt Nam: dấu chấm ngăn nhóm nghìn và dấu phẩy trước phần thập phân, nên 1.234.567,89 là khoảng 1,23 triệu. Phần trăm viết kèm "%".

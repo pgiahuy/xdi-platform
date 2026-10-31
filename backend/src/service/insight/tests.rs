@@ -20,7 +20,7 @@ use crate::engine::llm::mock::Mock;
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::store::ProfileColumn;
 use crate::error::AppError;
-use crate::service::ask::contract::{ColumnRole, InsightKind, ResultTable};
+use crate::service::ask::contract::{AnswerVerdict, ColumnRole, InsightKind, ResultTable};
 use crate::service::ask::fanout::JoinLink;
 use crate::service::explain::breakdown::{run_code_query, CodeQuery, QueryEnv, ASK_STOP_HINT};
 use crate::service::explain::check_tests::column;
@@ -373,10 +373,15 @@ fn insight_prompt_matches_the_fixture() {
     );
 }
 
-/// Mô hình giả trả một câu viết sẵn cho task insight, và đếm số lần được gọi.
+/// Mô hình giả trả một câu viết sẵn cho task insight, và một kết luận viết sẵn cho mô hình chấm (task judge).
 struct Writer {
     text: String,
+    verdict: &'static str,
 }
+
+const MATCH: &str = r#"{"verdict": "match", "problems": []}"#;
+const UNCLEAR: &str = r#"{"verdict": "warning", "problems": ["Chữ \"gấp đôi\" chưa rõ"]}"#;
+const WRONG: &str = r#"{"verdict": "mismatch", "problems": ["Lời nói ngược chiều"]}"#;
 
 #[async_trait]
 impl LlmProvider for Writer {
@@ -385,8 +390,11 @@ impl LlmProvider for Writer {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        assert_eq!(request.task, LlmTask::Insight);
-        Ok(self.text.clone())
+        match request.task {
+            LlmTask::Insight => Ok(self.text.clone()),
+            LlmTask::Judge => Ok(self.verdict.to_string()),
+            other => panic!("unexpected task {other:?}"),
+        }
     }
 }
 
@@ -408,6 +416,7 @@ async fn narration_falls_back_to_code_text_when_the_model_fails_or_is_off() {
     assert!(narrated.summary.starts_with(&parts.title));
     let wrong = Writer {
         text: "Doanh thu tăng 999.".to_string(),
+        verdict: MATCH,
     };
     assert!(
         !narrate_insight(&wrong, "q", &parts, true, Duration::from_secs(5), &[])
@@ -416,12 +425,11 @@ async fn narration_falls_back_to_code_text_when_the_model_fails_or_is_off() {
     );
     let right = Writer {
         text: "Tháng 11/2017 tăng 400 (100%) so với Tháng 10/2017.".to_string(),
+        verdict: MATCH,
     };
-    assert!(
-        narrate_insight(&right, "q", &parts, true, Duration::from_secs(5), &[])
-            .await
-            .by_model
-    );
+    let narrated = narrate_insight(&right, "q", &parts, true, Duration::from_secs(5), &[]).await;
+    assert!(narrated.by_model);
+    assert_eq!(narrated.verdict, Some(AnswerVerdict::Match));
     assert!(
         !narrate_insight(&right, "q", &parts, false, Duration::from_secs(5), &[])
             .await
@@ -608,4 +616,34 @@ async fn text_month_keys_are_read_as_a_time_series() {
         .title
         .starts_with("Tháng 11/2017 đổi mạnh nhất"));
     assert!(outcome.explanation.is_some());
+}
+
+/// Cổng 2 (#201): mô hình chấm nói sai ở mọi lần viết thì dùng câu của code, kết luận mismatch, ghi nhật ký lỗi; chỉ
+/// thấy chỗ chưa rõ thì giữ lời của mô hình kèm các chỗ đó, kết luận warning.
+#[tokio::test]
+async fn judge_verdict_decides_whether_the_model_text_is_used() {
+    let parts = checked_parts();
+    let text = "Tháng 11/2017 tăng 400 (100%) so với Tháng 10/2017.".to_string();
+    let wrong = Writer {
+        text: text.clone(),
+        verdict: WRONG,
+    };
+    let narrated = narrate_insight(&wrong, "q", &parts, true, Duration::from_secs(5), &[]).await;
+    assert!(!narrated.by_model);
+    assert_eq!(narrated.verdict, Some(AnswerVerdict::Mismatch));
+    assert!(narrated.failure.is_some());
+    assert!(narrated
+        .step
+        .detail
+        .unwrap()
+        .contains("Lời nói ngược chiều"));
+
+    let unclear = Writer {
+        text,
+        verdict: UNCLEAR,
+    };
+    let narrated = narrate_insight(&unclear, "q", &parts, true, Duration::from_secs(5), &[]).await;
+    assert!(narrated.by_model);
+    assert_eq!(narrated.verdict, Some(AnswerVerdict::Warning));
+    assert_eq!(narrated.warnings, ["Chữ \"gấp đôi\" chưa rõ"]);
 }

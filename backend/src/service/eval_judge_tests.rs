@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/eval_judge_tests.rs - test bộ đo mô hình chấm (service/eval_judge.rs, #201): file ca eval/judge.json đọc được,
-có cả ca đúng lẫn ca sai; báo cáo đếm đúng số ca đúng, bỏ lọt, chỉ cảnh báo, chặn nhầm, cảnh báo thừa và không chấm
+có cả ca đúng lẫn ca sai, có ca của cả câu "tại sao" lẫn câu thường; báo cáo đếm đúng số ca đúng, bỏ lọt, chỉ cảnh báo, chặn nhầm, cảnh báo thừa và không chấm
 được. */
 
 use std::path::Path;
 
-use crate::service::eval_judge::{build_report, load_judge_cases, JudgeOutcome};
+use crate::service::eval_judge::{build_report, load_judge_cases, CaseFacts, JudgeOutcome};
 
 #[test]
 fn judge_cases_file_is_valid() {
@@ -13,6 +13,12 @@ fn judge_cases_file_is_valid() {
     let cases = load_judge_cases(&path).expect("eval/judge.json");
     let matches = cases.cases.iter().filter(|c| c.expected == "match").count();
     assert!(matches > 0 && matches < cases.cases.len());
+    let plain = cases
+        .cases
+        .iter()
+        .filter(|c| matches!(c.facts, CaseFacts::Plain(_)))
+        .count();
+    assert!(plain > 0 && plain < cases.cases.len());
     for case in &cases.cases {
         assert_eq!(
             case.expected == "match",
@@ -20,12 +26,17 @@ fn judge_cases_file_is_valid() {
             "{}",
             case.id
         );
-        assert!(!case.facts.claims.is_empty(), "{}", case.id);
-        assert!(
-            !case.facts.base.is_empty() && !case.facts.compare.is_empty(),
-            "{}",
-            case.id
-        );
+        match &case.facts {
+            CaseFacts::Why(facts) => {
+                assert!(!facts.claims.is_empty(), "{}", case.id);
+                assert!(
+                    !facts.base.is_empty() && !facts.compare.is_empty(),
+                    "{}",
+                    case.id
+                );
+            }
+            CaseFacts::Plain(facts) => assert!(!facts.title.is_empty(), "{}", case.id),
+        }
     }
 }
 

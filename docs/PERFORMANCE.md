@@ -60,6 +60,8 @@ các câu SQL từng chiều của phân rã chạy cùng lúc; bước `explain
 | Câu thường | 4 | 3,87 s | 3,81 s | 3,25 | 7 272 | 519 | 0,0035 USD |
 | Câu "vì sao" | 3 | 5,66 s | 5,56 s | 4,0 | 7 958 | 1 011 | 0,0049 USD |
 
+Sau lượt đo này, #241 thêm cổng chấm (`judge`) cho lời của câu thường, nên câu thường có thêm một lượt gọi mô hình khi lời do mô hình viết; số của câu thường ở trên chưa gồm lượt đó và chưa đo lại.
+
 Câu thứ năm ("Tỷ lệ giao trễ theo phương thức vận chuyển") lỗi 502 sau 61 giây: lượt viết SQL chờ hết
 `GEMINI_TIMEOUT_SECS` (60 giây) mà Gemini không trả lời, lần hỏi lại trả 503. Cùng lượt đo, phần cột của hồ sơ
 `orders` mất 57 giây cho một lượt gọi thường mất 2 đến 4 giây. Thời gian trung vị vì thế không nói hết: thỉnh thoảng
