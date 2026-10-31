@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import type { Answer } from './AskOutcome'
 import { buildBreakdown } from './breakdownView'
 import { buildLeadFirst, buildLeadNames } from './drillColumns'
+import { buildRowsSource } from './drillSource'
 import type { EvidenceView } from './evidenceView'
 import { buildCellIndexes, buildResultView } from './resultView'
 
@@ -95,6 +96,7 @@ export function AskEvidence({ ws, answer, pending, view }: Props) {
       sql: drill.data.sql,
       result,
       page: { offset, limit: drillPageSize, total },
+      source: buildRowsSource(target, drill.data),
     }
   })()
 
