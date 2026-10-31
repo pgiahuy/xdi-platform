@@ -71,7 +71,7 @@ export function buildSourceTableGroups(tables: SourceTable[], choice: TickChoice
       sizeBytes: t.size_bytes,
       columnCount: t.column_count,
       comment: t.comment,
-      overRowLimit: t.over_row_limit,
+      overLimit: t.over_limit,
       state: t.state,
       reason: t.reason,
       warning: ticked ? null : untickWarning(t, (name) => tickedNames.has(name)),

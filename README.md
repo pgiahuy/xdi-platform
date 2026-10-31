@@ -41,7 +41,7 @@ Thử luồng database với database mẫu nhiều bảng (hai database `sales_
 13 bảng có khóa ngoại, [data/postgres-demo](data/postgres-demo/README.md)): tải và nạp một lần (`sh data/download.sh
 dataco`, `sh data/download.sh oulad`, `sh data/postgres-demo/load.sh`, rồi gỡ container chạy riêng đó, xem README ở
 đó), sau đó chạy `docker compose --profile demo up -d --build` trước lần thiết lập đầu. Thiết lập lần đầu thêm hai
-database này làm hai nguồn và chụp 12 bảng kèm quan hệ thành dataset; câu mẫu của `mock` trên đó có "Tỷ lệ bỏ học theo môn học" trên `students` và
+database này làm hai nguồn và chụp 13 bảng kèm quan hệ thành dataset; câu mẫu của `mock` trên đó có "Tỷ lệ bỏ học theo môn học" trên `students` và
 "Doanh thu theo phân khúc khách hàng" trên `order_items` (nối `orders`, `customers`).
 
 Build lần đầu biên dịch Rust và DuckDB (đo trên máy 16 nhân: 8 phút) và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy

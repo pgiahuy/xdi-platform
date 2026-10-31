@@ -50,8 +50,8 @@ export type SourceTableRow = {
   sizeBytes: number | null
   columnCount: number
   comment: string | null
-  /** Ước lượng đã quá SOURCE_MAX_ROWS: chụp thì chỉ lưu cấu trúc. */
-  overRowLimit: boolean
+  /** Trần mà riêng bảng này đã vượt theo thống kê của Postgres (chụp thì chỉ lưu cấu trúc); null khi vừa. */
+  overLimit: 'row_limit' | 'size_limit' | null
   /** Nguồn đang giữ bảng: đã chụp, chỉ có cấu trúc (kèm lý do), hay chưa. */
   state: 'snapshotted' | 'metadata_only' | null
   reason: string | null
