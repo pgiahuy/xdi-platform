@@ -31,6 +31,12 @@ pub const SQL: PromptFile = PromptFile {
     text: include_str!("../../prompts/sql.txt"),
 };
 
+/// Quan hệ và luật nối bảng của prompt SQL khi câu hỏi đọc được bảng liên quan (service/ask/prompt.rs, #213).
+pub const SQL_JOINS: PromptFile = PromptFile {
+    name: "sql_joins.txt",
+    text: include_str!("../../prompts/sql_joins.txt"),
+};
+
 /// Luật của trường unanswerable, chung cho prompt SQL và prompt form câu "tại sao".
 pub const UNANSWERABLE_RULE: PromptFile = PromptFile {
     name: "unanswerable_rule.txt",
@@ -208,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "prompt file sql.txt: no value for {{table}}")]
+    #[should_panic(expected = "prompt file sql.txt: no value for {{tables}}")]
     fn fill_panics_with_the_file_name() {
         fill(&SQL, &[("unanswerable_rule", "")]);
     }

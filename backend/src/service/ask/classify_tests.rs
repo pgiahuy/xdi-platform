@@ -38,6 +38,7 @@ fn column(name: &str, aliases: &[&str], description: Option<&str>) -> ColumnProf
         matched: false,
         unit: None,
         aggregation: crate::engine::store::ColumnAggregation::Sum,
+        join_key: false,
     }
 }
 

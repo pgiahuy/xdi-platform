@@ -182,6 +182,7 @@ impl Dataco {
                 domain: None,
                 choices,
                 history: "",
+                group: None,
             },
             columns: &self.columns,
             values: &self.values,

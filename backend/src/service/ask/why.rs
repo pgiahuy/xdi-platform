@@ -115,6 +115,8 @@ pub(super) async fn ask_why(
         sql_guarded: outcome.sql_guarded.as_deref(),
         result: outcome.result.as_ref(),
         explanation: build_stored_explanation(&outcome)?,
+        // Câu "tại sao" chỉ đọc dataset đang hỏi: record_query ghi cặp của nó.
+        read_versions: Vec::new(),
     };
     let target = (dataset, version);
     let query_id = record_query(state, member, target, question, recorded, &mut steps).await?;

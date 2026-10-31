@@ -20,6 +20,8 @@ export type SqlView = {
   guarded: string | null
   /** Vì sao không có bản sau guard, ví dụ lý do guard từ chối. */
   guardedMissing: string | null
+  /** Tên các bảng câu đã chạy đọc, như SQL viết; rỗng khi câu chưa có kết quả. */
+  tablesRead: string[]
 }
 
 export type GroupView = {

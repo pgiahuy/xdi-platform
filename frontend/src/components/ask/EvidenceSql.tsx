@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/EvidenceSql.tsx - tab SQL của pane bằng chứng: bản mô hình viết và bản sau guard (bản đã chạy), mỗi
 bản một nút chép. Dòng guard thêm chỉ được đánh dấu ngay trong khung (SqlCode.tsx), không kèm câu chú thích bên dưới:
-chi tiết bước guard (như giới hạn số dòng) đã có ở tab Các bước, nhắc lại ở đây chỉ làm tab dài thêm với người đọc
-không cần nó. Câu SQL hiện đã xuống dòng theo mệnh đề (SqlCode.tsx); nút chép chép nguyên văn câu backend gửi, không
-chép bản đã định dạng, để câu dán sang công cụ khác đúng là câu đã chạy. */
+chi tiết bước guard (như giới hạn số dòng) đã có ở tab Các bước, nhắc lại ở đây chỉ làm tab dài thêm với người đọc không
+cần nó. Dưới bản đã chạy là các bảng câu đã đọc: câu hỏi trên dataset chụp từ database có thể nối thêm bảng liên quan,
+và người đọc cần biết số đến từ những bảng nào. Câu SQL hiện đã xuống dòng theo mệnh đề (SqlCode.tsx); nút chép chép
+nguyên văn câu backend gửi, không chép bản đã định dạng, để câu dán sang công cụ khác đúng là câu đã chạy. */
 
 import { useState } from 'react'
 import { Copy } from 'lucide-react'
@@ -26,6 +27,9 @@ export function EvidenceSql({ sql }: Props) {
           <h3 className="text-xs font-semibold tracking-wider text-label uppercase">Sau guard</h3>
           <p className="text-sm text-muted-foreground">{sql.guardedMissing}</p>
         </section>
+      )}
+      {sql.tablesRead.length > 0 && (
+        <p className="text-sm text-muted-foreground">Bảng đã đọc: {sql.tablesRead.join(', ')}</p>
       )}
     </div>
   )

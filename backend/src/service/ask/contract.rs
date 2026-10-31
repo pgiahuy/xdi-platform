@@ -87,6 +87,9 @@ pub struct AskResponse {
     /// names, no file paths.
     #[schema(required)]
     pub sql_guarded: Option<String>,
+    /// Tables `sql_guarded` read, in the order the query first reads them: the dataset asked about, and related
+    /// datasets of the same database snapshot when the SQL joins them. Empty unless the status is `answered`.
+    pub tables_read: Vec<TableRead>,
     #[schema(required)]
     pub understanding: Option<Understanding>,
     #[schema(required)]
@@ -111,6 +114,16 @@ pub struct AskResponse {
     /// What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a
     /// `repair`.
     pub steps: Vec<AskStep>,
+}
+
+/// A dataset the SQL of an answer read.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct TableRead {
+    pub dataset_id: Uuid,
+    /// Dataset name as shown in the dataset list.
+    pub name: String,
+    /// Table name the SQL uses for this dataset.
+    pub logical_table: String,
 }
 
 // Mỗi mục kèm đoạn SQL nó lấy ra, để người đọc đối chiếu được và để #35 kiểm thẻ luôn khớp câu đã chạy.

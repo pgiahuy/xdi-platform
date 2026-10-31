@@ -764,6 +764,11 @@ export interface components {
              *     `repair`.
              */
             steps: components["schemas"]["AskStep"][];
+            /**
+             * @description Tables `sql_guarded` read, in the order the query first reads them: the dataset asked about, and related
+             *     datasets of the same database snapshot when the SQL joins them. Empty unless the status is `answered`.
+             */
+            tables_read: components["schemas"]["TableRead"][];
             understanding: components["schemas"]["Understanding"] | null;
             /**
              * Format: uuid
@@ -1665,6 +1670,15 @@ export interface components {
          * @enum {string}
          */
         SummaryPointKind: "reason" | "outliers" | "even" | "largest" | "against" | "dropped";
+        /** @description A dataset the SQL of an answer read. */
+        TableRead: {
+            /** Format: uuid */
+            dataset_id: string;
+            /** @description Table name the SQL uses for this dataset. */
+            logical_table: string;
+            /** @description Dataset name as shown in the dataset list. */
+            name: string;
+        };
         TestSourceResponse: {
             /** @description Number of tables and views the account can read. */
             table_count: number;

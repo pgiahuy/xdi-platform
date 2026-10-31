@@ -79,6 +79,8 @@ pub struct RunOutcome {
     /// Điều kiện phân quyền guard đã thêm vào sql_guarded (GuardedSql::row_filters), để thẻ gắn nhãn phân quyền; rỗng
     /// khi không lọc hoặc khi chưa answered.
     pub row_filters: Vec<String>,
+    /// Bảng câu answered đã đọc (GuardedSql::tables_read); rỗng khi chưa answered.
+    pub tables_read: Vec<String>,
     /// Cách hiểu của mô hình trong câu trả lời có sql_generated (câu sửa nếu đã sửa, vì câu sửa có thể hiểu lại câu
     /// hỏi). #33 kiểm terms với hồ sơ và dựng giả định từ assumptions.
     pub terms: Vec<Term>,
@@ -98,6 +100,7 @@ enum Attempt {
         result: ResultTable,
         limit_kept: bool,
         row_filters: Vec<String>,
+        tables_read: Vec<String>,
     },
     /// Guard từ chối; reason là lý do của guard, gửi cho mô hình ở vòng sửa.
     Refused { reason: String },
@@ -234,6 +237,7 @@ async fn run_guarded(
         runnable,
         limit_note,
         row_filters,
+        tables_read,
     } = guarded;
     // Thời gian của bước run gồm cả lúc chờ lượt: người hỏi chờ đúng chừng đó.
     let started = Instant::now();
@@ -244,6 +248,7 @@ async fn run_guarded(
                 result: build_result_table(output, input.max_rows),
                 limit_kept: limit_note.is_none(),
                 row_filters,
+                tables_read,
             };
             (answered, None)
         }
@@ -335,6 +340,7 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
             result,
             limit_kept,
             row_filters,
+            tables_read,
         } => {
             return RunOutcome {
                 status: AskStatus::Answered,
@@ -344,6 +350,7 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
                 result: Some(result),
                 limit_kept,
                 row_filters,
+                tables_read,
                 terms: answer.terms,
                 assumptions: answer.assumptions,
                 clarify: None,
@@ -374,6 +381,7 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
         result: None,
         limit_kept: false,
         row_filters: Vec::new(),
+        tables_read: Vec::new(),
         terms: answer.terms,
         assumptions: answer.assumptions,
         clarify: None,
@@ -402,6 +410,7 @@ fn build_failed(
         result: None,
         limit_kept: false,
         row_filters: Vec::new(),
+        tables_read: Vec::new(),
         terms,
         assumptions,
         clarify: None,
@@ -421,6 +430,7 @@ fn build_clarify_outcome(terms: Vec<Term>, clarify: Clarify) -> RunOutcome {
         result: None,
         limit_kept: false,
         row_filters: Vec::new(),
+        tables_read: Vec::new(),
         terms,
         assumptions: Vec::new(),
         clarify: Some(clarify),
@@ -443,6 +453,7 @@ fn build_unanswerable_outcome(
         result: None,
         limit_kept: false,
         row_filters: Vec::new(),
+        tables_read: Vec::new(),
         terms,
         assumptions: Vec::new(),
         clarify: None,

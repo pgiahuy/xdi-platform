@@ -149,6 +149,7 @@ function buildSql(response: AskResponse): TabData<SqlView> {
       repaired: steps.some((step) => step.name === 'repair'),
       guarded: response.sql_guarded,
       guardedMissing: response.sql_guarded ? null : buildGuardedMissing(response, lastGuard),
+      tablesRead: response.tables_read.map((table) => table.logical_table),
     },
   }
 }

@@ -33,6 +33,7 @@ pub mod examples;
 #[cfg(test)]
 mod examples_tests;
 pub mod filter_values;
+pub mod group_prompt;
 pub mod magnitude;
 pub mod matching;
 pub mod narrate;
@@ -43,6 +44,9 @@ pub mod phrases;
 pub mod prompt;
 #[cfg(test)]
 mod prompt_tests;
+pub mod related;
+#[cfg(test)]
+mod related_tests;
 pub mod repair;
 pub mod reply;
 mod response_choices;
@@ -69,12 +73,14 @@ use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, Que
 use crate::service::ask::checks::{build_result_warnings, CheckedQuery};
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
-use crate::service::ask::context::{build_ask_context, AskContext};
+use crate::service::ask::context::{build_ask_context_with_keys, AskContext};
 use crate::service::ask::contract::{
     AskResponse, AskStatus, AskStep, ChosenOption, ResultTable, StepName, Understanding, Warning,
     WarningCode,
 };
+use crate::service::ask::group_prompt::build_group_prompt;
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput};
+use crate::service::ask::related::{build_left_out_note, load_group};
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
 use crate::service::ask::response_choices::{
     build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
@@ -123,15 +129,20 @@ pub async fn ask(
     let ws = &member.workspace;
     let (dataset, version) = load_target(state, ws, dataset_id).await?;
 
-    // Chỉ số và câu đã đúng là hai tầng của ngữ cảnh (ARCHITECTURE mục 5), nên tính vào bước context.
+    // Chỉ số và câu đã đúng là hai tầng của ngữ cảnh (ARCHITECTURE mục 5), nên tính vào bước context, cùng các bảng
+    // liên quan (#213).
     let started = Instant::now();
-    let context = build_ask_context(state, ws, &version, question, choices).await?;
+    let columns = state.store.list_columns(ws, version.id).await?;
+    let picked = build_allowed_table(state, member, &dataset, &version, &columns).await?;
+    let group = load_group(state, member, (&dataset, &version, &columns), picked).await?;
+    let join_keys = group.join_keys(dataset.id);
+    let mut context =
+        build_ask_context_with_keys(state, ws, &version, question, choices, &join_keys).await?;
     let metrics = state.store.list_metrics(ws, dataset.id).await?;
     let examples = state
         .store
         .list_correct_queries(ws, dataset.id, EXAMPLE_POOL)
         .await?;
-    let columns = state.store.list_columns(ws, version.id).await?;
     let detail = build_ambiguity_detail(&context);
     let mut steps = vec![build_step(
         StepName::Context,
@@ -152,6 +163,8 @@ pub async fn ask(
         });
     }
 
+    // Sau bước hỏi lại: câu còn mơ hồ thì không cần đọc giá trị của các bảng liên quan.
+    let group_prompt = build_group_prompt(state, member, &group, question, &mut context).await?;
     let input = PromptInput {
         table: &dataset.logical_table,
         question,
@@ -161,8 +174,9 @@ pub async fn ask(
         domain: dataset.domain.as_deref().and_then(find_domain_package),
         choices,
         history: &history.section,
+        group: group_prompt.as_ref(),
     };
-    let tables = [build_allowed_table(state, member, &dataset, &version, &columns).await?];
+    let tables = &group.allowed;
     // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
     let classify_input = ClassifyInput {
         table: &dataset.logical_table,
@@ -174,12 +188,16 @@ pub async fn ask(
     let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
     steps.push(classified.step);
     if classified.kind == QuestionKind::Why {
+        // Câu "tại sao" chỉ đọc bảng đang chọn (#213): form và SQL do code dựng chỉ biết cột của một bảng.
         let why = WhyAsk {
             dataset: &dataset,
             version: &version,
-            prompt: input,
+            prompt: PromptInput {
+                group: None,
+                ..input
+            },
             columns: &columns,
-            tables: &tables,
+            tables: &tables[..1],
             steps,
         };
         return ask_why(state, member, why).await;
@@ -200,7 +218,7 @@ pub async fn ask(
         question,
         prompt: &prompt,
         reply: &reply,
-        tables: &tables,
+        tables,
         max_rows: state.config.ask_max_rows,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,
@@ -211,6 +229,13 @@ pub async fn ask(
         let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
         outcome.message = Some(build_unanswerable_message(unanswerable, &names));
     }
+    // Câu không trả lời được mà có bảng bị bỏ vì lọc dòng: nói rõ, để người hỏi không nghĩ dữ liệu thiếu bảng đó.
+    let unanswered = matches!(outcome.status, AskStatus::Rejected | AskStatus::Failed);
+    if let (true, Some(note)) = (unanswered, build_left_out_note(&group.left_out)) {
+        let message = outcome.message.take().unwrap_or_default();
+        outcome.message = Some(format!("{message} {note}").trim().to_string());
+    }
+    let tables_read = group.build_tables_read(&outcome.tables_read);
     // Giả định thành Choice một lần, dùng cho cả thẻ "Đã hiểu là" lẫn AskResponse.choices để hai chỗ cùng id.
     let answer = SqlAnswer {
         terms: outcome.terms.clone(),
@@ -228,7 +253,7 @@ pub async fn ask(
         row_filters: &outcome.row_filters,
         terms: &outcome.terms,
         columns: &columns,
-        restricted: !tables[0].row_filters.is_empty(),
+        restricted: group.is_restricted(),
     };
     warnings.extend(build_result_warnings(state, ws, &version, &checked).await);
 
@@ -279,6 +304,7 @@ pub async fn ask(
         sql_guarded: outcome.sql_guarded.as_deref(),
         result: outcome.result.as_ref(),
         explanation: None,
+        read_versions: group.build_read_versions(&tables_read),
     };
     let target = (&dataset, &version);
     let query_id = record_query(state, member, target, question, recorded, &mut steps).await?;
@@ -288,6 +314,7 @@ pub async fn ask(
         choices: used,
         sql_generated: outcome.sql_generated,
         sql_guarded: outcome.sql_guarded,
+        tables_read,
         understanding,
         result: outcome.result,
         chart,
@@ -347,11 +374,11 @@ async fn load_target(
     Ok((dataset, version))
 }
 
-/// Bảng duy nhất câu hỏi được đọc: dataset đang hỏi, trên file Parquet của phiên bản đang dùng, lọc dòng theo vai dữ
-/// liệu của người hỏi. columns là mọi cột của phiên bản, không chỉ cột ngữ cảnh gửi mô hình: dataset nhiều cột thì ngữ
-/// cảnh chỉ gửi cột khớp câu hỏi, mà guard từ chối cột không có trong danh sách nó nhận, nên câu SQL dùng một cột khác
-/// có thật sẽ bị chặn oan.
-async fn build_allowed_table(
+/// Một bảng câu hỏi được đọc (dataset đang hỏi hay bảng liên quan, ask/related.rs), trên file Parquet của phiên bản
+/// đang dùng, lọc dòng theo vai dữ liệu của người hỏi. columns là mọi cột của phiên bản, không chỉ cột ngữ cảnh gửi mô
+/// hình: dataset nhiều cột thì ngữ cảnh chỉ gửi cột khớp câu hỏi, mà guard từ chối cột không có trong danh sách nó
+/// nhận, nên câu SQL dùng một cột khác có thật sẽ bị chặn oan.
+pub(super) async fn build_allowed_table(
     state: &AppState,
     member: &Member,
     dataset: &Dataset,
@@ -427,6 +454,8 @@ pub(super) struct Recorded<'a> {
     pub result: Option<&'a ResultTable>,
     /// Form và Explanation của câu "tại sao" (ask/why.rs); None với câu thường.
     pub explanation: Option<serde_json::Value>,
+    /// Cặp (dataset, phiên bản) câu đã đọc, ghi vào queries.read_versions; rỗng thì ghi cặp của dataset đang hỏi.
+    pub read_versions: Vec<(uuid::Uuid, uuid::Uuid)>,
 }
 
 /// Ghi câu hỏi đã có kết quả cuối (answered, rejected, failed) rồi thêm bước record vào steps. Lỗi ghi là lỗi máy chủ
@@ -466,7 +495,11 @@ pub(super) async fn record_query(
         timings,
         row_count,
         explanation: recorded.explanation,
-        read_versions: vec![(dataset.id, version.id)],
+        read_versions: if recorded.read_versions.is_empty() {
+            vec![(dataset.id, version.id)]
+        } else {
+            recorded.read_versions
+        },
     };
     let id = state.store.record_query(&member.workspace, &query).await?;
     steps.push(build_step(StepName::Record, started, true, None));
@@ -493,6 +526,7 @@ pub(super) fn build_base_response(
         choices: vec![],
         sql_generated: None,
         sql_guarded: None,
+        tables_read: vec![],
         understanding: None,
         result: None,
         chart: None,
