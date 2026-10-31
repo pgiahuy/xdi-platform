@@ -25,6 +25,7 @@ make check          # check-fast, check-frontend và build image docker
 make check-fast     # fmt, clippy, test backend
 make check-frontend # lint, schema.ts khớp openapi.json, kiểm kiểu, build giao diện
 make eval           # hỏi các câu mẫu với mock trên DataCo (và trên database mẫu nếu đang chạy), so với SQL đúng
+make schema-docs    # sinh lại sơ đồ ER docs/images/schema.svg (cần tbls, Graphviz, DATABASE_URL đã migrate)
 make hooks          # cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/, openapi.json, Makefile
 ```
 
@@ -35,6 +36,8 @@ Actions.
 
 Thay đổi schema Postgres là một file migration mới trong `backend/migrations/`, đánh số tiếp theo file mới nhất, ví dụ
 `0009_mo_ta.sql`. Không sửa file migration đã merge: mọi database đã áp nó sẽ từ chối khởi động vì checksum không khớp.
+Cùng PR đó sửa [docs/SCHEMA.md](docs/SCHEMA.md) (ý nghĩa bảng, cột, ai ghi) và chạy `make schema-docs` để sinh lại sơ đồ
+ER; cách chạy ở cuối trang đó.
 
 Test cơ sở dữ liệu cần Postgres thật. Không có `DATABASE_URL` thì chúng tự bỏ qua trên máy (CI luôn chạy). Test chạy
 migration của nhánh và ghi dữ liệu vào database đó, nên dùng một database riêng, không dùng database `xdi` của

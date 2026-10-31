@@ -24,7 +24,7 @@ backend/     một crate Rust: api/ -> service/ -> engine/ và auth/. Phụ thu�
 frontend/    React với Vite, build ra file tĩnh, backend phục vụ. Kiểu API sinh từ openapi.json, không viết tay.
 docs/        tài liệu, cũng là nguồn GitHub Pages.
 data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB (DataCo mẫu), domains/ gói khái niệm ngành.
-scripts/     hook pre-push, kiểm số phiên bản, ghi chú phát hành, danh sách giấy phép.
+scripts/     hook pre-push, kiểm số phiên bản, ghi chú phát hành, danh sách giấy phép, sơ đồ schema Postgres.
 ```
 
 | Phần | Thư mục |
@@ -39,6 +39,7 @@ scripts/     hook pre-push, kiểm số phiên bản, ghi chú phát hành, danh
   trong `backend/src/api/`, kiểu request và response của hỏi dữ liệu và truy dòng nguồn trong
   `backend/src/service/ask/contract.rs` và `backend/src/service/drill/contract.rs`. Đụng hợp đồng chung thì báo cả đội
   trong PR.
+- Đổi `backend/migrations/` thì sửa `docs/SCHEMA.md` và chạy `make schema-docs` trong cùng PR.
 
 ## 3. Code
 
