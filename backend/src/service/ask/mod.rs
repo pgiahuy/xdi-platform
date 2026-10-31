@@ -81,7 +81,6 @@ pub mod why_prompt;
 use std::time::Instant;
 
 use crate::auth::{Member, WorkspaceId};
-use crate::engine::domains::find_domain_package;
 use crate::engine::guard::AllowedTable;
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
@@ -116,6 +115,7 @@ use crate::service::ask::value_retry::{apply_full_values, build_resend_columns};
 use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::why::{ask_why, build_narrate_timeout, WhyAsk};
+use crate::service::domains::load_for_prompt;
 use crate::service::explain::form::QuestionKind;
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
 use crate::service::lessons::{record_failures, FailedQuestion};
@@ -174,6 +174,11 @@ pub async fn ask(
         .store
         .list_approved_examples(ws, dataset.id, EXAMPLE_POOL)
         .await?;
+    // Gói ngành đọc từ bảng của workspace (#229), nên khái niệm admin vừa sửa có ngay ở câu này.
+    let domain = match dataset.domain.as_deref() {
+        Some(key) => load_for_prompt(state, ws, key).await?,
+        None => None,
+    };
     let active_lessons = state
         .store
         .list_active_lessons(ws, dataset.id, LESSON_POOL)
@@ -229,7 +234,7 @@ pub async fn ask(
         context: &context,
         metrics: &metrics,
         examples: &examples,
-        domain: dataset.domain.as_deref().and_then(find_domain_package),
+        domain: domain.as_ref(),
         choices,
         history: &history.section,
         group: group_prompt.as_ref(),
@@ -315,7 +320,7 @@ pub async fn ask(
                 context: &context,
                 metrics: &metrics,
                 examples: &examples,
-                domain: dataset.domain.as_deref().and_then(find_domain_package),
+                domain: domain.as_ref(),
                 choices,
                 history: &history.section,
                 group: group_prompt.as_ref(),

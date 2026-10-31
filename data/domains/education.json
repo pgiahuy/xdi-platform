@@ -1,0 +1,141 @@
+{
+  "id": "education",
+  "name": "Giáo dục và học trực tuyến",
+  "description": "Khái niệm chung của trường học có lớp trực tuyến: sinh viên, học phần, kết quả cuối khóa, bài đánh giá, mức hoạt động trên hệ thống học trực tuyến. Áp dụng cho dữ liệu mỗi dòng là một sinh viên học một học phần, kèm điểm từng bài và lượt truy cập, như OULAD.",
+  "concepts": [
+    {
+      "id": "student_count",
+      "name": "Số sinh viên",
+      "description": "Số sinh viên trong một học phần, một kỳ hay một nhóm. Một sinh viên học nhiều học phần hoặc học lại thì có nhiều lượt học, nên cần nói rõ đếm người hay đếm lượt học.",
+      "synonyms": ["số sinh viên", "sinh viên", "số học viên", "người học", "students", "student count", "learners"],
+      "calculations": [
+        {
+          "name": "Đếm sinh viên phân biệt",
+          "description": "Đếm số mã sinh viên khác nhau. Một người học ba học phần vẫn tính là một."
+        },
+        {
+          "name": "Đếm lượt học",
+          "description": "Đếm số cặp sinh viên và học phần. Chọn khi câu hỏi theo học phần, ví dụ số sinh viên mỗi môn mỗi kỳ."
+        }
+      ],
+      "dimensions": ["học phần", "kỳ học", "vùng", "nhóm tuổi", "giới tính", "trình độ học vấn"],
+      "sanity_checks": [{"kind": "non_negative"}]
+    },
+    {
+      "id": "course_count",
+      "name": "Số học phần",
+      "description": "Số học phần được mở. Một học phần là một môn mở trong một kỳ; cùng một môn mở ở hai kỳ là hai học phần.",
+      "synonyms": ["số học phần", "học phần", "số môn học", "môn học", "courses", "modules", "course count"],
+      "calculations": [
+        {
+          "name": "Đếm cặp môn và kỳ",
+          "description": "Đếm số cặp mã môn và mã kỳ khác nhau. Đây là số học phần đã mở."
+        },
+        {
+          "name": "Đếm môn phân biệt",
+          "description": "Đếm số mã môn khác nhau, không tính kỳ. Chọn khi câu hỏi muốn biết trường dạy bao nhiêu môn."
+        }
+      ],
+      "dimensions": ["kỳ học", "năm học"],
+      "sanity_checks": [{"kind": "non_negative"}]
+    },
+    {
+      "id": "pass_rate",
+      "name": "Tỷ lệ đạt",
+      "description": "Phần lượt học có kết quả cuối là đạt hoặc giỏi (Pass, Distinction) trên mọi lượt học, từ 0 đến 1. Giỏi cũng là đạt, nên tử số gồm cả hai.",
+      "synonyms": ["tỷ lệ đạt", "tỉ lệ đạt", "tỷ lệ qua môn", "pass rate", "success rate"],
+      "calculations": [
+        {
+          "name": "Trên mọi lượt học",
+          "description": "Số lượt học đạt hoặc giỏi chia tổng số lượt học, kể cả lượt bỏ học. Đây là cách hay dùng khi so giữa các học phần."
+        },
+        {
+          "name": "Trên lượt học đến cuối khóa",
+          "description": "Số lượt học đạt hoặc giỏi chia số lượt học không bỏ học giữa chừng. Chọn khi muốn tách chuyện học không qua khỏi chuyện rút học."
+        }
+      ],
+      "dimensions": ["học phần", "kỳ học", "vùng", "nhóm tuổi", "trình độ học vấn", "số lần học lại"],
+      "sanity_checks": [{"kind": "value_range", "min": 0.0, "max": 1.0}]
+    },
+    {
+      "id": "fail_rate",
+      "name": "Tỷ lệ trượt",
+      "description": "Phần lượt học có kết quả cuối là trượt (Fail) trên mọi lượt học, từ 0 đến 1. Lượt bỏ học không tính là trượt.",
+      "synonyms": ["tỷ lệ trượt", "tỉ lệ trượt", "tỷ lệ rớt môn", "fail rate", "failure rate"],
+      "calculations": [
+        {
+          "name": "Trên mọi lượt học",
+          "description": "Số lượt học trượt chia tổng số lượt học, kể cả lượt bỏ học."
+        },
+        {
+          "name": "Trên lượt học đến cuối khóa",
+          "description": "Số lượt học trượt chia số lượt học không bỏ học giữa chừng."
+        }
+      ],
+      "dimensions": ["học phần", "kỳ học", "vùng", "nhóm tuổi", "trình độ học vấn"],
+      "sanity_checks": [{"kind": "value_range", "min": 0.0, "max": 1.0}]
+    },
+    {
+      "id": "withdrawal_rate",
+      "name": "Tỷ lệ rút học",
+      "description": "Phần lượt học có kết quả cuối là bỏ học (Withdrawn) trên mọi lượt học, từ 0 đến 1.",
+      "synonyms": ["tỷ lệ rút học", "tỉ lệ rút học", "tỷ lệ bỏ học", "tỉ lệ bỏ học", "tỷ lệ rút môn", "withdrawal rate", "dropout rate"],
+      "calculations": [
+        {
+          "name": "Theo kết quả cuối",
+          "description": "Số lượt học có kết quả cuối là bỏ học chia tổng số lượt học."
+        },
+        {
+          "name": "Theo ngày hủy đăng ký",
+          "description": "Số lượt học có ngày hủy đăng ký chia tổng số lượt học. Chọn khi muốn biết sinh viên rút sớm hay muộn trong học phần."
+        }
+      ],
+      "dimensions": ["học phần", "kỳ học", "vùng", "nhóm tuổi", "trình độ học vấn", "khuyết tật"],
+      "sanity_checks": [{"kind": "value_range", "min": 0.0, "max": 1.0}]
+    },
+    {
+      "id": "average_assessment_score",
+      "name": "Điểm trung bình bài đánh giá",
+      "description": "Điểm trung bình của các bài đánh giá sinh viên đã nộp, thang 0 đến 100. Bài không có điểm không tính vào trung bình.",
+      "synonyms": ["điểm trung bình", "điểm bài đánh giá", "điểm trung bình bài kiểm tra", "average score", "assessment score", "mean score"],
+      "calculations": [
+        {
+          "name": "Trung bình mọi bài nộp",
+          "description": "Trung bình cộng điểm của mọi lần nộp bài. Sinh viên nộp nhiều bài thì nặng ký hơn."
+        },
+        {
+          "name": "Trung bình theo trọng số bài",
+          "description": "Cộng điểm nhân trọng số của bài rồi chia tổng trọng số. Chọn khi bài thi cuối kỳ phải nặng hơn bài tập."
+        },
+        {
+          "name": "Trung bình theo sinh viên",
+          "description": "Lấy điểm trung bình của từng sinh viên trước, rồi trung bình các con số đó. Chọn khi muốn mỗi sinh viên ngang nhau."
+        }
+      ],
+      "dimensions": ["học phần", "loại bài đánh giá", "kỳ học", "kết quả cuối"],
+      "sanity_checks": [{"kind": "value_range", "min": 0.0, "max": 100.0}]
+    },
+    {
+      "id": "online_activity",
+      "name": "Mức hoạt động học trực tuyến",
+      "description": "Sinh viên dùng hệ thống học trực tuyến nhiều hay ít, đo bằng số lần bấm hay số ngày có truy cập. Hay dùng để so nhóm đạt với nhóm bỏ học.",
+      "synonyms": ["mức hoạt động", "số lần bấm", "lượt truy cập", "hoạt động trực tuyến", "clicks", "online activity", "engagement"],
+      "calculations": [
+        {
+          "name": "Tổng số lần bấm",
+          "description": "Cộng số lần bấm của mọi ngày trong kỳ."
+        },
+        {
+          "name": "Số lần bấm trung bình mỗi sinh viên",
+          "description": "Tổng số lần bấm chia số sinh viên có truy cập. Chọn khi so các nhóm có số sinh viên khác nhau."
+        },
+        {
+          "name": "Số ngày có truy cập",
+          "description": "Đếm số ngày sinh viên có ít nhất một lần bấm. Chọn khi muốn biết học đều hay dồn vào vài ngày."
+        }
+      ],
+      "dimensions": ["học phần", "tuần học", "kết quả cuối", "loại hoạt động"],
+      "sanity_checks": [{"kind": "non_negative"}]
+    }
+  ]
+}

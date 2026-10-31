@@ -245,6 +245,25 @@ công thức là một hàm gộp trên cột có thật, điều kiện không 
 `name`, `expression`, `filter` hay `time_column`; lý do gốc của guard hay DuckDB chỉ ghi log. Chỉ số lưu xong vào
 prompt của câu hỏi kế tiếp.
 
+## Khái niệm ngành
+
+Gói khái niệm ngành của workspace ([DOMAINS.md](DOMAINS.md), `backend/src/service/domains/`):
+`GET /api/workspaces/{ws}/domains` trả `packs`, mỗi gói có `key` (giá trị của `datasets.domain`), `name`,
+`description` và `concepts` theo thứ tự đưa vào prompt (thứ tự của file gói, khái niệm admin thêm đứng sau), kể cả
+khái niệm đang tắt. Mỗi khái niệm có `id`, `key` (id trong file gói, null với khái niệm admin thêm), `name`,
+`description`, `synonyms`, `calculations`, `dimensions`, `sanity_checks`, `enabled`, `updated_at` (null khi chưa ai sửa
+từ lúc chép từ file). Lần gọi đầu trong workspace chép các gói của `data/domains/` vào; mọi thành viên gọi được. Chỉ
+admin, `member` nhận 403:
+
+- `POST .../domains/{pack}/concepts` thêm khái niệm vào cuối gói (201).
+- `PUT .../domains/{pack}/concepts/{concept_id}` ghi đè khái niệm (200); gửi `enabled: false` để tắt, khái niệm còn
+  trong danh sách nhưng không vào prompt.
+
+Body của cả hai: `name`, `description`, `synonyms` (ít nhất một), `calculations` (tối đa ba `{name, description}`),
+`dimensions`, `sanity_checks`, `enabled` (mặc định true). Sai thì 400 với `field` là trường sai, ví dụ tên trùng
+khái niệm khác của gói hay từ đồng nghĩa đã thuộc khái niệm khác; gói hay khái niệm không có trả 404. Khái niệm lưu
+xong vào prompt của câu hỏi kế tiếp trên dataset gắn gói đó.
+
 ## Xóa dataset
 
 `DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, chỉ số, cuộc trò chuyện

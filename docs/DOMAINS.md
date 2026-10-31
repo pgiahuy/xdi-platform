@@ -1,24 +1,42 @@
 # Gói khái niệm ngành
 
 Một gói khái niệm ngành (domain package) mô tả các khái niệm kinh doanh chung của mọi doanh nghiệp cùng ngành: doanh
-thu, số đơn, tỷ lệ giao trễ... Mỗi ngành một file `data/domains/<id>.json`. Gói giúp mô hình ngôn ngữ hiểu thuật ngữ
-trong câu hỏi; đề xuất chỉ số và kiểm hợp lý theo gói là thiết kế, chưa có code dùng.
+thu, số đơn, tỷ lệ giao trễ... Gói giúp mô hình ngôn ngữ hiểu thuật ngữ trong câu hỏi; đề xuất chỉ số và kiểm hợp lý
+theo gói là thiết kế, chưa có code dùng.
 
 Ba tầng tách riêng:
 
-1. **Engine** không biết ngành: chỉ biết hình dạng của một gói, có hàm liệt kê mọi gói và tìm gói theo id
-   (`backend/src/engine/domains.rs`).
+1. **Engine** không biết ngành: chỉ biết hình dạng của một gói và các luật kiểm chung (`backend/src/engine/domains.rs`).
 2. **Gói** nói về khái niệm bằng lời: cách tính phổ biến, từ đồng nghĩa, chiều hay dùng, luật kiểm hợp lý. Gói không
    ghi tên cột của dataset cụ thể.
 3. **Chỉ số của workspace** (bảng `metrics`) mới quyết định công thức trên cột thật của dataset.
 
-Hiện tại có một gói: `retail` (bán lẻ và chuỗi cung ứng), áp dụng được cho dữ liệu đơn hàng như DataCo hay Online
-Retail. Prompt sinh SQL và prompt form câu "tại sao" chèn tên gói và `name`, `synonyms`, `description` của từng khái
-niệm khi cột `datasets.domain` có giá trị (`build_domain_section` trong `service/ask/prompt.rs`, dùng cả ở
-`service/ask/why_prompt.rs`). Chưa có cách gắn gói cho dataset (lúc nạp hay qua API), nên hiện chưa prompt nào có phần
-này. Thiết kế: người dùng
-chọn một gói lúc nạp, một dataset một gói. `calculations`, `dimensions`, `sanity_checks` chưa được code nào đọc ngoài
-test.
+Hiện có hai gói: `retail` (bán lẻ và chuỗi cung ứng, cho dữ liệu đơn hàng như DataCo hay Online Retail) và
+`education` (giáo dục và học trực tuyến, cho schema `edu` của database mẫu `data/postgres-demo/` và OULAD).
+
+## Gói trong workspace
+
+Mỗi workspace có bản riêng của các gói, trong hai bảng Postgres `domain_packs` và `domain_concepts`
+(`backend/migrations/0014_domain_concepts.sql`). Lần đầu workspace cần gói (mở màn **Khái niệm ngành** hay hỏi trên
+dataset có gói), backend chép các file `data/domains/<id>.json` vào đó. Các lần sau chỉ chép gói và khái niệm mà
+workspace chưa có (so theo `id` của gói và của khái niệm), không ghi đè: khái niệm admin đã sửa hay đã tắt giữ nguyên.
+Hệ quả: bản phát hành sau thêm gói hay khái niệm mới thì workspace cũ nhận được, còn sửa chữ một khái niệm có sẵn trong
+file thì workspace đã chép không nhận.
+
+Trên màn **Khái niệm ngành** (thanh bên), mọi thành viên xem các gói; admin thêm khái niệm, sửa tên, mô tả, từ đồng
+nghĩa, chiều phân rã, cách tính, và tắt hay bật khái niệm. Trước khi lưu, backend kiểm như kiểm chỉ số
+(`backend/src/service/domains/check.rs`): tên, mô tả, từ đồng nghĩa không rỗng, không xuống dòng, trong trần độ dài;
+tên không trùng tên khái niệm khác của gói (không phân biệt hoa thường); từ đồng nghĩa không trùng giữa hai khái niệm
+của gói (so sau khi chữ thường và bỏ dấu); tên và từ đồng nghĩa không có ngoặc tròn, từ đồng nghĩa không có dấu phẩy
+(các dấu đó làm dòng của khái niệm trong prompt đọc sai); tối đa ba cách tính; luật kiểm nhất quán như file. Khái niệm
+admin thêm không bắt buộc có cách tính hay chiều phân rã. API ở [API.md](API.md#khái-niệm-ngành).
+
+Prompt sinh SQL và prompt form câu "tại sao" chèn tên gói và `name`, `synonyms`, `description` của từng khái niệm đang
+bật khi cột `datasets.domain` có giá trị (`build_domain_section` trong `service/ask/prompt.rs`, dùng cả ở
+`service/ask/why_prompt.rs`), đọc từ bảng của workspace ở mỗi câu hỏi, nên khái niệm vừa sửa có ngay ở câu kế tiếp.
+Workspace chưa sửa gì nhận đúng chữ như đọc từ file, cùng thứ tự khái niệm. Chưa có cách gắn gói cho dataset (lúc nạp
+hay qua API), nên hiện chưa prompt nào có phần này ngoài test. `calculations`, `dimensions`, `sanity_checks` chưa được
+code nào đọc ngoài màn quản trị và test.
 
 ## Schema của file gói
 
@@ -51,14 +69,17 @@ Mỗi luật trong `sanity_checks` có trường `kind`: `non_negative` (giá tr
 
 ## Thêm một ngành
 
-Thêm một file `data/domains/<id>.json` theo schema trên, không cần sửa code: `backend/build.rs` liệt kê thư mục lúc
-biên dịch và nhúng mọi file vào binary (image Docker và binary của `make install` không có thư mục `data/`, cùng lý
-do `engine/llm/mock.rs` nhúng câu trả lời mẫu). Thêm hay sửa file gói thì `cargo build` tự nhúng lại; với
-`CARGO_TARGET_DIR` dùng chung giữa nhiều bản checkout, chạy `touch backend/src/main.rs data/domains` trước để chắc
-chắn build script chạy lại (phải touch cả thư mục `data/domains`, không chỉ `main.rs`: một bản checkout khác thêm file
-gói thì thư mục của bản này không đổi, cargo không tự chạy lại build script).
+Thêm một file `data/domains/<id>.json` theo schema trên qua PR, không cần sửa code: `backend/build.rs` liệt kê thư mục
+lúc biên dịch và nhúng mọi file vào binary (image Docker và binary của `make install` không có thư mục `data/`, cùng lý
+do `engine/llm/mock.rs` nhúng câu trả lời mẫu). Workspace nhận gói mới ở lần đầu cần gói sau khi nâng cấp. Thêm hay sửa
+file gói thì `cargo build` tự nhúng lại; với `CARGO_TARGET_DIR` dùng chung giữa nhiều bản checkout, chạy
+`touch backend/src/main.rs data/domains` trước để chắc chắn build script chạy lại (phải touch cả thư mục
+`data/domains`, không chỉ `main.rs`: một bản checkout khác thêm file gói thì thư mục của bản này không đổi, cargo không
+tự chạy lại build script).
 
 Test của `engine/domains.rs` chặn gói sai: mọi file đọc được theo schema, `id` trùng tên file, id không trùng giữa các
 gói, mỗi khái niệm có hai đến ba cách tính, có từ đồng nghĩa và chiều phân rã, từ đồng nghĩa không rỗng và không
 trùng trong một gói, luật kiểm nhất quán (`non_negative` không có `min`, `max`; `value_range` có ít nhất một đầu và
-`min` không quá `max`), trường lạ bị từ chối. CI chạy các test này cả khi PR chỉ đổi `data/domains/`.
+`min` không quá `max`), trường lạ bị từ chối. Test của `service/domains/check.rs` kiểm mọi khái niệm của file qua được kiểm của màn quản
+trị, để admin mở rồi lưu lại một khái niệm có sẵn không bị báo lỗi. CI chạy các test này cả khi PR chỉ đổi
+`data/domains/`.

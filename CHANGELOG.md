@@ -22,6 +22,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Bản cài mới có sẵn database mẫu nhỏ nhiều bảng (dịch vụ `demo-db`, bán hàng và học tập): thiết lập lần đầu kết nối và chụp 13 bảng kèm quan hệ, câu mẫu của `mock` và `make eval` chạy trên các bảng đó; `SAMPLE_DATABASE_URL=` để nạp DataCo từ file như trước (#230).
 - `SOURCE_SECRET_KEY` để trống thì backend tự sinh khóa lần đầu và lưu ở `DATA_DIR/source_secret.key`; nguồn database không còn tắt khi chưa đặt khóa (#230).
 - TLS tới nguồn Postgres: `sslmode` `require` và `verify-full`, kèm ô chứng chỉ CA cho CA riêng của tổ chức (#230).
+- Màn **Khái niệm ngành** (thanh bên): gói ngành lưu riêng cho từng workspace, admin thêm, sửa, tắt khái niệm, câu hỏi sau dùng bản vừa sửa; thêm gói giáo dục cho dữ liệu OULAD (#229).
 
 ### Changed
 
