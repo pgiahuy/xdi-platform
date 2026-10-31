@@ -88,7 +88,8 @@ export function AppShell(props: Props) {
   return (
     <div
       className={cn(
-        'min-h-svh bg-background lg:grid',
+        // Bản in (trang Báo cáo, Xuất PDF) chỉ có nội dung trang: không lưới hai cột, không thanh bên, không thanh trên.
+        'min-h-svh bg-background lg:grid print:block print:min-h-0 print:bg-white',
         sidebarCollapsed ? 'lg:grid-cols-[4rem_minmax(0,1fr)]' : 'lg:grid-cols-[16rem_minmax(0,1fr)]',
       )}
     >
@@ -103,7 +104,7 @@ export function AppShell(props: Props) {
         Bỏ qua điều hướng
       </a>
 
-      <aside className="hidden bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col">
+      <aside className="hidden bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col print:hidden">
         <SidebarContent
           {...props}
           compact={sidebarCollapsed}
@@ -115,7 +116,7 @@ export function AppShell(props: Props) {
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b bg-card px-4 lg:px-8">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b bg-card px-4 lg:px-8 print:hidden">
           <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="-ml-1.5 lg:hidden" aria-label="Mở menu">
@@ -190,10 +191,10 @@ export function AppShell(props: Props) {
           </div>
         )}
 
-        <main id="main" tabIndex={-1} className="flex-1 bg-background focus:outline-none">
+        <main id="main" tabIndex={-1} className="flex-1 bg-background focus:outline-none print:bg-white">
           {/* Nội dung rộng hết vùng còn lại: trang hỏi có ba cột (danh sách, khung chat, minh chứng), giới hạn bề rộng thì
           màn rộng bỏ trống hai bên còn các cột lại chật. */}
-          <div className="w-full px-4 py-6 lg:px-8">{props.children}</div>
+          <div className="w-full px-4 py-6 lg:px-8 print:p-0">{props.children}</div>
         </main>
       </div>
 

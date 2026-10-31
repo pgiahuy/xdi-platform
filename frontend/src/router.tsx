@@ -3,7 +3,7 @@
 trong khung chung AppLayout; thêm trang trong workspace là thêm một route con ở đây và một dòng ở pages/workspaceNav.ts.
 Trang quản trị hệ thống và trang tài khoản ngoài workspace cũng hiện trong AppLayout nhưng không cần workspace, đường
 dẫn ở pages/globalNav.ts. Màn đăng nhập và thiết lập nằm ngoài khung, đường dẫn ở pages/authNav.ts.
-Đăng nhập, thiết lập, tài khoản, thành viên, khái niệm ngành, các trang quản trị, trang Tổng quan dữ liệu và trang Dữ liệu tải riêng khi
+Đăng nhập, thiết lập, tài khoản, thành viên, khái niệm ngành, các trang quản trị, trang Tổng quan dữ liệu, trang Báo cáo và trang Dữ liệu tải riêng khi
 mở (lazy): ít khi cần so với hỏi, hoặc kéo theo phần nạp file, nên không đóng vào gói chính. Mọi route nằm dưới một
 route gốc có errorElement, để lỗi ở bất kỳ trang nào cũng hiện câu tiếng Việt. */
 
@@ -23,6 +23,7 @@ import {
   lessonsPath,
   membersPath,
   overviewPath,
+  reportsPath,
   workspaceRoute,
 } from '@/pages/workspaceNav'
 import { WorkspaceNotFoundPage } from '@/pages/WorkspaceNotFoundPage'
@@ -69,6 +70,15 @@ export const router = createBrowserRouter([
                 path: 'datasets/:datasetId/metrics',
                 lazy: async () => ({ Component: (await import('@/pages/MetricsPage')).MetricsPage }),
                 handle: { title: 'Chỉ số' },
+              },
+              {
+                path: reportsPath,
+                lazy: async () => ({ Component: (await import('@/pages/ReportsPage')).ReportsPage }),
+              },
+              {
+                path: `${reportsPath}/:reportId`,
+                lazy: async () => ({ Component: (await import('@/pages/ReportPage')).ReportPage }),
+                handle: { title: 'Báo cáo' },
               },
               {
                 path: lessonsPath,

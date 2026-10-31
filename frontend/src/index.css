@@ -240,3 +240,18 @@
     background-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
   }
 }
+
+/* Bản in (Xuất PDF của trang Báo cáo mở hộp in của trình duyệt): khổ A4 dọc, lề vừa, giữ màu của biểu đồ và nền ô
+   (trình duyệt mặc định bỏ màu nền khi in). Phần nào không in và chỗ sang trang đặt bằng lớp print: ngay ở component. */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm;
+  }
+  html,
+  body {
+    background: white;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

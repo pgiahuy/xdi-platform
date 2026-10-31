@@ -6,7 +6,7 @@ Trang hỏi ('' là trang đầu) không có mục riêng: vào workspace là m�
 một cuộc cũ hay cuộc mới trên trang đó. */
 
 import type { LucideIcon } from 'lucide-react'
-import { BadgeCheck, BookOpen, ChartColumn, Database, Lightbulb, Users } from 'lucide-react'
+import { BadgeCheck, BookOpen, ChartColumn, Database, FileText, Lightbulb, Users } from 'lucide-react'
 
 export type WorkspaceNavEntry = {
   path: string
@@ -34,11 +34,15 @@ export const overviewPath = 'overview'
 /** Màn Câu mẫu (#212): admin duyệt câu trả lời được đánh giá Tốt. */
 export const examplesPath = 'examples'
 
+/** Trang Báo cáo: báo cáo của người dùng, tạo báo cáo trống hay tự động; một báo cáo ở reports/<id>. */
+export const reportsPath = 'reports'
+
 /** Màn Bài học (#228): admin xem nhật ký lỗi, viết và duyệt bài học. */
 export const lessonsPath = 'lessons'
 
 export const workspaceNav: WorkspaceNavEntry[] = [
   { path: overviewPath, label: 'Tổng quan dữ liệu', icon: ChartColumn },
+  { path: reportsPath, label: 'Báo cáo', icon: FileText },
   { path: 'datasets', label: 'Dữ liệu', icon: Database },
   { path: domainsPath, label: 'Khái niệm ngành', icon: BookOpen },
   { path: membersPath, label: 'Thành viên', icon: Users },
@@ -57,4 +61,9 @@ export function overviewHref(slug: string, datasetId: string, tableId?: string):
   const params = new URLSearchParams({ dataset: datasetId })
   if (tableId) params.set('table', tableId)
   return `${workspaceHref(slug, overviewPath)}?${params.toString()}`
+}
+
+/** Một báo cáo của workspace. */
+export function reportHref(slug: string, reportId: string): string {
+  return `${workspaceHref(slug, reportsPath)}/${encodeURIComponent(reportId)}`
 }
