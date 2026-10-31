@@ -18,6 +18,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Bộ lọc dòng theo vai dữ liệu lan theo khóa ngoại: lọc khách hàng theo vùng thì đơn hàng và dòng hàng của khách vùng khác cũng bị ẩn, cả khi hỏi riêng bảng đơn hàng (#215).
 - Mọi câu trả lời có phần giải thích kết quả nói lên điều gì, chọn theo hình dạng kết quả: so với kỳ trước, kỳ đổi mạnh nhất kèm phân rã, tỷ trọng và mức tập trung của các nhóm, hay chỉ số dòng; chênh lệch nhỏ hay ít dòng thì ghi không có thay đổi đáng kể. Trên bảng chụp từ database, phân rã xét cả cột của bảng liên quan (#227).
 - Hai nút **Tốt** và **Chưa đạt** dưới mỗi câu trả lời (Chưa đạt kèm lý do và ghi chú); màn **Câu mẫu** cho admin duyệt câu Tốt thành ví dụ trong prompt của câu hỏi sau có từ chung, và xuất câu đã duyệt thành ca ứng viên cho bộ đánh giá (#212).
+- Màn **Khái niệm ngành** (thanh bên): gói ngành lưu riêng cho từng workspace, admin thêm, sửa, tắt khái niệm, câu hỏi sau dùng bản vừa sửa; thêm gói giáo dục cho dữ liệu OULAD (#229).
 
 ### Changed
 
