@@ -52,8 +52,11 @@ pub struct CreateSourceRequest {
     pub user: String,
     /// Stored encrypted; never returned.
     pub password: String,
-    /// `disable` or `prefer` (default). TLS-only servers are not supported yet.
+    /// `disable`, `prefer` (default), `require` (TLS, certificate not checked) or `verify-full` (TLS, certificate
+    /// signed by a trusted CA and matching the host name).
     pub sslmode: Option<String>,
+    /// PEM CA certificate(s) trusted for `verify-full`, besides the system CAs. Only with `verify-full`.
+    pub ssl_root_cert: Option<String>,
 }
 
 /// A database source without its password.
@@ -66,6 +69,8 @@ pub struct SourceResponse {
     pub database: String,
     pub user: String,
     pub sslmode: String,
+    /// True when the source was added with its own CA certificate.
+    pub custom_ca: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -232,10 +237,10 @@ fn build_connect_info(req: CreateSourceRequest) -> Result<ConnectInfo, AppError>
     let sslmode = req.sslmode.unwrap_or_else(|| "prefer".to_string());
     if !SSL_MODES.contains(&sslmode.as_str()) {
         return Err(AppError::BadRequest(
-            "sslmode nhận disable hoặc prefer; máy chủ chỉ nhận TLS thì bản này chưa hỗ trợ"
-                .to_string(),
+            "sslmode nhận disable, prefer, require hoặc verify-full".to_string(),
         ));
     }
+    let ssl_root_cert = build_root_cert(req.ssl_root_cert, &sslmode)?;
     Ok(ConnectInfo {
         host,
         port: req.port.unwrap_or(5432),
@@ -244,7 +249,33 @@ fn build_connect_info(req: CreateSourceRequest) -> Result<ConnectInfo, AppError>
         // Mật khẩu giữ nguyên, kể cả khoảng trắng ở hai đầu; rỗng được (máy chủ dùng trust hay peer).
         password: req.password,
         sslmode,
+        ssl_root_cert,
     })
+}
+
+/// Chứng chỉ CA dán vào: bỏ trống thì không có. Chỉ nhận với verify-full, vì prefer và require không kiểm chứng chỉ
+/// nên CA dán vào sẽ bị bỏ qua mà người dùng tưởng là có kiểm. Kiểm đọc được ít nhất một chứng chỉ PEM ngay lúc thêm,
+/// để lỗi dán thiếu dòng không hiện ra thành lỗi TLS khó hiểu lúc kết nối.
+fn build_root_cert(pem: Option<String>, sslmode: &str) -> Result<Option<String>, AppError> {
+    use rustls::pki_types::{pem::PemObject, CertificateDer};
+
+    let Some(pem) = pem.filter(|p| !p.trim().is_empty()) else {
+        return Ok(None);
+    };
+    if sslmode != "verify-full" {
+        return Err(AppError::BadRequest(
+            "Chứng chỉ CA chỉ dùng với sslmode verify-full: chọn verify-full hoặc bỏ trống ô chứng chỉ".to_string(),
+        ));
+    }
+    let certs: Result<Vec<_>, _> = CertificateDer::pem_slice_iter(pem.as_bytes()).collect();
+    match certs {
+        Ok(certs) if !certs.is_empty() => Ok(Some(pem)),
+        _ => Err(AppError::BadRequest(
+            "Không đọc được chứng chỉ CA: dán nguyên văn file PEM, từ dòng -----BEGIN CERTIFICATE----- tới dòng \
+             -----END CERTIFICATE-----"
+                .to_string(),
+        )),
+    }
 }
 
 fn check_host_allowed(allowed: &[String], host: &str) -> Result<(), AppError> {
@@ -264,6 +295,7 @@ fn public_config(info: &ConnectInfo) -> Value {
         "database": info.database,
         "user": info.user,
         "sslmode": info.sslmode,
+        "custom_ca": info.ssl_root_cert.is_some(),
         "tables": {},
     })
 }
@@ -281,6 +313,7 @@ fn build_response(row: &SourceRow) -> SourceResponse {
         database: text("database"),
         user: text("user"),
         sslmode: text("sslmode"),
+        custom_ca: row.config["custom_ca"].as_bool().unwrap_or(false),
         created_at: row.created_at,
     }
 }

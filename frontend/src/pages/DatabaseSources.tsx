@@ -25,9 +25,22 @@ import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 import { buildRelatedView, MAX_SNAPSHOT_TABLES, type RelationChoice } from './relatedTablesView'
 
-// Khớp SSL_MODES của backend (service/sources/postgres.rs): bản này chưa hỗ trợ máy chủ chỉ nhận TLS.
-const SSL_MODES = ['prefer', 'disable']
-const EMPTY: ConnectValues = { host: '', port: '5432', database: '', user: '', password: '', sslmode: 'prefer' }
+// Khớp SSL_MODES của backend (service/sources/postgres.rs), nghĩa như sslmode của libpq.
+const SSL_MODES = [
+  { value: 'prefer', label: 'Dùng TLS nếu máy chủ nhận, không kiểm chứng chỉ.' },
+  { value: 'require', label: 'Bắt buộc TLS, không kiểm chứng chỉ: chống nghe lén, không chống giả máy chủ.' },
+  { value: 'verify-full', label: 'Bắt buộc TLS, chứng chỉ phải do CA tin cậy cấp và đúng tên máy chủ.' },
+  { value: 'disable', label: 'Không dùng TLS. Chỉ dùng trong mạng tin cậy.' },
+]
+const EMPTY: ConnectValues = {
+  host: '',
+  port: '5432',
+  database: '',
+  user: '',
+  password: '',
+  sslmode: 'prefer',
+  sslRootCert: '',
+}
 
 export function DatabaseSources({ ws }: { ws: string }) {
   const sources = useSources(ws)
@@ -39,8 +52,14 @@ export function DatabaseSources({ ws }: { ws: string }) {
 
   const submit = () => {
     const port = Number(values.port)
+    const { sslRootCert, ...connection } = values
     create.mutate(
-      { ...values, port: Number.isInteger(port) && port > 0 ? port : null },
+      {
+        ...connection,
+        port: Number.isInteger(port) && port > 0 ? port : null,
+        // Backend chỉ nhận chứng chỉ CA với verify-full; đổi sang mode khác thì không gửi phần đã dán.
+        ssl_root_cert: values.sslmode === 'verify-full' && sslRootCert.trim() !== '' ? sslRootCert : null,
+      },
       {
         onSuccess: () => {
           setValues(EMPTY)

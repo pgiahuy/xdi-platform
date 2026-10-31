@@ -16,7 +16,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
 uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid", "chrono", "json"] }
+# tls-rustls-ring-native-roots: TLS tới Postgres (nguồn database với sslmode require, verify-full, #230) bằng rustls và
+# bộ mã hóa ring như reqwest, tin các CA của hệ thống (image Docker cài ca-certificates). Không cần OpenSSL.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid", "chrono", "json", "tls-rustls-ring-native-roots"] }
 tower-http = { version = "0.7", features = ["fs"] }
 argon2 = "0.6.0"
 sha2 = "0.10"

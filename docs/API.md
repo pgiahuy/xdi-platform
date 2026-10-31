@@ -261,7 +261,9 @@ database. Thiếu `SOURCE_SECRET_KEY` thì thêm và dùng nguồn trả 503 (`u
 
 - `GET /api/workspaces/{ws}/sources`: nguồn của workspace (máy chủ, cổng, database, tài khoản, sslmode), không có mật
   khẩu.
-- `POST /api/workspaces/{ws}/sources`: thêm nguồn Postgres (`host`, `port`, `database`, `user`, `password`, `sslmode`).
+- `POST /api/workspaces/{ws}/sources`: thêm nguồn Postgres (`host`, `port`, `database`, `user`, `password`, `sslmode`
+  là `disable`, `prefer`, `require` hay `verify-full`, và `ssl_root_cert` là chứng chỉ CA dạng PEM, chỉ với
+  `verify-full`; TLS ở [DATA.md](DATA.md#nguồn-database-postgres)).
   Backend thử kết nối trước khi lưu; máy chủ ngoài `SOURCE_ALLOWED_HOSTS`, sai mật khẩu, không tới được máy chủ đều trả
   400 kèm lời báo cách sửa. 201 khi lưu xong.
 - `POST .../sources/{id}/test`: kết nối lại, trả số bảng và view đọc được.

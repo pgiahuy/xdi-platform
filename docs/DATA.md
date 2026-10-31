@@ -117,8 +117,22 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
 - Giới hạn: `SOURCE_MAX_ROWS` dòng và `MAX_UPLOAD_MB` dung lượng CSV cho mỗi bảng (đếm trước, quá thì từ chối cả lần
   chụp, không chụp thiếu), tối đa 10 bảng một lần chụp, `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
 - Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`). Máy chủ phải nằm trong
-  `SOURCE_ALLOWED_HOSTS`. Chưa có TLS tới Postgres: `sslmode` nhận `disable` hoặc `prefer`, máy chủ chỉ nhận TLS thì chưa
-  kết nối được.
+  `SOURCE_ALLOWED_HOSTS`.
+- **TLS** (#230), bằng rustls, nghĩa `sslmode` như libpq:
+
+  | `sslmode` | TLS | Kiểm chứng chỉ máy chủ |
+  |---|---|---|
+  | `disable` | Không | Không |
+  | `prefer` (mặc định) | Có nếu máy chủ nhận, không thì kết nối thường | Không |
+  | `require` | Bắt buộc | Không: chống nghe lén trên đường truyền, không chống máy giả mạo |
+  | `verify-full` | Bắt buộc | Có: do CA tin cậy cấp và đúng tên máy đã nhập (`host`) |
+
+  CA tin cậy là kho CA của hệ thống (image Docker cài `ca-certificates`), cộng chứng chỉ CA dạng PEM admin dán vào ô
+  "Chứng chỉ CA" (trường `ssl_root_cert`) khi máy chủ dùng CA riêng của tổ chức; ô này chỉ nhận với `verify-full`. Chứng
+  chỉ CA được mã hóa cùng thông tin kết nối, response chỉ ghi `custom_ca`. Chưa có `verify-ca` và chứng chỉ phía
+  client. Đã thử trên máy dev với một Postgres 17 bật `ssl=on` và chứng chỉ do CA tự tạo cấp cho `localhost`:
+  `require` kết nối được; `verify-full` không dán CA bị từ chối (CA lạ), dán CA thì kết nối được, nối bằng `127.0.0.1`
+  bị từ chối (sai tên máy); `require` tới máy chủ không bật TLS bị từ chối kèm lời báo chọn `prefer` hay `disable`.
 - Không dùng extension `postgres` của DuckDB vì `INSTALL postgres` tải extension từ Internet lúc chạy, đúng bản DuckDB
   đã biên dịch; image Docker không có thư mục home cho user chạy backend, và máy cài có thể không ra được Internet.
 - Xóa nguồn chỉ được khi không còn dataset nào chụp từ nó; xóa dataset không xóa nguồn.

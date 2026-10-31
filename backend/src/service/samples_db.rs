@@ -88,6 +88,7 @@ fn build_request(db: &SampleDatabase) -> CreateSourceRequest {
         user: db.user.clone(),
         password: db.password.expose().to_string(),
         sslmode: db.sslmode.clone(),
+        ssl_root_cert: None,
     }
 }
 
