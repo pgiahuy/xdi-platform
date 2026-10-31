@@ -90,6 +90,10 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
   quả hay bảng phân rã, kể cả câu nối bảng, kèm tổng của độ đo trên các dòng đó để so với ô (câu có HAVING, hàm cửa
   sổ hay bảng tạm gộp nhóm chưa truy được).
+- **Báo cáo:** gom các câu trả lời đã chọn thành một báo cáo có tiêu đề và đoạn mở đầu, hay tạo báo cáo tự động cho
+  một dataset (độ đo theo thời gian và theo nhóm, SQL do code dựng). Mỗi mục có câu hỏi, lời trả lời kèm kết quả kiểm
+  số và kiểm nghĩa, biểu đồ, bảng, cách tính, SQL, phiên bản dữ liệu; số liệu tính lại khi mở với quyền xem của người
+  đọc. Xuất PDF và Excel.
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
 - **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên file DataCo, và khi database mẫu đang chạy thì thêm 17 câu trên
   ảnh chụp của nó (10 câu bán hàng, 7 câu học tập, phần lớn nối bảng), so với SQL đúng viết tay; CI chạy phần DataCo và

@@ -2,7 +2,8 @@
 /* pages/AskConversation.tsx - khung trò chuyện của trang hỏi (#164): các lượt xếp dọc theo thứ tự hỏi, mỗi lượt là
 bong bóng câu hỏi và khối trả lời (ChatTurn). Thứ tự: các lượt đã lưu của cuộc vừa mở lại (chỉ có câu hỏi và tóm tắt,
 kèm nút Hỏi lại), rồi các lượt hỏi trong phiên này (AskOutcome đủ thẻ "Đã hiểu là", bảng, câu hỏi lại), rồi lượt đang
-chờ câu trả lời nếu đang hỏi câu mới. Lượt đã ghi (có query_id) có hai nút đánh giá Tốt, Chưa đạt (#212).
+chờ câu trả lời nếu đang hỏi câu mới. Lượt đã ghi (có query_id) có hai nút đánh giá Tốt, Chưa đạt (#212), và lượt đã
+trả lời có nút Thêm vào báo cáo.
 Bấm hay đưa focus vào một lượt của phiên này thì pane bằng chứng hiện của lượt đó (AskPage giữ lượt đang chọn).
 Số lượt hiện tăng (câu mới đang chờ, mở lại một cuộc) thì cuộn tới đầu lượt cuối: câu trả lời dài thì người đọc thấy
 phần đầu trước. Câu trả lời về thay lượt đang chờ ở đúng chỗ, số lượt không đổi, nên không cuộn lần nữa. */
@@ -13,6 +14,7 @@ import type { TurnItem } from '@/api/conversations'
 import { ChatTurn } from '@/components/ask/ChatTurn'
 import type { DrillTarget } from '@/components/ask/evidenceTypes'
 import { SavedTurnBody } from '@/components/ask/SavedTurnBody'
+import { AddToReportButton } from './AddToReportButton'
 import { AnswerFeedbackBar } from './AnswerFeedbackBar'
 import { AskOutcome, type Answer } from './AskOutcome'
 import { buildUnderstoodLines } from './savedTurnView'
@@ -65,6 +67,9 @@ export function AskConversation(props: Props) {
             disabled={pending}
           />
           <AnswerFeedbackBar ws={props.ws} queryId={turn.query_id} initial={turn.feedback} />
+          {turn.status === 'answered' && (
+            <AddToReportButton ws={props.ws} queryId={turn.query_id} question={turn.question} />
+          )}
         </ChatTurn>
       ))}
       {turns.map((turn, index) => (
@@ -101,6 +106,14 @@ export function AskConversation(props: Props) {
                 hỏi lại lượt này ra câu mới thì nút đánh giá bắt đầu lại từ chưa đánh giá. */}
             {turn.response.query_id && (
               <AnswerFeedbackBar key={turn.response.query_id} ws={props.ws} queryId={turn.response.query_id} initial={null} />
+            )}
+            {turn.response.query_id && turn.response.status === 'answered' && (
+              <AddToReportButton
+                key={`report-${turn.response.query_id}`}
+                ws={props.ws}
+                queryId={turn.response.query_id}
+                question={turn.variables.question}
+              />
             )}
           </ChatTurn>
         </div>
