@@ -134,7 +134,7 @@ pub struct ProfileColumn {
     pub role: String,
     pub description: Option<String>,
     /// Ai viết mô tả (DescriptionSource::as_str): database (COMMENT ON của nguồn) hay model (lớp ngữ nghĩa); None khi
-    /// chưa có mô tả.
+    /// chưa có mô tả hay không rõ nguồn.
     pub description_source: Option<String>,
     pub aliases: Vec<String>,
     pub is_sensitive: bool,
