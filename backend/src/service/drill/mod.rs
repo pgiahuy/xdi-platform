@@ -25,11 +25,12 @@ use tokio::sync::Semaphore;
 
 use crate::auth::Member;
 use crate::engine::guard::{
-    build_guarded_sql, build_parent_tables, AllowedTable, GuardError, GuardedSql,
+    build_guarded_sql, build_parent_tables, AllowedTable, GuardError, GuardedSql, JoinLink,
 };
 use crate::engine::query::{QueryError, QueryOutput};
 use crate::engine::store::QueryStatus;
 use crate::service::ask::build_allowed_table;
+use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::related::load_group;
 use crate::service::ask::repair::build_safe_error;
 use crate::service::ask::result::build_result_table;
@@ -99,6 +100,9 @@ pub async fn drill(
     let columns = state.store.list_columns(ws, version_id).await?;
     let picked = build_allowed_table(state, member, &dataset, &version, &columns).await?;
     let group = load_group(state, member, (&dataset, &version, &columns), picked).await?;
+    // Hộp lọc của người đã hỏi có nửa nối theo khóa ngoại (`"customer_id" IN (SELECT "id" FROM "customers" ...)`), nên
+    // guard cần quan hệ của nhóm để nhận lại câu đã lưu (luật nối bảng, #256).
+    let links = build_join_links(&group);
     let mut tables = group.allowed;
     let parents = build_parent_tables(&tables);
     tables.extend(parents);
@@ -109,6 +113,7 @@ pub async fn drill(
         offset: req.offset,
         limit: req.limit,
         tables: &tables,
+        links: &links,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,
     };
@@ -199,6 +204,8 @@ pub(super) struct DrillInput<'a> {
     pub limit: u32,
     /// Bảng của dataset, row_filters theo người đang bấm.
     pub tables: &'a [AllowedTable],
+    /// Quan hệ của nhóm bảng (ask/fanout.rs, build_join_links), cho luật nối bảng của guard.
+    pub links: &'a [JoinLink],
     pub timeout: Duration,
     pub jobs: &'a Arc<Semaphore>,
 }
@@ -208,7 +215,7 @@ pub(super) async fn run_drill(input: DrillInput<'_>) -> Result<DrillResponse, Ap
     // Trần của guard bằng cỡ trang lớn nhất: LIMIT của trang nằm dưới trần nên guard giữ nguyên.
     let max_rows = u64::from(MAX_DRILL_LIMIT);
     // Câu gốc với LIMIT 0 chỉ để biết tên cột kết quả, như giao diện đã nhận; DuckDB không đọc dòng nào.
-    let names_sql = guard(&plan.build_names_sql(), input.tables, max_rows)?;
+    let names_sql = guard(&plan.build_names_sql(), &input, max_rows)?;
     let names: Vec<String> = run(&input, names_sql.runnable)
         .await?
         .columns
@@ -222,8 +229,8 @@ pub(super) async fn run_drill(input: DrillInput<'_>) -> Result<DrillResponse, Ap
         input.offset,
         input.limit,
     )?;
-    let page = guard(&built.page, input.tables, max_rows)?;
-    let count = guard(&built.count, input.tables, max_rows)?;
+    let page = guard(&built.page, &input, max_rows)?;
+    let count = guard(&built.count, &input, max_rows)?;
     let rows = run(&input, page.runnable).await?;
     let total_rows = read_count(run(&input, count.runnable).await?)?;
     // Trang đã gửi đủ dòng (cỡ trang tối đa bằng số dòng ResultTable gửi) và không bị guard cắt, nên trần đưa vào là
@@ -238,8 +245,8 @@ pub(super) async fn run_drill(input: DrillInput<'_>) -> Result<DrillResponse, Ap
 
 /// Câu do code dựng từ một câu đã qua guard, nên guard từ chối chỉ khi hồ sơ đổi từ lúc hỏi (bảng đổi tên, cột không
 /// còn): báo như câu chưa truy được.
-fn guard(sql: &str, tables: &[AllowedTable], max_rows: u64) -> Result<GuardedSql, AppError> {
-    match build_guarded_sql(sql, tables, max_rows) {
+fn guard(sql: &str, input: &DrillInput<'_>, max_rows: u64) -> Result<GuardedSql, AppError> {
+    match build_guarded_sql(sql, input.tables, input.links, max_rows) {
         Ok(guarded) => Ok(guarded),
         Err(GuardError::Internal(e)) => Err(e),
         Err(

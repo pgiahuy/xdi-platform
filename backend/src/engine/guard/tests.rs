@@ -10,7 +10,8 @@ use sqlparser::ast::Statement;
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
 
-use super::{build_guarded_sql, AllowedTable, GuardError, GuardedSql, RowFilter};
+use super::join_tests::link;
+use super::{build_guarded_sql, AllowedTable, GuardError, GuardedSql, JoinLink, RowFilter};
 use crate::engine::analytics::parquet_glob;
 use crate::error::AppError;
 
@@ -47,8 +48,18 @@ fn tables_in(dir: &str) -> Vec<AllowedTable> {
     ]
 }
 
+/// sales.customer_id trỏ customers.customer_id, để các câu JOIN của test qua luật nối bảng (guard/joins.rs).
+/// Thêm một khóa tự trỏ sales.customer_id -> sales.customer_id chỉ để giữ các dạng câu tự JOIN của test lọc dòng:
+/// bảng tự JOIN phải đi qua khóa tự trỏ.
+fn links() -> Vec<JoinLink> {
+    vec![
+        link("sales", &["customer_id"], "customers", &["customer_id"]),
+        link("sales", &["customer_id"], "sales", &["customer_id"]),
+    ]
+}
+
 fn guard(sql: &str) -> Result<GuardedSql, GuardError> {
-    build_guarded_sql(sql, &tables_in("/data"), MAX_ROWS)
+    build_guarded_sql(sql, &tables_in("/data"), &links(), MAX_ROWS)
 }
 
 /// Phần read_parquet mà guard thay vào cho một bảng trong tables_in("/data"). Tính bằng parquet_glob thay vì viết
@@ -838,7 +849,12 @@ fn from_has_at_most_six_sources() {
             .collect::<Vec<_>>()
             .join(", ")
     };
-    assert_accepted(&format!("SELECT s1.region FROM {}", from(6)));
+    // Các bảng nối theo khóa tự trỏ của test để qua luật nối bảng; trần số nguồn kiểm trước luật đó.
+    let chain = (2..=6)
+        .map(|i| format!("s1.customer_id = s{i}.customer_id"))
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    assert_accepted(&format!("SELECT s1.region FROM {} WHERE {chain}", from(6)));
     let reason = assert_oversized(&format!("SELECT s1.region FROM {}", from(7)));
     assert!(reason.contains("tối đa 6"), "{reason}");
     // JOIN, JOIN trong ngoặc cũng tính.
@@ -854,7 +870,7 @@ fn from_has_at_most_six_sources() {
 fn tables_read_lists_each_data_table_once() {
     let guarded = assert_accepted(
         "WITH c AS (SELECT * FROM customers) SELECT s.region FROM sales s JOIN c ON s.customer_id = c.customer_id \
-         JOIN sales t ON t.region = s.region",
+         JOIN sales t ON t.customer_id = s.customer_id",
     );
     assert_eq!(guarded.tables_read, ["customers", "sales"]);
     let guarded = assert_accepted("SELECT region FROM sales");
@@ -920,7 +936,7 @@ fn row_filter(column: &str, allowed_values: &[&str]) -> RowFilter {
 /// Thành viên có data_role chỉ được thấy miền South.
 fn guard_as_south_member(sql: &str) -> Result<GuardedSql, GuardError> {
     let tables = tables_with_sales_policy("/data", vec![row_filter("region", &["South"])]);
-    build_guarded_sql(sql, &tables, MAX_ROWS)
+    build_guarded_sql(sql, &tables, &links(), MAX_ROWS)
 }
 
 fn assert_accepted_for_south_member(sql: &str) -> GuardedSql {
@@ -1076,7 +1092,8 @@ fn joins_several_policies_of_one_table_with_and() {
             row_filter("customer_id", &["1"]),
         ],
     );
-    let guarded = build_guarded_sql("SELECT region FROM sales", &tables, MAX_ROWS).unwrap();
+    let guarded =
+        build_guarded_sql("SELECT region FROM sales", &tables, &links(), MAX_ROWS).unwrap();
     assert_eq!(
         guarded.shown,
         "SELECT region FROM (SELECT * FROM sales WHERE \"region\" IN ('South', 'East') AND \"customer_id\" IN ('1')) \
@@ -1087,7 +1104,8 @@ fn joins_several_policies_of_one_table_with_and() {
 #[test]
 fn empty_allowed_list_shows_no_rows() {
     let tables = tables_with_sales_policy("/data", vec![row_filter("region", &[])]);
-    let guarded = build_guarded_sql("SELECT region FROM sales", &tables, MAX_ROWS).unwrap();
+    let guarded =
+        build_guarded_sql("SELECT region FROM sales", &tables, &links(), MAX_ROWS).unwrap();
     assert_eq!(
         guarded.shown,
         "SELECT region FROM (SELECT * FROM sales WHERE false) AS sales LIMIT 100"
@@ -1105,7 +1123,8 @@ fn quotes_in_policy_values_stay_inside_the_string() {
             &["O'Brien", "South') OR ('1' = '1"],
         )],
     );
-    let guarded = build_guarded_sql("SELECT region FROM sales", &tables, MAX_ROWS).unwrap();
+    let guarded =
+        build_guarded_sql("SELECT region FROM sales", &tables, &links(), MAX_ROWS).unwrap();
     assert_eq!(
         guarded.shown,
         "SELECT region FROM (SELECT * FROM sales \
@@ -1252,6 +1271,7 @@ fn lists_each_added_condition_once() {
         "SELECT c.segment FROM sales s JOIN customers c ON s.customer_id = c.customer_id \
          UNION ALL SELECT region FROM sales",
         &tables,
+        &links(),
         MAX_ROWS,
     )
     .unwrap();
@@ -1282,8 +1302,9 @@ fn no_policy_adds_no_condition() {
 fn policy_on_a_column_the_table_lacks_blocks_the_query() {
     let tables = tables_with_sales_policy("/data", vec![row_filter("segment", &["Retail"])]);
     let result = build_guarded_sql(
-        "SELECT s.region FROM customers c, sales s",
+        "SELECT s.region FROM customers c, sales s WHERE s.customer_id = c.customer_id",
         &tables,
+        &links(),
         MAX_ROWS,
     );
     assert!(matches!(result, Err(GuardError::Internal(_))), "{result:?}");
@@ -1461,7 +1482,8 @@ fn runnable_runs_on_duckdb() {
     let sql = "WITH t AS (SELECT s.region, c.segment, s.amount FROM sales s \
                JOIN customers c ON s.customer_id = c.customer_id) \
                SELECT segment, SUM(amount) AS total FROM t GROUP BY segment ORDER BY total DESC";
-    let guarded = build_guarded_sql(sql, &tables_in(dir.to_str().unwrap()), MAX_ROWS).unwrap();
+    let guarded =
+        build_guarded_sql(sql, &tables_in(dir.to_str().unwrap()), &links(), MAX_ROWS).unwrap();
     let mut statement = conn.prepare(&guarded.runnable).unwrap();
     let rows: Vec<(String, i64)> = statement
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
@@ -1481,7 +1503,7 @@ fn run_and_collect_regions(
     sql: &str,
     tables: &[AllowedTable],
 ) -> Vec<String> {
-    let guarded = build_guarded_sql(sql, tables, MAX_ROWS).unwrap();
+    let guarded = build_guarded_sql(sql, tables, &links(), MAX_ROWS).unwrap();
     let mut statement = conn.prepare(&guarded.runnable).unwrap();
     statement
         .query_map([], |row| row.get(0))

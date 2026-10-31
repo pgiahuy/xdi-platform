@@ -22,7 +22,7 @@ use futures_util::future::join_all;
 use rust_decimal::Decimal;
 use tokio::sync::Semaphore;
 
-use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError};
+use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError, JoinLink};
 use crate::engine::query::QueryError;
 use crate::error::AppError;
 use crate::service::ask::contract::StepName;
@@ -57,6 +57,9 @@ use crate::service::explain::{
 /// Bảng, trần dòng và giới hạn chạy, chung cho mọi câu của một câu hỏi.
 pub struct QueryEnv<'a> {
     pub tables: &'a [AllowedTable],
+    /// Quan hệ khóa ngoại giữa các bảng: câu do code dựng nối bảng liên quan (explain/source.rs) cũng qua luật nối
+    /// bảng của guard (#256). Rỗng khi chỉ đọc một bảng.
+    pub links: &'a [JoinLink],
     pub max_rows: u64,
     pub timeout: Duration,
     pub jobs: &'a Arc<Semaphore>,
@@ -91,7 +94,7 @@ pub async fn run_code_query(
     mut steps: Option<&mut Vec<AskStep>>,
 ) -> Result<CodeQuery, AppError> {
     let started = std::time::Instant::now();
-    let guarded = match build_guarded_sql(sql, env.tables, env.max_rows) {
+    let guarded = match build_guarded_sql(sql, env.tables, env.links, env.max_rows) {
         Ok(guarded) => guarded,
         Err(GuardError::Internal(e)) => return Err(e),
         Err(
