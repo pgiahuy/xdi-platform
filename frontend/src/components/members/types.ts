@@ -7,4 +7,6 @@ export type MemberItem = {
   name: string
   email: string
   role: string
+  /** Tên các vai dữ liệu người này mang; rỗng khi không có hay khi người xem không được biết. */
+  dataRoles?: string[]
 }

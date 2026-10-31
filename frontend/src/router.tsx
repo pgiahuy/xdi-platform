@@ -18,6 +18,7 @@ import { RootPage } from '@/pages/RootPage'
 import { RouteErrorPage } from '@/pages/RouteErrorPage'
 import {
   accountPath,
+  dataRolesPath,
   domainsPath,
   examplesPath,
   lessonsPath,
@@ -81,6 +82,10 @@ export const router = createBrowserRouter([
               {
                 path: domainsPath,
                 lazy: async () => ({ Component: (await import('@/pages/DomainsPage')).DomainsPage }),
+              },
+              {
+                path: dataRolesPath,
+                lazy: async () => ({ Component: (await import('@/pages/DataRolesPage')).DataRolesPage }),
               },
               {
                 path: membersPath,
