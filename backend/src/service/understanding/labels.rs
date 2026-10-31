@@ -260,6 +260,24 @@ pub fn build_filter_label(expr: &Expr, profile: &[ColumnProfile]) -> String {
         return format!("{subject} {phrase}");
     }
     match expr {
+        // Vế ghép bằng OR hay AND (trong ngoặc) đọc từng vế rồi nối bằng lời, như "Market là Europe hoặc Market là LATAM".
+        Expr::BinaryOp {
+            left,
+            op: op @ (BinaryOperator::Or | BinaryOperator::And),
+            right,
+        } => {
+            let word = if *op == BinaryOperator::Or {
+                "hoặc"
+            } else {
+                "và"
+            };
+            format!(
+                "{} {word} {}",
+                build_filter_label(left, profile),
+                build_filter_label(right, profile)
+            )
+        }
+        Expr::Nested(inner) => build_filter_label(inner, profile),
         Expr::InList {
             expr: subject,
             list,
@@ -274,7 +292,7 @@ pub fn build_filter_label(expr: &Expr, profile: &[ColumnProfile]) -> String {
                 let subject = build_subject_label(subject, profile, false);
                 format!("{subject} {word} {values}")
             }
-            None => expr.to_string(),
+            None => build_unread_filter_label(expr, profile),
         },
         Expr::Between {
             expr: subject,
@@ -286,7 +304,7 @@ pub fn build_filter_label(expr: &Expr, profile: &[ColumnProfile]) -> String {
                 let subject = build_subject_label(subject, profile, false);
                 format!("{subject} từ {low} đến {high}")
             }
-            _ => expr.to_string(),
+            _ => build_unread_filter_label(expr, profile),
         },
         Expr::IsNull(subject) => format!("{} trống", build_subject_label(subject, profile, false)),
         Expr::IsNotNull(subject) => {
@@ -295,7 +313,27 @@ pub fn build_filter_label(expr: &Expr, profile: &[ColumnProfile]) -> String {
                 build_subject_label(subject, profile, false)
             )
         }
-        _ => expr.to_string(),
+        _ => build_unread_filter_label(expr, profile),
+    }
+}
+
+// Vế lọc code không đọc được theo khuôn (so với một câu truy vấn con, hàm lạ): nói bằng lời cột nào bị lọc rồi chỉ người
+// đọc sang câu SQL, không in nguyên đoạn SQL vào thẻ: người dùng nghiệp vụ không đọc SQL, và đoạn dài làm thẻ rối. Cột
+// là cột đầu tiên có tên trong ngoặc kép của đoạn đó; không có cột nào thì chỉ nói có một điều kiện.
+fn build_unread_filter_label(expr: &Expr, profile: &[ColumnProfile]) -> String {
+    let text = expr.to_string();
+    let computed = text.to_uppercase().contains("SELECT ");
+    let column = text.split('"').nth(1).filter(|name| !name.is_empty());
+    match (column, computed) {
+        (Some(name), true) => format!(
+            "{} theo một giá trị tính từ dữ liệu (xem câu SQL)",
+            build_column_label(name, profile, false)
+        ),
+        (Some(name), false) => format!(
+            "{} theo một điều kiện phức tạp (xem câu SQL)",
+            build_column_label(name, profile, false)
+        ),
+        (None, _) => "Một điều kiện phức tạp (xem câu SQL)".to_string(),
     }
 }
 

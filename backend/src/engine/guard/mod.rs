@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/guard/mod.rs - kiểm SQL do LLM sinh trước khi chạy, theo năm bước trong build_guarded_sql: chỉ nhận một câu
 SELECT chỉ đọc; kiểm tên bảng, hàm, cột (luật kích thước của vài hàm ở guard/sizes.rs), số tầng câu lồng nhau
-(guard/depth.rs), số mảnh ghép chuỗi (guard/pieces.rs), độ dài chuỗi hằng và số cột (guard/width.rs); lọc dòng theo
+(guard/depth.rs), số mảnh ghép chuỗi (guard/pieces.rs), độ dài chuỗi hằng và số cột (guard/width.rs), nối bảng đúng
+khóa ngoại (guard/joins.rs); lọc dòng theo
 vai dữ liệu của người hỏi; thêm LIMIT; đổi bảng logic sang file Parquet. Test ở guard/tests.rs.
 
 Kiểm trên cây cú pháp vì dò chữ "DROP" thì lọt khi viết hoa thường lẫn lộn hay chen chú thích. Hạn chế: cây do
@@ -29,6 +30,7 @@ use sqlparser::parser::Parser;
 use crate::engine::analytics::parquet_glob;
 use crate::error::AppError;
 
+pub use joins::JoinLink;
 pub use prompt_rules::build_prompt_rules;
 
 /// Bảng logic mà SQL của LLM được phép đọc, ví dụ "sales". Cũng là bảng cha trong RowFilter::Parent: khi đó mô hình
@@ -104,9 +106,13 @@ pub enum GuardError {
 
 /// Cả hai bản in lại từ cây đã kiểm, không dùng câu gốc của LLM: phần guard bỏ qua khi đọc (chú thích) không tới được
 /// DuckDB.
+///
+/// links là các quan hệ khóa ngoại giữa các bảng (rỗng với dataset nạp từ file): mọi phép nối bảng phải đi đúng một
+/// quan hệ trong đó (guard/joins.rs).
 pub fn build_guarded_sql(
     sql: &str,
     tables: &[AllowedTable],
+    links: &[JoinLink],
     max_rows: u64,
 ) -> Result<GuardedSql, GuardError> {
     let mut query = parse_single_select(sql)?;
@@ -114,6 +120,8 @@ pub fn build_guarded_sql(
     depth::check_query_depth(&query).map_err(GuardError::Oversized)?;
     pieces::check_concat_pieces(&query).map_err(GuardError::Oversized)?;
     width::check_query_width(&query, tables).map_err(GuardError::Oversized)?;
+    // Trước bước lọc dòng: hộp lọc guard thêm có nửa nối theo khóa ngoại do code dựng, không cần kiểm lại.
+    joins::check_joins(&query, tables, links)?;
     // Sau check_names để mọi chỗ đọc dữ liệu đã chắc là bảng trong danh sách; trước build_runnable vì sau đó `sales s`
     // thành `read_parquet(...) AS s`, mất tên bảng. `shown` chứa cả điều kiện để người hỏi thấy phạm vi dữ liệu của mình.
     // Sau các luật kích thước: hộp lọc thêm một tầng câu nhưng chỉ là SELECT * kèm WHERE, không ghép thêm giá trị, nên
@@ -1076,6 +1084,16 @@ fn unknown_name(reason: String) -> GuardError {
 }
 
 mod depth;
+mod join_conditions;
+mod join_from;
+mod join_keys;
+mod join_nested;
+mod join_pairs;
+mod join_shape;
+mod join_sources;
+#[cfg(test)]
+mod join_tests;
+mod joins;
 #[cfg(test)]
 mod parent_filter_tests;
 mod pieces;

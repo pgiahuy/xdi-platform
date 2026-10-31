@@ -36,14 +36,16 @@ async fn one_group_is_compared_with_the_rest() {
     assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
     let explanation = outcome.explanation.as_ref().unwrap();
     assert_eq!(explanation.comparison, Comparison::Groups);
-    assert_eq!(explanation.base.label, "các thị trường còn lại");
-    assert_eq!(explanation.base.value, "6158980.00");
+    // Doanh thu cộng được: so với trung bình mỗi thị trường còn lại (6.158.980 trên 4 thị trường), không với tổng của
+    // chúng, nên Pacific Asia hóa ra cao hơn, trái tiền đề của câu hỏi.
+    assert_eq!(explanation.base.label, "trung bình các thị trường còn lại");
+    assert_eq!(explanation.base.value, "1539745.00");
     assert_eq!(explanation.compare.value, "1960120.00");
     assert_eq!(explanation.base.filter, "\"Market\" <> 'Pacific Asia'");
     assert!(
         explanation
             .summary_title
-            .contains("thấp hơn các thị trường còn lại"),
+            .contains("cao hơn trung bình các thị trường còn lại"),
         "{}",
         explanation.summary_title
     );
@@ -64,7 +66,7 @@ async fn one_group_is_compared_with_the_rest() {
         .collect();
     assert_eq!(
         labels,
-        ["Market: Pacific Asia so với các thị trường còn lại"]
+        ["Market: Pacific Asia so với trung bình các thị trường còn lại"]
     );
 }
 

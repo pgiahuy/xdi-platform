@@ -81,7 +81,7 @@ enum Verdict {
 }
 
 fn verdict(sql: &str) -> Verdict {
-    match build_guarded_sql(sql, &tables(), 1000) {
+    match build_guarded_sql(sql, &tables(), &[], 1000) {
         Ok(_) => Verdict::Accept,
         Err(GuardError::Oversized(_)) => Verdict::Oversized,
         Err(GuardError::Rejected(_) | GuardError::UnknownName(_)) => Verdict::Rejected,

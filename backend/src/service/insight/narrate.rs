@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
-use crate::service::ask::contract::{AnswerVerdict, AskStep, StepName};
+use crate::service::ask::contract::{AnswerVerdict, AskStep, InsightPoint, StepName};
 use crate::service::ask::failures::{FailedStep, StepFailure};
 use crate::service::ask::judge::judge;
 use crate::service::ask::lessons::build_with_lessons;
@@ -316,8 +316,13 @@ pub fn build_insight_check(text: &str, parts: &InsightParts) -> Result<(), Strin
 
 /// Câu của code nối thành một đoạn: Insight.summary khi không dùng lời của mô hình.
 pub fn build_code_text(parts: &InsightParts) -> String {
-    let mut text = parts.title.clone();
-    for point in &parts.points {
+    build_facts_text(&parts.title, &parts.points)
+}
+
+/// Câu chính và các ý nối thành một đoạn, mỗi ý "<nhãn>: <câu>".
+pub fn build_facts_text(title: &str, points: &[InsightPoint]) -> String {
+    let mut text = title.to_string();
+    for point in points {
         if !text.is_empty() {
             text.push(' ');
         }

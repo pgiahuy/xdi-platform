@@ -19,7 +19,7 @@ fn guarded(sql: &str, row_filters: Vec<RowFilter>) -> String {
         parquet_dir: PathBuf::from("/data/sales"),
         row_filters,
     }];
-    build_guarded_sql(sql, &tables, 1000).unwrap().shown
+    build_guarded_sql(sql, &tables, &[], 1000).unwrap().shown
 }
 
 fn south_only() -> Vec<RowFilter> {

@@ -252,10 +252,13 @@ async fn answers_a_question_and_records_it() {
         .as_str()
         .unwrap()
         .starts_with("Câu hỏi thường: "));
-    // Mock không có lời viết sẵn cho task insight nên đoạn trả lời là câu khuôn, không gọi mạng.
-    assert_eq!(
-        response["answer_text"],
-        "Có 2 dòng; cao nhất là LATAM với 200."
+    // Mock không có lời viết sẵn cho task insight nên đoạn trả lời là câu khuôn, không gọi mạng. Tên độ đo ở giữa câu
+    // là mô tả cột khi hồ sơ do mock viết (chạy nền sau khi nạp) đã ghi xong, không thì tên cột; chỉ so hai đầu câu.
+    let answer = response["answer_text"].as_str().unwrap();
+    assert!(answer.starts_with("LATAM có tổng "), "{answer}");
+    assert!(
+        answer.ends_with(" cao nhất: 200, tiếp theo là Europe."),
+        "{answer}"
     );
     assert_eq!(response["answer_text_by_model"], false);
     // Giả định "toàn bộ thời gian" của mô hình thành một lựa chọn với id do code dựng.

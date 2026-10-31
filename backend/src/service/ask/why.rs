@@ -22,10 +22,12 @@ use crate::engine::guard::AllowedTable;
 use crate::engine::store::{Dataset, DatasetVersion, ProfileColumn};
 use crate::service::ask::checks::build_empty_warning;
 use crate::service::ask::contract::{AskResponse, AskStatus, AskStep, Explanation, TableRead};
+use crate::service::ask::data_range::build_data_range;
+use crate::service::ask::fanout::JoinLink;
 use crate::service::ask::prompt::PromptInput;
 use crate::service::ask::related::TableGroup;
 use crate::service::ask::response_choices::{
-    build_pick_choices, build_unapplied_warnings, build_used_choices,
+    apply_answered_choices, build_pick_choices, build_unapplied_warnings, build_used_choices,
 };
 use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
@@ -47,6 +49,8 @@ pub(super) struct WhyAsk<'a> {
     /// Gồm bảng đang hỏi và các bảng liên quan của nhóm (ask/related.rs).
     pub tables: &'a [AllowedTable],
     pub group: &'a TableGroup,
+    /// Quan hệ của nhóm theo tên bảng (ask/fanout.rs, build_join_links), cho luật nối bảng của guard.
+    pub links: &'a [JoinLink],
     /// Bảng liên quan nối nhiều-một vào bảng đang hỏi, cho phân rã (#227).
     pub related: &'a RelatedTables,
     /// Các bước đã chạy (context).
@@ -65,6 +69,7 @@ pub(super) async fn ask_why(
         columns,
         tables,
         group,
+        links,
         related,
         mut steps,
     } = ask;
@@ -82,6 +87,7 @@ pub(super) async fn ask_why(
         values: &values,
         row_count: version.row_count,
         tables,
+        links,
         max_rows: state.config.ask_max_rows,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,
@@ -94,7 +100,8 @@ pub(super) async fn ask_why(
     let mut assumptions = build_pick_choices(context);
     assumptions.append(&mut outcome.assumptions);
     outcome.assumptions = assumptions;
-    let used = build_used_choices(context, &outcome.assumptions);
+    let mut used = build_used_choices(context, &outcome.assumptions);
+    apply_answered_choices(&mut used, choices, metrics);
     let mut warnings = build_unapplied_warnings(choices, &used);
     warnings.extend(build_value_warnings(context, &outcome.terms));
     // Trong các luật kiểm hợp lý (ask/checks.rs), câu "tại sao" chỉ nhận empty_result: SQL do code dựng từ form mà giá
@@ -154,12 +161,17 @@ pub(super) async fn ask_why(
         query_id: Some(query_id),
     };
     record_failures(state, member, &asked, &failures).await;
+    // Mọi câu trả lời ghi dữ liệu có đến ngày nào (ask/data_range.rs).
+    let data_range = (outcome.status == AskStatus::Answered)
+        .then(|| build_data_range(columns, outcome.sql_guarded.as_deref()))
+        .flatten();
     Ok(AskResponse {
         message: outcome.message,
         query_id: Some(query_id),
         choices: used,
         sql_generated: outcome.sql_generated,
         sql_guarded: outcome.sql_guarded,
+        data_range,
         tables_read: if outcome.status == AskStatus::Answered {
             tables_read
         } else {

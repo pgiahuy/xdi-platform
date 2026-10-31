@@ -72,3 +72,87 @@ fn build_grouped(whole: &str) -> String {
     }
     grouped
 }
+
+/// "12.340.831,43" thành "khoảng 12,3 triệu": số viết kiểu Việt Nam từ một triệu trở lên, ba chữ số có nghĩa, đơn vị
+/// triệu hay tỷ. None khi chuỗi không phải số như vậy (số nhỏ hơn, chữ, số viết kiểu máy).
+pub fn build_readable_number(token: &str) -> Option<String> {
+    let (whole, fraction) = token.split_once(',').unwrap_or((token, ""));
+    let groups: Vec<&str> = whole.split('.').collect();
+    let digits = |part: &str| part.chars().all(|c| c.is_ascii_digit());
+    let grouped = groups.len() >= 3
+        && (1..=3).contains(&groups[0].len())
+        && groups[1..].iter().all(|g| g.len() == 3)
+        && groups.iter().all(|g| digits(g))
+        && digits(fraction);
+    if !grouped {
+        return None;
+    }
+    let value: Decimal = format!(
+        "{}.{}",
+        groups.concat(),
+        if fraction.is_empty() { "0" } else { fraction }
+    )
+    .parse()
+    .ok()?;
+    let billion = Decimal::from(1_000_000_000);
+    let (scaled, unit) = if value >= billion {
+        (value / billion, "tỷ")
+    } else {
+        (value / Decimal::from(1_000_000), "triệu")
+    };
+    let places = if scaled >= Decimal::from(100) {
+        0
+    } else if scaled >= Decimal::from(10) {
+        1
+    } else {
+        2
+    };
+    let rounded = scaled
+        .round_dp_with_strategy(places, RoundingStrategy::MidpointAwayFromZero)
+        .normalize();
+    Some(format!(
+        "khoảng {} {unit}",
+        rounded.to_string().replace('.', ",")
+    ))
+}
+
+/// Mỗi số từ một triệu trở lên trong câu viết thêm dạng rút gọn đứng trước, số đủ trong ngoặc: "đạt khoảng 12,3 triệu
+/// (12.340.831,43)". Người đọc thấy ngay độ lớn mà vẫn đối chiếu được với bảng. Số có dấu trừ liền trước thì giữ nguyên,
+/// để không thành "-khoảng ..."; câu của code nói chiều bằng chữ nên hiếm gặp. Số đang nằm trong ngoặc cũng giữ nguyên,
+/// để không ra ngoặc lồng ngoặc ("Africa (2.294.452,93)"); nhờ vậy gọi hai lần trên cùng câu vẫn ra một câu.
+pub fn apply_readable_numbers(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let joins = |c: char| c.is_ascii_digit() || c == '.' || c == ',';
+    let mut out = String::with_capacity(text.len());
+    let mut depth = 0usize;
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        let starts =
+            chars[i].is_ascii_digit() && (i == 0 || !(joins(chars[i - 1]) || chars[i - 1] == '-'));
+        if !starts {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+        let mut end = i;
+        while end < chars.len() && joins(chars[end]) {
+            end += 1;
+        }
+        // Dấu chấm hay dấu phẩy cuối là dấu câu, không thuộc số.
+        while end > i && !chars[end - 1].is_ascii_digit() {
+            end -= 1;
+        }
+        let token: String = chars[i..end].iter().collect();
+        match build_readable_number(&token).filter(|_| depth == 0) {
+            Some(short) => out.push_str(&format!("{short} ({token})")),
+            None => out.push_str(&token),
+        }
+        i = end;
+    }
+    out
+}

@@ -74,7 +74,7 @@ impl Orders {
 
     /// Trả lời một câu như luồng hỏi: qua guard (không lọc dòng), chạy, đổi sang ResultTable. Trả sql_guarded và bảng.
     async fn answer(&self, sql: &str) -> (String, ResultTable) {
-        let guarded = build_guarded_sql(sql, &self.tables(Vec::new()), 100_000).unwrap();
+        let guarded = build_guarded_sql(sql, &self.tables(Vec::new()), &[], 100_000).unwrap();
         let output = run_query_in_turn(&self.jobs, guarded.runnable, Duration::from_secs(30))
             .await
             .unwrap();
@@ -96,6 +96,7 @@ impl Orders {
             offset: page.0,
             limit: page.1,
             tables: &tables,
+            links: &[],
             timeout: Duration::from_secs(30),
             jobs: &self.jobs,
         })

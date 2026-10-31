@@ -150,6 +150,8 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `SOURCE_SECRET_KEY` | trống (tự sinh) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`). Để trống thì lần đầu khởi động backend tự sinh một khóa ngẫu nhiên, ghi vào `DATA_DIR/source_secret.key` (quyền 0600; compose: volume `xdidata`) và các lần sau đọc lại file đó; log ghi một dòng khi sinh, không in khóa. Mất file đó (xóa volume, `docker compose down -v`) là mất mật khẩu của mọi nguồn đã lưu: phải thêm lại nguồn. `make backup` chép cả file này, nên ai có bản sao lưu là giải mã được thông tin kết nối. Bản chạy thật nên đặt biến này và giữ khóa ngoài máy chủ. Đổi khóa thì phải thêm lại các nguồn |
 | `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối, trừ đúng máy và cổng của `SAMPLE_DATABASE_URL` (chỉ cổng đó) luôn được phép. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp |
 | `SOURCE_MAX_ROWS`, `SOURCE_TIMEOUT_SECS` | `1000000`, `300` | Trần số dòng và thời gian một lần chụp bảng; dung lượng theo `MAX_UPLOAD_MB` |
+| `SOURCE_SNAPSHOT_MODE` | `direct` | Cách chép bảng khi chụp: `direct` để DuckDB đọc thẳng Postgres bằng extension `postgres` và ghi Parquet một bước, `copy` để Postgres `COPY` ra file CSV tạm rồi DuckDB đổi sang Parquet. Cùng kiểu cột, cùng dữ liệu; số đo ở [PERFORMANCE.md](PERFORMANCE.md). `direct` mà extension không nạp được (thiếu file, lệch bản DuckDB) hay libpq của extension không kết nối được thì log ghi một cảnh báo và lần chụp dùng `copy` |
+| `SOURCE_POSTGRES_EXTENSION` | `/usr/local/lib/xdi/postgres_scanner.duckdb_extension` | File extension `postgres` của DuckDB cho `direct`. Image Docker có sẵn file ở đường dẫn này; backend chỉ nạp từ file, không bao giờ tải extension lúc chạy (mục 2) |
 | `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | Để dành cho đăng nhập bằng Google, backend hiện chưa đọc; để trống |
 
@@ -266,7 +268,20 @@ make uninstall PREFIX=$HOME/.local
 `make install` build bản release rồi chép binary từ `backend/target`, hoặc từ `CARGO_TARGET_DIR` nếu biến này được đặt.
 
 Binary cần một Postgres (`DATABASE_URL`), thư mục dữ liệu ghi được (`DATA_DIR`) và, nếu muốn có giao diện, thư mục
-giao diện đã build (`STATIC_DIR`). Gói binary trong mỗi bản phát hành trên GitHub chỉ có backend. Muốn có dataset mẫu
+giao diện đã build (`STATIC_DIR`). Gói binary trong mỗi bản phát hành trên GitHub chỉ có backend, kèm file extension
+`postgres_scanner.duckdb_extension`: chép file đó vào `/usr/local/lib/xdi/` hoặc đặt `SOURCE_POSTGRES_EXTENSION` trỏ tới
+nó.
+
+**Extension `postgres` của DuckDB** (#246). Chụp bảng với `SOURCE_SNAPSHOT_MODE=direct` cần file extension đúng bản
+DuckDB mà crate `duckdb` biên dịch kèm (hiện `v1.5.6`). Backend nạp file bằng đường dẫn, tắt tự cài và tự nạp extension,
+nên máy chạy không cần ra Internet. File được tải lúc build, từ `extensions.duckdb.org`, bằng
+`scripts/fetch-duckdb-extension.sh`; script ghi phiên bản và SHA-256 của file cho `linux_amd64` và `linux_arm64`, sai
+checksum thì dừng. Ba chỗ gọi script: stage `duckdb-extension` của `backend/Dockerfile`, `make release-artifacts`, và
+`make duckdb-extension` (`make dev` gọi sẵn; tải một lần vào `duckdb-extensions/` của repo, git bỏ qua thư mục này).
+File khoảng 14 MB khi tải (gzip), 40 MB sau khi giải nén. Nâng crate `duckdb` thì sửa phiên bản và checksum trong
+script; test `duckdb_version_matches_the_extension_pin` báo lỗi khi hai bên lệch nhau. Giấy phép: MIT (duckdb-postgres),
+kèm libpq (PostgreSQL License) và OpenSSL 3 (Apache-2.0) liên kết tĩnh, văn bản ở
+`backend/third-party/duckdb-postgres-extension-licenses.txt`. Muốn có dataset mẫu
 lúc thiết lập lần đầu thì đặt `SAMPLES_DIR` trỏ tới thư mục `data/samples` của repo; không thấy file mẫu thì backend bỏ
 qua bước này.
 
@@ -592,7 +607,7 @@ dataset kèm 11 quan hệ: `sales_demo` (`order_items`, `orders`, `customers`, `
 `courses`, `registrations`, `assessments`, `student_assessments`, `vle_materials`), kèm chỉ số mẫu "Doanh thu", "Lợi
 nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. `edu.student_daily_clicks` (1,8 triệu dòng) không
 chụp sẵn vì quá `SOURCE_MAX_ROWS` mặc định. Đo trên máy dev ngày 31/10/2026: bước tạo tài khoản quản trị kèm chụp 12 bảng
-mất 5,4 giây. Câu mẫu của các bảng này nằm trong `backend/src/engine/llm/mock_answers_database.json` và hiện thành câu
+mất 5,4 giây (đo trước #246, chép bằng `copy`). Câu mẫu của các bảng này nằm trong `backend/src/engine/llm/mock_answers_database.json` và hiện thành câu
 gợi ý của dataset, ví dụ "Tỷ lệ bỏ học theo môn học" và "Số sinh viên theo kết quả cuối khóa" trên `students`, "Điểm
 trung bình theo loại bài đánh giá" trên `student_assessments` (nối `assessments`), "Doanh thu theo phân khúc khách
 hàng" trên `order_items` (nối `orders`, `customers`). Một database không tới được thì backend ghi cảnh báo và giữ nguồn

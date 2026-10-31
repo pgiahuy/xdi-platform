@@ -15,7 +15,8 @@ use std::path::{Path, PathBuf};
 use duckdb::types::Value;
 use duckdb::Connection;
 
-use super::{build_guarded_sql, AllowedTable, GuardError, RowFilter};
+use super::join_tests::link;
+use super::{build_guarded_sql, AllowedTable, GuardError, JoinLink, RowFilter};
 use crate::engine::analytics::parquet_glob;
 
 const MAX_ROWS: u64 = 100;
@@ -54,6 +55,21 @@ const ALLOWED_SOUTH_DONE_RETAIL: &str =
      CREATE TABLE orders AS SELECT * FROM orders_rows WHERE id IN (10); \
      CREATE TABLE order_items AS SELECT * FROM order_items_rows WHERE id IN (1, 6, 9, 10); \
      CREATE TABLE products AS SELECT * FROM products_rows WHERE segment = 'Retail';";
+
+/// Quan hệ của lược đồ ở đầu file, để các câu JOIN qua luật nối bảng (guard/joins.rs) cả khi bảng không bị lọc.
+fn links() -> Vec<JoinLink> {
+    vec![
+        link("orders", &["customer_id"], "customers", &["id"]),
+        link("order_items", &["order_id"], "orders", &["id"]),
+        link("order_items", &["gift_customer_id"], "customers", &["id"]),
+        link(
+            "order_items",
+            &["maker", "sku"],
+            "products",
+            &["maker", "sku"],
+        ),
+    ]
+}
 
 /// Mỗi dạng là một cách đọc: một bảng đọc riêng, JOIN theo quan hệ, khóa hai cột, câu con, bảng tạm, phép tập hợp.
 const QUERY_SHAPES: &[&str] = &[
@@ -155,8 +171,13 @@ fn single_key_filter_reads_the_filtered_parent() {
     let dir = PathBuf::from("/data");
     let tables = sales_tables(&dir, &[], &[]);
     let orders_only = vec![find(&tables, "orders").clone()];
-    let guarded =
-        build_guarded_sql("SELECT COUNT(*) AS n FROM orders", &orders_only, MAX_ROWS).unwrap();
+    let guarded = build_guarded_sql(
+        "SELECT COUNT(*) AS n FROM orders",
+        &orders_only,
+        &links(),
+        MAX_ROWS,
+    )
+    .unwrap();
     let condition =
         "\"customer_id\" IN (SELECT \"id\" FROM \"customers\" WHERE \"region\" IN ('South'))";
     assert_eq!(
@@ -185,8 +206,13 @@ fn single_key_filter_reads_the_filtered_parent() {
 #[test]
 fn transitive_two_path_and_composite_filters_are_all_added() {
     let tables = sales_tables(Path::new("/data"), &["done"], &["Retail"]);
-    let guarded =
-        build_guarded_sql("SELECT SUM(qty) AS q FROM order_items", &tables, MAX_ROWS).unwrap();
+    let guarded = build_guarded_sql(
+        "SELECT SUM(qty) AS q FROM order_items",
+        &tables,
+        &links(),
+        MAX_ROWS,
+    )
+    .unwrap();
     let customers = "SELECT \"id\" FROM \"customers\" WHERE \"region\" IN ('South')";
     let orders = format!(
         "SELECT \"id\" FROM \"orders\" WHERE \"status\" IN ('done') AND \"customer_id\" IN ({customers})"
@@ -223,7 +249,8 @@ fn parent_without_conditions_has_no_where() {
         dir,
         vec![parent(&["customer_id"], &["id"], customers)],
     );
-    let guarded = build_guarded_sql("SELECT id FROM orders", &[orders], MAX_ROWS).unwrap();
+    let guarded =
+        build_guarded_sql("SELECT id FROM orders", &[orders], &links(), MAX_ROWS).unwrap();
     assert_eq!(
         guarded.row_filters,
         ["\"customer_id\" IN (SELECT \"id\" FROM \"customers\")"]
@@ -237,12 +264,17 @@ fn cte_named_like_a_parent_table_is_rejected() {
     let tables = sales_tables(Path::new("/data"), &[], &[]);
     let orders_only = vec![find(&tables, "orders").clone()];
     let sql = "WITH customers AS (SELECT * FROM orders) SELECT COUNT(*) FROM customers";
-    match build_guarded_sql(sql, &orders_only, MAX_ROWS) {
+    match build_guarded_sql(sql, &orders_only, &links(), MAX_ROWS) {
         Err(GuardError::Rejected(reason)) => assert!(reason.contains("trùng tên"), "{reason}"),
         other => panic!("expected rejection, got {other:?}"),
     }
     // Mô hình cũng không đọc được bảng cha khi nó không có trong danh sách.
-    match build_guarded_sql("SELECT COUNT(*) FROM customers", &orders_only, MAX_ROWS) {
+    match build_guarded_sql(
+        "SELECT COUNT(*) FROM customers",
+        &orders_only,
+        &links(),
+        MAX_ROWS,
+    ) {
         Err(GuardError::UnknownName(_)) => {}
         other => panic!("expected unknown table, got {other:?}"),
     }
@@ -266,7 +298,7 @@ fn key_columns_must_exist_on_both_tables() {
     ];
     for filter in cases {
         let orders = table("orders", &["id", "customer_id"], dir, vec![filter]);
-        match build_guarded_sql("SELECT id FROM orders", &[orders], MAX_ROWS) {
+        match build_guarded_sql("SELECT id FROM orders", &[orders], &links(), MAX_ROWS) {
             Err(GuardError::Internal(_)) => {}
             other => panic!("expected internal error, got {other:?}"),
         }
@@ -324,7 +356,7 @@ fn check_one_query(
     tables: &[AllowedTable],
     sql: &str,
 ) -> Option<String> {
-    let guarded = match build_guarded_sql(sql, tables, NO_ROW_LIMIT) {
+    let guarded = match build_guarded_sql(sql, tables, &links(), NO_ROW_LIMIT) {
         Ok(guarded) => guarded,
         Err(e) => return Some(format!("{sql}\n  guard rejected: {e:?}")),
     };
@@ -371,8 +403,13 @@ fn orders_read_alone_count_only_orders_of_visible_customers() {
     write_full_data(&full, &dir);
     let tables = sales_tables(&dir, &[], &[]);
     let orders_only = vec![find(&tables, "orders").clone()];
-    let guarded =
-        build_guarded_sql("SELECT id FROM orders ORDER BY id", &orders_only, MAX_ROWS).unwrap();
+    let guarded = build_guarded_sql(
+        "SELECT id FROM orders ORDER BY id",
+        &orders_only,
+        &links(),
+        MAX_ROWS,
+    )
+    .unwrap();
     let rows = sorted_rows(&full, &guarded.runnable).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(rows, vec![vec![Value::Int(10)], vec![Value::Int(14)]]);
@@ -387,7 +424,8 @@ fn optional_keys_pass_when_empty_and_rows_without_any_link_stay_hidden() {
     let full = Connection::open_in_memory().unwrap();
     write_full_data(&full, &dir);
     let ids = |tables: &[AllowedTable]| {
-        let guarded = build_guarded_sql("SELECT id FROM order_items", tables, MAX_ROWS).unwrap();
+        let guarded =
+            build_guarded_sql("SELECT id FROM order_items", tables, &links(), MAX_ROWS).unwrap();
         sorted_rows(&full, &guarded.runnable).unwrap()
     };
     let south = ids(&sales_tables(&dir, &[], &[]));

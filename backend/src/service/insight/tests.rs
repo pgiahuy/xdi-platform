@@ -20,7 +20,9 @@ use crate::engine::llm::mock::Mock;
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::store::ProfileColumn;
 use crate::error::AppError;
-use crate::service::ask::contract::{AnswerVerdict, ColumnRole, InsightKind, ResultTable};
+use crate::service::ask::contract::{
+    AnswerVerdict, ColumnRole, InsightKind, ResultTable, StepName,
+};
 use crate::service::ask::fanout::JoinLink;
 use crate::service::explain::breakdown::{run_code_query, CodeQuery, QueryEnv, ASK_STOP_HINT};
 use crate::service::explain::check_tests::column;
@@ -101,6 +103,26 @@ fn groups_give_the_top_share_the_count_to_80_percent_and_outliers() {
             "Thấp hẳn mức trung bình: Africa (50), USCA (100); trung bình mỗi nhóm 250.",
         ]
     );
+}
+
+/// Số lớn trong câu của code có dạng rút gọn đứng trước; ý "Cách hiểu" nói cụm được tính theo cột nào, và cụm, tên cột
+/// thành chữ dữ liệu cho bước kiểm số.
+#[test]
+fn parts_get_readable_numbers_and_the_reading() {
+    let groups = [point("Europe", 7_000_000), point("LATAM", 3_000_000)];
+    let mut parts = build_group_parts("Doanh thu", "Thị trường", &groups, None);
+    parts.add_reading("doanh thu", "doanh thu sau chiết khấu");
+    parts.apply_readable_numbers();
+    assert!(
+        parts.title.contains("khoảng 7 triệu (7.000.000)"),
+        "{}",
+        parts.title
+    );
+    assert_eq!(
+        texts(&parts).last().map(String::as_str),
+        Some("Cách hiểu: \"doanh thu\" được tính theo doanh thu sau chiết khấu.")
+    );
+    assert!(parts.names.iter().any(|n| n == "doanh thu sau chiết khấu"));
 }
 
 #[test]
@@ -442,6 +464,8 @@ async fn narration_falls_back_to_code_text_when_the_model_fails_or_is_off() {
 struct Orders {
     root: PathBuf,
     allowed: Vec<AllowedTable>,
+    /// Quan hệ của hai bảng, để câu nối của "mô hình" và câu do code dựng qua luật nối bảng của guard (#256).
+    links: Vec<JoinLink>,
 }
 
 impl Orders {
@@ -484,12 +508,17 @@ impl Orders {
                 row_filters: vec![],
             },
         ];
-        Orders { root, allowed }
+        Orders {
+            root,
+            allowed,
+            links: order_links(),
+        }
     }
 
     fn env<'a>(&'a self, jobs: &'a Arc<Semaphore>) -> QueryEnv<'a> {
         QueryEnv {
             tables: &self.allowed,
+            links: &self.links,
             max_rows: 1000,
             timeout: Duration::from_secs(10),
             jobs,
@@ -524,6 +553,15 @@ impl Drop for Orders {
 }
 
 async fn run_insight(sql: &str, roles: &[ColumnRole]) -> crate::service::insight::InsightOutcome {
+    run_insight_with(sql, roles, false).await
+}
+
+/// limit_kept: câu có LIMIT của mô hình (câu hỏi xin số dòng), như ask/run.rs ghi.
+async fn run_insight_with(
+    sql: &str,
+    roles: &[ColumnRole],
+    limit_kept: bool,
+) -> crate::service::insight::InsightOutcome {
     let orders = Orders::new();
     let jobs = Arc::new(Semaphore::new(2));
     let (result, shown) = orders.run(&jobs, sql, roles).await;
@@ -546,7 +584,7 @@ async fn run_insight(sql: &str, roles: &[ColumnRole]) -> crate::service::insight
         result: &result,
         sql_generated: sql,
         sql_guarded: &shown,
-        limit_kept: false,
+        limit_kept,
         understanding: None,
         tables: &tables,
         links: &links,
@@ -554,6 +592,7 @@ async fn run_insight(sql: &str, roles: &[ColumnRole]) -> crate::service::insight
         narrate: true,
         narrate_timeout: Duration::from_secs(5),
         lessons: &[],
+        readings: &[],
     };
     build_insight(&Mock::new(), &input).await.unwrap().unwrap()
 }
@@ -586,6 +625,81 @@ async fn time_series_breaks_down_the_largest_step_by_a_related_column() {
         "Standard Class theo orders.shipping_mode: tăng 600, trong khi chênh lệch chung tăng 400."
     );
     assert_eq!(outcome.tables_read, ["order_items", "orders"]);
+}
+
+/// "Thị trường nào có doanh thu cao nhất" ra đúng một dòng: câu của code nêu tên nhóm và số, không chỉ đếm dòng.
+#[tokio::test]
+async fn one_row_ranked_by_a_measure_names_the_group() {
+    let sql = "SELECT o.market, SUM(oi.sales) AS revenue FROM order_items oi JOIN orders o ON oi.order_id = o.order_id \
+        GROUP BY o.market ORDER BY revenue DESC LIMIT 1";
+    let outcome = run_insight_with(sql, &[ColumnRole::Dimension, ColumnRole::Measure], true).await;
+    let insight = &outcome.insight;
+    assert_eq!(insight.kind, InsightKind::Rows);
+    assert_eq!(insight.title, "Europe có revenue cao nhất: 1.600,00.");
+    assert!(insight.points.is_empty());
+    // market là cột phân loại nên được gửi cho mô hình; Mock không có lời viết sẵn nên vẫn là câu của code.
+    let narrate = outcome
+        .steps
+        .iter()
+        .find(|s| s.name == StepName::Narrate)
+        .unwrap();
+    assert!(
+        !narrate
+            .detail
+            .as_deref()
+            .unwrap_or("")
+            .contains("không gửi được"),
+        "{narrate:?}"
+    );
+}
+
+/// Một dòng không có số đo: kể từng ô với tên cột.
+#[tokio::test]
+async fn one_row_without_a_measure_lists_its_cells() {
+    let sql = "SELECT o.market, o.shipping_mode FROM orders o WHERE o.order_id = 85";
+    let outcome = run_insight(sql, &[ColumnRole::Dimension, ColumnRole::Dimension]).await;
+    assert_eq!(outcome.insight.kind, InsightKind::Rows);
+    assert_eq!(
+        outcome.insight.title,
+        "Market là Europe, shipping_mode là Standard Class."
+    );
+}
+
+/// Ô tổng hợp ra chữ vẫn là giá trị của cột: max của cột không phải cột phân loại thì không gửi cho mô hình.
+#[tokio::test]
+async fn one_row_with_a_text_aggregate_of_a_key_column_stays_with_code() {
+    let sql = "SELECT o.market, max(CAST(o.order_id AS VARCHAR)) AS last_order FROM orders o GROUP BY o.market \
+        ORDER BY o.market LIMIT 1";
+    let outcome =
+        run_insight_with(sql, &[ColumnRole::Dimension, ColumnRole::Dimension], true).await;
+    assert_eq!(outcome.insight.kind, InsightKind::Rows);
+    let narrate = outcome
+        .steps
+        .iter()
+        .find(|s| s.name == StepName::Narrate)
+        .unwrap();
+    assert!(
+        narrate.detail.as_deref().unwrap_or("").contains("order_id"),
+        "{narrate:?}"
+    );
+}
+
+/// Độ đo không cộng được giữa các nhóm (thương của hai tổng): không nói tỷ trọng trên tổng hay mức tập trung, vì cộng
+/// các tỷ lệ của từng nhóm không ra số có nghĩa.
+#[tokio::test]
+async fn ratio_groups_have_no_share_of_a_total() {
+    let sql =
+        "SELECT o.market, SUM(oi.sales) / COUNT(*) AS per_row FROM order_items oi JOIN orders o \
+        ON oi.order_id = o.order_id GROUP BY o.market";
+    let outcome = run_insight(sql, &[ColumnRole::Dimension, ColumnRole::Measure]).await;
+    let insight = &outcome.insight;
+    assert_eq!(insight.kind, InsightKind::Groups);
+    assert!(!insight.title.contains("chiếm"), "{}", insight.title);
+    assert!(
+        insight.points.iter().all(|p| p.lead != "Mức tập trung"),
+        "{:?}",
+        insight.points
+    );
 }
 
 #[tokio::test]

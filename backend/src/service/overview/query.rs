@@ -33,7 +33,7 @@ pub async fn run_cached(
     sql: &str,
 ) -> Result<Ran, AppError> {
     // Guard trước khi tìm cache: khóa cache là câu chạy, đã gồm điều kiện lọc dòng của người xem.
-    let guarded = match build_guarded_sql(sql, env.tables, env.max_rows) {
+    let guarded = match build_guarded_sql(sql, env.tables, env.links, env.max_rows) {
         Ok(guarded) => guarded,
         Err(GuardError::Internal(e)) => return Err(e),
         Err(
