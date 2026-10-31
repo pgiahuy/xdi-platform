@@ -129,6 +129,7 @@ data/        nguồn và giấy phép dataset, samples/ (DataCo mẫu), postgres
 | [API.md](docs/API.md) | API, mã lỗi; đặc tả OpenAPI ở `/api/openapi.json`, thử trên trình duyệt ở `/api/docs` |
 | [GUARD.md](docs/GUARD.md) | Guard SQL: luật, hạn chế đã biết |
 | [DATA.md](docs/DATA.md) | Định dạng file nhận, phiên bản, tên cột |
+| [SCHEMA.md](docs/SCHEMA.md) | Bảng của Postgres ứng dụng, ý nghĩa, ví dụ |
 | [PRIVACY.md](docs/PRIVACY.md) | Dữ liệu nằm ở đâu, gửi gì cho mô hình |
 | [PERFORMANCE.md](docs/PERFORMANCE.md) | Thời gian, số lượt gọi mô hình và chi phí mỗi câu hỏi, đã đo |
 
