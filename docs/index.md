@@ -29,10 +29,10 @@ docker compose up -d --build
 docker compose logs backend | grep setup_code
 ```
 
-Mở http://localhost:8000, nhập mã thiết lập để tạo tài khoản quản trị. Compose chạy kèm một database Postgres mẫu nhỏ
-(bán hàng và học tập, 13 bảng có khóa ngoại); thiết lập lần đầu kết nối vào đó và chụp các bảng kèm quan hệ thành
-dataset. Mô hình mặc định `mock` trả lời các câu mẫu trên các bảng này, ví dụ "Tỷ lệ bỏ học theo môn học". Hướng dẫn
-từng bước, kể cả cách bật Gemini hay Ollama: [Cài đặt](INSTALL.md).
+Mở http://localhost:8000, nhập mã thiết lập để tạo tài khoản quản trị. Workspace đầu tiên có sẵn dataset mẫu DataCo;
+mô hình mặc định `mock` trả lời các câu mẫu trên dataset này. Đã nạp database mẫu nhiều bảng (bán hàng và học tập, 13
+bảng có khóa ngoại) và chạy `docker compose --profile demo up -d` thì thiết lập lần đầu kết nối vào đó và chụp các bảng
+kèm quan hệ thành dataset. Hướng dẫn từng bước, kể cả cách bật Gemini hay Ollama: [Cài đặt](INSTALL.md).
 
 ## Trạng thái
 

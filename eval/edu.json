@@ -54,15 +54,6 @@
     "ordered": false
   },
   {
-    "id": "e07",
-    "dataset": "student_daily_clicks",
-    "question": "Lượt bấm trung bình mỗi sinh viên theo kết quả cuối khóa",
-    "expected_sql": [
-      "SELECT s.final_result, AVG(t.clicks) AS avg_clicks FROM (SELECT code_module, code_presentation, id_student, SUM(sum_click) AS clicks FROM student_daily_clicks GROUP BY code_module, code_presentation, id_student) t JOIN students s ON t.code_module = s.code_module AND t.code_presentation = s.code_presentation AND t.id_student = s.id_student GROUP BY s.final_result ORDER BY avg_clicks DESC"
-    ],
-    "ordered": false
-  },
-  {
     "id": "e08",
     "dataset": "students",
     "question": "Số sinh viên theo nhóm tuổi và giới tính",

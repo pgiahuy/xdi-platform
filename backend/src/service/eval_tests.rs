@@ -86,7 +86,7 @@ fn row_count_mismatch_is_reported() {
 
 /// Bộ câu JOIN trên schema sales của database mẫu (eval/sales_joins.json, #213): mỗi SQL đúng qua guard với sáu bảng như
 /// ảnh chụp database mẫu, và đọc bảng của trường "dataset" (bảng người hỏi chọn). `make eval` chạy bộ này trên ảnh chụp
-/// thật của database mẫu nhỏ (demo-db, #230).
+/// thật của database mẫu (data/postgres-demo, #230) khi nó đang chạy.
 #[test]
 fn sales_join_cases_pass_the_guard() {
     use crate::engine::guard::{build_guarded_sql, AllowedTable};
@@ -190,7 +190,7 @@ fn sales_join_cases_pass_the_guard() {
 }
 
 /// Bộ câu trên schema edu của database mẫu (eval/edu.json, #230): mỗi SQL đúng qua guard với các bảng edu như ảnh chụp
-/// database mẫu và đọc bảng của trường "dataset". `make eval` chạy bộ này trên ảnh chụp thật của demo-db.
+/// database mẫu và đọc bảng của trường "dataset". `make eval` chạy bộ này trên ảnh chụp thật của database mẫu khi nó đang chạy.
 #[test]
 fn edu_cases_pass_the_guard() {
     use crate::engine::guard::{build_guarded_sql, AllowedTable};
@@ -269,7 +269,7 @@ fn edu_cases_pass_the_guard() {
         .collect();
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../eval/edu.json");
     let cases = load_cases(std::path::Path::new(path)).unwrap();
-    assert!(cases.len() >= 8);
+    assert!(cases.len() >= 7);
     for case in &cases {
         let picked = case.dataset.as_deref().unwrap();
         for sql in &case.expected_sql {

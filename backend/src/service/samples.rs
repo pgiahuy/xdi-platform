@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/samples.rs - dataset mẫu đóng gói sẵn: khi thiết lập lần đầu tạo xong workspace đầu tiên, có
 SAMPLE_DATABASE_URL thì thêm database mẫu làm nguồn và chụp các nhóm bảng của nó (service/samples_db.rs, luồng chính,
-compose trỏ vào dịch vụ demo-db). Không có, hay chụp lỗi, thì nạp <SAMPLES_DIR>/dataco.csv thành dataset "DataCo"
+compose trỏ vào dịch vụ demo-db của data/postgres-demo khi bật profile demo). Không có, hay chụp lỗi, thì nạp <SAMPLES_DIR>/dataco.csv thành dataset "DataCo"
 (bảng dataco) qua đúng đường nạp file thường (service/ingest.rs, kể cả hồ sơ cột), rồi ghi các chỉ số trong
 dataco.metrics.json vào bảng metrics. Câu mẫu của mock viết cho cả hai (engine/llm/mock_answers.json). Bộ đánh giá câu
 hỏi mẫu (service/eval.rs) nạp file qua cùng hàm upload_local_file.
@@ -80,12 +80,12 @@ pub async fn seed_workspace(state: &AppState, member: &Member) -> Result<SeedOut
                 })
             }
             Ok(None) => return Ok(SeedOutcome::AlreadyPresent),
-            // Lỗi kết nối hay chụp (demo-db chưa chạy, thiếu SOURCE_SECRET_KEY): vẫn cho workspace đầu tiên một
+            // Lỗi kết nối hay chụp (database mẫu không chạy hay chưa nạp, không có khóa mã hóa): vẫn cho workspace đầu tiên một
             // dataset để hỏi ngay. Bảng đã chụp trước lúc lỗi (nếu có) vẫn giữ.
             Err(e) => tracing::warn!(
                 error = ?e,
                 host = %db.host,
-                "cannot snapshot the sample database, loading dataco.csv instead (data/demo-db/README.md)"
+                "cannot snapshot the sample database, loading dataco.csv instead (data/postgres-demo/README.md)"
             ),
         }
     }

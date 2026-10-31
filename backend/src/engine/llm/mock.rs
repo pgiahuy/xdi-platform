@@ -26,10 +26,12 @@ trả lời của task why là form câu "tại sao" (service/ask/why_prompt.rs)
 đúng form đó. Mỗi câu sql và why có một câu task classify (service/ask/classify.rs): plain với câu sql, cause với câu
 why, để bước phân loại của câu mẫu đi đúng đường mà không cần luật từ khóa.
 
-File thứ hai, mock_answers_database.json, viết cho các bảng chụp từ database mẫu (data/demo-db, bảng logic như
+File thứ hai, mock_answers_database.json, viết cho các bảng chụp từ database mẫu (data/postgres-demo, bảng logic như
 order_items, students): hồ sơ của từng bảng kèm câu gợi ý, và câu SQL của các câu trong eval/sales_joins.json,
-eval/edu.json (đúng SQL đúng của bộ đánh giá, nhiều câu nối bảng qua quan hệ). Câu hỏi không được trùng giữa hai file:
-mock không đọc prompt nên không biết đang hỏi trên dataset nào. */
+eval/edu.json (đúng SQL đúng của bộ đánh giá, nhiều câu nối bảng qua quan hệ). Thêm hồ sơ và một câu cho
+student_daily_clicks: bảng này không nằm trong data/samples/sample_database.json (1,8 triệu dòng, quá SOURCE_MAX_ROWS
+mặc định), chụp tay thì câu đó vẫn trả lời được. Câu hỏi không được trùng giữa hai file: mock không đọc prompt nên
+không biết đang hỏi trên dataset nào. */
 
 use std::collections::HashMap;
 

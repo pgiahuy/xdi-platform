@@ -50,12 +50,9 @@ jobs:
               - 'backend/**'
               # Gói khái niệm ngành được build.rs nhúng vào backend; PR chỉ sửa gói vẫn phải chạy test.
               - 'data/domains/**'
-              # Bộ đánh giá câu hỏi mẫu và dữ liệu mẫu của nó (#37), kể cả database mẫu mà make eval chụp (#230).
+              # Bộ đánh giá câu hỏi mẫu và dữ liệu mẫu của nó (#37).
               - 'eval/**'
               - 'data/samples/**'
-              - 'data/demo-db/**'
-              - 'data/postgres-demo/**'
-              - 'docker-compose.yml'
               # Test so openapi.json và response mẫu của ask với code.
               - 'openapi.json'
               - 'frontend/src/api/examples/**'
@@ -88,7 +85,7 @@ jobs:
           workspaces: backend
       - if: steps.work.outputs.run == 'true'
         run: make check-fast
-      # make eval tự chạy dịch vụ demo-db của docker-compose.yml (database mẫu nhỏ) để chụp bảng như bản cài mới.
+      # CI không có database mẫu (data/postgres-demo), nên make eval chỉ chạy bộ câu trên file DataCo.
       - if: steps.work.outputs.run == 'true'
         run: make eval
 

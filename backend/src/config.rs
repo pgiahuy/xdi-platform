@@ -62,7 +62,7 @@ pub struct Config {
     /// Thư mục chứa file mẫu (SAMPLES_DIR): data/samples của repo, compose gắn vào /samples.
     pub samples_dir: PathBuf,
     /// Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng (SAMPLE_DATABASE_URL, service/samples.rs).
-    /// None: nạp dataco.csv như trước. Compose trỏ vào dịch vụ demo-db.
+    /// None: nạp dataco.csv như trước. Compose trỏ vào dịch vụ demo-db (data/postgres-demo, profile demo).
     pub sample_database: Option<SampleDatabase>,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
     pub excel_worker: ExcelWorker,

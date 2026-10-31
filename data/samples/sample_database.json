@@ -2,11 +2,23 @@
   "snapshots": [
     {
       "table": "sales.order_items",
-      "tables": ["sales.orders", "sales.customers", "sales.products", "sales.categories", "sales.departments"]
+      "tables": [
+        "sales.orders",
+        "sales.customers",
+        "sales.products",
+        "sales.categories",
+        "sales.departments"
+      ]
     },
     {
       "table": "edu.student_assessments",
-      "tables": ["edu.assessments", "edu.courses", "edu.registrations", "edu.student_daily_clicks", "edu.vle_materials", "edu.students"]
+      "tables": [
+        "edu.assessments",
+        "edu.courses",
+        "edu.registrations",
+        "edu.vle_materials",
+        "edu.students"
+      ]
     }
   ]
 }

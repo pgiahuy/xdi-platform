@@ -17,9 +17,8 @@ frontend/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
 
-# Dữ liệu: chỉ commit samples/ nhỏ, domains/ (gói khái niệm ngành, docs/DOMAINS.md), postgres-demo/ (script dựng
-# Postgres mẫu, không chứa dữ liệu) và demo-db/ (script của database mẫu nhỏ trong compose), dataset thật tải bằng
-# data/download.sh vào data/downloads/
+# Dữ liệu: chỉ commit samples/ nhỏ, domains/ (gói khái niệm ngành, docs/DOMAINS.md) và postgres-demo/ (script dựng
+# Postgres mẫu, không chứa dữ liệu), dataset thật tải bằng data/download.sh vào data/downloads/
 data/*
 data/downloads/
 !data/README.md
@@ -27,7 +26,6 @@ data/downloads/
 !data/samples/
 !data/domains/
 !data/postgres-demo/
-!data/demo-db/
 data/samples/*.parquet
 # Dữ liệu người dùng nạp khi chạy make dev (DATA_DIR mặc định ./data, tính từ backend/)
 backend/data/

@@ -87,5 +87,11 @@
       "ok": true,
       "detail": "khớp"
     }
-  ]
+  ],
+  "lessons": {
+    "lessons": 2,
+    "passed_without": 14,
+    "accuracy_without": 1.0,
+    "changed": []
+  }
 }

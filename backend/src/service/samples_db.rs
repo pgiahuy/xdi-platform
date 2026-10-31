@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/samples_db.rs - dataset mẫu chụp từ database mẫu (SAMPLE_DATABASE_URL, compose trỏ vào dịch vụ demo-db): thêm
+/* service/samples_db.rs - dataset mẫu chụp từ database mẫu (SAMPLE_DATABASE_URL, compose trỏ vào dịch vụ demo-db của data/postgres-demo): thêm
 database đó làm nguồn Postgres của workspace đầu tiên, rồi chụp từng nhóm bảng ghi trong
 <SAMPLES_DIR>/sample_database.json, mỗi bảng một dataset kèm quan hệ khóa ngoại, đúng như admin làm ở trang Dữ liệu
 (service/sources/). Bảng nào có <SAMPLES_DIR>/<tên bảng>.metrics.json thì ghi thêm chỉ số mẫu.

@@ -31,13 +31,17 @@ docker compose up -d --build
 docker compose logs backend | grep setup_code
 ```
 
-Mở http://localhost:8000, nhập mã thiết lập vừa in để tạo tài khoản quản trị. Compose chạy kèm một database Postgres
-mẫu nhỏ nhiều bảng (dịch vụ `demo-db`: bán hàng DataCo và học tập OULAD, nạp từ file trong `data/samples/`); thiết lập
-lần đầu thêm nó làm nguồn và chụp 13 bảng kèm quan hệ thành dataset của workspace đầu tiên. Mô hình mặc định là `mock`:
-không cần khóa, chỉ trả lời các câu mẫu, ví dụ "Tỷ lệ bỏ học theo môn học" trên `students`, "Doanh thu theo phân khúc
-khách hàng" trên `order_items` (nối `orders`, `customers`). Hỏi câu tự do trên dữ liệu của bạn thì đặt
-`LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hoặc `ollama`) trong `.env`, rồi chạy lại `docker compose up -d`. Kết nối
-database của bạn ở trang **Dữ liệu**, khung **Kết nối database**.
+Mở http://localhost:8000, nhập mã thiết lập vừa in để tạo tài khoản quản trị. Workspace đầu tiên có sẵn dataset mẫu
+DataCo (1500 dòng, từ `data/samples/dataco.csv`). Mô hình mặc định là `mock`: không cần khóa, chỉ trả lời các câu mẫu,
+ví dụ "Doanh thu theo thị trường". Kết nối database của bạn ở trang **Dữ liệu**, khung **Kết nối database**. Hỏi câu tự
+do thì đặt `LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hoặc `ollama`) trong `.env`, rồi chạy lại `docker compose up -d`.
+
+Thử luồng database với database mẫu nhiều bảng (DataCo và OULAD đầy đủ, 13 bảng có khóa ngoại,
+[data/postgres-demo](data/postgres-demo/README.md)): tải và nạp một lần (`sh data/download.sh dataco`,
+`sh data/download.sh oulad`, `sh data/postgres-demo/load.sh`, rồi gỡ container chạy riêng đó, xem README ở đó), sau đó
+chạy `docker compose --profile demo up -d --build` trước lần thiết lập đầu. Thiết lập lần đầu thêm database này làm nguồn và
+chụp 12 bảng kèm quan hệ thành dataset; câu mẫu của `mock` trên đó có "Tỷ lệ bỏ học theo môn học" trên `students` và
+"Doanh thu theo phân khúc khách hàng" trên `order_items` (nối `orders`, `customers`).
 
 Build lần đầu biên dịch Rust và DuckDB (đo trên máy 16 nhân: 8 phút) và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy
 ít RAM thì đặt `CARGO_BUILD_JOBS`. Hướng dẫn đầy đủ (build từ nguồn, đưa lên Internet, sao lưu, lỗi hay gặp, dùng lần
@@ -50,16 +54,15 @@ bộ đầy đủ tải bằng `data/download.sh` (kiểm SHA-256) vào `data/do
 
 | Bộ | Lấy ở đâu | Dùng cho |
 |---|---|---|
-| Database mẫu nhỏ: DataCo 1500 dòng và OULAD 660 sinh viên, tách thành 13 bảng có khóa ngoại | Có sẵn: dịch vụ `demo-db` của compose, nạp từ `data/samples/dataco.csv` và `data/samples/oulad/` ([data/demo-db](data/demo-db/README.md)) | Nguồn database thiết lập lần đầu chụp sẵn, câu mẫu của `mock`, bộ đánh giá `make eval` |
-| DataCo mẫu, 1500 dòng | Có sẵn: `data/samples/dataco.csv`, kèm chỉ số mẫu `dataco.metrics.json` | Dataset từ file khi tắt database mẫu (`SAMPLE_DATABASE_URL=`), câu mẫu của `mock`, bộ đánh giá `make eval` |
+| DataCo mẫu, 1500 dòng | Có sẵn: `data/samples/dataco.csv`, kèm chỉ số mẫu `dataco.metrics.json` | Dataset nạp sẵn khi thiết lập lần đầu không tới được database mẫu, câu mẫu của `mock`, bộ đánh giá `make eval` trên CI |
 | DataCo Smart Supply Chain đầy đủ, khoảng 96 MB CSV | `sh data/download.sh dataco` | Thử trên dữ liệu lớn; nạp với tên `DataCo` vào workspace chưa có DataCo thì câu mẫu của `mock` vẫn chạy (đã có thì bảng thành `dataco_2`) |
 | Online Retail II, khoảng 46 MB Excel | `sh data/download.sh retail` | Thử file Excel nhiều sheet (bản đầy đủ chưa thử nạp, giới hạn Excel ở [DATA.md](docs/DATA.md)); chưa có câu mẫu cho `mock`, cần Gemini hoặc Ollama |
 | OULAD (Open University Learning Analytics), 7 bảng CSV, khoảng 464 MB | `sh data/download.sh oulad` | Dữ liệu giáo dục: nạp `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần) để hỏi theo kết quả học tập; cần Gemini hoặc Ollama |
 
 DataCo từ Mendeley Data (Constante, Silva, Pereira, 2019); Online Retail II (Chen, 2019) và OULAD (Kuzilek, Hlosta,
 Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, ghi công và cách nạp:
-[data/README.md](data/README.md). Bản đầy đủ của DataCo và OULAD tách thành nhiều bảng trong một Postgres riêng:
-[data/postgres-demo](data/postgres-demo/README.md).
+[data/README.md](data/README.md). Bản đầy đủ của DataCo và OULAD tách thành nhiều bảng trong database mẫu duy nhất của
+repo: [data/postgres-demo](data/postgres-demo/README.md).
 
 ## Đã có
 
@@ -82,8 +85,9 @@ Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, gh
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
   quả hay bảng phân rã (câu có CTE, HAVING, hàm cửa sổ hay nhiều bảng chưa truy được).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
-- **Kiểm chất lượng:** `make eval` hỏi 18 câu mẫu trên ảnh chụp database mẫu (10 câu bán hàng, 8 câu học tập, phần lớn
-  nối bảng) và 14 câu trên file DataCo, so với SQL đúng viết tay; CI báo khi tỷ lệ đúng giảm.
+- **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên file DataCo, và khi database mẫu đang chạy thì thêm 17 câu trên
+  ảnh chụp của nó (10 câu bán hàng, 7 câu học tập, phần lớn nối bảng), so với SQL đúng viết tay; CI chạy phần DataCo và
+  báo khi tỷ lệ đúng giảm.
 
 ## Chưa có
 
@@ -100,7 +104,7 @@ Bảng trạng thái chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#tr�
 Cần Rust stable từ 1.89 kèm trình biên dịch C++, Node.js 24, Docker (cho Postgres) và GNU Make.
 
 ```bash
-make dev            # Postgres và database mẫu trong Docker, backend bằng cargo run ở cổng 8000
+make dev            # Postgres trong Docker, backend bằng cargo run ở cổng 8000
 make dev-frontend   # giao diện ở http://localhost:5173
 make check-fast     # fmt, clippy, test
 make help           # mọi lệnh
@@ -110,7 +114,7 @@ make help           # mọi lệnh
 backend/     crate Rust: api/ -> service/ -> engine/ và auth/; migrations/ cho Postgres
 frontend/    React, Vite, Tailwind, shadcn/ui; build ra file tĩnh, backend phục vụ
 docs/        tài liệu, cũng là nguồn GitHub Pages
-data/        nguồn và giấy phép dataset, samples/ (DataCo, OULAD mẫu), demo-db/ (database mẫu), domains/ (gói ngành)
+data/        nguồn và giấy phép dataset, samples/ (DataCo mẫu), postgres-demo/ (database mẫu), domains/ (gói ngành)
 ```
 
 | Tài liệu | Nội dung |

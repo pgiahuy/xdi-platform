@@ -1,5 +1,5 @@
-# docker-compose.yml - ba dịch vụ: postgres (dữ liệu của ứng dụng), demo-db (database mẫu nhiều bảng, đóng vai database
-# của tổ chức), backend. Backend phục vụ cả API (/api) và giao diện, một cổng.
+# docker-compose.yml - postgres (dữ liệu của ứng dụng), backend (API /api và giao diện, một cổng), và demo-db (database
+# mẫu nhiều bảng của data/postgres-demo, chỉ khi bật profile demo).
 # Mặc định chạy không cần khóa ngoài: LLM_PROVIDER=mock. Đổi trong .env.
 # Bản chạy thật đè thêm docker-compose.prod.yml (docs/INSTALL.md mục 3).
 
@@ -28,36 +28,21 @@ services:
       timeout: 3s
       retries: 10
 
-  # Database mẫu nhỏ "company_demo" (data/demo-db/README.md): schema sales (từ data/samples/dataco.csv) và edu (bản nhỏ
-  # của OULAD trong data/samples/oulad/), tách bảng có khóa ngoại như data/postgres-demo. Nạp một lần khi volume trống,
-  # bằng file init; không cần tải gì thêm. Thiết lập lần đầu kết nối vào đây bằng tài khoản chỉ đọc analyst và chụp
-  # bảng thành dataset (SAMPLE_DATABASE_URL của backend). Cùng image với postgres để bản cài mới chỉ tải một image.
+  # Database mẫu "company_demo" (data/postgres-demo/README.md): DataCo và OULAD đầy đủ, tách bảng có khóa ngoại, đóng
+  # vai database của tổ chức. Cùng một dịch vụ như data/postgres-demo/docker-compose.yml (extends), chỉ chạy khi bật
+  # profile demo: docker compose --profile demo up -d. Bản cài mới không bật thì không cần tải gì, thiết lập lần đầu
+  # nạp data/samples/dataco.csv. Chạy chung project với backend nên backend gọi được demo-db:5432 trong mạng của
+  # compose, không phải docker network connect.
   demo-db:
-    image: pgvector/pgvector:pg17
-    # Cùng lý do như postgres ở trên.
-    init: true
-    environment:
-      # Mật khẩu mẫu của người dùng chủ, chỉ dùng trong file init. Ứng dụng dùng analyst (chỉ SELECT).
-      POSTGRES_USER: demo
-      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:-demo}
-      POSTGRES_DB: company_demo
-    ports:
-      # Chỉ mở trên localhost, cho make dev và make eval chạy backend ngoài Docker. Backend trong compose nối qua mạng
-      # riêng (demo-db:5432).
-      - "127.0.0.1:${DEMO_DB_PORT:-5434}:5432"
+    extends:
+      file: data/postgres-demo/docker-compose.yml
+      service: demo-db
+    profiles: [demo]
+    # Cùng tên container với cách chạy riêng (data/postgres-demo) để hai cách không cùng lúc mở một volume: Postgres
+    # thứ hai trên cùng thư mục dữ liệu làm hỏng dữ liệu. Đang chạy riêng thì dừng bản đó trước.
+    container_name: ${DEMO_DB_CONTAINER:-xdi-demo-db}
     volumes:
-      - demodata:/var/lib/postgresql/data
-      - ./data/postgres-demo/init/01_roles.sql:/docker-entrypoint-initdb.d/01_roles.sql:ro
-      - ./data/demo-db/init/02_load.sh:/docker-entrypoint-initdb.d/02_load.sh:ro
-      - ./data/postgres-demo/sql:/demo-sql:ro
-      - ./data/samples:/samples:ro
-    healthcheck:
-      # -h 127.0.0.1: hỏi qua TCP. Lúc chạy file init, image mở một máy chủ tạm chỉ nghe unix socket; không có -h thì
-      # pg_isready báo sẵn sàng trước khi nạp xong.
-      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "demo", "-d", "company_demo"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      - demo-db-data:/var/lib/postgresql/data
 
   backend:
     build:
@@ -88,8 +73,9 @@ services:
       QUERY_TIMEOUT_SECS: ${QUERY_TIMEOUT_SECS:-30}
       ASK_MAX_ROWS: ${ASK_MAX_ROWS:-100000}
       SEED_SAMPLE: ${SEED_SAMPLE:-true}
-      # Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng (data/README.md). Đặt rỗng trong .env
-      # (SAMPLE_DATABASE_URL=) để nạp data/samples/dataco.csv như trước.
+      # Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng (data/README.md). Không bật profile demo thì tên
+      # demo-db không có trong mạng, thiết lập lần đầu ghi cảnh báo rồi nạp data/samples/dataco.csv; đặt rỗng trong
+      # .env (SAMPLE_DATABASE_URL=) để bỏ hẳn bước thử kết nối.
       SAMPLE_DATABASE_URL: ${SAMPLE_DATABASE_URL-postgres://analyst:analyst@demo-db:5432/company_demo}
       ANSWER_TEXT: ${ANSWER_TEXT:-true}
       INSIGHT_TEXT: ${INSIGHT_TEXT:-true}
@@ -113,8 +99,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      # Chờ database mẫu nạp xong để thiết lập lần đầu chụp được bảng. required: false để bản chạy thật tắt demo-db
-      # (docker-compose.prod.yml) mà backend vẫn chạy.
+      # Bật profile demo thì chờ database mẫu sẵn sàng để thiết lập lần đầu chụp được bảng. required: false: không bật
+      # profile thì backend vẫn chạy.
       demo-db:
         condition: service_healthy
         required: false
@@ -126,5 +112,8 @@ services:
 
 volumes:
   pgdata:
-  demodata:
   xdidata:
+  # Cùng volume mà data/postgres-demo/docker-compose.yml (project xdi-demo-db) tạo khi nạp bằng load.sh, nên dữ liệu đã
+  # nạp dùng được ngay, không phải nạp lại.
+  demo-db-data:
+    name: ${DEMO_DB_VOLUME:-xdi-demo-db_demo-db-data}

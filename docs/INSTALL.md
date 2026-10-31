@@ -9,9 +9,9 @@ docker compose up -d --build                      # build lần đầu mất và
 docker compose logs backend | grep setup_code     # mã để tạo tài khoản quản trị
 ```
 
-Mở http://localhost:8000, nhập mã thiết lập. Compose chạy kèm database mẫu nhỏ `demo-db` (Postgres, 13 bảng bán hàng
-và học tập có khóa ngoại); thiết lập lần đầu kết nối vào đó và chụp các bảng thành dataset của workspace đầu tiên, hỏi
-được ngay với mô hình `mock`. Tiếp theo: mục 7 (Dùng lần đầu).
+Mở http://localhost:8000, nhập mã thiết lập. Workspace đầu tiên có sẵn dataset mẫu DataCo, hỏi được ngay với mô hình
+`mock`. Muốn thử luồng database với database mẫu nhiều bảng thì nạp nó trước lần thiết lập đầu (mục 7, bước 1). Tiếp
+theo: mục 7 (Dùng lần đầu).
 
 | Mục | Khi nào cần |
 |---|---|
@@ -142,8 +142,9 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `ANSWER_TEXT` | `true` | Câu hỏi thường có đoạn trả lời do mô hình viết từ tối đa 10 dòng đầu của kết quả ([PRIVACY.md](PRIVACY.md)); `false` để không gửi dòng kết quả nào cho mô hình, đoạn trả lời là câu khuôn |
 | `INSIGHT_TEXT` | `true` | Phần giải thích của câu hỏi thường có lời do mô hình viết lại từ các câu backend đã tính (không gửi dòng kết quả nào, [PRIVACY.md](PRIVACY.md)); `false` để chỉ dùng câu do backend viết |
 | `SEED_SAMPLE` | `true` | Thiết lập lần đầu cho workspace đầu tiên dữ liệu mẫu (mục 7, bước 1): chụp database mẫu, hay nạp DataCo từ file khi không có database mẫu; `false` để workspace trống |
-| `SAMPLE_DATABASE_URL` | compose: `postgres://analyst:analyst@demo-db:5432/company_demo`; ngoài compose: trống | Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp các bảng ghi trong `data/samples/sample_database.json`. Đặt rỗng (`SAMPLE_DATABASE_URL=` trong `.env`) để nạp `data/samples/dataco.csv` như trước; database mẫu không tới được thì backend ghi cảnh báo và cũng nạp file đó. `make dev` đặt sẵn cổng `DEMO_DB_PORT` |
-| `DEMO_DB_PORT` | `5434` | Cổng của database mẫu (`demo-db`) trên `127.0.0.1` của máy host, cho `make dev` và `make eval`. Make không đọc `.env`: đổi cổng ở `.env` thì chạy kèm cùng giá trị, ví dụ `DEMO_DB_PORT=5437 make eval` |
+| `SAMPLE_DATABASE_URL` | compose: `postgres://analyst:analyst@demo-db:5432/company_demo`; `make dev`: `127.0.0.1:DEMO_DB_PORT`; chạy binary trực tiếp: trống | Database mẫu ([data/postgres-demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/README.md)) mà thiết lập lần đầu thêm làm nguồn và chụp các bảng ghi trong `data/samples/sample_database.json`. Không tới được (compose không bật `--profile demo`, chưa nạp dữ liệu) thì backend ghi cảnh báo và nạp `data/samples/dataco.csv`; đặt rỗng (`SAMPLE_DATABASE_URL=` trong `.env`) để không thử kết nối |
+| `DEMO_DB_PORT` | `5440` | Cổng của database mẫu trên `127.0.0.1` của máy host (`data/postgres-demo/docker-compose.yml`), cho `make dev` và `make eval`. Make không đọc `.env`: đổi cổng ở `.env` thì chạy kèm cùng giá trị, ví dụ `DEMO_DB_PORT=5441 make eval` |
+| `DEMO_DB_CONTAINER`, `DEMO_DB_VOLUME` | `xdi-demo-db`, `xdi-demo-db_demo-db-data` | Tên container và volume của database mẫu khi chạy bằng `--profile demo`; mặc định trùng cách chạy riêng ở `data/postgres-demo`, nên dữ liệu đã nạp dùng được ngay. Chỉ đổi khi cần một bản thứ hai tách biệt |
 | `SOURCE_SECRET_KEY` | trống (tự sinh) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`). Để trống thì lần đầu khởi động backend tự sinh một khóa ngẫu nhiên, ghi vào `DATA_DIR/source_secret.key` (quyền 0600; compose: volume `xdidata`) và các lần sau đọc lại file đó; log ghi một dòng khi sinh, không in khóa. Mất file đó (xóa volume, `docker compose down -v`) là mất mật khẩu của mọi nguồn đã lưu: phải thêm lại nguồn. `make backup` chép cả file này, nên ai có bản sao lưu là giải mã được thông tin kết nối. Bản chạy thật nên đặt biến này và giữ khóa ngoài máy chủ. Đổi khóa thì phải thêm lại các nguồn |
 | `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối, trừ máy của `SAMPLE_DATABASE_URL` luôn được phép. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp |
 | `SOURCE_MAX_ROWS`, `SOURCE_TIMEOUT_SECS` | `1000000`, `300` | Trần số dòng và thời gian một lần chụp bảng; dung lượng theo `MAX_UPLOAD_MB` |
@@ -290,7 +291,7 @@ Cần:
      khẩu mẫu.
    - `PUBLIC_URL` bắt đầu bằng `https://` thì cookie đăng nhập có cờ `Secure`: trình duyệt không gửi nó qua HTTP thường.
    - Hai container tự chạy lại khi máy chủ khởi động lại.
-   - Không chạy database mẫu `demo-db`: thiết lập lần đầu nạp `data/samples/dataco.csv`. Kết nối database của tổ chức
+   - Không chạy database mẫu (`demo-db` trong profile `demo`): thiết lập lần đầu nạp `data/samples/dataco.csv`. Kết nối database của tổ chức
      cần `SOURCE_ALLOWED_HOSTS` trong `.env`, và nên đặt `SOURCE_SECRET_KEY` (`openssl rand -base64 32`) thay vì để
      backend tự sinh khóa trong volume dữ liệu (Cấu hình, mục 1). Muốn thử database mẫu trên máy chủ thì chạy thêm
      `--profile demo` và đặt `SAMPLE_DATABASE_URL` trước lần thiết lập đầu.
@@ -555,25 +556,38 @@ Chạy bằng Docker: sửa `.env`, ví dụ `LLM_PROVIDER=gemini` và `GEMINI_A
 từ nguồn: đặt trên dòng lệnh, ví dụ `LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> make dev` (mục 2). Mô hình đang dùng ghi ở
 dòng **Mô hình**, góc dưới thanh bên và dưới màn thiết lập.
 
-Thử với `mock`: không cần tải gì. Khi bước 2 tạo xong workspace đầu tiên, backend thêm database mẫu `demo-db` làm nguồn
-(tài khoản chỉ đọc `analyst`) và chụp 13 bảng thành 13 dataset kèm 12 quan hệ: `sales` (`order_items`, `orders`,
-`customers`, `products`, `categories`, `departments`, từ 1500 dòng DataCo) và `edu` (`students`, `courses`,
-`registrations`, `assessments`, `student_assessments`, `student_daily_clicks`, `vle_materials`, từ 660 sinh viên OULAD),
-kèm chỉ số mẫu "Doanh thu", "Lợi nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. Dữ liệu,
-giấy phép và cách tắt ở [data/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/data/README.md). Câu mẫu của
-các bảng này nằm trong `backend/src/engine/llm/mock_answers_database.json` và hiện thành câu gợi ý của dataset, ví dụ
-"Tỷ lệ bỏ học theo môn học" và "Số sinh viên theo kết quả cuối khóa" trên `students`, "Điểm trung bình theo loại bài
-đánh giá" trên `student_assessments` (nối `assessments`), "Doanh thu theo phân khúc khách hàng" trên `order_items`
-(nối `orders`, `customers`).
+Thử với `mock` mà không tải gì: khi bước 2 tạo xong workspace đầu tiên, backend nạp dataset `DataCo` (bảng `dataco`,
+1500 dòng lấy từ DataCo Smart Supply Chain, giấy phép CC BY 4.0, file `data/samples/dataco.csv`) kèm vài chỉ số mẫu như
+"Doanh thu", "Lợi nhuận", "Tỷ lệ giao trễ". Câu mẫu của nó nằm trong `backend/src/engine/llm/mock_answers.json`, ví dụ
+"Doanh thu theo thị trường", "Top 10 danh mục có doanh thu cao nhất", "Vì sao doanh thu tháng 5 năm 2017 tăng".
 
-Không có database mẫu (`SAMPLE_DATABASE_URL=` để trống, chạy binary ngoài compose, hay `demo-db` không tới được), backend
-nạp dataset `DataCo` (bảng `dataco`, 1500 dòng lấy từ DataCo Smart Supply Chain, giấy phép CC BY 4.0) từ file như
-trước, kèm vài chỉ số mẫu như "Doanh thu", "Lợi nhuận", "Tỷ lệ giao trễ". Câu mẫu của nó nằm trong
-`backend/src/engine/llm/mock_answers.json`, ví dụ "Doanh thu theo thị trường", "Top 10 danh mục có doanh thu cao
-nhất", "Vì sao doanh thu tháng 5 năm 2017 tăng".
+Thử luồng chính, kết nối database, với database mẫu duy nhất của repo
+([data/postgres-demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/README.md): DataCo và OULAD
+đầy đủ, 13 bảng có khóa ngoại, có nguyên nhân cài sẵn để thử câu "tại sao"). Làm trước bước 2:
+
+1. Tải và nạp một lần: `sh data/download.sh dataco`, `sh data/download.sh oulad`,
+   `docker compose -f data/postgres-demo/docker-compose.yml up -d demo-db`, `sh data/postgres-demo/load.sh`.
+2. Gỡ container của bản chạy riêng đó, volume giữ nguyên:
+   `docker compose -f data/postgres-demo/docker-compose.yml rm -sf demo-db`.
+3. Ở gốc repo: `docker compose --profile demo up -d`. Compose gốc chạy cùng dịch vụ đó (cùng tên container `xdi-demo-db`,
+   cùng volume `xdi-demo-db_demo-db-data`, nên không phải nạp lại) trong mạng của backend; backend kết nối
+   `demo-db:5432` bằng tài khoản chỉ đọc `analyst`. Compose in cảnh báo volume có sẵn không do project này tạo: bình
+   thường. Nạp lại dữ liệu sau này thì `docker compose rm -sf demo-db` ở gốc repo trước khi chạy `load.sh`.
+
+Khi bước 2 tạo xong workspace đầu tiên, backend thêm database mẫu làm nguồn và chụp 12 bảng thành 12 dataset kèm 11
+quan hệ: `sales` (`order_items`, `orders`, `customers`, `products`, `categories`, `departments`) và `edu` (`students`,
+`courses`, `registrations`, `assessments`, `student_assessments`, `vle_materials`), kèm chỉ số mẫu "Doanh thu", "Lợi
+nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. `edu.student_daily_clicks` (1,8 triệu dòng) không
+chụp sẵn vì quá `SOURCE_MAX_ROWS` mặc định. Đo trên máy dev ngày 31/10/2026: bước tạo tài khoản quản trị kèm chụp 12 bảng
+mất 5,4 giây. Câu mẫu của các bảng này nằm trong `backend/src/engine/llm/mock_answers_database.json` và hiện thành câu
+gợi ý của dataset, ví dụ "Tỷ lệ bỏ học theo môn học" và "Số sinh viên theo kết quả cuối khóa" trên `students`, "Điểm
+trung bình theo loại bài đánh giá" trên `student_assessments` (nối `assessments`), "Doanh thu theo phân khúc khách
+hàng" trên `order_items` (nối `orders`, `customers`). Database mẫu không tới được (chưa nạp, không bật profile) thì
+backend ghi cảnh báo và nạp `DataCo` như trên.
 
 Bản cài đã thiết lập trước khi có dataset mẫu, hay đặt `SEED_SAMPLE=false`, thì kết nối database mẫu ở bước 3 (máy
-chủ `demo-db`, cổng 5432, database `company_demo`, tài khoản và mật khẩu `analyst`, `sslmode` `disable`), hoặc nạp tay: file
+chủ `demo-db`, cổng 5432, database `company_demo`, tài khoản và mật khẩu `analyst`, `sslmode` `disable`; máy của
+`SAMPLE_DATABASE_URL` luôn được phép), hoặc nạp tay: file
 `data/samples/dataco.csv` trong repo, hoặc bản đầy đủ tải bằng `sh data/download.sh dataco`. Đặt tên dataset là
 `DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên file và câu mẫu chạy
 lỗi. Workspace đã có bảng `dataco` thì dataset thứ hai thành `dataco_2`, nên nạp DataCo vào workspace chưa có nó.
@@ -585,7 +599,7 @@ Lần đầu mở giao diện, màn **Thiết lập lần đầu** hiện ra. L�
 `make dev`. Điền **Mã thiết lập**, **Email quản trị**, **Mật khẩu** và **Nhập lại mật khẩu** (8 đến 128 ký tự); **Tên
 hiển thị** và **Tên workspace đầu tiên** không bắt buộc (để trống thì workspace tên là "Workspace đầu tiên"). Bấm **Tạo
 tài khoản quản trị**: giao diện đăng nhập luôn và mở trang **Cuộc trò chuyện** của workspace vừa tạo, đã có các dataset
-chụp từ database mẫu (bước 1, dataset chọn sẵn là `students`) trừ khi `SEED_SAMPLE=false`. Chi tiết về mã thiết lập ở mục 1, Tạo tài khoản quản trị.
+chụp từ database mẫu (bước 1, dataset chọn sẵn là `students`) hay dataset `DataCo` khi không có database mẫu, trừ khi `SEED_SAMPLE=false`. Chi tiết về mã thiết lập ở mục 1, Tạo tài khoản quản trị.
 
 Workspace thứ hai trở đi: mở ô chọn workspace ở đầu thanh bên, chọn **Tạo workspace** ở cuối danh sách, nhập tên.
 Người tạo thành `admin` của workspace mới và giao diện mở trang đầu của nó. Tài khoản nào cũng tạo được workspace.
