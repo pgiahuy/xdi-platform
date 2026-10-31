@@ -7,8 +7,9 @@ Mọi câu đi qua guard với đúng bảng và bộ lọc dòng theo vai dữ 
 của mô hình: người chỉ được thấy Europe thì phân rã cũng chỉ tính trên dòng Europe, và tổng các chiều vẫn khớp tổng hai
 lát cắt vì mọi câu cùng bị lọc như nhau.
 
-Mọi cột ứng viên đều chạy câu từng chiều, cùng lúc trong giới hạn của DuckDB (run_candidates); explain/dimension_pick.rs bỏ chiều trùng và chiều không so
-được gì, rồi phần chấm điểm xếp các chiều còn lại, chiều giải thích tốt nhất trước; không chiều nào bị bỏ vì xếp sau.
+Mọi cột ứng viên đều chạy câu từng chiều, cùng lúc trong giới hạn của DuckDB (run_candidates); explain/dimension_pick.rs
+bỏ chiều trùng và chiều không so được gì, rồi phần chấm điểm xếp các chiều còn lại, chiều giải thích tốt nhất trước;
+không chiều nào bị bỏ vì xếp sau.
 Độ đo tỷ lệ đi nhánh riêng ở explain/ratio_breakdown.rs, dùng chung run_candidates và build_slice_labels ở đây.
 
 Một chiều lỗi (guard từ chối, DuckDB báo lỗi, chạm trần dòng, các nhóm không cộng ra đúng tổng) thì bỏ chiều đó, ghi log,

@@ -250,13 +250,6 @@
         "ok": true,
         "output_tokens": 120,
         "task": "sql"
-      },
-      {
-        "duration_ms": 900,
-        "input_tokens": 520,
-        "ok": true,
-        "output_tokens": 45,
-        "task": "summary"
       }
     ],
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",

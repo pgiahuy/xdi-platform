@@ -1747,7 +1747,7 @@ export interface components {
          * @description What the language model was asked to do in one call.
          * @enum {string}
          */
-        LlmTask: "sql" | "repair" | "profile" | "narrate" | "why" | "summary" | "insight" | "classify";
+        LlmTask: "sql" | "repair" | "profile" | "narrate" | "why" | "insight" | "classify";
         LoginRequest: {
             email: string;
             password: string;

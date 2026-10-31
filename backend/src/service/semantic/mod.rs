@@ -61,8 +61,8 @@ pub(crate) const QUESTION_MAX_CHARS: usize = 200;
 // mọi cột; giá trị dài quá STRING_MAX_BYTES byte không gửi. Không có trần này thì bảng khảo sát
 // vài trăm cột, mỗi cột 200 giá trị dài tới 1000 byte, thổi prompt lên hàng chục MB: tốn token, vượt cửa sổ ngữ
 // cảnh, mô hình trả lỗi và hồ sơ mất. Đo trên hồ sơ kiểu DataCo (test measure_dataco_like_prompt, 54 cột, 14 cột
-// dimension có giá trị, cột 164 giá trị bị cắt còn 20): prompt khoảng 10 700 ký tự, trong đó phần giá trị khoảng
-// 5 100.
+// dimension có giá trị, cột 164 giá trị bị cắt còn 20): mỗi prompt của ba phần (parts.rs) từ 9 600 tới 11 100 ký tự,
+// trong đó phần giá trị, chung cho cả ba, khoảng 5 100.
 
 /// Câu trả lời của mô hình sau khi kiểm: tên cột và giá trị đã đổi ra id, mọi giới hạn đã áp.
 #[derive(Debug)]
@@ -229,6 +229,7 @@ pub async fn apply_semantic_profile(
     let totals = build_call_totals(&log.calls());
     tracing::info!(
         version_id = %version_id,
+        table = %dataset.logical_table,
         total_ms = log.elapsed_ms(),
         model_calls = totals.calls,
         model_ms = totals.model_ms,
@@ -318,8 +319,8 @@ async fn profile_version(
 // So tên và bí danh (trùng sau chuẩn hóa cũng tính là trùng) qua fold của service/ask/phrases.rs (bỏ dấu, chữ
 // thường, tách từ), cùng một cách chuẩn hóa với khớp cụm ở ngữ cảnh hỏi: bí danh "Thị  Trường" trùng "thị trường".
 
-/// Prompt của một phần hồ sơ (service/semantic/parts.rs): luật và khuôn JSON của phần đó trước, rồi mỗi cột một dòng siêu dữ liệu, cuối cùng danh sách giá trị
-/// của các cột dimension không nhạy cảm. Chỉ siêu dữ liệu và giá trị cột dimension đi ra ngoài: min, max chỉ kèm cột
+/// Prompt của một phần hồ sơ (service/semantic/parts.rs): luật và khuôn JSON của phần đó trước, rồi mỗi cột một dòng
+/// siêu dữ liệu, cuối cùng danh sách giá trị của các cột dimension không nhạy cảm. Chỉ siêu dữ liệu và giá trị cột dimension đi ra ngoài: min, max chỉ kèm cột
 /// số thực và time (min, max của cột chữ hay mã số nguyên như mã đơn, số điện thoại là dữ liệu thật của người dùng);
 /// cột nhạy cảm chỉ gửi tên, kiểu, vai trò và số đo, không gửi giá trị nào. Tên cột và giá trị in dạng chuỗi JSON
 /// (xuống dòng, ngoặc kép được thoát) để dữ liệu không chèn được dòng giả vào prompt. Phần luật viết tiếng Anh (như

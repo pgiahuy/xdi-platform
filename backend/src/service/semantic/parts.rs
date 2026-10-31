@@ -6,8 +6,8 @@ Tách ra thì mỗi lời gọi viết một phần, chạy cùng lúc bằng to
 
 Ba phần độc lập: không phần nào cần câu trả lời của phần khác (prompt câu gợi ý tả cột cộng được và cột lấy trung bình
 bằng lời, không dựa vào cách gộp phần cột ghi). Mỗi phần có prompt (mod.rs, build_profile_prompt) và schema riêng
-(schema.rs, build_part_schema). Câu trả lời của mỗi phần chỉ được lấy đúng các khóa của phần đó, rồi ghép thành một object
-và đi qua build_profile_answer như câu trả lời đầy đủ trước đây, nên bước kiểm từng mục không đổi.
+(schema.rs, build_part_schema). Câu trả lời của mỗi phần chỉ được lấy đúng các khóa của phần đó, rồi ghép thành một
+object và đi qua build_profile_answer như câu trả lời đầy đủ trước đây, nên bước kiểm từng mục không đổi.
 
 Một phần lỗi thì giữ các phần đã có: hồ sơ được ghi với các phần còn lại, phần lỗi bỏ trống (log cảnh báo). Cả ba lỗi
 thì là một lỗi như trước: có lỗi tạm thì cả lượt là lỗi tạm (lần khởi động sau thử lại), còn lại là lỗi vĩnh viễn. */
@@ -107,6 +107,7 @@ async fn ask_part(state: &AppState, part: ProfilePart, input: &PartInput<'_>) ->
         // thật, và mock không theo schema.
         json_schema: Some(build_part_schema(part)),
     };
+    let started = std::time::Instant::now();
     let text = state.llm.complete(&request).await.map_err(|e| match e {
         // Chỉ BadRequest là vĩnh viễn: Gemini chặn prompt vì nội dung, mock không có bảng. MAX_TOKENS, SAFETY và mã
         // 400 khác của Gemini đến dưới dạng Upstream nên là lỗi tạm, thử lại mỗi lần khởi động.
@@ -120,6 +121,13 @@ async fn ask_part(state: &AppState, part: ProfilePart, input: &PartInput<'_>) ->
         ))));
     };
     answer.retain(|key, _| part.keys().contains(&key.as_str()));
+    // Phần nào chậm nhất quyết định thời gian chờ của cả lượt; ghi riêng từng phần để biết nên chia lại phần nào.
+    tracing::info!(
+        version_id = %input.version_id,
+        part = part.name(),
+        duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        "semantic profile part done"
+    );
     Ok(Some(answer))
 }
 

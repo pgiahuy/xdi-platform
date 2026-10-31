@@ -1176,22 +1176,31 @@ fn measure_dataco_like_prompt() {
         c.max_value = Some("999.0".to_string());
         columns.push(c);
     }
-    let prompt = build_profile_prompt(
+    for part in [
         ProfilePart::Columns,
-        "DataCo Supply Chain",
-        "dataco",
-        Some(180_519),
-        &columns,
-        &values,
-    );
-    let values_part: usize = prompt
-        .split("Values of dimension columns")
-        .nth(1)
-        .map_or(0, |s| s.len());
-    // Số đo ghi trong chú thích của các trần ở semantic/mod.rs đến từ test này; giữ một trần rộng để đổi khuôn prompt
-    // mà thổi kích thước lên nhiều lần thì test nhắc đo lại.
-    assert!(prompt.len() < 20_000, "prompt len {}", prompt.len());
-    assert!(values_part < 10_000, "values part {values_part}");
+        ProfilePart::Values,
+        ProfilePart::Questions,
+    ] {
+        let prompt = build_profile_prompt(
+            part,
+            "DataCo Supply Chain",
+            "dataco",
+            Some(180_519),
+            &columns,
+            &values,
+        );
+        let values_part: usize = prompt
+            .split("Values of dimension columns")
+            .nth(1)
+            .map_or(0, |s| s.chars().count());
+        // Số đo ghi trong chú thích của các trần ở semantic/mod.rs đến từ test này (cargo test measure_dataco_like_prompt
+        // -- --nocapture in ra); giữ một trần rộng để đổi khuôn prompt mà thổi kích thước lên nhiều lần thì test nhắc đo
+        // lại.
+        let chars = prompt.chars().count();
+        eprintln!("{part:?}: prompt {chars} chars, values part {values_part} chars");
+        assert!(chars < 20_000, "prompt len {chars}");
+        assert!(values_part < 10_000, "values part {values_part}");
+    }
 }
 
 /// Ba schema phần gộp lại đúng bằng schema đầy đủ: không khóa nào của câu trả lời bị bỏ sót hay có ở hai phần.
@@ -1250,7 +1259,8 @@ fn part_prompts_share_the_data_section() {
     assert_eq!(data(ProfilePart::Columns), data(ProfilePart::Questions));
 }
 
-/// Không phần nào xong: có một lỗi tạm thì cả lượt là lỗi tạm (thử lại lúc khởi động); toàn lỗi vĩnh viễn thì vĩnh viễn.
+/// Không phần nào xong: có một lỗi tạm thì cả lượt là lỗi tạm (thử lại lúc khởi động); toàn lỗi vĩnh viễn thì vĩnh
+/// viễn. Một phần xong là đủ.
 #[test]
 fn merged_answer_fails_only_when_no_part_answered() {
     let upstream = || SemanticFailure::Temporary(AppError::Upstream("busy".to_string()));
@@ -1323,6 +1333,7 @@ async fn one_failed_part_keeps_the_others() {
     assert!(market.description.is_some());
     let values = store.list_column_values(&ws, &[market.id]).await.unwrap();
     assert!(values.iter().all(|value| value.aliases.is_empty()));
+    store.set_current_version(&ws, ds.id, v.id).await.unwrap();
     let ds = store.get_dataset(&ws, ds.id).await.unwrap().unwrap();
     assert_eq!(ds.current_profile_status.as_deref(), Some("semantic"));
     assert_eq!(ds.suggested_questions.len(), 5);
