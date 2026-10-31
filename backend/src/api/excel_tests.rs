@@ -61,6 +61,8 @@ async fn send(
 fn source_files(data: &Path, workspace_id: &str, dataset_id: &str) -> Vec<String> {
     let pattern = data
         .join(workspace_id)
+        // <workspace>/<dataset>/<bảng>/<phiên bản> (#257); dataset của một file chỉ có bảng này.
+        .join("*")
         .join(dataset_id)
         .join("*")
         .join("*.parquet");
