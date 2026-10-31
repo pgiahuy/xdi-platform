@@ -12,12 +12,6 @@ Danh mục sản phẩm; mỗi danh mục thuộc một phòng ban
 | category_name | text    |         | false    |                                     |                                           | Tên danh mục, ví dụ Cleats, Fishing (Category Name)       |
 | department_id | integer |         | false    |                                     | [sales.departments](sales.departments.md) | Phòng ban chứa danh mục, khóa ngoại tới sales.departments |
 
-## Viewpoints
-
-| Name                        | Definition                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [sales](viewpoint-sales.md) | Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments. |
-
 ## Constraints
 
 | Name                          | Type        | Definition                                                              |

@@ -1,14 +1,9 @@
--- sql/row_counts.sql - đếm dòng thật của từng bảng trong edu và sales; load.sh in ra sau khi nạp.
-SELECT 'edu.courses' AS table_name, count(*) AS row_count FROM edu.courses
-UNION ALL SELECT 'edu.students', count(*) FROM edu.students
-UNION ALL SELECT 'edu.registrations', count(*) FROM edu.registrations
-UNION ALL SELECT 'edu.assessments', count(*) FROM edu.assessments
-UNION ALL SELECT 'edu.student_assessments', count(*) FROM edu.student_assessments
-UNION ALL SELECT 'edu.vle_materials', count(*) FROM edu.vle_materials
-UNION ALL SELECT 'edu.student_daily_clicks', count(*) FROM edu.student_daily_clicks
-UNION ALL SELECT 'sales.departments', count(*) FROM sales.departments
-UNION ALL SELECT 'sales.categories', count(*) FROM sales.categories
-UNION ALL SELECT 'sales.products', count(*) FROM sales.products
-UNION ALL SELECT 'sales.customers', count(*) FROM sales.customers
-UNION ALL SELECT 'sales.orders', count(*) FROM sales.orders
-UNION ALL SELECT 'sales.order_items', count(*) FROM sales.order_items;
+-- sql/row_counts.sql - đếm dòng thật (count(*), không phải ước lượng của planner) của từng bảng trong một schema;
+-- load.sh in ra sau khi nạp mỗi database, với biến psql schema (psql -v schema=sales).
+SELECT table_schema || '.' || table_name AS table_name,
+       (xpath('/row/n/text()',
+              query_to_xml(format('SELECT count(*) AS n FROM %I.%I', table_schema, table_name), false, true, '')))[1]::text::bigint
+           AS row_count
+FROM information_schema.tables
+WHERE table_schema = :'schema' AND table_type = 'BASE TABLE'
+ORDER BY table_name;

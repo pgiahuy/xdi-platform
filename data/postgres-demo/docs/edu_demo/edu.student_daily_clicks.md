@@ -15,12 +15,6 @@ Số lần bấm trên hệ thống học trực tuyến của sinh viên theo n
 | sum_click         | integer |         | false    |          |                                 | Tổng số lần bấm trong ngày, cộng trên mọi tài liệu                         |
 | num_sites         | integer |         | false    |          |                                 | Số tài liệu khác nhau sinh viên mở trong ngày                              |
 
-## Viewpoints
-
-| Name                    | Definition                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [edu](viewpoint-edu.md) | Dữ liệu học tập OULAD. Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses. |
-
 ## Constraints
 
 | Name                                                            | Type        | Definition                                                                                                                   |

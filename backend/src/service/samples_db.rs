@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/samples_db.rs - dataset mẫu chụp từ database mẫu (SAMPLE_DATABASE_URL, compose trỏ vào dịch vụ demo-db của data/postgres-demo): thêm
-database đó làm nguồn Postgres của workspace đầu tiên, rồi chụp từng nhóm bảng ghi trong
-<SAMPLES_DIR>/sample_database.json, mỗi bảng một dataset kèm quan hệ khóa ngoại, đúng như admin làm ở trang Dữ liệu
-(service/sources/). Bảng nào có <SAMPLES_DIR>/<tên bảng>.metrics.json thì ghi thêm chỉ số mẫu.
+/* service/samples_db.rs - dataset mẫu chụp từ một database mẫu (một chuỗi của SAMPLE_DATABASE_URL, compose trỏ vào
+sales_demo và edu_demo của dịch vụ demo-db trong data/postgres-demo): thêm database đó làm nguồn Postgres của workspace
+đầu tiên, rồi chụp các nhóm bảng của nó ghi trong <SAMPLES_DIR>/sample_database.json, mỗi bảng một dataset kèm quan hệ
+khóa ngoại, đúng như admin làm ở trang Dữ liệu (service/sources/). Bảng nào có <SAMPLES_DIR>/<tên bảng>.metrics.json thì
+ghi thêm chỉ số mẫu.
 
-service/samples.rs gọi seed_database khi có SAMPLE_DATABASE_URL; lỗi ở đây thì bên đó ghi log và nạp dataco.csv thay.
+service/samples.rs gọi seed_database cho từng database mẫu; lỗi ở đây thì bên đó ghi log, và khi không database nào
+chụp được thì nạp dataco.csv thay.
 Bộ đánh giá trên database (service/eval.rs) gọi cùng hàm, nên `make eval` kiểm đúng đường mà bản cài mới đi qua. */
 
 use std::path::Path;
@@ -21,9 +23,13 @@ use crate::state::AppState;
 /// File trong SAMPLES_DIR liệt kê các nhóm bảng cần chụp.
 pub const PLAN_FILE: &str = "sample_database.json";
 
-/// Một lần chụp: bảng bắt đầu và các bảng chụp kèm, như request POST /sources/{id}/snapshot.
+/// Một lần chụp: database, bảng bắt đầu và các bảng chụp kèm, như request POST /sources/{id}/snapshot.
 #[derive(Debug, Deserialize)]
 pub struct PlannedSnapshot {
+    /// Tên database mà lần chụp này dành cho (sales_demo, edu_demo). Không ghi thì áp cho mọi database mẫu, như file
+    /// kế hoạch khi chỉ có một database.
+    #[serde(default)]
+    pub database: Option<String>,
     pub table: String,
     #[serde(default)]
     pub tables: Vec<String>,
@@ -50,6 +56,15 @@ pub async fn seed_database(
     db: &SampleDatabase,
 ) -> Result<Option<DatabaseSeed>, AppError> {
     let plan = load_plan(&state.config.samples_dir.join(PLAN_FILE))?;
+    let planned = build_planned_for(&plan, &db.database);
+    // Kiểm trước khi thêm nguồn: database không có trong kế hoạch (ví dụ company_demo của bản cũ) thì không để lại một
+    // nguồn không bảng nào.
+    if planned.is_empty() {
+        return Err(AppError::Internal(format!(
+            "{PLAN_FILE} has no snapshot for database {}",
+            db.database
+        )));
+    }
     let existing = sources::list(state, member).await?;
     if existing
         .iter()
@@ -63,7 +78,7 @@ pub async fn seed_database(
         relations: 0,
         metrics: 0,
     };
-    for planned in &plan.snapshots {
+    for planned in planned {
         let request = SnapshotRequest {
             table: Some(planned.table.clone()),
             tables: planned.tables.clone(),
@@ -78,6 +93,14 @@ pub async fn seed_database(
         }
     }
     Ok(Some(seed))
+}
+
+/// Các lần chụp dành cho một database: ghi đúng tên database đó, hay không ghi database.
+fn build_planned_for<'a>(plan: &'a Plan, database: &str) -> Vec<&'a PlannedSnapshot> {
+    plan.snapshots
+        .iter()
+        .filter(|s| s.database.as_deref().is_none_or(|d| d == database))
+        .collect()
 }
 
 fn build_request(db: &SampleDatabase) -> CreateSourceRequest {

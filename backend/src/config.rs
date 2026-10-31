@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::engine::excel_worker::ExcelWorker;
-use crate::sample_database::{build_sample_database, SampleDatabase};
+use crate::sample_database::{build_sample_database, split_sample_urls, SampleDatabase};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -68,9 +68,10 @@ pub struct Config {
     pub insight_text: bool,
     /// Thư mục chứa file mẫu (SAMPLES_DIR): data/samples của repo, compose gắn vào /samples.
     pub samples_dir: PathBuf,
-    /// Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng (SAMPLE_DATABASE_URL, service/samples.rs).
-    /// None: nạp dataco.csv như trước. Compose trỏ vào dịch vụ demo-db (data/postgres-demo, profile demo).
-    pub sample_database: Option<SampleDatabase>,
+    /// Các database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng, mỗi database một nguồn (SAMPLE_DATABASE_URL,
+    /// nhiều chuỗi cách nhau bằng dấu phẩy, service/samples.rs). Rỗng: nạp dataco.csv. Compose trỏ vào sales_demo và
+    /// edu_demo của dịch vụ demo-db (data/postgres-demo, profile demo).
+    pub sample_databases: Vec<SampleDatabase>,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
     pub excel_worker: ExcelWorker,
     /// Khóa mã hóa thông tin kết nối của nguồn database (SOURCE_SECRET_KEY, 32 byte dạng base64). Biến rỗng thì main.rs
@@ -174,7 +175,7 @@ impl Config {
                 "SOURCE_POSTGRES_EXTENSION",
                 DEFAULT_POSTGRES_EXTENSION,
             )),
-            sample_database: sample_database(&var_or("SAMPLE_DATABASE_URL", "")),
+            sample_databases: sample_databases(&var_or("SAMPLE_DATABASE_URL", "")),
         }
     }
 
@@ -184,9 +185,9 @@ impl Config {
     /// 127.0.0.1 thì admin chụp được chính Postgres của ứng dụng (cổng 5433).
     pub fn source_host_allowed(&self, host: &str, port: u16) -> bool {
         let sample = self
-            .sample_database
-            .as_ref()
-            .is_some_and(|s| s.host == host && s.port == port);
+            .sample_databases
+            .iter()
+            .any(|s| s.host == host && s.port == port);
         sample || self.source_allowed_hosts.iter().any(|h| h == host)
     }
 
@@ -252,16 +253,21 @@ const OLLAMA_NUM_CTX_DEFAULT: u32 = 12_288;
 /// Mật khẩu mẫu trong docker-compose.yml và .env.example.
 const SAMPLE_DB_PASSWORD: &str = "xdi";
 
-/// SAMPLE_DATABASE_URL sai dạng thì cảnh báo và bỏ qua (thiết lập lần đầu nạp dataco.csv), không làm backend chết lúc
-/// khởi động.
-fn sample_database(raw: &str) -> Option<SampleDatabase> {
-    match build_sample_database(raw) {
-        Ok(db) => db,
-        Err(why) => {
-            tracing::warn!(%why, "invalid SAMPLE_DATABASE_URL, the first-run setup loads dataco.csv instead");
-            None
+/// Mỗi chuỗi của SAMPLE_DATABASE_URL (cách nhau bằng dấu phẩy) một database mẫu. Chuỗi sai dạng thì cảnh báo và bỏ
+/// riêng chuỗi đó, không làm backend chết lúc khởi động; không còn chuỗi nào thì thiết lập lần đầu nạp dataco.csv.
+fn sample_databases(raw: &str) -> Vec<SampleDatabase> {
+    let mut databases = Vec::new();
+    for (index, part) in split_sample_urls(raw).into_iter().enumerate() {
+        match build_sample_database(part) {
+            Ok(Some(db)) => databases.push(db),
+            Ok(None) => {}
+            // Ghi vị trí, không ghi chuỗi: chuỗi có mật khẩu.
+            Err(why) => {
+                tracing::warn!(%why, index, "invalid entry in SAMPLE_DATABASE_URL, skipped")
+            }
         }
     }
+    databases
 }
 
 /// Mật khẩu trong DATABASE_URL dạng postgres://user:mat-khau@host/db, nếu có. Dạng khác (không có mật khẩu, hoặc
@@ -438,8 +444,15 @@ mod tests {
     #[test]
     fn only_the_sample_host_and_port_are_allowed_without_listing() {
         let mut config = Config::from_env();
-        config.sample_database =
-            build_sample_database("postgres://analyst:x@127.0.0.1:5440/company_demo").unwrap();
+        config.sample_databases = sample_databases(
+            "postgres://analyst:x@127.0.0.1:5440/sales_demo,postgres://analyst:x@127.0.0.1:5440/edu_demo",
+        );
+        assert_eq!(config.sample_databases.len(), 2);
+        // Chuỗi sai dạng bị bỏ riêng, chuỗi đúng vẫn giữ.
+        assert_eq!(
+            sample_databases("mysql://a:b@h/db, postgres://a:b@h/db").len(),
+            1
+        );
         config.source_allowed_hosts = vec!["db.example.com".to_string()];
         assert!(config.source_host_allowed("127.0.0.1", 5440));
         // Cùng máy, cổng khác (Postgres của ứng dụng ở 5433): không được.

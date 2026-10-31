@@ -1,6 +1,6 @@
--- sql/edu_schema.sql - schema "edu": dữ liệu học tập OULAD (Open University, Anh) tách thành bảng có khóa.
--- load.sh chạy file này mỗi lần nạp: xóa schema cũ rồi tạo lại, nên đổi bảng ở đây là đủ, không cần migration.
--- Dữ liệu đổ vào từ schema staging trong sql/edu_load.sql. Quan hệ giữa các bảng vẽ trong README.md.
+-- sql/edu_schema.sql - schema "edu" của database edu_demo: dữ liệu học tập OULAD (Open University, Anh) tách thành
+-- bảng có khóa. load.sh chạy file này mỗi lần nạp: xóa schema cũ rồi tạo lại, nên đổi bảng ở đây là đủ, không cần
+-- migration. Dữ liệu đổ vào từ schema staging trong sql/edu_load.sql. Quan hệ giữa các bảng vẽ trong README.md.
 --
 -- Một "học phần" (course) là một môn (code_module) mở trong một kỳ (code_presentation). Mã sinh viên id_student
 -- không duy nhất một mình: một người học nhiều môn hoặc học lại thì có nhiều dòng trong students.

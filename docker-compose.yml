@@ -28,8 +28,8 @@ services:
       timeout: 3s
       retries: 10
 
-  # Database mẫu "company_demo" (data/postgres-demo/README.md): DataCo và OULAD đầy đủ, tách bảng có khóa ngoại, đóng
-  # vai database của tổ chức. Cùng một dịch vụ như data/postgres-demo/docker-compose.yml (extends), chỉ chạy khi bật
+  # Database mẫu (data/postgres-demo/README.md): sales_demo (DataCo) và edu_demo (OULAD) đầy đủ, tách bảng có khóa
+  # ngoại, đóng vai database của tổ chức. Cùng một dịch vụ như data/postgres-demo/docker-compose.yml (extends), chỉ chạy khi bật
   # profile demo: docker compose --profile demo up -d. Bản cài mới không bật thì không cần tải gì, thiết lập lần đầu
   # nạp data/samples/dataco.csv. Chạy chung project với backend nên backend gọi được demo-db:5432 trong mạng của
   # compose, không phải docker network connect.
@@ -74,10 +74,10 @@ services:
       QUERY_TIMEOUT_SECS: ${QUERY_TIMEOUT_SECS:-30}
       ASK_MAX_ROWS: ${ASK_MAX_ROWS:-100000}
       SEED_SAMPLE: ${SEED_SAMPLE:-true}
-      # Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng (data/README.md). Không bật profile demo thì tên
-      # demo-db không có trong mạng, thiết lập lần đầu ghi cảnh báo rồi nạp data/samples/dataco.csv; đặt rỗng trong
-      # .env (SAMPLE_DATABASE_URL=) để bỏ hẳn bước thử kết nối.
-      SAMPLE_DATABASE_URL: ${SAMPLE_DATABASE_URL-postgres://analyst:analyst@demo-db:5432/company_demo}
+      # Các database mẫu mà thiết lập lần đầu thêm làm nguồn (mỗi database một nguồn) và chụp bảng (data/README.md),
+      # cách nhau bằng dấu phẩy. Không bật profile demo thì tên demo-db không có trong mạng, thiết lập lần đầu ghi cảnh
+      # báo rồi nạp data/samples/dataco.csv; đặt rỗng trong .env (SAMPLE_DATABASE_URL=) để bỏ hẳn bước thử kết nối.
+      SAMPLE_DATABASE_URL: ${SAMPLE_DATABASE_URL-postgres://analyst:analyst@demo-db:5432/sales_demo,postgres://analyst:analyst@demo-db:5432/edu_demo}
       ANSWER_TEXT: ${ANSWER_TEXT:-true}
       INSIGHT_TEXT: ${INSIGHT_TEXT:-true}
       # Nguồn database (docs/DATA.md): khóa trống thì backend sinh một khóa và lưu ở /data/source_secret.key (volume

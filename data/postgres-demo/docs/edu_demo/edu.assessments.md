@@ -15,12 +15,6 @@ Bài đánh giá của một học phần: bài tập chấm bởi giảng viên
 | date              | integer |         | true     |                                                       |                               | Hạn nộp, tính bằng số ngày từ ngày bắt đầu học phần. Rỗng khi nguồn ghi "?" (bài thi chưa có ngày, theo mô tả OULAD là cuối học phần)                            |
 | weight            | numeric |         | false    |                                                       |                               | Trọng số của bài, phần trăm. Trong một học phần, các bài không phải thi cộng lại 100 (môn GGG: 0) và bài thi cộng lại 100 (môn CCC có hai bài thi, cộng lại 200) |
 
-## Viewpoints
-
-| Name                    | Definition                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [edu](viewpoint-edu.md) | Dữ liệu học tập OULAD. Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses. |
-
 ## Constraints
 
 | Name                                           | Type        | Definition                                                                                          |
