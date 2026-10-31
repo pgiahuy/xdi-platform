@@ -1,12 +1,12 @@
 {
   "snapshots": [
     {
-      "table": "edu.student_assessments",
-      "tables": ["edu.assessments", "edu.students", "edu.courses", "edu.registrations", "edu.student_daily_clicks", "edu.vle_materials"]
-    },
-    {
       "table": "sales.order_items",
       "tables": ["sales.orders", "sales.customers", "sales.products", "sales.categories", "sales.departments"]
+    },
+    {
+      "table": "edu.student_assessments",
+      "tables": ["edu.assessments", "edu.courses", "edu.registrations", "edu.student_daily_clicks", "edu.vle_materials", "edu.students"]
     }
   ]
 }
