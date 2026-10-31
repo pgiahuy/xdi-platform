@@ -41,3 +41,6 @@ Thumbs.db
 backend/eval/
 eval/result.json
 eval/result-database.json
+
+# Extension postgres của DuckDB tải bằng make duckdb-extension (scripts/fetch-duckdb-extension.sh)
+duckdb-extensions/

@@ -83,6 +83,21 @@ pub struct Config {
     pub source_max_rows: u64,
     /// Thời gian tối đa một lần chụp bảng, kể cả kết nối (SOURCE_TIMEOUT_SECS).
     pub source_timeout: Duration,
+    /// Cách chép dữ liệu bảng khi chụp (SOURCE_SNAPSHOT_MODE, service/sources/direct.rs, #246).
+    pub source_snapshot_mode: SnapshotMode,
+    /// File extension postgres của DuckDB, đúng bản DuckDB của binary (SOURCE_POSTGRES_EXTENSION). Chỉ dùng với
+    /// SOURCE_SNAPSHOT_MODE=direct; thiếu file thì chụp bằng COPY.
+    pub source_postgres_extension: PathBuf,
+}
+
+/// Cách chép dữ liệu một bảng nguồn ra file khi chụp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotMode {
+    /// Postgres COPY ra CSV, DuckDB đọc CSV với kiểu cột lấy từ catalog rồi ghi Parquet (service/sources/postgres.rs).
+    Copy,
+    /// DuckDB đọc thẳng Postgres bằng extension postgres nạp từ file cục bộ, ghi Parquet một bước
+    /// (service/sources/direct.rs). Extension không nạp được thì quay về Copy.
+    Direct,
 }
 
 impl Config {
@@ -154,6 +169,11 @@ impl Config {
                 1_000_000,
             )),
             source_timeout: timeout_secs("SOURCE_TIMEOUT_SECS", 300),
+            source_snapshot_mode: snapshot_mode(env::var("SOURCE_SNAPSHOT_MODE").ok().as_deref()),
+            source_postgres_extension: PathBuf::from(var_or(
+                "SOURCE_POSTGRES_EXTENSION",
+                DEFAULT_POSTGRES_EXTENSION,
+            )),
             sample_database: sample_database(&var_or("SAMPLE_DATABASE_URL", "")),
         }
     }
@@ -324,6 +344,33 @@ fn flag(key: &str, raw: Option<&str>, default: bool) -> bool {
 
 /// Timeout tính bằng giây từ biến môi trường, theo cùng quy tắc với positive_number: timeout 0 sẽ làm mọi lần gọi mô
 /// hình thất bại ngay.
+/// Chỗ Dockerfile đặt extension postgres của DuckDB; make dev và gói phát hành trỏ chỗ khác qua biến môi trường.
+pub const DEFAULT_POSTGRES_EXTENSION: &str = "/usr/local/lib/xdi/postgres_scanner.duckdb_extension";
+
+/// SOURCE_SNAPSHOT_MODE: copy hoặc direct; trống thì DEFAULT_SNAPSHOT_MODE, giá trị lạ thì cảnh báo và dùng mặc định.
+fn snapshot_mode(raw: Option<&str>) -> SnapshotMode {
+    let Some(raw) = raw.filter(|v| !v.trim().is_empty()) else {
+        return DEFAULT_SNAPSHOT_MODE;
+    };
+    match raw.trim().to_lowercase().as_str() {
+        "copy" => SnapshotMode::Copy,
+        "direct" => SnapshotMode::Direct,
+        _ => {
+            tracing::warn!(
+                variable = "SOURCE_SNAPSHOT_MODE",
+                value = raw,
+                default = ?DEFAULT_SNAPSHOT_MODE,
+                "invalid value, expected copy or direct; using default"
+            );
+            DEFAULT_SNAPSHOT_MODE
+        }
+    }
+}
+
+/// direct nhanh hơn và tốn ít đĩa tạm hơn copy trên database mẫu (docs/PERFORMANCE.md, #246); copy vẫn là đường dự phòng
+/// khi extension không nạp được.
+const DEFAULT_SNAPSHOT_MODE: SnapshotMode = SnapshotMode::Direct;
+
 fn timeout_secs(key: &str, default: u32) -> Duration {
     Duration::from_secs(u64::from(positive_number(
         key,
@@ -456,6 +503,14 @@ mod tests {
         for bad in ["", "abc", "0", "-1", "1.5", "99999999999"] {
             assert_eq!(positive_number("X", Some(bad), 5), 5, "{bad}");
         }
+    }
+
+    #[test]
+    fn snapshot_mode_parsing() {
+        assert_eq!(snapshot_mode(None), DEFAULT_SNAPSHOT_MODE);
+        assert_eq!(snapshot_mode(Some(" Direct ")), SnapshotMode::Direct);
+        assert_eq!(snapshot_mode(Some("copy")), SnapshotMode::Copy);
+        assert_eq!(snapshot_mode(Some("fast")), DEFAULT_SNAPSHOT_MODE);
     }
 
     #[test]

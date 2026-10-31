@@ -16,15 +16,21 @@ BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
 # đặt thì backend tự sinh khóa trong DATA_DIR.
 DEMO_DB_PORT ?= 5440
 SAMPLE_DATABASE_URL ?= postgres://analyst:analyst@127.0.0.1:$(DEMO_DB_PORT)/company_demo
+# Extension postgres của DuckDB cho SOURCE_SNAPSHOT_MODE=direct (#246), tải một lần bằng make duckdb-extension. Git và
+# context build của Docker bỏ qua thư mục này; image tự tải ở stage riêng (backend/Dockerfile).
+DUCKDB_EXTENSION := $(CURDIR)/duckdb-extensions/postgres_scanner.duckdb_extension
 
-.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-lessons eval-classify eval-judge
+.PHONY: help duckdb-extension dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-lessons eval-classify eval-judge
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
-dev: ## Postgres trong Docker, backend chạy local với cargo run (database mẫu nếu đang chạy, xem data/postgres-demo)
+duckdb-extension: ## Tải extension postgres của DuckDB (đúng phiên bản, kiểm SHA-256) vào duckdb-extensions/, một lần
+	scripts/fetch-duckdb-extension.sh "$(DUCKDB_EXTENSION)"
+
+dev: duckdb-extension ## Postgres trong Docker, backend chạy local với cargo run (database mẫu nếu đang chạy, xem data/postgres-demo)
 	$(COMPOSE) up -d --wait postgres
-	cd backend && SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" cargo run
+	cd backend && SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" SOURCE_POSTGRES_EXTENSION="$(DUCKDB_EXTENSION)" cargo run
 
 dev-frontend: ## Giao diện chạy dev ở cổng 5173; /api chuyển sang backend
 	cd frontend && npm install && npm run dev
@@ -107,7 +113,7 @@ eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco
 	@# có database này nên bỏ qua. Chụp bảng như thiết lập lần đầu, kết quả ghi eval/result-database.json.
 	@if [ -n "$$(docker ps -q --filter name=^xdi-demo-db$$ --filter status=running 2>/dev/null)" ]; then \
 	  DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
-	  SAMPLES_DIR=data/samples SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" \
+	  SAMPLES_DIR=data/samples SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" SOURCE_POSTGRES_EXTENSION="$(DUCKDB_EXTENSION)" \
 	  $(CARGO_TARGET)/debug/xdi-backend eval --sample-database --cases eval/sales_joins.json --cases eval/edu.json \
 	  --baseline eval/baseline.json --out eval/result-database.json; \
 	else echo "xdi-demo-db is not running: skipping the evaluation on the sample database (data/postgres-demo/README.md)"; fi
@@ -156,7 +162,8 @@ uninstall: ## Gỡ binary đã cài bằng make install
 
 # Gói phát hành, CI gọi đúng target này. Ra thư mục release/:
 #   xdi-platform-$(VERSION).tar.gz                 mã nguồn, giải nén ra xdi-platform-$(VERSION)/
-#   xdi-backend-$(VERSION)-linux-x86_64.tar.gz     binary kèm LICENSE, README, LICENSES.md và danh sách giấy phép phụ thuộc
+#   xdi-backend-$(VERSION)-linux-x86_64.tar.gz     binary kèm extension postgres của DuckDB, LICENSE, README, LICENSES.md
+#                                                   và danh sách giấy phép phụ thuộc
 #   notes.md                                        ghi chú lấy từ CHANGELOG.md
 # DRY_RUN=1: chạy thử, chấp nhận CHANGELOG chưa có mục cho phiên bản này (CI dùng trên PR).
 release-artifacts: ## Đóng gói phát hành: make release-artifacts VERSION=x.y.z
@@ -166,7 +173,9 @@ release-artifacts: ## Đóng gói phát hành: make release-artifacts VERSION=x.
 	cd backend && cargo build --release --locked
 	rm -rf release && mkdir -p release/xdi-backend-$(VERSION)-linux-x86_64
 	cp "$(BACKEND_BIN)" LICENSE README.md docs/LICENSES.md docs/licenses-dependencies.md \
-		backend/third-party/swagger-ui-5.32.6-licenses.txt release/xdi-backend-$(VERSION)-linux-x86_64/
+		backend/third-party/swagger-ui-5.32.6-licenses.txt \
+		backend/third-party/duckdb-postgres-extension-licenses.txt release/xdi-backend-$(VERSION)-linux-x86_64/
+	scripts/fetch-duckdb-extension.sh release/xdi-backend-$(VERSION)-linux-x86_64/postgres_scanner.duckdb_extension linux_amd64
 	tar -C release -czf release/xdi-backend-$(VERSION)-linux-x86_64.tar.gz xdi-backend-$(VERSION)-linux-x86_64
 	rm -rf release/xdi-backend-$(VERSION)-linux-x86_64
 	git archive --format=tar.gz --prefix=xdi-platform-$(VERSION)/ -o release/xdi-platform-$(VERSION).tar.gz HEAD
