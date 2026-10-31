@@ -586,7 +586,7 @@ Thử luồng chính, kết nối database, với database mẫu duy nhất củ
    `demo-db:5432` bằng tài khoản chỉ đọc `analyst`. Compose in cảnh báo volume có sẵn không do project này tạo: bình
    thường. Nạp lại dữ liệu sau này thì `docker compose rm -sf demo-db` ở gốc repo trước khi chạy `load.sh`.
 
-Khi bước 2 tạo xong workspace đầu tiên, backend thêm database mẫu làm nguồn và chụp 12 bảng thành 12 dataset kèm 11
+Khi bước 2 tạo xong workspace đầu tiên, backend thêm database mẫu làm nguồn và chụp 12 bảng vào một dataset kèm 11
 quan hệ: `sales` (`order_items`, `orders`, `customers`, `products`, `categories`, `departments`) và `edu` (`students`,
 `courses`, `registrations`, `assessments`, `student_assessments`, `vle_materials`), kèm chỉ số mẫu "Doanh thu", "Lợi
 nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. `edu.student_daily_clicks` (1,8 triệu dòng) không
@@ -602,7 +602,7 @@ chủ `demo-db`, cổng 5432, database `company_demo`, tài khoản và mật kh
 `SAMPLE_DATABASE_URL`, đúng cổng đó, luôn được phép), hoặc nạp tay: file
 `data/samples/dataco.csv` trong repo, hoặc bản đầy đủ tải bằng `sh data/download.sh dataco`. Đặt tên dataset là
 `DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên file và câu mẫu chạy
-lỗi. Workspace đã có bảng `dataco` thì dataset thứ hai thành `dataco_2`, nên nạp DataCo vào workspace chưa có nó.
+lỗi. Mỗi file là một dataset riêng, nên nạp DataCo lần nữa (nội dung khác) vẫn có bảng tên `dataco` (#257).
 
 ### Bước 2. Tạo tài khoản quản trị
 

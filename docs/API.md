@@ -103,14 +103,53 @@ Hai ngoại lệ trả body rỗng, không có `ErrorBody`:
 
 Enum lỗi nằm ở `backend/src/error.rs`.
 
+## Dataset và bảng
+
+Một dataset là một database đã kết nối hay một file đã nạp; bảng nằm bên trong dataset (#257). File có đúng một bảng;
+database có mọi bảng đã chụp từ nó. Phiên bản, hồ sơ cột, chỉ số của bảng, câu hỏi và bằng chứng vẫn theo từng bảng.
+Code: `backend/src/service/catalog/` (hợp đồng ở `contract.rs`), `backend/src/api/catalog.rs`.
+
+| Route | Ai gọi | Việc |
+|---|---|---|
+| `GET /api/workspaces/{ws}/catalog` | mọi thành viên | Mọi dataset, cũ trước, mỗi dataset kèm bảng và quan hệ |
+| `GET .../catalog/{id}` | mọi thành viên | Một dataset |
+| `POST .../catalog/{id}/snapshot` | admin | Chụp lại mọi bảng của dataset là database, trong một giao dịch |
+| `POST .../catalog/{id}/ask` | mọi thành viên | Hỏi trên dataset; `table_id` để ghim bảng bắt đầu |
+| `GET .../catalog/{id}/conversations` | mọi thành viên | Cuộc trò chuyện của người gọi trên mọi bảng của dataset |
+
+- `DatasetSummary`: `id` (với database, trùng id nguồn ở `/sources/{id}`), `kind` (`database` hay `file`), `name` (tên
+  database, hay tên đặt lúc nạp file), `domain` (gói ngành), `tables`, `relations` (quan hệ khóa ngoại giữa các bảng của
+  dataset, dạng `DatasetRelation`), `updated_at` (lần chụp hay nạp gần nhất), `created_at`.
+- `DatasetTable`: `id` là id bảng mà các route bảng nhận (`/datasets/{id}/overview`, `/metrics`, `/drill`,
+  `/conversations/{conversation_id}`, `DELETE /datasets/{id}`); `name`, `logical_table` (tên trong SQL, chỉ không trùng
+  trong một dataset: hai database cùng có `orders` thì cả hai là `orders`), `schema` và `source_table` (null với file),
+  `description` (comment của bảng trong database), `row_count`, phiên bản hiện hành, `current_profile_status`,
+  `semantic_unavailable`, `suggested_questions`, và `columns` của phiên bản hiện hành (`name`, `data_type`, `role`,
+  `description`, `description_source`, `is_sensitive`, `aliases`). Bảng xếp theo `source_table` rồi theo tên, để giao
+  diện nhóm theo schema. Database đã kết nối mà chưa chụp bảng nào có `tables` rỗng.
+- Hỏi trên dataset nhận `question`, `choices`, `conversation_id` như route hỏi của bảng, thêm `table_id`. Không có
+  `table_id` thì backend chọn bảng bắt đầu (`backend/src/service/ask/scope.rs`): bảng có nhiều cụm từ của câu hỏi trùng
+  tên bảng, tên cột hay bí danh cột nhất; bằng nhau thì bảng của cuộc đang tiếp; rồi bảng giữ nhiều khóa ngoại nhất;
+  rồi bảng nhiều dòng hơn. Từ bảng đó câu hỏi đọc thêm các bảng nối với nó như trước (mục Hỏi dữ liệu). `table_id`
+  không thuộc dataset trả 404. Response là `AskResponse` như route hỏi của bảng; `AskResponse.table_id` là bảng đã bắt
+  đầu, dùng cho truy dòng nguồn. Cuộc trò chuyện nằm trên bảng bắt đầu của câu đầu (`ConversationItem.table_id`) và
+  tiếp được từ bất kỳ bảng nào của cùng dataset.
+- Chụp lại dataset: dataset là file trả 400; tối đa 30 bảng; giới hạn dòng và dung lượng như chụp một nhóm (mục Nguồn
+  database). 201 khi có bảng đổi, 200 khi không bảng nào đổi.
+
+Route cũ vẫn chạy, đặc tả đánh dấu `deprecated`: `GET .../datasets` (mỗi mục là một bảng, `parent_id` là dataset của
+nó), `POST .../datasets/{id}/ask` (thay bằng hỏi trên dataset kèm `table_id`), `GET .../datasets/{id}/conversations`.
+Tên `dataset` trong các route và kiểu cũ (`Dataset`, `dataset_id`, `UploadResult.dataset`, `SnapshotResponse.datasets`)
+nghĩa là bảng.
+
 ## Hỏi dữ liệu
 
-`POST /api/workspaces/{ws}/datasets/{id}/ask` trả lời một câu hỏi trên phiên bản đang dùng của dataset
-(`backend/src/service/ask/mod.rs`): lấy ngữ cảnh từ hồ sơ cột, nhờ mô hình viết SQL, guard kiểm, DuckDB chạy, sửa một
-lần khi lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy lỗi) vẫn là 200 với
-`status` trong body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, body sai, dataset chưa có dữ liệu, hồ sơ chưa lập
-xong hay lập lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu mock không có câu trả lời mẫu; 404 dataset không có;
-502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào.
+`POST /api/workspaces/{ws}/datasets/{id}/ask` (id là id bảng; hỏi trên cả dataset ở mục trên) trả lời một câu hỏi trên
+phiên bản đang dùng của bảng (`backend/src/service/ask/mod.rs`): lấy ngữ cảnh từ hồ sơ cột, nhờ mô hình viết SQL, guard
+kiểm, DuckDB chạy, sửa một lần khi lỗi, ghi lịch sử câu hỏi. Câu không trả lời được (guard từ chối, câu mơ hồ, SQL chạy
+lỗi) vẫn là 200 với `status` trong body, không phải mã lỗi. Mã lỗi: 400 câu hỏi rỗng, body sai, dataset chưa có dữ liệu,
+hồ sơ chưa lập xong hay lập lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu mock không có câu trả lời mẫu; 404 dataset
+không có; 502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào.
 
 Câu answered có thẻ "Hệ thống đã hiểu là", vai trò cột và gợi ý biểu đồ. Câu thường answered có ít nhất một dòng kết quả
 thì có `answer_text`: đoạn trả lời ngắn tiếng Việt. Đó là `insight.summary` khi lời này do mô hình viết và đã qua bước
@@ -264,7 +303,7 @@ prompt của câu hỏi kế tiếp.
 ## Khái niệm ngành
 
 Gói khái niệm ngành của workspace ([DOMAINS.md](DOMAINS.md), `backend/src/service/domains/`):
-`GET /api/workspaces/{ws}/domains` trả `packs`, mỗi gói có `key` (giá trị của `datasets.domain`), `name`,
+`GET /api/workspaces/{ws}/domains` trả `packs`, mỗi gói có `key` (giá trị của `sources.domain`), `name`,
 `description` và `concepts` theo thứ tự đưa vào prompt (thứ tự của file gói, khái niệm admin thêm đứng sau), kể cả
 khái niệm đang tắt. Mỗi khái niệm có `id`, `key` (id trong file gói, null với khái niệm admin thêm), `name`,
 `description`, `synonyms`, `calculations`, `dimensions`, `sanity_checks`, `enabled`, `updated_at` (null khi chưa ai sửa
@@ -328,15 +367,17 @@ hỏng, không ghi được) thì thêm và dùng nguồn trả 503 (`unavailabl
   được), `constraint`, `from_table`, `from_columns`, `to_table`, `to_columns`, `column_count`, `addable` và `reason`
   (tiếng Việt, khi không chụp kèm được). Chỉ đọc `pg_catalog`, không đọc dòng dữ liệu.
 - `POST .../sources/{id}/snapshot`: `table` (`schema.table` lấy từ danh sách bảng), `tables` (các bảng chụp kèm, có thể
-  rỗng) và `name` (tên dataset của `table` khi nó mới), hoặc `dataset_id` để chụp lại dataset đó cùng mọi dataset cùng
-  nguồn nối với nó qua quan hệ (gửi kèm `tables` thì 400). Mỗi bảng thành một dataset; bảng đã chụp từ nguồn này thì
-  thêm phiên bản vào dataset cũ. Response `SnapshotResponse`: `datasets` (mỗi bảng một `UploadResult`, bảng bắt đầu đứng
-  đầu, `created: false` khi bảng không đổi) và `relations` (quan hệ giữa các dataset này, dạng `DatasetRelation`). 201
-  khi có ít nhất một phiên bản mới, 200 khi không bảng nào đổi; 400 khi quá 10 bảng hay có bảng không đọc được; 413 khi
-  một bảng quá `SOURCE_MAX_ROWS` hay `MAX_UPLOAD_MB`.
+  rỗng) và `name` (tên bảng `table` khi nó mới), hoặc `dataset_id` (id bảng) để chụp lại bảng đó cùng mọi bảng cùng
+  nguồn nối với nó qua quan hệ (gửi kèm `tables` thì 400); chụp lại mọi bảng của database ở `POST
+  .../catalog/{id}/snapshot`. Mỗi bảng thành một bảng của dataset là nguồn này; bảng đã chụp từ nguồn này thì thêm phiên
+  bản vào bảng cũ. Response `SnapshotResponse`: `datasets` (mỗi bảng một `UploadResult`, bảng bắt đầu đứng đầu,
+  `created: false` khi bảng không đổi) và `relations` (quan hệ giữa các dataset này, dạng `DatasetRelation`). 201 khi có
+  ít nhất một phiên bản mới, 200 khi không bảng nào đổi; 400 khi quá 10 bảng hay có bảng không đọc được; 413 khi một
+  bảng quá `SOURCE_MAX_ROWS` hay `MAX_UPLOAD_MB`.
 - `DELETE .../sources/{id}`: 204; 400 khi còn dataset chụp từ nguồn này.
 
-Dataset trả qua API có thêm `source_kind`, `source_id`, `source_table`, `current_version_at` (lần nạp hay lần chụp
+Bảng trả qua route cũ (kiểu `Dataset`) có thêm `parent_id` (dataset chứa nó), `row_count`, `description`, `source_kind`,
+`source_id`, `source_table`, `current_version_at` (lần nạp hay lần chụp
 gần nhất) và `relations`: các dataset nối với nó theo khóa ngoại của database nguồn, mỗi mục có `dataset_id`, `name`,
 `direction` (`many_to_one` khi dataset này giữ khóa ngoại, `one_to_many` khi dataset kia giữ), `columns` (cột khóa của
 dataset này) và `related_columns`; rỗng với file nạp. Mọi thành viên đọc được trường này.

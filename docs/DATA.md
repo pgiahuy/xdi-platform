@@ -4,6 +4,11 @@ Tài liệu này ghi hệ thống nhận file dữ liệu nào, đổi chúng th
 nào. Cách nạp trên giao diện và bằng `curl`: [Cài đặt](INSTALL.md), mục Nạp dữ liệu. Dữ liệu nằm ở đâu và gửi gì cho
 mô hình ngôn ngữ: [Dữ liệu và quyền riêng tư](PRIVACY.md).
 
+Một dataset là một database đã kết nối hay một file đã nạp; bảng nằm bên trong dataset (#257). Một file là một dataset
+có một bảng; mỗi bảng chụp từ một database là một bảng của dataset đó. Phiên bản theo từng bảng. Cách lưu trong
+Postgres và vì sao giữ tên cũ: [Kiến trúc](ARCHITECTURE.md), mục 5. Dưới đây "dataset" ở các route và trường cũ
+(`dataset_id`, `name` của lần nạp) là bảng.
+
 Nạp file: `POST /api/workspaces/{ws}/datasets`, dạng `multipart/form-data`, chỉ `admin` của workspace gọi được
 ([API](API.md)). Các trường: `file` (lặp lại để gửi nhiều file), `name` (tên dataset mới), `dataset_id` (thêm phiên bản
 cho dataset có sẵn), `sheet` (sheet cần nạp của file Excel). Code: `backend/src/api/datasets/`,
@@ -167,9 +172,13 @@ bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộ
 - **Một ảnh chụp nhất quán:** mọi bảng đếm dòng và chép trong một giao dịch `REPEATABLE READ READ ONLY` trên một kết
   nối, nên các bảng cùng là ảnh của một thời điểm (MVCC của Postgres): không có dòng hàng trỏ tới đơn chưa có trong bản
   chụp `orders`.
-- **Một bảng nguồn, một dataset:** bảng đã chụp từ nguồn này (tra theo `sources.config.tables`) thì lần chụp sau thêm
-  phiên bản vào đúng dataset đó. Bảng chiều dùng chung, ví dụ `orders` được cả `order_items` và `returns` trỏ tới, nên
-  chỉ có một dataset dù chụp trong hai nhóm khác nhau. Bảng không đổi thì không tạo phiên bản mới (`created: false`).
+- **Một database, một dataset:** mọi bảng chụp từ một nguồn là bảng của cùng một dataset, tên theo tên database
+  (`GET .../catalog`). "Chụp lại" cả dataset (`POST .../catalog/{id}/snapshot`) chép lại mọi bảng đã chụp, tối đa 30
+  bảng, trong một giao dịch như chụp một nhóm, rồi thay mọi quan hệ giữa chúng.
+- **Một bảng nguồn, một bảng của dataset:** bảng đã chụp từ nguồn này (tra theo `sources.config.tables`) thì lần chụp
+  sau thêm phiên bản vào đúng dataset đó. Bảng chiều dùng chung, ví dụ `orders` được cả `order_items` và `returns` trỏ
+  tới, nên chỉ có một dataset dù chụp trong hai nhóm khác nhau. Bảng không đổi thì không tạo phiên bản mới (`created:
+  false`).
 - **Quan hệ:** ghi khóa ngoại nối hai bảng trong cùng lần chụp, chỉ khi cột được trỏ tới là khóa chính hay `UNIQUE`.
   Mỗi quan hệ có dataset phía nhiều (giữ khóa ngoại) và cột của nó, dataset phía một và cột của nó, tên ràng buộc, và
   `cardinality` (`one_to_one` khi cột khóa ngoại cũng là khóa chính hay `UNIQUE`, còn lại `many_to_one`). Lần chụp sau
@@ -203,11 +212,13 @@ vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset
   xếp, nên thứ tự chọn file không đổi kết quả. Với file Excel, hash tính thêm tên các sheet đã chọn và phiên bản cách
   đọc Excel của backend: cùng file mà chọn sheet khác là dữ liệu khác.
 - Hash chỉ tính trên nội dung, không tính tên file.
-- Nạp trùng: có `dataset_id` thì so với các phiên bản của dataset đó; không có thì so với mọi phiên bản trong workspace.
+- Nạp trùng: có `dataset_id` thì so với các phiên bản của bảng đó; không có thì so với mọi phiên bản trong workspace.
+  Bảng mới chụp từ database không so cả workspace: cùng một database kết nối hai lần thì mỗi dataset có bảng riêng.
   Trùng thì không tạo gì, trả 200 với `created: false` và phiên bản đã có. Tạo mới thì trả 201.
-- File Parquet nằm ở `<DATA_DIR>/<id workspace>/<id dataset>/<thư mục phiên bản>/`; database lưu đường dẫn tương đối
-  với `DATA_DIR`. Trong lúc nạp, file nằm ở thư mục tạm `<DATA_DIR>/staging/`, xóa khi xong hay khi lỗi; backend dừng
-  giữa chừng thì lần khởi động sau xóa.
+- File Parquet nằm ở `<DATA_DIR>/<id workspace>/<id dataset>/<id bảng>/<thư mục phiên bản>/`; database lưu đường dẫn
+  tương đối với `DATA_DIR`, nên phiên bản ghi trước #257 (ở `<id workspace>/<id bảng>/<thư mục phiên bản>/`) vẫn đọc
+  được mà không phải chuyển file. Trong lúc nạp, file nằm ở thư mục tạm `<DATA_DIR>/staging/`, xóa khi xong hay khi lỗi;
+  backend dừng giữa chừng thì lần khởi động sau xóa.
 - Phiên bản lưu số dòng (`row_count`) và trạng thái hồ sơ `profile_status`: `structure` khi đã có hồ sơ cột (mục
   dưới), `semantic` khi xong lớp ngữ nghĩa, `pending` khi chưa, `failed` khi lớp cấu trúc lỗi do dữ liệu.
 - Xóa dataset (`DELETE /api/workspaces/{ws}/datasets/{id}`, chỉ `admin`) xóa mọi phiên bản cùng hồ sơ cột, chỉ số và
@@ -221,7 +232,7 @@ Thiết lập lần đầu tạo xong workspace đầu tiên mà tới được 
 `demo-db` của [data/postgres-demo](../data/postgres-demo/README.md) khi bật `--profile demo`, `make dev` trỏ vào
 `127.0.0.1:5440`) thì thêm nó làm nguồn
 Postgres và chụp các nhóm bảng ghi trong `SAMPLES_DIR/sample_database.json`, đúng như admin làm ở mục Nguồn database
-phía trên: 12 bảng thành 12 dataset kèm 11 quan hệ, cộng chỉ số mẫu của bảng có file
+phía trên: một dataset có 12 bảng kèm 11 quan hệ, cộng chỉ số mẫu của bảng có file
 `<bảng>.metrics.json` (`backend/src/service/samples_db.rs`). Không có database mẫu, hay chụp lỗi, thì nạp `dataco.csv`
 trong `SAMPLES_DIR` thành dataset `DataCo` qua đường nạp file, kèm các chỉ số mẫu (`backend/src/service/samples.rs`).
 Tắt cả hai bằng `SEED_SAMPLE=false`. Chi tiết, nguồn và giấy phép: [data/README.md](../data/README.md).
@@ -233,7 +244,10 @@ Tắt cả hai bằng `SEED_SAMPLE=false`. Chi tiết, nguồn và giấy phép:
 **Tên bảng logic** (`logical_table`) là tên mô hình ngôn ngữ dùng trong SQL và guard kiểm. Đặt một lần khi tạo dataset,
 từ tên dataset: bỏ dấu, viết thường, mỗi dãy ký tự không phải chữ hay số thành một `_`, bỏ `_` ở hai đầu, cắt còn 48
 ký tự; sau khi cắt, tên bắt đầu bằng số thì thêm `t_` ở đầu; không còn ký tự nào thì là `dataset`; trùng tên bảng khác
-trong workspace thì thêm `_2`, `_3`. Ví dụ "Bán hàng 2024" thành `ban_hang_2024`, "2024 sales" thành `t_2024_sales`.
+trong cùng dataset thì thêm `_2`, `_3`. Hai dataset khác nhau được có bảng cùng tên: hai database cùng có `orders`, hay
+file `orders.csv` cạnh database có bảng `orders`, đều giữ `orders`, vì một câu hỏi chỉ đọc bảng của một dataset. Bảng
+đặt tên trước #257 giữ tên cũ (có thể là `orders_2`), vì SQL đã lưu của câu hỏi cũ dùng tên đó.
+Ví dụ "Bán hàng 2024" thành `ban_hang_2024`, "2024 sales" thành `t_2024_sales`.
 
 **Tên cột**:
 

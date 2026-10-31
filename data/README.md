@@ -53,12 +53,12 @@ không được hay checksum lệch thì script in trang nguồn để tải tay
 | Online Retail II | `online_retail_ii.zip` và `online_retail_II.xlsx` giải nén từ đó (khoảng 46 MB) | UCI Machine Learning Repository, https://archive.ics.uci.edu/dataset/502/online+retail+ii | CC BY 4.0; Daqing Chen (2019), https://doi.org/10.24432/C5CG6D |
 | Open University Learning Analytics (OULAD) | `oulad.zip` (khoảng 47 MB) và 7 file CSV giải nén vào `oulad/` (tổng khoảng 464 MB, riêng `studentVle.csv` 454 MB) | UCI Machine Learning Repository, https://archive.ics.uci.edu/dataset/349/open+university+learning+analytics+dataset | CC BY 4.0; Jakub Kuzilek, Martin Hlosta, Zdenek Zdrahal (2015), https://doi.org/10.24432/C5KK69 |
 
-Câu mẫu DataCo của mock (`backend/src/engine/llm/mock_answers.json`) viết cho bảng `dataco`: nạp bản đầy
-đủ của DataCo với tên dataset `DataCo` vào workspace chưa có dataset đó (đã có thì bảng mới thành `dataco_2`). Online
-Retail II và OULAD chưa có chỉ số mẫu hay câu mẫu cho mock, hỏi trên đó cần Gemini hoặc Ollama. OULAD là dữ liệu
-học tập: bảng dễ hỏi nhất là `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần, có giới tính,
-khu vực, trình độ, kết quả cuối khóa); đã nạp thử qua trang **Dữ liệu** và hỏi với Gemini. Online Retail II bản đầy
-đủ chưa được thử nạp qua trang **Dữ liệu**, giới hạn của file Excel ở [docs/DATA.md](../docs/DATA.md).
+Câu mẫu DataCo của mock (`backend/src/engine/llm/mock_answers.json`) viết cho bảng `dataco`: nạp bản đầy đủ của DataCo
+với tên dataset `DataCo` (mỗi file là một dataset riêng, bảng vẫn tên `dataco` khi workspace đã có DataCo mẫu). Online
+Retail II và OULAD chưa có chỉ số mẫu hay câu mẫu cho mock, hỏi trên đó cần Gemini hoặc Ollama. OULAD là dữ liệu học
+tập: bảng dễ hỏi nhất là `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần, có giới tính, khu
+vực, trình độ, kết quả cuối khóa); đã nạp thử qua trang **Dữ liệu** và hỏi với Gemini. Online Retail II bản đầy đủ chưa
+được thử nạp qua trang **Dữ liệu**, giới hạn của file Excel ở [docs/DATA.md](../docs/DATA.md).
 
 Cùng hai bộ DataCo và OULAD, tách thành nhiều bảng có khóa chính, khóa ngoại trong một Postgres riêng để thử kết nối
 cơ sở dữ liệu công ty: [postgres-demo/README.md](postgres-demo/README.md).

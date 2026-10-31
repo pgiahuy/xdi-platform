@@ -55,7 +55,7 @@ bộ đầy đủ tải bằng `data/download.sh` (kiểm SHA-256) vào `data/do
 | Bộ | Lấy ở đâu | Dùng cho |
 |---|---|---|
 | DataCo mẫu, 1500 dòng | Có sẵn: `data/samples/dataco.csv`, kèm chỉ số mẫu `dataco.metrics.json` | Dataset nạp sẵn khi thiết lập lần đầu không tới được database mẫu, câu mẫu của `mock`, bộ đánh giá `make eval` trên CI |
-| DataCo Smart Supply Chain đầy đủ, khoảng 96 MB CSV | `sh data/download.sh dataco` | Thử trên dữ liệu lớn; nạp với tên `DataCo` vào workspace chưa có DataCo thì câu mẫu của `mock` vẫn chạy (đã có thì bảng thành `dataco_2`) |
+| DataCo Smart Supply Chain đầy đủ, khoảng 96 MB CSV | `sh data/download.sh dataco` | Thử trên dữ liệu lớn; nạp với tên `DataCo` thì câu mẫu của `mock` vẫn chạy (mỗi file là một dataset riêng, bảng vẫn tên `dataco`) |
 | Online Retail II, khoảng 46 MB Excel | `sh data/download.sh retail` | Thử file Excel nhiều sheet (bản đầy đủ chưa thử nạp, giới hạn Excel ở [DATA.md](docs/DATA.md)); chưa có câu mẫu cho `mock`, cần Gemini hoặc Ollama |
 | OULAD (Open University Learning Analytics), 7 bảng CSV, khoảng 464 MB | `sh data/download.sh oulad` | Dữ liệu giáo dục: nạp `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần) để hỏi theo kết quả học tập; cần Gemini hoặc Ollama |
 
@@ -69,10 +69,10 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 - **Tài khoản và workspace:** mỗi người nhiều workspace; vai `admin` (nạp, xóa dữ liệu, quản lý thành viên) và
   `member` (xem, hỏi); quản trị hệ thống quản lý tài khoản.
 - **Kết nối database:** thêm nguồn Postgres (thông tin kết nối mã hóa, tài khoản chỉ đọc, TLS với `require` hay
-  `verify-full`), chụp một bảng cùng các bảng liên quan theo khóa ngoại, mỗi bảng một dataset có ghi quan hệ; câu hỏi
-  nối các bảng đó, có chặn cộng lặp khi nối. Nạp file là lựa chọn phụ: CSV (UTF-8, windows-1252), Parquet, Excel .xlsx
-  kèm chọn sheet. Mỗi lần chụp hay nạp là một phiên bản. Hồ sơ cột lập lúc nạp; mô hình thêm mô tả cột, bí danh và câu
-  gợi ý, gồm cả câu hỏi tìm nguyên nhân.
+  `verify-full`), chụp một bảng cùng các bảng liên quan theo khóa ngoại; mỗi database là một dataset chứa các bảng đã
+  chụp, có ghi quan hệ; câu hỏi chọn dataset và nối các bảng đó, có chặn cộng lặp khi nối. Nạp file là lựa chọn phụ: CSV
+  (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet. Mỗi lần chụp hay nạp là một phiên bản. Hồ sơ cột lập lúc
+  nạp; mô hình thêm mô tả cột, bí danh và câu gợi ý, gồm cả câu hỏi tìm nguyên nhân.
 - **Hỏi theo cuộc trò chuyện:** câu sau hiểu theo các câu trước. Câu hỏi qua guard (một câu `SELECT` chỉ đọc, trên
   bảng, cột, hàm được phép, có trần số dòng) rồi chạy trên DuckDB; lỗi thì mô hình sửa một lần. Kết quả có bảng, biểu
   đồ, tải CSV, thẻ "Hệ thống đã hiểu là" và cảnh báo khi kết quả đáng ngờ.
