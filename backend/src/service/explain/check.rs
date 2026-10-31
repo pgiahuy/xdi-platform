@@ -16,6 +16,7 @@ use sqlparser::ast::Expr;
 use crate::engine::store::{MetricDefinition, ProfileColumn, ProfileRole};
 use crate::service::ask::values::ValueIndex;
 use crate::service::explain::form::{FieldError, WhyForm};
+use crate::service::explain::group_base::GroupBase;
 use crate::service::explain::measure::{check_measure, find_metric, parse_expr, PlanMeasure};
 use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::source::{PlanSource, RelatedTables};
@@ -75,10 +76,11 @@ pub enum PlanSlices {
         /// base là kỳ liền trước vì mô hình để trống và người hỏi chưa chọn; giả định để hiện ở thẻ "Đã hiểu là".
         base_by_default: bool,
     },
-    /// So hai nhóm của một cột chiều; period là kỳ của câu hỏi khi form có time và compare.
+    /// So hai nhóm của một cột chiều: một nhóm với một nhóm khác, hay với mọi nhóm còn lại (GroupBase); period là kỳ
+    /// của câu hỏi khi form có time và compare.
     Groups {
         column: String,
-        base: String,
+        base: GroupBase,
         compare: String,
         period: Option<(PlanTime, Period)>,
     },
@@ -166,12 +168,19 @@ fn check_slices(
             return None;
         }
         let compare = check_value(profile, column, &groups.compare, "groups.compare", errors);
-        let base = check_value(profile, column, &groups.base, "groups.base", errors);
+        // base vắng hay rỗng: so với mọi nhóm còn lại của cột (#244).
+        let base = match non_empty(&groups.base) {
+            Some(text) => {
+                check_value(profile, column, text, "groups.base", errors).map(GroupBase::Value)
+            }
+            None => Some(GroupBase::Rest),
+        };
         let (compare, base) = (compare?, base?);
-        if compare == base {
+        if base == GroupBase::Value(compare.clone()) {
             errors.push(FieldError::new(
                 "groups.base",
-                "the two groups are the same value; compare two different values",
+                "the two groups are the same value; compare two different values, or leave base out to compare with \
+                 all other groups",
             ));
             return None;
         }

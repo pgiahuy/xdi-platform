@@ -66,8 +66,9 @@ pub fn build_why_understanding(
             period,
         } => {
             let label = format!(
-                "{}: {compare} so với {base}",
-                build_column_label(column, profile, false)
+                "{}: {compare} so với {}",
+                build_column_label(column, profile, false),
+                base.build_label(column, &plan.labels)
             );
             filters.push(build_item(label, &conditions.slices));
             match (period, &conditions.period) {

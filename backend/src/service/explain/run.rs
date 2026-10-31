@@ -418,7 +418,7 @@ fn build_empty_slice_errors(
         PlanSlices::Groups { base, compare, .. } => (
             "groups.base",
             "groups.compare",
-            base.clone(),
+            base.build_error_text(compare),
             compare.clone(),
         ),
     };

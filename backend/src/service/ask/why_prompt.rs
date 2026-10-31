@@ -61,7 +61,7 @@ pub fn build_why_form_schema() -> serde_json::Value {
             },
             "time": {
                 "type": "object",
-                "description": "Set to compare two periods; leave out to compare two groups",
+                "description": "Set to compare two periods; with groups, set only when the question names a period",
                 "properties": {
                     "column": text("A column of role time"),
                     "grain": { "type": "string", "enum": ["month", "quarter", "year"] }
@@ -92,9 +92,12 @@ pub fn build_why_form_schema() -> serde_json::Value {
                 "properties": {
                     "column": text("A column of role dimension"),
                     "compare": text("The group being explained, a value of the column"),
-                    "base": text("The group to compare with, a value of the column")
+                    "base": text(
+                        "The group to compare with, a value of the column; leave out to compare with all other \
+                         groups of the column"
+                    )
                 },
-                "required": ["column", "compare", "base"]
+                "required": ["column", "compare"]
             },
             "unanswerable": build_unanswerable_schema()
         },

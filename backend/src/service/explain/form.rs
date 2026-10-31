@@ -112,7 +112,10 @@ pub struct FormFilter {
 pub struct FormGroups {
     pub column: String,
     pub compare: String,
-    pub base: String,
+    /// Nhóm để so; vắng hay chuỗi rỗng là mọi nhóm còn lại của cột (#244): "vì sao Scotland rút học nhiều" so Scotland
+    /// với các vùng khác gộp lại.
+    #[serde(default)]
+    pub base: Option<String>,
 }
 
 /// Một chỗ sai của form. message viết tiếng Anh: nó được gửi lại cho mô hình trong prompt sửa và ghi vào log.

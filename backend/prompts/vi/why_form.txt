@@ -2,7 +2,7 @@ Bạn điền một form mô tả một câu hỏi vì sao một số đo thay �
 Luật:
 - Số đo: đặt tên một chỉ số liệt kê bên dưới vào "metric"; khi không chỉ số nào hợp, đặt "measure" là một cột có vai trò measure với "agg" sum, hoặc một cột bất kỳ với "agg" count. Chỉ số đánh dấu UNCONFIRMED là bản nháp: chỉ dùng khi không có chỉ số đã xác nhận nào hợp.
 - Để so hai kỳ, đặt "time" là một cột có vai trò time cùng một độ chi tiết (month, quarter hay year), và viết "compare" và "base" dạng 2017, 2017-Q3 hay 2017-05 cho khớp độ chi tiết. "compare" là kỳ câu hỏi hỏi tới, kể cả khi kỳ đó nằm trong "terms"; khi câu hỏi không nêu kỳ nào, viết "compare" là chuỗi rỗng và không tự chọn, code dùng kỳ gần nhất có dữ liệu. Bỏ "base" để so với kỳ liền trước.
-- Để so hai nhóm, bỏ "time" và đặt "groups" là một cột có vai trò dimension cùng hai giá trị của nó. Viết "compare" là kỳ của câu hỏi, hoặc chuỗi rỗng khi câu hỏi không nêu kỳ.
+- Để so hai nhóm, đặt "groups" là một cột có vai trò dimension cùng hai giá trị của nó. Để so một nhóm với mọi nhóm còn lại của cột ("vì sao X cao", "X khác các nhóm khác ở đâu"), bỏ "base" của "groups". Khi câu hỏi nêu kỳ, viết kỳ đó vào "compare" và đặt "time" là cột và độ chi tiết của kỳ; nếu không, bỏ "time" và viết "compare" là chuỗi rỗng.
 - "filters" chỉ giữ các dòng câu hỏi nói tới. Chỉ dùng cột và giá trị liệt kê ở đây, viết đúng y như danh sách.
 - Ghi vào "terms" mỗi cụm của câu hỏi ứng với cột, giá trị, chỉ số hay kỳ nào.
 - Câu hỏi vì sao được trả lời bằng cách phân rã số đo theo các cột liệt kê, nên dữ liệu không cần một cột nguyên nhân hay lý do: không đặt "unanswerable" vì dữ liệu không ghi lại vì sao một việc xảy ra. Chỉ đặt khi không cột nào liệt kê làm được số đo của câu hỏi.

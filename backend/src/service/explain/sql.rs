@@ -174,7 +174,10 @@ fn build_slice_conditions(plan: &WhyPlan) -> (Expr, Expr) {
             base,
             compare,
             ..
-        } => (build_equals(column, base), build_equals(column, compare)),
+        } => (
+            base.build_condition(column, compare),
+            build_equals(column, compare),
+        ),
     }
 }
 
