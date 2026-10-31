@@ -66,6 +66,9 @@ pub mod summary;
 #[cfg(test)]
 mod summary_tests;
 pub mod unanswerable;
+pub mod value_retry;
+#[cfg(test)]
+mod value_retry_tests;
 pub mod values;
 pub(crate) mod view;
 mod why;
@@ -78,7 +81,7 @@ use crate::engine::domains::find_domain_package;
 use crate::engine::guard::AllowedTable;
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
-use crate::service::ask::checks::{build_result_warnings, CheckedQuery};
+use crate::service::ask::checks::{build_result_warnings, find_missing_values, CheckedQuery};
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
 use crate::service::ask::context::{build_ask_context_with_keys, AskContext};
@@ -104,6 +107,8 @@ pub use crate::service::ask::row_filters::load_row_filters;
 use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
 use crate::service::ask::summary::{summarize, SummaryInput, SummaryOutcome};
 use crate::service::ask::unanswerable::build_unanswerable_message;
+use crate::service::ask::value_retry::{apply_full_values, build_resend_columns};
+use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::why::{ask_why, build_narrate_timeout, WhyAsk};
 use crate::service::explain::form::QuestionKind;
@@ -267,6 +272,66 @@ pub async fn ask(
     };
     let mut outcome = run_with_repair(state.llm.as_ref(), input).await?;
     steps.append(&mut outcome.steps);
+
+    // Câu lọc theo giá trị cột không có, mà danh sách của cột chưa gửi đủ: gửi lại một lần kèm đủ giá trị của cột đó
+    // (ask/value_retry.rs). Người bị lọc dòng không được gửi lại: danh sách là của cả cột.
+    let checked = CheckedQuery {
+        status: outcome.status,
+        sql_guarded: outcome.sql_guarded.as_deref(),
+        result: outcome.result.as_ref(),
+        row_filters: &outcome.row_filters,
+        terms: &outcome.terms,
+        columns: &columns,
+        restricted: group.is_restricted(),
+    };
+    let (_, missing) = find_missing_values(state, ws, &version, &checked).await;
+    let resend = build_resend_columns(&missing, &context.columns);
+    if !resend.is_empty() && !group.is_restricted() {
+        let index = load_value_index(state, ws, &version).await?;
+        let applied: Vec<String> = resend
+            .into_iter()
+            .filter(|name| apply_full_values(&mut context.columns, &index, name))
+            .collect();
+        if !applied.is_empty() {
+            let retry_input = PromptInput {
+                table: &dataset.logical_table,
+                question,
+                context: &context,
+                metrics: &metrics,
+                examples: &examples,
+                domain: dataset.domain.as_deref().and_then(find_domain_package),
+                choices,
+                history: &history.section,
+                group: group_prompt.as_ref(),
+            };
+            let prompt = build_sql_prompt(&retry_input);
+            let started = Instant::now();
+            let request = LlmRequest {
+                task: LlmTask::Sql,
+                question,
+                prompt: &prompt,
+                json_schema: Some(build_sql_reply_schema()),
+            };
+            let reply = state.llm.complete(&request).await?;
+            let detail = format!(
+                "Gửi lại kèm đủ giá trị của cột {}: câu trước lọc theo giá trị cột không có",
+                applied.join(", ")
+            );
+            steps.push(build_step(StepName::Llm, started, true, Some(&detail)));
+            let input = RunInput {
+                question,
+                prompt: &prompt,
+                reply: &reply,
+                tables,
+                links: &links,
+                max_rows: state.config.ask_max_rows,
+                timeout: state.config.query_timeout,
+                jobs: &state.query_jobs,
+            };
+            outcome = run_with_repair(state.llm.as_ref(), input).await?;
+            steps.append(&mut outcome.steps);
+        }
+    }
     if let Some(unanswerable) = &outcome.unanswerable {
         let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
         outcome.message = Some(build_unanswerable_message(unanswerable, &names));

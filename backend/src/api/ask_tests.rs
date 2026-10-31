@@ -682,3 +682,70 @@ async fn unconfigured_model_is_503() {
         0
     );
 }
+
+/// CSV có sáu cột chiều, mỗi cột 200 giá trị (1200 giá trị, vượt trần 1000 của ngữ cảnh): câu hỏi không nhắc cột zone
+/// nên danh sách của zone không được gửi.
+fn wide_dimension_csv() -> String {
+    let names = ["zone", "c1", "c2", "c3", "c4", "c5"];
+    let mut csv = format!("{},amount\n", names.join(","));
+    for i in 0..200 {
+        let cells: Vec<String> = names.iter().map(|n| format!("{n} {i:03}")).collect();
+        csv.push_str(&format!("{},{}\n", cells.join(","), i + 1));
+    }
+    csv
+}
+
+fn step_details(response: &Value) -> Vec<String> {
+    response["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|s| s["detail"].as_str().map(str::to_string))
+        .collect()
+}
+
+/// Câu lọc theo giá trị zone không có, mà danh sách zone chưa gửi (#230): gọi lại lượt viết SQL đúng một lần kèm đủ giá
+/// trị, ghi vào các bước. Câu sửa đúng thì hết cảnh báo; câu sửa vẫn sai thì không gọi thêm lần nào (mô hình giả báo lỗi
+/// nếu bị gọi lần thứ ba) và cảnh báo giữ như cũ.
+#[tokio::test]
+async fn wrong_filter_value_resends_the_full_values_once() {
+    let bad = sql_reply(r#"SELECT SUM(amount) AS total FROM dataco WHERE zone = 'Zone 7'"#);
+    let good = sql_reply(r#"SELECT SUM(amount) AS total FROM dataco WHERE zone = 'zone 007'"#);
+    let csv = wide_dimension_csv();
+    let Some(asking) = start_on(Some(scripted(&[bad.clone(), good])), &csv, |_| {}).await else {
+        return;
+    };
+    let (status, response) = asking.ask("Tổng tiền", json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    // amount 8 là dòng của zone 007; tổng số nguyên lớn ra dạng chữ.
+    let total = &response["result"]["rows"][0][0];
+    assert!(total == "8" || total == 8.0, "{response}");
+    assert!(warning_codes(&response).is_empty(), "{response}");
+    let resent: Vec<String> = step_details(&response)
+        .into_iter()
+        .filter(|d| d.starts_with("Gửi lại kèm đủ giá trị"))
+        .collect();
+    assert_eq!(
+        resent,
+        ["Gửi lại kèm đủ giá trị của cột zone: câu trước lọc theo giá trị cột không có"]
+    );
+    asking.db.drop().await;
+
+    let Some(asking) = start_on(Some(scripted(&[bad.clone(), bad])), &csv, |_| {}).await else {
+        return;
+    };
+    let (status, response) = asking.ask("Tổng tiền", json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(
+        warning_codes(&response),
+        ["all_null", "filter_value_not_found"],
+        "{response}"
+    );
+    let resent = step_details(&response)
+        .into_iter()
+        .filter(|d| d.starts_with("Gửi lại kèm đủ giá trị"))
+        .count();
+    assert_eq!(resent, 1);
+    asking.db.drop().await;
+}
