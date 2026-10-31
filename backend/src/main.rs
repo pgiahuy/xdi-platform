@@ -123,6 +123,7 @@ async fn run(args: Vec<String>) {
     };
 
     service::ingest::clear_staging(&config.data_dir);
+    config.duckdb_limits().clear_leftovers();
 
     // Phiên bản nạp trước khi có hồ sơ cột: lấy danh sách trước khi nhận request (phiên bản nạp sau đó có hồ sơ ngay
     // lúc nạp), rồi lập hồ sơ nền để không chặn khởi động. Không đọc được danh sách thì chỉ cảnh báo.

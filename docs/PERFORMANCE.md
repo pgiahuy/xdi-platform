@@ -203,7 +203,7 @@ metadata vì cộng thêm nó thì quá 4096 MB.
   hơn tới khoảng 3 lần (`wide_1m` 17,6 s so với 5,5 s).
 - Bộ nhớ đỉnh không nằm ở bước chép: đọc `VmRSS` mỗi 0,5 giây trong một lần chụp `wide_5m`, suốt giao dịch tiến trình
   giữ khoảng 200 MiB, rồi lên 3,6 GiB trong khoảng một giây ở bước nạp sau đó (hồ sơ cột trên file Parquet), không
-  thuộc `service/sources/`. Trần một bảng 2048 MB giữ đỉnh này ở mức đã đo.
+  thuộc `service/sources/`. Từ khi có `DUCKDB_MEMORY_LIMIT_MB` (đo bên dưới), đỉnh này còn khoảng 1,1 GiB.
 - Câu tổng hợp (tổng theo vùng và tháng) trên file Parquet chạy dưới 0,2 s ở mọi cỡ đã đo.
 - Code trên `main` (còn `count(*)` khi có trần dòng, đặt `SOURCE_MAX_ROWS=4000000000`) cho số gần như nhau, ví dụ
   `fact_20m` 8,12 s, `wide_5m` 23,58 s: bỏ `count(*)` không làm nhanh hơn rõ trên các bảng này.
@@ -229,6 +229,26 @@ Cách đo:
   hai.
 - Làm lại: `BENCH_URL=postgres://...` trỏ vào một database trống, `scripts/bench-snapshot.sh setup`, rồi `run` và
   `defaults`; biến và cột in ra ghi ở đầu script.
+
+Trần bộ nhớ của DuckDB khi nạp và lập hồ sơ cột (`DUCKDB_MEMORY_LIMIT_MB`), đo ngày 01/11/2026 trên cùng máy (Intel Core
+7 240H, 30 GiB RAM, Linux 7.0, load average 3 đến 5 vì máy còn build nhánh khác). Trước khi có trần, các kết nối DuckDB
+của bước nạp (`engine/analytics.rs`), hồ sơ cột (`engine/profile.rs`) và bước chép (`service/sources/direct.rs`) chạy
+không có `memory_limit`, nên DuckDB dùng tới 80% RAM của máy. Bản "trước": commit `6636eff` (`main`); bản "sau": nhánh
+`fix/profile-memory-limit`, mỗi kết nối có trần và thư mục tạm riêng dưới `DATA_DIR/duckdb-spill/`. Cùng
+`scripts/bench-snapshot.sh run wide_1m wide_5m`, trung vị của 3 lần, `LLM_PROVIDER=mock`.
+
+| Bảng | Bản | Trần | Thời gian chụp | Bộ nhớ đỉnh |
+|---|---|---|---|---|
+| `wide_1m` | Trước | không có | 5,15 s | 1 204 MiB |
+| `wide_1m` | Sau | 1024 MiB (mặc định) | 5,29 s | 611 MiB |
+| `wide_5m` | Trước | không có | 22,51 s | 3 619 MiB |
+| `wide_5m` | Sau | 1024 MiB (mặc định) | 24,38 s | 1 134 MiB |
+
+Một lần đo mỗi bảng với trần khác: 512 MiB cho `wide_5m` 685 MiB trong 28,10 s (`wide_1m` 426 MiB, 6,21 s); 2048 MiB cho
+`wide_5m` 1 679 MiB trong 22,83 s (`wide_1m` 1 003 MiB, 5,23 s). Trần thấp hơn thì DuckDB ghi nhiều hơn ra thư mục tạm và
+chậm hơn; mặc định 1024 MiB giảm đỉnh của `wide_5m` khoảng 3 lần, đổi lại chậm hơn khoảng 8%. Đỉnh vượt trần một ít vì
+trần chỉ tính bộ nhớ DuckDB quản lý, không tính phần còn lại của tiến trình. Mỗi kết nối một trần: hai lần nạp cùng lúc
+thì tới khoảng gấp đôi.
 
 ## Đo lại
 

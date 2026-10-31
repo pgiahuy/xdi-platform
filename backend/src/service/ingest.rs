@@ -287,8 +287,9 @@ pub async fn upload(
             .collect(),
     };
     let parquet_dir = staging.parquet_dir();
+    let limits = state.config.duckdb_limits();
     let materialized =
-        tokio::task::spawn_blocking(move || analytics::materialize(&inputs, &parquet_dir))
+        tokio::task::spawn_blocking(move || analytics::materialize(&inputs, &parquet_dir, &limits))
             .await
             .map_err(|e| AppError::Internal(format!("materialize task: {e}")))??;
     // Đo cột ngay trên Parquet trong thư mục tạm, trước khi ghi gì vào Postgres: lỗi ở đây không để lại dòng nào.
@@ -300,6 +301,7 @@ pub async fn upload(
         staging.parquet_dir(),
         materialized.row_count,
         previous_formats,
+        state.config.duckdb_limits(),
     )
     .await?;
     apply_source_descriptions(&mut columns, &upload.descriptions);

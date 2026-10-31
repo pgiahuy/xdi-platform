@@ -96,7 +96,7 @@ fn materialize(path: &Path, copy: &TableCopy, out: PathBuf) -> PathBuf {
         format: copy.format,
         column_types: copy.column_types.clone(),
     };
-    analytics::materialize(&[input], &out).unwrap();
+    analytics::materialize(&[input], &out, &crate::engine::duckdb_limits::test_limits()).unwrap();
     out
 }
 

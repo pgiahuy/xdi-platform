@@ -137,6 +137,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `GEMINI_BACKUP_API_KEY` | trống | Khóa Gemini dự phòng: khóa chính hết hạn mức (lỗi 429) thì backend gọi lại bằng khóa này ngay trong lần gọi đó; lỗi khác không đổi khóa |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini khi `LLM_PROVIDER=gemini` |
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
+| `DUCKDB_MEMORY_LIMIT_MB` | `1024` | Trần bộ nhớ (MiB) DuckDB dùng cho mỗi lần nạp file, lập hồ sơ cột hay chụp bảng; chạm trần thì DuckDB ghi phần dư ra thư mục tạm dưới `DATA_DIR/duckdb-spill/`, chậm hơn nhưng vẫn xong. Hai lần nạp chạy cùng lúc thì mỗi lần một trần. Câu hỏi có trần riêng 1 GB, không theo biến này. Số đo ở [PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn |
 | `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB; quá thì câu bị dừng, trừ phần DuckDB tính trước khi chạy ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |
 | `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; chạm trần thì giao diện ghi "ít nhất N dòng". Giao diện chỉ nhận 1000 dòng đầu |
 | `RUST_LOG` | `info` | Mức log |
