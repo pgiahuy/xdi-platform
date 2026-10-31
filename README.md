@@ -3,9 +3,11 @@
 Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên: hỏi bằng tiếng Việt, nhận câu trả lời kèm lời giải thích và minh
 chứng cho từng con số.
 
-Nạp file CSV, Parquet hoặc Excel rồi gõ câu hỏi. Hệ thống viết SQL, kiểm SQL bằng guard, chạy trên DuckDB và trả về
-bảng, biểu đồ cùng câu SQL đã chạy. Với câu hỏi tìm nguyên nhân, như vì sao doanh thu tháng này giảm hay vì sao Europe
-cao hơn LATAM, hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một số để xem các dòng dữ liệu đứng sau nó.
+Kết nối database Postgres của tổ chức, chụp các bảng cần hỏi cùng các bảng liên quan theo khóa ngoại, rồi gõ câu hỏi;
+dữ liệu chưa nằm trong database thì nạp file CSV, Parquet hoặc Excel. Hệ thống viết SQL (nối nhiều bảng khi cần), kiểm
+SQL bằng guard, chạy trên DuckDB và trả về bảng, biểu đồ cùng câu SQL đã chạy. Với câu hỏi tìm nguyên nhân, như vì sao
+doanh thu tháng này giảm hay vì sao Europe cao hơn LATAM, hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một
+số để xem các dòng dữ liệu đứng sau nó.
 
 Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, phân loại câu hỏi, viết SQL, điền
 form cho câu hỏi tìm nguyên nhân và viết lời. Nó nhận tên cột và danh sách giá trị của cột phân loại, không nhận bảng
@@ -30,9 +32,16 @@ docker compose logs backend | grep setup_code
 ```
 
 Mở http://localhost:8000, nhập mã thiết lập vừa in để tạo tài khoản quản trị. Workspace đầu tiên có sẵn dataset mẫu
-DataCo (1500 dòng). Mô hình mặc định là `mock`: không cần khóa, chỉ trả lời các câu mẫu trên DataCo, ví dụ "Doanh thu
-theo thị trường" hay "Vì sao doanh thu tháng 5 năm 2017 tăng". Hỏi câu tự do trên dữ liệu của bạn thì đặt
-`LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hoặc `ollama`) trong `.env`, rồi chạy lại `docker compose up -d`.
+DataCo (1500 dòng, từ `data/samples/dataco.csv`). Mô hình mặc định là `mock`: không cần khóa, chỉ trả lời các câu mẫu,
+ví dụ "Doanh thu theo thị trường". Kết nối database của bạn ở trang **Dữ liệu**, khung **Kết nối database**. Hỏi câu tự
+do thì đặt `LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hoặc `ollama`) trong `.env`, rồi chạy lại `docker compose up -d`.
+
+Thử luồng database với database mẫu nhiều bảng (DataCo và OULAD đầy đủ, 13 bảng có khóa ngoại,
+[data/postgres-demo](data/postgres-demo/README.md)): tải và nạp một lần (`sh data/download.sh dataco`,
+`sh data/download.sh oulad`, `sh data/postgres-demo/load.sh`, rồi gỡ container chạy riêng đó, xem README ở đó), sau đó
+chạy `docker compose --profile demo up -d --build` trước lần thiết lập đầu. Thiết lập lần đầu thêm database này làm nguồn và
+chụp 12 bảng kèm quan hệ thành dataset; câu mẫu của `mock` trên đó có "Tỷ lệ bỏ học theo môn học" trên `students` và
+"Doanh thu theo phân khúc khách hàng" trên `order_items` (nối `orders`, `customers`).
 
 Build lần đầu biên dịch Rust và DuckDB (đo trên máy 16 nhân: 8 phút) và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy
 ít RAM thì đặt `CARGO_BUILD_JOBS`. Hướng dẫn đầy đủ (build từ nguồn, đưa lên Internet, sao lưu, lỗi hay gặp, dùng lần
@@ -45,22 +54,25 @@ bộ đầy đủ tải bằng `data/download.sh` (kiểm SHA-256) vào `data/do
 
 | Bộ | Lấy ở đâu | Dùng cho |
 |---|---|---|
-| DataCo mẫu, 1500 dòng | Có sẵn: `data/samples/dataco.csv`, kèm chỉ số mẫu `dataco.metrics.json` | Dataset nạp sẵn khi thiết lập lần đầu, câu mẫu của `mock`, bộ đánh giá `make eval` |
+| DataCo mẫu, 1500 dòng | Có sẵn: `data/samples/dataco.csv`, kèm chỉ số mẫu `dataco.metrics.json` | Dataset nạp sẵn khi thiết lập lần đầu không tới được database mẫu, câu mẫu của `mock`, bộ đánh giá `make eval` trên CI |
 | DataCo Smart Supply Chain đầy đủ, khoảng 96 MB CSV | `sh data/download.sh dataco` | Thử trên dữ liệu lớn; nạp với tên `DataCo` vào workspace chưa có DataCo thì câu mẫu của `mock` vẫn chạy (đã có thì bảng thành `dataco_2`) |
 | Online Retail II, khoảng 46 MB Excel | `sh data/download.sh retail` | Thử file Excel nhiều sheet (bản đầy đủ chưa thử nạp, giới hạn Excel ở [DATA.md](docs/DATA.md)); chưa có câu mẫu cho `mock`, cần Gemini hoặc Ollama |
 | OULAD (Open University Learning Analytics), 7 bảng CSV, khoảng 464 MB | `sh data/download.sh oulad` | Dữ liệu giáo dục: nạp `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần) để hỏi theo kết quả học tập; cần Gemini hoặc Ollama |
 
 DataCo từ Mendeley Data (Constante, Silva, Pereira, 2019); Online Retail II (Chen, 2019) và OULAD (Kuzilek, Hlosta,
 Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, ghi công và cách nạp:
-[data/README.md](data/README.md).
+[data/README.md](data/README.md). Bản đầy đủ của DataCo và OULAD tách thành nhiều bảng trong database mẫu duy nhất của
+repo: [data/postgres-demo](data/postgres-demo/README.md).
 
 ## Đã có
 
 - **Tài khoản và workspace:** mỗi người nhiều workspace; vai `admin` (nạp, xóa dữ liệu, quản lý thành viên) và
   `member` (xem, hỏi); quản trị hệ thống quản lý tài khoản.
-- **Nạp dữ liệu:** CSV (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet, hoặc chụp một bảng Postgres. Mỗi
-  lần nạp là một phiên bản. Hồ sơ cột lập lúc nạp; mô hình thêm mô tả cột, bí danh và câu gợi ý, gồm cả câu hỏi tìm
-  nguyên nhân.
+- **Kết nối database:** thêm nguồn Postgres (thông tin kết nối mã hóa, tài khoản chỉ đọc, TLS với `require` hay
+  `verify-full`), chụp một bảng cùng các bảng liên quan theo khóa ngoại, mỗi bảng một dataset có ghi quan hệ; câu hỏi
+  nối các bảng đó, có chặn cộng lặp khi nối. Nạp file là lựa chọn phụ: CSV (UTF-8, windows-1252), Parquet, Excel .xlsx
+  kèm chọn sheet. Mỗi lần chụp hay nạp là một phiên bản. Hồ sơ cột lập lúc nạp; mô hình thêm mô tả cột, bí danh và câu
+  gợi ý, gồm cả câu hỏi tìm nguyên nhân.
 - **Hỏi theo cuộc trò chuyện:** câu sau hiểu theo các câu trước. Câu hỏi qua guard (một câu `SELECT` chỉ đọc, trên
   bảng, cột, hàm được phép, có trần số dòng) rồi chạy trên DuckDB; lỗi thì mô hình sửa một lần. Kết quả có bảng, biểu
   đồ, tải CSV, thẻ "Hệ thống đã hiểu là" và cảnh báo khi kết quả đáng ngờ.
@@ -73,13 +85,16 @@ Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, gh
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
   quả hay bảng phân rã (câu có CTE, HAVING, hàm cửa sổ hay nhiều bảng chưa truy được).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
-- **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên DataCo, so với SQL đúng viết tay; CI báo khi tỷ lệ đúng giảm.
+- **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên file DataCo, và khi database mẫu đang chạy thì thêm 17 câu trên
+  ảnh chụp của nó (10 câu bán hàng, 7 câu học tập, phần lớn nối bảng), so với SQL đúng viết tay; CI chạy phần DataCo và
+  báo khi tỷ lệ đúng giảm.
 
 ## Chưa có
 
 - Gán vai dữ liệu cho thành viên: guard đã lọc dòng theo vai dữ liệu, nhưng chưa có API hay màn để đặt.
 - Chế độ demo, màn xem lịch sử câu hỏi, màn sửa mô tả, bí danh và vai trò cột.
-- Nguồn MySQL, SQLite; TLS khi chụp bảng Postgres.
+- Nguồn MySQL, SQLite; truy vấn thẳng database ngoài lúc hỏi (hiện là chụp bảng); `sslmode=verify-ca` và chứng chỉ phía
+  client.
 
 Bảng trạng thái chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái). Lịch sử thay đổi:
 [CHANGELOG.md](CHANGELOG.md). Tiến độ: [milestones](https://github.com/pgiahuy/xdi-platform/milestones).
@@ -99,7 +114,7 @@ make help           # mọi lệnh
 backend/     crate Rust: api/ -> service/ -> engine/ và auth/; migrations/ cho Postgres
 frontend/    React, Vite, Tailwind, shadcn/ui; build ra file tĩnh, backend phục vụ
 docs/        tài liệu, cũng là nguồn GitHub Pages
-data/        nguồn và giấy phép dataset, samples/ (DataCo mẫu), domains/ (gói khái niệm ngành)
+data/        nguồn và giấy phép dataset, samples/ (DataCo mẫu), postgres-demo/ (database mẫu), domains/ (gói ngành)
 ```
 
 | Tài liệu | Nội dung |

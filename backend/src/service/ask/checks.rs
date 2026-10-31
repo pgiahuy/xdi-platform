@@ -51,6 +51,21 @@ pub async fn build_result_warnings(
     version: &DatasetVersion,
     checked: &CheckedQuery<'_>,
 ) -> Vec<Warning> {
+    let (shape, missing) = find_missing_values(state, ws, version, checked).await;
+    let answered = checked.status == AskStatus::Answered;
+    let result = checked.result.filter(|_| answered);
+    build_warnings(result, shape.as_ref(), checked.columns, &missing)
+}
+
+/// Phần tra cứu của luật filter_value_not_found: cây cú pháp của sql_guarded (None khi chưa answered hay không đọc
+/// được) và giá trị lọc mà cột không có. ask/mod.rs còn gọi hàm này để quyết định gửi lại lượt viết SQL kèm đủ giá trị
+/// của cột (#230).
+pub async fn find_missing_values(
+    state: &AppState,
+    ws: &WorkspaceId,
+    version: &DatasetVersion,
+    checked: &CheckedQuery<'_>,
+) -> (Option<QueryShape>, Vec<MissingValue>) {
     let answered = checked.status == AskStatus::Answered;
     let shape = match checked
         .sql_guarded
@@ -71,31 +86,29 @@ pub async fn build_result_warnings(
         checked.columns,
     );
     // Danh sách giá trị đã vào cache từ bước context (ask/context.rs), nên tra lại ở đây thường không đọc Postgres.
-    let missing = if wanted.is_empty() {
-        Vec::new()
-    } else {
-        match load_value_index(state, ws, version).await {
-            Ok(index) if index.loaded => {
-                let mut missing = build_missing_values(&wanted, &index);
-                // Danh sách giá trị là của cả cột, không theo vai dữ liệu: gợi ý cho người bị lọc dòng có thể lộ
-                // giá trị của dòng họ không được xem, nên chỉ báo không có, không gợi ý.
-                if checked.restricted {
-                    missing.iter_mut().for_each(|m| m.suggestions.clear());
-                }
-                missing
+    if wanted.is_empty() {
+        return (shape, Vec::new());
+    }
+    let missing = match load_value_index(state, ws, version).await {
+        Ok(index) if index.loaded => {
+            let mut missing = build_missing_values(&wanted, &index);
+            // Danh sách giá trị là của cả cột, không theo vai dữ liệu: gợi ý cho người bị lọc dòng có thể lộ giá trị
+            // của dòng họ không được xem, nên chỉ báo không có, không gợi ý.
+            if checked.restricted {
+                missing.iter_mut().for_each(|m| m.suggestions.clear());
             }
-            Ok(_) => {
-                tracing::warn!(version_id = %version.id, "column values not loaded, skipping the filter value check");
-                Vec::new()
-            }
-            Err(e) => {
-                tracing::warn!(error = ?e, "cannot load column values, skipping the filter value check");
-                Vec::new()
-            }
+            missing
+        }
+        Ok(_) => {
+            tracing::warn!(version_id = %version.id, "column values not loaded, skipping the filter value check");
+            Vec::new()
+        }
+        Err(e) => {
+            tracing::warn!(error = ?e, "cannot load column values, skipping the filter value check");
+            Vec::new()
         }
     };
-    let result = checked.result.filter(|_| answered);
-    build_warnings(result, shape.as_ref(), checked.columns, &missing)
+    (shape, missing)
 }
 
 /// Mọi cảnh báo kiểm hợp lý, theo thứ tự luật ở đầu file. result và shape là None khi câu chưa answered hay khi không

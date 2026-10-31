@@ -70,6 +70,15 @@ pub(super) async fn start_with_max_rows(
     llm_replies: &[Value],
     max_rows: Option<u64>,
 ) -> Option<Setup> {
+    start_with_llm(key, scripted(llm_replies), max_rows).await
+}
+
+/// Như start, với một mô hình giả bất kỳ (ví dụ mô hình giữ lại prompt, ask_tests::recording).
+pub(super) async fn start_with_llm(
+    key: Option<&str>,
+    llm: std::sync::Arc<dyn crate::engine::llm::LlmProvider>,
+    max_rows: Option<u64>,
+) -> Option<Setup> {
     let db = fresh_database().await?;
     let url = crate::engine::store::test_support::database_url().unwrap();
     let (host, port, _, _) = url_parts(&url);
@@ -106,12 +115,7 @@ pub(super) async fn start_with_max_rows(
             c.source_max_rows = max_rows;
         }
     };
-    let app = app_with_llm(
-        db.store.clone(),
-        Some(CODE),
-        configure,
-        scripted(llm_replies),
-    );
+    let app = app_with_llm(db.store.clone(), Some(CODE), configure, llm);
     let setup = json!({"setup_code": CODE, "email": "lan@example.com", "password": PASSWORD,
                        "workspace_name": "Cửa hàng"});
     let (status, lan, _) = call(&app, "POST", "/api/auth/setup", None, Some(setup)).await;
@@ -509,5 +513,37 @@ async fn snapshot_keeps_postgres_column_types() {
         1
     );
     assert_eq!(count("code = '00004' AND price = 5.00 AND ok"), 1);
+    s.finish().await;
+}
+
+/// Máy chủ không bật TLS (Postgres của test, ssl = off như CI): require và verify-full báo lỗi TLS rõ cách sửa, không
+/// lưu nguồn; prefer vẫn kết nối được. Máy chủ của test bật TLS thì bỏ qua phần lỗi.
+#[tokio::test]
+async fn tls_modes_against_a_server_without_tls() {
+    let Some(s) = start(Some(KEY), &[]).await else {
+        return;
+    };
+    let url = format!("{SHOP}/sources");
+    let ssl = crate::engine::store::test_support::fetch_text(&s.db.store, "SHOW ssl").await;
+    if ssl == "off" {
+        for mode in ["require", "verify-full"] {
+            let mut form = s.form.clone();
+            form["sslmode"] = json!(mode);
+            let (status, _, body) = call(&s.app, "POST", &url, Some(&s.lan), Some(form)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            let message = body["message"].as_str().unwrap();
+            assert!(
+                message.contains("TLS") && message.contains("prefer"),
+                "{body}"
+            );
+        }
+        let (_, _, list) = call(&s.app, "GET", &url, Some(&s.lan), None).await;
+        assert_eq!(list.as_array().unwrap().len(), 0, "{list}");
+    }
+    let mut prefer = s.form.clone();
+    prefer["sslmode"] = json!("prefer");
+    let (status, _, source) = call(&s.app, "POST", &url, Some(&s.lan), Some(prefer)).await;
+    assert_eq!(status, StatusCode::CREATED, "{source}");
+    assert_eq!(source["custom_ca"], false);
     s.finish().await;
 }

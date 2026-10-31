@@ -19,10 +19,17 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Mọi câu trả lời có phần giải thích kết quả nói lên điều gì, chọn theo hình dạng kết quả: so với kỳ trước, kỳ đổi mạnh nhất kèm phân rã, tỷ trọng và mức tập trung của các nhóm, hay chỉ số dòng; chênh lệch nhỏ hay ít dòng thì ghi không có thay đổi đáng kể. Trên bảng chụp từ database, phân rã xét cả cột của bảng liên quan (#227).
 - Màn **Bài học** cho admin: nhật ký lỗi ghi tự động (guard từ chối, SQL lỗi, cộng lặp bị chặn, form sai, lời bị bộ kiểm chặn, câu bị đánh giá Chưa đạt); admin viết bài học tay hay từ một dòng nhật ký, duyệt và bật; tối đa 3 bài liên quan vào prompt; `make eval-lessons` chạy bộ đánh giá không và có bài học (#228).
 - Hai nút **Tốt** và **Chưa đạt** dưới mỗi câu trả lời (Chưa đạt kèm lý do và ghi chú); màn **Câu mẫu** cho admin duyệt câu Tốt thành ví dụ trong prompt của câu hỏi sau có từ chung, và xuất câu đã duyệt thành ca ứng viên cho bộ đánh giá (#212).
+- Database mẫu nhiều bảng (`data/postgres-demo`) chạy được ngay trong compose gốc bằng `--profile demo`, chung mạng với backend: thiết lập lần đầu kết nối và chụp 12 bảng kèm quan hệ, có câu mẫu của `mock` và bộ câu của `make eval` cho các bảng đó; không có database mẫu thì nạp DataCo từ file như trước (#230).
+- `SOURCE_SECRET_KEY` để trống thì backend tự sinh khóa lần đầu và lưu ở `DATA_DIR/source_secret.key`; nguồn database không còn tắt khi chưa đặt khóa (#230).
+- TLS tới nguồn Postgres: `sslmode` `require` và `verify-full`, kèm ô chứng chỉ CA cho CA riêng của tổ chức (#230).
 - Màn **Khái niệm ngành** (thanh bên): gói ngành lưu riêng cho từng workspace, admin thêm, sửa, tắt khái niệm, câu hỏi sau dùng bản vừa sửa; thêm gói giáo dục cho dữ liệu OULAD (#229).
 
 ### Changed
 
+- Trang Dữ liệu: kết nối database là luồng chính, nạp file CSV, Parquet, Excel chuyển xuống một nút phụ (#230).
+- Prompt phân loại và prompt viết SQL có metadata đủ (kiểu, vai trò, đơn vị, cách gộp, mô tả, bí danh) của mọi cột của mọi bảng câu hỏi đọc, không bỏ cột khi dài; lượt phân loại nêu thêm các cột câu hỏi cần (#230).
+- Danh sách giá trị ở lượt viết SQL: tổng tới 1000 giá trị thì gửi đủ mọi cột phân loại, vượt thì chỉ cột liên quan (kể cả cột lượt phân loại nêu), tới 200 giá trị mỗi cột (#230).
+- Câu SQL lọc theo giá trị cột không có mà danh sách của cột chưa được gửi đủ thì hệ thống viết lại SQL một lần kèm đủ giá trị của cột đó, ghi trong tab Các bước (#230).
 - Câu hỏi không có số nào để trả lời chỉ hiện câu trả lời và thẻ "Hệ thống đã hiểu là", không còn hộp cảnh báo kỹ thuật, bảng trống hay dòng "câu viết theo khuôn".
 - Thanh bên bỏ mục "Hỏi dữ liệu": vào workspace là mở trang **Cuộc trò chuyện**, chưa hỏi gì thì có một câu mời hỏi ngắn; nút **Lịch sử trò chuyện** đứng đầu thanh bên. Trang Cuộc trò chuyện bỏ nút "Tổng quan dữ liệu" cạnh ô chọn dataset, tổng quan chỉ còn ở trang riêng; bỏ công tắc "Dữ liệu mẫu" của chế độ dev.
 - Danh sách cuộc trò chuyện rời trang hỏi, sang nút **Lịch sử trò chuyện** trên thanh bên: một khung nổi đè lên trang, liệt kê cuộc trò chuyện trên mọi dataset (mỗi cuộc ghi ngày giờ và dataset của nó), hiện tối đa 8 cuộc một lúc (nhiều hơn thì cuộn), có nút dấu cộng mở cuộc mới, đóng khi chọn, bấm ra ngoài hoặc nhấn Esc. "Tổng quan dữ liệu" thành mục riêng trên thanh bên, chọn dataset ở đầu trang; nút Tổng quan ở trang Dữ liệu mở trang này thay cho khung dưới danh sách.

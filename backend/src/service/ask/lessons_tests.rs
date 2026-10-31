@@ -27,6 +27,9 @@ fn column(name: &str, matched: bool) -> ColumnProfile {
         unit: None,
         aggregation: ColumnAggregation::Sum,
         join_key: false,
+        metric_column: false,
+        picked: false,
+        brief: false,
     }
 }
 
