@@ -104,7 +104,9 @@ pub fn list_domain_packages() -> &'static [DomainPackage] {
     })
 }
 
-/// Tìm gói theo khóa (tên file, cũng là trường id trong file).
+/// Tìm gói theo khóa (tên file, cũng là trường id trong file). Chỉ test dùng: lúc chạy, prompt đọc gói từ bảng của
+/// workspace (service/domains/), không đọc file.
+#[cfg(test)]
 pub fn find_domain_package(id: &str) -> Option<&'static DomainPackage> {
     list_domain_packages()
         .iter()
