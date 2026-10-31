@@ -208,9 +208,12 @@ vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset
 
 ## Dataset mẫu
 
-Thiết lập lần đầu tạo xong workspace đầu tiên thì nạp `dataco.csv` trong `SAMPLES_DIR` thành dataset `DataCo` qua đúng
-đường nạp file ở trên, kèm các chỉ số mẫu (`backend/src/service/samples.rs`); tắt bằng `SEED_SAMPLE=false`. Chi tiết,
-nguồn và giấy phép: [data/README.md](../data/README.md).
+Thiết lập lần đầu tạo xong workspace đầu tiên thì thêm database mẫu (`SAMPLE_DATABASE_URL`, compose trỏ vào dịch vụ
+`demo-db`) làm nguồn Postgres và chụp các nhóm bảng ghi trong `SAMPLES_DIR/sample_database.json`, đúng như admin làm ở
+mục Nguồn database phía trên: 13 bảng thành 13 dataset kèm 12 quan hệ, cộng chỉ số mẫu của bảng có file
+`<bảng>.metrics.json` (`backend/src/service/samples_db.rs`). Không có database mẫu, hay chụp lỗi, thì nạp `dataco.csv`
+trong `SAMPLES_DIR` thành dataset `DataCo` qua đường nạp file, kèm các chỉ số mẫu (`backend/src/service/samples.rs`).
+Tắt cả hai bằng `SEED_SAMPLE=false`. Chi tiết, nguồn và giấy phép: [data/README.md](../data/README.md).
 
 ## Tên bảng và tên cột
 

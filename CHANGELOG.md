@@ -18,9 +18,12 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Bộ lọc dòng theo vai dữ liệu lan theo khóa ngoại: lọc khách hàng theo vùng thì đơn hàng và dòng hàng của khách vùng khác cũng bị ẩn, cả khi hỏi riêng bảng đơn hàng (#215).
 - Mọi câu trả lời có phần giải thích kết quả nói lên điều gì, chọn theo hình dạng kết quả: so với kỳ trước, kỳ đổi mạnh nhất kèm phân rã, tỷ trọng và mức tập trung của các nhóm, hay chỉ số dòng; chênh lệch nhỏ hay ít dòng thì ghi không có thay đổi đáng kể. Trên bảng chụp từ database, phân rã xét cả cột của bảng liên quan (#227).
 - Hai nút **Tốt** và **Chưa đạt** dưới mỗi câu trả lời (Chưa đạt kèm lý do và ghi chú); màn **Câu mẫu** cho admin duyệt câu Tốt thành ví dụ trong prompt của câu hỏi sau có từ chung, và xuất câu đã duyệt thành ca ứng viên cho bộ đánh giá (#212).
+- Bản cài mới có sẵn database mẫu nhỏ nhiều bảng (dịch vụ `demo-db`, bán hàng và học tập): thiết lập lần đầu kết nối và chụp 13 bảng kèm quan hệ, câu mẫu của `mock` và `make eval` chạy trên các bảng đó; `SAMPLE_DATABASE_URL=` để nạp DataCo từ file như trước (#230).
+- TLS tới nguồn Postgres: `sslmode` `require` và `verify-full`, kèm ô chứng chỉ CA cho CA riêng của tổ chức (#230).
 
 ### Changed
 
+- Trang Dữ liệu: kết nối database là luồng chính, nạp file CSV, Parquet, Excel chuyển xuống một nút phụ (#230).
 - Câu hỏi không có số nào để trả lời chỉ hiện câu trả lời và thẻ "Hệ thống đã hiểu là", không còn hộp cảnh báo kỹ thuật, bảng trống hay dòng "câu viết theo khuôn".
 - Thanh bên bỏ mục "Hỏi dữ liệu": vào workspace là mở trang **Cuộc trò chuyện**, chưa hỏi gì thì có một câu mời hỏi ngắn; nút **Lịch sử trò chuyện** đứng đầu thanh bên. Trang Cuộc trò chuyện bỏ nút "Tổng quan dữ liệu" cạnh ô chọn dataset, tổng quan chỉ còn ở trang riêng; bỏ công tắc "Dữ liệu mẫu" của chế độ dev.
 - Danh sách cuộc trò chuyện rời trang hỏi, sang nút **Lịch sử trò chuyện** trên thanh bên: một khung nổi đè lên trang, liệt kê cuộc trò chuyện trên mọi dataset (mỗi cuộc ghi ngày giờ và dataset của nó), hiện tối đa 8 cuộc một lúc (nhiều hơn thì cuộn), có nút dấu cộng mở cuộc mới, đóng khi chọn, bấm ra ngoài hoặc nhấn Esc. "Tổng quan dữ liệu" thành mục riêng trên thanh bên, chọn dataset ở đầu trang; nút Tổng quan ở trang Dữ liệu mở trang này thay cho khung dưới danh sách.

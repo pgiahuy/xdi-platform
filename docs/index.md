@@ -1,13 +1,14 @@
 # xdi-platform
 
-*Ask questions about your data in Vietnamese and get answers with evidence for every number. Upload a CSV, Parquet or
-Excel file; the system writes SQL, checks it with a SQL guard, runs it on DuckDB and returns a table, a chart and the
-SQL it ran. For "why" questions it computes which groups drove the change and shows the source rows behind the
-numbers. Rust backend, DuckDB for analytics, Postgres for application data, React UI. Apache 2.0. Latest release:
-v0.2.0. Vietnamese documentation follows.*
+*Ask questions about your data in Vietnamese and get answers with evidence for every number. Connect a Postgres database
+(or upload a CSV, Parquet or Excel file); the system writes SQL, joining related tables when needed, checks it with a
+SQL guard, runs it on DuckDB and returns a table, a chart and the SQL it ran. For "why" questions it computes which
+groups drove the change and shows the source rows behind the numbers. Rust backend, DuckDB for analytics, Postgres for
+application data, React UI. Apache 2.0. Latest release: v0.2.0. Vietnamese documentation follows.*
 
 Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên: hỏi bằng tiếng Việt, nhận câu trả lời kèm lời giải thích và minh
-chứng cho từng con số. Nạp file, gõ câu hỏi, nhận bảng, biểu đồ và câu SQL đã chạy. Câu hỏi tìm nguyên nhân, như vì sao
+chứng cho từng con số. Kết nối database Postgres của tổ chức (hoặc nạp file), gõ câu hỏi, nhận bảng, biểu đồ và câu
+SQL đã chạy, kể cả câu nối nhiều bảng. Câu hỏi tìm nguyên nhân, như vì sao
 doanh thu tháng này giảm, được tách thành phần chênh lệch của từng nhóm; bấm vào một số để xem các dòng dữ liệu đứng sau
 nó.
 
@@ -28,13 +29,15 @@ docker compose up -d --build
 docker compose logs backend | grep setup_code
 ```
 
-Mở http://localhost:8000, nhập mã thiết lập để tạo tài khoản quản trị. Workspace đầu tiên có sẵn dataset mẫu DataCo;
-mô hình mặc định `mock` trả lời các câu mẫu trên dataset này. Hướng dẫn từng bước, kể cả cách bật Gemini hay Ollama:
-[Cài đặt](INSTALL.md).
+Mở http://localhost:8000, nhập mã thiết lập để tạo tài khoản quản trị. Compose chạy kèm một database Postgres mẫu nhỏ
+(bán hàng và học tập, 13 bảng có khóa ngoại); thiết lập lần đầu kết nối vào đó và chụp các bảng kèm quan hệ thành
+dataset. Mô hình mặc định `mock` trả lời các câu mẫu trên các bảng này, ví dụ "Tỷ lệ bỏ học theo môn học". Hướng dẫn
+từng bước, kể cả cách bật Gemini hay Ollama: [Cài đặt](INSTALL.md).
 
 ## Trạng thái
 
-Đã có: tài khoản, workspace, vai `admin` và `member`; nạp CSV, Parquet, Excel thành phiên bản; hồ sơ cột và câu gợi ý,
+Đã có: tài khoản, workspace, vai `admin` và `member`; kết nối Postgres (có TLS), chụp bảng cùng các bảng liên quan
+thành phiên bản, hỏi qua nhiều bảng; nạp CSV, Parquet, Excel là lựa chọn phụ; hồ sơ cột và câu gợi ý,
 gồm câu hỏi tìm nguyên nhân; hỏi theo cuộc trò chuyện, SQL qua guard, bảng, biểu đồ, thẻ "Hệ thống đã hiểu là"; câu hỏi
 tìm nguyên nhân có phân rã và lời giải thích bằng lời thường; minh chứng gồm SQL, phân rã, các bước và dòng nguồn của
 các ô số đo; mô hình `mock`, Gemini, Ollama.

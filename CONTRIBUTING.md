@@ -24,7 +24,7 @@ make dev-frontend   # giao diện ở http://localhost:5173, /api chuyển sang 
 make check          # check-fast, check-frontend và build image docker
 make check-fast     # fmt, clippy, test backend
 make check-frontend # lint, schema.ts khớp openapi.json, kiểm kiểu, build giao diện
-make eval           # hỏi các câu mẫu trên DataCo với mock, so với SQL đúng viết tay
+make eval           # hỏi các câu mẫu với mock trên database mẫu (demo-db) và trên DataCo, so với SQL đúng viết tay
 make hooks          # cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/, openapi.json, Makefile
 ```
 
