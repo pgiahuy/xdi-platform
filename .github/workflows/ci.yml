@@ -83,6 +83,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
+      # Extension postgres của DuckDB cho test so hai cách chụp bảng (service/sources/direct_tests.rs); thiếu file thì
+      # test đó bỏ qua.
+      - if: steps.work.outputs.run == 'true'
+        run: make duckdb-extension
       - if: steps.work.outputs.run == 'true'
         run: make check-fast
       # CI không có database mẫu (data/postgres-demo), nên make eval chỉ chạy bộ câu trên file DataCo.
