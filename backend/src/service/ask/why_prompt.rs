@@ -17,6 +17,7 @@ use crate::service::ask::prompt::{
     build_unanswerable_rule, build_within_limit, join_sections, pick_examples, PromptInput,
 };
 use crate::service::ask::reply::{build_terms_schema, build_unanswerable_schema};
+use crate::service::explain::filter::FILTER_OPS;
 
 /// Prompt cho câu "tại sao". Ví dụ là câu mẫu "tại sao" đã duyệt (#212) kèm form của nó, không phải câu SQL.
 pub fn build_why_prompt(input: &PromptInput) -> String {
@@ -54,25 +55,38 @@ pub fn build_why_form_schema() -> serde_json::Value {
                 "type": "object",
                 "description": "The measure when no metric fits",
                 "properties": {
-                    "column": text("A column of role measure for sum, any column for count"),
-                    "agg": { "type": "string", "enum": ["sum", "count"] }
+                    "column": text(
+                        "A column of role measure for sum and avg, any column for count, a column of role key for \
+                         count_distinct, a column of role dimension for share"
+                    ),
+                    "agg": {
+                        "type": "string",
+                        "enum": ["sum", "avg", "count", "count_distinct", "share"]
+                    },
+                    "value": text("For share only: the value of the column whose share of rows is explained")
                 },
                 "required": ["column", "agg"]
             },
             "time": {
                 "type": "object",
-                "description": "Set to compare two periods; leave out to compare two groups",
+                "description": "Set to compare two periods; with groups, set only when the question names a period",
                 "properties": {
                     "column": text("A column of role time"),
-                    "grain": { "type": "string", "enum": ["month", "quarter", "year"] }
+                    "grain": { "type": "string", "enum": ["day", "week", "month", "quarter", "year"] }
                 },
                 "required": ["column", "grain"]
             },
             "compare": text(
-                "The period being explained, such as 2017, 2017-Q3 or 2017-05, matching the grain; an empty string \
-                 when the question names no period"
+                "The period being explained, such as 2017, 2017-Q3, 2017-05, 2017-W22 or 2017-05-31, matching the \
+                 grain; an empty string when the question names no period"
             ),
-            "base": text("The period to compare with; leave out to use the period just before"),
+            "base": text("The period to compare with; leave out to use compare_with"),
+            "compare_with": {
+                "type": "string",
+                "description": "When base is left out: the period just before (the default) or the same period \
+                                one year before",
+                "enum": ["previous", "same_period_last_year"]
+            },
             "filters": {
                 "type": "array",
                 "description": "Conditions on the rows the question is about",
@@ -80,10 +94,19 @@ pub fn build_why_form_schema() -> serde_json::Value {
                     "type": "object",
                     "properties": {
                         "column": text("A column from the list"),
-                        "op": { "type": "string", "enum": ["="] },
-                        "value": text("A value from the value list of the column, written exactly as listed")
+                        "op": { "type": "string", "enum": FILTER_OPS },
+                        "value": text(
+                            "For =, >, >=, <, <=: a value from the value list of the column written exactly as \
+                             listed, a number, or a date such as 2017, 2017-Q3, 2017-05 or 2017-05-31"
+                        ),
+                        "values": {
+                            "type": "array",
+                            "description": "For in: two or more values; for between: the low end and the high end, \
+                                            both included",
+                            "items": { "type": "string" }
+                        }
                     },
-                    "required": ["column", "op", "value"]
+                    "required": ["column", "op"]
                 }
             },
             "groups": {
@@ -92,9 +115,22 @@ pub fn build_why_form_schema() -> serde_json::Value {
                 "properties": {
                     "column": text("A column of role dimension"),
                     "compare": text("The group being explained, a value of the column"),
-                    "base": text("The group to compare with, a value of the column")
+                    "base": text(
+                        "The group to compare with, a value of the column; leave out to compare with all other \
+                         groups of the column"
+                    )
                 },
-                "required": ["column", "compare", "base"]
+                "required": ["column", "compare"]
+            },
+            "find": {
+                "type": "object",
+                "description": "Set when the question asks which period or which group is unusual; the code \
+                                finds it and explains it",
+                "properties": {
+                    "kind": { "type": "string", "enum": ["period", "group"] },
+                    "column": text("For group: a column of role dimension whose groups are searched")
+                },
+                "required": ["kind"]
             },
             "unanswerable": build_unanswerable_schema()
         },

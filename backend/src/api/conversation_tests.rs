@@ -146,6 +146,9 @@ async fn follow_up_gets_earlier_turns_without_data() {
             "{data} must not reach the model:\n{follow_up}"
         );
     }
+    // Lời trả lời đã lưu của lượt trước cũng không vào khối lịch sử.
+    let first_answer = first["answer_text"].as_str().unwrap();
+    assert!(!follow_up.contains(first_answer), "{follow_up}");
 
     // Hai lượt lưu cùng cuộc, đọc lại theo thứ tự hỏi.
     let linked = fetch_count(
@@ -170,6 +173,16 @@ async fn follow_up_gets_earlier_turns_without_data() {
     assert_eq!(turns[1]["status"], "answered");
     assert_eq!(turns[0]["query_id"], first["query_id"]);
     assert!(turns[0]["understood"].is_string(), "{opened}");
+    // Mở lại cuộc (tải lại trang) thấy đúng lời trả lời đã hiện lúc hỏi.
+    assert_eq!(turns[0]["answer"]["text"], first["answer_text"], "{opened}");
+    assert_eq!(
+        turns[0]["answer"]["by_model"],
+        first["answer_text_by_model"]
+    );
+    assert_eq!(
+        turns[1]["answer"]["text"], second["answer_text"],
+        "{opened}"
+    );
     let (status, _, listed) = call(
         &asking.app,
         "GET",

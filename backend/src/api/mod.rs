@@ -24,6 +24,8 @@ mod ask_related_tests;
 #[cfg(test)]
 mod ask_tests;
 #[cfg(test)]
+mod ask_why_frames_tests;
+#[cfg(test)]
 mod ask_why_tests;
 mod auth;
 #[cfg(test)]

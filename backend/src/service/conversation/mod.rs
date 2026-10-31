@@ -22,7 +22,7 @@ use crate::service::ask::contract::{AskResponse, AskStatus, ChosenOption};
 use crate::service::ask::AskHistory;
 use crate::service::conversation::carryover::{apply_carryover, find_previous};
 use crate::service::conversation::contract::{
-    ConversationItem, ConversationListResponse, ConversationResponse, TurnItem,
+    ConversationItem, ConversationListResponse, ConversationResponse, SavedAnswer, TurnItem,
 };
 use crate::service::conversation::history::{
     build_history_section, build_understood_text, HISTORY_TURNS,
@@ -93,9 +93,18 @@ pub async fn ask(
             .understanding
             .as_ref()
             .and_then(build_understood_text);
+        // Lời đã hiện được lưu để mở lại cuộc (tải lại trang) vẫn thấy câu trả lời; không đưa vào khối lịch sử gửi mô
+        // hình (history.rs), khối đó chỉ có câu hỏi, SQL và phần đã hiểu.
+        let answer = build_saved_answer(&response).and_then(|a| serde_json::to_value(a).ok());
         state
             .store
-            .attach_turn(ws, query_id, conversation, understood.as_deref())
+            .attach_turn(
+                ws,
+                query_id,
+                conversation,
+                understood.as_deref(),
+                answer.as_ref(),
+            )
             .await?;
     }
     response.conversation_id = conversation;
@@ -196,7 +205,44 @@ fn build_turn(turn: StoredTurn) -> TurnItem {
         understood: turn.understood,
         created_at: turn.created_at,
         feedback,
+        // Bản ghi không đọc được (khuôn JSON đổi) thì coi như không có lời, lượt vẫn mở được.
+        answer: turn
+            .answer
+            .and_then(|value| serde_json::from_value(value).ok()),
     }
+}
+
+/// Lời trả lời đã hiện của một câu answered: đoạn trả lời của câu thường, hay lời giải thích của câu "tại sao" (câu
+/// "tại sao" không có answer_text). Kết luận của mô hình chấm giữ cả khi lời là câu của code (mismatch); các chỗ chưa rõ
+/// chỉ thuộc lời của mô hình.
+pub fn build_saved_answer(response: &AskResponse) -> Option<SavedAnswer> {
+    if response.status != AskStatus::Answered {
+        return None;
+    }
+    if let Some(text) = &response.answer_text {
+        let by_model = response.answer_text_by_model.unwrap_or(false);
+        let insight = response.insight.as_ref();
+        return Some(SavedAnswer {
+            text: text.clone(),
+            by_model,
+            verdict: insight.and_then(|i| i.summary_verdict),
+            warnings: match insight {
+                Some(insight) if by_model => insight.summary_warnings.clone(),
+                _ => Vec::new(),
+            },
+        });
+    }
+    let explanation = response.explanation.as_ref()?;
+    Some(SavedAnswer {
+        text: explanation.summary.clone(),
+        by_model: explanation.summary_by_model,
+        verdict: explanation.summary_verdict,
+        warnings: if explanation.summary_by_model {
+            explanation.summary_warnings.clone()
+        } else {
+            Vec::new()
+        },
+    })
 }
 
 /// Đánh giá của lượt (#212); None khi chưa đánh giá. Hai cột feedback và feedback_at luôn ghi cùng nhau

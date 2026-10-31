@@ -420,7 +420,12 @@ pub(super) fn build_slice_column(plan: &WhyPlan) -> Option<String> {
 pub(super) fn build_slice_labels(plan: &WhyPlan) -> (String, String) {
     match &plan.slices {
         PlanSlices::Periods { base, compare, .. } => (base.label(), compare.label()),
-        PlanSlices::Groups { base, compare, .. } => (base.clone(), compare.clone()),
+        PlanSlices::Groups {
+            column,
+            base,
+            compare,
+            ..
+        } => (base.build_label(column, &plan.labels), compare.clone()),
     }
 }
 

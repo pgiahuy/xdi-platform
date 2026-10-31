@@ -37,7 +37,9 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          \n\
          Meaning of the JSON:\n\
          - \"measure\": the measure compared. \"comparison\": \"periods\" means two periods and \"compare\" is the \
-         later one; \"groups\" means two groups at the same time, with no before and after.\n\
+         later one; \"groups\" means two groups at the same time, with no before and after; the \
+         base side can be all the other groups of a column taken together, its label then says so and the text names \
+         it by that label, never as one group.\n\
          - \"base\", \"compare\": the two sides and their values. \"change\": compare minus base. \
          \"percent_change\": the same in percent of base. Every change in the JSON (change, percent_change, \
          contribution, the effects) is an object: \"direction\" and \"amount\" (without sign) are for the text, \

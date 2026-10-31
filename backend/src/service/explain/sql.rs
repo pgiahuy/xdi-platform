@@ -116,6 +116,32 @@ pub fn build_dimension_sql(plan: &WhyPlan, column: &str) -> String {
     )
 }
 
+/// Tên cột của câu chuỗi theo kỳ (build_series_sql); explain/unusual.rs đọc kết quả theo đúng các tên này.
+pub const SERIES_PERIOD: &str = "period_start";
+pub const SERIES_VALUE: &str = "period_value";
+
+/// Độ đo theo từng kỳ trên mọi dòng của bộ lọc, không theo hai lát cắt: để explain/unusual.rs tìm kỳ đổi mạnh nhất
+/// (#244). Kỳ in thành chữ ngày đầu kỳ như explain/latest.rs, để đọc lại bằng Period::containing.
+pub fn build_series_sql(plan: &WhyPlan, time: &PlanTime) -> String {
+    let unit = build_string(time.grain.as_str());
+    let mut conditions: Vec<String> = plan
+        .filters
+        .iter()
+        .cloned()
+        .map(build_grouped)
+        .map(|e| e.to_string())
+        .collect();
+    conditions.push(format!("{} IS NOT NULL", time.expr));
+    format!(
+        "SELECT strftime(date_trunc({unit}, {}), '%Y-%m-%d') AS {SERIES_PERIOD}, {} AS {SERIES_VALUE} FROM {} \
+         WHERE {} GROUP BY 1 ORDER BY 1",
+        time.expr,
+        plan.measure.aggregate,
+        build_from(plan, &[]),
+        conditions.join(" AND ")
+    )
+}
+
 /// Số cặp giá trị khác nhau của hai cột trên đúng tập dòng của câu từng chiều (cùng build_where): explain/dimension_pick.rs
 /// so với số nhóm của mỗi cột để biết hai cột có chia dữ liệu y hệt nhau không.
 pub fn build_pair_count_sql(plan: &WhyPlan, first: &str, second: &str) -> String {
@@ -174,7 +200,10 @@ fn build_slice_conditions(plan: &WhyPlan) -> (Expr, Expr) {
             base,
             compare,
             ..
-        } => (build_equals(column, base), build_equals(column, compare)),
+        } => (
+            base.build_condition(column, compare),
+            build_equals(column, compare),
+        ),
     }
 }
 
@@ -258,6 +287,9 @@ fn build_sliced(additive: &Additive, condition: &Expr) -> String {
         Additive::Count { value: Some(value) } => {
             format!("COUNT(CASE WHEN {condition} THEN {value} END)")
         }
+        Additive::CountDistinct { value } => {
+            format!("COUNT(DISTINCT CASE WHEN {condition} THEN {value} END)")
+        }
     }
 }
 
@@ -280,6 +312,7 @@ fn build_additive_aggregate(additive: &Additive) -> String {
         Additive::Sum { value, decimal } => format!("SUM({})", build_summand(value, *decimal)),
         Additive::Count { value: None } => "COUNT(*)".to_string(),
         Additive::Count { value: Some(value) } => format!("COUNT({value})"),
+        Additive::CountDistinct { value } => format!("COUNT(DISTINCT {value})"),
     }
 }
 
@@ -321,7 +354,7 @@ pub fn build_equals(column: &str, value: &str) -> Expr {
     build_binary(build_ident(column), BinaryOperator::Eq, build_string(value))
 }
 
-fn build_timestamp(date: chrono::NaiveDate) -> Expr {
+pub(super) fn build_timestamp(date: chrono::NaiveDate) -> Expr {
     Expr::TypedString(TypedString {
         data_type: DataType::Timestamp(None, TimezoneInfo::None),
         value: Value::SingleQuotedString(date.format("%Y-%m-%d").to_string()).with_empty_span(),
@@ -329,7 +362,7 @@ fn build_timestamp(date: chrono::NaiveDate) -> Expr {
     })
 }
 
-fn build_binary(left: Expr, op: BinaryOperator, right: Expr) -> Expr {
+pub(super) fn build_binary(left: Expr, op: BinaryOperator, right: Expr) -> Expr {
     Expr::BinaryOp {
         left: Box::new(left),
         op,

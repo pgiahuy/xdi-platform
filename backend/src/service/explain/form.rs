@@ -67,14 +67,20 @@ pub struct WhyForm {
     /// Kỳ cần giải thích, dạng 2017, 2017-Q3, 2017-05.
     #[serde(default)]
     pub compare: Option<String>,
-    /// Kỳ để so; trống là kỳ liền trước.
+    /// Kỳ để so; trống thì theo compare_with.
     #[serde(default)]
     pub base: Option<String>,
+    /// Kỳ so khi base trống (#244): kỳ liền trước (mặc định) hay cùng kỳ năm trước.
+    #[serde(default)]
+    pub compare_with: Option<CompareWith>,
     #[serde(default)]
     pub filters: Vec<FormFilter>,
     /// Có khi so hai nhóm.
     #[serde(default)]
     pub groups: Option<FormGroups>,
+    /// Câu hỏi tìm kỳ hay nhóm bất thường (#244): code tìm rồi phân rã như hai kỳ (explain/unusual.rs).
+    #[serde(default)]
+    pub find: Option<FormFind>,
     /// Dữ liệu không có thông tin để trả lời (#164); có lý do thì không kiểm phần còn lại của form.
     #[serde(default)]
     pub unanswerable: Option<Unanswerable>,
@@ -84,14 +90,43 @@ pub struct WhyForm {
 pub struct FormMeasure {
     pub column: String,
     pub agg: FormAgg,
+    /// Giá trị của cột khi agg là share: tỷ lệ dòng có giá trị này.
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
-/// Hai cách tổng hợp cộng được theo nhóm: tổng nhóm con bằng tổng cả lát cắt, điều kiện để phân rã (#39) đúng.
+/// Cách tổng hợp một cột; mỗi cách một dạng phân rã, xem explain/measure_column.rs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FormAgg {
     Sum,
+    Avg,
     Count,
+    CountDistinct,
+    Share,
+}
+
+/// "Tháng nào giảm bất thường" (kind period) hay "nhóm nào kéo doanh thu xuống" (kind group, column là cột của nhóm).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct FormFind {
+    pub kind: FindKind,
+    #[serde(default)]
+    pub column: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindKind {
+    Period,
+    Group,
+}
+
+/// Kỳ gốc khi form không ghi base: "tuần này so với tuần trước" hay "quý 3/2017 so với cùng kỳ năm trước".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompareWith {
+    Previous,
+    SamePeriodLastYear,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -103,16 +138,25 @@ pub struct FormTime {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FormFilter {
     pub column: String,
-    /// Chỉ nhận "="; schema đã giới hạn, kiểm lại vì mô hình không bị ép (mock, Ollama cũ) có thể ghi khác.
+    /// Một phép của FILTER_OPS (explain/filter.rs); schema đã giới hạn, kiểm lại vì mô hình không bị ép (mock, Ollama
+    /// cũ) có thể ghi khác.
     pub op: String,
+    /// Giá trị của "=", ">", ">=", "<", "<=".
+    #[serde(default)]
     pub value: String,
+    /// Các giá trị của "in", hay hai đầu của "between" (#244).
+    #[serde(default)]
+    pub values: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FormGroups {
     pub column: String,
     pub compare: String,
-    pub base: String,
+    /// Nhóm để so; vắng hay chuỗi rỗng là mọi nhóm còn lại của cột (#244): "vì sao Scotland rút học nhiều" so Scotland
+    /// với các vùng khác gộp lại.
+    #[serde(default)]
+    pub base: Option<String>,
 }
 
 /// Một chỗ sai của form. message viết tiếng Anh: nó được gửi lại cho mô hình trong prompt sửa và ghi vào log.

@@ -30,12 +30,20 @@ pub(crate) mod claims_tests;
 pub mod dimension_pick;
 #[cfg(test)]
 mod dimension_pick_tests;
+pub mod filter;
+mod filter_bound;
 pub mod form;
+#[cfg(test)]
+mod frames_run_tests;
+#[cfg(test)]
+mod frames_tests;
+pub mod group_base;
 pub mod judge;
 #[cfg(test)]
 mod judge_tests;
 pub mod latest;
 pub mod measure;
+mod measure_column;
 mod narrate_prompt;
 pub mod number;
 pub mod period;
@@ -47,7 +55,7 @@ pub mod ratio_breakdown;
 mod ratio_tests;
 pub mod run;
 #[cfg(test)]
-mod run_tests;
+pub(crate) mod run_tests;
 pub mod significance;
 pub mod source;
 #[cfg(test)]
@@ -61,6 +69,7 @@ pub mod summary;
 mod summary_tests;
 #[cfg(test)]
 mod tests;
+pub mod unusual;
 
 pub use narrate_prompt::{build_narrate_prompt, MAX_REASONS};
 pub use summary::build_template_summary;

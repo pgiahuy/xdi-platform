@@ -115,14 +115,14 @@ pub(super) fn quarter_form() -> serde_json::Value {
     })
 }
 
-struct Fixture {
-    columns: Vec<ProfileColumn>,
-    values: ValueIndex,
-    metrics: Vec<MetricDefinition>,
+pub(super) struct Fixture {
+    pub(super) columns: Vec<ProfileColumn>,
+    pub(super) values: ValueIndex,
+    pub(super) metrics: Vec<MetricDefinition>,
 }
 
 impl Fixture {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Fixture {
             columns: dataco_columns("2015-01-01", "2018-01-31"),
             values: dataco_values(),
@@ -147,7 +147,7 @@ impl Fixture {
         }
     }
 
-    fn profile(&self) -> WhyProfile<'_> {
+    pub(super) fn profile(&self) -> WhyProfile<'_> {
         WhyProfile {
             table: TABLE,
             columns: &self.columns,
@@ -157,7 +157,7 @@ impl Fixture {
         }
     }
 
-    fn check(&self, form: serde_json::Value) -> Result<WhyPlan, Vec<FieldError>> {
+    pub(super) fn check(&self, form: serde_json::Value) -> Result<WhyPlan, Vec<FieldError>> {
         self.check_with(form, None)
     }
 
@@ -170,12 +170,12 @@ impl Fixture {
         build_why_check(&form, &self.profile(), choice)
     }
 
-    fn plan(&self, form: serde_json::Value) -> WhyPlan {
+    pub(super) fn plan(&self, form: serde_json::Value) -> WhyPlan {
         self.check(form).unwrap()
     }
 
     /// Tên các trường sai.
-    fn fields(&self, form: serde_json::Value) -> Vec<String> {
+    pub(super) fn fields(&self, form: serde_json::Value) -> Vec<String> {
         let errors = self.check(form).unwrap_err();
         errors.into_iter().map(|e| e.field).collect()
     }
@@ -823,7 +823,7 @@ fn replies_are_read_like_sql_replies() {
     for reply in [
         "SELECT 1",
         "{\"metric\": ",
-        "{\"time\": {\"column\": \"x\", \"grain\": \"week\"}}",
+        "{\"time\": {\"column\": \"x\", \"grain\": \"hour\"}}",
     ] {
         let error = build_form_from_reply(reply).unwrap_err();
         assert_eq!(error.field, "form", "{reply}");
