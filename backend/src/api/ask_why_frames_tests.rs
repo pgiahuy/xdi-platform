@@ -8,7 +8,7 @@ Dữ liệu: quý 3/2017 Europe 80 (Corporate 50, Consumer 30), LATAM 120.25 (Co
 use axum::http::StatusCode;
 use serde_json::{json, Value};
 
-use super::ask_tests::{scripted, start_on, Asking};
+use super::ask_tests::{scripted, scripted_with_kind, start_on, Asking};
 use crate::api::test_support::call;
 
 const CSV: &str = "Market,Customer Segment,order date (DateOrders),Order Item Total\n\
@@ -188,4 +188,39 @@ async fn same_quarter_last_year_is_answered_and_drilled() {
     let (status, page) = drill(&asking, europe).await;
     assert_eq!(status, StatusCode::OK, "{page}");
     assert_eq!(source_rows(&page), (70.0, vec!["Europe".to_string()]));
+}
+
+/// Tìm kỳ bất thường qua route (câu không có cụm "vì sao": bước phân loại của mô hình nhận là câu tìm nguyên nhân): các tháng có dữ liệu là 5/2017 (300,5) và 8/2017 (210,25); câu hỏi giảm nên code chọn
+/// tháng 8 so với tháng 5, form lưu cùng câu hỏi ghi kỳ đã tìm, và truy dòng nguồn chạy trên hai kỳ đó.
+#[tokio::test]
+async fn unusual_month_is_found_answered_and_drilled() {
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Item Total", "agg": "sum"},
+        "time": {"column": "order date (DateOrders)", "grain": "month"},
+        "compare": "",
+        "find": {"kind": "period"},
+        "filters": []
+    });
+    let Some(asking) = start_on(Some(scripted_with_kind("cause", &[form])), CSV, |_| {}).await
+    else {
+        return;
+    };
+    let (status, response) = asking
+        .ask("Tháng nào doanh thu giảm bất thường?", json!([]))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    let explanation = &response["explanation"];
+    assert_eq!(explanation["base"]["label"], "Tháng 5/2017");
+    assert_eq!(explanation["compare"]["label"], "Tháng 8/2017");
+    let query_id = response["query_id"].clone();
+    let europe = json!({"query_id": query_id,
+                        "breakdown": {"slice": "compare", "column": "Market", "value": "Europe"}});
+    let (status, page) = drill(&asking, europe).await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    assert_eq!(
+        source_rows(&page),
+        (80.0, vec!["Europe".to_string(), "Europe".to_string()])
+    );
 }

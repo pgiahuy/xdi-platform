@@ -24,6 +24,7 @@ use crate::service::explain::measure::{
 use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::source::{PlanSource, RelatedTables};
 use crate::service::explain::sql::build_time_expr;
+use crate::service::explain::unusual::check_find;
 
 /// Chiều có tới ngần này giá trị khác nhau mới phân rã (#39): nhiều hơn thì bảng đóng góp dài mà mỗi nhóm nhỏ.
 pub const DIMENSION_MAX_VALUES: i64 = 50;
@@ -109,6 +110,7 @@ pub fn build_why_check(
     let measure = check_measure(form, profile, &mut errors);
     let slices = check_slices(form, profile, base_choice, &mut errors);
     let mut filters = check_filters(form, profile, &mut errors);
+    check_find(form, profile, &mut errors);
     let (Some(measure), Some(slices)) = (measure, slices) else {
         return Err(errors);
     };

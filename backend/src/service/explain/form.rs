@@ -78,6 +78,9 @@ pub struct WhyForm {
     /// Có khi so hai nhóm.
     #[serde(default)]
     pub groups: Option<FormGroups>,
+    /// Câu hỏi tìm kỳ hay nhóm bất thường (#244): code tìm rồi phân rã như hai kỳ (explain/unusual.rs).
+    #[serde(default)]
+    pub find: Option<FormFind>,
     /// Dữ liệu không có thông tin để trả lời (#164); có lý do thì không kiểm phần còn lại của form.
     #[serde(default)]
     pub unanswerable: Option<Unanswerable>,
@@ -101,6 +104,21 @@ pub enum FormAgg {
     Count,
     CountDistinct,
     Share,
+}
+
+/// "Tháng nào giảm bất thường" (kind period) hay "nhóm nào kéo doanh thu xuống" (kind group, column là cột của nhóm).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct FormFind {
+    pub kind: FindKind,
+    #[serde(default)]
+    pub column: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindKind {
+    Period,
+    Group,
 }
 
 /// Kỳ gốc khi form không ghi base: "tuần này so với tuần trước" hay "quý 3/2017 so với cùng kỳ năm trước".

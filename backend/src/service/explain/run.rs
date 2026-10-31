@@ -53,10 +53,13 @@ use crate::service::explain::form::{
 };
 use crate::service::explain::latest::{apply_latest, find_latest, LatestPeriod, COMPARE_CHOICE_ID};
 use crate::service::explain::plain::run_plain;
-use crate::service::explain::premise::{build_premise_labels, build_premise_warning};
+use crate::service::explain::premise::{
+    build_asked_direction, build_premise_labels, build_premise_warning,
+};
 use crate::service::explain::source::RelatedTables;
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
 use crate::service::explain::summary::apply_summary_parts;
+use crate::service::explain::unusual::{apply_find, Found};
 
 /// Đầu vào của run_why, trừ mô hình. #33 đọc từ Postgres và AppState rồi truyền vào.
 pub struct WhyInput<'a> {
@@ -255,7 +258,32 @@ async fn run_round(
     // Form chỉ nêu cột của bảng đang hỏi; cột của bảng liên quan chỉ vào phân rã, như cột chiều của bảng đó.
     let filtered = build_single_value_columns(&read.form);
     apply_related(&mut plan, input.related, &filtered);
+    // Câu tìm kỳ hay nhóm bất thường: code tìm rồi sửa plan; kỳ gần nhất của latest khi đó chỉ là chỗ giữ để kiểm form.
+    let started = Instant::now();
+    let direction = build_asked_direction(input.prompt.question);
+    let latest = match apply_find(&build_env(input), &read.form, &mut plan, direction).await? {
+        None => latest,
+        Some(found) => {
+            let (ok, detail) = match found {
+                Found::Applied(detail) => (true, detail),
+                Found::NotFound(reason) => (false, reason),
+            };
+            steps.push(build_step(StepName::Explain, started, ok, Some(&detail)));
+            apply_found_form(&mut read, &plan);
+            None
+        }
+    };
     run_plan(llm, input, read, &plan, latest.as_ref(), steps).await
+}
+
+/// Ghi kỳ và bộ lọc code đã tìm vào form lưu cùng câu hỏi, để form trong lịch sử khớp câu đã chạy.
+fn apply_found_form(read: &mut ReadForm, plan: &WhyPlan) {
+    if let PlanSlices::Periods { base, compare, .. } = &plan.slices {
+        read.json["compare"] = serde_json::Value::String(compare.text());
+        read.json["base"] = serde_json::Value::String(base.text());
+    }
+    let filters: Vec<String> = plan.filters.iter().map(ToString::to_string).collect();
+    read.json["applied_filters"] = serde_json::json!(filters);
 }
 
 /// Phương án người hỏi gửi cho lựa chọn kỳ so sánh (explain/choices.rs), nếu có.

@@ -6,13 +6,16 @@ trên Parquet tạm ở explain/frames_run_tests.rs. */
 
 use std::collections::HashMap;
 
+use rust_decimal::Decimal;
 use serde_json::json;
 
 use crate::service::explain::check::PlanSlices;
 use crate::service::explain::check_tests::{Fixture, DATE};
 use crate::service::explain::group_base::GroupBase;
 use crate::service::explain::period::{Grain, Period};
+use crate::service::explain::premise::AskedDirection;
 use crate::service::explain::sql::{build_dimension_sql, build_slices_sql, build_why_sql};
+use crate::service::explain::unusual::{build_group_parts, pick_step};
 
 fn rest_form() -> serde_json::Value {
     json!({
@@ -398,4 +401,57 @@ fn compare_with_picks_the_same_period_last_year() {
     let mut early = form("same_period_last_year");
     early["compare"] = json!("2015-Q1");
     assert_eq!(Fixture::new().fields(early), ["compare_with"]);
+}
+
+// Tìm kỳ hay nhóm bất thường (explain/unusual.rs).
+
+#[test]
+fn steps_are_picked_by_the_asked_direction() {
+    let values: Vec<Decimal> = [10, 30, 5, 6, -40].into_iter().map(Decimal::from).collect();
+    // Bước: +20, -25, +1, -46.
+    assert_eq!(pick_step(&values, None), Some(4));
+    assert_eq!(pick_step(&values, Some(AskedDirection::Up)), Some(1));
+    assert_eq!(pick_step(&values, Some(AskedDirection::Down)), Some(4));
+    let rising: Vec<Decimal> = [1, 2, 3].into_iter().map(Decimal::from).collect();
+    assert_eq!(pick_step(&rising, Some(AskedDirection::Down)), None);
+    assert_eq!(pick_step(&rising[..1], None), None);
+}
+
+/// Phần của từng nhóm với tỷ lệ cộng lại đúng R1 - R0: nhóm A 1/4 lên 3/4, nhóm B 1/4 lên 1/4 (mẫu 4 và 4 mỗi bên),
+/// R0 = 2/8, R1 = 4/8.
+#[test]
+fn ratio_group_parts_add_up_to_the_change() {
+    let d = |n: i64| Decimal::from(n);
+    let groups = vec![
+        (None, vec![d(1), d(3), d(4), d(4)]),
+        (None, vec![d(1), d(1), d(4), d(4)]),
+    ];
+    let parts = build_group_parts(&groups);
+    assert_eq!(parts.iter().sum::<Decimal>(), Decimal::new(25, 2));
+    assert_eq!(parts[0], Decimal::new(25, 2));
+    let totals = vec![(None, vec![d(5), d(2)])];
+    assert_eq!(build_group_parts(&totals), [d(-3)]);
+}
+
+#[test]
+fn find_needs_two_periods_and_a_dimension() {
+    let fixture = Fixture::new();
+    let mut form = json!({
+        "metric": "doanh thu",
+        "time": {"column": DATE, "grain": "month"},
+        "compare": "2017-08",
+        "find": {"kind": "group", "column": "Order Item Total"},
+        "filters": []
+    });
+    assert_eq!(fixture.fields(form.clone()), ["find.column"]);
+    form["find"] = json!({"kind": "group"});
+    assert_eq!(fixture.fields(form.clone()), ["find.column"]);
+    form["find"] = json!({"kind": "period"});
+    assert!(fixture.check(form.clone()).is_ok());
+    let groups = json!({
+        "metric": "doanh thu",
+        "groups": {"column": "Market", "compare": "Europe"},
+        "find": {"kind": "period"},
+    });
+    assert_eq!(fixture.fields(groups), ["find"]);
 }

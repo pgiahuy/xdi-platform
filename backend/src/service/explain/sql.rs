@@ -116,6 +116,32 @@ pub fn build_dimension_sql(plan: &WhyPlan, column: &str) -> String {
     )
 }
 
+/// Tên cột của câu chuỗi theo kỳ (build_series_sql); explain/unusual.rs đọc kết quả theo đúng các tên này.
+pub const SERIES_PERIOD: &str = "period_start";
+pub const SERIES_VALUE: &str = "period_value";
+
+/// Độ đo theo từng kỳ trên mọi dòng của bộ lọc, không theo hai lát cắt: để explain/unusual.rs tìm kỳ đổi mạnh nhất
+/// (#244). Kỳ in thành chữ ngày đầu kỳ như explain/latest.rs, để đọc lại bằng Period::containing.
+pub fn build_series_sql(plan: &WhyPlan, time: &PlanTime) -> String {
+    let unit = build_string(time.grain.as_str());
+    let mut conditions: Vec<String> = plan
+        .filters
+        .iter()
+        .cloned()
+        .map(build_grouped)
+        .map(|e| e.to_string())
+        .collect();
+    conditions.push(format!("{} IS NOT NULL", time.expr));
+    format!(
+        "SELECT strftime(date_trunc({unit}, {}), '%Y-%m-%d') AS {SERIES_PERIOD}, {} AS {SERIES_VALUE} FROM {} \
+         WHERE {} GROUP BY 1 ORDER BY 1",
+        time.expr,
+        plan.measure.aggregate,
+        build_from(plan, &[]),
+        conditions.join(" AND ")
+    )
+}
+
 /// Số cặp giá trị khác nhau của hai cột trên đúng tập dòng của câu từng chiều (cùng build_where): explain/dimension_pick.rs
 /// so với số nhóm của mỗi cột để biết hai cột có chia dữ liệu y hệt nhau không.
 pub fn build_pair_count_sql(plan: &WhyPlan, first: &str, second: &str) -> String {

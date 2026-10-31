@@ -122,6 +122,16 @@ pub fn build_why_form_schema() -> serde_json::Value {
                 },
                 "required": ["column", "compare"]
             },
+            "find": {
+                "type": "object",
+                "description": "Set when the question asks which period or which group is unusual; the code \
+                                finds it and explains it",
+                "properties": {
+                    "kind": { "type": "string", "enum": ["period", "group"] },
+                    "column": text("For group: a column of role dimension whose groups are searched")
+                },
+                "required": ["kind"]
+            },
             "unanswerable": build_unanswerable_schema()
         },
         "required": ["terms", "compare", "filters"]

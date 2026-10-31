@@ -69,6 +69,7 @@ pub mod summary;
 mod summary_tests;
 #[cfg(test)]
 mod tests;
+pub mod unusual;
 
 pub use narrate_prompt::{build_narrate_prompt, MAX_REASONS};
 pub use summary::build_template_summary;

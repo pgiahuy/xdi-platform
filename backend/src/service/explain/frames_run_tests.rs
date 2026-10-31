@@ -232,3 +232,73 @@ async fn same_month_last_year_is_compared() {
     assert_eq!(explanation.base.value, "1000.00");
     assert_eq!(explanation.compare.label, "Tháng 8/2017");
 }
+
+/// "Tháng nào doanh thu năm 2017 giảm bất thường?": chuỗi tháng 4, 5, 6, 8, 9 của năm 2017; bước giảm lớn nhất là tháng
+/// 6 (chỉ có dòng 0 đồng) so với tháng 5, rồi phân rã như hai kỳ.
+#[tokio::test]
+async fn unusual_month_is_found_then_explained() {
+    let data = Dataco::new();
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Item Total", "agg": "sum"},
+        "time": {"column": DATE, "grain": "month"},
+        "compare": "",
+        "find": {"kind": "period"},
+        "filters": [{"column": DATE, "op": "between", "values": ["2017", "2017"]}]
+    });
+    let llm = ScriptedLlm::new(vec![form]);
+    let outcome = data
+        .ask(&llm, "Tháng nào doanh thu năm 2017 giảm bất thường?", &[])
+        .await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let explanation = outcome.explanation.as_ref().unwrap();
+    assert_eq!(explanation.base.label, "Tháng 5/2017");
+    assert_eq!(explanation.compare.label, "Tháng 6/2017");
+    assert_eq!(explanation.base.value, "8806350.75");
+    assert_eq!(outcome.form.as_ref().unwrap()["compare"], "2017-06");
+    // Kỳ do code tìm, không phải kỳ gần nhất: không có lựa chọn why:compare.
+    assert!(outcome.assumptions.iter().all(|c| c.id != "why:compare"));
+    let found = outcome
+        .steps
+        .iter()
+        .find(|s| {
+            s.detail
+                .as_deref()
+                .is_some_and(|d| d.starts_with("Kỳ đổi nhiều nhất"))
+        })
+        .expect("a step names the period found");
+    assert!(found.ok);
+}
+
+/// "Thị trường nào kéo doanh thu quý 3/2017 xuống?": thêm một dòng Europe, Corporate 100.000 ở quý 3 để Customer Segment
+/// của Europe có hai nhóm. Europe vẫn giảm nhiều nhất (539.780,25, LATAM 339.049,50); câu lọc Europe rồi phân rã hai quý
+/// theo Customer Segment.
+#[tokio::test]
+async fn group_pulling_down_is_found_then_explained() {
+    let row = "SELECT CAST(40000 AS INTEGER), 'Europe', 'Corporate', '8/20/2017 10:00', CAST(100000 AS DOUBLE)";
+    let data = Dataco::with_rows(&[row.to_string()], 1);
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Item Total", "agg": "sum"},
+        "time": {"column": DATE, "grain": "quarter"},
+        "compare": "2017-Q3",
+        "find": {"kind": "group", "column": "Market"},
+        "filters": []
+    });
+    let llm = ScriptedLlm::new(vec![form]);
+    let outcome = data
+        .ask(&llm, "Thị trường nào kéo doanh thu quý 3/2017 xuống?", &[])
+        .await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let explanation = outcome.explanation.as_ref().unwrap();
+    assert_eq!(explanation.base.value, "2850120.40");
+    assert_eq!(explanation.compare.value, "2310340.15");
+    let columns: Vec<&str> = explanation
+        .dimensions
+        .iter()
+        .map(|d| d.column.as_str())
+        .collect();
+    assert_eq!(columns, ["Customer Segment"]);
+    let sql = outcome.sql_guarded.as_deref().unwrap();
+    assert!(sql.contains("\"Market\" = 'Europe'"), "{sql}");
+}
