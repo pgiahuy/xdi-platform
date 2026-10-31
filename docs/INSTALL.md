@@ -645,12 +645,14 @@ trống thì backend tự sinh khóa): khung **Kết nối database** đứng đ
 không thì bấm **Thêm database**. Nhập máy chủ, cổng, database, tài khoản, mật khẩu và `sslmode`: `prefer` (mặc định; thử TLS khi máy chủ nhận TLS, bắt
 tay lỗi thì báo lỗi chứ không quay về kết nối thường; trước #230 `prefer` luôn là kết nối thường),
 `require` khi máy chủ bắt buộc TLS, `verify-full` để kiểm chứng chỉ máy chủ (kèm ô **Chứng chỉ CA** cho CA riêng của tổ
-chức; bảng ở [Dữ liệu](DATA.md), mục Nguồn database). Bấm **Kết nối**: backend thử kết nối trước khi lưu. Chọn bảng hay
-view rồi bấm **Chụp bảng thành dataset**. Bảng có khóa ngoại thì khung hiện các bảng liên quan để chụp kèm,
-tách hai nhóm: bảng nó trỏ tới (nhiều-một, chọn sẵn) và bảng trỏ tới nó (một-nhiều); **Xem bảng nối với ...** dưới một
-bảng đã chọn mở thêm một bước. Mỗi bảng thành một dataset riêng. Dòng của dataset ghi
-**Liên quan:** các dataset nối với nó. Dataset chụp từ database có nút **Chụp lại**, chụp lại cả các dataset liên quan,
-thay cho **Nạp phiên bản mới**. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
+chức; bảng ở [Dữ liệu](DATA.md), mục Nguồn database). Bấm **Kết nối**: backend thử kết nối trước khi lưu. Kết nối xong, khung
+liệt kê mọi bảng, view tài khoản đọc được, nhóm theo schema, tick sẵn, mỗi bảng kèm số dòng ước lượng, dung lượng, số
+cột, comment, và nhãn **Quá trần dòng, chỉ lưu cấu trúc** khi bảng quá `SOURCE_MAX_ROWS`. Bỏ tick bảng không cần (hay
+**Chọn hết**, **Bỏ hết** cho cả schema); bỏ tick một bảng mà bảng đang tick trỏ tới thì khung báo ngay bảng nào mất
+quan hệ. Bấm **Chụp N bảng**: mọi bảng chụp trong một giao dịch, xong thì khung ghi bảng đã chụp, bảng chỉ lưu cấu trúc
+kèm lý do. Nguồn đã chụp rồi thì **Chụp thêm bảng** mở lại danh sách, tick sẵn các bảng nguồn đang giữ. Thẻ dataset của
+database có nút **Chụp lại** (chụp lại mọi bảng dataset đang giữ); mở **Xem bảng** thì bảng chỉ có cấu trúc ghi
+**Chỉ có cấu trúc** kèm lý do, và `admin` có nút **Chụp bảng này** sau khi tăng trần. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
 
 Nạp file, khi dữ liệu chưa nằm trong database: bấm **Nạp file CSV, Parquet hoặc Excel** dưới khung database để mở khung
 **Nạp dữ liệu** (chỉ `admin` của workspace thấy):

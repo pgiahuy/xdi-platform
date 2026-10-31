@@ -4,7 +4,7 @@ danh sách dataset, và nạp file là lựa chọn phụ cho admin: một nút 
 mới" ở một dataset nạp từ file thì khung nạp tự mở.
 Một dataset là một database đã kết nối hay một file (#257, api/catalog.ts): mỗi dataset một thẻ (DatasetCard.tsx);
 thẻ database mở ra thấy bảng nhóm theo schema và quan hệ, "Chụp lại" chụp lại mọi bảng của database trong một giao
-dịch. Máy chủ của database lấy từ danh sách nguồn (chỉ admin đọc được; id dataset là id nguồn).
+dịch; bảng chỉ có cấu trúc (quá trần lúc chụp, #247) có nút chụp riêng bảng đó cho admin. Máy chủ của database lấy từ danh sách nguồn (chỉ admin đọc được; id dataset là id nguồn).
 Vai lấy từ /auth/me (đã có trong bộ đệm, AppLayout vừa đọc). Ẩn khung nạp với member chỉ để giao diện gọn;
 quyền thật nằm ở backend, member gọi thẳng API vẫn nhận 403.
 Hồ sơ cột, chỉ số và biểu đồ dựng sẵn của từng bảng ở trang Tổng quan dữ liệu (OverviewPage.tsx, #198); nút Tổng
@@ -20,9 +20,9 @@ import {
   type CatalogSnapshotResponse,
 } from "@/api/catalog";
 import { useDeleteDataset } from "@/api/datasets";
-import { useSources, type Source } from "@/api/sources";
+import { useSnapshot, useSources, type Source } from "@/api/sources";
 import { DatasetCard, type DatasetCardProps } from "@/components/datasets/DatasetCard";
-import type { DatasetCardView, TableRow } from "@/components/datasets/types";
+import type { DatasetCardView, MetadataTableRow, TableRow } from "@/components/datasets/types";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { DatabaseSources } from "./DatabaseSources";
@@ -46,6 +46,7 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
   const datasets = useCatalog(ws);
   const deleteTable = useDeleteDataset(ws);
   const snapshot = useSnapshotCatalog(ws);
+  const snapshotTable = useSnapshot(ws);
   const [message, setMessage] = useState<CardMessage>();
   const [target, setTarget] = useState<UploadTarget>();
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -79,6 +80,18 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
     });
   };
 
+  // Id dataset là database cũng là id nguồn (api/catalog.ts), nên chụp riêng một bảng đi qua route của nguồn.
+  const snapshotOne = (dataset: CatalogDataset, table: MetadataTableRow) => {
+    snapshotTable.mutate(
+      { sourceId: dataset.id, tables: [table.table] },
+      {
+        onError: (error) => setMessage({ id: dataset.id, kind: "error", text: error.message }),
+        onSuccess: (result) =>
+          setMessage({ id: dataset.id, kind: "success", text: tableSnapshotText(table.table, result) }),
+      },
+    );
+  };
+
   const remove = (dataset: CatalogDataset, table: TableRow) => {
     deleteTable.mutate(table.id, {
       onError: (error) => setMessage({ id: dataset.id, kind: "error", text: error.message }),
@@ -96,6 +109,11 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
       metricsHref: (table) => `${table.id}/metrics`,
       onSnapshot: isAdmin ? () => snapshotAgain(dataset) : undefined,
       snapshotPending: snapshot.isPending && snapshot.variables === dataset.id,
+      onSnapshotTable: isAdmin ? (table) => snapshotOne(dataset, table) : undefined,
+      snapshotTablePending:
+        snapshotTable.isPending && snapshotTable.variables?.sourceId === dataset.id
+          ? snapshotTable.variables.tables?.[0]
+          : undefined,
       onAddVersion: isAdmin ? (table) => addVersion(dataset, table) : undefined,
       onDeleteTable: isAdmin ? (table) => remove(dataset, table) : undefined,
       deletePending: deleteTable.isPending,
@@ -233,6 +251,18 @@ function buildCardView(dataset: CatalogDataset, source: Source | undefined): Dat
       rowCount: t.row_count,
       description: t.description,
     })),
+    metadataOnly: dataset.metadata_only.map((t) => {
+      const dot = t.table.indexOf(".");
+      return {
+        table: t.table,
+        name: dot < 0 ? t.table : t.table.slice(dot + 1),
+        schema: dot < 0 ? null : t.table.slice(0, dot),
+        reason: t.reason,
+        rowCount: t.row_count,
+        columnCount: t.columns.length,
+        description: t.description,
+      };
+    }),
     relations: dataset.relations.map((r) => ({
       key: r.constraint_name + r.from_dataset_id,
       from: names.get(r.from_dataset_id) ?? r.from_dataset_name,
@@ -246,6 +276,22 @@ function buildCardView(dataset: CatalogDataset, source: Source | undefined): Dat
 function snapshotText(result: CatalogSnapshotResponse): string {
   const changed = result.datasets.filter((d) => d.created).length;
   const total = result.datasets.length;
-  if (changed === 0) return `Đã chụp lại ${total} bảng, không bảng nào đổi.`;
-  return `Đã chụp lại ${total} bảng, ${changed} bảng có phiên bản mới.`;
+  const parts = [
+    changed === 0
+      ? `Đã chụp lại ${total} bảng, không bảng nào đổi`
+      : `Đã chụp lại ${total} bảng, ${changed} bảng có phiên bản mới`,
+  ];
+  if (result.metadata_only.length > 0)
+    parts.push(`${result.metadata_only.length} bảng vẫn chỉ có cấu trúc`);
+  if (result.unreadable.length > 0)
+    parts.push(`không còn đọc được ${result.unreadable.join(", ")}, giữ phiên bản cũ`);
+  return `${parts.join("; ")}.`;
+}
+
+function tableSnapshotText(table: string, result: CatalogSnapshotResponse): string {
+  const kept = result.metadata_only.find((t) => t.table === table);
+  if (kept) return `${table} vẫn chỉ có cấu trúc: ${kept.reason}`;
+  const rows = result.datasets[0]?.version.row_count;
+  const count = rows === null || rows === undefined ? "" : `, ${rows.toLocaleString("vi-VN")} dòng`;
+  return `Đã chụp ${table}${count}.`;
 }

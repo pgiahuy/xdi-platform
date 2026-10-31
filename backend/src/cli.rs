@@ -178,17 +178,22 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         }
     };
     for case in &report.cases {
-        if case.ok {
-            println!("ok   {} {}", case.id, case.question);
-        } else {
-            println!("SAI  {} {}\n     {}", case.id, case.question, case.detail);
+        match case.verdict {
+            eval::Verdict::Pass => println!("ok   {} {}", case.id, case.question),
+            eval::Verdict::Fail => {
+                println!("SAI  {} {}\n     {}", case.id, case.question, case.detail)
+            }
+            eval::Verdict::Review => {
+                println!("XEM  {} {}\n     {}", case.id, case.question, case.detail)
+            }
         }
     }
     println!(
-        "accuracy: {}/{} ({:.1}%)",
+        "accuracy: {}/{} ({:.1}%), needs review: {}",
         report.passed,
-        report.total,
-        report.accuracy * 100.0
+        report.passed + report.failed,
+        report.accuracy * 100.0,
+        report.review
     );
     if let Some(comparison) = &report.lessons {
         println!(
