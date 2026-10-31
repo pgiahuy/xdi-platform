@@ -28,7 +28,7 @@ type Props = {
 
 /** Dataset có liên quan thì nói rõ quan hệ mất theo, còn các dataset kia vẫn giữ. */
 function deleteText(dataset: DatasetRow): string {
-  const base = 'Dataset, mọi phiên bản và file của nó bị xóa.'
+  const base = 'Dataset, mọi phiên bản, file và lịch sử câu hỏi của nó bị xóa, kể cả các cuộc trò chuyện.'
   const count = dataset.related.length
   const links =
     count > 0

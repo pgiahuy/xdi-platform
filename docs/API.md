@@ -192,10 +192,9 @@ prompt của câu hỏi kế tiếp.
 ## Xóa dataset
 
 `DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, chỉ số, cuộc trò chuyện
-(CASCADE) và file Parquet trên đĩa (`delete_dataset` trong `backend/src/service/ingest.rs`). Lịch sử câu hỏi của dataset
-(bảng `queries`) không xóa: các dòng còn lại với `dataset_id`, `version_id` null, và chỉ mất khi xóa workspace. Chỉ
-admin của workspace, `member` nhận 403; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không
-khôi phục được.
+và lịch sử câu hỏi (bảng `queries`, kể cả các lượt trò chuyện), bằng khóa ngoại `ON DELETE CASCADE`, rồi file Parquet
+trên đĩa (`delete_dataset` trong `backend/src/service/ingest.rs`). Chỉ admin của workspace, `member` nhận 403; 404 khi
+dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không khôi phục được.
 
 ## Tổng quan dataset
 

@@ -71,9 +71,12 @@ database. Dataset chụp từ database được đối xử như dataset nạp t
 - Admin xóa workspace ở trang Thành viên (hoặc `DELETE /api/workspaces/{ws}`): xóa mọi dataset, hồ sơ, chỉ số, lịch
   sử câu hỏi và thành viên của nó trong Postgres (khóa ngoại `ON DELETE CASCADE`) và thư mục Parquet của workspace.
 - Admin xóa từng dataset ở trang Dữ liệu (hoặc `DELETE /api/workspaces/{ws}/datasets/{id}`): xóa mọi phiên bản, hồ
-  sơ cột, chỉ số và cuộc trò chuyện của dataset trong Postgres và file Parquet của từng phiên bản trên đĩa. Lịch sử câu
-  hỏi của dataset (câu hỏi, SQL, lỗi, bảng phân rã của câu "tại sao") vẫn còn trong Postgres, chỉ bỏ liên kết tới
-  dataset; nó mất khi xóa cả workspace.
+  sơ cột, chỉ số, cuộc trò chuyện và lịch sử câu hỏi của dataset (câu hỏi, SQL, lỗi, phần "Đã hiểu là", bảng phân rã
+  của câu "tại sao") trong Postgres, và file Parquet của từng phiên bản trên đĩa. Câu hỏi trên dataset khác mà đã nối
+  sang dataset này (hỏi qua bảng liên quan) vẫn giữ, vì chúng thuộc dataset kia.
+- Bản sao lưu (`make backup`) làm trước khi xóa vẫn còn dữ liệu cũ, kể cả lịch sử câu hỏi; xóa hẳn thì xóa cả các bản
+  sao lưu đó. Bản cài cũ có lịch sử câu hỏi còn lại từ các lần xóa dataset trước: lần cập nhật đầu tiên có migration
+  `0011_delete_query_history.sql` xóa các dòng đó.
 
 ## Bản demo công khai (thiết kế)
 
