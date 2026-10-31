@@ -19,6 +19,11 @@ fn turn(question: &str, sql_generated: Option<&str>, understood: Option<&str>) -
         sql_guarded: Some("SELECT guarded LIMIT 100000".to_string()),
         understood: understood.map(str::to_string),
         created_at: Utc::now(),
+        feedback: None,
+        feedback_reason: None,
+        feedback_note: None,
+        feedback_at: None,
+        example_approved: false,
     }
 }
 

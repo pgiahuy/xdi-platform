@@ -10,7 +10,7 @@ use crate::engine::llm::{LlmProvider, LlmTask};
 use crate::error::AppError;
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
 use crate::service::ask::contract::{AskStatus, AskStep, StepName, Warning, WarningCode};
-use crate::service::ask::prompt::build_sql_prompt;
+use crate::service::ask::prompt::{build_examples_detail, build_sql_prompt, pick_examples};
 use crate::service::ask::reply::SqlAnswer;
 use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
 use crate::service::ask::unanswerable::build_unanswerable_message;
@@ -25,7 +25,13 @@ pub async fn run_plain(
     let prompt = build_sql_prompt(&input.prompt);
     let started = Instant::now();
     let reply = complete(llm, input, LlmTask::Sql, &prompt).await?;
-    steps.push(build_step(StepName::Llm, started, true, None));
+    let examples_used = build_examples_detail(&pick_examples(&input.prompt, false));
+    steps.push(build_step(
+        StepName::Llm,
+        started,
+        true,
+        examples_used.as_deref(),
+    ));
     let run = run_with_repair(
         llm,
         RunInput {

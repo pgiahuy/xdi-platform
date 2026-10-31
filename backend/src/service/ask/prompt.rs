@@ -2,7 +2,7 @@
 /* service/ask/prompt.rs - prompt SQL cho câu thường (#29), và các phần chung với prompt form câu "tại sao"
 (ask/why_prompt.rs): cột, gợi ý, lựa chọn đã có, chỉ số, khái niệm ngành, trần độ dài. Câu trả lời theo
 build_sql_reply_schema (ask/reply.rs). Ngữ cảnh (cột, giá trị, gợi ý, cột đã chọn) lấy từ AskContext (ask/context.rs),
-chỉ số và câu đã đúng đọc từ engine/store (metrics.rs, queries.rs), gói khái niệm ngành từ engine/domains.rs. Endpoint
+chỉ số và câu mẫu đã duyệt đọc từ engine/store (metrics.rs, queries.rs), gói khái niệm ngành từ engine/domains.rs. Endpoint
 hỏi (#33) đọc các thứ đó rồi gọi build_sql_prompt. Test ở ask/prompt_tests.rs.
 
 Prompt chỉ có tên bảng logic, tên cột, mô tả, bí danh, giá trị của cột chiều không nhạy cảm và định nghĩa chỉ số; không
@@ -38,7 +38,7 @@ use crate::service::ask::values::ValueEntry;
 /// bị cắt mà không báo; vượt trần thì bỏ dần phần ít cần nhất (build_within_limit).
 pub const PROMPT_MAX_CHARS: usize = 24_000;
 
-/// Số câu đã đúng tối đa đưa vào prompt làm ví dụ.
+/// Số câu mẫu đã duyệt tối đa đưa vào prompt làm ví dụ.
 pub const EXAMPLES_MAX: usize = 3;
 
 /// Đầu vào chung của prompt SQL và prompt form (ask/why_prompt.rs).
@@ -49,7 +49,8 @@ pub struct PromptInput<'a> {
     pub context: &'a AskContext,
     /// Chỉ số của dataset (Store::list_metrics).
     pub metrics: &'a [MetricDefinition],
-    /// Câu đã đánh dấu đúng, mới nhất trước (Store::list_correct_queries). Prompt form không dùng.
+    /// Câu mẫu admin đã duyệt, mới nhất trước (Store::list_approved_examples, #212). Prompt SQL lấy câu thường, prompt
+    /// form lấy câu "tại sao" (có form).
     pub examples: &'a [PromptExample],
     /// Gói khái niệm ngành của dataset; None khi dataset chưa gắn gói.
     pub domain: Option<&'a DomainPackage>,
@@ -88,7 +89,7 @@ pub fn build_sql_prompt(input: &PromptInput) -> String {
             build_choices_section(input.context, input.choices),
             build_group_metrics(input),
             build_domain_section(input.domain),
-            build_examples_section(input.question, input.examples),
+            build_examples_section(&pick_examples(input, false)),
             input.history.to_string(),
             format!("Question: {}", input.question),
         ])
@@ -430,23 +431,71 @@ pub(super) fn build_domain_section(domain: Option<&DomainPackage>) -> String {
     )
 }
 
-/// Tối đa EXAMPLES_MAX câu đã đúng có chung ít nhất một từ không phải từ dừng với câu hỏi, mới nhất trước: câu không
-/// liên quan chỉ làm prompt dài và kéo mô hình theo cách viết của câu khác.
-fn build_examples_section(question: &str, examples: &[PromptExample]) -> String {
-    let words = build_content_words(question);
-    let picked: Vec<String> = examples
+/// Câu mẫu đưa vào prompt: tối đa EXAMPLES_MAX câu đã duyệt có chung ít nhất một từ không phải từ dừng với câu hỏi,
+/// mới nhất trước. Câu không liên quan chỉ làm prompt dài và kéo mô hình theo cách viết của câu khác. why chọn câu
+/// "tại sao" (có form) cho prompt form; false chọn câu thường cho prompt SQL: SQL của câu "tại sao" do code dựng, không
+/// phải cách mô hình viết.
+pub(crate) fn pick_examples<'a>(input: &PromptInput<'a>, why: bool) -> Vec<&'a PromptExample> {
+    let words = build_content_words(input.question);
+    input
+        .examples
         .iter()
+        .filter(|e| e.form.is_some() == why)
         .filter(|e| !build_content_words(&e.question).is_disjoint(&words))
         .take(EXAMPLES_MAX)
-        // Nhãn khác dòng "Question:" cuối prompt, để mô hình không lẫn câu ví dụ với câu cần trả lời.
+        .collect()
+}
+
+/// Chi tiết của bước llm khi prompt có câu mẫu: người xem tab Các bước biết câu trả lời đã dựa vào câu mẫu đã duyệt
+/// nào. None khi không có câu nào.
+pub(crate) fn build_examples_detail(picked: &[&PromptExample]) -> Option<String> {
+    if picked.is_empty() {
+        return None;
+    }
+    let questions: Vec<String> = picked
+        .iter()
+        .map(|e| format!("\"{}\"", e.question))
+        .collect();
+    Some(format!(
+        "Prompt có {} câu mẫu đã duyệt: {}",
+        picked.len(),
+        questions.join("; ")
+    ))
+}
+
+fn build_examples_section(picked: &[&PromptExample]) -> String {
+    if picked.is_empty() {
+        return String::new();
+    }
+    // Nhãn khác dòng "Question:" cuối prompt, để mô hình không lẫn câu ví dụ với câu cần trả lời.
+    let lines: Vec<String> = picked
+        .iter()
         .map(|e| format!("Example question: {}\nExample SQL: {}", e.question, e.sql))
         .collect();
-    if picked.is_empty() {
+    format!(
+        "Earlier questions answered correctly:\n{}",
+        lines.join("\n")
+    )
+}
+
+/// Câu mẫu cho prompt form: câu hỏi và form đã chạy, viết JSON một dòng như câu trả lời mô hình cần viết.
+pub(super) fn build_form_examples_section(picked: &[&PromptExample]) -> String {
+    let lines: Vec<String> = picked
+        .iter()
+        .filter_map(|e| {
+            let form = e.form.as_ref()?;
+            Some(format!(
+                "Example question: {}\nExample form: {form}",
+                e.question
+            ))
+        })
+        .collect();
+    if lines.is_empty() {
         return String::new();
     }
     format!(
         "Earlier questions answered correctly:\n{}",
-        picked.join("\n")
+        lines.join("\n")
     )
 }
 

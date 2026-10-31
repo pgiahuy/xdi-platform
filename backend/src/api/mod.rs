@@ -33,6 +33,9 @@ mod drill_tests;
 #[cfg(test)]
 mod excel_tests;
 mod extract;
+mod feedback;
+#[cfg(test)]
+mod feedback_tests;
 mod metrics;
 #[cfg(test)]
 mod metrics_tests;
@@ -81,6 +84,7 @@ fn api_routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .merge(datasets::routes(max_upload_bytes))
         .merge(query::routes())
         .merge(conversations::routes())
+        .merge(feedback::routes())
         .merge(metrics::routes())
         .merge(sources::routes())
 }

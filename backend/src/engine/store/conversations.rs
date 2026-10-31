@@ -31,6 +31,13 @@ pub struct StoredTurn {
     /// Phần "Đã hiểu là" dạng chữ ngắn (service/conversation/history.rs); None với câu không answered.
     pub understood: Option<String>,
     pub created_at: DateTime<Utc>,
+    /// Đánh giá của người hỏi (#212): chữ của queries.feedback, None khi chưa đánh giá; ba trường sau đi cùng nó.
+    pub feedback: Option<String>,
+    pub feedback_reason: Option<String>,
+    pub feedback_note: Option<String>,
+    pub feedback_at: Option<DateTime<Utc>>,
+    /// Admin đã duyệt câu làm câu mẫu.
+    pub example_approved: bool,
 }
 
 impl Store {
@@ -104,7 +111,9 @@ impl Store {
     ) -> Result<Vec<StoredTurn>, AppError> {
         sqlx::query_as(
             "SELECT * FROM (
-                 SELECT id AS query_id, question, status, sql_generated, sql_guarded, understood, created_at
+                 SELECT id AS query_id, question, status, sql_generated, sql_guarded, understood, created_at,
+                        feedback, feedback_reason, feedback_note, feedback_at,
+                        example_approved_at IS NOT NULL AS example_approved
                  FROM queries WHERE workspace_id = $1 AND conversation_id = $2
                  ORDER BY created_at DESC LIMIT $3
              ) last ORDER BY created_at",

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/mod.rs - luồng một câu hỏi (docs/ARCHITECTURE.md mục 2): dataset và phiên bản đang dùng, ngữ cảnh
-(ask/context.rs) cùng chỉ số, câu đã đúng và gói ngành, mô hình viết SQL (prompt ở ask/prompt.rs), guard, chạy và sửa
+(ask/context.rs) cùng chỉ số, câu mẫu đã duyệt và gói ngành, mô hình viết SQL (prompt ở ask/prompt.rs), guard, chạy và sửa
 một lần (ask/run.rs), ghi lịch sử (engine/store/queries.rs), rồi dựng AskResponse (ask/contract.rs). Mỗi bước đo thời
 gian thành một AskStep. Lựa chọn của response dựng ở ask/choices.rs và ask/response_choices.rs; thẻ "Đã hiểu là", vai
 trò cột và gợi ý biểu đồ ở ask/view.rs. Sau bước context, bước classify (ask/classify.rs) nhờ mô hình phân loại câu
@@ -89,7 +89,9 @@ use crate::service::ask::contract::{
 use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::group_prompt::build_group_prompt;
 use crate::service::ask::plain_insight::{build_stored_breakdown, run_insight};
-use crate::service::ask::prompt::{build_sql_prompt, PromptInput};
+use crate::service::ask::prompt::{
+    build_examples_detail, build_sql_prompt, pick_examples, PromptInput,
+};
 use crate::service::ask::related::{build_group_related, load_group};
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
 use crate::service::ask::response_choices::{
@@ -106,7 +108,7 @@ use crate::service::explain::form::QuestionKind;
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
 use crate::{error::AppError, state::AppState};
 
-/// Số câu đã đúng gần nhất đọc từ lịch sử; prompt chỉ lấy tối đa EXAMPLES_MAX câu có từ trùng câu hỏi trong số này
+/// Số câu mẫu đã duyệt gần nhất đọc từ lịch sử; prompt chỉ lấy tối đa EXAMPLES_MAX câu có từ trùng câu hỏi trong số này
 /// (ask/prompt.rs). Đọc ít quá thì câu liên quan mà cũ không bao giờ được chọn; nhiều quá thì mỗi câu hỏi đọc Postgres
 /// lâu hơn.
 const EXAMPLE_POOL: i64 = 50;
@@ -140,7 +142,7 @@ pub async fn ask(
     let ws = &member.workspace;
     let (dataset, version) = load_target(state, ws, dataset_id).await?;
 
-    // Chỉ số và câu đã đúng là hai tầng của ngữ cảnh (ARCHITECTURE mục 5), nên tính vào bước context, cùng các bảng
+    // Chỉ số và câu mẫu đã duyệt là hai tầng của ngữ cảnh (ARCHITECTURE mục 5), nên tính vào bước context, cùng các bảng
     // liên quan (#213).
     let started = Instant::now();
     let columns = state.store.list_columns(ws, version.id).await?;
@@ -152,7 +154,7 @@ pub async fn ask(
     let metrics = state.store.list_metrics(ws, dataset.id).await?;
     let examples = state
         .store
-        .list_correct_queries(ws, dataset.id, EXAMPLE_POOL)
+        .list_approved_examples(ws, dataset.id, EXAMPLE_POOL)
         .await?;
     let detail = build_ambiguity_detail(&context);
     let mut steps = vec![build_step(
@@ -230,7 +232,13 @@ pub async fn ask(
         json_schema: Some(build_sql_reply_schema()),
     };
     let reply = state.llm.complete(&request).await?;
-    steps.push(build_step(StepName::Llm, started, true, None));
+    let examples_used = build_examples_detail(&pick_examples(&input, false));
+    steps.push(build_step(
+        StepName::Llm,
+        started,
+        true,
+        examples_used.as_deref(),
+    ));
 
     let input = RunInput {
         question,

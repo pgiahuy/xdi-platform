@@ -8,6 +8,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::service::ask::contract::AskStatus;
+use crate::service::feedback::contract::QueryFeedback;
 
 /// One conversation on a dataset.
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -39,6 +40,9 @@ pub struct TurnItem {
     #[schema(required)]
     pub understood: Option<String>,
     pub created_at: DateTime<Utc>,
+    /// The rating the caller gave this answer; null when not rated.
+    #[schema(required)]
+    pub feedback: Option<QueryFeedback>,
 }
 
 /// A conversation and its recorded turns, oldest first.

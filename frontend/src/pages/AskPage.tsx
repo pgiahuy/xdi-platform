@@ -198,6 +198,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       {opened.error && <FormMessage kind="error">{`Không mở được cuộc trò chuyện: ${opened.error.message}`}</FormMessage>}
       {(!empty || pendingQuestion !== null) && (
         <AskConversation
+          ws={ws}
           savedTurns={savedTurns}
           turns={turns}
           selected={selected}

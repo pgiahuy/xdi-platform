@@ -11,12 +11,13 @@ use serde_json::json;
 
 use crate::engine::prompts::{self, fill};
 use crate::service::ask::prompt::{
-    build_choices_section, build_columns_section, build_domain_section, build_hints_section,
-    build_metrics_section, build_unanswerable_rule, build_within_limit, join_sections, PromptInput,
+    build_choices_section, build_columns_section, build_domain_section,
+    build_form_examples_section, build_hints_section, build_metrics_section,
+    build_unanswerable_rule, build_within_limit, join_sections, pick_examples, PromptInput,
 };
 use crate::service::ask::reply::{build_terms_schema, build_unanswerable_schema};
 
-/// Prompt cho câu "tại sao". PromptInput::examples không dùng: ví dụ là câu SQL, form không có SQL.
+/// Prompt cho câu "tại sao". Ví dụ là câu mẫu "tại sao" đã duyệt (#212) kèm form của nó, không phải câu SQL.
 pub fn build_why_prompt(input: &PromptInput) -> String {
     build_within_limit(|detail| {
         join_sections(vec![
@@ -26,6 +27,7 @@ pub fn build_why_prompt(input: &PromptInput) -> String {
             build_choices_section(input.context, input.choices),
             build_metrics_section(input.metrics, false),
             build_domain_section(input.domain),
+            build_form_examples_section(&pick_examples(input, true)),
             input.history.to_string(),
             format!("Question: {}", input.question),
         ])

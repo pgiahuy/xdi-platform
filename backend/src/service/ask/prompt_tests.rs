@@ -16,7 +16,9 @@ use crate::service::ask::choices::{
 };
 use crate::service::ask::context::{AskContext, ColumnPick, ColumnProfile, ValueHint};
 use crate::service::ask::contract::ChosenOption;
-use crate::service::ask::prompt::{build_sql_prompt, PromptInput, PROMPT_MAX_CHARS};
+use crate::service::ask::prompt::{
+    build_examples_detail, build_sql_prompt, pick_examples, PromptInput, PROMPT_MAX_CHARS,
+};
 use crate::service::ask::repair::build_repair_prompt;
 use crate::service::ask::reply::{Assumption, ChoiceKind, Clarify, SqlAnswer, Term, TermKind};
 use crate::service::ask::values::ValueEntry;
@@ -155,6 +157,15 @@ fn example(question: &str, sql: &str) -> PromptExample {
     PromptExample {
         question: question.to_string(),
         sql: sql.to_string(),
+        form: None,
+    }
+}
+
+/// Câu mẫu "tại sao" đã duyệt: SQL do code dựng, form là phần mô hình điền.
+fn why_example(question: &str) -> PromptExample {
+    PromptExample {
+        form: Some(serde_json::json!({"metric": "doanh thu", "compare": "2017-Q3", "filters": []})),
+        ..example(question, "SELECT built_by_code")
     }
 }
 
@@ -334,7 +345,7 @@ fn minimal_context_still_builds() {
     assert!(prompt.ends_with("Question: Doanh thu theo thị trường"));
 }
 
-/// Tối đa ba câu đã đúng có chung từ với câu hỏi, mới nhất trước; câu chỉ chung từ dừng ("theo") bị bỏ.
+/// Tối đa ba câu mẫu đã duyệt có chung từ với câu hỏi, mới nhất trước; câu chỉ chung từ dừng ("theo") bị bỏ.
 #[test]
 fn examples_are_related_and_at_most_three() {
     let context = dataco_context();
@@ -357,6 +368,38 @@ fn examples_are_related_and_at_most_three() {
          Example question: Top 10 danh mục có doanh thu cao nhất\nExample SQL: SELECT 2\n\
          Example question: Doanh thu từng quý năm 2017\nExample SQL: SELECT 3"
     );
+}
+
+/// Prompt SQL bỏ câu mẫu "tại sao"; prompt form chỉ lấy câu mẫu "tại sao" và ghi form thay cho SQL. Chi tiết bước llm
+/// nêu câu mẫu đã dùng.
+#[test]
+fn why_examples_go_to_the_form_prompt_only() {
+    let context = dataco_context();
+    let examples = [
+        why_example("Vì sao doanh thu quý 3 giảm?"),
+        example("Doanh thu theo tháng", "SELECT 1"),
+    ];
+    let sql_input = input(QUESTION, &context, &[], &examples, &[]);
+    let prompt = build_sql_prompt(&sql_input);
+    assert!(prompt.contains("Example SQL: SELECT 1"), "{prompt}");
+    assert!(!prompt.contains("built_by_code"), "{prompt}");
+    assert_eq!(
+        build_examples_detail(&pick_examples(&sql_input, false)).as_deref(),
+        Some("Prompt có 1 câu mẫu đã duyệt: \"Doanh thu theo tháng\"")
+    );
+
+    let question = "Vì sao doanh thu tháng 5 tăng?";
+    let why_input = input(question, &context, &[], &examples, &[]);
+    let prompt = build_why_prompt(&why_input);
+    assert!(
+        prompt.contains(
+            "Example question: Vì sao doanh thu quý 3 giảm?\nExample form: \
+             {\"compare\":\"2017-Q3\",\"filters\":[],\"metric\":\"doanh thu\"}"
+        ),
+        "{prompt}"
+    );
+    assert!(!prompt.contains("SELECT 1"), "{prompt}");
+    assert_eq!(build_examples_detail(&[]), None);
 }
 
 /// Luật cho từng loại câu: câu không nêu thời gian, cụm khớp hai cột, câu không có cách hiểu mặc định.
@@ -431,7 +474,7 @@ fn long_prompts_drop_sample_values_then_unmatched_columns() {
 
 // Prompt form câu "tại sao"
 
-/// Form có luật hai kỳ, hai nhóm; chỉ số chỉ có tên và mô tả, không có công thức; không có ví dụ SQL.
+/// Form có luật hai kỳ, hai nhóm; chỉ số chỉ có tên và mô tả, không có công thức; câu mẫu thường (SQL) không vào.
 #[test]
 fn why_prompt_has_metric_names_without_formulas() {
     let context = dataco_context();

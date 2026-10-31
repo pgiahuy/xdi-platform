@@ -17,7 +17,7 @@ mod history_tests;
 use uuid::Uuid;
 
 use crate::auth::Member;
-use crate::engine::store::{Conversation, StoredTurn};
+use crate::engine::store::{Conversation, StoredFeedback, StoredTurn};
 use crate::service::ask::contract::{AskResponse, AskStatus, ChosenOption};
 use crate::service::ask::AskHistory;
 use crate::service::conversation::carryover::{apply_carryover, find_previous};
@@ -27,6 +27,7 @@ use crate::service::conversation::contract::{
 use crate::service::conversation::history::{
     build_history_section, build_understood_text, HISTORY_TURNS,
 };
+use crate::service::feedback::contract::QueryFeedback;
 use crate::{error::AppError, state::AppState};
 
 /// Độ dài tối đa của tên cuộc (lấy từ câu hỏi đầu), tính theo ký tự.
@@ -186,6 +187,7 @@ fn build_turn(turn: StoredTurn) -> TurnItem {
         "rejected" => AskStatus::Rejected,
         _ => AskStatus::Failed,
     };
+    let feedback = build_turn_feedback(&turn);
     TurnItem {
         query_id: turn.query_id,
         question: turn.question,
@@ -193,5 +195,19 @@ fn build_turn(turn: StoredTurn) -> TurnItem {
         sql: turn.sql_guarded,
         understood: turn.understood,
         created_at: turn.created_at,
+        feedback,
     }
+}
+
+/// Đánh giá của lượt (#212); None khi chưa đánh giá. Hai cột feedback và feedback_at luôn ghi cùng nhau
+/// (engine/store/feedback.rs), nên thiếu một trong hai cũng coi như chưa đánh giá.
+fn build_turn_feedback(turn: &StoredTurn) -> Option<QueryFeedback> {
+    let stored = StoredFeedback {
+        feedback: turn.feedback.clone()?,
+        reason: turn.feedback_reason.clone(),
+        note: turn.feedback_note.clone(),
+        rated_at: turn.feedback_at?,
+        approved: turn.example_approved,
+    };
+    QueryFeedback::from_stored(&stored)
 }

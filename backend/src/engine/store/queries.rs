@@ -57,27 +57,30 @@ pub struct StoredQuery {
     pub explanation: Option<serde_json::Value>,
 }
 
-/// Một câu hỏi đã được đánh dấu trả lời đúng, làm ví dụ trong prompt sinh SQL.
+/// Một câu đã được admin duyệt làm câu mẫu (#212), làm ví dụ trong prompt.
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct PromptExample {
     pub question: String,
     pub sql: String,
+    /// Form câu "tại sao" đã chạy (queries.explanation->'form'); None với câu thường. Câu "tại sao" có SQL do code dựng
+    /// từ form, nên ví dụ cho prompt form là form, không phải SQL.
+    pub form: Option<serde_json::Value>,
 }
 
 impl Store {
-    /// Tối đa `limit` câu đã đánh dấu đúng của dataset, mới nhất trước. Lấy SQL mô hình viết (sql_generated), không lấy
+    /// Tối đa `limit` câu mẫu đã duyệt của dataset, mới nhất trước. Lấy SQL mô hình viết (sql_generated), không lấy
     /// bản sau guard: bản đó có LIMIT và điều kiện phân quyền theo vai của người đã hỏi, đưa vào prompt thì mô hình sẽ
-    /// chép điều kiện của người khác vào câu mới.
-    pub async fn list_correct_queries(
+    /// chép điều kiện của người khác vào câu mới. Câu chỉ được người hỏi đánh giá "Tốt" mà chưa duyệt thì không lấy.
+    pub async fn list_approved_examples(
         &self,
         ws: &WorkspaceId,
         dataset_id: Uuid,
         limit: i64,
     ) -> Result<Vec<PromptExample>, AppError> {
         sqlx::query_as(
-            "SELECT question, sql_generated AS sql FROM queries
+            "SELECT question, sql_generated AS sql, explanation->'form' AS form FROM queries
              WHERE workspace_id = $1 AND dataset_id = $2 AND feedback = 'correct' AND status = 'ok'
-               AND sql_generated IS NOT NULL
+               AND example_approved_at IS NOT NULL AND sql_generated IS NOT NULL
              ORDER BY created_at DESC LIMIT $3",
         )
         .bind(ws.as_uuid())
@@ -85,7 +88,7 @@ impl Store {
         .bind(limit)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| db_error("list correct queries", e))
+        .map_err(|e| db_error("list approved examples", e))
     }
 
     /// Một câu hỏi của workspace theo id; None nếu không có hay thuộc workspace khác.
@@ -216,7 +219,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn correct_queries_are_examples_newest_first() {
+    async fn approved_examples_newest_first() {
         let Some(store) = store().await else {
             eprintln!("skip: DATABASE_URL not set");
             return;
@@ -241,15 +244,23 @@ mod tests {
             )
             .await
             .unwrap();
-        // (câu hỏi, trạng thái, đánh giá, số giờ trước): chỉ hai câu đầu là ví dụ.
+        // (câu hỏi, trạng thái, đánh giá, đã duyệt, số giờ trước): chỉ hai câu đầu là ví dụ; câu "Tốt" chưa duyệt
+        // thì không.
         let rows = [
-            ("old correct", QueryStatus::Ok, Some("correct"), 2),
-            ("new correct", QueryStatus::Ok, Some("correct"), 1),
-            ("marked wrong", QueryStatus::Ok, Some("incorrect"), 1),
-            ("not marked", QueryStatus::Ok, None, 1),
-            ("rejected", QueryStatus::Rejected, Some("correct"), 1),
+            ("old correct", QueryStatus::Ok, Some("correct"), true, 2),
+            ("new correct", QueryStatus::Ok, Some("correct"), true, 1),
+            (
+                "good not approved",
+                QueryStatus::Ok,
+                Some("correct"),
+                false,
+                1,
+            ),
+            ("marked wrong", QueryStatus::Ok, Some("incorrect"), false, 1),
+            ("not marked", QueryStatus::Ok, None, false, 1),
+            ("rejected", QueryStatus::Rejected, Some("correct"), true, 1),
         ];
-        for (question, status, feedback, hours_ago) in rows {
+        for (question, status, feedback, approved, hours_ago) in rows {
             let sql = format!("SELECT '{question}'");
             let id = store
                 .record_query(
@@ -270,20 +281,22 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            // Chưa có endpoint đánh dấu đúng sai, nên đặt thẳng bằng SQL; created_at đặt rõ để thứ tự không phụ thuộc
-            // tốc độ chèn.
+            // Câu không có người hỏi (user_id null) nên đặt thẳng bằng SQL, không qua set_feedback; created_at đặt rõ để
+            // thứ tự không phụ thuộc tốc độ chèn.
             let feedback = feedback.map_or("NULL".to_string(), |f| format!("'{f}'"));
+            let approved_at = if approved { "now()" } else { "NULL" };
             exec(
                 &store,
                 &format!(
-                    "UPDATE queries SET feedback = {feedback}, created_at = now() - interval '{hours_ago} hours'
+                    "UPDATE queries SET feedback = {feedback}, example_approved_at = {approved_at},
+                         created_at = now() - interval '{hours_ago} hours'
                      WHERE id = '{id}'"
                 ),
             )
             .await;
         }
 
-        let examples = store.list_correct_queries(&ws, ds.id, 10).await.unwrap();
+        let examples = store.list_approved_examples(&ws, ds.id, 10).await.unwrap();
         let got: Vec<(&str, &str)> = examples
             .iter()
             .map(|e| (e.question.as_str(), e.sql.as_str()))
@@ -297,7 +310,7 @@ mod tests {
         );
         assert_eq!(
             store
-                .list_correct_queries(&ws, ds.id, 1)
+                .list_approved_examples(&ws, ds.id, 1)
                 .await
                 .unwrap()
                 .len(),
@@ -305,7 +318,7 @@ mod tests {
         );
         let other = temp_workspace(&store).await;
         assert!(store
-            .list_correct_queries(&other, ds.id, 10)
+            .list_approved_examples(&other, ds.id, 10)
             .await
             .unwrap()
             .is_empty());

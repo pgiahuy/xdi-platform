@@ -52,7 +52,7 @@ không dò được tên workspace. Id dataset của workspace khác cũng trả
 
 | Vai | Thuộc về | Gọi việc không đủ quyền |
 |---|---|---|
-| `admin`, `member` | Một tài khoản trong một workspace (trường `role` của `Membership`) | `member` gọi việc của admin (nạp file, liệt kê sheet, xóa dataset, đổi tên hay xóa workspace, thêm, đổi vai hay xóa người khác): 403 |
+| `admin`, `member` | Một tài khoản trong một workspace (trường `role` của `Membership`) | `member` gọi việc của admin (nạp file, liệt kê sheet, xóa dataset, đổi tên hay xóa workspace, thêm, đổi vai hay xóa người khác, xem, duyệt hay xuất câu mẫu): 403 |
 | Quản trị hệ thống | Tài khoản (`is_system_admin`), không theo workspace | Người khác gọi `/api/admin/...`: 403 |
 
 Thành viên thường nhận 403 thay vì 404 vì họ đã biết workspace có thật, chỉ thiếu quyền. Quản trị hệ thống không tự có
@@ -177,6 +177,33 @@ cuộc chưa có lượt nào. `GET .../conversations/{conversation_id}` trả c
 hỏi: `query_id`, câu hỏi, `status`, `sql` (sau guard), `understood` (phần "Hệ thống đã hiểu là" dạng chữ). Bảng kết quả
 không lưu; hỏi lại câu đó để xem số. Chỉ người tạo đọc và hỏi tiếp được một cuộc, admin của workspace cũng không: cuộc
 của người khác, của dataset khác hay id không có đều trả 404.
+
+## Đánh giá câu trả lời và câu mẫu
+
+Người hỏi đánh giá câu trả lời của mình (`backend/src/service/feedback/`), mọi vai:
+
+- `PUT /api/workspaces/{ws}/queries/{query_id}/feedback` với `{rating, reason, note}`: `rating` là `good` (nút "Tốt")
+  hay `bad` ("Chưa đạt"); `reason` (`misunderstood`, `wrong_numbers`, `unclear_explanation`, `other`) và `note` (tối đa
+  500 ký tự) chỉ đi với `bad`, đều không bắt buộc. Gửi lại thì thay đánh giá cũ. Câu của người khác, kể cả với admin,
+  trả 404 như cuộc trò chuyện.
+- `DELETE` cùng đường dẫn bỏ đánh giá (204).
+- Mỗi lượt của `GET .../conversations/{conversation_id}` có `feedback` (null khi chưa đánh giá), để mở lại cuộc thì nút
+  đã bấm hiện lại.
+
+Chỉ admin, `member` nhận 403:
+
+- `GET /api/workspaces/{ws}/examples`: tối đa 200 câu đã trả lời được đánh giá `good` của mọi thành viên, mới đánh giá
+  trước, kèm SQL mô hình viết, phần "Hệ thống đã hiểu là", số dòng kết quả, ai đánh giá, ai duyệt và lúc nào.
+- `PUT /api/workspaces/{ws}/examples/{query_id}/approval` duyệt câu làm câu mẫu, ghi người duyệt và thời điểm (204);
+  `DELETE` bỏ duyệt. Câu chưa đánh giá `good` hay không trả lời được trả 404. Người hỏi đổi sang `bad` hay bỏ đánh giá
+  thì lần duyệt mất theo.
+- `GET /api/workspaces/{ws}/datasets/{id}/examples/export`: câu mẫu đã duyệt của dataset dạng mảng JSON cùng khuôn với
+  file ca trong `eval/` (`id`, `question`, `expected_sql`, `ordered` luôn false). Người viết bộ câu xem lại từng ca,
+  sửa `ordered` khi thứ tự dòng là một phần câu trả lời, rồi mới chép vào file ca.
+
+Câu mẫu đã duyệt vào prompt của câu hỏi sau trên cùng dataset có chung ít nhất một từ (không tính từ dừng), tối đa 3
+câu, mới nhất trước: câu thường góp câu hỏi và SQL mô hình viết (không phải bản sau guard), câu "tại sao" góp câu hỏi
+và form vào prompt form. Bước `llm` trong `steps` khi đó có `detail` "Prompt có N câu mẫu đã duyệt: ...".
 
 ## Chỉ số và cách gộp
 

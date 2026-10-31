@@ -16,7 +16,7 @@ import { accountRoute, adminAccountsRoute, adminWorkspacesRoute } from '@/pages/
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { RootPage } from '@/pages/RootPage'
 import { RouteErrorPage } from '@/pages/RouteErrorPage'
-import { accountPath, membersPath, overviewPath, workspaceRoute } from '@/pages/workspaceNav'
+import { accountPath, examplesPath, membersPath, overviewPath, workspaceRoute } from '@/pages/workspaceNav'
 import { WorkspaceNotFoundPage } from '@/pages/WorkspaceNotFoundPage'
 
 async function loadAccountPage() {
@@ -61,6 +61,10 @@ export const router = createBrowserRouter([
                 path: 'datasets/:datasetId/metrics',
                 lazy: async () => ({ Component: (await import('@/pages/MetricsPage')).MetricsPage }),
                 handle: { title: 'Chỉ số' },
+              },
+              {
+                path: examplesPath,
+                lazy: async () => ({ Component: (await import('@/pages/ExamplesPage')).ExamplesPage }),
               },
               {
                 path: membersPath,

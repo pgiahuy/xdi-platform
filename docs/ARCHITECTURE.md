@@ -62,7 +62,7 @@ không cần CORS và cookie đăng nhập đơn giản. DuckDB là thư viện 
 ```
 1. api        kiểm phiên đăng nhập, lấy workspace, role và dataset id
 2. store      đọc hồ sơ cột, giá trị phân loại, chính sách phân quyền của role     (Postgres)
-3. ask        ghép prompt: schema context + bí danh + câu hỏi mẫu đã đúng + các lượt trước của cuộc trò chuyện;
+3. ask        ghép prompt: schema context + bí danh + câu mẫu admin đã duyệt + các lượt trước của cuộc trò chuyện;
                dataset chụp từ database: thêm cột của các bảng liên quan và danh sách quan hệ khóa ngoại
 4. llm        phân loại câu hỏi -> JSON {kind, reason}: câu thường hay câu hỏi tìm nguyên nhân (lỗi thì luật từ khóa)
                câu thường: LlmProvider::complete -> JSON {terms, assumptions, clarify, unanswerable, sql}, SQL trên
@@ -199,10 +199,12 @@ workspace chỉ còn admin như vậy thì quản trị hệ thống chỉ đị
 | Xóa dataset (xóa cả file Parquet) | Có | Không (403) |
 | Xem chỉ số và cách gộp của cột số đo | Có | Có |
 | Tạo, sửa, xóa chỉ số; đổi cách gộp của cột số đo | Có | Không |
-| Sửa mô tả cột, bí danh; đánh dấu câu trả lời đúng | Có | Không |
+| Đánh giá Tốt, Chưa đạt câu trả lời của mình | Có | Có |
+| Xem câu được đánh giá Tốt, duyệt làm câu mẫu, xuất câu mẫu cho bộ đánh giá | Có | Không (403) |
+| Sửa mô tả cột, bí danh | Có | Không |
 | Xem lại câu hỏi của mình (qua cuộc trò chuyện) | Có | Có |
 
-Dòng sửa mô tả cột, bí danh, đánh dấu câu trả lời đúng chưa có endpoint; cũng chưa có lưu riêng một câu
+Dòng sửa mô tả cột, bí danh chưa có endpoint; cũng chưa có lưu riêng một câu
 hỏi. Câu đã trả lời, bị từ chối hay lỗi đều được ghi vào lịch sử; mỗi
 người mới xem lại được câu hỏi của mình qua danh sách cuộc trò chuyện (mục 8), chưa có màn xem lịch sử chung. Khi
 thêm, việc chỉ admin làm được gọi `member.require_admin()` ở đầu service hoặc handler, kèm test cho cả hai vai.
@@ -259,7 +261,7 @@ Mô tả và bí danh do mô hình ngôn ngữ viết một lần lúc nạp. L�
 |---|---|---|
 | Schema context | `columns` | Câu hỏi tách thành cụm 1 đến 5 âm tiết; cụm bằng tên hay bí danh cột chọn cột đó, so có dấu khi cả hai bên có dấu, sau khi bỏ dấu khi một bên không dấu (cột `khu_vuc` khớp "khu vực"). Dataset tới 60 cột thì đưa cả schema, nhiều hơn thì cột khớp một cụm cộng cột thời gian. Một cụm khớp tên của nhiều cột với điểm chênh dưới 0.1 thì hỏi lại (id lựa chọn `column:<cụm đã bỏ dấu>`); chênh nhiều hơn thì chọn cột điểm cao và ghi thành giả định |
 | Value mapping | `column_values` | Mỗi cột chiều không nhạy cảm được gửi kèm danh sách giá trị và bí danh, nhiều dòng nhất trước: đủ khi cột tới 50 giá trị, 20 giá trị nhiều dòng nhất khi nhiều hơn, tổng tối đa 400 giá trị (vượt thì cắt cột nhiều giá trị trước). Mô hình tự ánh xạ chữ người dùng sang giá trị trong danh sách ("miền Nam" thành `South`) và trả `{terms, sql}` (#29); endpoint hỏi (#33) báo `filter_value_not_found` khi một giá trị trong `terms` không có trong danh sách đủ của cột. Code chỉ thêm gợi ý khi một cụm từ hai âm tiết, không chứa từ chỉ thời gian, số hay từ nối, bằng chính xác một giá trị hay bí danh (dấu thanh kiểu cũ và mới là một). Giá trị tải một lần cho mỗi phiên bản rồi giữ trong bộ nhớ (32 phiên bản, 200 000 chuỗi); tải quá 2 giây thì đi tiếp không có giá trị |
-| Few-shot | `queries` đã đánh dấu đúng | Từ khóa trùng |
+| Few-shot | `queries` được người hỏi đánh giá Tốt và admin duyệt làm câu mẫu (#212) | Từ khóa trùng, tối đa 3 câu |
 
 Cột `embedding` có sẵn trên ba bảng; trait sẽ có thêm `embed`. Khi so chuỗi không đủ (cách diễn đạt không lường trước,
 nguồn nhiều bảng), bật tìm theo vector trong cùng Postgres, gộp với so chuỗi thành một danh sách ứng viên.
@@ -489,4 +491,5 @@ Cập nhật khi có thay đổi.
 | Bộ đánh giá câu hỏi mẫu (`service/eval.rs`, lệnh `xdi-backend eval`, `make eval`): tạo workspace tạm, nạp `data/samples/dataco.csv`, hỏi từng câu trong `eval/dataco.json` qua đúng luồng hỏi, so tập dòng kết quả với SQL đúng viết tay (cũng qua guard), ghi `eval/result.json`, thoát mã 1 khi tỷ lệ đúng dưới `eval/baseline.json` | Có; 14 câu, mock đúng cả 14; `make eval` và CI luôn chạy với mock; chạy với mô hình thật thì gọi thẳng `xdi-backend eval` kèm `LLM_PROVIDER` ([RELEASING.md](RELEASING.md)) |
 | Màn Chỉ số (#185, `service/metrics/`, `api/metrics.rs`, `pages/MetricsPage.tsx`, [API.md](API.md)): mọi thành viên xem chỉ số và cột của phiên bản hiện hành; admin tạo, sửa (thêm phiên bản, `origin` `ui`, đã xác nhận), xóa chỉ số bằng chọn phép tính và cột hoặc viết SQL, và đổi cách gộp của cột số đo; công thức chạy thử qua guard và DuckDB trước khi lưu, lỗi trả theo từng trường (`ErrorBody.field`). Prompt sinh SQL ghi cột `avg` phải gộp bằng AVG; form câu "tại sao" đổi tổng của cột `avg` thành trung bình mỗi dòng và phân rã như tỷ lệ; dòng "Đo" của thẻ "Hệ thống đã hiểu là" ghi cách tính bằng lời khi chỉ số không có mô tả | Có, kèm test API (quyền, kiểm công thức, phiên bản, prompt); đã chạy một lần với Gemini trên OULAD (`studentInfo.csv`): câu "Số tín chỉ theo kết quả cuối khóa", không nói "trung bình", ra `AVG("studied_credits")`; cách gộp admin đặt chưa chép sang phiên bản nạp sau |
 | Phân loại câu hỏi (`service/ask/classify.rs`, #197) và bộ câu thử (`service/eval_classify.rs`, lệnh `xdi-backend eval-classify`, `make eval-classify`): 48 câu trên DataCo trong `eval/classify.json` (20 câu hỏi tìm nguyên nhân, 22 câu thường, 6 câu tiếp nối kèm câu hỏi trước), so loại câu viết tay với luật từ khóa và với bước `classify`, in trung vị thời gian của bước `classify` | Có, kèm test với mô hình giả và qua route; không có baseline, không chạy trong CI. Đo ngày 28/10/2026 với `gemini-3.5-flash-lite`, hai lượt, nghỉ 4 giây giữa hai câu: luật từ khóa đúng 32/48, bước `classify` đúng 48/48 ở cả hai lượt, không câu nào rơi về luật từ khóa; trung vị thời gian bước `classify` 1320 ms và 1173 ms (thấp nhất 879 ms, cao nhất 12793 ms). Bước này chạy nối tiếp trước bước viết SQL hay điền form, nên thời gian của nó là phần thêm vào mỗi câu hỏi. Ví dụ trong prompt khác các câu của bộ thử, nhưng cả hai do cùng người viết |
-| Màn xem lịch sử câu hỏi, sửa mô tả cột và bí danh, đánh dấu câu trả lời đúng | Chưa có; prompt đã đọc câu đã đánh dấu đúng, nhưng chưa có đường ghi |
+| Đánh giá câu trả lời và câu mẫu (#212, `service/feedback/`, `api/feedback.rs`, `pages/ExamplesPage.tsx`, [API.md](API.md)): nút Tốt, Chưa đạt (lý do, ghi chú) dưới mỗi câu trả lời, hiện lại khi mở cuộc trò chuyện; admin duyệt câu Tốt làm câu mẫu, ghi người duyệt và thời điểm; chỉ câu đã duyệt vào prompt SQL (câu thường) hay prompt form (câu "tại sao"); bước `llm` ghi câu mẫu đã dùng; xuất câu mẫu thành ca ứng viên cho bộ đánh giá | Có, kèm test API cho cả hai vai và test prompt; ca xuất ra chưa được đưa vào file ca nào |
+| Màn xem lịch sử câu hỏi, sửa mô tả cột và bí danh | Chưa có |
