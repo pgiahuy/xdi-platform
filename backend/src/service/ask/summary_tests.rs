@@ -95,6 +95,8 @@ fn insight(kind: InsightKind, summary: &str, by_model: bool) -> Insight {
         points: vec![],
         summary: summary.to_string(),
         summary_by_model: by_model,
+        summary_warnings: vec![],
+        summary_verdict: None,
         notable: true,
     }
 }

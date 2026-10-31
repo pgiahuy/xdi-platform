@@ -1659,9 +1659,18 @@ export interface components {
             summary: string;
             /**
              * @description True when `summary` was written by the language model; false when it is the backend's text (the model failed,
-             *     timed out, wrote a number or a direction that is not in the points, used a causal word, or `INSIGHT_TEXT=false`).
+             *     timed out, its text failed the checks on every attempt, or `INSIGHT_TEXT=false`). The checks: every number and
+             *     direction must come from the points, no causal word, then a separate model call compares the meaning of the text
+             *     with `title` and `points`; when a check fails or finds an unclear point, the model rewrites once.
              */
             summary_by_model: boolean;
+            summary_verdict: components["schemas"]["AnswerVerdict"] | null;
+            /**
+             * @description Parts of `summary` that the separate check found unclear but not certainly wrong, one Vietnamese sentence each,
+             *     written by the checking model; show them with `summary`. Empty when nothing was unclear or `summary` is the
+             *     backend's text.
+             */
+            summary_warnings: string[];
             /** @description Main finding, one sentence written by the backend (Vietnamese). */
             title: string;
         };

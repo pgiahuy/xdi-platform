@@ -162,10 +162,11 @@ function buildGuardedMissing(response: AskResponse, lastGuard: AskResponse['step
 
 function buildSteps(response: AskResponse): TabData<StepView[]> {
   if (response.steps.length === 0) return { data: null, reason: 'Backend không gửi các bước cho câu này.' }
-  // Loại câu thuộc bước phân loại; kết luận hai cổng kiểm thuộc bước viết lời của câu "tại sao". Backend cũ không có
-  // các trường này.
+  // Loại câu thuộc bước phân loại; kết luận hai cổng kiểm thuộc bước viết lời: của câu "tại sao" hay của phần giải thích
+  // câu thường (phân rã tự động của câu thường không qua bước viết lời của câu "tại sao", nên summary_verdict null).
+  // Backend cũ không có các trường này.
   const questionType = response.question_type ?? null
-  const verdict = response.explanation?.summary_verdict ?? null
+  const verdict = response.explanation?.summary_verdict ?? response.insight?.summary_verdict ?? null
   return {
     data: response.steps.map((step) => ({
       label: stepLabels[step.name],

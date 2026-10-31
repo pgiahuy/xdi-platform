@@ -420,8 +420,8 @@ pub enum QuestionType {
     Causal,
 }
 
-// Kết luận hai cổng của #201; giao diện vẽ thành cờ màu ở bước viết lời của tab Các bước. Đoạn trả lời câu thường sẽ
-// dùng cùng enum khi qua hai cổng.
+// Kết luận hai cổng của #201, cho lời của câu "tại sao" và lời phần giải thích của câu thường; giao diện vẽ thành cờ màu
+// ở bước viết lời của tab Các bước.
 /// Verdict of the two checks on a text written by the language model: `match` (agrees with the computed numbers),
 /// `warning` (some parts can be read several ways, not certainly wrong), `mismatch` (wrong on every attempt; the model's
 /// text is replaced by a template sentence).
@@ -439,7 +439,8 @@ pub enum AnswerVerdict {
 // (DOUBLE cộng bằng số thực), nên giá trị hai lát cắt có thể lệch ô tương ứng của bảng ở chữ số cuối; con số của phân
 // rã là con số ở đây.
 // Phần giải thích của câu thường (#227), dựng ở service/insight/: code chọn loại theo hình dạng bảng kết quả và viết câu
-// chính cùng các ý; mô hình chỉ diễn đạt lại, mọi số trong lời của mô hình được kiểm như lời của câu "tại sao".
+// chính cùng các ý; mô hình chỉ diễn đạt lại, và lời của nó qua hai cổng như lời của câu "tại sao" (#201): code kiểm
+// số, chiều, từ chỉ nguyên nhân; rồi mô hình chấm so nghĩa của lời với các câu của code.
 /// Explanation of a plain answer, chosen by the shape of the result.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Insight {
@@ -452,8 +453,19 @@ pub struct Insight {
     /// passed the checks, otherwise `title` and `points` joined.
     pub summary: String,
     /// True when `summary` was written by the language model; false when it is the backend's text (the model failed,
-    /// timed out, wrote a number or a direction that is not in the points, used a causal word, or `INSIGHT_TEXT=false`).
+    /// timed out, its text failed the checks on every attempt, or `INSIGHT_TEXT=false`). The checks: every number and
+    /// direction must come from the points, no causal word, then a separate model call compares the meaning of the text
+    /// with `title` and `points`; when a check fails or finds an unclear point, the model rewrites once.
     pub summary_by_model: bool,
+    /// Parts of `summary` that the separate check found unclear but not certainly wrong, one Vietnamese sentence each,
+    /// written by the checking model; show them with `summary`. Empty when nothing was unclear or `summary` is the
+    /// backend's text.
+    pub summary_warnings: Vec<String>,
+    /// Outcome of the two checks on the model's text: `match` or `warning` when `summary` is the model's text,
+    /// `mismatch` when the model's text failed every attempt and `summary` is the backend's text, null when no check ran
+    /// (the model was not called, failed or timed out, or the checking model failed).
+    #[schema(required)]
+    pub summary_verdict: Option<AnswerVerdict>,
     /// False when the numbers show nothing notable: a change below the threshold, too few rows to conclude, groups of
     /// about the same size, or a plain list of rows.
     pub notable: bool,

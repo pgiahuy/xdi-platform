@@ -6,26 +6,31 @@ code viết (insight/facts.rs) thành một đoạn ngắn, rồi kiểm lời �
 nhận dòng nào của bảng kết quả hay bảng phân rã (docs/PRIVACY.md); INSIGHT_TEXT=false thì không gọi mô hình. Danh sách
 dòng và bảng nhóm theo cột nhạy cảm thì insight/mod.rs không gọi hàm này mà dùng build_code_narrated.
 
-Bốn bước kiểm, trượt một bước là dùng câu của code (bước narrate ghi lý do):
-- độ dài tối đa MAX_INSIGHT_CHARS;
-- mọi số trong lời phải có nguyên văn trong các câu của code, phần trăm phải kèm "%" như code viết (bộ quét số của
-  explain/mod.rs, build_text_number_check);
-- trước mỗi độ lớn có chiều trong câu của code, chữ "tăng" hay "giảm" gần nhất phải đúng chiều (build_amount_direction_check);
-- không có từ chỉ nguyên nhân: phần giải thích chỉ nói chênh lệch nằm ở đâu, không nói vì sao.
-
-Khi #201 có khuôn JSON kèm `source` và mô hình chấm, phần này đi qua cùng cơ chế đó; hiện dùng các bước kiểm trên như
-lời của câu "tại sao". */
+Hai cổng (#201), như lời của câu "tại sao" (ask/narrate.rs):
+- cổng 1 là bốn bước kiểm bằng code (build_insight_check): độ dài tối đa MAX_INSIGHT_CHARS; mọi số trong lời phải có
+  nguyên văn trong các câu của code, phần trăm phải kèm "%" như code viết (bộ quét số của explain/mod.rs,
+  build_text_number_check); trước mỗi độ lớn có chiều trong câu của code, chữ "tăng" hay "giảm" gần nhất phải đúng
+  chiều (build_amount_direction_check); không có từ chỉ nguyên nhân, vì phần giải thích chỉ nói chênh lệch nằm ở đâu;
+- cổng 2 là mô hình chấm (ask/judge.rs), một lần gọi riêng: nhận lời và các câu code đã viết, so nghĩa của lời với các
+  câu đó, trả match, warning hay mismatch. Mô hình chấm cũng không nhận dòng nào của bảng kết quả.
+Trượt cổng 1, bị chấm mismatch hay warning thì mô hình viết lại một lần, kèm các lỗi và chỗ chưa rõ của lần trước. Vẫn
+không khớp thì dùng câu của code (kết luận mismatch); lần trước chỉ có chỗ chưa rõ thì giữ lời đó, kèm các chỗ chưa rõ
+(kết luận warning). */
 
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
-use crate::service::ask::contract::{AskStep, StepName};
+use crate::service::ask::contract::{AnswerVerdict, AskStep, StepName};
 use crate::service::ask::failures::{FailedStep, StepFailure};
+use crate::service::ask::judge::judge;
 use crate::service::ask::lessons::build_with_lessons;
+use crate::service::ask::narrate::MAX_NARRATE_ATTEMPTS;
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::run::build_duration_text;
+use crate::service::explain::claims::build_rewrite_prompt;
+use crate::service::explain::judge::{build_judge_prompt_with, Verdict};
 use crate::service::explain::{
     allow_text, build_amount_direction_check, build_text_number_check, push_known_text,
 };
@@ -48,13 +53,25 @@ const CAUSAL_WORDS: [&str; 9] = [
     "dẫn tới",
 ];
 
-/// Lời đã chọn, cờ "do mô hình viết" và bước cho timeline.
+/// Lời đã chọn, cờ "do mô hình viết", kết luận hai cổng và bước cho timeline.
 pub struct Narrated {
     pub summary: String,
     pub by_model: bool,
+    /// Chỗ mô hình chấm thấy chưa rõ trong lời được dùng; trống khi lời khớp hay summary là câu của code.
+    pub warnings: Vec<String>,
+    /// Kết luận hai cổng (Insight.summary_verdict); None khi không cổng nào chạy xong.
+    pub verdict: Option<AnswerVerdict>,
     pub step: AskStep,
-    /// Bước kiểm chặn lời của mô hình: lý do và nguyên lời, cho nhật ký lỗi (#228); None trong mọi trường hợp khác.
+    /// Hai cổng chặn lời của mô hình ở mọi lần viết: lý do và lời của lần cuối, cho nhật ký lỗi (#228); None trong mọi
+    /// trường hợp khác.
     pub failure: Option<StepFailure>,
+}
+
+/// Lời mô hình chấm thấy có chỗ chưa rõ ở một lần viết: giữ lại để dùng khi lần viết sau không khớp hẳn.
+struct Unclear {
+    text: String,
+    warnings: Vec<String>,
+    attempt: usize,
 }
 
 /// enabled là Config::insight_text; false thì không gọi mô hình. lessons là bài học đã duyệt liên quan câu hỏi
@@ -72,45 +89,170 @@ pub async fn narrate_insight(
         let detail = "INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết";
         return build_code_narrated(parts, started, detail.to_string());
     }
-    let prompt = build_with_lessons(build_insight_prompt(question, parts), lessons);
-    let request = LlmRequest {
-        task: LlmTask::Insight,
-        question,
-        prompt: &prompt,
-        json_schema: None,
-    };
-    let reply = match tokio::time::timeout(timeout, llm.complete(&request)).await {
-        Ok(Ok(reply)) => reply,
-        Ok(Err(error)) => {
-            let detail = format!(
-                "Mô hình không viết được lời giải thích: {}",
-                build_user_text(&error, "insight")
-            );
-            return fallback(parts, started, false, detail);
-        }
-        Err(_) => {
-            let detail = format!(
-                "Mô hình không trả lời trong {}",
-                build_duration_text(timeout)
-            );
-            return fallback(parts, started, false, detail);
-        }
-    };
-    let text = reply.trim();
-    if let Err(problem) = build_insight_check(text, parts) {
-        tracing::warn!(%problem, "insight text failed the checks");
-        let failure = StepFailure::new(FailedStep::Narrate, &problem, Some(text));
-        return Narrated {
-            failure: Some(failure),
-            ..fallback(parts, started, false, problem)
+    // Bài học đã duyệt nối vào prompt gốc, nên lần viết lại cũng mang theo.
+    let first_prompt = build_with_lessons(build_insight_prompt(question, parts), lessons);
+    let mut problems: Vec<String> = Vec::new();
+    let mut unclear: Option<Unclear> = None;
+    let mut last_text: Option<String> = None;
+    for attempt in 1..=MAX_NARRATE_ATTEMPTS {
+        let prompt = if problems.is_empty() {
+            first_prompt.clone()
+        } else {
+            build_rewrite_prompt(&first_prompt, &problems)
         };
+        let request = LlmRequest {
+            task: LlmTask::Insight,
+            question,
+            prompt: &prompt,
+            json_schema: None,
+        };
+        // Lỗi gọi mô hình hay quá giờ không phải lỗi của lời, viết lại không sửa được: dừng ngay.
+        let reply = match tokio::time::timeout(timeout, llm.complete(&request)).await {
+            Ok(Ok(reply)) => reply,
+            Ok(Err(error)) => {
+                let detail = format!(
+                    "Mô hình không viết được lời giải thích: {}",
+                    build_user_text(&error, "insight")
+                );
+                return finish_failed(parts, unclear, started, detail);
+            }
+            Err(_) => {
+                let detail = format!(
+                    "Mô hình không trả lời trong {}",
+                    build_duration_text(timeout)
+                );
+                return finish_failed(parts, unclear, started, detail);
+            }
+        };
+        let text = reply.trim().to_string();
+        last_text = Some(text.clone());
+        if let Err(problem) = build_insight_check(&text, parts) {
+            tracing::warn!(attempt, %problem, "insight text failed gate 1");
+            problems = vec![problem];
+            continue;
+        }
+        let rewritten = if attempt > 1 {
+            ", sau một lần viết lại"
+        } else {
+            ""
+        };
+        // Không chấm được thì không biết lời đúng hay sai, viết lại cũng không giúp: dừng ngay.
+        match judge(
+            llm,
+            question,
+            &build_insight_judge_prompt(&text, parts),
+            timeout,
+        )
+        .await
+        {
+            Ok(Verdict::Match) => {
+                let detail = format!(
+                    "Đã đối soát với các câu đã tính; mô hình chấm thấy lời khớp{rewritten}"
+                );
+                return Narrated {
+                    summary: text,
+                    by_model: true,
+                    warnings: Vec::new(),
+                    verdict: Some(AnswerVerdict::Match),
+                    step: build_step(started, true, Some(detail)),
+                    failure: None,
+                };
+            }
+            // Chỗ chưa rõ cũng gửi lại cho mô hình viết lại như lỗi; lời này được giữ, lần viết lại không khớp hẳn thì
+            // dùng lại nó (finish_unclear).
+            Ok(Verdict::Warning(found)) => {
+                tracing::warn!(
+                    attempt,
+                    problems = found.len(),
+                    "insight text is unclear at gate 2"
+                );
+                problems = found
+                    .iter()
+                    .map(|p| format!("Mô hình chấm thấy chưa rõ: {p}"))
+                    .collect();
+                unclear = Some(Unclear {
+                    text,
+                    warnings: found,
+                    attempt,
+                });
+            }
+            Ok(Verdict::Mismatch(found)) => {
+                tracing::warn!(
+                    attempt,
+                    problems = found.len(),
+                    "insight text failed gate 2"
+                );
+                problems = found
+                    .into_iter()
+                    .map(|p| format!("Mô hình chấm: {p}"))
+                    .collect();
+            }
+            Err(detail) => return finish_failed(parts, unclear, started, detail),
+        }
     }
+    if let Some(unclear) = unclear {
+        return finish_unclear(unclear, started);
+    }
+    let detail = format!(
+        "Lời của mô hình chưa qua hai cổng kiểm sau {MAX_NARRATE_ATTEMPTS} lần viết: {}",
+        problems.join("; ")
+    );
+    // Lời trượt mọi lần viết thì không trả cho người dùng: câu của code thay vào, kết luận ghi là mismatch.
+    let failure = StepFailure::new(FailedStep::Narrate, &detail, last_text.as_deref());
     Narrated {
-        summary: text.to_string(),
+        verdict: Some(AnswerVerdict::Mismatch),
+        failure: Some(failure),
+        ..fallback(parts, started, false, detail)
+    }
+}
+
+/// Lời có chỗ chưa rõ được dùng: kết luận warning, các chỗ chưa rõ đi kèm lời.
+fn finish_unclear(unclear: Unclear, started: Instant) -> Narrated {
+    let when = if unclear.attempt > 1 {
+        ", sau một lần viết lại"
+    } else if MAX_NARRATE_ATTEMPTS > 1 {
+        ", lần viết lại không khớp hơn nên giữ lời đầu"
+    } else {
+        ""
+    };
+    let detail = format!(
+        "Đã đối soát với các câu đã tính; mô hình chấm thấy chỗ chưa rõ{when}: {}",
+        unclear.warnings.join("; ")
+    );
+    Narrated {
+        summary: unclear.text,
         by_model: true,
-        step: build_step(started, true, None),
+        warnings: unclear.warnings,
+        verdict: Some(AnswerVerdict::Warning),
+        step: build_step(started, true, Some(detail)),
         failure: None,
     }
+}
+
+/// Lần viết hay lần chấm lỗi giữa chừng: còn lời có chỗ chưa rõ của lần trước thì dùng nó, không thì câu của code.
+fn finish_failed(
+    parts: &InsightParts,
+    unclear: Option<Unclear>,
+    started: Instant,
+    detail: String,
+) -> Narrated {
+    match unclear {
+        Some(unclear) => finish_unclear(unclear, started),
+        None => fallback(parts, started, false, detail),
+    }
+}
+
+/// Prompt cho mô hình chấm: cùng luật với câu "tại sao" (prompts/judge_answer.txt), nghĩa các khóa ở
+/// prompts/judge_meaning_plain.txt, JSON là câu chính và các ý code đã viết.
+pub fn build_insight_judge_prompt(text: &str, parts: &InsightParts) -> String {
+    let points: Vec<serde_json::Value> = parts
+        .points
+        .iter()
+        .map(|p| serde_json::json!({"lead": p.lead, "text": p.text}))
+        .collect();
+    let facts = serde_json::json!({"title": parts.title, "points": points});
+    let json = serde_json::to_string_pretty(&facts).expect("serialize insight facts");
+    build_judge_prompt_with(&prompts::JUDGE_MEANING_PLAIN, &json, text)
 }
 
 /// Prompt: luật tiếng Anh ở backend/prompts/insight.txt, dữ liệu là câu chính, các ý và cờ notable dạng JSON.
@@ -227,6 +369,8 @@ fn fallback(parts: &InsightParts, started: Instant, ok: bool, detail: String) ->
     Narrated {
         summary: build_code_text(parts),
         by_model: false,
+        warnings: Vec::new(),
+        verdict: None,
         step: build_step(started, ok, Some(detail)),
         failure: None,
     }

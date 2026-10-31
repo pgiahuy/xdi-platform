@@ -2,7 +2,7 @@
 /* components/ask/EvidenceSteps.tsx - tab Các bước của pane bằng chứng: những gì backend đã làm, theo đúng thứ tự, mỗi
 bước một dòng có thời gian, đạt hay lỗi, chi tiết. Bước có gọi mô hình ngôn ngữ ghi rõ, để thấy mô hình chỉ viết SQL
 và lời, còn số do code tính. Bước phân loại và bước viết lời thay nhãn "có mô hình" bằng cờ màu: loại câu
-(Quantitative, Causal) và kết luận hai cổng kiểm của câu "tại sao" (#201: match, warning, mismatch); mô hình chấm không đúng tuyệt
+(Quantitative, Causal) và kết luận hai cổng kiểm (#201: match, warning, mismatch); mô hình chấm không đúng tuyệt
 đối, nên người đọc cần thấy nó đã kết luận gì. Một bước có thể lặp lại (run trước và sau repair), nên khóa theo vị trí.
 Vẽ như dòng thời gian: mỗi bước một chấm tròn có dấu tick xanh lá (đỏ khi lỗi) nối bằng vạch dọc. */
 
