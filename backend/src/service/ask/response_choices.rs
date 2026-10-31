@@ -7,6 +7,8 @@ chỉ gom kết quả đó cùng ngữ cảnh (ask/context.rs) thành dạng c�
 Phương án nói bằng nghĩa của cột trước tên cột: người hỏi nghĩ theo chữ mình gõ, không biết dữ liệu chia thành
 cột nào. */
 
+use crate::engine::store::MetricDefinition;
+use crate::service::ask::choices::{METRIC_CHOICE_PREFIX, TIME_CHOICE_ID};
 use crate::service::ask::context::{AskContext, ColumnProfile};
 use crate::service::ask::contract::{Choice, ChoiceOption, ChosenOption, Warning, WarningCode};
 
@@ -32,6 +34,27 @@ pub fn build_used_choices(context: &AskContext, assumptions: &[Choice]) -> Vec<C
             Some(build_chosen(&choice.id, selected))
         });
     picks.chain(chosen_assumptions).collect()
+}
+
+/// Thêm vào `used` các lựa chọn người hỏi gửi để trả lời câu hỏi lại về chỉ số (phương án là một chỉ số có thật của
+/// dataset) hay về khoảng thời gian. Các lựa chọn này luôn vào prompt dưới dạng lệnh (ask/prompt.rs, phần lựa chọn của
+/// người hỏi), nhưng mô hình thường không ghi lại chúng thành giả định, nên trước đây bị báo choice_not_applied dù câu
+/// trả lời đã tính đúng theo lựa chọn: hệ thống hỏi, người hỏi chọn, rồi lại báo "không áp dụng được". Lựa chọn trỏ tới
+/// chỉ số không có thật thì vẫn bị báo.
+pub fn apply_answered_choices(
+    used: &mut Vec<ChosenOption>,
+    sent: &[ChosenOption],
+    metrics: &[MetricDefinition],
+) {
+    for choice in sent {
+        let answered = choice.choice_id == TIME_CHOICE_ID
+            || (choice.choice_id.starts_with(METRIC_CHOICE_PREFIX)
+                && metrics.iter().any(|m| m.name == choice.option_id));
+        let listed = used.iter().any(|u| u.choice_id == choice.choice_id);
+        if answered && !listed {
+            used.push(choice.clone());
+        }
+    }
 }
 
 /// Cảnh báo choice_not_applied cho mỗi lựa chọn người hỏi gửi mà câu trả lời không dùng: cụm không còn trong câu, cột

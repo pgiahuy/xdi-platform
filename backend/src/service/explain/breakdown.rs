@@ -41,9 +41,12 @@ use crate::service::explain::check::{PlanSlices, WhyPlan};
 use crate::service::explain::dimension_pick::{pick_dimensions, Candidate, Presence};
 use crate::service::explain::measure::Additive;
 use crate::service::explain::ratio_breakdown::build_ratio_breakdown;
+use crate::service::explain::rest_average::{
+    averages_rest, build_average, build_average_scale, build_group_averages,
+};
 use crate::service::explain::sql::{
-    build_dimension_sql, BASE_DENOMINATOR, BASE_ROWS, BASE_VALUE, BASE_VOLUME, COMPARE_DENOMINATOR,
-    COMPARE_ROWS, COMPARE_VALUE, COMPARE_VOLUME,
+    build_dimension_sql, BASE_DENOMINATOR, BASE_GROUPS, BASE_ROWS, BASE_VALUE, BASE_VOLUME,
+    COMPARE_DENOMINATOR, COMPARE_ROWS, COMPARE_VALUE, COMPARE_VOLUME,
 };
 use crate::service::explain::{
     apply_dimension_order, build_decimal_text, build_dimension_score, build_entity_name,
@@ -156,6 +159,20 @@ pub struct SliceTotals {
     pub volume: Option<(Decimal, Decimal)>,
     /// Mẫu số của hai lát cắt khi độ đo là tỷ lệ; base, compare ở trên khi đó là tử số.
     pub denominators: Option<(Decimal, Decimal)>,
+    /// Lát gốc là trung bình mỗi nhóm còn lại (explain/rest_average.rs): base, base_rows và lượng gốc ở trên đã chia
+    /// cho số nhóm; None khi so với một nhóm, một kỳ, hay độ đo tỷ lệ.
+    pub rest: Option<RestAverage>,
+}
+
+/// Cách đã chia lát gốc "các nhóm còn lại", để chia từng nhóm của các chiều phân rã đúng như tổng.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RestAverage {
+    /// Số nhóm còn lại (k).
+    pub groups: Decimal,
+    /// Tổng lát gốc trước khi chia: các nhóm của một chiều phải cộng ra đúng số này.
+    pub raw_base: Decimal,
+    /// Số chữ số thập phân của số đã chia.
+    pub scale: u32,
 }
 
 /// None khi kết quả không có đúng một dòng hay một ô không đọc được thành số (số quá 28 chữ số của Decimal).
@@ -176,7 +193,7 @@ pub fn read_slice_totals(sql: String, result: &ResultTable) -> Option<SliceTotal
         (Some(base), Some(compare)) => Some((base, compare)),
         _ => None,
     };
-    Some(SliceTotals {
+    let totals = SliceTotals {
         denominators,
         base: cell(BASE_VALUE)?,
         compare: cell(COMPARE_VALUE)?,
@@ -184,7 +201,32 @@ pub fn read_slice_totals(sql: String, result: &ResultTable) -> Option<SliceTotal
         compare_rows: cell(COMPARE_ROWS)?,
         volume,
         sql,
-    })
+        rest: None,
+    };
+    // Cột BASE_GROUPS chỉ có khi so với trung bình các nhóm còn lại (sql.rs); 0 nhóm thì lát gốc rỗng, để nguyên cho bước
+    // kiểm lát cắt rỗng (explain/run.rs) báo.
+    match cell(BASE_GROUPS) {
+        Some(groups) if groups > Decimal::ZERO => apply_rest_average(totals, groups),
+        _ => Some(totals),
+    }
+}
+
+/// Chia tổng, số dòng và lượng của lát gốc cho số nhóm còn lại. None khi phép chia tràn.
+fn apply_rest_average(mut totals: SliceTotals, groups: Decimal) -> Option<SliceTotals> {
+    let raw_base = totals.base;
+    let scale = build_average_scale(raw_base);
+    totals.base = build_average(raw_base, groups, scale)?;
+    totals.base_rows = build_average(totals.base_rows, groups, 0)?;
+    if let Some((base_volume, compare_volume)) = totals.volume {
+        let volume = build_average(base_volume, groups, build_average_scale(base_volume))?;
+        totals.volume = Some((volume, compare_volume));
+    }
+    totals.rest = Some(RestAverage {
+        groups,
+        raw_base,
+        scale,
+    });
+    Some(totals)
 }
 
 /// Ô của cột tổng hợp: DECIMAL, HUGEINT, BIGINT đều tới đây dạng chuỗi chữ số (ValueKind::Decimal), đổi sang Decimal
@@ -235,7 +277,7 @@ pub async fn build_breakdown(
     let dimensions: Vec<_> = picked
         .kept
         .into_iter()
-        .filter_map(|candidate| build_dimension(plan, candidate))
+        .filter_map(|candidate| build_dimension(plan, candidate, totals.rest, totals.base))
         .collect();
     let groups: Vec<Vec<GroupValues>> = dimensions.iter().map(|(_, g)| g.clone()).collect();
     let mode = build_ranking_mode(&groups, totals.base, totals.compare);
@@ -328,12 +370,16 @@ pub(super) async fn run_candidates(
 }
 
 /// Một chiều của độ đo cộng được: đọc các nhóm, tính đóng góp. None (kèm log) khi chiều phải bỏ.
+/// rest, base: lát gốc là trung bình các nhóm còn lại thì giá trị gốc của từng nhóm cũng chia cho số nhóm, cộng ra đúng
+/// base (tổng lát gốc đã chia).
 fn build_dimension(
     plan: &WhyPlan,
     candidate: Candidate,
+    rest: Option<RestAverage>,
+    base: Decimal,
 ) -> Option<(DimensionBreakdown, Vec<GroupValues>)> {
     let Candidate { column, rows } = candidate;
-    let groups: Vec<GroupValues> = rows
+    let mut groups: Vec<GroupValues> = rows
         .groups
         .into_iter()
         .map(|(value, numbers)| GroupValues {
@@ -342,6 +388,18 @@ fn build_dimension(
             compare_value: numbers[1],
         })
         .collect();
+    if let Some(rest) = rest {
+        let raw: Vec<Decimal> = groups.iter().map(|g| g.base_value).collect();
+        // Các nhóm không cộng ra tổng chưa chia thì chiều này vốn bị bỏ (TotalsMismatch); không chia để khỏi che lỗi đó.
+        if raw.iter().copied().sum::<Decimal>() != rest.raw_base {
+            tracing::warn!(%column, "dimension groups do not add up to the slice total");
+            return None;
+        }
+        let averaged = build_group_averages(&raw, rest.groups, base, rest.scale)?;
+        for (group, value) in groups.iter_mut().zip(averaged) {
+            group.base_value = value;
+        }
+    }
     let Some(contributions) = build_group_contributions(&groups) else {
         tracing::warn!(%column, "dimension contributions overflow");
         return None;
@@ -428,7 +486,10 @@ pub(super) fn build_slice_labels(plan: &WhyPlan) -> (String, String) {
             base,
             compare,
             ..
-        } => (base.build_label(column, &plan.labels), compare.clone()),
+        } => (
+            base.build_label(column, &plan.labels, averages_rest(plan)),
+            compare.clone(),
+        ),
     }
 }
 

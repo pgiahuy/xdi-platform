@@ -102,7 +102,8 @@ pub fn build_simple_example() -> AskResponse {
         }),
         // Phần giải thích của mẫu là câu do code viết (INSIGHT_TEXT=false), nên đoạn trả lời là câu khuôn
         // (ask/summary.rs).
-        answer_text: Some("Có 5 dòng; cao nhất là Europe với 10.845.230,42.".to_string()),
+        answer_text: Some("Europe có tổng doanh thu cao nhất: khoảng 10,8 triệu (10.845.230,42), tiếp theo là LATAM, Pacific Asia, USCA \
+             và Africa.".to_string()),
         answer_text_by_model: Some(false),
         insight: Some(build_group_insight(&rows)),
         steps: vec![
@@ -485,6 +486,7 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         answer_text: None,
         answer_text_by_model: None,
         question_type: None,
+        data_range: None,
         clarifications: vec![],
         steps: vec![],
         model_calls: vec![],

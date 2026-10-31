@@ -632,6 +632,7 @@ mod premise_values_tests {
             compare_rows: d("1"),
             volume: None,
             denominators: denominators.map(|(a, b)| (d(a), d(b))),
+            rest: None,
         }
     }
 

@@ -4,7 +4,8 @@
 chính:
 
 - Một câu hỏi thường mất khoảng 4 đến 4,5 giây, gồm 3 lượt gọi mô hình chạy nối tiếp (phân loại, viết SQL, viết lời
-  giải thích), thêm một lượt khi SQL phải sửa. Câu "vì sao" trên code hiện tại (có cổng chấm của #240) gồm 4 lượt
+  giải thích), thêm một lượt khi SQL phải sửa. Từ #241, lời do mô hình viết còn qua một lượt chấm: đo lại ngày 31/10
+  (mục Câu hỏi), lượt chấm mất trung vị 1,04 giây và khoảng 0,0003 USD mỗi câu. Câu "vì sao" trên code hiện tại (có cổng chấm của #240) gồm 4 lượt
   (phân loại, điền form, viết lời, chấm lời) và mất khoảng 5,7 giây. Gần hết thời gian là chờ mô hình: phần còn lại
   (đọc hồ sơ, guard, chạy SQL trên DuckDB, phân rã, ghi lịch sử) khoảng 60 đến 130 ms (hiệu hai trung vị).
 - Theo giá trả phí của mô hình này, một câu thường tốn khoảng 0,003 USD, một câu "vì sao" khoảng 0,005 USD. Gói miễn
@@ -63,7 +64,31 @@ các câu SQL từng chiều của phân rã chạy cùng lúc; bước `explain
 | Câu thường | 4 | 3,87 s | 3,81 s | 3,25 | 7 272 | 519 | 0,0035 USD |
 | Câu "vì sao" | 3 | 5,66 s | 5,56 s | 4,0 | 7 958 | 1 011 | 0,0049 USD |
 
-Sau lượt đo này, #241 thêm cổng chấm (`judge`) cho lời của câu thường, nên câu thường có thêm một lượt gọi mô hình khi lời do mô hình viết; số của câu thường ở trên chưa gồm lượt đó và chưa đo lại.
+Sau lượt đo này, #241 thêm cổng chấm (`judge`) cho lời của câu thường: lời do mô hình viết có thêm một lượt gọi mô
+hình. Đo lại ngày 31/10/2026 tối, trên nhánh `feat/answer-clarity` (sau #243, chưa commit), cùng 5 câu thường, mỗi câu 2
+lần, nghỉ 12 giây giữa hai lần hỏi, chỉ một bản chạy. Khác với cách đo ở trên: backend build debug (`cargo run` của
+`make dev`), Postgres của ứng dụng chạy bằng Podman, các bảng `orders`, `order_items`, `customers`, `products` chụp từ
+database mẫu nạp lại bằng `load.sh` nên hồ sơ cột do mô hình viết lại. Vì build debug, cột "Tổng thời gian" không so
+được với bảng trên; số lượt gọi, token và thời gian từng lượt gọi thì so được.
+
+| Loại câu | Số câu | Tổng thời gian | Chờ mô hình | Lượt gọi | Token vào | Token ra | Chi phí mỗi câu |
+|---|---|---|---|---|---|---|---|
+| Câu thường | 10 | 6,34 s | 6,15 s | 4,1 | 7 453 | 499 | 0,0035 USD |
+
+Cả 10 câu `answered`, cả 10 lời do mô hình viết được chấm `match`; một câu ("Top 5 quốc gia có nhiều đơn nhất năm
+2016", lần hai) viết lời hai lần vì lần đầu trượt bước kiểm của code, nên trung bình 4,1 lượt. Theo loại việc:
+
+| Lượt gọi | Số lượt | Thời gian | Token vào | Token ra |
+|---|---|---|---|---|
+| `classify` | 10 | 1,41 s | 2 068 | 75 |
+| `sql` | 10 | 2,44 s | 3 733 | 273 |
+| `insight` | 11 | 1,06 s | 645 | 120 |
+| `judge` (chấm lời) | 10 | 1,04 s | 943 | 18 |
+
+Lượt chấm thêm trung vị 1,04 giây và trung bình 0,00033 USD mỗi câu. Trong buổi đo này Gemini chậm hơn buổi đo ở trên:
+`classify` mất 1,41 giây so với 1,22 giây, nên phần lớn chênh lệch của cột "Chờ mô hình" so với bảng trên (6,15 giây so
+với 3,81 giây) đến từ các lượt gọi vốn có, không chỉ từ lượt chấm. Một lượt đo trước đó cùng buổi, trên DataCo đầy đủ
+nạp từ CSV (180 519 dòng, một bảng), ra lượt chấm trung vị 0,82 giây, 917 token vào.
 
 Câu thứ năm ("Tỷ lệ giao trễ theo phương thức vận chuyển") lỗi 502 sau 61 giây: lượt viết SQL chờ hết
 `GEMINI_TIMEOUT_SECS` (60 giây) mà Gemini không trả lời, lần hỏi lại trả 503. Cùng lượt đo, phần cột của hồ sơ
