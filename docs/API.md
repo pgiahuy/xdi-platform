@@ -403,6 +403,42 @@ gần nhất) và `relations`: các dataset nối với nó theo khóa ngoại c
 `direction` (`many_to_one` khi dataset này giữ khóa ngoại, `one_to_many` khi dataset kia giữ), `columns` (cột khóa của
 dataset này) và `related_columns`; rỗng với file nạp. Mọi thành viên đọc được trường này.
 
+## Báo cáo
+
+Báo cáo gom các câu trả lời đã chọn thành một trang (`backend/src/service/report/`, route ở `backend/src/api/reports.rs`).
+Mọi thành viên tạo được báo cáo; như cuộc trò chuyện, chỉ người tạo đọc và sửa được một báo cáo, admin của workspace
+cũng không: báo cáo của người khác hay id không có đều trả 404.
+
+- `GET /api/workspaces/{ws}/reports`: báo cáo của người gọi, sửa gần nhất trước, không kèm mục. `POST` cùng đường dẫn
+  tạo báo cáo trống (`title` tới 200 ký tự, `intro` tới 5000 ký tự).
+- `PATCH .../reports/{id}`: đổi `title`, `intro`; `DELETE .../reports/{id}`: xóa báo cáo, câu hỏi của các mục vẫn còn.
+- `POST .../reports/{id}/items` với `query_id`: thêm vào cuối một câu đã trả lời của chính người gọi (câu của người khác
+  trả 404, câu không answered hay đã có trong báo cáo trả 400, tối đa 30 mục). `DELETE .../items/{item_id}` bỏ một mục;
+  `PUT .../reports/{id}/order` với `item_ids` (đúng mọi mục, mỗi mục một lần) ghi thứ tự mới.
+- `GET .../reports/{id}`: báo cáo kèm mọi mục dựng lại. Bảng kết quả không lưu, nên mỗi lần mở backend cho câu SQL đã lưu
+  (`sql_generated`) qua guard lại với vai dữ liệu của người xem và chạy trên đúng các phiên bản câu hỏi đã đọc
+  (`read_versions`), như truy dòng nguồn. Mỗi mục có câu hỏi, loại câu hỏi, bảng và phiên bản đã đọc (`is_current`
+  false khi bảng đã có phiên bản mới hơn), lời trả lời đã lưu (`answer`) kèm `number_check` (kiểm số: `passed`,
+  `replaced`, `not_needed`) và `meaning_check` (kiểm nghĩa: kết luận của mô hình chấm, null khi không chạy), `facts`
+  (câu chính và các ý do code tính lại từ bảng vừa chạy, không gọi mô hình), `understanding` (phần "Cách tính"),
+  `sql` sau guard, `result` (tối đa 1000 dòng như câu trả lời, `total_rows` là tổng), `chart`, `breakdown` (chiều đầu
+  của phân rã, tối đa 5 nhóm), `notes` (chỗ khác lúc hỏi: số dòng, phiên bản mới hơn, quyền xem dòng đã đổi) và `error`
+  khi câu không chạy lại được (mục vẫn có trong danh sách). Khi điều kiện lọc dòng hiện tại của người xem không có trong
+  câu đã chạy lúc hỏi, `answer` và `breakdown` đã lưu là null: chúng có thể nói về dòng người xem không còn được thấy.
+- `GET .../reports/{id}/xlsx`: file Excel dựng từ cùng bản dựng lại: sheet `Tóm tắt` (mỗi mục một dòng: câu hỏi, lời trả
+  lời, kiểm số, kiểm nghĩa, số dòng, sheet chứa bảng), mỗi mục một sheet `Mục N` (bảng kết quả, phân rã), sheet
+  `Cách tính` (độ đo, bộ lọc, nhóm, kỳ, sắp xếp, SQL đã chạy, bảng và phiên bản, lúc hỏi, các ý căn cứ).
+- `POST .../reports/automatic` với `dataset_id` (`DatasetSummary.id`): báo cáo tự động cho một dataset. Backend dựng câu
+  SQL bằng code, không nhờ mô hình viết SQL: độ đo chính (chỉ số đã xác nhận đầu tiên, không có thì cột số đo đơn vị tiền
+  hay số lượng) theo tháng (theo ngày khi dữ liệu ngắn hơn ba tháng), rồi theo hai cột chiều; cột thời gian và cột chiều
+  lấy ở bảng của độ đo hay ở bảng nó trỏ tới bằng khóa ngoại. Mỗi phần qua guard với bộ lọc dòng của người bấm, được
+  ghi thành một câu đã trả lời và có phần giải thích như câu thường: kỳ đổi mạnh nhất và phân rã của kỳ đó, nhóm dẫn đầu,
+  mức tập trung, nhóm lệch mức trung bình; lời do mô hình viết qua kiểm số và kiểm nghĩa, không qua thì là câu của code.
+  `report.model_calls` là số lần gọi mô hình (mỗi phần tối đa hai lần, bốn khi phải viết lại); `skipped` nói phần nào
+  không dựng được và vì sao. 400 khi dataset không có độ đo nào hay không phần nào chạy được.
+
+Xuất PDF là việc của giao diện: nút Xuất PDF mở hộp in của trình duyệt với kiểu in riêng của trang báo cáo.
+
 ## Truy dòng nguồn
 
 `POST /api/workspaces/{ws}/datasets/{id}/drill` trả một trang dòng nguồn của một ô trong bảng kết quả hay của một dòng
