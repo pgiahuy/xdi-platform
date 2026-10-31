@@ -8,6 +8,9 @@ use crate::config::Config;
 use crate::engine::llm;
 use crate::error::AppError;
 use crate::service::eval_pace::{build_paced_state, Pace};
+use crate::service::eval_report::{
+    build_regressions, build_subset, build_variant_cases, load_previous, KindRow,
+};
 use crate::service::llm_stats::{build_question_stat, build_report, TokenPrice};
 use crate::service::{eval, eval_classify, eval_judge, users};
 use crate::state::AppState;
@@ -21,6 +24,7 @@ const USAGE: &str = "usage:
   xdi-backend eval (--data <csv> | --sample-database) --cases <json> [--cases <json>...]
                   [--baseline <json>] [--out <json>] [--lessons <json>]
                   [--pause-ms <ms>] [--quota-wait-ms <ms>]
+                  [--subset <n>] [--variants] [--repeat <n>] [--previous <json>]
                                               run the sample question evaluation on a file or on the
                                               snapshot of every SAMPLE_DATABASE_URL entry; write the report to --out
                                               (default eval/result.json); exit 1 when accuracy drops
@@ -28,7 +32,10 @@ const USAGE: &str = "usage:
                                               --lessons, run once without and once with those lessons;
                                               --pause-ms spaces every model call, --quota-wait-ms (default
                                               60000) is the wait before calling again when every key is
-                                              out of quota
+                                              out of quota; --subset picks n cases spread over the kinds,
+                                              --variants also asks every alternative wording, --repeat runs
+                                              the set n times on one snapshot, --previous lists the cases
+                                              that passed in that earlier report and fail now
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
                                               exit 2 on infrastructure errors
@@ -88,7 +95,9 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
 /// tầng (thiếu file, JSON hỏng, không nạp được dữ liệu) thoát mã 2. Có --lessons thì chạy hai lượt, không và có bài học
 /// (#228), in thêm tỷ lệ đúng của lượt không bài học và các câu đổi kết quả; baseline so với lượt có bài học.
 /// --pause-ms, --quota-wait-ms (#202): mọi lần gọi mô hình của lượt chạy đi qua service/eval_pace.rs; in số lần gọi dự
-/// kiến trước khi chạy, số lần gọi thật và số lần chờ hết hạn mức sau khi chạy.
+/// kiến trước khi chạy, số lần gọi thật và số lần chờ hết hạn mức sau khi chạy. --subset, --variants, --repeat,
+/// --previous (#202): chọn câu, hỏi cả cách hỏi khác, chạy lặp, so với báo cáo cũ (service/eval_report.rs); in thêm
+/// bảng theo loại câu kèm khoảng tin cậy.
 async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut data = None;
     let mut sample_database = false;
@@ -98,10 +107,18 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut lessons_path = None;
     let mut pause_ms = "0".to_string();
     let mut quota_wait_ms = "60000".to_string();
+    let mut subset = None;
+    let mut variants = false;
+    let mut repeat = "1".to_string();
+    let mut previous = None;
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         if flag == "--sample-database" {
             sample_database = true;
+            continue;
+        }
+        if flag == "--variants" {
+            variants = true;
             continue;
         }
         // Các cờ còn lại đều có một giá trị đi sau.
@@ -117,6 +134,9 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             "--lessons" => lessons_path = Some(value.clone()),
             "--pause-ms" => pause_ms = value.clone(),
             "--quota-wait-ms" => quota_wait_ms = value.clone(),
+            "--subset" => subset = Some(value.clone()),
+            "--repeat" => repeat = value.clone(),
+            "--previous" => previous = Some(value.clone()),
             _ => {
                 eprintln!("{USAGE}");
                 return 2;
@@ -128,6 +148,18 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         eprintln!("{USAGE}");
         return 2;
     };
+    let (Ok(repeat), Ok(subset)) = (
+        repeat.parse::<u32>(),
+        subset.map(|s| s.parse::<usize>()).transpose(),
+    ) else {
+        eprintln!("{USAGE}");
+        return 2;
+    };
+    // Lượt có bài học so với lượt không bài học theo từng câu; gộp thêm nhiều lượt thì không còn biết so lượt nào.
+    if repeat == 0 || (repeat > 1 && lessons_path.is_some()) {
+        eprintln!("eval: --repeat must be at least 1 and cannot be used with --lessons");
+        return 2;
+    }
     let pace = Pace {
         pause: std::time::Duration::from_millis(pause_ms),
         quota_wait: std::time::Duration::from_millis(quota_wait_ms),
@@ -160,6 +192,20 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             }
         }
     }
+    if let Some(size) = subset {
+        cases = build_subset(cases, size);
+    }
+    if variants {
+        cases = build_variant_cases(cases);
+    }
+    let previous = match previous.map(|p| load_previous(std::path::Path::new(&p))) {
+        None => None,
+        Some(Ok(previous)) => Some(previous),
+        Some(Err(e)) => {
+            eprintln!("eval: {e:?}");
+            return 2;
+        }
+    };
     let lessons = match lessons_path.map(|p| eval::load_lessons(std::path::Path::new(&p))) {
         None => Vec::new(),
         Some(Ok(lessons)) => lessons,
@@ -168,16 +214,22 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             return 2;
         }
     };
-    print_call_estimate(cases.len(), pace);
+    print_call_estimate(cases.len() * repeat as usize, pace);
     let (paced, stats) = build_paced_state(state, pace);
-    let report = match eval::run_eval(&paced, source, &cases, &lessons).await {
+    let mut report = match eval::run_eval(&paced, source, &cases, &lessons, repeat).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("eval: {e:?}");
             return 2;
         }
     };
+    if let Some(previous) = &previous {
+        report.regressions = build_regressions(previous, &report.cases);
+    }
     for case in &report.cases {
+        if repeat > 1 {
+            print!("[{}] ", case.run);
+        }
         match case.verdict {
             eval::Verdict::Pass => println!("ok   {} {}", case.id, case.question),
             eval::Verdict::Fail => {
@@ -195,6 +247,25 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         report.accuracy * 100.0,
         report.review
     );
+    print_kind_rows(&report.by_kind);
+    if !report.runs.is_empty() {
+        let runs: Vec<String> = report
+            .runs
+            .iter()
+            .map(|r| format!("{:.1}%", r.accuracy * 100.0))
+            .collect();
+        println!(
+            "runs: {}; cases that changed between runs: {}",
+            runs.join(", "),
+            build_id_list(&report.unstable)
+        );
+    }
+    if previous.is_some() {
+        println!(
+            "regressions since the previous report: {}",
+            build_id_list(&report.regressions)
+        );
+    }
     if let Some(comparison) = &report.lessons {
         println!(
             "lessons: {}; without lessons {}/{} ({:.1}%); cases that changed: {}",
@@ -244,6 +315,31 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         }
     }
     0
+}
+
+/// Bảng theo loại câu: đạt trên số câu chấm được, tỷ lệ, khoảng tin cậy Wilson 95%, số câu cần xem lại.
+fn print_kind_rows(rows: &[KindRow]) {
+    println!("by kind (accuracy, 95% Wilson interval):");
+    for row in rows {
+        println!(
+            "  {:<22} {:>3}/{:<3} {:>5.1}%  [{:.1}%, {:.1}%]  needs review: {}",
+            row.kind,
+            row.passed,
+            row.passed + row.failed,
+            row.accuracy * 100.0,
+            row.low * 100.0,
+            row.high * 100.0,
+            row.review
+        );
+    }
+}
+
+fn build_id_list(ids: &[String]) -> String {
+    if ids.is_empty() {
+        "none".to_string()
+    } else {
+        ids.join(", ")
+    }
 }
 
 /// Số lần gọi lại tối đa khi mọi khóa hết hạn mức: hạn mức theo phút hồi sau một lần chờ; hết hạn mức theo ngày thì

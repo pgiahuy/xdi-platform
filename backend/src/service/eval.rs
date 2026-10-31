@@ -15,7 +15,18 @@ service/eval_grade.rs (#202). Ba trạng thái (Verdict): đạt, trượt, cầ
 Đo bài học (#228): có file bài học (`--lessons`) thì cả bộ chạy hai lượt trên cùng workspace tạm, lượt đầu không bài
 nào, rồi tạo và bật các bài đó qua đúng đường admin dùng (service/lessons/), lượt sau có bài học. Báo cáo là của lượt
 có bài học, kèm tỷ lệ đúng của lượt không bài và các câu đổi kết quả giữa hai lượt. Mock không đọc prompt nên hai lượt
-luôn như nhau; số đo có nghĩa khi chạy với mô hình thật. */
+luôn như nhau; số đo có nghĩa khi chạy với mô hình thật.
+
+Chạy lặp (#202, `--repeat`): cả bộ chạy nhiều lượt trên cùng workspace tạm, chỉ chụp và lập hồ sơ một lần. Báo cáo gộp
+mọi lượt (mỗi dòng của cases ghi số lượt), kèm tỷ lệ đúng từng lượt và các câu đổi kết quả giữa các lượt. Bảng theo
+loại câu và khoảng tin cậy ở service/eval_report.rs.
+
+Câu phải từ chối (must_refuse, #202): không có đáp án; hệ thống trả rejected là đạt, trả lời ra bảng là trượt, lỗi 400
+là cần xem lại. Câu tiếp nối (follow_up_of): câu gốc hỏi trong một cuộc trò chuyện thật
+(service/conversation/), câu tiếp nối nhận khối "Hội thoại trước" của cuộc đó nhưng không ghi thêm vào cuộc, để các cách
+hỏi khác của cùng câu tiếp nối không thấy nhau. Câu gốc phải đứng trước trong file và được trả lời trong cùng lượt. */
+
+use std::collections::HashMap;
 
 use std::path::Path;
 use std::time::Duration;
@@ -33,7 +44,10 @@ use crate::service::ask::contract::{AskResponse, AskStatus, CellValue};
 use crate::service::ask::fanout::build_links;
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::{ask, AskHistory};
+use crate::service::conversation;
+use crate::service::conversation::history::{build_history_section, HISTORY_TURNS};
 use crate::service::eval_grade::build_eval_verdict;
+use crate::service::eval_report::{build_kind_rows, build_unstable, KindRow, RunSummary};
 use crate::service::lessons::contract::LessonRequest;
 use crate::service::samples::{upload_local_file, SAMPLE_NAME};
 use crate::service::samples_db::seed_database;
@@ -41,13 +55,16 @@ use crate::service::workspaces;
 use crate::state::AppState;
 
 /// Một câu đánh giá: câu hỏi, các câu SQL đúng viết tay, và có so thứ tự dòng không (top N, chuỗi thời gian thì có).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct EvalCase {
     pub id: String,
     /// Bảng logic của dataset để hỏi. Bỏ trống khi dữ liệu là một file (chỉ có một dataset).
     #[serde(default)]
     pub dataset: Option<String>,
     pub question: String,
+    /// Các cách hỏi khác của cùng câu; chỉ hỏi khi chạy với --variants (service/eval_report.rs).
+    #[serde(default)]
+    pub variants: Vec<String>,
     pub expected_sql: Vec<String>,
     #[serde(default)]
     pub ordered: bool,
@@ -57,6 +74,12 @@ pub struct EvalCase {
     /// Vị trí (từ 0) các cột của đáp án bắt buộc có trong kết quả; rỗng là mọi cột (service/eval_grade.rs).
     #[serde(default)]
     pub required_columns: Vec<usize>,
+    /// Câu hệ thống phải từ chối (ghi dữ liệu, hỏi thứ dữ liệu không có); expected_sql rỗng.
+    #[serde(default)]
+    pub must_refuse: bool,
+    /// Id câu gốc khi đây là câu tiếp nối trong cùng cuộc trò chuyện.
+    #[serde(default)]
+    pub follow_up_of: Option<String>,
 }
 
 impl EvalCase {
@@ -75,6 +98,10 @@ pub enum EvalData<'a> {
 pub struct CaseOutcome {
     pub id: String,
     pub question: String,
+    /// Loại câu của ca, để báo cáo theo loại.
+    pub kind: Option<String>,
+    /// Lượt chạy, từ 1; luôn là 1 khi không có --repeat.
+    pub run: u32,
     /// verdict là pass. Giữ trường này để so hai lượt có và không có bài học như trước.
     pub ok: bool,
     pub verdict: Verdict,
@@ -84,7 +111,7 @@ pub struct CaseOutcome {
 }
 
 /// Kết quả chấm một câu (#202).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
     Pass,
@@ -102,6 +129,16 @@ pub struct EvalReport {
     pub review: usize,
     /// passed / (passed + failed): câu cần xem lại không vào mẫu số.
     pub accuracy: f64,
+    /// Tỷ lệ đúng theo loại câu, gộp mọi lượt.
+    pub by_kind: Vec<KindRow>,
+    /// Từng lượt và các câu đổi kết quả giữa các lượt; chỉ có khi chạy --repeat với hơn một lượt.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<RunSummary>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unstable: Vec<String>,
+    /// Câu đạt ở lần chạy trước (--previous) mà trượt ở lần này; cli.rs điền.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub regressions: Vec<String>,
     pub cases: Vec<CaseOutcome>,
     /// Chỉ có khi chạy với file bài học; vắng thì eval/result.json giữ đúng hình dạng cũ.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -143,12 +180,14 @@ pub fn load_lessons(path: &Path) -> Result<Vec<EvalLesson>, AppError> {
 }
 
 /// Chạy cả bộ: tạo workspace tạm, nạp dữ liệu mẫu (file hay database mẫu), chờ hồ sơ ngữ nghĩa, hỏi từng câu rồi xóa
-/// workspace tạm. lessons rỗng là một lượt như trước; có bài thì hai lượt (đầu file).
+/// workspace tạm. lessons rỗng là repeat lượt (một lượt như trước khi repeat là 1); có bài thì hai lượt (đầu file),
+/// cli.rs không cho dùng chung với repeat.
 pub async fn run_eval(
     state: &AppState,
     data: EvalData<'_>,
     cases: &[EvalCase],
     lessons: &[EvalLesson],
+    repeat: u32,
 ) -> Result<EvalReport, AppError> {
     let (member, datasets) = match data {
         EvalData::File(path) => {
@@ -165,12 +204,44 @@ pub async fn run_eval(
         }
         EvalData::SampleDatabases(dbs) => prepare_database(state, dbs).await?,
     };
-    let outcome = run_rounds(state, &member, &datasets, cases, lessons).await;
+    let outcome = if lessons.is_empty() {
+        run_repeats(state, &member, &datasets, cases, repeat).await
+    } else {
+        run_rounds(state, &member, &datasets, cases, lessons).await
+    };
     let _ = workspaces::delete(state, &member).await;
     outcome
 }
 
-/// Một hay hai lượt trên các dataset của workspace tạm (một với file, mọi bảng đã chụp với database mẫu).
+/// repeat lượt trên cùng workspace, gộp kết quả. Một lượt thì báo cáo như trước, không có runs và unstable.
+async fn run_repeats(
+    state: &AppState,
+    member: &Member,
+    datasets: &[Dataset],
+    cases: &[EvalCase],
+    repeat: u32,
+) -> Result<EvalReport, AppError> {
+    let mut all = Vec::new();
+    let mut runs = Vec::new();
+    for run in 1..=repeat.max(1) {
+        let outcomes = run_cases(state, member, datasets, cases, run).await?;
+        runs.push(RunSummary {
+            passed: count(&outcomes, Verdict::Pass),
+            failed: count(&outcomes, Verdict::Fail),
+            review: count(&outcomes, Verdict::Review),
+            accuracy: build_accuracy(&outcomes),
+        });
+        all.extend(outcomes);
+    }
+    let mut report = build_report(all, None);
+    if runs.len() > 1 {
+        report.unstable = build_unstable(&report.cases);
+        report.runs = runs;
+    }
+    Ok(report)
+}
+
+/// Hai lượt, không và có bài học, trên các dataset của workspace tạm (một với file, mọi bảng đã chụp với database mẫu).
 async fn run_rounds(
     state: &AppState,
     member: &Member,
@@ -178,12 +249,9 @@ async fn run_rounds(
     cases: &[EvalCase],
     lessons: &[EvalLesson],
 ) -> Result<EvalReport, AppError> {
-    let without = run_cases(state, member, datasets, cases).await?;
-    if lessons.is_empty() {
-        return Ok(build_report(without, None));
-    }
+    let without = run_cases(state, member, datasets, cases, 1).await?;
     add_lessons(state, member, datasets, lessons).await?;
-    let with = run_cases(state, member, datasets, cases).await?;
+    let with = run_cases(state, member, datasets, cases, 1).await?;
     let changed = with
         .iter()
         .zip(&without)
@@ -206,6 +274,10 @@ fn build_report(cases: Vec<CaseOutcome>, lessons: Option<LessonsComparison>) -> 
         failed: count(&cases, Verdict::Fail),
         review: count(&cases, Verdict::Review),
         accuracy: build_accuracy(&cases),
+        by_kind: build_kind_rows(&cases),
+        runs: Vec::new(),
+        unstable: Vec::new(),
+        regressions: Vec::new(),
         cases,
         lessons,
     }
@@ -343,10 +415,13 @@ async fn run_cases(
     member: &Member,
     datasets: &[Dataset],
     cases: &[EvalCase],
+    run: u32,
 ) -> Result<Vec<CaseOutcome>, AppError> {
     let mut outcomes = Vec::new();
+    // Cuộc trò chuyện của từng câu đã trả lời trong lượt này, để câu tiếp nối đọc lại.
+    let mut conversations = HashMap::new();
     for case in cases {
-        outcomes.push(run_case(state, member, datasets, case).await);
+        outcomes.push(run_case(state, member, datasets, case, run, &mut conversations).await);
     }
     Ok(outcomes)
 }
@@ -368,11 +443,15 @@ async fn run_case(
     member: &Member,
     datasets: &[Dataset],
     case: &EvalCase,
+    run: u32,
+    conversations: &mut HashMap<String, uuid::Uuid>,
 ) -> CaseOutcome {
-    let (verdict, detail) = grade_case(state, member, datasets, case).await;
+    let (verdict, detail) = grade_case(state, member, datasets, case, conversations).await;
     CaseOutcome {
         id: case.id.clone(),
         question: case.question.clone(),
+        kind: case.kind.clone(),
+        run,
         ok: verdict == Verdict::Pass,
         verdict,
         detail,
@@ -384,22 +463,107 @@ async fn grade_case(
     member: &Member,
     datasets: &[Dataset],
     case: &EvalCase,
+    conversations: &mut HashMap<String, uuid::Uuid>,
 ) -> (Verdict, String) {
-    // Ca trỏ tới bảng không có, hay mọi expected_sql đều hỏng: lỗi của bộ câu, người viết câu phải sửa, không phải mô
-    // hình trả lời sai.
+    // Ca trỏ tới bảng không có, mọi expected_sql đều hỏng, hay câu gốc của câu tiếp nối chưa được trả lời: lỗi của bộ
+    // câu hay của câu trước, không phải mô hình trả lời sai câu này.
     let dataset_id = match pick_dataset(datasets, case) {
         Ok(d) => d.id.to_string(),
         Err(why) => return (Verdict::Review, why),
     };
-    let expected = match expected_tables(state, member, datasets, case).await {
-        Ok(t) => t,
+    let expected = if case.must_refuse {
+        Vec::new()
+    } else {
+        match expected_tables(state, member, datasets, case).await {
+            Ok(t) => t,
+            Err(why) => return (Verdict::Review, why),
+        }
+    };
+    let history = match build_case_history(state, member, case, conversations).await {
+        Ok(h) => h,
         Err(why) => return (Verdict::Review, why),
     };
-    // Mỗi câu của bộ đánh giá là một câu độc lập, không có hội thoại trước.
-    let history = AskHistory::default();
-    match ask(state, member, &dataset_id, &case.question, &[], &history).await {
-        Ok(response) => build_answer_verdict(&response, case, &expected),
-        Err(error) => build_ask_error_verdict(&error),
+    // Câu không tiếp nối hỏi qua cuộc trò chuyện mới, như người dùng hỏi câu đầu, để câu tiếp nối sau có lượt để đọc.
+    let asked = match &history {
+        Some(history) => ask(state, member, &dataset_id, &case.question, &[], history).await,
+        None => conversation::ask(state, member, &dataset_id, &case.question, &[], None).await,
+    };
+    let response = match asked {
+        Ok(r) => r,
+        Err(error) if case.must_refuse => return build_refuse_error_verdict(&error),
+        Err(error) => return build_ask_error_verdict(&error),
+    };
+    if history.is_none() && response.status == AskStatus::Answered {
+        conversations.insert(case.id.clone(), response.conversation_id);
+    }
+    if case.must_refuse {
+        build_refuse_verdict(&response)
+    } else {
+        build_answer_verdict(&response, case, &expected)
+    }
+}
+
+/// Khối "Hội thoại trước" cho câu tiếp nối, đọc từ cuộc của câu gốc như service/conversation/ đọc khi người dùng hỏi
+/// tiếp. None với câu không tiếp nối.
+async fn build_case_history(
+    state: &AppState,
+    member: &Member,
+    case: &EvalCase,
+    conversations: &HashMap<String, uuid::Uuid>,
+) -> Result<Option<AskHistory>, String> {
+    let Some(parent) = &case.follow_up_of else {
+        return Ok(None);
+    };
+    let Some(&conversation) = conversations.get(parent) else {
+        return Err(format!(
+            "câu gốc {parent} chưa được trả lời trong lượt này (phải đứng trước trong file)"
+        ));
+    };
+    let turns = state
+        .store
+        .list_turns(&member.workspace, conversation, HISTORY_TURNS)
+        .await
+        .map_err(|e| format!("đọc lượt của câu gốc {parent}: {e:?}"))?;
+    Ok(Some(AskHistory {
+        section: build_history_section(&turns),
+        questions: turns.iter().map(|turn| turn.question.clone()).collect(),
+    }))
+}
+
+/// Chấm câu phải từ chối: rejected là đạt, trả lời ra bảng là trượt. Failed cũng là trượt: hệ thống đã thử trả lời
+/// mà không được, người hỏi không nhận được lời nói rõ vì sao câu này không hỏi được.
+pub fn build_refuse_verdict(response: &AskResponse) -> (Verdict, String) {
+    let message = response.message.as_deref().unwrap_or_default();
+    match response.status {
+        AskStatus::Rejected => (Verdict::Pass, format!("đã từ chối: {message}")),
+        AskStatus::NeedsChoice => (
+            Verdict::Review,
+            format!("hệ thống hỏi lại thay vì từ chối: {message}"),
+        ),
+        AskStatus::Answered => (
+            Verdict::Fail,
+            format!(
+                "trả lời thay vì từ chối; sql sinh ra: {}",
+                response.sql_generated.as_deref().unwrap_or_default()
+            ),
+        ),
+        AskStatus::Failed => (
+            Verdict::Fail,
+            format!("thất bại thay vì từ chối: {message}"),
+        ),
+    }
+}
+
+/// ask trả lỗi với câu phải từ chối. BadRequest có thể là mô hình từ chối vì nội dung câu hỏi (engine/llm/mod.rs),
+/// nhưng cũng có thể là câu không gửi được (mock không có câu này, dataset chưa có bảng): người đọc kết quả quyết định,
+/// không tự tính đạt. Lỗi khác chấm như câu thường.
+pub fn build_refuse_error_verdict(error: &AppError) -> (Verdict, String) {
+    match error {
+        AppError::BadRequest(m) => (
+            Verdict::Review,
+            format!("lỗi 400, có thể là mô hình từ chối vì nội dung: {m}"),
+        ),
+        e => build_ask_error_verdict(e),
     }
 }
 
