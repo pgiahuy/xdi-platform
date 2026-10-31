@@ -119,6 +119,16 @@ câu đó do mô hình viết (`true`) hay theo khuôn (`false`). Hai trường 
 `explanation.summary`) và câu không answered. Bước này hiện trong `steps` dưới tên `narrate`. `ANSWER_TEXT=false` thì
 luôn là câu khuôn, không gọi mô hình.
 
+Câu thường answered có ít nhất một ô có giá trị thì có `insight`: phần giải thích chọn theo hình dạng kết quả (`kind`:
+`single_value`, `time_series`, `groups`, `top_n`, `rows`), gồm `title` và `points` (`lead`, `text`) do backend viết từ số
+đã tính, `summary` là lời của mô hình khi `summary_by_model` (đã kiểm số, chiều tăng giảm và từ chỉ nguyên nhân), không
+thì là câu chính nối các ý, và `notable` là `false` khi số liệu không cho thấy điều gì đáng kể (chênh lệch dưới 2%, một
+kỳ dưới 30 dòng, các nhóm khá đều, hay danh sách dòng). Với `single_value` so được kỳ trước và `time_series`,
+`explanation` là phân rã của kỳ đổi mạnh nhất so với kỳ liền trước (cùng hình dạng như câu "tại sao", lưu cùng câu hỏi
+nên truy dòng nguồn của một dòng phân rã như câu "tại sao"); chênh lệch không đáng kể thì `explanation` null. Hai bước
+thêm trong `steps`: `explain` (phần do code tính) và `narrate` (lời). `insight` null với câu "tại sao" và câu không
+answered. `INSIGHT_TEXT=false` thì không gọi mô hình cho phần này.
+
 Câu hỏi cần thông tin không cột nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo
 `unanswerable`, không câu SQL nào chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các
 cột gần nhất có thể hỏi; câu vẫn ghi vào lịch sử như câu bị từ chối.

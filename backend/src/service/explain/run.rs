@@ -45,7 +45,7 @@ use crate::service::explain::breakdown::{
     SliceTotals, ASK_STOP_HINT,
 };
 use crate::service::explain::check::{
-    build_chosen_base, build_why_check, PlanSlices, WhyPlan, WhyProfile,
+    apply_related, build_chosen_base, build_why_check, PlanSlices, WhyPlan, WhyProfile,
 };
 use crate::service::explain::choices::{build_why_assumptions, BASE_CHOICE_ID};
 use crate::service::explain::form::{
@@ -54,6 +54,7 @@ use crate::service::explain::form::{
 use crate::service::explain::latest::{apply_latest, find_latest, LatestPeriod, COMPARE_CHOICE_ID};
 use crate::service::explain::plain::run_plain;
 use crate::service::explain::premise::{build_premise_labels, build_premise_warning};
+use crate::service::explain::source::RelatedTables;
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
 use crate::service::explain::summary::apply_summary_parts;
 
@@ -79,6 +80,9 @@ pub struct WhyInput<'a> {
     pub jobs: &'a Arc<Semaphore>,
     /// Thời gian tối đa chờ mô hình viết lời (bước narrate).
     pub narrate_timeout: Duration,
+    /// Bảng liên quan nối nhiều-một vào bảng đang hỏi (explain/source.rs): phân rã xét thêm cột của chúng. Rỗng với
+    /// dataset nạp từ file; tables khi đó chỉ có bảng đang hỏi.
+    pub related: &'a RelatedTables,
 }
 
 /// Phần của AskResponse do đường câu "tại sao" quyết định, cùng nghĩa các trường như RunOutcome.
@@ -213,10 +217,13 @@ async fn run_round(
     if let Some(latest) = &latest {
         apply_latest(&mut read, latest);
     }
-    let plan = match build_why_check(&read.form, &profile, find_base_choice(input)) {
+    let mut plan = match build_why_check(&read.form, &profile, find_base_choice(input)) {
         Ok(plan) => plan,
         Err(errors) => return Ok(Round::Invalid(errors)),
     };
+    // Form chỉ nêu cột của bảng đang hỏi; cột của bảng liên quan chỉ vào phân rã, như cột chiều của bảng đó.
+    let filtered: Vec<String> = read.form.filters.iter().map(|f| f.column.clone()).collect();
+    apply_related(&mut plan, input.related, &filtered);
     run_plan(llm, input, read, &plan, latest.as_ref(), steps).await
 }
 
@@ -551,7 +558,7 @@ fn build_measure_choice(
 
 /// Giá trị hai lát cắt để kiểm tiền đề: tổng như đã đọc, hay tỷ lệ tử trên mẫu làm tròn RATE_SCALE chữ số khi độ đo là
 /// tỷ lệ. None khi một mẫu số bằng 0 (không có tỷ lệ để so).
-fn build_premise_values(
+pub(crate) fn build_premise_values(
     totals: &SliceTotals,
 ) -> Option<(rust_decimal::Decimal, rust_decimal::Decimal)> {
     match totals.denominators {

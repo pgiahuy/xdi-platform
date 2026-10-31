@@ -98,8 +98,16 @@ pub struct AskResponse {
     pub chart: Option<ChartSuggestion>,
     /// Notes shown next to the result; they never hide it.
     pub warnings: Vec<Warning>,
+    /// Breakdown of a "why" question; for other answered questions, the automatic breakdown behind `insight` when it
+    /// has one (the change of a single number against the period before, or the period of a time series that changed
+    /// most). Null otherwise.
     #[schema(required)]
     pub explanation: Option<Explanation>,
+    /// What the result says, for an `answered` question that is not a "why" question and has at least one row with a
+    /// value: chosen by the shape of the result, every number computed by the backend. Null otherwise; a "why" question
+    /// has `explanation.summary`.
+    #[schema(required)]
+    pub insight: Option<Insight>,
     /// Short answer in Vietnamese for an `answered` question that is not a "why" question and has at least one row:
     /// written by the language model from the first 10 rows of the result, every number checked against those rows,
     /// or a template sentence written by the backend. Null otherwise; a "why" question has `explanation.summary`.
@@ -402,8 +410,56 @@ pub struct Warning {
 // đúng chênh lệch, và #41 so số trong lời với đúng các chuỗi này. Bảng kết quả thì cộng theo kiểu cột (DOUBLE cộng
 // bằng số thực), nên giá trị hai lát cắt có thể lệch ô tương ứng của bảng ở chữ số cuối; con số của phân rã là con số
 // ở đây.
-/// Breakdown of a change between two slices (two periods or two groups); null in `AskResponse` unless an answered
-/// "why" question has one. Numbers are exact strings of decimal digits.
+// Phần giải thích của câu thường (#227), dựng ở service/insight/: code chọn loại theo hình dạng bảng kết quả và viết câu
+// chính cùng các ý; mô hình chỉ diễn đạt lại, mọi số trong lời của mô hình được kiểm như lời của câu "tại sao".
+/// Explanation of a plain answer, chosen by the shape of the result.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct Insight {
+    pub kind: InsightKind,
+    /// Main finding, one sentence written by the backend (Vietnamese).
+    pub title: String,
+    /// Points under the main finding, written by the backend (Vietnamese).
+    pub points: Vec<InsightPoint>,
+    /// Plain-language text for the end user (Vietnamese): the language model's wording of `title` and `points` when it
+    /// passed the checks, otherwise `title` and `points` joined.
+    pub summary: String,
+    /// True when `summary` was written by the language model; false when it is the backend's text (the model failed,
+    /// timed out, wrote a number or a direction that is not in the points, used a causal word, or `INSIGHT_TEXT=false`).
+    pub summary_by_model: bool,
+    /// False when the numbers show nothing notable: a change below the threshold, too few rows to conclude, groups of
+    /// about the same size, or a plain list of rows.
+    pub notable: bool,
+}
+
+/// - `single_value`: one number; compared with the period before when the question names a period.
+/// - `time_series`: one measure over periods; overall direction and the period that changed most against the one
+///   before, broken down by dimension in `AskResponse.explanation`.
+/// - `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the
+///   total, groups far from the mean.
+/// - `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the
+///   first two.
+/// - `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum InsightKind {
+    SingleValue,
+    TimeSeries,
+    Groups,
+    TopN,
+    Rows,
+}
+
+/// One point of an insight: a short lead (shown in bold) and the sentence after it.
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct InsightPoint {
+    /// Lead of the point (Vietnamese), for example the words for "concentration".
+    pub lead: String,
+    /// Rest of the point (Vietnamese).
+    pub text: String,
+}
+
+/// Breakdown of a change between two slices (two periods or two groups); see `AskResponse.explanation` for when it is
+/// set. Numbers are exact strings of decimal digits.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Explanation {
     /// Measure that changed, text for the end user (Vietnamese).

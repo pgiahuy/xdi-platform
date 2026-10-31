@@ -293,6 +293,6 @@ async fn model_keeps_a_count_by_a_reason_column_plain() {
     assert!(response["explanation"].is_null(), "{response}");
     assert_eq!(
         step_names(&response),
-        ["context", "classify", "llm", "guard", "run", "narrate", "record"]
+        ["context", "classify", "llm", "guard", "run", "narrate", "explain", "narrate", "record"]
     );
 }

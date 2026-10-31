@@ -19,7 +19,7 @@ use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
 use sqlparser::tokenizer::Token;
 
-use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileRole};
+use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileColumn, ProfileRole};
 use crate::service::ask::phrases::build_key;
 use crate::service::explain::check::{find_column, WhyProfile};
 use crate::service::explain::form::{FieldError, FormAgg, WhyForm};
@@ -168,7 +168,7 @@ fn check_metric(
             return None;
         }
     };
-    let Some((additive, denominator)) = build_measure_parts(&aggregate, profile) else {
+    let Some((additive, denominator)) = build_measure_parts(&aggregate, profile.columns) else {
         errors.push(not_additive());
         return None;
     };
@@ -180,11 +180,23 @@ fn check_metric(
     )
 }
 
+/// Độ đo của một biểu thức tổng hợp đã có sẵn, không qua form: cột tổng hợp của câu thường, để phân rã tự động của
+/// phần giải thích (service/insight/, #227) dùng đúng công thức người hỏi đã thấy. Cùng hai dạng như chỉ số; None khi
+/// biểu thức không thuộc dạng nào. columns là hồ sơ cột của bảng chính, để biết cột nào cộng đúng sẵn.
+pub fn build_measure_from_expr(
+    label: &str,
+    aggregate: &Expr,
+    columns: &[ProfileColumn],
+) -> Option<PlanMeasure> {
+    let (additive, denominator) = build_measure_parts(aggregate, columns)?;
+    build_plan_measure(label.to_string(), None, additive, denominator)
+}
+
 /// Tách công thức chỉ số thành tử và mẫu: (tử, None) cho dạng cộng được, (tử, Some(mẫu)) cho tỷ lệ. None khi công thức
 /// không thuộc dạng nào.
 fn build_measure_parts(
     aggregate: &Expr,
-    profile: &WhyProfile,
+    profile: &[ProfileColumn],
 ) -> Option<(Additive, Option<Additive>)> {
     match build_unnested(aggregate) {
         Expr::BinaryOp {
@@ -230,7 +242,7 @@ fn build_average_arg(aggregate: &Expr) -> Option<&Expr> {
 }
 
 /// SUM(x), COUNT(*), COUNT(x) không DISTINCT, không FILTER, không OVER; dạng khác trả None.
-fn build_additive(aggregate: &Expr, profile: &WhyProfile) -> Option<Additive> {
+fn build_additive(aggregate: &Expr, profile: &[ProfileColumn]) -> Option<Additive> {
     let (name, arg) = build_plain_call(aggregate)?;
     match (name.as_str(), arg) {
         ("sum", FunctionArgExpr::Expr(value)) => Some(Additive::Sum {
@@ -273,12 +285,11 @@ fn build_plain_call(aggregate: &Expr) -> Option<(String, &FunctionArgExpr)> {
 }
 
 // Biểu thức cộng đúng sẵn khi là đúng một cột số nguyên hay DECIMAL; biểu thức khác không biết kiểu nên đổi sang DECIMAL.
-fn is_exact_expr(value: &Expr, profile: &WhyProfile) -> bool {
+fn is_exact_expr(value: &Expr, profile: &[ProfileColumn]) -> bool {
     let Expr::Identifier(ident) = value else {
         return false;
     };
     profile
-        .columns
         .iter()
         .find(|c| c.name == ident.value)
         .is_some_and(|c| is_exact_type(&c.data_type))

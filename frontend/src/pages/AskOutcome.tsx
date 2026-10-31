@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AskOutcome.tsx - phần dưới ô hỏi của trang hỏi: hiện một AskResponse theo status (hợp đồng ở
-backend/src/service/ask/contract.rs). answered: lời trả lời (hay lời giải thích của câu "tại sao"), biểu đồ nếu
-backend gợi ý, bảng kết quả, thẻ "Đã hiểu là"; needs_choice: màn câu hỏi lại; rejected, failed: lời báo của backend. Cảnh báo hiện với mọi
+backend/src/service/ask/contract.rs). answered: lời trả lời và phần giải thích (insight của câu thường, hay lời giải
+thích của câu "tại sao"), biểu đồ nếu backend gợi ý, bảng kết quả, thẻ "Đã hiểu là"; needs_choice: màn câu hỏi lại; rejected, failed: lời báo của backend. Cảnh báo hiện với mọi
 status. Khối này là phần trả lời của một lượt trong khung trò chuyện; bong bóng câu hỏi và thẻ bọc ngoài do
 ChatTurn (AskConversation.tsx). Dựng dữ liệu cho component từ response; việc gửi câu hỏi do AskPage.
 Biểu đồ tải riêng (lazy) vì Recharts nặng, lý do ở components/ask/ResultChart.tsx; nó nằm trong ErrorBoundary riêng
@@ -12,8 +12,10 @@ import {
   isRepeatedClarification,
   type AskResponse,
   type AskVariables,
+  type Insight,
   type Understanding,
 } from '@/api/ask'
+import { AnswerSummary } from '@/components/ask/AnswerSummary'
 import { AnswerText } from '@/components/ask/AnswerText'
 import { AskWarnings } from '@/components/ask/AskWarnings'
 import { ClarificationForm } from '@/components/ask/ClarificationForm'
@@ -126,9 +128,9 @@ type AnsweredProps = {
   onChangeAssumption: (choiceId: string, optionId: string) => void
 }
 
-// Thứ tự đọc: lời trả lời trước (answer_text, hay ba số lớn và lời giải thích của câu "tại sao"), rồi biểu đồ và bảng,
-// cuối cùng thẻ "Đã hiểu là": người hỏi cần con số trước, cách hệ thống hiểu câu hỏi là phần để kiểm lại. Bảng phân rã
-// đủ mọi chiều và SQL đứng sau từng con số thuộc pane minh chứng (#52).
+// Thứ tự đọc: lời trả lời trước (answer_text và phần giải thích, hay ba số lớn và lời giải thích của câu "tại sao"), rồi
+// biểu đồ và bảng, cuối cùng thẻ "Đã hiểu là": người hỏi cần con số trước, cách hệ thống hiểu câu hỏi là phần để kiểm
+// lại. Bảng phân rã đủ mọi chiều và SQL đứng sau từng con số thuộc pane minh chứng (#52).
 function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumption }: AnsweredProps) {
   const understanding = response.understanding && (
     <UnderstandingCard
@@ -156,7 +158,13 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
       {response.answer_text && (
         <AnswerText text={response.answer_text} byModel={response.answer_text_by_model ?? false} />
       )}
-      {breakdown && <WhyOverview breakdown={breakdown} />}
+      {response.insight ? (
+        // Câu thường: phần giải thích theo hình dạng kết quả (#227). Phân rã tự động của nó (explanation) chỉ hiện ở tab
+        // Phân rã của pane minh chứng, để thẻ không thành một câu "tại sao" thứ hai.
+        <AnswerSummary {...buildInsightView(response.insight)} />
+      ) : (
+        breakdown && <WhyOverview breakdown={breakdown} />
+      )}
       {result && chart && (
         // key theo câu hỏi: câu trả lời mới thì thử vẽ lại. lazy() nhớ lần tải chunk đã lỗi, nên chunk lỗi chỉ hết
         // khi tải lại trang; bảng vẫn dùng được trong lúc đó.
@@ -185,6 +193,15 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
 }
 
 const noDataText = 'Không có dữ liệu để trả lời câu hỏi này.'
+
+/** Câu chính, các ý và lời của mô hình (chỉ khi lời đã qua bước kiểm) cho AnswerSummary. */
+function buildInsightView(insight: Insight) {
+  return {
+    title: insight.title,
+    points: insight.points.map((point) => ({ lead: point.lead, text: point.text })),
+    modelSummary: insight.summary_by_model ? insight.summary : null,
+  }
+}
 
 /** Câu thường đã trả lời mà kết quả không có số nào: không dòng nào, hay mọi ô đều trống (tổng trên tập rỗng). */
 function hasNoData(response: AskResponse): boolean {

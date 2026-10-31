@@ -16,6 +16,7 @@
     "clarifications": [],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
+    "insight": null,
     "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
@@ -103,6 +104,7 @@
     ],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
+    "insight": null,
     "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
     "model": "gemini-2.5-flash",
     "query_id": null,
@@ -132,6 +134,7 @@
     "clarifications": [],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
+    "insight": null,
     "message": "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.",
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
@@ -211,6 +214,23 @@
     "clarifications": [],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
     "explanation": null,
+    "insight": {
+      "kind": "groups",
+      "notable": true,
+      "points": [
+        {
+          "lead": "Mức tập trung",
+          "text": "4 trên 5 nhóm chiếm từ 80% tổng trở lên."
+        },
+        {
+          "lead": "Thấp hẳn mức trung bình",
+          "text": "Africa (2.340.560,12); trung bình mỗi nhóm 7.331.570,41."
+        }
+      ],
+      "summary": "Europe đứng đầu với 10.845.230,42, chiếm 29,6% tổng doanh thu. Mức tập trung: 4 trên 5 nhóm chiếm từ 80% tổng trở lên. Thấp hẳn mức trung bình: Africa (2.340.560,12); trung bình mỗi nhóm 7.331.570,41.",
+      "summary_by_model": false,
+      "title": "Europe đứng đầu với 10.845.230,42, chiếm 29,6% tổng doanh thu."
+    },
     "message": null,
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
@@ -291,6 +311,18 @@
       {
         "detail": null,
         "duration_ms": 910,
+        "name": "narrate",
+        "ok": true
+      },
+      {
+        "detail": null,
+        "duration_ms": 0,
+        "name": "explain",
+        "ok": true
+      },
+      {
+        "detail": "INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết",
+        "duration_ms": 0,
         "name": "narrate",
         "ok": true
       },
@@ -529,6 +561,7 @@
         "volume_label": "Số đơn"
       }
     },
+    "insight": null,
     "message": null,
     "model": "gemini-2.5-flash",
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
