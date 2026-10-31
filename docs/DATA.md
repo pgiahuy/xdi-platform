@@ -240,8 +240,8 @@ bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộ
 - **Lỗi giữa chừng:** các bảng nạp lần lượt sau khi chép xong. Một bảng nạp lỗi thì các bảng nạp trước đó đã có phiên
   bản mới, còn quan hệ của lần này chưa ghi. Chụp lại là đủ: bảng không đổi trùng hash nội dung nên không tạo phiên bản
   trùng.
-- **Hỏi:** câu thường trên một dataset của nhóm được đọc thêm các dataset nối với nó qua quan hệ (hai chiều, tối đa 2
-  bước và 8 bảng), mô hình viết `JOIN` theo đúng các quan hệ đó; khung Minh chứng ghi các bảng câu đã đọc. Câu "tại
+- **Hỏi:** câu thường trên một dataset của nhóm được đọc mọi bảng đã chụp của cùng database (#249), mô hình viết
+  `JOIN` theo đúng các quan hệ đó; khung Minh chứng ghi các bảng câu đã đọc. Câu "tại
   sao" và truy dòng nguồn vẫn chỉ một bảng. Cách chọn bảng và luật cho người bị lọc dòng:
   [ARCHITECTURE.md](ARCHITECTURE.md), mục 6.
 

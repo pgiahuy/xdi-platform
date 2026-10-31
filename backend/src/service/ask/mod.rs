@@ -22,6 +22,7 @@ mod classify_tests;
 pub mod data_range;
 #[cfg(test)]
 mod data_range_tests;
+pub mod database;
 // build_metric_mismatches chờ cách báo chỉ số dùng sai công thức: bốn luật kiểm hợp lý (#36) không có mã cảnh báo hợp,
 // thêm mã mới là đổi API. Phần còn lại endpoint hỏi đã gọi. Gỡ allow khi hàm đó được gọi, để clippy bắt lại mã thừa.
 #[cfg(test)]
@@ -48,6 +49,7 @@ pub mod lessons;
 mod lessons_tests;
 pub mod magnitude;
 pub mod matching;
+pub mod missing_tables;
 pub mod narrate;
 #[cfg(test)]
 mod narrate_tests;
@@ -74,6 +76,9 @@ pub mod scope;
 pub mod summary;
 #[cfg(test)]
 mod summary_tests;
+pub mod table_pick;
+#[cfg(test)]
+mod table_pick_tests;
 pub mod total_alias;
 #[cfg(test)]
 mod total_alias_tests;
@@ -90,10 +95,12 @@ pub mod why_prompt;
 use std::time::Instant;
 
 use crate::auth::{Member, WorkspaceId};
+use crate::engine::domains::DomainPackage;
 use crate::engine::guard::AllowedTable;
 use crate::engine::llm::meter::{build_call_totals, CallLog};
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
+use crate::engine::store::{MetricDefinition, PromptExample};
 use crate::service::ask::checks::{build_result_warnings, find_missing_values, CheckedQuery};
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
@@ -105,11 +112,14 @@ use crate::service::ask::contract::{
     Understanding, Warning, WarningCode,
 };
 use crate::service::ask::data_range::build_data_range;
+use crate::service::ask::database::{build_model_tables, load_unsnapshotted, DatabaseTables};
 use crate::service::ask::fanout::{build_join_links, JoinLink};
+use crate::service::ask::group_prompt::GroupPrompt;
 use crate::service::ask::group_prompt::{
     apply_question_columns, build_group_prompt, load_question_tables,
 };
 use crate::service::ask::lessons::pick_lessons;
+use crate::service::ask::missing_tables::find_needed_tables;
 use crate::service::ask::plain_insight::{build_stored_breakdown, run_insight};
 use crate::service::ask::prompt::{
     build_examples_detail, build_sql_prompt, build_sql_prompt_detail, pick_examples, PromptInput,
@@ -208,13 +218,13 @@ async fn ask_steps(
     let ws = &member.workspace;
     let (dataset, version) = load_target(state, ws, dataset_id).await?;
 
-    // Chỉ số và câu mẫu đã duyệt là hai tầng của ngữ cảnh (ARCHITECTURE mục 5), nên tính vào bước context, cùng các bảng
-    // liên quan (#213).
+    // Chỉ số và câu mẫu đã duyệt là hai tầng của ngữ cảnh (ARCHITECTURE mục 5), nên tính vào bước context, cùng mọi bảng
+    // của database (#213, #249).
     let started = Instant::now();
     let columns = state.store.list_columns(ws, version.id).await?;
     let picked = build_allowed_table(state, member, &dataset, &version, &columns).await?;
-    let group = load_group(state, member, (&dataset, &version, &columns), picked).await?;
-    let join_keys = group.join_keys(dataset.id);
+    let full = load_group(state, member, (&dataset, &version, &columns), picked).await?;
+    let join_keys = full.join_keys(dataset.id);
     // Chỉ số đọc trước ngữ cảnh: cột trong công thức chỉ số luôn được gửi đủ chi tiết (ask/context.rs).
     let metrics = state.store.list_metrics(ws, dataset.id).await?;
     let mut context =
@@ -233,52 +243,72 @@ async fn ask_steps(
         .store
         .list_active_lessons(ws, dataset.id, LESSON_POOL)
         .await?;
+    let unsnapshotted = load_unsnapshotted(state, ws, &dataset, &full).await?;
+    let all = load_question_tables(state, member, &full, question).await?;
+    let database = DatabaseTables {
+        full,
+        all,
+        unsnapshotted,
+    };
     let mut steps = vec![build_step(StepName::Context, started, true, None)];
 
-    // Lượt phân loại nhận metadata cột của mọi bảng; cột nó chọn quyết định cột nào được gửi đủ danh sách giá trị ở
-    // lượt viết SQL (ask/context.rs). Một cụm khớp nhiều cột không hỏi lại ở đây: ngữ cảnh đã chọn cột đầu và ghi các cột
-    // khác thành giả định đổi được.
-    let mut question_tables = load_question_tables(state, member, &group, question).await?;
+    // Bảng gửi chi tiết (ask/table_pick.rs): metadata mọi bảng vừa trần thì gửi đủ; không thì chọn theo chữ của câu hỏi,
+    // rồi chọn lại sau lượt phân loại với các bảng mô hình cần.
+    let mut choice = database.build_choice(&context, &metrics, question, &[]);
     let table = dataset.logical_table.as_str();
-    let restricted = group.is_restricted();
+    // Người bị lọc dòng trên một bảng gửi chi tiết không nhận danh sách giá trị nào (#230); xét trên đúng các bảng gửi đi.
+    let (pre_group, mut question_tables) = database.build_view(&choice);
+    let classify_others = database.build_others(&choice);
+    // Lượt phân loại nhận metadata cột của mọi bảng gửi chi tiết; cột nó chọn quyết định cột nào được gửi đủ danh sách giá
+    // trị ở lượt viết SQL (ask/context.rs). Một cụm khớp nhiều cột không hỏi lại ở đây: ngữ cảnh đã chọn cột đầu và ghi
+    // các cột khác thành giả định đổi được.
+    let restricted = pre_group.is_restricted();
     apply_question_columns(&mut context, table, &mut question_tables, &[], restricted);
-    // Phân loại sau bước ngữ cảnh: prompt phân loại cần metadata cột của các bảng vừa đọc.
     let classify_input = ClassifyInput {
         table,
         question,
         columns: &context.columns,
         related: &question_tables.related,
         earlier: &history.questions,
+        others: &classify_others,
     };
     let timeout = build_classify_timeout(&state.config);
     let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
-    steps.push(classified.step);
+    steps.push(classified.step.clone());
+    if !choice.all_fit {
+        choice = database.build_choice(
+            &context,
+            &metrics,
+            question,
+            &build_model_tables(&classified),
+        );
+    }
+    steps[0].detail = Some(database.build_detail(&choice));
+    let (mut group, mut question_tables) = database.build_view(&choice);
     apply_question_columns(
         &mut context,
         table,
         &mut question_tables,
         &classified.columns,
-        restricted,
+        group.is_restricted(),
     );
-    let group_prompt = build_group_prompt(&group, question_tables);
+    let mut others = database.build_others(&choice);
+    let mut group_prompt = build_group_prompt(&group, question_tables, others.clone());
     // Bài học chọn sau khi ngữ cảnh đã đủ (cột khớp, cột lượt phân loại chọn), để khớp đúng các cột câu hỏi dùng.
     let lessons = pick_lessons(question, &context.columns, &active_lessons);
-    let input = PromptInput {
+    let parts = PromptParts {
         table: &dataset.logical_table,
         question,
-        context: &context,
         metrics: &metrics,
         examples: &examples,
         domain: domain.as_ref(),
         choices,
         history: &history.section,
-        group: group_prompt.as_ref(),
         lessons: &lessons,
     };
-    let tables = &group.allowed;
     // Quan hệ giữa các bảng của câu hỏi, để chặn câu cộng lặp khi nối bảng một-nhiều (ask/fanout.rs) và để phân rã
     // nối bảng liên quan theo đúng chiều nhiều-một (explain/source.rs).
-    let links = build_join_links(&group);
+    let mut links = build_join_links(&group);
     if classified.kind == QuestionKind::Why {
         // Form của câu "tại sao" chỉ nêu cột của bảng đang chọn (#213); phân rã thì xét thêm cột của các bảng nối
         // nhiều-một vào nó (#227), nên guard nhận đủ các bảng của nhóm.
@@ -286,12 +316,9 @@ async fn ask_steps(
         let why = WhyAsk {
             dataset: &dataset,
             version: &version,
-            prompt: PromptInput {
-                group: None,
-                ..input
-            },
+            prompt: build_prompt_input(&parts, &context, None),
             columns: &columns,
-            tables,
+            tables: &group.allowed,
             group: &group,
             links: &links,
             related: &related,
@@ -303,7 +330,8 @@ async fn ask_steps(
     }
 
     // Mức chi tiết của prompt: danh sách giá trị nào thật sự đã gửi (ask/value_retry.rs).
-    let (prompt, detail) = build_sql_prompt_detail(&input);
+    let input = build_prompt_input(&parts, &context, group_prompt.as_ref());
+    let (mut prompt, mut detail) = build_sql_prompt_detail(&input);
     let started = Instant::now();
     let request = LlmRequest {
         task: LlmTask::Sql,
@@ -311,7 +339,7 @@ async fn ask_steps(
         prompt: &prompt,
         json_schema: Some(build_sql_reply_schema()),
     };
-    let reply = state.llm.complete(&request).await?;
+    let mut reply = state.llm.complete(&request).await?;
     let examples_used = build_examples_detail(&pick_examples(&input, false), input.lessons.len());
     steps.push(build_step(
         StepName::Llm,
@@ -319,6 +347,32 @@ async fn ask_steps(
         true,
         examples_used.as_deref(),
     ));
+
+    // Câu cần một bảng chỉ có tên trong danh sách gọn (ask/missing_tables.rs): gửi lại một lần kèm chi tiết bảng đó, trước
+    // khi cho câu qua guard.
+    let needed = find_needed_tables(&reply, &others);
+    if !needed.is_empty() {
+        database.apply_needed(&mut choice, &needed);
+        (group, question_tables) = database.build_view(&choice);
+        apply_question_columns(
+            &mut context,
+            table,
+            &mut question_tables,
+            &classified.columns,
+            group.is_restricted(),
+        );
+        others = database.build_others(&choice);
+        group_prompt = build_group_prompt(&group, question_tables, others.clone());
+        links = build_join_links(&group);
+        let input = build_prompt_input(&parts, &context, group_prompt.as_ref());
+        let (resent, resent_detail) = build_sql_prompt_detail(&input);
+        if let Some(new_reply) =
+            run_table_resend(state, question, &resent, &needed, &mut steps).await
+        {
+            (prompt, detail, reply) = (resent, resent_detail, new_reply);
+        }
+    }
+    let tables = &group.allowed;
 
     let sensitive = group.sensitive_columns();
     let input = RunInput {
@@ -355,18 +409,7 @@ async fn ask_steps(
             .filter(|name| apply_full_values(&mut context.columns, &index, name))
             .collect();
         if !applied.is_empty() {
-            let retry_input = PromptInput {
-                table: &dataset.logical_table,
-                question,
-                context: &context,
-                metrics: &metrics,
-                examples: &examples,
-                domain: domain.as_ref(),
-                choices,
-                history: &history.section,
-                group: group_prompt.as_ref(),
-                lessons: &lessons,
-            };
+            let retry_input = build_prompt_input(&parts, &context, group_prompt.as_ref());
             let retry = ValueRetry {
                 input: &retry_input,
                 columns: &applied,
@@ -381,6 +424,7 @@ async fn ask_steps(
         let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
         outcome.message = Some(build_unanswerable_message(unanswerable, &names));
     }
+    apply_unrelated_message(&database, &mut outcome);
     apply_needed_table_message(state, ws, &dataset, question, &mut outcome).await?;
     // Giả định thành Choice một lần, dùng cho cả thẻ "Đã hiểu là" lẫn AskResponse.choices để hai chỗ cùng id.
     let answer = SqlAnswer {
@@ -512,6 +556,89 @@ async fn ask_steps(
     })
 }
 
+/// Phần của PromptInput không đổi giữa các lần dựng prompt của một câu hỏi (lần đầu, gửi lại kèm bảng, gửi lại kèm
+/// giá trị, form câu "tại sao"); ngữ cảnh cột và nhóm bảng thì đổi.
+struct PromptParts<'a> {
+    table: &'a str,
+    question: &'a str,
+    metrics: &'a [MetricDefinition],
+    examples: &'a [PromptExample],
+    domain: Option<&'a DomainPackage>,
+    choices: &'a [ChosenOption],
+    history: &'a str,
+    lessons: &'a [String],
+}
+
+fn build_prompt_input<'a>(
+    parts: &PromptParts<'a>,
+    context: &'a AskContext,
+    group: Option<&'a GroupPrompt>,
+) -> PromptInput<'a> {
+    PromptInput {
+        table: parts.table,
+        question: parts.question,
+        context,
+        metrics: parts.metrics,
+        examples: parts.examples,
+        domain: parts.domain,
+        choices: parts.choices,
+        history: parts.history,
+        group,
+        lessons: parts.lessons,
+    }
+}
+
+/// Gửi lại lượt viết SQL một lần kèm chi tiết các bảng needed (ask/missing_tables.rs). Trả câu trả lời mới, hay None
+/// khi mô hình lỗi: khi đó giữ câu trả lời đầu, guard và vòng sửa xử lý như thường, và bước ghi ok = false.
+async fn run_table_resend(
+    state: &AppState,
+    question: &str,
+    prompt: &str,
+    needed: &[String],
+    steps: &mut Vec<AskStep>,
+) -> Option<String> {
+    let names = needed.join(", ");
+    let started = Instant::now();
+    let request = LlmRequest {
+        task: LlmTask::Sql,
+        question,
+        prompt,
+        json_schema: Some(build_sql_reply_schema()),
+    };
+    match state.llm.complete(&request).await {
+        Ok(reply) => {
+            let detail = format!(
+                "Gửi lại kèm chi tiết bảng {names}: câu trước cần bảng chỉ có tên trong danh sách gọn"
+            );
+            steps.push(build_step(StepName::Llm, started, true, Some(&detail)));
+            Some(reply)
+        }
+        Err(e) => {
+            tracing::warn!(error = ?e, "table resend: the model call failed, keeping the first answer");
+            let detail = format!(
+                "Gửi lại kèm chi tiết bảng {names} không được ({}): giữ câu trả lời đầu",
+                build_user_text(&e, "llm")
+            );
+            steps.push(build_step(StepName::Llm, started, false, Some(&detail)));
+            None
+        }
+    }
+}
+
+/// Câu không trả lời được mà SQL đọc hai bảng không nối được qua chuỗi khóa ngoại nào (ask/missing_tables.rs): lời nói
+/// rõ hai bảng không có quan hệ trong database, thay cho lời chung của guard.
+fn apply_unrelated_message(database: &DatabaseTables, outcome: &mut RunOutcome) {
+    if !matches!(outcome.status, AskStatus::Rejected | AskStatus::Failed) {
+        return;
+    }
+    let Some(sql) = outcome.sql_generated.as_deref() else {
+        return;
+    };
+    if let Some(message) = database.build_unrelated_message(sql) {
+        outcome.message = Some(message);
+    }
+}
+
 /// Phần của lần gửi lại kèm đủ giá trị (ask/value_retry.rs) mà run_value_retry cần.
 struct ValueRetry<'a> {
     input: &'a PromptInput<'a>,
@@ -628,7 +755,10 @@ async fn apply_needed_table_message(
         return Ok(());
     };
     let tables = state.store.list_metadata_tables(ws, source_id).await?;
-    let sql = outcome.sql_generated.as_deref();
+    // Mô hình báo không trả lời được thì không có SQL; lý do của nó có thể nêu tên bảng chưa chụp (luật ở
+    // backend/prompts/sql_other_tables.txt), nên dò tên bảng trong lý do như trong SQL.
+    let reason = outcome.unanswerable.as_ref().map(|u| u.reason.as_str());
+    let sql = outcome.sql_generated.as_deref().or(reason);
     if let Some(table) = unsnapshotted::find_needed_table(question, sql, &tables) {
         outcome.message = Some(unsnapshotted::build_needed_table_message(table));
     }
