@@ -34,6 +34,13 @@ fn load_or_create(path: &Path) -> Result<String, String> {
     match std::fs::read_to_string(path) {
         Ok(text) => {
             let key = text.trim().to_string();
+            if key.is_empty() {
+                return Err(format!(
+                    "{} is empty: delete it to generate a new key (database sources added with the old key must be \
+                     added again), or set SOURCE_SECRET_KEY",
+                    path.display()
+                ));
+            }
             // Kiểm ngay lúc khởi động: file sửa tay hỏng thì báo ở đây, không đợi tới lần đầu thêm nguồn.
             SecretKey::from_base64(&key)
                 .map_err(|_| format!("{} is not a 32 byte base64 key", path.display()))?;
@@ -44,32 +51,48 @@ fn load_or_create(path: &Path) -> Result<String, String> {
     }
 }
 
-/// Sinh khóa và ghi file. create_new: hai tiến trình cùng khởi động (server và một lệnh quản trị) thì tiến trình sau
-/// không ghi đè khóa của tiến trình trước mà đọc lại nó.
+/// Sinh khóa và ghi file, nguyên tử: ghi đủ vào một file tạm cùng thư mục (quyền 0600), rồi hard_link sang tên thật.
+/// hard_link không ghi đè: hai tiến trình cùng khởi động (server và một lệnh quản trị) thì tiến trình sau đọc khóa của
+/// tiến trình trước. Nhờ vậy không ai đọc được file khóa rỗng hay ghi dở (đĩa đầy giữa lúc ghi chỉ để lại file tạm).
 fn create(path: &Path) -> Result<String, String> {
     let dir: PathBuf = path.parent().map(Path::to_path_buf).unwrap_or_default();
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|e| format!("cannot generate a key: {e}"))?;
     let key = base64::engine::general_purpose::STANDARD.encode(bytes);
+    let temp = dir.join(format!(".{KEY_FILE}.{}.tmp", uuid::Uuid::new_v4().simple()));
+    let written = write_private(&temp, &key);
+    let linked = written.and_then(|()| {
+        std::fs::hard_link(&temp, path)
+            .map_err(|e| (e.kind(), format!("cannot create {}: {e}", path.display())))
+    });
+    // File tạm không còn cần, kể cả khi lỗi.
+    let _ = std::fs::remove_file(&temp);
+    match linked {
+        Ok(()) => {
+            // Không in khóa, chỉ nơi lưu.
+            tracing::info!(path = %path.display(), "generated SOURCE_SECRET_KEY and saved it to the data directory");
+            Ok(key)
+        }
+        Err((std::io::ErrorKind::AlreadyExists, _)) => load_or_create(path),
+        Err((_, why)) => Err(why),
+    }
+}
+
+/// Ghi khóa vào một file mới, chỉ user chạy backend đọc được (0600): khóa giải mã được mật khẩu của mọi nguồn.
+fn write_private(path: &Path, key: &str) -> Result<(), (std::io::ErrorKind, String)> {
+    let fail = |e: std::io::Error| (e.kind(), format!("cannot write {}: {e}", path.display()));
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
-    // Chỉ user chạy backend đọc được file (0600): khóa giải mã được mật khẩu của mọi nguồn.
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = match options.open(path) {
-        Ok(file) => file,
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return load_or_create(path),
-        Err(e) => return Err(format!("cannot create {}: {e}", path.display())),
-    };
+    let mut file = options.open(path).map_err(fail)?;
     file.write_all(format!("{key}\n").as_bytes())
-        .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-    // Không in khóa, chỉ nơi lưu.
-    tracing::info!(path = %path.display(), "generated SOURCE_SECRET_KEY and saved it to the data directory");
-    Ok(key)
+        .map_err(fail)?;
+    file.sync_all().map_err(fail)
 }
 
 #[cfg(test)]
@@ -119,6 +142,18 @@ mod tests {
         apply_key_file(&mut config).unwrap();
         assert_eq!(config.source_secret_key.expose(), set);
         assert!(!dir.join(KEY_FILE).exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn empty_key_file_is_reported() {
+        let dir = temp_dir();
+        std::fs::write(dir.join(KEY_FILE), "").unwrap();
+        let mut config = config_in(&dir, "");
+        let why = apply_key_file(&mut config).unwrap_err();
+        assert!(why.contains("is empty"), "{why}");
+        // Không để lại file tạm nào trong thư mục.
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

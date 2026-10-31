@@ -22,7 +22,8 @@ quá `SOURCE_MAX_ROWS` mặc định). Bảng nào có `<tên bảng>.metrics.js
 `student_assessments.metrics.json`) thì ghi thêm chỉ số mẫu. Hồ sơ cột và câu gợi ý của `mock` cho các bảng này nằm ở
 `backend/src/engine/llm/mock_answers_database.json`.
 
-Không có `SAMPLE_DATABASE_URL` (để rỗng, hay chạy binary ngoài compose và `make dev`), hoặc chụp lỗi (database mẫu không
+Không có `SAMPLE_DATABASE_URL` (để rỗng, hay chạy binary trực tiếp không đặt biến này; `make dev` luôn đặt nó trỏ vào
+`127.0.0.1:5440`), hoặc chụp lỗi (database mẫu không
 chạy hay chưa nạp, không có khóa mã hóa dùng được), backend ghi cảnh báo và nạp `<SAMPLES_DIR>/dataco.csv` thành dataset tên `DataCo`
 (bảng `dataco`, bảng mà các câu mẫu DataCo của `LLM_PROVIDER=mock` viết cho), qua đúng đường nạp file ở trang **Dữ
 liệu**, kể cả hồ sơ cột. Sau đó ghi các chỉ số trong `dataco.metrics.json` vào bảng `metrics` của dataset đó (`origin`

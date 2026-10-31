@@ -245,9 +245,18 @@ async fn prepare_database(
             "eval workspace already has the sample source".to_string(),
         ));
     }
-    wait_semantic(state, &member).await?;
-    let datasets = state.store.list_datasets(&member.workspace).await?;
-    Ok((member, datasets))
+    // Lỗi sau khi đã tạo workspace tạm thì xóa nó luôn, như khi chụp lỗi ở trên: run_eval chỉ xóa khi bước này xong.
+    let ready = match wait_semantic(state, &member).await {
+        Ok(()) => state.store.list_datasets(&member.workspace).await,
+        Err(e) => Err(e),
+    };
+    match ready {
+        Ok(datasets) => Ok((member, datasets)),
+        Err(e) => {
+            let _ = workspaces::delete(state, &member).await;
+            Err(e)
+        }
+    }
 }
 
 /// Hồ sơ ngữ nghĩa chạy nền; hỏi khi chưa xong thì ngữ cảnh thiếu bí danh và câu gợi ý. Chờ mọi dataset của workspace.

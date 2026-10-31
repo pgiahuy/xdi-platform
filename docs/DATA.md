@@ -209,7 +209,8 @@ vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset
 ## Dataset mẫu
 
 Thiết lập lần đầu tạo xong workspace đầu tiên mà tới được database mẫu (`SAMPLE_DATABASE_URL`; compose trỏ vào dịch vụ
-`demo-db` của [data/postgres-demo](../data/postgres-demo/README.md) khi bật `--profile demo`) thì thêm nó làm nguồn
+`demo-db` của [data/postgres-demo](../data/postgres-demo/README.md) khi bật `--profile demo`, `make dev` trỏ vào
+`127.0.0.1:5440`) thì thêm nó làm nguồn
 Postgres và chụp các nhóm bảng ghi trong `SAMPLES_DIR/sample_database.json`, đúng như admin làm ở mục Nguồn database
 phía trên: 12 bảng thành 12 dataset kèm 11 quan hệ, cộng chỉ số mẫu của bảng có file
 `<bảng>.metrics.json` (`backend/src/service/samples_db.rs`). Không có database mẫu, hay chụp lỗi, thì nạp `dataco.csv`

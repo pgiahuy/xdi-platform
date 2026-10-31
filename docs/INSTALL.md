@@ -195,6 +195,10 @@ git pull && docker compose up -d --build  # cập nhật; backend tự áp migra
 docker compose down -v                    # gỡ hẳn, XÓA cả hai volume dữ liệu
 ```
 
+Cẩn thận với `docker compose --profile demo down -v`: có `--profile demo` thì volume của database mẫu
+(`xdi-demo-db_demo-db-data`) cũng thuộc project này và bị xóa theo, phải tải và nạp lại bằng `load.sh`. Chỉ gỡ ứng dụng
+thì chạy `docker compose down -v` không kèm profile, hoặc `docker compose --profile demo down` (không `-v`).
+
 Gỡ hẳn và xóa luôn image backend: `docker compose down -v --rmi local`. `docker builder prune` xóa cache build (của
 mọi project trên máy, không riêng project này).
 
@@ -211,7 +215,8 @@ git clone https://github.com/pgiahuy/xdi-platform.git
 cd xdi-platform
 cp .env.example .env
 make hooks          # một lần: hook pre-push chạy kiểm tra trước khi push (dành cho người đóng góp)
-make dev            # Postgres và database mẫu trong Docker, backend chạy bằng cargo run ở cổng 8000
+make dev            # Postgres trong Docker, backend chạy bằng cargo run ở cổng 8000; dùng database mẫu ở
+                    # 127.0.0.1:5440 nếu nó đang chạy (data/postgres-demo), không thì nạp dataco.csv
 ```
 
 Giao diện, ở terminal khác:
