@@ -389,7 +389,7 @@ export interface paths {
         put?: never;
         /**
          * Snapshot every table of a database dataset again (admin only)
-         * @description Copies every table snapshotted before from this database, in one read-only transaction so all tables show the same moment, then replaces the relations between them. A table whose content did not change gets no new version (`created: false`); the status is 200 when no table changed. At most 30 tables; SOURCE_MAX_ROWS and MAX_UPLOAD_MB apply to each table.
+         * @description Copies every table this database dataset holds: tables snapshotted before and tables kept as metadata only, never tables the admin left unticked. One read-only REPEATABLE READ transaction, so all tables show the same moment; then every declared foreign key between held tables is recorded as a relation. A table whose content did not change gets no new version (`created: false`); the status is 200 when no table changed. No table count limit: a table over SOURCE_MAX_ROWS, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (Postgres sizes, smallest tables first), keeps metadata only (`metadata_only`); MAX_UPLOAD_MB applies to each copied table. A table the account can no longer read is skipped and listed in `unreadable`. SOURCE_RESNAPSHOT_HOURS runs the same on a schedule.
          */
         post: operations["snapshotCatalogDataset"];
         delete?: never;
@@ -945,8 +945,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Snapshot a table and related tables, one dataset per table (admin only)
-         * @description Every table is copied in one read-only REPEATABLE READ transaction, then stored as a Parquet version like an uploaded file. A table snapshotted before from this source gets a new version of its dataset. Foreign keys among the tables are recorded as dataset relations. A snapshot again (`dataset_id`) takes every dataset of this source linked to it. At most 10 tables; SOURCE_MAX_ROWS and MAX_UPLOAD_MB apply to each table. A table with the same content as an existing version creates nothing (`created` false); the status is 200 when no table created anything.
+         * Snapshot tables of the source, every readable table by default, one dataset per table (admin only)
+         * @description Without `table`, `tables` and `dataset_id`, every table and view the account can read is snapshotted; `tables` lists the ticked tables instead, and one name snapshots that table alone (for example one kept as metadata only). All tables are copied in one read-only REPEATABLE READ transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from this source gets a new version of its dataset, and one with unchanged content creates nothing (`created` false). Every declared foreign key between tables snapshotted from this source is recorded as a relation; relations are never inferred. A table over SOURCE_MAX_ROWS, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (Postgres sizes, smallest tables first), keeps columns, types, keys and comments only (`metadata_only`). MAX_UPLOAD_MB still applies to each copied table. `dataset_id` snapshots that dataset again with every dataset linked to it.
          */
         post: operations["snapshotSource"];
         delete?: never;
@@ -962,7 +962,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Tables and views the source account can read (admin only) */
+        /**
+         * Tables and views the source account can read, for picking what to snapshot (admin only)
+         * @description Every table and view the account can read (its SELECT grants decide the scope), with the row estimate and size from Postgres statistics, the table comment, foreign keys in and out among readable tables, `is_referenced` when another table points to it (warn before unticking a lookup table), `over_row_limit` when the estimate is above SOURCE_MAX_ROWS, and what this source already holds for it (`state`).
+         */
         get: operations["listSourceTables"];
         put?: never;
         post?: never;
@@ -1549,6 +1552,12 @@ export interface components {
              */
             id: string;
             kind: components["schemas"]["DatasetKind"];
+            /**
+             * @description Tables of the database kept with columns, types, keys and comments but no rows (over SOURCE_MAX_ROWS or the
+             *     SOURCE_SNAPSHOT_MAX_MB total), ordered by `table`. An admin snapshots one with `POST /sources/{id}/snapshot`
+             *     and `tables: [table]`. Empty for a file.
+             */
+            metadata_only: components["schemas"]["MetadataOnlyTable"][];
             /** @description Database name for a database, the name given at upload for a file. */
             name: string;
             /** @description Foreign-key relations between tables of this dataset, copied from the source database. Empty for a file. */
@@ -2130,6 +2139,42 @@ export interface components {
             /** Format: uuid */
             workspace_id: string;
         };
+        /** @description One column of a table kept as metadata only, read from the source catalog. */
+        MetadataColumn: {
+            /** @description Postgres type as `format_type` writes it, for example `numeric(10,2)`. */
+            data_type: string;
+            /** @description `COMMENT ON COLUMN`, cleaned; null when none. */
+            description: string | null;
+            name: string;
+            nullable: boolean;
+            primary_key: boolean;
+        };
+        /** @description A table of the source with columns, types, keys and comments but no rows. */
+        MetadataOnlyTable: {
+            cause: components["schemas"]["SkipCause"];
+            columns: components["schemas"]["MetadataColumn"][];
+            /**
+             * Format: uuid
+             * @description Dataset of an earlier snapshot of this table, which keeps its last version; null when never snapshotted.
+             */
+            dataset_id: string | null;
+            /** @description `COMMENT ON TABLE`, cleaned; null when none. */
+            description: string | null;
+            /** @description Why, in Vietnamese, with the setting to change. */
+            reason: string;
+            /**
+             * Format: int64
+             * @description Rows counted, or estimated by Postgres when far over SOURCE_MAX_ROWS.
+             */
+            row_count: number | null;
+            /**
+             * Format: int64
+             * @description Size reported by Postgres; null for views.
+             */
+            size_bytes: number | null;
+            /** @description `schema.table`. */
+            table: string;
+        };
         /** @description A metric of the dataset: the version in use (the latest confirmed one). */
         Metric: {
             /** @description False for a draft nobody approved; the SQL prompt marks it as such. */
@@ -2469,6 +2514,11 @@ export interface components {
             name: string;
         };
         /**
+         * @description Why a table keeps metadata only.
+         * @enum {string}
+         */
+        SkipCause: "row_limit" | "size_limit";
+        /**
          * @description `base` or `compare`: one of the two slices of `AskResponse.explanation`.
          * @enum {string}
          */
@@ -2481,19 +2531,30 @@ export interface components {
             dataset_id?: string | null;
             /** @description Name of the dataset of `table` when it is new; defaults to the table name. Other tables use their table name. */
             name?: string | null;
-            /** @description `schema.table` to start from. Not needed with `dataset_id`. */
+            /**
+             * @description `schema.table` named `name` when it is new. Optional: without `table`, `tables` and `dataset_id`, every table
+             *     and view the account can read is snapshotted.
+             */
             table?: string | null;
             /**
-             * @description More `schema.table` names snapshotted with `table`, usually picked from its relation list. Each table becomes
-             *     its own dataset. Not allowed with `dataset_id`.
+             * @description `schema.table` names to snapshot (the ticked tables), each into its own dataset. Empty with no `table` and no
+             *     `dataset_id`: every readable table. One name snapshots that one table, for example a table kept as metadata
+             *     only. Not allowed with `dataset_id`.
              */
             tables?: string[];
         };
         SnapshotResponse: {
-            /** @description One entry per table, the starting table first. `created` is false for a table whose content did not change. */
+            /** @description One entry per table copied. `created` is false for a table whose content did not change. */
             datasets: components["schemas"]["UploadResult"][];
-            /** @description Foreign-key relations among these datasets, as recorded. */
+            /** @description Tables over SOURCE_MAX_ROWS or the SOURCE_SNAPSHOT_MAX_MB total: no rows copied, metadata kept. */
+            metadata_only: components["schemas"]["MetadataOnlyTable"][];
+            /** @description Foreign-key relations recorded for these datasets (both ends snapshotted from this source). */
             relations: components["schemas"]["DatasetRelation"][];
+            /**
+             * @description Tables this source held that the account can no longer read (re-snapshot only); their datasets keep their
+             *     last version.
+             */
+            unreadable: string[];
         };
         /** @description A database source without its password. */
         SourceResponse: {
@@ -2511,11 +2572,50 @@ export interface components {
             sslmode: string;
             user: string;
         };
-        SourceTable: {
+        /** @description A table or view the source account can read, with what the connect screen needs to pick tables. */
+        SourceTableInfo: {
+            /**
+             * Format: int64
+             * @description Columns the account can read.
+             */
+            column_count: number;
+            /** @description `COMMENT ON TABLE`, cleaned; null when none. */
+            comment: string | null;
+            /**
+             * Format: uuid
+             * @description Dataset of the table when `state` is `snapshotted`.
+             */
+            dataset_id: string | null;
+            /**
+             * Format: int64
+             * @description Row estimate from Postgres statistics (last ANALYZE); null when Postgres has none yet, and for views.
+             */
+            estimated_rows: number | null;
+            /**
+             * @description True when another readable table points to this one (a lookup table): unticking it leaves those tables without
+             *     the relation.
+             */
+            is_referenced: boolean;
             /** @description `table` or `view`. */
             kind: string;
             name: string;
+            /** @description True when the row estimate is above SOURCE_MAX_ROWS: a snapshot keeps its metadata only. */
+            over_row_limit: boolean;
+            /** @description Why the table has metadata only; null otherwise. */
+            reason: string | null;
+            /** @description Foreign keys of other readable tables pointing to this table. */
+            referenced_by: components["schemas"]["TableLink"][];
+            /** @description Foreign keys of this table pointing to other readable tables. */
+            references: components["schemas"]["TableLink"][];
             schema: string;
+            /**
+             * Format: int64
+             * @description Size reported by Postgres (`pg_table_size`, without indexes); null for views.
+             */
+            size_bytes: number | null;
+            state: components["schemas"]["TableState"] | null;
+            /** @description `schema.table`, the name to send in `SnapshotRequest.tables`. */
+            table: string;
         };
         /**
          * @description Step of the backend:
@@ -2569,6 +2669,16 @@ export interface components {
             /** @description `dimension`, `measure`, `time`, `key`, `text` or `ignore`. */
             role: string;
         };
+        /** @description A foreign key between two readable tables, as declared in the source database. */
+        TableLink: {
+            constraint: string;
+            from_columns: string[];
+            /** @description Table holding the foreign key (the many side) and its key columns. */
+            from_table: string;
+            to_columns: string[];
+            /** @description Table the foreign key points to (the one side) and its key columns. */
+            to_table: string;
+        };
         /** @description A dataset the SQL of an answer read. */
         TableRead: {
             /** Format: uuid */
@@ -2578,6 +2688,11 @@ export interface components {
             /** @description Dataset name as shown in the dataset list. */
             name: string;
         };
+        /**
+         * @description What a source holds for one table.
+         * @enum {string}
+         */
+        TableState: "snapshotted" | "metadata_only";
         TestSourceResponse: {
             /** @description Number of tables and views the account can read. */
             table_count: number;
@@ -3710,7 +3825,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description 400 a file dataset, no table yet, too many tables, or the database refused; 401; 403 not admin; 404 not a member or no such dataset; 413 a table over SOURCE_MAX_ROWS */
+            /** @description 400 a file dataset, no table yet, or the database refused; 401; 403 not admin; 404 not a member or no such dataset; 413 a copied table bigger than MAX_UPLOAD_MB */
             "4XX": {
                 headers: {
                     [name: string]: unknown;
@@ -5383,7 +5498,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Every table matches an existing version: nothing created */
+            /** @description No table created anything (unchanged or metadata only) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5410,7 +5525,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description 400 unknown table, cannot read it, more than 10 tables, 401, 403 not admin, 404, 413 a table has more rows than SOURCE_MAX_ROWS or is bigger than MAX_UPLOAD_MB */
+            /** @description 400 unknown table, cannot read it or cannot connect, 401, 403 not admin, 404, 413 a copied table is bigger than MAX_UPLOAD_MB */
             "4XX": {
                 headers: {
                     [name: string]: unknown;
@@ -5441,7 +5556,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SourceTable"][];
+                    "application/json": components["schemas"]["SourceTableInfo"][];
                 };
             };
             /** @description Internal error; details are in the server log, not in the response */

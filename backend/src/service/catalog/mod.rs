@@ -15,13 +15,15 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::auth::Member;
-use crate::engine::store::{CatalogColumnRow, CatalogSourceRow, Dataset, DatasetRelation};
+use crate::engine::store::{
+    CatalogColumnRow, CatalogSourceRow, Dataset, DatasetRelation, MetadataTableRow,
+};
 use crate::service::ask::contract::{AskResponse, ChosenOption};
 use crate::service::catalog::contract::{DatasetKind, DatasetSummary, DatasetTable, TableColumn};
 use crate::service::conversation::contract::ConversationListResponse;
 use crate::service::conversation::{self, DatasetScope};
 use crate::service::ingest;
-use crate::service::sources::{self, SnapshotResponse};
+use crate::service::sources::{self, MetadataOnlyTable, SnapshotResponse};
 use crate::{error::AppError, state::AppState};
 
 /// Mọi dataset của workspace kèm bảng của chúng.
@@ -31,9 +33,10 @@ pub async fn list(state: &AppState, member: &Member) -> Result<Vec<DatasetSummar
     let tables = ingest::list_datasets(state, member).await?;
     let columns = state.store.list_catalog_columns(ws, None).await?;
     let relations = state.store.list_relations(ws, None).await?;
+    let metadata = state.store.list_workspace_metadata_tables(ws).await?;
     Ok(sources
         .into_iter()
-        .map(|source| build_summary(source, &tables, &columns, &relations))
+        .map(|source| build_summary(source, &tables, &columns, &relations, &metadata))
         .collect())
 }
 
@@ -51,10 +54,14 @@ pub async fn detail(
         .list_catalog_columns(ws, Some(source.id))
         .await?;
     let relations = state.store.list_relations(ws, None).await?;
-    Ok(build_summary(source, &tables, &columns, &relations))
+    let metadata = state.store.list_metadata_tables(ws, source.id).await?;
+    Ok(build_summary(
+        source, &tables, &columns, &relations, &metadata,
+    ))
 }
 
-/// Chụp lại mọi bảng của một dataset là database (chỉ admin), trong một giao dịch đọc như chụp một nhóm bảng.
+/// Chụp lại mọi bảng một dataset là database đang giữ, kể cả bảng chỉ có metadata (chỉ admin, #247), trong một giao
+/// dịch đọc.
 pub async fn snapshot(
     state: &AppState,
     member: &Member,
@@ -144,6 +151,7 @@ fn build_summary(
     all_tables: &[Dataset],
     columns: &[CatalogColumnRow],
     relations: &[DatasetRelation],
+    metadata: &[MetadataTableRow],
 ) -> DatasetSummary {
     let mut by_table: HashMap<Uuid, Vec<TableColumn>> = HashMap::new();
     for c in columns {
@@ -174,6 +182,11 @@ fn build_summary(
             .iter()
             .filter(|r| ids.contains(&r.from_dataset_id) && ids.contains(&r.to_dataset_id))
             .cloned()
+            .collect(),
+        metadata_only: metadata
+            .iter()
+            .filter(|m| m.source_id == source.id)
+            .map(MetadataOnlyTable::from_stored)
             .collect(),
         tables,
         updated_at,

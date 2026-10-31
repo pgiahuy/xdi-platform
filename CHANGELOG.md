@@ -6,6 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
+- Kết nối database thì mặc định chụp mọi bảng tài khoản đọc được, admin bỏ tick; không còn trần số bảng mà có trần dung lượng `SOURCE_SNAPSHOT_MAX_MB`; bảng quá trần chỉ lưu cột, kiểu, khóa, mô tả và câu hỏi cần nó được báo đúng tên bảng; chụp lại cả dataset bằng tay hay theo lịch `SOURCE_RESNAPSHOT_HOURS` (#247).
 - Database mẫu tách thành hai database trong cùng container: `sales_demo` (DataCo) và `edu_demo` (OULAD); thiết lập lần đầu thêm mỗi database làm một nguồn, `SAMPLE_DATABASE_URL` nhận nhiều chuỗi cách nhau bằng dấu phẩy; màn xem nhanh chỉ đọc bằng Flask-Admin cho hai database (`data/postgres-demo`, profile `admin`) (#250, #259).
 - Guard chỉ nhận phép nối giữa hai bảng đúng cột của một khóa ngoại trong database; nối sai cột, thiếu cột của khóa, nối hai bảng không có quan hệ hay tích chéo bị từ chối, mô hình sửa lại một lần theo đúng khóa (#256).
 - Chụp bảng Postgres đọc luôn mô tả bảng và cột ghi trong database (`COMMENT ON`) làm mô tả trong hồ sơ cột; mô hình không viết lại các mô tả này, giao diện ghi nguồn "từ database" hay "do mô hình viết" (#245).

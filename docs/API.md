@@ -119,7 +119,9 @@ Code: `backend/src/service/catalog/` (hợp đồng ở `contract.rs`), `backend
 
 - `DatasetSummary`: `id` (với database, trùng id nguồn ở `/sources/{id}`), `kind` (`database` hay `file`), `name` (tên
   database, hay tên đặt lúc nạp file), `domain` (gói ngành), `tables`, `relations` (quan hệ khóa ngoại giữa các bảng của
-  dataset, dạng `DatasetRelation`), `updated_at` (lần chụp hay nạp gần nhất), `created_at`.
+  dataset, dạng `DatasetRelation`), `metadata_only` (bảng của database mới có cột, kiểu, khóa và mô tả, chưa có dữ liệu:
+  cùng dạng `MetadataOnlyTable` như response chụp, rỗng với file), `updated_at` (lần chụp hay nạp gần nhất),
+  `created_at`.
 - `DatasetTable`: `id` là id bảng mà các route bảng nhận (`/datasets/{id}/overview`, `/metrics`, `/drill`,
   `/conversations/{conversation_id}`, `DELETE /datasets/{id}`); `name`, `logical_table` (tên trong SQL, chỉ không trùng
   trong một dataset: hai database cùng có `orders` thì cả hai là `orders`), `schema` và `source_table` (null với file),
@@ -134,8 +136,9 @@ Code: `backend/src/service/catalog/` (hợp đồng ở `contract.rs`), `backend
   không thuộc dataset trả 404. Response là `AskResponse` như route hỏi của bảng; `AskResponse.table_id` là bảng đã bắt
   đầu, dùng cho truy dòng nguồn. Cuộc trò chuyện nằm trên bảng bắt đầu của câu đầu (`ConversationItem.table_id`) và
   tiếp được từ bất kỳ bảng nào của cùng dataset.
-- Chụp lại dataset: dataset là file trả 400; tối đa 30 bảng; giới hạn dòng và dung lượng như chụp một nhóm (mục Nguồn
-  database). 201 khi có bảng đổi, 200 khi không bảng nào đổi.
+- Chụp lại dataset: mọi bảng dataset đang giữ, gồm bảng chỉ có metadata, không gồm bảng admin bỏ tick; không giới hạn
+  số bảng, trần dòng và dung lượng như lần chụp đầu (mục Nguồn database); response `SnapshotResponse` như ở đó, bảng
+  không còn đọc được ghi trong `unreadable`. Dataset là file trả 400. 201 khi có bảng đổi, 200 khi không bảng nào đổi.
 
 Route cũ vẫn chạy, đặc tả đánh dấu `deprecated`: `GET .../datasets` (mỗi mục là một bảng, `parent_id` là dataset của
 nó), `POST .../datasets/{id}/ask` (thay bằng hỏi trên dataset kèm `table_id`), `GET .../datasets/{id}/conversations`.
@@ -372,19 +375,25 @@ hỏng, không ghi được) thì thêm và dùng nguồn trả 503 (`unavailabl
   Backend thử kết nối trước khi lưu; máy chủ ngoài `SOURCE_ALLOWED_HOSTS`, sai mật khẩu, không tới được máy chủ đều trả
   400 kèm lời báo cách sửa. 201 khi lưu xong.
 - `POST .../sources/{id}/test`: kết nối lại, trả số bảng và view đọc được.
-- `GET .../sources/{id}/tables`: bảng và view tài khoản đọc được (`schema`, `name`, `kind`).
+- `GET .../sources/{id}/tables`: mọi bảng và view tài khoản đọc được (`SourceTableInfo`): `schema`, `name`, `kind`,
+  `table` (`schema.table`), `estimated_rows`, `size_bytes`, `comment`, `column_count`, `references` và `referenced_by`
+  (khóa ngoại ra, vào giữa các bảng đọc được), `is_referenced` (bảng khác trỏ tới nó), `over_row_limit`, `state`
+  (`snapshotted`, `metadata_only` hay null), `dataset_id`, `reason`. Ý nghĩa từng trường ở
+  [DATA.md](DATA.md#chụp-mọi-bảng-đọc-được).
 - `POST .../sources/{id}/relations`: thân `{"table": "schema.table"}`. Trả `column_count` (cột đọc được của bảng),
   `many_to_one` (bảng mà bảng này trỏ tới) và `one_to_many` (bảng trỏ vào bảng này). Mỗi mục có `table` (bảng chụp kèm
   được), `constraint`, `from_table`, `from_columns`, `to_table`, `to_columns`, `column_count`, `addable` và `reason`
   (tiếng Việt, khi không chụp kèm được). Chỉ đọc `pg_catalog`, không đọc dòng dữ liệu.
-- `POST .../sources/{id}/snapshot`: `table` (`schema.table` lấy từ danh sách bảng), `tables` (các bảng chụp kèm, có thể
-  rỗng) và `name` (tên bảng `table` khi nó mới), hoặc `dataset_id` (id bảng) để chụp lại bảng đó cùng mọi bảng cùng
-  nguồn nối với nó qua quan hệ (gửi kèm `tables` thì 400); chụp lại mọi bảng của database ở `POST
-  .../catalog/{id}/snapshot`. Mỗi bảng thành một bảng của dataset là nguồn này; bảng đã chụp từ nguồn này thì thêm phiên
-  bản vào bảng cũ. Response `SnapshotResponse`: `datasets` (mỗi bảng một `UploadResult`, bảng bắt đầu đứng đầu,
-  `created: false` khi bảng không đổi) và `relations` (quan hệ giữa các dataset này, dạng `DatasetRelation`). 201 khi có
-  ít nhất một phiên bản mới, 200 khi không bảng nào đổi; 400 khi quá 10 bảng hay có bảng không đọc được; 413 khi một
-  bảng quá `SOURCE_MAX_ROWS` hay `MAX_UPLOAD_MB`.
+- `POST .../sources/{id}/snapshot`: thân rỗng (`{}`) chụp mọi bảng đọc được; `tables` là đúng các bảng được tick (một
+  tên là chụp riêng bảng đó); `table` cùng `name` đặt tên cho một bảng mới; hoặc `dataset_id` (id bảng) để chụp lại
+  bảng đó cùng mọi bảng cùng nguồn nối với nó qua quan hệ (gửi kèm `tables` thì 400); chụp lại mọi bảng của database ở
+  `POST .../catalog/{id}/snapshot`. Mỗi bảng thành một bảng của dataset là nguồn này; bảng đã chụp từ nguồn này thì
+  thêm phiên bản vào bảng cũ. Không giới hạn số bảng. Response `SnapshotResponse`: `datasets` (mỗi bảng chép được một
+  `UploadResult`, `created: false` khi bảng không đổi), `relations` (quan hệ của các bảng này, dạng `DatasetRelation`),
+  `metadata_only` (bảng quá `SOURCE_MAX_ROWS` hay trần `SOURCE_SNAPSHOT_MAX_MB`: `table`, `cause` là `row_limit` hay
+  `size_limit`, `reason`, `row_count`, `size_bytes`, `description`, `columns`, `dataset_id` của lần chụp trước nếu có)
+  và `unreadable` (chỉ khi chụp lại cả dataset). 201 khi có ít nhất một phiên bản mới, 200 khi không bảng nào đổi; 400
+  khi có bảng không đọc được; 413 khi file chép ra của một bảng quá `MAX_UPLOAD_MB`.
 - `DELETE .../sources/{id}`: 204; 400 khi còn dataset chụp từ nguồn này.
 
 Bảng trả qua route cũ (kiểu `Dataset`) có thêm `parent_id` (dataset chứa nó), `row_count`, `description`, `source_kind`,

@@ -82,6 +82,11 @@ pub struct Config {
     pub source_allowed_hosts: Vec<String>,
     /// Trần số dòng một lần chụp bảng (SOURCE_MAX_ROWS); bảng lớn hơn thì từ chối thay vì chụp thiếu.
     pub source_max_rows: u64,
+    /// Trần tổng dung lượng (theo Postgres) các bảng chép dữ liệu trong một lần chụp (SOURCE_SNAPSHOT_MAX_MB, #247); bảng
+    /// không còn chỗ chỉ lưu metadata (service/sources/plan.rs).
+    pub source_snapshot_max_bytes: u64,
+    /// Khoảng giữa hai lần chụp lại mọi nguồn theo lịch (SOURCE_RESNAPSHOT_HOURS, #247); None là không có lịch.
+    pub source_resnapshot_every: Option<Duration>,
     /// Thời gian tối đa một lần chụp bảng, kể cả kết nối (SOURCE_TIMEOUT_SECS).
     pub source_timeout: Duration,
     /// Cách chép dữ liệu bảng khi chụp (SOURCE_SNAPSHOT_MODE, service/sources/direct.rs, #246).
@@ -169,6 +174,15 @@ impl Config {
                 env::var("SOURCE_MAX_ROWS").ok().as_deref(),
                 1_000_000,
             )),
+            source_snapshot_max_bytes: u64::from(positive_number(
+                "SOURCE_SNAPSHOT_MAX_MB",
+                env::var("SOURCE_SNAPSHOT_MAX_MB").ok().as_deref(),
+                2048,
+            )) * 1024
+                * 1024,
+            source_resnapshot_every: resnapshot_every(
+                env::var("SOURCE_RESNAPSHOT_HOURS").ok().as_deref(),
+            ),
             source_timeout: timeout_secs("SOURCE_TIMEOUT_SECS", 300),
             source_snapshot_mode: snapshot_mode(env::var("SOURCE_SNAPSHOT_MODE").ok().as_deref()),
             source_postgres_extension: PathBuf::from(var_or(
@@ -377,6 +391,24 @@ fn snapshot_mode(raw: Option<&str>) -> SnapshotMode {
 /// khi extension không nạp được.
 const DEFAULT_SNAPSHOT_MODE: SnapshotMode = SnapshotMode::Direct;
 
+/// SOURCE_RESNAPSHOT_HOURS: trống hay 0 là không có lịch; số giờ dương là khoảng giữa hai lần; giá trị lạ thì cảnh báo
+/// và không bật lịch, vì chụp ngoài ý muốn tốn tải của database nguồn hơn là không chụp.
+fn resnapshot_every(raw: Option<&str>) -> Option<Duration> {
+    let raw = raw.map(str::trim).filter(|v| !v.is_empty())?;
+    match raw.parse::<u32>() {
+        Ok(0) => None,
+        Ok(hours) => Some(Duration::from_secs(u64::from(hours) * 3600)),
+        Err(_) => {
+            tracing::warn!(
+                variable = "SOURCE_RESNAPSHOT_HOURS",
+                value = raw,
+                "invalid value, expected a whole number of hours; scheduled re-snapshot is off"
+            );
+            None
+        }
+    }
+}
+
 fn timeout_secs(key: &str, default: u32) -> Duration {
     Duration::from_secs(u64::from(positive_number(
         key,
@@ -507,6 +539,18 @@ mod tests {
             config.public_url = url.to_string();
             assert_eq!(config.secure_cookies(), secure, "{url}");
         }
+    }
+
+    #[test]
+    fn resnapshot_hours_parsing() {
+        assert_eq!(resnapshot_every(None), None);
+        assert_eq!(resnapshot_every(Some(" ")), None);
+        assert_eq!(resnapshot_every(Some("0")), None);
+        assert_eq!(resnapshot_every(Some("abc")), None);
+        assert_eq!(
+            resnapshot_every(Some(" 24 ")),
+            Some(Duration::from_secs(24 * 3600))
+        );
     }
 
     #[test]

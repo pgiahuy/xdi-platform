@@ -101,10 +101,15 @@ async fn detail(
     tag = "catalog",
     operation_id = "snapshotCatalogDataset",
     summary = "Snapshot every table of a database dataset again (admin only)",
-    description = "Copies every table snapshotted before from this database, in one read-only transaction so all \
-                   tables show the same moment, then replaces the relations between them. A table whose content did \
-                   not change gets no new version (`created: false`); the status is 200 when no table changed. At \
-                   most 30 tables; SOURCE_MAX_ROWS and MAX_UPLOAD_MB apply to each table.",
+    description = "Copies every table this database dataset holds: tables snapshotted before and tables kept as \
+                   metadata only, never tables the admin left unticked. One read-only REPEATABLE READ transaction, \
+                   so all tables show the same moment; then every declared foreign key between held tables is \
+                   recorded as a relation. A table whose content did not change gets no new version (`created: \
+                   false`); the status is 200 when no table changed. No table count limit: a table over \
+                   SOURCE_MAX_ROWS, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (Postgres sizes, \
+                   smallest tables first), keeps metadata only (`metadata_only`); MAX_UPLOAD_MB applies to each \
+                   copied table. A table the account can no longer read is skipped and listed in `unreadable`. \
+                   SOURCE_RESNAPSHOT_HOURS runs the same on a schedule.",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = String, Path, description = "Dataset id (UUID)")
@@ -112,9 +117,9 @@ async fn detail(
     responses(
         (status = 201, body = SnapshotResponse, description = "At least one table got a new version"),
         (status = 200, body = SnapshotResponse, description = "No table changed: nothing created"),
-        (status = "4XX", body = ErrorBody, description = "400 a file dataset, no table yet, too many tables, or the \
-                                                         database refused; 401; 403 not admin; 404 not a member or \
-                                                         no such dataset; 413 a table over SOURCE_MAX_ROWS")
+        (status = "4XX", body = ErrorBody, description = "400 a file dataset, no table yet, or the database refused; \
+                                                         401; 403 not admin; 404 not a member or no such dataset; \
+                                                         413 a copied table bigger than MAX_UPLOAD_MB")
     )
 )]
 async fn snapshot(

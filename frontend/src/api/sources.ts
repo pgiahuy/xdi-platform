@@ -9,7 +9,7 @@ import type { components } from './schema'
 
 type Schemas = components['schemas']
 export type Source = Schemas['SourceResponse']
-export type SourceTable = Schemas['SourceTable']
+export type SourceTable = Schemas['SourceTableInfo']
 export type CreateSourceRequest = Schemas['CreateSourceRequest']
 export type SnapshotRequest = Schemas['SnapshotRequest']
 export type SnapshotResponse = Schemas['SnapshotResponse']
