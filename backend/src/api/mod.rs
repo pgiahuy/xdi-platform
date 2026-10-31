@@ -28,6 +28,9 @@ mod auth;
 mod conversation_tests;
 mod conversations;
 mod datasets;
+mod domains;
+#[cfg(test)]
+mod domains_tests;
 #[cfg(test)]
 mod drill_tests;
 #[cfg(test)]
@@ -86,6 +89,7 @@ fn api_routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .merge(conversations::routes())
         .merge(feedback::routes())
         .merge(metrics::routes())
+        .merge(domains::routes())
         .merge(sources::routes())
 }
 

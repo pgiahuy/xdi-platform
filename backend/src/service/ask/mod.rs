@@ -74,7 +74,6 @@ pub mod why_prompt;
 use std::time::Instant;
 
 use crate::auth::{Member, WorkspaceId};
-use crate::engine::domains::find_domain_package;
 use crate::engine::guard::AllowedTable;
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
@@ -104,6 +103,7 @@ use crate::service::ask::summary::{summarize, SummaryInput, SummaryOutcome};
 use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::why::{ask_why, build_narrate_timeout, WhyAsk};
+use crate::service::domains::load_for_prompt;
 use crate::service::explain::form::QuestionKind;
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
 use crate::{error::AppError, state::AppState};
@@ -156,6 +156,11 @@ pub async fn ask(
         .store
         .list_approved_examples(ws, dataset.id, EXAMPLE_POOL)
         .await?;
+    // Gói ngành đọc từ bảng của workspace (#229), nên khái niệm admin vừa sửa có ngay ở câu này.
+    let domain = match dataset.domain.as_deref() {
+        Some(key) => load_for_prompt(state, ws, key).await?,
+        None => None,
+    };
     let detail = build_ambiguity_detail(&context);
     let mut steps = vec![build_step(
         StepName::Context,
@@ -184,7 +189,7 @@ pub async fn ask(
         context: &context,
         metrics: &metrics,
         examples: &examples,
-        domain: dataset.domain.as_deref().and_then(find_domain_package),
+        domain: domain.as_ref(),
         choices,
         history: &history.section,
         group: group_prompt.as_ref(),
