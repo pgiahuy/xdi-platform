@@ -104,6 +104,13 @@ pub const JUDGE_MEANING_WHY: PromptFile = PromptFile {
     text: include_str!("../../prompts/judge_meaning_why.txt"),
 };
 
+/// Nghĩa các khóa của JSON gửi mô hình chấm cho lời phần giải thích của câu thường (câu chính và các ý code đã viết,
+/// service/insight/narrate.rs).
+pub const JUDGE_MEANING_PLAIN: PromptFile = PromptFile {
+    name: "judge_meaning_plain.txt",
+    text: include_str!("../../prompts/judge_meaning_plain.txt"),
+};
+
 /// Prompt phân loại câu hỏi: câu thường hay câu hỏi tìm nguyên nhân (service/ask/classify.rs).
 pub const CLASSIFY_QUESTION: PromptFile = PromptFile {
     name: "classify_question.txt",

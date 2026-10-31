@@ -1965,6 +1965,206 @@
      }
     ]
    }
+  },
+  {
+   "id": "j56",
+   "expected": "match",
+   "error": "none",
+   "text": "Estados Unidos là nước có tổng doanh thu cao nhất, đạt 4.879.667,67, chiếm 13,27% tổng doanh thu của mọi nước.",
+   "facts": {
+    "title": "Estados Unidos có tổng doanh thu cao nhất: 4.879.667,67.",
+    "points": [
+     {
+      "lead": "Tỷ trọng",
+      "text": "Estados Unidos chiếm 13,27% tổng doanh thu của mọi nước."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j57",
+   "expected": "mismatch",
+   "error": "wrong_number",
+   "text": "Estados Unidos là nước có tổng doanh thu cao nhất, đạt 4.879.667,67, chiếm 31,27% tổng doanh thu của mọi nước.",
+   "facts": {
+    "title": "Estados Unidos có tổng doanh thu cao nhất: 4.879.667,67.",
+    "points": [
+     {
+      "lead": "Tỷ trọng",
+      "text": "Estados Unidos chiếm 13,27% tổng doanh thu của mọi nước."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j58",
+   "expected": "mismatch",
+   "error": "wrong_meaning",
+   "text": "Estados Unidos là nước có nhiều đơn hàng nhất, chiếm 13,27% số đơn của mọi nước.",
+   "facts": {
+    "title": "Estados Unidos có tổng doanh thu cao nhất: 4.879.667,67.",
+    "points": [
+     {
+      "lead": "Tỷ trọng",
+      "text": "Estados Unidos chiếm 13,27% tổng doanh thu của mọi nước."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j59",
+   "expected": "match",
+   "error": "none",
+   "text": "Fishing dẫn đầu 3 danh mục với 6.929.656,49, chiếm 46,1% tổng doanh thu và cao hơn Cleats 2.497.714,40.",
+   "facts": {
+    "title": "Fishing có tổng doanh thu cao nhất trong 3 danh mục: 6.929.656,49.",
+    "points": [
+     {
+      "lead": "Tập trung",
+      "text": "Fishing chiếm 46,1% tổng doanh thu của 3 danh mục."
+     },
+     {
+      "lead": "Khoảng cách",
+      "text": "Fishing cao hơn Cleats, danh mục thứ hai, 2.497.714,40."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j60",
+   "expected": "mismatch",
+   "error": "wrong_rank",
+   "text": "Cleats là danh mục có tổng doanh thu cao nhất trong 3 danh mục.",
+   "facts": {
+    "title": "Fishing có tổng doanh thu cao nhất trong 3 danh mục: 6.929.656,49.",
+    "points": [
+     {
+      "lead": "Tập trung",
+      "text": "Fishing chiếm 46,1% tổng doanh thu của 3 danh mục."
+     },
+     {
+      "lead": "Khoảng cách",
+      "text": "Fishing cao hơn Cleats, danh mục thứ hai, 2.497.714,40."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j61",
+   "expected": "mismatch",
+   "error": "unsupported_conclusion",
+   "text": "Fishing có tổng doanh thu cao nhất, 6.929.656,49, nhờ giá bán rẻ hơn các danh mục khác.",
+   "facts": {
+    "title": "Fishing có tổng doanh thu cao nhất trong 3 danh mục: 6.929.656,49.",
+    "points": [
+     {
+      "lead": "Tập trung",
+      "text": "Fishing chiếm 46,1% tổng doanh thu của 3 danh mục."
+     },
+     {
+      "lead": "Khoảng cách",
+      "text": "Fishing cao hơn Cleats, danh mục thứ hai, 2.497.714,40."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j62",
+   "expected": "mismatch",
+   "error": "wrong_arithmetic",
+   "text": "Fishing có tổng doanh thu 6.929.656,49, gấp khoảng 2,5 lần Cleats.",
+   "facts": {
+    "title": "Fishing có tổng doanh thu cao nhất trong 3 danh mục: 6.929.656,49.",
+    "points": [
+     {
+      "lead": "Tập trung",
+      "text": "Fishing chiếm 46,1% tổng doanh thu của 3 danh mục."
+     },
+     {
+      "lead": "Khoảng cách",
+      "text": "Fishing cao hơn Cleats, danh mục thứ hai, 2.497.714,40."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j63",
+   "expected": "match",
+   "error": "none",
+   "text": "Fishing chiếm gần một nửa tổng doanh thu của 3 danh mục, với 6.929.656,49.",
+   "facts": {
+    "title": "Fishing có tổng doanh thu cao nhất trong 3 danh mục: 6.929.656,49.",
+    "points": [
+     {
+      "lead": "Tập trung",
+      "text": "Fishing chiếm 46,1% tổng doanh thu của 3 danh mục."
+     },
+     {
+      "lead": "Khoảng cách",
+      "text": "Fishing cao hơn Cleats, danh mục thứ hai, 2.497.714,40."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j64",
+   "expected": "match",
+   "error": "none",
+   "text": "Doanh thu tháng 6/2017 đạt 3.928,55, tăng 1.348,10 (52,2%) so với tháng 5/2017.",
+   "facts": {
+    "title": "Tổng doanh thu tháng 6/2017 là 3.928,55.",
+    "points": [
+     {
+      "lead": "So với kỳ trước",
+      "text": "Tăng 1.348,10 so với tháng 5/2017 (2.580,45), tức tăng 52,2%."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j65",
+   "expected": "mismatch",
+   "error": "wrong_direction",
+   "text": "Doanh thu tháng 6/2017 đạt 3.928,55, giảm 1.348,10 so với tháng 5/2017.",
+   "facts": {
+    "title": "Tổng doanh thu tháng 6/2017 là 3.928,55.",
+    "points": [
+     {
+      "lead": "So với kỳ trước",
+      "text": "Tăng 1.348,10 so với tháng 5/2017 (2.580,45), tức tăng 52,2%."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j66",
+   "expected": "mismatch",
+   "error": "wrong_magnitude",
+   "text": "Doanh thu tháng 6/2017 đạt khoảng 3,9 triệu, tăng 52,2% so với tháng 5/2017.",
+   "facts": {
+    "title": "Tổng doanh thu tháng 6/2017 là 3.928,55.",
+    "points": [
+     {
+      "lead": "So với kỳ trước",
+      "text": "Tăng 1.348,10 so với tháng 5/2017 (2.580,45), tức tăng 52,2%."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j67",
+   "expected": "match",
+   "error": "none",
+   "text": "Doanh thu tháng 6/2017 khoảng 3,9 nghìn, tăng hơn một nửa so với tháng 5/2017.",
+   "facts": {
+    "title": "Tổng doanh thu tháng 6/2017 là 3.928,55.",
+    "points": [
+     {
+      "lead": "So với kỳ trước",
+      "text": "Tăng 1.348,10 so với tháng 5/2017 (2.580,45), tức tăng 52,2%."
+     }
+    ]
+   }
   }
  ]
 }

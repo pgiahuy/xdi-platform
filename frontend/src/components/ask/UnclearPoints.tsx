@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/UnclearPoints.tsx - các chỗ mô hình chấm của backend (#201) thấy chưa rõ nghĩa trong lời của mô hình,
-hiện ngay dưới insight của câu "tại sao" (WhyInsight, summary_warnings). Chỗ chưa rõ không chắc là sai, nên lời vẫn
-hiện; khối này báo người đọc đối chiếu với bảng số. Kết luận đối soát (khớp, chưa rõ,
+hiện ngay dưới lời: insight của câu "tại sao" (WhyInsight, explanation.summary_warnings) và đoạn trả lời của câu thường
+(AnswerText, insight.summary_warnings). Chỗ chưa rõ không chắc là sai, nên lời vẫn hiện; khối này báo người đọc đối
+chiếu với số đã tính. Kết luận đối soát (khớp, chưa rõ,
 không khớp) không hiện ở câu trả lời mà ở bước hai cổng kiểm của tab Các bước (EvidenceSteps). */
 
 import { TriangleAlert } from 'lucide-react'

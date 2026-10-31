@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/judge.rs - cổng 2 (#201): gọi mô hình chấm để so lời diễn giải câu "tại sao" với các khẳng định đã qua
-cổng 1 (ask/narrate.rs gọi, prompt dựng ở explain/judge.rs). Schema và cách đọc câu trả lời ở explain/judge.rs. Test
-qua ask/narrate_tests.rs.
+/* service/ask/judge.rs - cổng 2 (#201): gọi mô hình chấm để so lời với các khẳng định đã qua cổng 1, cho lời diễn giải
+câu "tại sao" (ask/narrate.rs, prompt dựng ở explain/judge.rs) và lời phần giải thích câu thường (insight/narrate.rs,
+prompt dựng ở đó với cùng bộ luật). Schema và cách đọc câu trả lời ở explain/judge.rs. Test qua ask/narrate_tests.rs và
+insight/tests.rs.
 
 Lần gọi này độc lập với lần viết lời: prompt mới, không kèm lịch sử, luật hay dữ liệu của lần viết, nên mô hình chấm
 không biết lời được dặn viết thế nào, chỉ thấy lời và các khẳng định. Mô hình chấm hiện dùng cùng nhà cung cấp với lần
@@ -21,7 +22,7 @@ pub fn build_judge_timeout(config: &Config) -> Duration {
     build_narrate_timeout(config)
 }
 
-/// prompt do bên gọi dựng (build_judge_prompt). Bộ đo mô hình chấm (service/eval_judge.rs)
+/// prompt do bên gọi dựng (build_judge_prompt hay build_insight_judge_prompt). Bộ đo mô hình chấm (service/eval_judge.rs)
 /// gọi cùng hàm này. Err khi không chấm được (mô hình lỗi, quá giờ, câu trả lời không đọc được), kèm lý do cho bước
 /// của bên gọi. Bên gọi không coi Err là khớp.
 pub async fn judge(

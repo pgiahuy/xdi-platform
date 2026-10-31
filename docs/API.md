@@ -120,14 +120,18 @@ viết (`true`) hay theo khuôn (`false`). Hai trường null với câu "tại 
 answered. Đoạn trả lời không có lần gọi mô hình hay bước riêng trong `steps`. `ANSWER_TEXT=false` thì luôn là câu khuôn.
 
 Câu thường answered có ít nhất một ô có giá trị thì có `insight`: phần giải thích chọn theo hình dạng kết quả (`kind`:
-`single_value`, `time_series`, `groups`, `top_n`, `rows`), gồm `title` và `points` (`lead`, `text`) do backend viết từ số
-đã tính, `summary` là lời của mô hình khi `summary_by_model` (đã kiểm số, chiều tăng giảm và từ chỉ nguyên nhân), không
-thì là câu chính nối các ý, và `notable` là `false` khi số liệu không cho thấy điều gì đáng kể (chênh lệch dưới 2%, một
-kỳ dưới 30 dòng, các nhóm khá đều, hay danh sách dòng). Với `single_value` so được kỳ trước và `time_series`,
-`explanation` là phân rã của kỳ đổi mạnh nhất so với kỳ liền trước (cùng hình dạng như câu "tại sao", lưu cùng câu hỏi
-nên truy dòng nguồn của một dòng phân rã như câu "tại sao"); chênh lệch không đáng kể thì `explanation` null. Hai bước
-thêm trong `steps`: `explain` (phần do code tính) và `narrate` (lời). `insight` null với câu "tại sao" và câu không
-answered. `INSIGHT_TEXT=false` thì không gọi mô hình cho phần này.
+`single_value`, `time_series`, `groups`, `top_n`, `rows`), gồm `title` và `points` (`lead`, `text`) do backend viết từ
+số đã tính, `summary` là lời của mô hình khi `summary_by_model`, không thì là câu chính nối các ý. Lời của mô hình qua
+hai cổng (#201): code kiểm số, chiều tăng giảm và từ chỉ nguyên nhân; rồi một lần gọi mô hình chấm riêng so nghĩa của
+lời với `title` và `points`. Trượt hay có chỗ chưa rõ thì mô hình viết lại một lần kèm các lỗi đó; vẫn trượt thì dùng
+câu của code. `summary_verdict` là kết luận: `match`, `warning` (lời vẫn dùng, các chỗ chưa rõ ở `summary_warnings`),
+`mismatch` (lời trượt mọi lần viết, `summary` là câu của code), null khi không cổng nào chạy xong; và `notable` là
+`false` khi số liệu không cho thấy điều gì đáng kể (chênh lệch dưới 2%, một kỳ dưới 30 dòng, các nhóm khá đều, hay danh
+sách dòng). Với `single_value` so được kỳ trước và `time_series`, `explanation` là phân rã của kỳ đổi mạnh nhất so với
+kỳ liền trước (cùng hình dạng như câu "tại sao", lưu cùng câu hỏi nên truy dòng nguồn của một dòng phân rã như câu "tại
+sao"); chênh lệch không đáng kể thì `explanation` null. Hai bước thêm trong `steps`: `explain` (phần do code tính) và
+`narrate` (lời). `insight` null với câu "tại sao" và câu không answered. `INSIGHT_TEXT=false` thì không gọi mô hình cho
+phần này.
 
 Câu hỏi cần thông tin không cột nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo
 `unanswerable`, không câu SQL nào chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/eval_judge.rs - bộ đo mô hình chấm (cổng 2, #201), chạy ngoài sản phẩm như bộ đánh giá câu hỏi
-(service/eval.rs). Mỗi ca là một lời diễn giải câu "tại sao", JudgeFacts (tên độ đo, tên hai bên, các khẳng định đã
-qua cổng 1) và kết luận đúng do người viết ca gắn: match, hoặc mismatch kèm loại lỗi cố ý cài vào lời (số gán nhầm
+(service/eval.rs). Mỗi ca là một lời và các khẳng định của nó: lời diễn giải câu "tại sao" với JudgeFacts (tên độ đo,
+tên hai bên, các khẳng định đã qua cổng 1), hay lời phần giải thích câu thường với InsightFacts (câu chính và các ý do
+code viết); kèm kết luận đúng do người viết ca gắn: match, hoặc mismatch kèm loại lỗi cố ý cài vào lời (số gán nhầm
 nhóm, sai chiều, thêm lý do, tính sai...). Lệnh `xdi-backend eval-judge` ở cli.rs gọi run_eval_judge: gửi từng ca cho
-mô hình chấm qua đúng prompt và hàm bước narrate dùng (explain/judge.rs, ask/judge.rs), rồi đếm bỏ lọt (ca sai mà mô hình nói khớp), ca sai chỉ bị cảnh báo
+mô hình chấm qua đúng prompt và hàm hai bước kiểm dùng (ask/judge.rs), rồi đếm bỏ lọt (ca sai mà mô hình nói khớp), ca sai chỉ bị cảnh báo
 (warning: lời sai vẫn tới người dùng, kèm cảnh báo), chặn nhầm (ca đúng mà mô hình nói không khớp) và cảnh báo thừa
 (ca đúng mà mô hình cảnh báo).
 
@@ -18,8 +19,11 @@ use serde::Deserialize;
 use crate::config::Config;
 use crate::engine::llm::LlmProvider;
 use crate::error::AppError;
+use crate::service::ask::contract::InsightPoint;
 use crate::service::ask::judge::{build_judge_timeout, judge};
 use crate::service::explain::judge::{build_judge_prompt, JudgeFacts, Verdict};
+use crate::service::insight::facts::InsightParts;
+use crate::service::insight::narrate::build_insight_judge_prompt;
 
 /// File ca.
 #[derive(Debug, Deserialize)]
@@ -35,7 +39,29 @@ pub struct JudgeCase {
     /// Loại lỗi cài vào lời ("swapped_numbers", "extra_reason"...); "none" với ca đúng.
     pub error: String,
     pub text: String,
-    pub facts: JudgeFacts,
+    pub facts: CaseFacts,
+}
+
+/// Khẳng định của một ca. untagged: serde thử từng loại theo các khóa có trong ca (JudgeFacts có measure, comparison;
+/// InsightFacts có title, points), file ca không cần ghi loại.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum CaseFacts {
+    Why(JudgeFacts),
+    Plain(InsightFacts),
+}
+
+/// Câu chính và các ý do code viết cho phần giải thích câu thường, đúng như mô hình chấm nhận.
+#[derive(Debug, Deserialize)]
+pub struct InsightFacts {
+    pub title: String,
+    pub points: Vec<FactPoint>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FactPoint {
+    pub lead: String,
+    pub text: String,
 }
 
 /// Kết quả một ca. got là None khi mô hình chấm không chấm được (lỗi, quá giờ, câu trả lời không đọc được).
@@ -85,6 +111,24 @@ pub fn load_judge_cases(path: &Path) -> Result<JudgeCases, AppError> {
     Ok(cases)
 }
 
+// Các phần build_insight_judge_prompt đọc: câu chính và các ý; phần còn lại của InsightParts không vào prompt chấm.
+fn build_parts(facts: &InsightFacts) -> InsightParts {
+    InsightParts {
+        title: facts.title.clone(),
+        points: facts
+            .points
+            .iter()
+            .map(|p| InsightPoint {
+                lead: p.lead.clone(),
+                text: p.text.clone(),
+            })
+            .collect(),
+        notable: true,
+        changes: Vec::new(),
+        names: Vec::new(),
+    }
+}
+
 /// Chấm lần lượt từng ca. pause là khoảng nghỉ giữa hai ca, để không vượt hạn mức số lần gọi mỗi phút của khóa.
 pub async fn run_eval_judge(
     llm: &dyn LlmProvider,
@@ -99,7 +143,10 @@ pub async fn run_eval_judge(
             tokio::time::sleep(pause).await;
         }
         let started = Instant::now();
-        let prompt = build_judge_prompt(&case.text, &case.facts);
+        let prompt = match &case.facts {
+            CaseFacts::Why(facts) => build_judge_prompt(&case.text, facts),
+            CaseFacts::Plain(facts) => build_insight_judge_prompt(&case.text, &build_parts(facts)),
+        };
         let verdict = judge(llm, &case.id, &prompt, timeout).await;
         let (got, detail) = match verdict {
             Ok(Verdict::Match) => (Some("match".to_string()), String::new()),

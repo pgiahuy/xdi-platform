@@ -57,6 +57,8 @@ impl LlmProvider for RecordingLlm {
         match request.task {
             LlmTask::Sql => Ok(sql_reply(sql).to_string()),
             LlmTask::Insight => Ok(MARKET_TEXT.to_string()),
+            // Mô hình chấm (cổng 2, #201) thấy lời khớp; prompt của nó cũng được ghi và kiểm như mọi prompt bên dưới.
+            LlmTask::Judge => Ok(r#"{"verdict": "match", "problems": []}"#.to_string()),
             // Hồ sơ ngữ nghĩa và phân loại lỗi tạm: phân loại dùng luật từ khóa.
             _ => Err(AppError::Upstream("not in this test".to_string())),
         }

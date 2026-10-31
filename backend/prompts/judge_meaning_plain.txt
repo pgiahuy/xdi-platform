@@ -1,0 +1,3 @@
+- "title": the main finding the system computed from the result of the question, one sentence.
+- "points": the other findings the system computed; each has a short "lead" and a sentence "text".
+- The title and the points are the claims: every number, group, period, share and direction in them was computed from the data. Numbers are written the Vietnamese way: a dot between groups of thousands and a comma before the decimals, so 1.234.567,89 is about 1,23 million. A percent is written with "%".

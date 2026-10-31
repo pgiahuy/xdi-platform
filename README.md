@@ -89,9 +89,9 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
 - **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên file DataCo, và khi database mẫu đang chạy thì thêm 17 câu trên
   ảnh chụp của nó (10 câu bán hàng, 7 câu học tập, phần lớn nối bảng), so với SQL đúng viết tay; CI chạy phần DataCo và
-  báo khi tỷ lệ đúng giảm. `make eval-judge LLM_PROVIDER=gemini` đo mô hình chấm lời giải thích câu "tại sao" trên 55 ca
-  có nhãn: số ca đúng trên tổng, số lời sai bị bỏ lọt hay chỉ bị cảnh báo, số lời đúng bị chặn nhầm hay bị cảnh báo
-  thừa.
+  báo khi tỷ lệ đúng giảm. `make eval-judge LLM_PROVIDER=gemini` đo mô hình chấm trên 67 ca có nhãn (lời giải thích câu
+  "tại sao" và lời phần giải thích câu thường): số ca đúng trên tổng, số lời sai bị bỏ lọt hay chỉ bị cảnh báo, số lời
+  đúng bị chặn nhầm hay bị cảnh báo thừa.
 
 ## Chưa có
 

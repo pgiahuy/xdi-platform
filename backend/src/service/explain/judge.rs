@@ -71,8 +71,8 @@ pub fn build_judge_prompt(text: &str, facts: &JudgeFacts) -> String {
     build_judge_prompt_with(&prompts::JUDGE_MEANING_WHY, &build_judge_json(facts), text)
 }
 
-/// Luật chung điền nghĩa các khóa, JSON và lời. Tách nghĩa các khóa ra file riêng để đoạn trả lời câu thường sau này
-/// chấm theo cùng bộ luật với file nghĩa của nó.
+/// Luật chung điền nghĩa các khóa, JSON và lời. Lời phần giải thích của câu thường (insight/narrate.rs) dùng cùng hàm
+/// này với file nghĩa của nó, để hai loại câu chấm theo cùng một bộ luật.
 pub fn build_judge_prompt_with(
     meaning: &prompts::PromptFile,
     facts_json: &str,
