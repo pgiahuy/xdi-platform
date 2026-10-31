@@ -282,6 +282,8 @@ fn average_is_a_ratio_of_sum_and_count() {
     );
     let wrong = measured(json!({"column": "Market", "agg": "avg"}));
     assert_eq!(fixture.fields(wrong), ["measure.column"]);
+    let key = measured(json!({"column": "Order Id", "agg": "avg"}));
+    assert_eq!(fixture.fields(key), ["measure.column"]);
 }
 
 #[test]

@@ -5,7 +5,7 @@ thức của tổ chức) vẫn ở đó. Test ở explain/check_tests.rs và ex
 
 Năm cách tổng hợp, mỗi cách một dạng phân rã:
 - sum, count: cộng được theo nhóm, phân rã bằng phép trừ từng nhóm (#39).
-- avg, và sum trên cột có cách gộp avg (#185): trung bình mỗi dòng, tử SUM(x) trên mẫu COUNT(x), phân rã thành phần cơ
+- avg (mọi cột số trừ cột key), và sum trên cột có cách gộp avg (#185): trung bình mỗi dòng, tử SUM(x) trên mẫu COUNT(x), phân rã thành phần cơ
   cấu và phần hiệu suất (explain/ratio.rs) như chỉ số AVG(x).
 - share (#244): tỷ lệ dòng có một giá trị ("tỷ lệ rút học", "tỷ lệ giao trễ"): tử COUNT(CASE WHEN "cột" = 'giá trị'
   THEN 1 END), mẫu COUNT(*), cùng đường tỷ lệ. Giá trị phải có trong danh sách giá trị của cột như bộ lọc "=".
@@ -49,7 +49,7 @@ pub(super) fn check_column_measure(
             build_plan_measure(label, None, build_sum(column), None)
         }
         FormAgg::Avg => {
-            check_number(column, "avg", errors)?;
+            check_average(column, errors)?;
             build_average(column)
         }
         FormAgg::Count => {
@@ -70,6 +70,22 @@ fn check_number(column: &ProfileColumn, agg: &str, errors: &mut Vec<FieldError>)
         FIELD,
         format!(
             "\"{}\" is a {} column of type {}; \"{agg}\" needs a number column of role measure",
+            column.name, column.role, column.data_type
+        ),
+    ));
+    None
+}
+
+/// avg nhận mọi cột số trừ cột key: cột số ít giá trị như số ngày giao thường có vai trò dimension, mà trung bình của
+/// nó vẫn có nghĩa; trung bình của một mã thì không.
+fn check_average(column: &ProfileColumn, errors: &mut Vec<FieldError>) -> Option<()> {
+    if column.role != ProfileRole::Key.as_str() && is_number_type(&column.data_type) {
+        return Some(());
+    }
+    errors.push(FieldError::new(
+        FIELD,
+        format!(
+            "\"{}\" is a {} column of type {}; \"avg\" needs a number column that is not a key",
             column.name, column.role, column.data_type
         ),
     ));
