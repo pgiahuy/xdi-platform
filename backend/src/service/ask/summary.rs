@@ -20,7 +20,7 @@ use crate::service::ask::contract::{
 use crate::service::explain::number::{
     apply_readable_numbers, build_number_text, build_number_text_with,
 };
-use crate::service::explain::{drop_column_name, lower_first};
+use crate::service::explain::{drop_column_name, is_vietnamese_alias, lower_first};
 use crate::service::insight::narrate::build_facts_text;
 
 /// Giá trị ô có chữ dài quá thì cắt khi đưa vào câu khuôn, để đoạn dữ liệu dài không lọt nguyên văn ra giao diện.
@@ -130,12 +130,22 @@ pub fn build_rows_answer(result: &ResultTable, understanding: Option<&Understand
 /// "Đã hiểu là".
 pub fn build_template_answer(input: &SummaryInput<'_>) -> String {
     let result = input.result;
-    let measure = input
-        .understanding
-        .filter(|u| u.measures.len() == 1)
-        .map(|u| drop_column_name(&u.measures[0].label));
+    // Tên độ đo: bí danh tiếng Việt câu SQL đặt cho cột, không thì nhãn của thẻ "Đã hiểu là" khi thẻ có đúng một độ đo.
+    // None khi chỉ còn tên cột trong dữ liệu (giữ nguyên chữ hoa, chữ thường của nó).
+    let measure_label = |column: &str| -> Option<String> {
+        let item = input
+            .understanding
+            .filter(|u| u.measures.len() == 1)?
+            .measures
+            .first()?;
+        Some(match is_vietnamese_alias(column, &item.sql) {
+            true => column.to_string(),
+            false => drop_column_name(&item.label),
+        })
+    };
     if result.columns.len() == 1 && result.total_rows == 1 {
-        let measure = measure.unwrap_or_else(|| result.columns[0].name.clone());
+        let measure = measure_label(&result.columns[0].name)
+            .unwrap_or_else(|| result.columns[0].name.clone());
         let value = build_row_texts(result, &result.rows[0]).remove(0);
         return format!("{measure} là {}.", apply_readable_numbers(&value));
     }
@@ -155,8 +165,8 @@ pub fn build_template_answer(input: &SummaryInput<'_>) -> String {
     }
     let rows = build_row_count(result);
     if let Some(top) = build_top_group(result) {
-        // Tên độ đo của thẻ "Đã hiểu là" là chữ thường đứng giữa câu; tên cột giữ nguyên vì là tên trong dữ liệu.
-        let measure = measure.map_or(top.measure, |label| lower_first(&label));
+        // Tên độ đo đứng giữa câu nên viết thường chữ đầu; tên cột trong dữ liệu giữ nguyên.
+        let measure = measure_label(&top.measure).map_or(top.measure, |label| lower_first(&label));
         let lead = format!(
             "{} có {measure} cao nhất: {}",
             top.group,

@@ -40,13 +40,21 @@ impl GroupBase {
 
     /// Nhãn cho người dùng: giá trị nhóm, hay "các <nghĩa tiếng Việt của cột> còn lại". labels là WhyPlan.labels; cột
     /// chưa có nghĩa tiếng Việt thì "các nhóm còn lại", vì tên cột gốc (tiếng Anh) ghép vào câu tiếng Việt khó đọc.
-    pub fn build_label(&self, column: &str, labels: &HashMap<String, String>) -> String {
+    /// average: lát gốc là trung bình mỗi nhóm còn lại (explain/rest_average.rs), nhãn mở đầu bằng "trung bình".
+    pub fn build_label(
+        &self,
+        column: &str,
+        labels: &HashMap<String, String>,
+        average: bool,
+    ) -> String {
+        let rest = match labels.get(column) {
+            Some(label) => format!("các {} còn lại", lower_first(label)),
+            None => "các nhóm còn lại".to_string(),
+        };
         match self {
             GroupBase::Value(value) => value.clone(),
-            GroupBase::Rest => match labels.get(column) {
-                Some(label) => format!("các {} còn lại", lower_first(label)),
-                None => "các nhóm còn lại".to_string(),
-            },
+            GroupBase::Rest if average => format!("trung bình {rest}"),
+            GroupBase::Rest => rest,
         }
     }
 

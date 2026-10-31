@@ -677,6 +677,24 @@ async fn one_row_with_a_text_aggregate_of_a_key_column_stays_with_code() {
     );
 }
 
+/// Độ đo không cộng được giữa các nhóm (thương của hai tổng): không nói tỷ trọng trên tổng hay mức tập trung, vì cộng
+/// các tỷ lệ của từng nhóm không ra số có nghĩa.
+#[tokio::test]
+async fn ratio_groups_have_no_share_of_a_total() {
+    let sql =
+        "SELECT o.market, SUM(oi.sales) / COUNT(*) AS per_row FROM order_items oi JOIN orders o \
+        ON oi.order_id = o.order_id GROUP BY o.market";
+    let outcome = run_insight(sql, &[ColumnRole::Dimension, ColumnRole::Measure]).await;
+    let insight = &outcome.insight;
+    assert_eq!(insight.kind, InsightKind::Groups);
+    assert!(!insight.title.contains("chiếm"), "{}", insight.title);
+    assert!(
+        insight.points.iter().all(|p| p.lead != "Mức tập trung"),
+        "{:?}",
+        insight.points
+    );
+}
+
 #[tokio::test]
 async fn single_value_is_compared_with_the_period_before() {
     let sql = "SELECT SUM(oi.sales) AS revenue FROM order_items oi JOIN orders o ON oi.order_id = o.order_id \

@@ -24,6 +24,7 @@ use crate::service::ask::contract::{Choice, Understanding, UnderstoodItem};
 use crate::service::explain::check::{PlanSlices, PlanTime, WhyPlan};
 use crate::service::explain::measure::find_metric;
 use crate::service::explain::period::Period;
+use crate::service::explain::rest_average::averages_rest;
 use crate::service::explain::sql::build_why_conditions;
 use crate::service::understanding::build_understanding;
 use crate::service::understanding::labels::{
@@ -68,7 +69,7 @@ pub fn build_why_understanding(
             let label = format!(
                 "{}: {compare} so với {}",
                 build_column_label(column, profile, false),
-                base.build_label(column, &plan.labels)
+                base.build_label(column, &plan.labels, averages_rest(plan))
             );
             filters.push(build_item(label, &conditions.slices));
             match (period, &conditions.period) {

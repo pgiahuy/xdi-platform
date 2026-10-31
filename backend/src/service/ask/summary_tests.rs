@@ -149,6 +149,25 @@ fn one_short_row_of_a_list_uses_the_insight_text() {
     assert!(outcome.by_model);
 }
 
+/// Câu SQL đặt bí danh tiếng Việt cho cột tính ra thì câu khuôn gọi độ đo bằng bí danh đó, không bằng nhãn dựng từ công
+/// thức; bí danh tiếng Anh thì giữ nhãn của thẻ "Hệ thống đã hiểu là".
+#[test]
+fn template_names_the_measure_by_its_vietnamese_alias() {
+    let mut result = sales();
+    result.columns[1].name = "Số lượng bán".to_string();
+    let mut u = understanding();
+    u.measures = vec![UnderstoodItem {
+        label: "Số dòng có mã sản phẩm".to_string(),
+        sql: "count(\"product_id\")".to_string(),
+        from_previous: false,
+    }];
+    assert!(build_template_answer(&input(&result, Some(&u), None))
+        .starts_with("Fishing có số lượng bán cao nhất:"));
+    result.columns[1].name = "units".to_string();
+    assert!(build_template_answer(&input(&result, Some(&u), None))
+        .starts_with("Fishing có số dòng có mã sản phẩm cao nhất:"));
+}
+
 #[test]
 fn template_without_order_only_counts_rows() {
     let result = table(&[("Cleats", 10.0), ("Fishing", 20.0)]);

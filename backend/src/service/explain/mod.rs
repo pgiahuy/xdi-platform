@@ -55,6 +55,7 @@ pub mod ratio;
 pub mod ratio_breakdown;
 #[cfg(test)]
 mod ratio_tests;
+pub mod rest_average;
 pub mod run;
 #[cfg(test)]
 pub(crate) mod run_tests;
@@ -958,6 +959,21 @@ pub(crate) fn build_entity_name(column: &str, label: Option<&str>) -> String {
         Some(rest) if !rest.trim().is_empty() => rest.trim().to_string(),
         _ => lowered,
     }
+}
+
+/// Tên cột kết quả là bí danh tiếng Việt câu SQL đặt cho cột tính ra, không phải chữ của biểu thức: khác biểu thức sau
+/// khi bỏ nháy, khoảng trắng, hoa thường, và có chữ ngoài ASCII. Prompt viết SQL yêu cầu bí danh nói đúng thứ câu hỏi hỏi
+/// theo cách câu hỏi hỏi ("Số lượng sinh viên rút học"), nên câu trả lời đọc tự nhiên hơn nhãn dựng từ công thức ("số
+/// dòng có mã định danh ..."). Bí danh tiếng Anh hay không có bí danh thì giữ nhãn dựng từ hồ sơ cột. expr rỗng (không
+/// biết biểu thức) thì không coi là bí danh.
+pub(crate) fn is_vietnamese_alias(name: &str, expr: &str) -> bool {
+    let plain = |text: &str| -> String {
+        text.chars()
+            .filter(|c| *c != '"' && !c.is_whitespace())
+            .flat_map(char::to_lowercase)
+            .collect()
+    };
+    !expr.trim().is_empty() && plain(name) != plain(expr) && !name.is_ascii()
 }
 
 // "Tổng doanh thu (Sales)" thành "Tổng doanh thu". Chỉ bỏ ngoặc cuối khi chữ trong đó không dấu (tên cột tiếng Anh), để
