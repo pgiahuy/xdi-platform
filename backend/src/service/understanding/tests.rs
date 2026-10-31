@@ -466,12 +466,30 @@ fn only_the_first_run_of_time_bounds_is_the_range() {
     );
 }
 
+/// Vế OR là một mục, đọc từng vế rồi nối bằng "hoặc"; SQL của mục vẫn là cả vế.
 #[test]
-fn or_filter_is_one_item_labelled_by_its_sql() {
+fn or_filter_is_one_item_read_side_by_side() {
     let sql = r#"SELECT SUM("Order Item Total") AS revenue FROM dataco WHERE "Market" = 'Europe' OR "Market" = 'LATAM'"#;
     let u = build_card(sql, vec![], &[]).understanding;
     let condition = r#""Market" = 'Europe' OR "Market" = 'LATAM'"#;
-    assert_eq!(pairs(&u.filters), [(condition, condition)]);
+    assert_eq!(
+        pairs(&u.filters),
+        [(
+            "Thị trường nơi giao đơn hàng (Market) là Europe hoặc Thị trường nơi giao đơn hàng (Market) là LATAM",
+            condition
+        )]
+    );
+}
+
+/// Vế so với một câu truy vấn con: thẻ không in đoạn SQL, chỉ nói cột nào bị lọc và chỉ sang câu SQL.
+#[test]
+fn subquery_filter_is_described_not_printed() {
+    let sql = r#"SELECT "Customer City", SUM("Sales") AS sales FROM dataco WHERE "Customer City" = (SELECT "Customer City" FROM dataco GROUP BY "Customer City" ORDER BY SUM("Sales") DESC LIMIT 1) GROUP BY 1"#;
+    let u = build_card(sql, vec![], &[]).understanding;
+    assert_eq!(
+        u.filters[0].label,
+        "Thành phố của khách hàng (Customer City) theo một giá trị tính từ dữ liệu (xem câu SQL)"
+    );
 }
 
 #[test]

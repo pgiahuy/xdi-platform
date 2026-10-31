@@ -12,7 +12,8 @@ số để xem các dòng dữ liệu đứng sau nó.
 Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, phân loại câu hỏi, viết SQL, điền
 form cho câu hỏi tìm nguyên nhân và viết lời. Nó nhận metadata của mọi cột (tên, kiểu, mô tả), danh sách giá trị của
 cột phân loại không đánh dấu nhạy cảm (người bị lọc dòng theo vai dữ liệu thì không), và các ý do code tính (con số tổng
-hợp kèm tên nhóm); không nhận dòng kết quả nào hay nội dung file. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
+hợp kèm tên nhóm); không nhận dòng kết quả nào, trừ ô của kết quả chỉ một dòng khi mọi ô là số tổng hợp hay giá trị
+của cột phân loại không nhạy cảm, và không nhận nội dung file. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
 Tài liệu: https://pgiahuy.github.io/xdi-platform/
@@ -89,7 +90,7 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
 - **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên file DataCo, và khi database mẫu đang chạy thì thêm 17 câu trên
   ảnh chụp của nó (10 câu bán hàng, 7 câu học tập, phần lớn nối bảng), so với SQL đúng viết tay; CI chạy phần DataCo và
-  báo khi tỷ lệ đúng giảm. `make eval-judge LLM_PROVIDER=gemini` đo mô hình chấm trên 67 ca có nhãn (lời giải thích câu
+  báo khi tỷ lệ đúng giảm. `make eval-judge LLM_PROVIDER=gemini` đo mô hình chấm trên 70 ca có nhãn (lời giải thích câu
   "tại sao" và lời phần giải thích câu thường): số ca đúng trên tổng, số lời sai bị bỏ lọt hay chỉ bị cảnh báo, số lời
   đúng bị chặn nhầm hay bị cảnh báo thừa.
 

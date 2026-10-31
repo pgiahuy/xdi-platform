@@ -114,10 +114,21 @@ xong hay lập lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu 
 
 Câu answered có thẻ "Hệ thống đã hiểu là", vai trò cột và gợi ý biểu đồ. Câu thường answered có ít nhất một dòng kết quả
 thì có `answer_text`: đoạn trả lời ngắn tiếng Việt. Đó là `insight.summary` khi lời này do mô hình viết và đã qua bước
-kiểm (mô hình chỉ nhận các câu backend đã tính, không nhận dòng kết quả nào); còn lại là câu khuôn do backend viết, kể
-cả mọi danh sách dòng không gộp ("Có 37 dòng khớp điều kiện: ..."). `answer_text_by_model` cho biết đoạn đó do mô hình
+kiểm (mô hình chỉ nhận các câu backend đã tính); còn lại là câu khuôn do backend viết: một ô ("Tổng doanh thu là khoảng
+36,8 triệu (36.784.735,01)."), nhóm đứng đầu khi cột số đo xếp giảm dần ("Caguas có tổng doanh thu cao nhất: ..., tiếp
+theo là Chicago và Brooklyn."), danh sách dòng không gộp ("Có 37 dòng khớp điều kiện: ..."). Kết quả một dòng, tới 5
+cột, mà không phải một con số đơn (`insight.kind` là `rows`) dùng lời của `insight` kể dòng đó: lời của mô hình khi qua
+kiểm, không thì câu của code, như "New York City có tổng doanh thu cao nhất: 436.061,54.". Số từ một triệu trở lên có
+dạng rút gọn đứng trước số đủ. `answer_text_by_model` cho biết đoạn đó do mô hình
 viết (`true`) hay theo khuôn (`false`). Hai trường null với câu "tại sao" (đã có `explanation.summary`) và câu không
 answered. Đoạn trả lời không có lần gọi mô hình hay bước riêng trong `steps`. `ANSWER_TEXT=false` thì luôn là câu khuôn.
+
+Câu answered (câu thường và câu "tại sao") có `data_range` khi bảng có cột thời gian dùng được: `from`, `to` (YYYY-MM-DD)
+là ngày đầu, ngày cuối của cột đó trong hồ sơ lúc nạp, `column` và `label` (bí danh đầu, null khi không có) là cột đã
+dùng: cột thời gian đầu tiên có tên trong câu SQL đã chạy, không có thì cột thời gian đầu tiên của bảng; cột nhạy cảm
+không dùng. `partial` là `true` khi câu SQL có mốc ngày (dạng `'YYYY-MM-DD'`) mà ngày liền trước mốc đó vẫn sau ngày
+cuối của dữ liệu: kỳ được hỏi chưa đủ dữ liệu. Ngày lấy từ hồ sơ của cả bảng, không theo vai dữ liệu của người hỏi.
+`data_range` null với câu không answered, hay khi không có cột thời gian dùng được.
 
 Câu thường answered có ít nhất một ô có giá trị thì có `insight`: phần giải thích chọn theo hình dạng kết quả (`kind`:
 `single_value`, `time_series`, `groups`, `top_n`, `rows`), gồm `title` và `points` (`lead`, `text`) do backend viết từ

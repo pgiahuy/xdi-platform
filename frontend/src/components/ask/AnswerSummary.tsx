@@ -4,7 +4,7 @@ câu hỏi tìm nguyên nhân hiện ở WhyInsight.tsx. Có lời của mô hì
 chỉ diễn đạt lại các ý code đã tính, và lời đã qua hai cổng kiểm của backend (#201). Ngay dưới là mục "Căn cứ": câu
 chính (summary_title) và các ý ngắn (summary_points) do code viết, để người đọc đối chiếu lời của mô hình với số đã
 tính. Không có lời của mô hình (mô hình lỗi, lời trượt hai cổng ở mọi lần viết, hay INSIGHT_TEXT=false) thì câu chính
-và các ý đứng đầu, kèm dòng ghi câu viết theo khuôn. */
+và các ý đứng đầu, không kèm dòng ghi chú (tab Các bước ghi lời của mô hình có được dùng không). */
 
 import type { SummaryPointView } from './evidenceTypes'
 
@@ -34,7 +34,6 @@ export function AnswerSummary({ title, points, modelSummary }: Props) {
             {title}
           </h3>
           <Facts points={points} />
-          <p className="text-xs text-muted-foreground">Câu viết theo khuôn từ số đã tính.</p>
         </>
       )}
     </section>

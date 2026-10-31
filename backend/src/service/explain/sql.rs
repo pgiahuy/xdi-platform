@@ -25,6 +25,7 @@ use crate::engine::store::ProfileColumn;
 use crate::service::explain::check::{PlanSlices, PlanTime, WhyPlan};
 use crate::service::explain::measure::Additive;
 use crate::service::explain::period::Period;
+use crate::service::explain::rest_average::averages_rest;
 use crate::service::explain::source::build_from_sql;
 use crate::service::profile::is_time_type;
 
@@ -37,6 +38,8 @@ pub const BASE_ROWS: &str = "base_rows";
 pub const COMPARE_ROWS: &str = "compare_rows";
 pub const BASE_DENOMINATOR: &str = "base_denominator";
 pub const COMPARE_DENOMINATOR: &str = "compare_denominator";
+/// Số nhóm của lát gốc "các nhóm còn lại" khi so với trung bình của chúng (explain/rest_average.rs).
+pub const BASE_GROUPS: &str = "base_groups";
 
 /// Số chữ số thập phân của tỷ lệ trên bảng tổng theo kỳ, bằng RATE_SCALE của explain/ratio.rs để số của mỗi kỳ trên
 /// bảng trùng với số của phân rã.
@@ -87,6 +90,12 @@ pub fn build_slices_sql(plan: &WhyPlan) -> String {
     items.push(format!(
         "COUNT(CASE WHEN {compare} THEN 1 END) AS {COMPARE_ROWS}"
     ));
+    if let (true, PlanSlices::Groups { column, .. }) = (averages_rest(plan), &plan.slices) {
+        let column = build_ident(column);
+        items.push(format!(
+            "COUNT(DISTINCT CASE WHEN {base} THEN {column} END) AS {BASE_GROUPS}"
+        ));
+    }
     if let Some(volume) = &plan.volume {
         let key = build_ident(volume);
         items.push(format!(
