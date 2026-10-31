@@ -429,7 +429,7 @@ export interface paths {
         };
         /**
          * One conversation of the caller with its turns
-         * @description Turns oldest first, each with its question, status, SQL and the short text of what was understood. Results are not stored: ask a turn again to see its numbers.
+         * @description Turns oldest first, each with its question, status, SQL, the short text of what was understood and the answer text shown when it was asked. Result rows are not stored: ask a turn again to see its table and chart.
          */
         get: operations["getConversation"];
         put?: never;
@@ -1332,6 +1332,11 @@ export interface components {
             columns: components["schemas"]["OverviewColumn"][];
             /** Format: uuid */
             dataset_id: string;
+            /**
+             * @description Description of the table written in the source database (`COMMENT ON TABLE`) for the current version; null for
+             *     uploaded files and tables without a comment.
+             */
+            description: string | null;
             main_measure: components["schemas"]["MainMeasure"] | null;
             /** @description Defined metrics, one per name: the latest confirmed definition, else the latest draft. */
             metrics: components["schemas"]["OverviewMetric"][];
@@ -1367,6 +1372,11 @@ export interface components {
             created_at: string;
             /** Format: uuid */
             dataset_id: string;
+            /**
+             * @description Description of the snapshotted table written in the source database (`COMMENT ON TABLE`); null for uploaded
+             *     files and tables without a comment.
+             */
+            description: string | null;
             file_hash: string | null;
             /** Format: uuid */
             id: string;
@@ -1384,6 +1394,11 @@ export interface components {
             column: string;
             /** @description Every group of the column, largest contribution (by absolute value) first. */
             groups: components["schemas"]["GroupContribution"][];
+            /**
+             * @description True when at least one group is an `outlier`. Dimensions with outliers come first, each part in the order of
+             *     how well the dimension explains the change.
+             */
+            has_outliers: boolean;
             /** @description How to read the group values, like the `kind` of a result column. */
             kind: components["schemas"]["ValueKind"];
             /** @description Vietnamese name of the column from the column profile; null when the profile has none. */
@@ -1445,6 +1460,26 @@ export interface components {
              * @description Number of source rows behind the number, over all pages.
              */
             total_rows: number;
+        };
+        /**
+         * @description - `separates_slices`: every value of the column is found in one slice only, so the column only renames the two
+         *       slices.
+         *     - `duplicates`: the column splits the rows into exactly the groups of another column (`duplicate_of`).
+         * @enum {string}
+         */
+        DropReason: "separates_slices" | "duplicates";
+        /** @description One dimension left out, and why. */
+        DroppedDimension: {
+            /** @description For `separates_slices`: values found only in the base slice, as text. */
+            base_only: string[];
+            column: string;
+            /** @description For `separates_slices`: values found only in the compared slice, as text. */
+            compare_only: string[];
+            /** @description Column with the same groups, for `duplicates`. */
+            duplicate_of: string | null;
+            /** @description Vietnamese name of the column from the column profile; null when the profile has none. */
+            label: string | null;
+            reason: components["schemas"]["DropReason"];
         };
         /** @description Error body returned by every endpoint on failure. */
         ErrorBody: {
@@ -1556,6 +1591,11 @@ export interface components {
             counts_rows: boolean;
             /** @description One breakdown per dimension, the dimension that explains the change best first. */
             dimensions: components["schemas"]["DimensionBreakdown"][];
+            /**
+             * @description Dimensions left out of `dimensions` or of the summary, with the reason; show them as a note with the
+             *     breakdown so that a missing table is explained.
+             */
+            dropped_dimensions: components["schemas"]["DroppedDimension"][];
             /** @description Measure that changed, text for the end user (Vietnamese). */
             measure: string;
             /** @description How the measure adds up over groups, which decides how to read the numbers below. */
@@ -1637,12 +1677,41 @@ export interface components {
              */
             mix_effect: string | null;
             /**
+             * @description True when the group stands out: its `share_of_change` is at least 1 (in absolute value) and its
+             *     `percent_change` is at least 10 points away from the `percent_change` of the whole, or it is `new`, `gone` or a
+             *     `sign_flip`.
+             */
+            outlier: boolean;
+            /**
+             * @description `(compare_value - base_value) / base_value * 100`, one decimal. Null when the group is `new` or `gone`, when
+             *     `base_value` is zero or negative, or when `sign_flip`.
+             */
+            percent_change: string | null;
+            presence: components["schemas"]["GroupPresence"];
+            /**
              * @description Ratio measures only: part of `change` because the ratio inside this group changed,
              *     `(base_share + compare_share) / 2 * (compare_value - base_value)`.
              */
             rate_effect: string | null;
+            /**
+             * @description `contribution / change * 100`, one decimal: negative when the group moved against the change, above 100 when
+             *     other groups offset it. Null when the change is close to zero (under 0.5% of the larger slice), where these
+             *     percents grow without meaning.
+             */
+            share_of_change: string | null;
+            /**
+             * @description True when the base and compared values are both non-zero with opposite signs, for example a profit that
+             *     turned into a loss.
+             */
+            sign_flip: boolean;
             value: components["schemas"]["CellValue"] | null;
         };
+        /**
+         * @description Where a group has rows: `both` slices, only the compared slice (`new`), or only the base slice (`gone`). For a
+         *     ratio, a group has rows in a slice when its denominator there is not zero.
+         * @enum {string}
+         */
+        GroupPresence: "both" | "new" | "gone";
         HealthResponse: {
             /** @description Always `ok` when the server answers. */
             status: string;
@@ -1856,6 +1925,11 @@ export interface components {
             /** @description DuckDB type, for example `DOUBLE`, `BIGINT`, `VARCHAR`. */
             data_type: string;
             description: string | null;
+            /**
+             * @description Who wrote `description`: `database` (a `COMMENT ON COLUMN` of the source database) or `model` (the semantic
+             *     profile); null when there is no description.
+             */
+            description_source: string | null;
             name: string;
             /** @description `dimension`, `measure`, `time`, `key`, `text` or `ignore`. */
             role: string;
@@ -1917,6 +1991,11 @@ export interface components {
         OverviewChartKind: "measure_over_time" | "rows_over_time" | "rows_by_value";
         OverviewColumn: {
             description: string | null;
+            /**
+             * @description Who wrote `description`: `database` (a `COMMENT ON COLUMN` of the source database) or `model` (the semantic
+             *     profile); null when there is no description.
+             */
+            description_source: string | null;
             /**
              * Format: int64
              * @description Exact number of different values; null when `summary.restricted`.
@@ -2107,6 +2186,19 @@ export interface components {
          * @enum {string}
          */
         SanityCheckKind: "value_range" | "non_negative";
+        /**
+         * @description The answer text of a recorded question, as shown when it was asked: `answer_text` of a plain question, or
+         *     `explanation.summary` of a "why" question. Result rows are not stored.
+         */
+        SavedAnswer: {
+            /** @description True when a language model wrote the text and it passed the checks; false when the backend wrote it. */
+            by_model: boolean;
+            /** @description Vietnamese text for the end user. */
+            text: string;
+            verdict: components["schemas"]["AnswerVerdict"] | null;
+            /** @description Points the check found unclear in the model's text; empty when `by_model` is false. */
+            warnings: string[];
+        };
         SetRoleRequest: {
             /** @description `admin` or `member`. */
             role: string;
@@ -2245,6 +2337,7 @@ export interface components {
         TimeGrain: "day" | "month";
         /** @description One recorded question of a conversation. Questions waiting for a choice (`needs_choice`) are not recorded. */
         TurnItem: {
+            answer: components["schemas"]["SavedAnswer"] | null;
             /** Format: date-time */
             created_at: string;
             feedback: components["schemas"]["QueryFeedback"] | null;

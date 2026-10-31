@@ -20,6 +20,7 @@ use crate::service::explain::breakdown::{
 };
 use crate::service::explain::check::{apply_related, PlanSlices, WhyPlan};
 use crate::service::explain::check_tests::column;
+use crate::service::explain::group_base::GroupBase;
 use crate::service::explain::measure::{Additive, PlanMeasure};
 use crate::service::explain::source::{
     build_from_sql, build_related_tables, build_tables_used, SourceTable,
@@ -224,7 +225,7 @@ fn score_plan() -> WhyPlan {
         },
         slices: PlanSlices::Groups {
             column: "module".to_string(),
-            base: "A".to_string(),
+            base: GroupBase::Value("A".to_string()),
             compare: "B".to_string(),
             period: None,
         },

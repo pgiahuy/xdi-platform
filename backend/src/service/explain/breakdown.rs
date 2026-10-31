@@ -34,7 +34,8 @@ use crate::service::ask::repair::{build_safe_error, build_user_error, mentions_d
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::run::{build_duration_text, build_step, run_query_in_turn};
 use crate::service::explain::annotate::{
-    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
+    annotate_dimensions, apply_group_notes, build_percent_change, build_percent_text,
+    build_value_presences, Totals,
 };
 use crate::service::explain::check::{PlanSlices, WhyPlan};
 use crate::service::explain::dimension_pick::{pick_dimensions, Candidate, Presence};
@@ -253,13 +254,14 @@ pub async fn build_breakdown(
         ));
     }
     apply_dimension_order(&mut ranked, mode);
-    let dimensions: Vec<DimensionBreakdown> = ranked.into_iter().map(|d| d.breakdown).collect();
-    let presences: Vec<_> = dimensions.iter().map(build_value_presences).collect();
+    let mut dimensions: Vec<DimensionBreakdown> = ranked.into_iter().map(|d| d.breakdown).collect();
+    let mut presences: Vec<_> = dimensions.iter().map(build_value_presences).collect();
     let slices = Totals {
         base: totals.base,
         compare: totals.compare,
         change,
     };
+    apply_group_notes(&mut dimensions, &mut presences, slices);
     let mut notes = annotate_dimensions(&dimensions, &presences, slices);
     // Chiều dimension_pick đã bỏ không còn trong dimensions để annotate thấy; thêm vào để lời tóm tắt vẫn nói vì sao bỏ.
     notes.dropped.extend(picked.dropped);
@@ -293,6 +295,7 @@ pub async fn build_breakdown(
         summary_by_model: false,
         summary_warnings: Vec::new(),
         summary_verdict: None,
+        dropped_dimensions: notes.dropped.clone(),
         notes,
     })))
 }
@@ -351,6 +354,7 @@ fn build_dimension(
         groups: contributions,
         mix_effect: None,
         rate_effect: None,
+        has_outliers: false,
     };
     Some((breakdown, groups))
 }
@@ -419,7 +423,12 @@ pub(super) fn build_slice_column(plan: &WhyPlan) -> Option<String> {
 pub(super) fn build_slice_labels(plan: &WhyPlan) -> (String, String) {
     match &plan.slices {
         PlanSlices::Periods { base, compare, .. } => (base.label(), compare.label()),
-        PlanSlices::Groups { base, compare, .. } => (base.clone(), compare.clone()),
+        PlanSlices::Groups {
+            column,
+            base,
+            compare,
+            ..
+        } => (base.build_label(column, &plan.labels), compare.clone()),
     }
 }
 

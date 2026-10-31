@@ -24,6 +24,8 @@ mod ask_related_tests;
 #[cfg(test)]
 mod ask_tests;
 #[cfg(test)]
+mod ask_why_frames_tests;
+#[cfg(test)]
 mod ask_why_tests;
 mod auth;
 #[cfg(test)]
@@ -58,6 +60,8 @@ mod roles_tests;
 #[cfg(test)]
 mod row_filter_fk_tests;
 mod security_headers;
+#[cfg(test)]
+mod source_comments_tests;
 #[cfg(test)]
 mod source_relations_tests;
 mod sources;

@@ -18,7 +18,8 @@ use crate::engine::llm::LlmTask;
 use crate::service::ask::contract::*;
 use crate::service::ask::run::REFUSED_MESSAGE;
 use crate::service::explain::annotate::{
-    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
+    annotate_dimensions, apply_group_notes, build_percent_change, build_percent_text,
+    build_value_presences, Totals,
 };
 use crate::service::explain::summary::apply_summary_parts;
 use crate::service::insight::facts::{build_group_parts, Point};
@@ -321,6 +322,7 @@ fn build_why_explanation() -> Explanation {
         summary_by_model: true,
         summary_warnings: Vec::new(),
         summary_verdict: Some(AnswerVerdict::Match),
+        dropped_dimensions: Vec::new(),
         notes: Default::default(),
     };
     // % thay đổi, ghi chú và các ý tóm tắt tính bằng đúng hàm của bước explain, để mẫu khớp response thật.
@@ -329,13 +331,15 @@ fn build_why_explanation() -> Explanation {
         compare: Decimal::new(811910000, 2),
         change: Decimal::new(-128340000, 2),
     };
-    let presences: Vec<_> = explanation
+    let mut presences: Vec<_> = explanation
         .dimensions
         .iter()
         .map(build_value_presences)
         .collect();
     explanation.percent_change = build_percent_change(totals).map(build_percent_text);
+    apply_group_notes(&mut explanation.dimensions, &mut presences, totals);
     explanation.notes = annotate_dimensions(&explanation.dimensions, &presences, totals);
+    explanation.dropped_dimensions = explanation.notes.dropped.clone();
     apply_summary_parts(&mut explanation);
     apply_model_insight(&mut explanation);
     explanation
@@ -588,10 +592,12 @@ fn build_breakdown(
                 contribution: contribution.to_string(),
                 mix_effect: None,
                 rate_effect: None,
+                ..Default::default()
             })
             .collect(),
         mix_effect: None,
         rate_effect: None,
+        has_outliers: false,
     }
 }
 

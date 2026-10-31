@@ -111,6 +111,18 @@ pub struct Upload {
     /// Có thì files là một file CSV chép từ bảng của nguồn database này (service/sources/): dataset mới gắn vào nguồn
     /// đó thay vì một nguồn file riêng, phiên bản ghi source_kind postgres.
     pub database_source: Option<Uuid>,
+    /// Mô tả bảng và cột đọc từ database nguồn (COMMENT ON); rỗng với file nạp tay.
+    pub descriptions: SourceDescriptions,
+}
+
+/// Mô tả tổ chức đã ghi sẵn trong database nguồn (COMMENT ON TABLE, COMMENT ON COLUMN), đã làm sạch ở
+/// service/sources/comments.rs. Mô tả cột thành mô tả trong hồ sơ cấu trúc với nguồn database; mô tả bảng ghi trên
+/// phiên bản.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SourceDescriptions {
+    pub table: Option<String>,
+    /// (tên cột, mô tả), chỉ cột có comment.
+    pub columns: Vec<(String, String)>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -278,12 +290,13 @@ pub async fn upload(
         Some(d) => profile::previous_time_formats(state, ws, d.id).await?,
         None => HashMap::new(),
     };
-    let columns = profile::build_profile(
+    let mut columns = profile::build_profile(
         staging.parquet_dir(),
         materialized.row_count,
         previous_formats,
     )
     .await?;
+    apply_source_descriptions(&mut columns, &upload.descriptions);
 
     // Bước 4: dataset (nếu mới) và phiên bản. Đường dẫn lưu trong database là tương đối với DATA_DIR, để đổi chỗ thư
     // mục dữ liệu không phải sửa database.
@@ -312,6 +325,7 @@ pub async fn upload(
         file_hash: &content_hash,
         parquet_path: &relative,
         row_count: materialized.row_count,
+        description: upload.descriptions.table.as_deref(),
     };
     let created = create_version_retrying(state, ws, dataset.id, &new_version, &columns).await;
     // Phiên bản và hồ sơ không ghi được thì dataset vừa tạo cho lần nạp này không có phiên bản nào: xóa nó, để danh
@@ -387,6 +401,20 @@ pub async fn upload(
         version,
         columns: materialized.columns,
     })
+}
+
+/// Gắn mô tả cột đọc từ database nguồn vào hồ sơ cấu trúc, theo tên cột: file CSV của bản chụp lấy tên cột đúng như
+/// Postgres trả, nên tên khớp nhau. Cột không có comment giữ None, lớp ngữ nghĩa viết mô tả cho nó sau.
+fn apply_source_descriptions(columns: &mut [NewColumn], descriptions: &SourceDescriptions) {
+    for column in columns.iter_mut() {
+        if let Some((_, text)) = descriptions
+            .columns
+            .iter()
+            .find(|(name, _)| *name == column.name)
+        {
+            column.description = Some(text.clone());
+        }
+    }
 }
 
 /// Nạp lại đúng bộ file cũ: phiên bản trùng còn ở structure (lần trước mô hình lỗi) thì gọi lại lớp ngữ nghĩa một

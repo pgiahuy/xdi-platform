@@ -97,6 +97,7 @@ pub fn build_new_columns(stats: Vec<ColumnStats>, row_count: i64) -> Vec<NewColu
             min_value: s.min_value.map(remove_nul),
             max_value: s.max_value.map(remove_nul),
             time_format: s.time_format,
+            description: None,
             values: build_new_values(s.values),
         })
         .collect()
@@ -710,6 +711,7 @@ mod tests {
             file_hash: hash,
             parquet_path: path,
             row_count: materialized.row_count,
+            description: None,
         };
         let missing = store
             .create_version(&ws, ds.id, &version("h0", "ws/ds/gone"), &[])

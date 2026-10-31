@@ -94,7 +94,16 @@ pub struct PremiseLabels {
 pub fn build_premise_labels(plan: &WhyPlan) -> PremiseLabels {
     let (base, compare, periods) = match &plan.slices {
         PlanSlices::Periods { base, compare, .. } => (base.label(), compare.label(), true),
-        PlanSlices::Groups { base, compare, .. } => (base.clone(), compare.clone(), false),
+        PlanSlices::Groups {
+            column,
+            base,
+            compare,
+            ..
+        } => (
+            base.build_label(column, &plan.labels),
+            compare.clone(),
+            false,
+        ),
     };
     let fraction_digits = if plan.measure.denominator.is_some() {
         RATE_SCALE

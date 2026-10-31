@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/conversation/contract.rs - kiểu response của hai route đọc cuộc trò chuyện (api/conversations.rs). Một lượt
-chỉ có câu hỏi và cách nó được hiểu; bảng kết quả không lưu, mở lại một cuộc cũ thì hỏi lại câu đó để xem số. */
+có câu hỏi, cách nó được hiểu và lời trả lời đã hiện (#201); bảng kết quả không lưu, mở lại một cuộc cũ thì hỏi lại câu
+đó để xem bảng và biểu đồ. */
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::service::ask::contract::AskStatus;
+use crate::service::ask::contract::{AnswerVerdict, AskStatus};
 use crate::service::feedback::contract::QueryFeedback;
 
 /// One conversation on a dataset.
@@ -43,6 +44,26 @@ pub struct TurnItem {
     /// The rating the caller gave this answer; null when not rated.
     #[schema(required)]
     pub feedback: Option<QueryFeedback>,
+    /// The answer text shown when the question was asked; null unless answered, and for questions recorded before
+    /// answers were stored.
+    #[schema(required)]
+    pub answer: Option<SavedAnswer>,
+}
+
+/// The answer text of a recorded question, as shown when it was asked: `answer_text` of a plain question, or
+/// `explanation.summary` of a "why" question. Result rows are not stored.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct SavedAnswer {
+    /// Vietnamese text for the end user.
+    pub text: String,
+    /// True when a language model wrote the text and it passed the checks; false when the backend wrote it.
+    pub by_model: bool,
+    /// Verdict of the independent model call that compared the meaning of the model's text with the computed facts
+    /// (`match`, `warning`, `mismatch`); null when the check did not run.
+    #[schema(required)]
+    pub verdict: Option<AnswerVerdict>,
+    /// Points the check found unclear in the model's text; empty when `by_model` is false.
+    pub warnings: Vec<String>,
 }
 
 /// A conversation and its recorded turns, oldest first.

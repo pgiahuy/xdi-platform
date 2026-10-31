@@ -429,7 +429,7 @@ pub enum QuestionType {
 /// Verdict of the two checks on a text written by the language model: `match` (agrees with the computed numbers),
 /// `warning` (some parts can be read several ways, not certainly wrong), `mismatch` (wrong on every attempt; the model's
 /// text is replaced by a template sentence).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AnswerVerdict {
     Match,
@@ -558,6 +558,9 @@ pub struct Explanation {
     /// change to explain, or the model or the checking model failed).
     #[schema(required)]
     pub summary_verdict: Option<AnswerVerdict>,
+    /// Dimensions left out of `dimensions` or of the summary, with the reason; show them as a note with the
+    /// breakdown so that a missing table is explained.
+    pub dropped_dimensions: Vec<DroppedDimension>,
     // Ghi chú nội bộ cho lời tóm tắt (% tác động, nhóm khác thường, chiều bỏ qua), không gửi qua API: annotate.rs
     // tính, summary.rs và cổng 1 của narrate (explain/claim_cell.rs) đọc. Bảng `dimensions` ở trên không đổi vì ghi
     // chú này.
@@ -652,11 +655,56 @@ pub struct DimensionBreakdown {
     /// Ratio measures only: sum of `rate_effect` of every group.
     #[schema(required)]
     pub rate_effect: Option<String>,
+    /// True when at least one group is an `outlier`. Dimensions with outliers come first, each part in the order of
+    /// how well the dimension explains the change.
+    pub has_outliers: bool,
+}
+
+// Bảng phân rã đọc các trường dưới đây thay vì tự tính lại (#186): luật "khác thường", "mới", "không còn", "đổi dấu"
+// chỉ viết một lần ở explain/annotate.rs, cùng chỗ lời tóm tắt đọc, nên bảng và lời không thể nói khác nhau.
+/// Where a group has rows: `both` slices, only the compared slice (`new`), or only the base slice (`gone`). For a
+/// ratio, a group has rows in a slice when its denominator there is not zero.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupPresence {
+    #[default]
+    Both,
+    New,
+    Gone,
+}
+
+/// One dimension left out, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
+pub struct DroppedDimension {
+    pub column: String,
+    /// Vietnamese name of the column from the column profile; null when the profile has none.
+    #[schema(required)]
+    pub label: Option<String>,
+    pub reason: DropReason,
+    /// Column with the same groups, for `duplicates`.
+    #[schema(required)]
+    pub duplicate_of: Option<String>,
+    /// For `separates_slices`: values found only in the base slice, as text.
+    pub base_only: Vec<String>,
+    /// For `separates_slices`: values found only in the compared slice, as text.
+    pub compare_only: Vec<String>,
+}
+
+/// - `separates_slices`: every value of the column is found in one slice only, so the column only renames the two
+///   slices.
+/// - `duplicates`: the column splits the rows into exactly the groups of another column (`duplicate_of`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DropReason {
+    SeparatesSlices,
+    Duplicates,
 }
 
 // value cùng column của DimensionBreakdown là khóa nhóm, để bấm một dòng thì truy được dòng nguồn (#34, #52).
 /// One group of a dimension. `value` is null for the group of rows where the dimension column is null.
-#[derive(Debug, Clone, Serialize, ToSchema)]
+// Default: các trường ghi chú (presence tới outlier) do annotate.rs điền sau, nên chỗ dựng nhóm viết
+// `..Default::default()` cho chúng.
+#[derive(Debug, Clone, Default, Serialize, ToSchema)]
 pub struct GroupContribution {
     /// Value of the dimension column for this group; null for rows where it is null.
     #[schema(required)]
@@ -675,6 +723,23 @@ pub struct GroupContribution {
     /// `(base_share + compare_share) / 2 * (compare_value - base_value)`.
     #[schema(required)]
     pub rate_effect: Option<String>,
+    pub presence: GroupPresence,
+    /// `contribution / change * 100`, one decimal: negative when the group moved against the change, above 100 when
+    /// other groups offset it. Null when the change is close to zero (under 0.5% of the larger slice), where these
+    /// percents grow without meaning.
+    #[schema(required)]
+    pub share_of_change: Option<String>,
+    /// `(compare_value - base_value) / base_value * 100`, one decimal. Null when the group is `new` or `gone`, when
+    /// `base_value` is zero or negative, or when `sign_flip`.
+    #[schema(required)]
+    pub percent_change: Option<String>,
+    /// True when the base and compared values are both non-zero with opposite signs, for example a profit that
+    /// turned into a loss.
+    pub sign_flip: bool,
+    /// True when the group stands out: its `share_of_change` is at least 1 (in absolute value) and its
+    /// `percent_change` is at least 10 points away from the `percent_change` of the whole, or it is `new`, `gone` or a
+    /// `sign_flip`.
+    pub outlier: bool,
 }
 
 // Shapley hai nhân tố (#40): phần tương tác chia đôi. Giá là phép chia duy nhất và là chỗ duy nhất làm tròn: giá giữ

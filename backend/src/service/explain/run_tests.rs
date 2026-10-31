@@ -64,24 +64,24 @@ const COMPARE_CELLS: [(&str, &str, &str, &str); 7] = [
 const ROWS: i64 = 9_501;
 
 /// Thư mục tạm chứa Parquet của bảng dataco, tự xóa khi ra khỏi phạm vi.
-struct Dataco {
+pub(super) struct Dataco {
     root: PathBuf,
     dir: PathBuf,
-    columns: Vec<ProfileColumn>,
+    pub(super) columns: Vec<ProfileColumn>,
     values: ValueIndex,
-    metrics: Vec<MetricDefinition>,
+    pub(super) metrics: Vec<MetricDefinition>,
     context: AskContext,
     jobs: Arc<Semaphore>,
     rows: i64,
 }
 
 impl Dataco {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self::with_rows(&[], 0)
     }
 
     /// Bảng như new() cộng các câu SELECT trong extra (cùng năm cột), thêm extra_rows dòng.
-    fn with_rows(extra: &[String], extra_rows: i64) -> Self {
+    pub(super) fn with_rows(extra: &[String], extra_rows: i64) -> Self {
         let root = std::env::temp_dir().join(format!("xdi-why-{}", uuid::Uuid::new_v4()));
         let dir = root.join("ws").join("dataset").join("v1");
         std::fs::create_dir_all(&dir).unwrap();
@@ -152,7 +152,7 @@ impl Dataco {
         }]
     }
 
-    async fn ask(
+    pub(super) async fn ask(
         &self,
         llm: &dyn LlmProvider,
         question: &str,
@@ -163,7 +163,7 @@ impl Dataco {
             .unwrap()
     }
 
-    async fn ask_as(
+    pub(super) async fn ask_as(
         &self,
         llm: &dyn LlmProvider,
         question: &str,
@@ -206,13 +206,13 @@ impl Drop for Dataco {
 }
 
 /// Mô hình giả: trả lần lượt các câu viết sẵn, hết câu thì báo lỗi (bước narrate rơi về câu khuôn), ghi lại request.
-struct ScriptedLlm {
+pub(super) struct ScriptedLlm {
     replies: Mutex<VecDeque<String>>,
     requests: Mutex<Vec<(LlmTask, String)>>,
 }
 
 impl ScriptedLlm {
-    fn new(replies: Vec<serde_json::Value>) -> Self {
+    pub(super) fn new(replies: Vec<serde_json::Value>) -> Self {
         let replies = replies.into_iter().map(|r| r.to_string()).collect();
         ScriptedLlm {
             replies: Mutex::new(replies),
@@ -220,7 +220,7 @@ impl ScriptedLlm {
         }
     }
 
-    fn tasks(&self) -> Vec<LlmTask> {
+    pub(super) fn tasks(&self) -> Vec<LlmTask> {
         self.requests
             .lock()
             .unwrap()
@@ -229,7 +229,7 @@ impl ScriptedLlm {
             .collect()
     }
 
-    fn prompt(&self, i: usize) -> String {
+    pub(super) fn prompt(&self, i: usize) -> String {
         self.requests.lock().unwrap()[i].1.clone()
     }
 }
@@ -250,11 +250,11 @@ impl LlmProvider for ScriptedLlm {
     }
 }
 
-fn steps(outcome: &WhyOutcome) -> Vec<(StepName, bool)> {
+pub(super) fn steps(outcome: &WhyOutcome) -> Vec<(StepName, bool)> {
     outcome.steps.iter().map(|s| (s.name, s.ok)).collect()
 }
 
-fn groups(dimension: &DimensionBreakdown) -> Vec<(String, String, String, String)> {
+pub(super) fn groups(dimension: &DimensionBreakdown) -> Vec<(String, String, String, String)> {
     dimension
         .groups
         .iter()
@@ -273,7 +273,7 @@ fn groups(dimension: &DimensionBreakdown) -> Vec<(String, String, String, String
         .collect()
 }
 
-fn choose(choice_id: &str, option_id: &str) -> Vec<ChosenOption> {
+pub(super) fn choose(choice_id: &str, option_id: &str) -> Vec<ChosenOption> {
     vec![ChosenOption {
         choice_id: choice_id.to_string(),
         option_id: option_id.to_string(),
@@ -713,7 +713,7 @@ async fn chosen_base_without_rows_is_reported_at_once() {
     assert_eq!(base.selected.as_deref(), Some("2017-Q1"));
 }
 
-fn view(outcome: &WhyOutcome, metrics: &[MetricDefinition]) -> AnswerView {
+pub(super) fn view(outcome: &WhyOutcome, metrics: &[MetricDefinition]) -> AnswerView {
     let ran = RanQuery {
         status: outcome.status,
         sql_guarded: outcome.sql_guarded.as_deref(),
@@ -725,7 +725,7 @@ fn view(outcome: &WhyOutcome, metrics: &[MetricDefinition]) -> AnswerView {
     build_answer_view(&ran, &[], metrics, &outcome.assumptions).unwrap()
 }
 
-fn items(understanding: &Understanding) -> Vec<&UnderstoodItem> {
+pub(super) fn items(understanding: &Understanding) -> Vec<&UnderstoodItem> {
     let lists = [
         &understanding.measures,
         &understanding.filters,

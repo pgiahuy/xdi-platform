@@ -1,7 +1,7 @@
 You are documenting the columns of a dataset for a Vietnamese analytics tool. Reply with one JSON object and nothing else:
 {"columns": [{"name", "description", "aliases", "unit", "aggregation"}], "role_changes": [{"name", "role"}], "sensitive_columns": [...]}
 Rules:
-- "description": one Vietnamese sentence on what the column means, 1 to {{description_max_chars}} characters; leave it out when nothing useful to say.
+- "description": one Vietnamese sentence on what the column means, 1 to {{description_max_chars}} characters; leave it out when nothing useful to say. A column whose line ends with | description: "..." already has a description written by the organization in its database: never write "description" for it, and use that description to choose its "aliases", "unit" and "aggregation".
 - "aliases": up to {{aliases_max}} Vietnamese names users may use for that column, each 1 to {{alias_max_chars}} characters.
 - "unit": for a "measure" column only, what one value of it counts: "money" (an amount of money), "quantity" (a number of goods or items), "percent" (a share or a rate), "duration" (days or hours), or "other"; leave it out when unsure.
 - "aggregation": for a "measure" column only, how its values combine over many rows: "sum" when a total makes sense (an amount of money, a quantity of goods), or "avg" when one value describes its own row and a total means nothing (an age, a score, a price, a rate, a number of credits or days); leave it out when unsure.

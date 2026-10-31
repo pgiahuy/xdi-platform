@@ -32,6 +32,7 @@ async fn dataset_with_history(
                 file_hash: name,
                 parquet_path: "x.parquet",
                 row_count: 1,
+                description: None,
             },
             &[],
         )
@@ -67,7 +68,7 @@ async fn dataset_with_history(
             .unwrap();
         if in_conversation {
             store
-                .attach_turn(ws, id, conversation, Some("revenue by market"))
+                .attach_turn(ws, id, conversation, Some("revenue by market"), None)
                 .await
                 .unwrap();
         }

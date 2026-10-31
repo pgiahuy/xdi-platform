@@ -20,6 +20,8 @@ export type OverviewColumnView = {
   /** Nhãn tiếng Việt (bí danh đầu do lớp ngữ nghĩa viết); null khi chưa có. */
   label: string | null
   description: string | null
+  /** database: comment trong database nguồn; model: lớp ngữ nghĩa viết; null khi không có mô tả. */
+  descriptionSource: string | null
   role: OverviewRole
   unit: string | null
   sensitive: boolean
@@ -49,6 +51,8 @@ export type OverviewChartView = {
 
 export type OverviewView = {
   name: string
+  /** Mô tả bảng ghi trong database nguồn (COMMENT ON TABLE); null với file nạp tay hay bảng không có. */
+  description: string | null
   /** Số phiên bản hiện hành; null khi dataset chưa có dữ liệu. */
   version: number | null
   /** Số dòng người xem đọc được; null khi chưa đếm. */
