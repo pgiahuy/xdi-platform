@@ -7,11 +7,20 @@ api/query.rs. Test ở drill/tests.rs (không cần Postgres) và api/drill_test
 Quyền của người đang bấm, không của người đã hỏi: câu do admin hỏi, thành viên có vai dữ liệu bấm vào thì chỉ thấy dòng
 của vai đó. Chạy trên version_id đã lưu: nạp phiên bản mới sau đó không làm dòng nguồn lệch con số đã trả.
 
+Câu nối bảng (JOIN theo khóa ngoại, #256) truy được: trang là dòng của bảng mà độ đo cộng kèm cột khóa và cột lọc của
+bảng nối (drill/sources.rs, drill/columns.rs), và mọi độ đo được tính lại trên mọi dòng nguồn (drill/measures.rs) để
+người dùng so với con số.
+
 Bấm dòng phân rã của câu "tại sao": đọc queries.explanation (ask/why.rs ghi) lấy câu SQL của chiều được bấm
 (DimensionBreakdown.sql, đã qua guard khi hỏi) và điều kiện của lát cắt được bấm, rồi truy như một ô của câu chiều đó
 (drill/sql.rs). Request chỉ gửi tên lát cắt, cột và giá trị nhóm; SQL luôn lấy từ chỗ đã lưu. */
 
+mod columns;
 pub mod contract;
+#[cfg(test)]
+mod join_tests;
+mod measures;
+mod sources;
 mod sql;
 #[cfg(test)]
 mod tests;
@@ -30,15 +39,18 @@ use crate::engine::guard::{
 use crate::engine::query::{QueryError, QueryOutput};
 use crate::engine::store::QueryStatus;
 use crate::service::ask::build_allowed_table;
+use crate::service::ask::contract::{CellValue, ResultTable};
 use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::related::load_group;
 use crate::service::ask::repair::build_safe_error;
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::run::{build_duration_text, run_query_in_turn};
+use crate::service::drill::columns::{PageColumns, RowColumn};
 use crate::service::drill::contract::{
-    BreakdownKey, DrillKey, DrillRequest, DrillResponse, SliceName, MAX_DRILL_LIMIT,
+    BreakdownKey, DrillKey, DrillMeasure, DrillRequest, DrillResponse, SliceName, MAX_DRILL_LIMIT,
 };
-use crate::service::drill::sql::build_drill_plan;
+use crate::service::drill::sql::{build_drill_plan, PageRequest};
+use crate::service::explain::sql::{BASE_VALUE, COMPARE_VALUE};
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
 use crate::{error::AppError, state::AppState};
 
@@ -66,15 +78,20 @@ pub async fn drill(
         _ => return Err(no_number("chạy lỗi")),
     };
     // check_request đã bảo đảm có đúng một trong cell, breakdown.
-    let (sql, keys, slice_filter) = match (&req.cell, &req.breakdown) {
-        (Some(keys), _) => (sql_guarded, keys.clone(), None),
+    let (sql, keys, slice_filter, only_measure) = match (&req.cell, &req.breakdown) {
+        (Some(keys), _) => (sql_guarded, keys.clone(), None, None),
         (None, Some(key)) => {
             let (sql, filter) = find_breakdown(query.explanation, key)?;
             let keys = vec![DrillKey {
                 column: key.column.clone(),
                 value: key.value.clone(),
             }];
-            (sql, keys, Some(filter))
+            // Câu chiều có độ đo của cả hai lát cắt; con số được bấm là độ đo của lát cắt đó.
+            let measure = match key.slice {
+                SliceName::Base => BASE_VALUE,
+                SliceName::Compare => COMPARE_VALUE,
+            };
+            (sql, keys, Some(filter), Some(measure))
         }
         (None, None) => {
             return Err(AppError::Internal(
@@ -95,8 +112,8 @@ pub async fn drill(
         .ok_or_else(version_gone)?;
     // Cùng đường dựng bảng với luồng hỏi (ask/related.rs), trên phiên bản câu hỏi đã dùng: hộp lọc trong câu đã lưu có
     // thể nhắc tới bảng khác (điều kiện lan theo khóa ngoại của người đã hỏi, #215), nên các bảng liên quan và bảng cha
-    // của điều kiện phải có trong danh sách, mỗi bảng với bộ lọc của người đang bấm. Câu ngoài cùng vẫn chỉ được đọc một
-    // bảng (drill/sql.rs).
+    // của điều kiện phải có trong danh sách, mỗi bảng với bộ lọc của người đang bấm. Câu nối bảng cũng cần chúng: mỗi
+    // bảng câu đọc nhận bộ lọc của người đang bấm, và hồ sơ cột cho biết cột thuộc bảng nào (drill/sources.rs).
     let columns = state.store.list_columns(ws, version_id).await?;
     let picked = build_allowed_table(state, member, &dataset, &version, &columns).await?;
     let group = load_group(state, member, (&dataset, &version, &columns), picked).await?;
@@ -110,6 +127,7 @@ pub async fn drill(
         sql_guarded: &sql,
         keys: &keys,
         slice_filter: slice_filter.as_deref(),
+        only_measure,
         offset: req.offset,
         limit: req.limit,
         tables: &tables,
@@ -200,6 +218,8 @@ pub(super) struct DrillInput<'a> {
     pub keys: &'a [DrillKey],
     /// Điều kiện lát cắt khi bấm dòng phân rã (drill/sql.rs).
     pub slice_filter: Option<&'a str>,
+    /// Tên cột độ đo của lát cắt được bấm, khi bấm dòng phân rã; None là mọi độ đo của ô.
+    pub only_measure: Option<&'a str>,
     pub offset: u64,
     pub limit: u32,
     /// Bảng của dataset, row_filters theo người đang bấm.
@@ -222,25 +242,78 @@ pub(super) async fn run_drill(input: DrillInput<'_>) -> Result<DrillResponse, Ap
         .into_iter()
         .map(|c| c.name)
         .collect();
-    let built = plan.build_sql(
-        &names,
-        input.keys,
-        input.slice_filter,
-        input.offset,
-        input.limit,
-    )?;
+    let built = plan.build_sql(&PageRequest {
+        names: &names,
+        keys: input.keys,
+        slice_filter: input.slice_filter,
+        only_measure: input.only_measure,
+        offset: input.offset,
+        limit: input.limit,
+        tables: input.tables,
+        links: input.links,
+    })?;
     let page = guard(&built.page, &input, max_rows)?;
     let count = guard(&built.count, &input, max_rows)?;
     let rows = run(&input, page.runnable).await?;
-    let total_rows = read_count(run(&input, count.runnable).await?)?;
+    let (total_rows, values) = read_totals(run(&input, count.runnable).await?)?;
     // Trang đã gửi đủ dòng (cỡ trang tối đa bằng số dòng ResultTable gửi) và không bị guard cắt, nên trần đưa vào là
     // u64::MAX: limit_reached luôn false, tổng thật nằm ở DrillResponse.total_rows.
     let result = build_result_table(rows, u64::MAX);
+    let (joined_columns, measures) = build_column_notes(&built.columns, &result, values);
     Ok(DrillResponse {
         sql: page.shown,
         result,
         total_rows,
+        source_table: built.columns.source_table,
+        joined_columns,
+        measures,
     })
+}
+
+/// Tên cột bảng nối và độ đo trên trang. Cột thêm nằm cuối trang theo thứ tự của PageColumns, nên tên của chúng đọc
+/// theo vị trí: tên cuối cùng có thể khác tên đã đặt khi trùng cột của bảng (build_unique_names thêm hậu tố).
+fn build_column_notes(
+    columns: &PageColumns,
+    result: &ResultTable,
+    values: Vec<Option<CellValue>>,
+) -> (Vec<String>, Vec<DrillMeasure>) {
+    let names: Vec<&str> = result.columns.iter().map(|c| c.name.as_str()).collect();
+    let added = columns
+        .measures
+        .iter()
+        .filter(|m| m.row == RowColumn::Added)
+        .count();
+    let measure_start = names.len().saturating_sub(added);
+    let joined_start = measure_start.saturating_sub(columns.joined_added);
+    let mut joined: Vec<String> = columns
+        .joined_named
+        .iter()
+        .filter(|name| names.contains(&name.as_str()))
+        .cloned()
+        .collect();
+    joined.extend(
+        names[joined_start..measure_start]
+            .iter()
+            .map(|n| n.to_string()),
+    );
+    let mut added_names = names[measure_start..].iter();
+    let mut values = values.into_iter();
+    let measures = columns
+        .measures
+        .iter()
+        .map(|measure| DrillMeasure {
+            column: measure.column.clone(),
+            rule: measure.rule,
+            value: values.next().flatten(),
+            row_column: match &measure.row {
+                RowColumn::Absent => None,
+                RowColumn::Added => added_names.next().map(|n| n.to_string()),
+                // Tên cột trong câu có thể khác hoa thường với tên DuckDB trả qua `*` (`SUM(sales)` trên cột "Sales").
+                RowColumn::Existing(name) => find_name(&names[..joined_start], name),
+            },
+        })
+        .collect();
+    (joined, measures)
 }
 
 /// Câu do code dựng từ một câu đã qua guard, nên guard từ chối chỉ khi hồ sơ đổi từ lúc hỏi (bảng đổi tên, cột không
@@ -278,16 +351,34 @@ async fn run(input: &DrillInput<'_>, runnable: String) -> Result<QueryOutput, Ap
     }
 }
 
-/// count(*) của DuckDB là BIGINT, một dòng một cột.
-fn read_count(output: QueryOutput) -> Result<u64, AppError> {
-    match output.rows.first().and_then(|row| row.first()) {
-        Some(Value::BigInt(n)) => {
-            u64::try_from(*n).map_err(|_| AppError::Internal(format!("drill: negative count {n}")))
+/// Tên cột trang trùng name, đúng chữ trước rồi không phân biệt hoa thường.
+fn find_name(names: &[&str], name: &str) -> Option<String> {
+    names
+        .iter()
+        .find(|n| **n == name)
+        .or_else(|| names.iter().find(|n| n.eq_ignore_ascii_case(name)))
+        .map(|n| n.to_string())
+}
+
+/// Một dòng: count(*) của DuckDB (BIGINT) rồi giá trị các độ đo, đổi sang ô như bảng kết quả.
+fn read_totals(output: QueryOutput) -> Result<(u64, Vec<Option<CellValue>>), AppError> {
+    let count = match output.rows.first().and_then(|row| row.first()) {
+        Some(Value::BigInt(n)) => u64::try_from(*n)
+            .map_err(|_| AppError::Internal(format!("drill: negative count {n}")))?,
+        other => {
+            return Err(AppError::Internal(format!(
+                "drill: unexpected count {other:?}"
+            )))
         }
-        other => Err(AppError::Internal(format!(
-            "drill: unexpected count {other:?}"
-        ))),
-    }
+    };
+    let table = build_result_table(output, u64::MAX);
+    let values = table
+        .rows
+        .into_iter()
+        .next()
+        .map(|row| row.into_iter().skip(1).collect())
+        .unwrap_or_default();
+    Ok((count, values))
 }
 
 fn query_not_found() -> AppError {

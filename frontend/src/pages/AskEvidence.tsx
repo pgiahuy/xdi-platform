@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import type { Answer } from './AskOutcome'
 import { buildBreakdown } from './breakdownView'
 import { buildLeadFirst, buildLeadNames } from './drillColumns'
+import { buildRowsSource } from './drillSource'
 import type { EvidenceView } from './evidenceView'
 import { buildCellIndexes, buildResultView } from './resultView'
 
@@ -87,7 +88,9 @@ export function AskEvidence({ ws, answer, pending, view }: Props) {
     if (!drill.data) return { state: 'loading', target }
     // result.total_rows của drill chỉ đếm dòng của trang này; tổng thật ở total_rows ngoài, nên bảng ghi "N trên M".
     const total = drill.data.total_rows
-    const page = buildLeadFirst(buildResultView(drill.data.result), buildLeadNames(target, response))
+    // Cột từng dòng của độ đo (backend chỉ ra, kể cả khi SQL ghi kèm bí danh bảng như oi.item_total) cũng lên đầu.
+    const rowColumns = drill.data.measures.flatMap((m) => (m.row_column ? [m.row_column] : []))
+    const page = buildLeadFirst(buildResultView(drill.data.result), [...buildLeadNames(target, response), ...rowColumns])
     const result = { ...page, totalRows: total, truncated: page.rows.length < total }
     return {
       state: 'ready',
@@ -95,6 +98,7 @@ export function AskEvidence({ ws, answer, pending, view }: Props) {
       sql: drill.data.sql,
       result,
       page: { offset, limit: drillPageSize, total },
+      source: buildRowsSource(target, drill.data),
     }
   })()
 

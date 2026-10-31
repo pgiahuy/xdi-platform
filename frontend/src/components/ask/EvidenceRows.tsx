@@ -3,12 +3,15 @@
 (một lát cắt, một cột, một giá trị nhóm) hoặc một ô số đo của bảng kết quả, bảng dùng lại ResultTable. Trang truy dòng
 và truyền trạng thái vào; khi backend không truy được (trả 400 kèm lý do) trang truyền lời báo qua state error.
 Backend trả từng trang dòng nguồn kèm tổng số dòng (DrillResponse.total_rows); nút trang ở đây xin trang khác qua
-onPageChange, vì một chỗ bấm có thể đứng sau hàng nghìn dòng, nhiều hơn một lần gửi. */
+onPageChange, vì một chỗ bấm có thể đứng sau hàng nghìn dòng, nhiều hơn một lần gửi. Trên bảng là phần nói dòng đến từ
+bảng nào (câu nối bảng: bảng mà độ đo cộng, cột nào lấy từ bảng nối) và độ đo tính lại trên mọi dòng, so với ô đã bấm,
+để người dùng tự kiểm con số bằng dòng nguồn. */
 
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { formatCell } from './cellFormat'
 import { describeDrillTarget } from './drillTarget'
-import type { RowsPage, RowsView } from './evidenceTypes'
+import type { RowsMeasure, RowsPage, RowsSource, RowsView } from './evidenceTypes'
 import { ResultTable } from './ResultTable'
 import { SqlCode } from './SqlCode'
 
@@ -57,6 +60,7 @@ function RowsBody({ rows, onPageChange }: BodyProps) {
     case 'ready':
       return (
         <>
+          <SourceNote source={rows.source} total={rows.page.total} />
           <ResultTable result={rows.result} heading="Dòng nguồn" nowrap />
           <PageNav page={rows.page} onPageChange={onPageChange} />
           <details className="text-xs">
@@ -66,6 +70,48 @@ function RowsBody({ rows, onPageChange }: BodyProps) {
         </>
       )
   }
+}
+
+function SourceNote({ source, total }: { source: RowsSource; total: number }) {
+  const from = describeFrom(source)
+  const measure = source.measure ? describeMeasure(source.measure, total) : null
+  if (!from && !measure) return null
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      {from && <p className="text-muted-foreground">{from}</p>}
+      {measure && <p>{measure}</p>}
+    </div>
+  )
+}
+
+function describeFrom({ table, joinedColumns }: RowsSource): string | null {
+  if (!table) return null
+  if (joinedColumns.length === 0) return `Mỗi dòng là một dòng của bảng ${table}.`
+  return `Mỗi dòng là một dòng của bảng ${table}; cột ${joinedColumns.join(', ')} lấy từ bảng nối theo khóa ngoại.`
+}
+
+function describeMeasure(measure: RowsMeasure, total: number): string {
+  const value = measure.value === null ? 'trống' : formatCell(measure.value, measure.kind)
+  const rows = countFormat.format(total)
+  const head =
+    measure.rule === 'sum'
+      ? `Tổng cột ${measure.rowColumn ?? measure.column} của ${rows} dòng: ${value}`
+      : measure.rule === 'count'
+        ? `Đếm được ${rows} dòng: ${value}`
+        : `${measure.column} tính lại trên ${rows} dòng: ${value}`
+  if (!measure.compared) return `${head}.`
+  if (sameValue(measure.value, measure.clicked)) return `${head}, bằng ô đã bấm.`
+  const clicked = measure.clicked === null ? 'trống' : formatCell(measure.clicked, measure.kind)
+  return `${head}, khác ô đã bấm (${clicked}), có thể vì vai dữ liệu của bạn chỉ thấy một phần các dòng của con số này.`
+}
+
+// Hai bên là cùng hàm tổng hợp trên cùng tập dòng; số thực có thể lệch ở chữ số cuối do thứ tự cộng, nên so tương đối.
+function sameValue(a: RowsMeasure['value'], b: RowsMeasure['value']): boolean {
+  if (a === b) return true
+  const x = Number(a)
+  const y = Number(b)
+  if (a === null || b === null || Number.isNaN(x) || Number.isNaN(y)) return false
+  return Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(x), Math.abs(y))
 }
 
 function PageNav({ page, onPageChange }: { page: RowsPage; onPageChange: (offset: number) => void }) {

@@ -125,6 +125,9 @@ nhiều lần qua các tầng câu con, hay chép một giá trị lớn ra nhi�
   cùng tên trong một `WITH` lồng chỉ che bảng tạm ngoài bên trong câu đó, không làm số tầng ít đi. Bảng tạm không ai
   đọc vẫn tính (`WITH a AS (... 4 tầng) SELECT 1` là 5 tầng): đếm bảo thủ, vì chưa biết chắc DuckDB bỏ qua bảng tạm
   không dùng trước khi tính biểu thức hằng trong nó; câu như vậy vào vòng sửa, mô hình chỉ cần bỏ bảng tạm thừa.
+  Hộp `(SELECT * FROM bảng WHERE ...)` không tính tầng của chính nó (câu con trong `WHERE` của hộp vẫn tính): hộp chỉ
+  lọc dòng, không ghép giá trị mới ở danh sách cột, như hộp lọc guard tự thêm ở bước 3. Truy dòng nguồn đưa lại câu đã
+  lưu có hộp lọc của người đã hỏi qua guard; tính tầng hộp thì câu hợp lệ lúc hỏi thành quá trần lúc truy.
 - Tối đa 20 mảnh ghép trong cả câu (`engine/guard/pieces.rs`): toán hạng của `||` (`a || b || c` là 3), tham số của
   `concat`, `concat_ws` (dấu ngăn là biểu thức thì tính cả các lần nó được chèn vào), phần tử của danh sách, struct,
   map viết thẳng. Dùng lại bí danh đặt trước đó trong cùng danh sách cột (`a0 || a0 AS a1, a1 || a1 AS a2`) cộng số
@@ -132,8 +135,8 @@ nhiều lần qua các tầng câu con, hay chép một giá trị lớn ra nhi�
   tính.
 - Chuỗi hằng tối đa 1000 byte, ở mọi chỗ trong câu (`engine/guard/width.rs`).
 - Mỗi danh sách cột của SELECT tối đa 200 mục (`engine/guard/width.rs`). `*` và `t.*` là một mục khi `FROM` có một
-  nguồn. Khi có nhiều nguồn, `*` tính theo số cột thật trong hồ sơ của bảng dữ liệu, và bị từ chối nếu có bảng tạm hay
-  câu con (không biết số cột): `SELECT * FROM w a1, w a2, ...` nhân số cột theo số lần JOIN.
+  nguồn. Khi có nhiều nguồn, `*` tính theo số cột thật trong hồ sơ của bảng dữ liệu (hộp lọc `(SELECT * FROM t WHERE ...)`
+  tính như t), và bị từ chối nếu có bảng tạm hay câu con khác (không biết số cột): `SELECT * FROM w a1, w a2, ...` nhân số cột theo số lần JOIN.
 - Mỗi `FROM` tối đa 6 nguồn, tính cả `JOIN`, bảng tạm, câu con (`engine/guard/width.rs`). Từ #213 câu hỏi đọc được
   các bảng liên quan của một ảnh chụp database, nên trần nâng từ 4 lên 6. Bảng số đo bên dưới đo khi trần là 4; số cột
   của `*` qua nhiều nguồn vẫn bị giới hạn bởi trần 200 cột, còn số dòng do JOIN nhân lên thì giới hạn lúc chạy
@@ -218,7 +221,9 @@ SELECT ở mọi tầng: câu ngoài, `WITH`, câu con ở `FROM`, `WHERE`, danh
   lần như mọi lý do từ chối khác.
 - Câu do code dựng đi cùng luật: phân rã theo bảng liên quan (`service/explain/source.rs`, #227) nối `LEFT JOIN` đúng
   khóa từ quan hệ; truy dòng nguồn đưa lại `sql_guarded` có hộp lọc qua guard, nửa nối của hộp khớp quan hệ service
-  truyền vào và quan hệ suy ra từ điều kiện lan.
+  truyền vào và quan hệ suy ra từ điều kiện lan. Câu truy dòng nguồn của câu nối bảng giữ nguyên các `JOIN` của câu đã
+  chạy, nên đi cùng luật này mà không cần ngoại lệ; nó lấy `<bảng>.*` của một bảng, và luật số cột đếm `t.*` trên hộp
+  lọc `(SELECT * FROM t WHERE ...)` theo số cột của t (`guard/width.rs`).
 - Hạn chế: không lần cột qua `UNION`; câu con tương quan không có phép bằng nào (chỉ so lớn nhỏ) không bị kiểm; vế
   `WHERE` không phải phép bằng giữa hai bảng đã nối đúng khóa được coi là điều kiện lọc.
 

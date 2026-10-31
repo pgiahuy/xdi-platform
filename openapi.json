@@ -7404,9 +7404,45 @@
           }
         }
       },
+      "DrillMeasure": {
+        "type": "object",
+        "description": "One measure of the clicked number, computed again over its source rows.",
+        "required": [
+          "column",
+          "rule",
+          "value"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Name of the measure column in the answer's `result.columns` (for a breakdown row, the column of the clicked\nslice in the breakdown query)."
+          },
+          "row_column": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With rule `sum`: the column of `result` that holds each row's part, so the rows of all pages add up to\n`value`. null otherwise."
+          },
+          "rule": {
+            "$ref": "#/components/schemas/MeasureRule"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CellValue",
+                "description": "The aggregate of the answer over every source row of the number. Equal to the clicked cell when the member\nclicking sees the same rows as the member who asked."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "DrillRequest": {
         "type": "object",
-        "description": "Which number to trace back to its source rows: set exactly one of `cell` and `breakdown`. Rows come one page at a\ntime, in the order the analytics engine reads them.",
+        "description": "Which number to trace back to its source rows: set exactly one of `cell` and `breakdown`. Rows come one page at a\ntime, sorted by every column of the page, so pages do not overlap.",
         "required": [
           "query_id"
         ],
@@ -7457,12 +7493,35 @@
         "required": [
           "sql",
           "result",
-          "total_rows"
+          "total_rows",
+          "joined_columns",
+          "measures"
         ],
         "properties": {
+          "joined_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Columns of `result` that come from the joined tables rather than from `source_table`: the grouping keys and\nfilter columns of the question on those tables. Empty when the question reads one table."
+          },
+          "measures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DrillMeasure"
+            },
+            "description": "The measures of the clicked number, each computed again over all source rows (every page). For a breakdown row,\nonly the measure of the clicked slice."
+          },
           "result": {
             "$ref": "#/components/schemas/ResultTable",
-            "description": "The page: every column of the dataset, including `_source_file`, the file each row came from. Here\n`result.total_rows` counts the rows of this page only."
+            "description": "The page. For a question on one table: every column of the dataset, including `_source_file`, the file each\nrow came from. For a question that joins tables: every column of `source_table`, then `joined_columns`. Then,\nfor each `sum` measure over an expression rather than one column of the page, its `row_column`. Here `result.total_rows` counts the rows of this page only."
+          },
+          "source_table": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The data table the rows come from. For a question that joins tables, this is the table the measures add up\n(the many side, such as `order_items` joined to `orders` and `customers`): one row of `result` per row of it\nthat went into the number, its columns first. null when the rows come from a WITH table or a subquery that\ndoes not start from a data table."
           },
           "sql": {
             "type": "string",
@@ -8488,6 +8547,15 @@
         "enum": [
           "total",
           "ratio"
+        ]
+      },
+      "MeasureRule": {
+        "type": "string",
+        "description": "How the source rows make up a measure:\n- `sum`: `SUM(x)`; `row_column` holds x of each row and `value` is their sum.\n- `count`: `COUNT(*)`; each row counts one, so `value` equals `total_rows`.\n- `other`: any other aggregate (AVG, COUNT DISTINCT, a ratio, a rounded sum); `value` is that aggregate over the\n  rows, there is no per-row column.",
+        "enum": [
+          "sum",
+          "count",
+          "other"
         ]
       },
       "MemberDataRolesRequest": {

@@ -88,7 +88,8 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 - **Chỉ số:** admin định nghĩa chỉ số của từng dataset (chọn phép tính và cột, hoặc viết SQL; chạy thử trước khi lưu)
   và đặt cột số đo nào lấy tổng, cột nào lấy trung bình; câu hỏi sau dùng đúng công thức đó.
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
-  quả hay bảng phân rã (câu có CTE, HAVING, hàm cửa sổ hay nhiều bảng chưa truy được).
+  quả hay bảng phân rã, kể cả câu nối bảng, kèm tổng của độ đo trên các dòng đó để so với ô (câu có HAVING, hàm cửa
+  sổ hay bảng tạm gộp nhóm chưa truy được).
 - **Báo cáo:** gom các câu trả lời đã chọn thành một báo cáo có tiêu đề và đoạn mở đầu, hay tạo báo cáo tự động cho
   một dataset (độ đo theo thời gian và theo nhóm, SQL do code dựng). Mỗi mục có câu hỏi, lời trả lời kèm kết quả kiểm
   số và kiểm nghĩa, biểu đồ, bảng, cách tính, SQL, phiên bản dữ liệu; số liệu tính lại khi mở với quyền xem của người

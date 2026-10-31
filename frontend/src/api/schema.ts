@@ -1970,9 +1970,24 @@ export interface components {
             column: string;
             value: components["schemas"]["CellValue"] | null;
         };
+        /** @description One measure of the clicked number, computed again over its source rows. */
+        DrillMeasure: {
+            /**
+             * @description Name of the measure column in the answer's `result.columns` (for a breakdown row, the column of the clicked
+             *     slice in the breakdown query).
+             */
+            column: string;
+            /**
+             * @description With rule `sum`: the column of `result` that holds each row's part, so the rows of all pages add up to
+             *     `value`. null otherwise.
+             */
+            row_column?: string | null;
+            rule: components["schemas"]["MeasureRule"];
+            value: components["schemas"]["CellValue"] | null;
+        };
         /**
          * @description Which number to trace back to its source rows: set exactly one of `cell` and `breakdown`. Rows come one page at a
-         *     time, in the order the analytics engine reads them.
+         *     time, sorted by every column of the page, so pages do not overlap.
          */
         DrillRequest: {
             breakdown?: components["schemas"]["BreakdownKey"] | null;
@@ -2000,10 +2015,28 @@ export interface components {
         /** @description One page of the source rows behind a number. */
         DrillResponse: {
             /**
-             * @description The page: every column of the dataset, including `_source_file`, the file each row came from. Here
-             *     `result.total_rows` counts the rows of this page only.
+             * @description Columns of `result` that come from the joined tables rather than from `source_table`: the grouping keys and
+             *     filter columns of the question on those tables. Empty when the question reads one table.
+             */
+            joined_columns: string[];
+            /**
+             * @description The measures of the clicked number, each computed again over all source rows (every page). For a breakdown row,
+             *     only the measure of the clicked slice.
+             */
+            measures: components["schemas"]["DrillMeasure"][];
+            /**
+             * @description The page. For a question on one table: every column of the dataset, including `_source_file`, the file each
+             *     row came from. For a question that joins tables: every column of `source_table`, then `joined_columns`. Then,
+             *     for each `sum` measure over an expression rather than one column of the page, its `row_column`. Here `result.total_rows` counts the rows of this page only.
              */
             result: components["schemas"]["ResultTable"];
+            /**
+             * @description The data table the rows come from. For a question that joins tables, this is the table the measures add up
+             *     (the many side, such as `order_items` joined to `orders` and `customers`): one row of `result` per row of it
+             *     that went into the number, its columns first. null when the rows come from a WITH table or a subquery that
+             *     does not start from a data table.
+             */
+            source_table?: string | null;
             /**
              * @description The SQL that read this page, after the guard: the filters of the answered question, the keys of the clicked
              *     number, and the row filters of the member asking now (which may differ from the member who asked the question).
@@ -2439,6 +2472,15 @@ export interface components {
          * @enum {string}
          */
         MeasureKind: "total" | "ratio";
+        /**
+         * @description How the source rows make up a measure:
+         *     - `sum`: `SUM(x)`; `row_column` holds x of each row and `value` is their sum.
+         *     - `count`: `COUNT(*)`; each row counts one, so `value` equals `total_rows`.
+         *     - `other`: any other aggregate (AVG, COUNT DISTINCT, a ratio, a rounded sum); `value` is that aggregate over the
+         *       rows, there is no per-row column.
+         * @enum {string}
+         */
+        MeasureRule: "sum" | "count" | "other";
         /** @description The full set of data roles of a member; empty removes every role. */
         MemberDataRolesRequest: {
             role_ids: string[];

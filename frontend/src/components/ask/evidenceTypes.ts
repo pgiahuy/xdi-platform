@@ -135,11 +135,11 @@ export type DrillKeyView = {
 
 // Một kiểu chung cho hai chỗ bấm để tab Dòng nguồn, lần gọi drill và chữ "Đang xem" đi cùng một đường; from cho biết
 // request gửi breakdown hay cell (hợp đồng ở drill/contract.rs).
-/** Chỗ được bấm: một dòng phân rã (lát cắt, cột, giá trị nhóm) hoặc một ô số đo của bảng kết quả (khóa của dòng và tên
- * cột số đo; không có khóa là toàn bộ dòng nguồn của câu hỏi). */
+/** Chỗ được bấm: một dòng phân rã (lát cắt, cột, giá trị nhóm) hoặc một ô số đo của bảng kết quả (khóa của dòng, tên
+ * cột số đo, giá trị ô để so với tổng các dòng nguồn; không có khóa là toàn bộ dòng nguồn của câu hỏi). */
 export type DrillTarget =
   | { from: 'breakdown'; slice: Slice; column: string; value: Cell; kind: CellKind }
-  | { from: 'cell'; keys: DrillKeyView[]; measure: string }
+  | { from: 'cell'; keys: DrillKeyView[]; measure: string; value: Cell; kind: CellKind }
 
 /** Ô nào của bảng kết quả bấm được: chỉ số các cột số đo, chỉ số các cột khóa (dimension, time) của dòng. */
 export type CellDrill = {
@@ -155,12 +155,32 @@ export type RowsPage = {
   total: number
 }
 
+/** Độ đo của chỗ được bấm, backend tính lại trên mọi dòng nguồn (DrillMeasure): sum là tổng cột rowColumn của các
+ * dòng, count là số dòng, other là hàm tổng hợp khác (trung bình, tỷ lệ) tính lại. clicked là ô đã bấm khi so được
+ * (ô của bảng kết quả); null với dòng phân rã, vì số của phân rã có thể đã chia theo số nhóm. */
+export type RowsMeasure = {
+  column: string
+  rule: 'sum' | 'count' | 'other'
+  value: Cell
+  kind: CellKind
+  rowColumn: string | null
+  clicked: Cell
+  compared: boolean
+}
+
+/** Dòng nguồn đến từ bảng nào và cột nào lấy từ bảng nối (câu nối bảng), kèm độ đo tính lại. */
+export type RowsSource = {
+  table: string | null
+  joinedColumns: string[]
+  measure: RowsMeasure | null
+}
+
 /** Tab dòng nguồn theo trạng thái lần truy gần nhất; idle kèm lời nhắc bấm ở đâu. */
 export type RowsView =
   | { state: 'idle'; hint: string }
   | { state: 'loading'; target: DrillTarget }
   | { state: 'error'; target: DrillTarget; message: string }
-  | { state: 'ready'; target: DrillTarget; sql: string; result: ResultView; page: RowsPage }
+  | { state: 'ready'; target: DrillTarget; sql: string; result: ResultView; page: RowsPage; source: RowsSource }
 
 export type StepView = {
   /** Nhãn tiếng Việt do giao diện đặt cho tên bước. */
