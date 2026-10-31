@@ -1704,7 +1704,12 @@
                                 "compare_value": "2210340.15",
                                 "contribution": "-639780.25",
                                 "mix_effect": null,
+                                "outlier": false,
+                                "percent_change": "-22.4",
+                                "presence": "both",
                                 "rate_effect": null,
+                                "share_of_change": "49.9",
+                                "sign_flip": false,
                                 "value": "Europe"
                               },
                               {
@@ -1712,7 +1717,12 @@
                                 "compare_value": "2301250.60",
                                 "contribution": "-339049.50",
                                 "mix_effect": null,
+                                "outlier": false,
+                                "percent_change": "-12.8",
+                                "presence": "both",
                                 "rate_effect": null,
+                                "share_of_change": "26.4",
+                                "sign_flip": false,
                                 "value": "LATAM"
                               },
                               {
@@ -1720,7 +1730,12 @@
                                 "compare_value": "1960120.00",
                                 "contribution": "-145310.25",
                                 "mix_effect": null,
+                                "outlier": false,
+                                "percent_change": "-6.9",
+                                "presence": "both",
                                 "rate_effect": null,
+                                "share_of_change": "11.3",
+                                "sign_flip": false,
                                 "value": "Pacific Asia"
                               },
                               {
@@ -1728,7 +1743,12 @@
                                 "compare_value": "1090230.00",
                                 "contribution": "-120270.00",
                                 "mix_effect": null,
+                                "outlier": false,
+                                "percent_change": "-9.9",
+                                "presence": "both",
                                 "rate_effect": null,
+                                "share_of_change": "9.4",
+                                "sign_flip": false,
                                 "value": "USCA"
                               },
                               {
@@ -1736,10 +1756,16 @@
                                 "compare_value": "557159.25",
                                 "contribution": "-38990.00",
                                 "mix_effect": null,
+                                "outlier": false,
+                                "percent_change": "-6.5",
+                                "presence": "both",
                                 "rate_effect": null,
+                                "share_of_change": "3",
+                                "sign_flip": false,
                                 "value": "Africa"
                               }
                             ],
+                            "has_outliers": false,
                             "kind": "text",
                             "label": "thị trường",
                             "mix_effect": null,
@@ -1754,7 +1780,12 @@
                                 "compare_value": "4150100.50",
                                 "contribution": "-730099.65",
                                 "mix_effect": null,
+                                "outlier": false,
+                                "percent_change": "-15",
+                                "presence": "both",
                                 "rate_effect": null,
+                                "share_of_change": "56.9",
+                                "sign_flip": false,
                                 "value": "Consumer"
                               },
                               {
@@ -1762,7 +1793,12 @@
                                 "compare_value": "2480300.25",
                                 "contribution": "-369699.85",
                                 "mix_effect": null,
+                                "outlier": false,
+                                "percent_change": "-13",
+                                "presence": "both",
                                 "rate_effect": null,
+                                "share_of_change": "28.8",
+                                "sign_flip": false,
                                 "value": "Corporate"
                               },
                               {
@@ -1770,10 +1806,16 @@
                                 "compare_value": "1488699.25",
                                 "contribution": "-183600.50",
                                 "mix_effect": null,
+                                "outlier": false,
+                                "percent_change": "-11",
+                                "presence": "both",
                                 "rate_effect": null,
+                                "share_of_change": "14.3",
+                                "sign_flip": false,
                                 "value": "Home Office"
                               }
                             ],
+                            "has_outliers": false,
                             "kind": "text",
                             "label": "phân khúc khách hàng",
                             "mix_effect": null,
@@ -1781,6 +1823,7 @@
                             "sql": "SELECT \"Customer Segment\", SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS base_value, SUM(CASE WHEN strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-07-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' THEN CAST(\"Order Item Total\" AS DECIMAL(18, 2)) END) AS compare_value FROM dataco WHERE strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-10-01' GROUP BY \"Customer Segment\" LIMIT 100000"
                           }
                         ],
+                        "dropped_dimensions": [],
                         "measure": "Doanh thu",
                         "measure_kind": "total",
                         "percent_change": "-13.6",
@@ -5382,7 +5425,8 @@
           "sql",
           "groups",
           "mix_effect",
-          "rate_effect"
+          "rate_effect",
+          "has_outliers"
         ],
         "properties": {
           "column": {
@@ -5395,6 +5439,10 @@
               "$ref": "#/components/schemas/GroupContribution"
             },
             "description": "Every group of the column, largest contribution (by absolute value) first."
+          },
+          "has_outliers": {
+            "type": "boolean",
+            "description": "True when at least one group is an `outlier`. Dimensions with outliers come first, each part in the order of\nhow well the dimension explains the change."
           },
           "kind": {
             "$ref": "#/components/schemas/ValueKind",
@@ -5521,6 +5569,62 @@
             "format": "int64",
             "description": "Number of source rows behind the number, over all pages.",
             "minimum": 0
+          }
+        }
+      },
+      "DropReason": {
+        "type": "string",
+        "description": "- `separates_slices`: every value of the column is found in one slice only, so the column only renames the two\n  slices.\n- `duplicates`: the column splits the rows into exactly the groups of another column (`duplicate_of`).",
+        "enum": [
+          "separates_slices",
+          "duplicates"
+        ]
+      },
+      "DroppedDimension": {
+        "type": "object",
+        "description": "One dimension left out, and why.",
+        "required": [
+          "column",
+          "label",
+          "reason",
+          "duplicate_of",
+          "base_only",
+          "compare_only"
+        ],
+        "properties": {
+          "base_only": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For `separates_slices`: values found only in the base slice, as text."
+          },
+          "column": {
+            "type": "string"
+          },
+          "compare_only": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For `separates_slices`: values found only in the compared slice, as text."
+          },
+          "duplicate_of": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Column with the same groups, for `duplicates`."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vietnamese name of the column from the column profile; null when the profile has none."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/DropReason"
           }
         }
       },
@@ -5808,7 +5912,8 @@
           "summary_points",
           "summary_by_model",
           "summary_warnings",
-          "summary_verdict"
+          "summary_verdict",
+          "dropped_dimensions"
         ],
         "properties": {
           "base": {
@@ -5837,6 +5942,13 @@
               "$ref": "#/components/schemas/DimensionBreakdown"
             },
             "description": "One breakdown per dimension, the dimension that explains the change best first."
+          },
+          "dropped_dimensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DroppedDimension"
+            },
+            "description": "Dimensions left out of `dimensions` or of the summary, with the reason; show them as a note with the\nbreakdown so that a missing table is explained."
           },
           "measure": {
             "type": "string",
@@ -5993,7 +6105,12 @@
           "compare_value",
           "contribution",
           "mix_effect",
-          "rate_effect"
+          "rate_effect",
+          "presence",
+          "share_of_change",
+          "percent_change",
+          "sign_flip",
+          "outlier"
         ],
         "properties": {
           "base_value": {
@@ -6013,12 +6130,37 @@
             ],
             "description": "Ratio measures only: part of `change` because this group's share of the denominator changed,\n`(compare_share - base_share) * (base_value + compare_value) / 2`. For a group with no denominator in one slice,\nthe ratio of that slice is taken equal to the other slice, so the whole contribution is a mix effect."
           },
+          "outlier": {
+            "type": "boolean",
+            "description": "True when the group stands out: its `share_of_change` is at least 1 (in absolute value) and its\n`percent_change` is at least 10 points away from the `percent_change` of the whole, or it is `new`, `gone` or a\n`sign_flip`."
+          },
+          "percent_change": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`(compare_value - base_value) / base_value * 100`, one decimal. Null when the group is `new` or `gone`, when\n`base_value` is zero or negative, or when `sign_flip`."
+          },
+          "presence": {
+            "$ref": "#/components/schemas/GroupPresence"
+          },
           "rate_effect": {
             "type": [
               "string",
               "null"
             ],
             "description": "Ratio measures only: part of `change` because the ratio inside this group changed,\n`(base_share + compare_share) / 2 * (compare_value - base_value)`."
+          },
+          "share_of_change": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`contribution / change * 100`, one decimal: negative when the group moved against the change, above 100 when\nother groups offset it. Null when the change is close to zero (under 0.5% of the larger slice), where these\npercents grow without meaning."
+          },
+          "sign_flip": {
+            "type": "boolean",
+            "description": "True when the base and compared values are both non-zero with opposite signs, for example a profit that\nturned into a loss."
           },
           "value": {
             "oneOf": [
@@ -6032,6 +6174,15 @@
             ]
           }
         }
+      },
+      "GroupPresence": {
+        "type": "string",
+        "description": "Where a group has rows: `both` slices, only the compared slice (`new`), or only the base slice (`gone`). For a\nratio, a group has rows in a slice when its denominator there is not zero.",
+        "enum": [
+          "both",
+          "new",
+          "gone"
+        ]
       },
       "HealthResponse": {
         "type": "object",
