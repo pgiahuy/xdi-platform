@@ -14,7 +14,8 @@ backend/prompts/sql.txt và unanswerable_rule.txt (engine/prompts.rs); nhãn c�
 
 Câu hỏi đọc được bảng liên quan (#213, ask/related.rs, ask/group_prompt.rs) thì phần cột thành một khối mỗi bảng, bảng
 đang chọn trước, theo sau là danh sách quan hệ và luật nối bảng (backend/prompts/sql_joins.txt); chỉ số ghi kèm tên
-bảng. Câu một bảng giữ nguyên chữ như trước.
+bảng. Bảng của database không gửi chi tiết (ask/table_pick.rs) và bảng chưa chụp nằm trong danh sách gọn ở sau
+(backend/prompts/sql_other_tables.txt, #249). Câu một bảng giữ nguyên chữ như trước.
 
 Thứ tự: luật, luật của guard, cột, gợi ý, lựa chọn đã có, chỉ số, khái niệm ngành, ví dụ, bài học đã duyệt (#228),
 các lượt hỏi trước của hội thoại, câu hỏi cuối cùng, để mô hình đọc câu hỏi khi đã có đủ ngữ cảnh. Luật của guard
@@ -30,7 +31,7 @@ use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileRole, Pro
 use crate::service::ask::choices::COLUMN_CHOICE_PREFIX;
 use crate::service::ask::context::{is_related, AskContext, ColumnProfile};
 use crate::service::ask::contract::ChosenOption;
-use crate::service::ask::group_prompt::{GroupPrompt, JoinLine};
+use crate::service::ask::group_prompt::{CompactTable, GroupPrompt, JoinLine};
 use crate::service::ask::lessons::build_lessons_section;
 use crate::service::ask::phrases::build_phrases;
 use crate::service::ask::values::ValueEntry;
@@ -172,12 +173,54 @@ fn build_group_columns(input: &PromptInput, detail: Detail) -> String {
         let title = format!("Columns of table {}:", table.table);
         sections.push(build_table_block(&title, &table.columns, detail));
     }
-    let joins: Vec<String> = group.joins.iter().map(build_join_line).collect();
-    sections.push(fill(
-        &prompts::SQL_JOINS,
-        &[("relationships", &joins.join("\n"))],
-    ));
+    // Bảng chỉ có trong danh sách gọn thì không có khối cột, nên câu một bảng chi tiết không có luật nối bảng.
+    if !group.tables.is_empty() {
+        let joins: Vec<String> = group.joins.iter().map(build_join_line).collect();
+        let relationships = if joins.is_empty() {
+            "(none)".to_string()
+        } else {
+            joins.join("\n")
+        };
+        sections.push(fill(
+            &prompts::SQL_JOINS,
+            &[("relationships", &relationships)],
+        ));
+    }
+    sections.push(build_other_tables(&group.others));
     join_sections(sections)
+}
+
+/// Danh sách gọn các bảng chỉ gửi tên (#249), kèm luật xin chi tiết; rỗng khi mọi bảng đã có khối cột.
+fn build_other_tables(others: &[CompactTable]) -> String {
+    if others.is_empty() {
+        return String::new();
+    }
+    fill(
+        &prompts::SQL_OTHER_TABLES,
+        &[("tables", &build_compact_tables(others))],
+    )
+}
+
+/// Mỗi bảng một dòng: `- departments: Phòng ban của cửa hàng`, bảng chưa chụp ghi thêm "(no data yet)". Chung cho
+/// prompt SQL và prompt phân loại (ask/classify.rs).
+pub(super) fn build_compact_tables(others: &[CompactTable]) -> String {
+    let lines: Vec<String> = others
+        .iter()
+        .map(|t| {
+            let marker = if t.unsnapshotted {
+                " (no data yet)"
+            } else {
+                ""
+            };
+            let description = t.description.trim();
+            if description.is_empty() {
+                format!("- {}{marker}", t.table)
+            } else {
+                format!("- {}{marker}: {description}", t.table)
+            }
+        })
+        .collect();
+    lines.join("\n")
 }
 
 /// `- order_items.order_id = orders.order_id (many order_items rows per orders row)`; khóa nhiều cột nối bằng AND.

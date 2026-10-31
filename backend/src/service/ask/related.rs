@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/related.rs - các bảng một câu hỏi được đọc (#213): dataset đang chọn cùng các dataset nối với nó qua
-dataset_relations (engine/store/relations.rs, ghi lúc chụp nhiều bảng từ database), cả hai chiều, tối đa MAX_HOPS bước
-và MAX_GROUP_TABLES bảng, chỉ dataset có phiên bản đang dùng và đã lập hồ sơ. ask/mod.rs gọi load_group trước khi dựng
-ngữ cảnh: mỗi bảng thành một AllowedTable của guard với bộ lọc dòng của riêng nó; ask/group_prompt.rs dựng ngữ cảnh
-của các bảng liên quan cho prompt SQL. Dataset nạp từ file
-không có quan hệ nào, nên nhóm chỉ có một bảng và prompt như trước.
+/* service/ask/related.rs - các bảng một câu hỏi được đọc (#213, #249): mọi bảng đã chụp của database chứa bảng bắt
+đầu (cùng dataset, Dataset::parent_id), chỉ bảng có phiên bản đang dùng, đã lập hồ sơ và có file Parquet, cùng mọi quan
+hệ dataset_relations (engine/store/relations.rs, ghi lúc chụp) giữa chúng. Không giới hạn số bước theo quan hệ: câu
+"theo phòng ban" trên order_items cần order_items -> products -> categories -> departments, ba bước. Bảng nào được gửi
+chi tiết cho mô hình do ask/table_pick.rs chọn khi metadata mọi bảng vượt trần; build_subset dựng nhóm của các bảng đó.
+
+ask/mod.rs và drill/mod.rs gọi load_group trước khi dựng ngữ cảnh: mỗi bảng thành một AllowedTable của guard với bộ
+lọc dòng của riêng nó; ask/group_prompt.rs dựng ngữ cảnh của các bảng liên quan cho prompt SQL. Dataset nạp từ file
+đứng riêng: nhóm chỉ có đúng bảng đó, như trước.
 
 Người bị lọc dòng nhận đủ các bảng như mọi người: bảng trỏ tới bảng bị lọc mang điều kiện lan theo khóa ngoại
 (ask/row_filters.rs, #215), nên đọc orders một mình hay JOIN với customers đều chỉ thấy đơn của khách được thấy. */
@@ -23,14 +26,8 @@ use crate::service::ask::fanout::JoinLink;
 use crate::service::explain::source::{build_related_tables, RelatedTables, SourceTable};
 use crate::{error::AppError, state::AppState};
 
-/// Số bảng tối đa một câu hỏi được đọc, kể cả bảng đang chọn: đủ cho chuỗi bảng sự kiện, bảng đơn, khách hàng, sản
-/// phẩm, danh mục; nhiều hơn thì prompt dài và mô hình dễ nối sai.
-pub const MAX_GROUP_TABLES: usize = 8;
-
-/// Số bước tối đa đi theo quan hệ từ bảng đang chọn (order_items, orders, customers là hai bước).
-pub const MAX_HOPS: usize = 2;
-
 /// Một bảng của nhóm.
+#[derive(Clone)]
 pub struct GroupTable {
     pub dataset: Dataset,
     pub version: DatasetVersion,
@@ -38,8 +35,9 @@ pub struct GroupTable {
     pub columns: Vec<ProfileColumn>,
 }
 
+#[derive(Clone)]
 pub struct TableGroup {
-    /// Bảng đang chọn ở đầu, rồi các bảng liên quan theo số bước.
+    /// Bảng đang chọn ở đầu, rồi các bảng nối được theo số bước quan hệ (gần trước), rồi bảng không nối được.
     pub tables: Vec<GroupTable>,
     /// Đầu vào của guard, cùng thứ tự với tables.
     pub allowed: Vec<AllowedTable>,
@@ -56,7 +54,6 @@ pub async fn load_group(
 ) -> Result<TableGroup, AppError> {
     let (dataset, version, columns) = picked;
     let ws = &member.workspace;
-    let relations = state.store.list_relations(ws, None).await?;
     let mut group = TableGroup {
         tables: vec![GroupTable {
             dataset: dataset.clone(),
@@ -66,27 +63,47 @@ pub async fn load_group(
         allowed: vec![picked_table],
         relations: Vec::new(),
     };
-    // Đọc các bảng ứng viên; bảng chưa có phiên bản, chưa lập hồ sơ xong hay không có file Parquet thì bỏ.
-    let candidates = build_group_ids(dataset.id, &relations, |_| true);
+    // File nạp lên không có nguồn database: không có bảng cùng database nào để đọc thêm.
+    if dataset.source_id.is_none() {
+        return Ok(group);
+    }
+    let siblings: Vec<Uuid> = state
+        .store
+        .list_datasets(ws)
+        .await?
+        .into_iter()
+        .filter(|d| d.parent_id == dataset.parent_id && d.id != dataset.id)
+        .map(|d| d.id)
+        .collect();
+    // Bảng chưa có phiên bản, chưa lập hồ sơ xong hay không có file Parquet thì bỏ.
     let mut loaded: Vec<(GroupTable, AllowedTable)> = Vec::new();
-    for id in candidates.into_iter().skip(1) {
+    for id in siblings {
         if let Some(found) = load_table(state, member, id).await? {
             loaded.push(found);
         }
     }
-    // Tính lại sau khi bỏ bảng không dùng được: bảng chỉ nối được qua bảng đó không viết JOIN tới được.
-    let usable: HashSet<Uuid> = loaded.iter().map(|(t, _)| t.dataset.id).collect();
-    let kept = build_group_ids(dataset.id, &relations, |id| usable.contains(&id));
-    for (table, allowed) in loaded {
-        if kept.contains(&table.dataset.id) {
+    let mut usable: HashSet<Uuid> = loaded.iter().map(|(t, _)| t.dataset.id).collect();
+    usable.insert(dataset.id);
+    let relations: Vec<DatasetRelation> = state
+        .store
+        .list_relations(ws, None)
+        .await?
+        .into_iter()
+        .filter(|r| usable.contains(&r.from_dataset_id) && usable.contains(&r.to_dataset_id))
+        .collect();
+    let names: Vec<(Uuid, String)> = loaded
+        .iter()
+        .map(|(t, _)| (t.dataset.id, t.dataset.logical_table.clone()))
+        .collect();
+    let order = build_group_order(dataset.id, &names, &relations);
+    for id in order.into_iter().skip(1) {
+        if let Some(at) = loaded.iter().position(|(t, _)| t.dataset.id == id) {
+            let (table, allowed) = loaded.swap_remove(at);
             group.tables.push(table);
             group.allowed.push(allowed);
         }
     }
-    group.relations = relations
-        .into_iter()
-        .filter(|r| kept.contains(&r.from_dataset_id) && kept.contains(&r.to_dataset_id))
-        .collect();
+    group.relations = relations;
     Ok(group)
 }
 
@@ -119,39 +136,54 @@ async fn load_table(
     Ok(Some((table, allowed)))
 }
 
-/// Dataset đi được từ picked theo quan hệ, hai chiều, tối đa MAX_HOPS bước và MAX_GROUP_TABLES dataset, picked ở đầu,
-/// gần trước xa sau. Chỉ đi qua dataset usable nhận.
-pub fn build_group_ids(
-    picked: Uuid,
+/// Thứ tự các bảng của nhóm: start ở đầu, rồi bảng nối được theo quan hệ (hai chiều), ít bước trước, cùng số bước thì
+/// theo thứ tự quan hệ; sau cùng là bảng không nối được với start, theo tên bảng. others là (id, tên bảng logic) của
+/// mọi bảng khác start. Thứ tự này là thứ tự khối cột trong prompt: bảng gần bảng bắt đầu đứng trước.
+pub fn build_group_order(
+    start: Uuid,
+    others: &[(Uuid, String)],
     relations: &[DatasetRelation],
-    usable: impl Fn(Uuid) -> bool,
 ) -> Vec<Uuid> {
-    let mut group = vec![picked];
-    let mut frontier = vec![picked];
-    for _ in 0..MAX_HOPS {
+    let known = |id: Uuid| id == start || others.iter().any(|(o, _)| *o == id);
+    let mut order = vec![start];
+    let mut frontier = vec![start];
+    while !frontier.is_empty() {
         let mut next = Vec::new();
         for &id in &frontier {
-            for r in relations {
-                let other = if r.from_dataset_id == id {
-                    r.to_dataset_id
-                } else if r.to_dataset_id == id {
-                    r.from_dataset_id
-                } else {
-                    continue;
-                };
-                if group.contains(&other) || !usable(other) {
-                    continue;
+            for other in build_neighbors(id, relations) {
+                if known(other) && !order.contains(&other) {
+                    order.push(other);
+                    next.push(other);
                 }
-                if group.len() == MAX_GROUP_TABLES {
-                    return group;
-                }
-                group.push(other);
-                next.push(other);
             }
         }
         frontier = next;
     }
-    group
+    let mut unlinked: Vec<&(Uuid, String)> = others
+        .iter()
+        .filter(|(id, _)| !order.contains(id))
+        .collect();
+    unlinked.sort_by(|a, b| a.1.cmp(&b.1));
+    order.extend(unlinked.into_iter().map(|(id, _)| *id));
+    order
+}
+
+/// Bảng nối trực tiếp với id bằng một quan hệ, cả hai chiều, theo thứ tự quan hệ, mỗi bảng một lần.
+pub fn build_neighbors(id: Uuid, relations: &[DatasetRelation]) -> Vec<Uuid> {
+    let mut found = Vec::new();
+    for r in relations {
+        let other = if r.from_dataset_id == id {
+            r.to_dataset_id
+        } else if r.to_dataset_id == id {
+            r.from_dataset_id
+        } else {
+            continue;
+        };
+        if other != id && !found.contains(&other) {
+            found.push(other);
+        }
+    }
+    found
 }
 
 /// Bảng liên quan của nhóm nối nhiều-một vào bảng đang chọn (explain/source.rs), cho phân rã. Nhóm một bảng thì rỗng.
@@ -170,6 +202,30 @@ pub fn build_group_related(group: &TableGroup, links: &[JoinLink]) -> RelatedTab
 }
 
 impl TableGroup {
+    /// Nhóm chỉ gồm các bảng trong ids, giữ thứ tự của nhóm này; bảng đầu (bảng đang chọn) luôn được giữ. Quan hệ chỉ
+    /// giữ những quan hệ có cả hai đầu trong nhóm mới, nên guard chỉ nhận JOIN giữa các bảng đã gửi chi tiết.
+    pub fn build_subset(&self, ids: &[Uuid]) -> TableGroup {
+        let mut subset = TableGroup {
+            tables: Vec::new(),
+            allowed: Vec::new(),
+            relations: Vec::new(),
+        };
+        for (i, (table, allowed)) in self.tables.iter().zip(&self.allowed).enumerate() {
+            if i == 0 || ids.contains(&table.dataset.id) {
+                subset.tables.push(table.clone());
+                subset.allowed.push(allowed.clone());
+            }
+        }
+        let kept: Vec<Uuid> = subset.tables.iter().map(|t| t.dataset.id).collect();
+        subset.relations = self
+            .relations
+            .iter()
+            .filter(|r| kept.contains(&r.from_dataset_id) && kept.contains(&r.to_dataset_id))
+            .cloned()
+            .collect();
+        subset
+    }
+
     /// Cột khóa của dataset id trong các quan hệ của nhóm.
     pub fn join_keys(&self, id: Uuid) -> Vec<String> {
         let mut keys = Vec::new();
