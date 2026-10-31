@@ -182,3 +182,22 @@ fn tls_error_advice_depends_on_the_mode() {
     info.sslmode = "require".to_string();
     assert!(message(&info).contains("chọn prefer hoặc disable"));
 }
+
+/// Comment vào hash của bản chụp chỉ khi bảng có comment: bảng không có comment giữ hash như trước #245, đổi comment
+/// thì hash đổi.
+#[test]
+fn comments_enter_the_snapshot_hash_only_when_present() {
+    use crate::service::ingest::SourceDescriptions;
+
+    assert_eq!(
+        snapshot::build_comment_part(&SourceDescriptions::default()),
+        ""
+    );
+    let with = |text: &str| SourceDescriptions {
+        table: None,
+        columns: vec![("region".to_string(), text.to_string())],
+    };
+    let first = snapshot::build_comment_part(&with("Vùng giao hàng"));
+    assert!(!first.is_empty());
+    assert_ne!(first, snapshot::build_comment_part(&with("Vùng nhận hàng")));
+}

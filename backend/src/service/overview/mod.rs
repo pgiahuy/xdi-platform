@@ -50,6 +50,7 @@ pub async fn build_overview(
     let mut overview = DatasetOverviewResponse {
         dataset_id: dataset.id,
         name: dataset.name.clone(),
+        description: None,
         version: None,
         summary: OverviewSummary {
             row_count: None,
@@ -68,6 +69,7 @@ pub async fn build_overview(
         overview.missing.push(build_missing(MissingCode::NoVersion));
         return Ok(overview);
     };
+    overview.description = version.description.clone();
     overview.version = Some(build_version(&version));
     let status = version.profile_status.as_str();
     if status == ProfileStatus::Pending.as_str() || status == ProfileStatus::Failed.as_str() {

@@ -5219,6 +5219,7 @@
         "required": [
           "dataset_id",
           "name",
+          "description",
           "version",
           "summary",
           "columns",
@@ -5245,6 +5246,13 @@
           "dataset_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Description of the table written in the source database (`COMMENT ON TABLE`) for the current version; null for\nuploaded files and tables without a comment."
           },
           "main_measure": {
             "oneOf": [
@@ -5353,6 +5361,7 @@
           "parquet_path",
           "row_count",
           "profile_status",
+          "description",
           "created_at"
         ],
         "properties": {
@@ -5363,6 +5372,13 @@
           "dataset_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Description of the snapshotted table written in the source database (`COMMENT ON TABLE`); null for uploaded\nfiles and tables without a comment."
           },
           "file_hash": {
             "type": [
@@ -6669,6 +6685,7 @@
           "data_type",
           "role",
           "description",
+          "description_source",
           "aggregation"
         ],
         "properties": {
@@ -6692,6 +6709,13 @@
               "string",
               "null"
             ]
+          },
+          "description_source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who wrote `description`: `database` (a `COMMENT ON COLUMN` of the source database) or `model` (the semantic\nprofile); null when there is no description."
           },
           "name": {
             "type": "string"
@@ -6855,6 +6879,7 @@
           "name",
           "label",
           "description",
+          "description_source",
           "role",
           "unit",
           "sensitive",
@@ -6868,6 +6893,13 @@
               "string",
               "null"
             ]
+          },
+          "description_source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who wrote `description`: `database` (a `COMMENT ON COLUMN` of the source database) or `model` (the semantic\nprofile); null when there is no description."
           },
           "distinct_count": {
             "type": [

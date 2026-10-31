@@ -42,6 +42,7 @@ pub(crate) fn column(
         data_type: data_type.to_string(),
         role: role.to_string(),
         description: None,
+        description_source: None,
         aliases: Vec::new(),
         is_sensitive: false,
         null_count: Some(0),

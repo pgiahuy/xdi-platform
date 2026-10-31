@@ -16,6 +16,7 @@ Bảo vệ:
 - Thông tin kết nối mã hóa bằng SOURCE_SECRET_KEY trước khi lưu; mật khẩu không bao giờ có trong response, log hay
   prompt. Cột _source_file ghi postgres://máy/database/schema.bảng, không có tài khoản hay mật khẩu. */
 
+mod comments;
 mod key_file;
 mod pg_types;
 mod postgres;

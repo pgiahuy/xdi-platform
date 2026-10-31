@@ -37,8 +37,8 @@ use crate::auth::WorkspaceId;
 use crate::engine::llm::meter::{build_call_totals, CallLog};
 use crate::engine::prompts::{self, fill};
 use crate::engine::store::{
-    ColumnAggregation, ColumnUnit, ColumnValue, Dataset, ProfileColumn, ProfileRole, ProfileStatus,
-    SemanticColumnUpdate, SemanticValueUpdate,
+    ColumnAggregation, ColumnUnit, ColumnValue, Dataset, DescriptionSource, ProfileColumn,
+    ProfileRole, ProfileStatus, SemanticColumnUpdate, SemanticValueUpdate,
 };
 use crate::service::ask::context;
 use crate::service::ask::phrases::fold;
@@ -265,11 +265,19 @@ async fn profile_version(
         .list_column_values(ws, &value_columns)
         .await
         .map_err(SemanticFailure::Temporary)?;
+    // Comment của bảng nguồn database (nằm trên phiên bản) làm ngữ cảnh cho cả ba phần; file nạp tay không có.
+    let table_description = state
+        .store
+        .get_version(ws, dataset.id, version_id)
+        .await
+        .map_err(SemanticFailure::Temporary)?
+        .and_then(|v| v.description);
 
     let input = PartInput {
         dataset,
         version_id,
         row_count,
+        table_description: table_description.as_deref(),
         columns: &columns,
         values: &values,
     };
@@ -319,8 +327,9 @@ async fn profile_version(
 // So tên và bí danh (trùng sau chuẩn hóa cũng tính là trùng) qua fold của service/ask/phrases.rs (bỏ dấu, chữ
 // thường, tách từ), cùng một cách chuẩn hóa với khớp cụm ở ngữ cảnh hỏi: bí danh "Thị  Trường" trùng "thị trường".
 
-/// Prompt của một phần hồ sơ (service/semantic/parts.rs): luật và khuôn JSON của phần đó trước, rồi mỗi cột một dòng
-/// siêu dữ liệu, cuối cùng danh sách giá trị của các cột dimension không nhạy cảm. Chỉ siêu dữ liệu và giá trị cột dimension đi ra ngoài: min, max chỉ kèm cột
+/// Prompt của một phần hồ sơ (service/semantic/parts.rs): luật và khuôn JSON của phần đó trước, rồi mô tả bảng và mỗi
+/// cột một dòng siêu dữ liệu (kèm mô tả từ database nếu có), cuối cùng danh sách giá trị của các cột dimension không
+/// nhạy cảm. Chỉ siêu dữ liệu và giá trị cột dimension đi ra ngoài: min, max chỉ kèm cột
 /// số thực và time (min, max của cột chữ hay mã số nguyên như mã đơn, số điện thoại là dữ liệu thật của người dùng);
 /// cột nhạy cảm chỉ gửi tên, kiểu, vai trò và số đo, không gửi giá trị nào. Tên cột và giá trị in dạng chuỗi JSON
 /// (xuống dòng, ngoặc kép được thoát) để dữ liệu không chèn được dòng giả vào prompt. Phần luật viết tiếng Anh (như
@@ -329,10 +338,15 @@ pub fn build_profile_prompt(
     part: ProfilePart,
     dataset_name: &str,
     logical_table: &str,
+    table_description: Option<&str>,
     row_count: Option<i64>,
     columns: &[ProfileColumn],
     values: &[ColumnValue],
 ) -> String {
+    let table_description = match table_description {
+        Some(text) => format!("\nTable description: {}", json_string(text)),
+        None => String::new(),
+    };
     let rows = match row_count {
         Some(rows) => format!(", {rows} rows"),
         None => String::new(),
@@ -373,6 +387,7 @@ pub fn build_profile_prompt(
             ("dataset", &json_string(dataset_name)),
             ("table", &json_string(logical_table)),
             ("row_count", &rows),
+            ("table_description", &table_description),
             ("columns", &column_lines),
             ("values", &build_values_part(columns, values)),
         ],
@@ -457,7 +472,19 @@ fn column_line(c: &ProfileColumn, row_count: Option<i64>) -> String {
             line.push_str(&format!(" | {min} | {max}"));
         }
     }
+    // Mô tả tổ chức ghi trong database: mô hình dùng nó để chọn bí danh, đơn vị, câu gợi ý, và luật phần cột dặn không
+    // viết lại. Đứng cuối dòng, có nhãn, vì min, max không phải cột nào cũng có.
+    if let Some(description) = database_description(c) {
+        line.push_str(&format!(" | description: {}", json_string(description)));
+    }
     line
+}
+
+/// Mô tả của cột khi nó đến từ database nguồn (COMMENT ON COLUMN); None với mô tả mô hình viết hay chưa có mô tả.
+fn database_description(c: &ProfileColumn) -> Option<&str> {
+    let from_database =
+        c.description_source.as_deref() == Some(DescriptionSource::Database.as_str());
+    from_database.then_some(c.description.as_deref()).flatten()
 }
 
 /// Số lý do bỏ mục giữ lại để ghi log khi cả câu trả lời bị bỏ: đủ thấy mô hình sai kiểu gì, không làm dòng log dài
@@ -531,7 +558,9 @@ pub fn build_profile_answer(
             note_rejection(&mut reasons, "columns", i, "unknown column name");
             continue;
         };
-        let description = clean_text_opt(&item["description"], DESCRIPTION_MAX_CHARS);
+        // Cột đã có mô tả từ database thì bỏ mô tả mô hình viết (luật đã dặn không viết); store cũng không ghi đè.
+        let description = clean_text_opt(&item["description"], DESCRIPTION_MAX_CHARS)
+            .filter(|_| database_description(column).is_none());
         let aliases = valid_aliases(&item["aliases"], &column_names);
         let unit = valid_unit(column, &item["unit"]);
         let aggregation = valid_aggregation(column, &item["aggregation"]);
@@ -748,19 +777,23 @@ fn clean_text(text: &str, max_chars: usize) -> Option<String> {
     if trimmed.is_empty() || trimmed.chars().count() > max_chars {
         return None;
     }
-    let bad = trimmed.chars().any(|c| {
-        c.is_control()
-            || ('\u{200b}'..='\u{200f}').contains(&c) // zero-width, LRM/RLM
-            || ('\u{2028}'..='\u{2029}').contains(&c) // line/paragraph separator
-            || ('\u{202a}'..='\u{202e}').contains(&c) // điều hướng hai chiều
-            || ('\u{2060}'..='\u{2064}').contains(&c) // word joiner, dấu nối vô hình
-            || ('\u{2066}'..='\u{2069}').contains(&c)
-            || c == '\u{61c}' || c == '\u{feff}'
-    });
-    if bad {
+    if trimmed.chars().any(is_hidden_char) {
         return None;
     }
     Some(trimmed.to_string())
+}
+
+/// Ký tự điều khiển, ký tự vô hình và ký tự điều hướng hai chiều: không hiện ra mà đổi được cách chữ hiển thị hay vỡ
+/// dòng của prompt. clean_text bỏ cả chuỗi có chúng; comment của database (service/sources/comments.rs) chỉ bỏ ký tự.
+pub(crate) fn is_hidden_char(c: char) -> bool {
+    c.is_control()
+        || ('\u{200b}'..='\u{200f}').contains(&c) // zero-width, LRM/RLM
+        || ('\u{2028}'..='\u{2029}').contains(&c) // line/paragraph separator
+        || ('\u{202a}'..='\u{202e}').contains(&c) // điều hướng hai chiều
+        || ('\u{2060}'..='\u{2064}').contains(&c) // word joiner, dấu nối vô hình
+        || ('\u{2066}'..='\u{2069}').contains(&c)
+        || c == '\u{61c}'
+        || c == '\u{feff}'
 }
 
 /// Như clean_text cho trường JSON có thể null hay sai kiểu: thành None (mặc định), không loại cả mục.
