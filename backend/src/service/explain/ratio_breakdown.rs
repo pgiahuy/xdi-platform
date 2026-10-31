@@ -18,7 +18,8 @@ use crate::service::ask::contract::{
     DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
 };
 use crate::service::explain::annotate::{
-    annotate_dimensions, build_percent_change, build_percent_text, GroupPresence, Totals,
+    annotate_dimensions, apply_group_notes, build_percent_change, build_percent_text,
+    GroupPresence, Totals,
 };
 use crate::service::explain::breakdown::{
     build_comparison, build_slice_column, build_slice_labels, run_candidates, Breakdown, QueryEnv,
@@ -110,6 +111,7 @@ pub(super) async fn build_ratio_breakdown(
                         groups: split.groups,
                         mix_effect: Some(build_rate_text(split.mix_effect)),
                         rate_effect: Some(build_rate_text(split.rate_effect)),
+                        has_outliers: false,
                     },
                     score,
                 });
@@ -125,9 +127,9 @@ pub(super) async fn build_ratio_breakdown(
         ));
     }
     apply_dimension_order(&mut ranked, RankingMode::Effect);
-    let dimensions: Vec<DimensionBreakdown> = ranked.into_iter().map(|d| d.breakdown).collect();
+    let mut dimensions: Vec<DimensionBreakdown> = ranked.into_iter().map(|d| d.breakdown).collect();
     // Xếp chiều đổi thứ tự nên lấy lại nhóm có mặt ở đâu theo tên cột.
-    let presences: Vec<Vec<GroupPresence>> = dimensions
+    let mut presences: Vec<Vec<GroupPresence>> = dimensions
         .iter()
         .map(|d| presences.remove(&d.column).unwrap_or_default())
         .collect();
@@ -137,6 +139,7 @@ pub(super) async fn build_ratio_breakdown(
         compare: change.compare_rate,
         change: change.change,
     };
+    apply_group_notes(&mut dimensions, &mut presences, slices);
     let mut notes = annotate_dimensions(&dimensions, &presences, slices);
     // Như nhánh cộng được (breakdown.rs): chiều dimension_pick đã bỏ vẫn có trong ý "Bỏ qua" của lời tóm tắt.
     notes.dropped.extend(picked.dropped);
@@ -170,6 +173,7 @@ pub(super) async fn build_ratio_breakdown(
         summary_by_model: false,
         summary_warnings: Vec::new(),
         summary_verdict: None,
+        dropped_dimensions: notes.dropped.clone(),
         notes,
     })))
 }

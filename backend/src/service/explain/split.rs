@@ -4,7 +4,9 @@ bình mỗi đơn vị (#40, #201), dùng chung cho prompt insight của mô hì
 (explain/summary.rs), cổng 1 (explain/claim_cell.rs) và JSON gửi mô hình chấm (explain/judge.rs), kèm phần trăm của mỗi
 phần trong chênh lệch.
 
-Chỉ tách khi plan có lượng mang nghĩa nghiệp vụ (Explanation.volume_price, như số đơn). Không tách theo số dòng: một dòng
+Chỉ tách khi plan có lượng mang nghĩa nghiệp vụ (Explanation.volume_price, như số đơn) và độ đo là một tổng. Độ đo
+đếm (số đơn, số dòng) thì không tách: chính nó đã là quy mô, "chủ yếu do số đơn" là nói lại câu hỏi; lời đọc theo các
+nhóm (#186, bảng các trường hợp). Không tách theo số dòng: một dòng
 dữ liệu không có nghĩa kinh doanh chung (DataCo một dòng là một món trong đơn), nên "do số dòng dữ liệu" không giải
 thích được gì cho người đọc; trước đây câu khuôn còn gọi số dòng là lý do chính chỉ vì trung bình mỗi dòng lệch dưới
 10%, sai cả khi tính đúng. Không có lượng thì insight giải thích theo các nhóm.
@@ -29,9 +31,12 @@ pub struct Split {
     pub price_share: Option<String>,
 }
 
-/// Tách của một Explanation; None khi plan không có lượng (volume_price null: độ đo tỷ lệ, độ đo đếm dòng, không có cột
-/// lượng, hay một lượng bằng 0).
+/// Tách của một Explanation; None khi plan không có lượng (volume_price null: độ đo tỷ lệ, không có cột lượng, hay một
+/// lượng bằng 0) hay khi độ đo là phép đếm (counts_rows).
 pub fn build_split(e: &Explanation) -> Option<Split> {
+    if e.counts_rows {
+        return None;
+    }
     let vp = e.volume_price.as_ref()?;
     let (volume_label, price_label) = (vp.volume_label.clone(), vp.price_label.clone());
     let numbers = VolumePriceNumbers {

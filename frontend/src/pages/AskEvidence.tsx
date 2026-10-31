@@ -9,6 +9,7 @@ cell cho ô số đo; lỗi thì hiện lời báo của backend. */
 import type { AskResponse } from '@/api/ask'
 import { drillPageSize, useDrill, type DrillRequest, type DrillVariables } from '@/api/drill'
 import { EvidencePane } from '@/components/ask/EvidencePane'
+import { drillSubject } from '@/components/ask/breakdownText'
 import type {
   DrillTarget,
   EvidenceTab,
@@ -78,7 +79,7 @@ export function AskEvidence({ ws, answer, pending, view }: Props) {
 
   const rows = ((): RowsView | null => {
     if (!target) {
-      const hint = buildRowsHint(Boolean(response.explanation), buildCellIndexes(response) !== null)
+      const hint = buildRowsHint(response.explanation, buildCellIndexes(response) !== null)
       return hint ? { state: 'idle', hint } : null
     }
     if (drill.error) return { state: 'error', target, message: drill.error.message }
@@ -120,15 +121,19 @@ function buildDrillKey(target: DrillTarget): Pick<DrillRequest, 'cell' | 'breakd
   return { cell: target.keys.map((key) => ({ column: key.column, value: key.value })) }
 }
 
-/** Lời nhắc khi chưa bấm gì, theo những chỗ bấm được của câu trả lời; null khi không có chỗ nào. */
-function buildRowsHint(hasBreakdown: boolean, hasCells: boolean): string | null {
-  if (hasBreakdown && hasCells) {
+/** Lời nhắc khi chưa bấm gì, theo những chỗ bấm được của câu trả lời; null khi không có chỗ nào. So hai nhóm thì nói
+ * số của nhóm nào, không gọi hai nhóm là "kỳ" (breakdownText.drillSubject). */
+function buildRowsHint(explanation: AskResponse['explanation'], hasCells: boolean): string | null {
+  const subject = explanation
+    ? drillSubject(explanation.comparison, explanation.base.label, explanation.compare.label)
+    : null
+  if (subject && hasCells) {
     return (
-      'Bấm vào một con số trong bảng kết quả, hoặc con số của một kỳ ở tab Phân rã, để xem những dòng dữ liệu tạo ' +
+      `Bấm vào một con số trong bảng kết quả, hoặc ${subject} ở tab Phân rã, để xem những dòng dữ liệu tạo ` +
       'ra con số đó.'
     )
   }
-  if (hasBreakdown) return 'Bấm vào con số của một kỳ ở tab Phân rã để xem những dòng dữ liệu tạo ra con số đó.'
+  if (subject) return `Bấm vào ${subject} ở tab Phân rã để xem những dòng dữ liệu tạo ra con số đó.`
   if (hasCells) return 'Bấm vào một con số trong bảng kết quả để xem những dòng dữ liệu tạo ra con số đó.'
   return null
 }

@@ -10,8 +10,10 @@ use crate::service::ask::contract::{
     CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
     SummaryPointKind, ValueKind,
 };
+use crate::service::ask::examples::build_why_example;
 use crate::service::explain::annotate::{
-    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
+    annotate_dimensions, apply_group_notes, build_percent_change, build_percent_text,
+    build_value_presences, Totals,
 };
 use crate::service::explain::summary::{build_summary_parts, build_template_summary};
 use crate::service::explain::{build_group_contributions, build_number_check, GroupValues};
@@ -73,6 +75,7 @@ fn build(case: Case) -> Explanation {
                 groups: build_group_contributions(&values).expect("contributions"),
                 mix_effect: None,
                 rate_effect: None,
+                has_outliers: false,
             }
         })
         .collect();
@@ -81,7 +84,10 @@ fn build(case: Case) -> Explanation {
         compare: compare_total,
         change,
     };
-    let presences: Vec<_> = dimensions.iter().map(build_value_presences).collect();
+    let mut dimensions = dimensions;
+    let mut presences: Vec<_> = dimensions.iter().map(build_value_presences).collect();
+    // Như bước explain thật (breakdown.rs): ghi chú vào bảng và xếp chiều trước, rồi mới đọc ghi chú cho lời tóm tắt.
+    apply_group_notes(&mut dimensions, &mut presences, totals);
     let notes = annotate_dimensions(&dimensions, &presences, totals);
     let slice = |(label, value, rows): (&str, &str, &str)| ExplanationSlice {
         label: label.to_string(),
@@ -108,6 +114,7 @@ fn build(case: Case) -> Explanation {
         summary_by_model: false,
         summary_warnings: Vec::new(),
         summary_verdict: None,
+        dropped_dimensions: notes.dropped.clone(),
         notes,
     }
 }
@@ -227,8 +234,9 @@ fn complete_canceled_drops_the_columns_that_rename_the_groups() {
 }
 
 /// Lời tóm tắt bỏ qua Type và Delivery Status, nhưng annotate không bỏ chiều nào khỏi bảng phân rã đã dựng: bỏ qua chỉ
-/// nằm trong ghi chú nội bộ. Trên dữ liệu thật, explain/dimension_pick.rs bỏ hai chiều này khỏi bảng trước bước annotate
-/// và đưa chúng vào ghi chú (dimension_pick_tests.rs).
+/// nằm trong ghi chú nội bộ và `dropped_dimensions`. Trên dữ liệu thật, explain/dimension_pick.rs bỏ hai chiều này khỏi
+/// bảng trước bước annotate và đưa chúng vào ghi chú (dimension_pick_tests.rs). Hai chiều này chỉ có nhóm một bên nên
+/// có nhóm khác thường và đứng trước hai chiều dàn đều.
 #[test]
 fn the_breakdown_keeps_the_dimensions_the_summary_skips() {
     let explanation = complete_canceled();
@@ -241,8 +249,8 @@ fn the_breakdown_keeps_the_dimensions_the_summary_skips() {
         columns,
         [
             "Type",
-            "Customer Country",
             "Delivery Status",
+            "Customer Country",
             "Customer Segment"
         ]
     );
@@ -305,7 +313,7 @@ fn a_negative_base_falls_back_to_the_largest_group() {
         compare: ("Quý 3/2017", "350", "12"),
         dimensions: vec![(
             "Market",
-            vec![("Europe", "-300", "100"), ("LATAM", "200", "250")],
+            vec![("Europe", "-300", "-50"), ("LATAM", "200", "400")],
         )],
         labels: &[],
     });
@@ -313,8 +321,35 @@ fn a_negative_base_falls_back_to_the_largest_group() {
     assert_eq!(points[0].kind, SummaryPointKind::Largest);
     assert_eq!(
         points[0].text,
-        "theo Market, riêng nhóm Europe, tổng lợi nhuận tăng 400."
+        "theo Market, riêng nhóm Europe, tổng lợi nhuận tăng 250."
     );
+}
+
+/// Nhóm đổi dấu (lỗ thành lãi) không có % thay đổi nhưng là nhóm khác thường, và lời nói rõ hai giá trị.
+#[test]
+fn a_sign_flip_is_an_outlier() {
+    let explanation = build(Case {
+        measure: "Tổng lợi nhuận",
+        comparison: Comparison::Periods,
+        slice_column: None,
+        base: ("Quý 2/2017", "-100", "10"),
+        compare: ("Quý 3/2017", "350", "12"),
+        dimensions: vec![(
+            "Market",
+            vec![("Europe", "-300", "100"), ("LATAM", "200", "250")],
+        )],
+        labels: &[],
+    });
+    let europe = &explanation.dimensions[0].groups[0];
+    assert!(europe.sign_flip && europe.outlier);
+    assert_eq!(europe.percent_change, None);
+    let (_, points) = build_summary_parts(&explanation);
+    assert_eq!(points[0].kind, SummaryPointKind::Outliers);
+    assert_eq!(
+        points[0].text,
+        "Europe đổi dấu, từ -300 ở Quý 2/2017 sang 100 ở Quý 3/2017 (tăng 400), chiếm 88,9% chênh lệch."
+    );
+    build_number_check(&build_template_summary(&explanation), &explanation).unwrap();
 }
 
 /// Một nhóm đi ngược chiều mà không khác thường (chiều không có nhóm khác thường) thì có ý "Ngược chiều".
@@ -338,4 +373,33 @@ fn a_group_against_the_change_is_named() {
         .find(|p| p.kind == SummaryPointKind::Against)
         .expect("against point");
     assert_eq!(against.text, "theo Market, LATAM giảm 100.");
+}
+
+/// Quy mô là lý do chính: ý "Lý do chính" nêu số đơn và trung bình mỗi đơn của hai bên, để thấy hai mức đó có gần nhau.
+#[test]
+fn a_scale_reason_names_both_counts_and_averages() {
+    let explanation = build_why_example().explanation.expect("why example");
+    let (_, points) = build_summary_parts(&explanation);
+    let reason = points
+        .iter()
+        .find(|p| p.kind == SummaryPointKind::Reason)
+        .expect("reason");
+    assert!(
+        reason.text.starts_with(
+            "chủ yếu do số đơn (Quý 2/2017 có 5.000, Quý 3/2017 có 4.400; giá trị đơn trung bình 1.880,50 và \
+             1.845,25)."
+        ),
+        "{}",
+        reason.text
+    );
+    build_number_check(&build_template_summary(&explanation), &explanation).unwrap();
+}
+
+/// Độ đo đếm không có ý "do quy mô": nó chính là quy mô.
+#[test]
+fn a_count_measure_has_no_scale_reason() {
+    let mut explanation = build_why_example().explanation.expect("why example");
+    explanation.counts_rows = true;
+    let (_, points) = build_summary_parts(&explanation);
+    assert!(points.iter().all(|p| p.kind != SummaryPointKind::Reason));
 }

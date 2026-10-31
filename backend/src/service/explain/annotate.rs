@@ -18,13 +18,21 @@ Hai loại chiều lời tóm tắt bỏ qua:
   có giá trị chữ, vì "Fan Shop" dễ đọc hơn "7".
 
 Luật "khác thường" theo gợi ý của nhóm: % thay đổi lệch % thay đổi chung từ 10 điểm phần trăm trở lên và % tác động từ
-1% trở lên; nhóm chỉ có ở một bên và % tác động từ 1% cũng là khác thường. Lời tóm tắt đọc chiều có nhóm khác thường
-trước. */
+1% trở lên; nhóm chỉ có ở một bên hay đổi dấu (hai bên trái dấu) và % tác động từ 1% cũng là khác thường. Lời tóm tắt
+đọc chiều có nhóm khác thường trước.
+
+Cùng các số đó cũng vào bảng phân rã trả qua API (apply_group_notes: trường share_of_change, percent_change, presence,
+sign_flip, outlier của từng nhóm, has_outliers của từng chiều, chiều có nhóm khác thường xếp trước), để tab Phân rã
+hiện đúng luật này thay vì tự tính lại một bản khác. */
 
 use rust_decimal::{Decimal, RoundingStrategy};
 
 use crate::service::ask::contract::{DimensionBreakdown, ValueKind};
 use crate::service::explain::build_value_text;
+
+// Ba kiểu này là của hợp đồng (ask/contract.rs) vì bảng phân rã trả chúng qua API; các module khác của explain vẫn gọi
+// chúng qua annotate như trước.
+pub use crate::service::ask::contract::{DropReason, DroppedDimension, GroupPresence};
 
 /// Lệch % thay đổi chung từ ngần này điểm phần trăm trở lên mới là khác thường.
 const OUTLIER_POINTS: i64 = 10;
@@ -34,15 +42,6 @@ const OUTLIER_MIN_SHARE: i64 = 1;
 /// Chênh lệch tổng nhỏ hơn ngần này phần nghìn của lát cắt lớn hơn thì coi như gần 0: % tác động khi đó phình ra hàng
 /// nghìn phần trăm và không còn nghĩa, nên không tính.
 const NEAR_ZERO_PER_MILLE: i64 = 5;
-
-/// Nhóm có ở cả hai lát cắt, chỉ ở lát so sánh (mới), hay chỉ ở lát gốc (không còn).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum GroupPresence {
-    #[default]
-    Both,
-    New,
-    Gone,
-}
 
 /// Ghi chú của cả bảng phân rã. Rỗng (Default) khi không có phân rã để đọc, như Explanation dựng tay trong test.
 #[derive(Debug, Clone, Default)]
@@ -66,29 +65,11 @@ pub struct GroupNotes {
     pub presence: GroupPresence,
     /// % tác động, chuỗi một chữ số lẻ ("41.5"); âm khi nhóm đi ngược chiều; None khi chênh lệch gần 0.
     pub share_of_change: Option<String>,
-    /// % thay đổi trong nhóm; None khi nhóm không có ở cả hai bên hay lát gốc không dương.
+    /// % thay đổi trong nhóm; None khi nhóm không có ở cả hai bên, lát gốc không dương hay hai bên trái dấu.
     pub percent_change: Option<String>,
+    /// Hai bên khác 0 và trái dấu (lãi thành lỗ): % thay đổi không đọc được, bảng ghi "đổi dấu".
+    pub sign_flip: bool,
     pub outlier: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DropReason {
-    /// Mọi giá trị của cột chỉ có ở một bên: tên khác của hai lát cắt.
-    SeparatesSlices,
-    /// Cột chia nhóm giống hệt một chiều đã giữ.
-    Duplicates,
-}
-
-#[derive(Debug, Clone)]
-pub struct DroppedDimension {
-    pub column: String,
-    pub label: Option<String>,
-    pub reason: DropReason,
-    pub duplicate_of: Option<String>,
-    /// Giá trị chỉ có ở lát gốc, dạng chữ.
-    pub base_only: Vec<String>,
-    /// Giá trị chỉ có ở lát so sánh, dạng chữ.
-    pub compare_only: Vec<String>,
 }
 
 /// Tổng của hai lát cắt và chênh lệch, đã đọc thành Decimal.
@@ -195,27 +176,27 @@ fn build_notes(
             } else {
                 parse(&group.contribution).and_then(|c| build_share(c, change))
             };
-            let percent = match presence {
-                GroupPresence::Both => {
-                    match (parse(&group.compare_value), parse(&group.base_value)) {
-                        (Some(compare), Some(base)) => compare
-                            .checked_sub(base)
-                            .and_then(|diff| build_percent(diff, base)),
-                        _ => None,
-                    }
-                }
-                GroupPresence::New | GroupPresence::Gone => None,
+            let (base, compare) = (parse(&group.base_value), parse(&group.compare_value));
+            let sign_flip = presence == GroupPresence::Both
+                && matches!((base, compare), (Some(b), Some(c)) if is_sign_flip(b, c));
+            let percent = match (presence, base, compare) {
+                (GroupPresence::Both, Some(base), Some(compare)) if !sign_flip => compare
+                    .checked_sub(base)
+                    .and_then(|diff| build_percent(diff, base)),
+                _ => None,
             };
             let big_enough = share.is_some_and(|s| s.abs() >= Decimal::from(OUTLIER_MIN_SHARE));
             let off_the_whole = match (percent, total_percent) {
                 (Some(p), Some(t)) => (p - t).abs() >= Decimal::from(OUTLIER_POINTS),
                 _ => false,
             };
-            let one_sided = presence != GroupPresence::Both;
+            // Nhóm chỉ có ở một bên hay đổi dấu không có % thay đổi để so với mức chung, nhưng tự nó đã khác thường.
+            let one_sided = presence != GroupPresence::Both || sign_flip;
             GroupNotes {
                 presence,
                 share_of_change: share.map(build_percent_text),
                 percent_change: percent.map(build_percent_text),
+                sign_flip,
                 outlier: big_enough && (off_the_whole || one_sided),
             }
         })
@@ -225,6 +206,51 @@ fn build_notes(
         has_outliers: groups.iter().any(|g| g.outlier),
         groups,
     }
+}
+
+/// Ghi ghi chú của từng nhóm (% tác động, % thay đổi, có mặt ở đâu, đổi dấu, khác thường) vào bảng phân rã trả qua
+/// API, cho mọi chiều kể cả chiều lời tóm tắt bỏ qua, rồi xếp các chiều không có nhóm khác thường ra sau. `presences`
+/// thẳng hàng với `dimensions` và được xếp cùng. Gọi trước annotate_dimensions để chỉ số trong ghi chú trỏ đúng chỗ.
+// Xếp ổn định: trong mỗi phần, chiều giữ thứ tự điểm Adtributor (apply_dimension_order). Bảng "dàn đều" đứng đầu thì
+// người đọc tưởng nhóm lớn nhất của nó là nguyên nhân, dù nhóm đó chỉ đổi như mọi nhóm khác.
+pub fn apply_group_notes(
+    dimensions: &mut Vec<DimensionBreakdown>,
+    presences: &mut Vec<Vec<GroupPresence>>,
+    totals: Totals,
+) {
+    let total_percent = build_percent_change(totals);
+    let near_zero = is_near_zero(totals);
+    for (dimension, presence) in dimensions.iter_mut().zip(presences.iter()) {
+        let notes = build_notes(
+            0,
+            dimension,
+            presence,
+            totals.change,
+            total_percent,
+            near_zero,
+        );
+        dimension.has_outliers = notes.has_outliers;
+        for (group, note) in dimension.groups.iter_mut().zip(notes.groups) {
+            group.presence = note.presence;
+            group.share_of_change = note.share_of_change;
+            group.percent_change = note.percent_change;
+            group.sign_flip = note.sign_flip;
+            group.outlier = note.outlier;
+        }
+    }
+    let mut pairs: Vec<(DimensionBreakdown, Vec<GroupPresence>)> = std::mem::take(dimensions)
+        .into_iter()
+        .zip(std::mem::take(presences))
+        .collect();
+    pairs.sort_by_key(|(dimension, _)| !dimension.has_outliers);
+    let (sorted_dimensions, sorted_presences): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
+    *dimensions = sorted_dimensions;
+    *presences = sorted_presences;
+}
+
+// Hai số khác 0 và trái dấu.
+fn is_sign_flip(base: Decimal, compare: Decimal) -> bool {
+    !base.is_zero() && !compare.is_zero() && base.is_sign_negative() != compare.is_sign_negative()
 }
 
 /// `part / change * 100`: phần của chênh lệch, đúng cả khi chênh lệch âm (nhóm cùng chiều luôn ra số dương). None khi

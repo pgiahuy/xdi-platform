@@ -1,24 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/breakdownPercent.ts - phần trăm của bảng phân rã (BreakdownDimension.tsx), để người đọc thấy mỗi nhóm
-tác động bao nhiêu tới chênh lệch chứ không chỉ con số tuyệt đối:
-- % tác động: đóng góp của nhóm chia chênh lệch tổng. Mọi nhóm cộng lại ra 100%, vì đóng góp cộng lại bằng đúng chênh
-  lệch: backend chỉ phân rã cộng thẳng độ đo cộng được (SUM, COUNT), còn độ đo tỷ lệ thì đóng góp là tổng hai phần cơ
-  cấu và hiệu suất.
-- % thay đổi: bên so sánh so với bên gốc trong nhóm. Đặt cạnh mức chung của cả lát cắt thì thấy nhóm nào khác thường
-  (isOffTrend); nhóm có đóng góp lớn chỉ vì là nhóm lớn thì % thay đổi gần mức chung. Không tính cho độ đo tỷ lệ (số của
-  hai bên đã là tỷ lệ) và khi bên gốc bằng 0 hay âm (phần trăm không có nghĩa).
+/* components/ask/breakdownPercent.ts - phần trăm của bảng phân rã (BreakdownDimension.tsx). Với từng nhóm, % tác động,
+% thay đổi và cờ khác thường do backend tính (explain/annotate.rs, cùng luật với lời tóm tắt); file này chỉ đọc và viết
+chúng ra. Dòng "Còn lại" gộp nhiều nhóm nên backend không có số cho nó: hai hàm tính ở đây dùng cho dòng đó và cho mức
+chung ở dòng "Tổng":
+- % tác động: đóng góp chia chênh lệch tổng. Mọi nhóm cộng lại ra 100%, vì đóng góp cộng lại bằng đúng chênh lệch.
+- % thay đổi: bên so sánh so với bên gốc. Không tính cho độ đo tỷ lệ (số của hai bên đã là tỷ lệ) và khi bên gốc bằng 0
+  hay âm (phần trăm không có nghĩa).
 Tính bằng Number(): chỉ để hiện một chữ số lẻ, nên làm tròn của số thực không đổi chữ hiện ra; số tuyệt đối vẫn là chuỗi
 chữ số của backend (cellFormat.formatDecimal). */
-
-/** Cách mức chung từ chừng này điểm phần trăm thì % thay đổi của nhóm được in đậm. Nhỏ hơn thì nhóm chỉ dao động thường
- * cũng bị đánh dấu; lớn hơn thì bỏ sót nhóm khác hẳn. Ví dụ DataCo, Corporate so với Consumer: mức chung -41,5%, các
- * hình thức thanh toán từ -42,4% tới -38,2% (không nhóm nào khác thường), các danh mục từ -67,4% tới -17,1%. */
-export const OFF_TREND_POINTS = 10
-
-/** Nhóm phải tạo ra ít nhất chừng này phần trăm của chênh lệch mới được in đậm. Nhóm nhỏ ít dòng nên tỷ lệ dao động
- * mạnh: cùng ví dụ trên, mọi danh mục lệch xa mức chung chỉ tác động 0,1% tới 0,3%, đánh dấu chúng là đưa người đọc đi
- * lạc; với ngưỡng này còn lại các bang như FL (tác động 4,2%, thay đổi -53,9%). */
-export const MIN_SHARE_PERCENT = 1
 
 const percentFormat = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 })
 
@@ -39,10 +28,11 @@ export function changePercent(base: string | null, compare: string | null): numb
   return ((to - from) / from) * 100
 }
 
-/** Nhóm khác thường: % thay đổi lệch mức chung từ OFF_TREND_POINTS, và % tác động từ MIN_SHARE_PERCENT trở lên. */
-export function isOffTrend(change: number | null, overall: number | null, share: number | null): boolean {
-  if (change === null || overall === null || share === null) return false
-  return Math.abs(change - overall) >= OFF_TREND_POINTS && Math.abs(share) >= MIN_SHARE_PERCENT
+/** Phần trăm backend gửi ("-41.5") thành số để hiện; null giữ null. Chỉ để hiện một chữ số lẻ như backend đã làm tròn. */
+export function parsePercent(text: string | null): number | null {
+  if (text === null) return null
+  const value = Number(text)
+  return Number.isFinite(value) ? value : null
 }
 
 /** "39,1%"; chuỗi rỗng khi không tính được. */
