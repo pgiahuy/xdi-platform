@@ -605,6 +605,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/error-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where the model went wrong, newest first (admin only)
+         * @description Written automatically: guard refusals, SQL that failed to run, blocked double counting over a join, invalid why forms, text rejected by the number or direction check, and answers rated `bad`. At most 200 rows.
+         */
+        get: operations["listErrorLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/examples": {
         parameters: {
             query?: never;
@@ -644,6 +664,48 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/lessons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lessons of the workspace, newest first (admin only) */
+        get: operations["listLessons"];
+        put?: never;
+        /**
+         * Write a lesson as a draft (admin only)
+         * @description A draft is not used. Enable it to approve it; then it goes into the prompts of related questions.
+         */
+        post: operations["createLesson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/lessons/{lesson_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a lesson (admin only) */
+        delete: operations["deleteLesson"];
+        options?: never;
+        head?: never;
+        /**
+         * Enable (approve) or disable a lesson (admin only)
+         * @description Enabling records who approved it and when. At most 3 enabled lessons related to a question go into its prompts: same dataset or the whole workspace, sharing a word with the question or naming a column it matched.
+         */
+        patch: operations["setLessonState"];
         trace?: never;
     };
     "/workspaces/{ws}/members": {
@@ -1377,6 +1439,35 @@ export interface components {
          * @enum {string}
          */
         ErrorCode: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "too_large" | "internal" | "not_implemented" | "upstream" | "unavailable";
+        /** @description One row of the error log. */
+        ErrorEntry: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            dataset_id: string | null;
+            dataset_name: string | null;
+            error: string;
+            /** Format: uuid */
+            id: string;
+            /** @description What the model returned at that step: SQL, the form as JSON, or the text it wrote. */
+            model_output: string | null;
+            /**
+             * Format: uuid
+             * @description The recorded question; null when it was not recorded (waiting for a choice) or was deleted.
+             */
+            query_id: string | null;
+            question: string;
+            step: components["schemas"]["ErrorStep"];
+        };
+        /** @description Newest rows first. */
+        ErrorLogResponse: {
+            entries: components["schemas"]["ErrorEntry"][];
+        };
+        /**
+         * @description The step where the model went wrong.
+         * @enum {string}
+         */
+        ErrorStep: "guard" | "run" | "fanout" | "why_form" | "narrate" | "feedback";
         /**
          * @description One approved example as a candidate case for the evaluation set, in the format of the files in `eval/` (for
          *     example `eval/dataco.json`). Review each case before adding it: check the SQL and set `ordered`.
@@ -1561,6 +1652,55 @@ export interface components {
             lead: string;
             /** @description Rest of the point (Vietnamese). */
             text: string;
+        };
+        /** @description A short lesson for the model, written by an admin. */
+        Lesson: {
+            /** Format: date-time */
+            approved_at: string | null;
+            /** @description Who last enabled it; null for a draft never enabled. */
+            approved_by: string | null;
+            /** Format: date-time */
+            created_at: string;
+            created_by: string | null;
+            /**
+             * Format: uuid
+             * @description Null for a lesson of the whole workspace.
+             */
+            dataset_id: string | null;
+            dataset_name: string | null;
+            /** @description Approved and in use: only these lessons go into prompts. */
+            enabled: boolean;
+            /**
+             * Format: uuid
+             * @description The error log row it was written from.
+             */
+            error_id: string | null;
+            /** Format: uuid */
+            id: string;
+            text: string;
+        };
+        /** @description A new lesson, saved as a draft that is not used until enabled. */
+        LessonRequest: {
+            /**
+             * Format: uuid
+             * @description Leave out for a lesson of the whole workspace.
+             */
+            dataset_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The error log row the lesson comes from, if any.
+             */
+            error_id?: string | null;
+            /** @description One or two short sentences, at most 300 characters. */
+            text: string;
+        };
+        /** @description Turn a lesson on (approve it, recording who and when) or off. */
+        LessonStateRequest: {
+            enabled: boolean;
+        };
+        /** @description Newest first. */
+        LessonsResponse: {
+            lessons: components["schemas"]["Lesson"][];
         };
         /** @description Multipart form for listing the sheets of an Excel file. The file is not stored. */
         ListSheetsRequest: {
@@ -3781,6 +3921,46 @@ export interface operations {
             };
         };
     };
+    listErrorLog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorLogResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listExamples: {
         parameters: {
             query?: never;
@@ -3893,6 +4073,178 @@ export interface operations {
                 };
             };
             /** @description 401; 403 not admin; 404 not a member, or no answered question rated good with this id */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listLessons: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LessonsResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonRequest"];
+            };
+        };
+        responses: {
+            /** @description Created as a draft */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lesson"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 empty or over 300 characters, or a dataset or error log row not in this workspace; 401; 403 not admin; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Lesson id (UUID) */
+                lesson_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member or no such lesson */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    setLessonState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Lesson id (UUID) */
+                lesson_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonStateRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lesson"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member or no such lesson */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

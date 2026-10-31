@@ -286,6 +286,13 @@ async fn repairs_a_failed_run_once() {
     // Trục là ngày, chỉ 3 kỳ nên cột đứng (ask/chart.rs, luật 2: tới 10 kỳ là cột).
     assert_eq!(response["chart"]["kind"], "column");
     assert_eq!(response["chart"]["x"], "ship_day");
+    // Lần chạy lỗi vào nhật ký lỗi (#228), kèm câu SQL đầu của mô hình và query_id của câu đã trả lời.
+    let logged = format!(
+        "SELECT count(*) FROM error_log WHERE step = 'run' AND strpos(model_output, '%d/%m/%Y') > 0
+         AND query_id = '{}'",
+        response["query_id"].as_str().unwrap()
+    );
+    assert_eq!(fetch_count(&asking.db.store, &logged).await, 1);
 }
 
 /// Mô hình báo dữ liệu không có thông tin (#164): rejected, không chạy SQL, lời nêu lý do và chỉ các cột có thật, ghi
@@ -378,6 +385,10 @@ async fn guard_refusal_is_recorded_as_rejected() {
         "{response}"
     );
     assert_eq!(asking.queries_with("rejected").await, 1);
+    // Hai lần guard từ chối, hai dòng nhật ký lỗi kèm câu của mô hình (#228).
+    let logged = "SELECT count(*) FROM error_log WHERE step = 'guard' AND model_output = 'DELETE FROM dataco'
+                  AND question = 'Xóa hết dữ liệu' AND query_id IS NOT NULL";
+    assert_eq!(fetch_count(&asking.db.store, logged).await, 2);
     // Không có câu nào chạy nên không có thẻ hay biểu đồ.
     assert!(response["understanding"].is_null());
     assert!(response["chart"].is_null());

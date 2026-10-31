@@ -6,7 +6,7 @@ Trang hỏi ('' là trang đầu) không có mục riêng: vào workspace là m�
 một cuộc cũ hay cuộc mới trên trang đó. */
 
 import type { LucideIcon } from 'lucide-react'
-import { BadgeCheck, BookOpen, ChartColumn, Database, Users } from 'lucide-react'
+import { BadgeCheck, BookOpen, ChartColumn, Database, Lightbulb, Users } from 'lucide-react'
 
 export type WorkspaceNavEntry = {
   path: string
@@ -34,12 +34,16 @@ export const overviewPath = 'overview'
 /** Màn Câu mẫu (#212): admin duyệt câu trả lời được đánh giá Tốt. */
 export const examplesPath = 'examples'
 
+/** Màn Bài học (#228): admin xem nhật ký lỗi, viết và duyệt bài học. */
+export const lessonsPath = 'lessons'
+
 export const workspaceNav: WorkspaceNavEntry[] = [
   { path: overviewPath, label: 'Tổng quan dữ liệu', icon: ChartColumn },
   { path: 'datasets', label: 'Dữ liệu', icon: Database },
   { path: domainsPath, label: 'Khái niệm ngành', icon: BookOpen },
   { path: membersPath, label: 'Thành viên', icon: Users },
   { path: examplesPath, label: 'Câu mẫu', icon: BadgeCheck, adminOnly: true },
+  { path: lessonsPath, label: 'Bài học', icon: Lightbulb, adminOnly: true },
 ].map((entry) => ({ ...entry, section: 'Workspace' }))
 
 /** Đường dẫn tới một trang của workspace; path rỗng là trang đầu. Mọi chỗ dựng link tới workspace đi qua hàm này. */

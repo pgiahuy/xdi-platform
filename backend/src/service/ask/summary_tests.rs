@@ -169,7 +169,7 @@ async fn all_empty_result_gets_the_no_data_answer() {
         understanding: Some(&u),
         result: &result,
     };
-    let outcome = summarize(&NeverCalled, &input, true, Duration::from_secs(5))
+    let outcome = summarize(&NeverCalled, &input, true, Duration::from_secs(5), &[])
         .await
         .unwrap();
     assert_eq!(outcome.text, NO_DATA_ANSWER);
@@ -285,13 +285,13 @@ async fn model_answer_is_kept_or_replaced_by_the_template() {
     };
     let timeout = Duration::from_secs(5);
     let good = StubLlm("Fishing bán chạy nhất với 6.929.656,49.");
-    let outcome = summarize(&good, &input, true, timeout).await.unwrap();
+    let outcome = summarize(&good, &input, true, timeout, &[]).await.unwrap();
     assert!(outcome.by_model);
     assert!(outcome.step.ok);
     assert_eq!(outcome.text, "Fishing bán chạy nhất với 6.929.656,49.");
 
     let wrong = StubLlm("Fishing bán chạy nhất với 7.000.000.");
-    let outcome = summarize(&wrong, &input, true, timeout).await.unwrap();
+    let outcome = summarize(&wrong, &input, true, timeout, &[]).await.unwrap();
     assert!(!outcome.by_model);
     assert!(!outcome.step.ok);
     assert_eq!(
@@ -308,7 +308,7 @@ async fn disabled_answer_text_never_calls_the_model() {
         understanding: None,
         result: &result,
     };
-    let outcome = summarize(&NeverCalled, &input, false, Duration::from_secs(5))
+    let outcome = summarize(&NeverCalled, &input, false, Duration::from_secs(5), &[])
         .await
         .unwrap();
     assert!(!outcome.by_model);
@@ -323,6 +323,6 @@ async fn empty_result_has_no_answer_text() {
         understanding: None,
         result: &result,
     };
-    let outcome = summarize(&NeverCalled, &input, true, Duration::from_secs(5)).await;
+    let outcome = summarize(&NeverCalled, &input, true, Duration::from_secs(5), &[]).await;
     assert!(outcome.is_none());
 }

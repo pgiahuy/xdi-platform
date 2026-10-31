@@ -52,7 +52,7 @@ không dò được tên workspace. Id dataset của workspace khác cũng trả
 
 | Vai | Thuộc về | Gọi việc không đủ quyền |
 |---|---|---|
-| `admin`, `member` | Một tài khoản trong một workspace (trường `role` của `Membership`) | `member` gọi việc của admin (nạp file, liệt kê sheet, xóa dataset, đổi tên hay xóa workspace, thêm, đổi vai hay xóa người khác, xem, duyệt hay xuất câu mẫu): 403 |
+| `admin`, `member` | Một tài khoản trong một workspace (trường `role` của `Membership`) | `member` gọi việc của admin (nạp file, liệt kê sheet, xóa dataset, đổi tên hay xóa workspace, thêm, đổi vai hay xóa người khác, xem, duyệt hay xuất câu mẫu, xem nhật ký lỗi, viết hay bật bài học): 403 |
 | Quản trị hệ thống | Tài khoản (`is_system_admin`), không theo workspace | Người khác gọi `/api/admin/...`: 403 |
 
 Thành viên thường nhận 403 thay vì 404 vì họ đã biết workspace có thật, chỉ thiếu quyền. Quản trị hệ thống không tự có
@@ -204,6 +204,25 @@ Chỉ admin, `member` nhận 403:
 Câu mẫu đã duyệt vào prompt của câu hỏi sau trên cùng dataset có chung ít nhất một từ (không tính từ dừng), tối đa 3
 câu, mới nhất trước: câu thường góp câu hỏi và SQL mô hình viết (không phải bản sau guard), câu "tại sao" góp câu hỏi
 và form vào prompt form. Bước `llm` trong `steps` khi đó có `detail` "Prompt có N câu mẫu đã duyệt: ...".
+
+## Nhật ký lỗi và bài học
+
+Chỉ admin, `member` nhận 403 (`backend/src/service/lessons/`):
+
+- `GET /api/workspaces/{ws}/error-log`: tối đa 200 dòng mới nhất. Mỗi dòng có câu hỏi, dataset, `step` (`guard`,
+  `run`, `fanout`, `why_form`, `narrate`, `feedback`), lời báo lỗi, `model_output` (câu SQL, form JSON hay lời mô hình
+  viết ở bước đó), `query_id` (null khi câu chưa được ghi, ví dụ còn chờ chọn cách hiểu). Ghi tự động trong luồng hỏi;
+  lỗi ghi nhật ký chỉ vào log máy chủ, không làm câu hỏi lỗi. Dòng `feedback` ghi lý do và ghi chú của "Chưa đạt".
+- `GET /api/workspaces/{ws}/lessons`: mọi bài học, mới trước.
+- `POST /api/workspaces/{ws}/lessons` với `{text, dataset_id, error_id}`: tạo bài nháp (201). `text` tối đa 300 ký tự;
+  `dataset_id` vắng là bài của cả workspace; `error_id` là dòng nhật ký bài viết từ đó. Dataset hay dòng không thuộc
+  workspace trả 400.
+- `PATCH /api/workspaces/{ws}/lessons/{lesson_id}` với `{enabled}`: bật là duyệt, ghi `approved_by`, `approved_at`; tắt
+  giữ lần duyệt cũ. `DELETE` cùng đường dẫn xóa (204).
+
+Bài đã bật vào prompt của câu hỏi trên cùng dataset (hay mọi dataset với bài của cả workspace) khi có chung một từ với
+câu hỏi hay nhắc tên một cột câu hỏi khớp, tối đa 3 bài, trong một khối riêng; bước `llm` khi đó có `detail` "Prompt
+có N bài học đã duyệt".
 
 ## Chỉ số và cách gộp
 

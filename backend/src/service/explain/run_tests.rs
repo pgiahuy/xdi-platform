@@ -183,6 +183,7 @@ impl Dataco {
                 choices,
                 history: "",
                 group: None,
+                lessons: &[],
             },
             columns: &self.columns,
             values: &self.values,
