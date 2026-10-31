@@ -18,6 +18,7 @@ use crate::service::ask::values::ValueIndex;
 use crate::service::explain::form::{FieldError, WhyForm};
 use crate::service::explain::measure::{check_measure, find_metric, parse_expr, PlanMeasure};
 use crate::service::explain::period::{Grain, Period};
+use crate::service::explain::source::{PlanSource, RelatedTables};
 use crate::service::explain::sql::{build_equals, build_time_expr};
 
 /// Chiều có tới ngần này giá trị khác nhau mới phân rã (#39): nhiều hơn thì bảng đóng góp dài mà mỗi nhóm nhỏ.
@@ -58,6 +59,9 @@ pub struct WhyPlan {
     /// Tên tiếng Việt của cột (bí danh đầu tiên trong hồ sơ ngữ nghĩa), để lời tóm tắt ghi "Type (cách thanh toán)".
     /// Cột chưa có bí danh thì không có mục nào.
     pub labels: HashMap<String, String>,
+    /// Bảng liên quan nối nhiều-một vào table (explain/source.rs, #227); rỗng với dataset nạp từ file. Chiều tên
+    /// "bảng.cột" trong dimensions đọc qua đây.
+    pub source: PlanSource,
 }
 
 /// Hai lát cắt.
@@ -123,7 +127,30 @@ pub fn build_why_check(
         measure,
         slices,
         filters,
+        source: PlanSource::default(),
     })
+}
+
+/// Thêm chiều của bảng liên quan (explain/source.rs) sau chiều của bảng chính, đến khi đủ DIMENSION_CANDIDATES_MAX.
+/// excluded là cột đã lọc bằng một giá trị: chỉ một nhóm, không giải thích gì. Không có bảng liên quan thì plan giữ
+/// nguyên.
+pub fn apply_related(plan: &mut WhyPlan, related: &RelatedTables, excluded: &[String]) {
+    if related.source.joins.is_empty() {
+        return;
+    }
+    plan.source = related.source.clone();
+    for dimension in &related.dimensions {
+        if plan.dimensions.len() >= DIMENSION_CANDIDATES_MAX {
+            break;
+        }
+        if excluded.contains(&dimension.name) || plan.dimensions.contains(&dimension.name) {
+            continue;
+        }
+        plan.dimensions.push(dimension.name.clone());
+        if let Some(label) = &dimension.label {
+            plan.labels.insert(dimension.name.clone(), label.clone());
+        }
+    }
 }
 
 fn check_slices(
@@ -383,20 +410,27 @@ fn check_value(
 /// rồi phần chấm điểm xếp các chiều còn lại. Cắt sớm hơn theo thứ tự cột ở đây thì cột đứng sau trong file không bao giờ
 /// được xét, dù giải thích tốt hơn.
 fn build_dimensions(form: &WhyForm, profile: &WhyProfile, slices: &PlanSlices) -> Vec<String> {
-    let slice_column = match slices {
-        PlanSlices::Groups { column, .. } => Some(column.as_str()),
-        PlanSlices::Periods { .. } => None,
-    };
-    profile
-        .columns
+    let mut excluded: Vec<&str> = form.filters.iter().map(|f| f.column.as_str()).collect();
+    if let PlanSlices::Groups { column, .. } = slices {
+        excluded.push(column);
+    }
+    build_dimension_candidates(profile.columns, &excluded)
+}
+
+/// Cột chiều ứng viên của bảng chính theo luật trên, trừ các cột trong excluded (cột làm lát cắt, cột đã lọc bằng một
+/// giá trị). Phân rã tự động của phần giải thích (service/insight/) dùng cùng luật.
+pub(crate) fn build_dimension_candidates(
+    columns: &[ProfileColumn],
+    excluded: &[&str],
+) -> Vec<String> {
+    columns
         .iter()
         .filter(|c| c.role == ProfileRole::Dimension.as_str() && !c.is_sensitive)
         .filter(|c| {
             c.distinct_count
                 .is_some_and(|n| (2..=DIMENSION_MAX_VALUES).contains(&n))
         })
-        .filter(|c| slice_column != Some(c.name.as_str()))
-        .filter(|c| !form.filters.iter().any(|f| f.column == c.name))
+        .filter(|c| !excluded.contains(&c.name.as_str()))
         .take(DIMENSION_CANDIDATES_MAX)
         .map(|c| c.name.clone())
         .collect()
@@ -405,7 +439,7 @@ fn build_dimensions(form: &WhyForm, profile: &WhyProfile, slices: &PlanSlices) -
 /// Lượng của #40: đúng một cột vai trò key và cột đó lặp lại (ít giá trị khác nhau hơn số dòng, như Order Id khi một
 /// đơn có nhiều dòng). Nhiều cột key thì không đoán cột nào là đơn. Cột key không lặp thì đếm nó chỉ là đếm dòng.
 /// metrics chưa có trường đánh dấu chỉ số nào là lượng, nên chưa lấy lượng từ metrics.
-fn build_volume(profile: &WhyProfile) -> Option<String> {
+pub(crate) fn build_volume(profile: &WhyProfile) -> Option<String> {
     let keys: Vec<&ProfileColumn> = profile
         .columns
         .iter()
@@ -421,7 +455,7 @@ fn build_volume(profile: &WhyProfile) -> Option<String> {
 
 // Bí danh của hồ sơ ngữ nghĩa là tiếng Việt (luật của prompt lập hồ sơ); bí danh đầu là tên mô hình thấy hợp nhất.
 // Bí danh trùng tên cột (khác hoa thường) thì không thêm gì cho người đọc, nên bỏ.
-fn build_labels(profile: &WhyProfile) -> HashMap<String, String> {
+pub(crate) fn build_labels(profile: &WhyProfile) -> HashMap<String, String> {
     profile
         .columns
         .iter()

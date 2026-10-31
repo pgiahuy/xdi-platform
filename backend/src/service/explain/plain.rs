@@ -32,8 +32,9 @@ pub async fn run_plain(
             question: input.prompt.question,
             prompt: &prompt,
             reply: &reply,
-            tables: input.tables,
-            // Câu "tại sao" chỉ đọc bảng đang chọn, không có quan hệ nào.
+            // Prompt dự phòng chỉ có cột của bảng đang chọn (input.tables[0]): bảng liên quan chỉ dùng cho phân rã do
+            // code dựng, nên câu của mô hình chỉ được đọc bảng đó và không có quan hệ nào để kiểm cộng lặp.
+            tables: &input.tables[..1],
             links: &[],
             max_rows: input.max_rows,
             timeout: input.timeout,

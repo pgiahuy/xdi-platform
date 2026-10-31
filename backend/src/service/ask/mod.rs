@@ -88,7 +88,7 @@ use crate::service::ask::contract::{
 use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::group_prompt::build_group_prompt;
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput};
-use crate::service::ask::related::load_group;
+use crate::service::ask::related::{build_group_related, load_group};
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
 use crate::service::ask::response_choices::{
     build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
@@ -196,8 +196,13 @@ pub async fn ask(
     let timeout = build_classify_timeout(&state.config);
     let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
     steps.push(classified.step);
+    // Quan hệ giữa các bảng của câu hỏi, để chặn câu cộng lặp khi nối bảng một-nhiều (ask/fanout.rs) và để phân rã
+    // nối bảng liên quan theo đúng chiều nhiều-một (explain/source.rs).
+    let links = build_join_links(&group);
     if classified.kind == QuestionKind::Why {
-        // Câu "tại sao" chỉ đọc bảng đang chọn (#213): form và SQL do code dựng chỉ biết cột của một bảng.
+        // Form của câu "tại sao" chỉ nêu cột của bảng đang chọn (#213); phân rã thì xét thêm cột của các bảng nối
+        // nhiều-một vào nó (#227), nên guard nhận đủ các bảng của nhóm.
+        let related = build_group_related(&group, &links);
         let why = WhyAsk {
             dataset: &dataset,
             version: &version,
@@ -206,7 +211,9 @@ pub async fn ask(
                 ..input
             },
             columns: &columns,
-            tables: &tables[..1],
+            tables,
+            group: &group,
+            related: &related,
             steps,
         };
         return ask_why(state, member, why).await;
@@ -223,8 +230,6 @@ pub async fn ask(
     let reply = state.llm.complete(&request).await?;
     steps.push(build_step(StepName::Llm, started, true, None));
 
-    // Quan hệ giữa các bảng của câu hỏi, để chặn câu cộng lặp khi nối bảng một-nhiều (ask/fanout.rs).
-    let links = build_join_links(&group);
     let input = RunInput {
         question,
         prompt: &prompt,

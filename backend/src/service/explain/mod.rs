@@ -40,6 +40,9 @@ mod ratio_tests;
 pub mod run;
 #[cfg(test)]
 mod run_tests;
+pub mod source;
+#[cfg(test)]
+mod source_tests;
 pub mod sql;
 pub mod summary;
 #[cfg(test)]
