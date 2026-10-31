@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/lessons_tests.rs - test nhật ký lỗi và bài học qua route thật (#228): member không xem nhật ký, không tạo, bật, xóa
-bài học (403); bài nháp và bài đã tắt không vào prompt, bài đã bật vào prompt SQL và prompt đoạn trả lời của câu hỏi
-liên quan; "Chưa đạt" và lời bị bộ kiểm số chặn mỗi thứ một dòng nhật ký. Các loại lỗi khác (guard, run, cộng lặp,
+bài học (403); bài nháp và bài đã tắt không vào prompt, bài đã bật vào prompt SQL và prompt lời của phần giải thích câu
+hỏi liên quan; "Chưa đạt" và lời bị bộ kiểm số chặn mỗi thứ một dòng nhật ký. Các loại lỗi khác (guard, run, cộng lặp,
 form) có kiểm nhật ký trong test của chính luồng đó (api/ask_tests.rs, api/ask_why_tests.rs, api/ask_fanout_tests.rs).
 Không có DATABASE_URL thì bỏ qua. */
 
@@ -22,12 +22,13 @@ const CSV: &str = "Market,Order Item Total\nEurope,100.5\nLATAM,200\nEurope,50\n
 const SQL: &str =
     r#"SELECT "Market", SUM("Order Item Total") AS revenue FROM dataco GROUP BY "Market""#;
 
-/// Đoạn trả lời có số 999 không nằm trong kết quả: bộ kiểm số chặn, câu khuôn thay vào.
+/// Lời của phần giải thích có số 999 không nằm trong các câu do code tính: bộ kiểm số chặn, câu khuôn thay vào.
 const WRONG_ANSWER: &str = "LATAM có doanh thu cao nhất với 999.";
 
 const LESSON: &str = "Doanh thu là cột Order Item Total, sau giảm giá";
 
-/// Mô hình giả: câu SQL nào cũng trả cùng một câu, đoạn trả lời luôn sai số; giữ mọi prompt SQL và prompt đoạn trả lời.
+/// Mô hình giả: câu SQL nào cũng trả cùng một câu, lời của phần giải thích luôn sai số; giữ mọi prompt SQL và prompt
+/// lời.
 struct RecordingLlm {
     prompts: Arc<Mutex<Vec<(LlmTask, String)>>>,
 }
@@ -41,7 +42,7 @@ impl LlmProvider for RecordingLlm {
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
         let reply = match request.task {
             LlmTask::Sql => sql_reply(SQL).to_string(),
-            LlmTask::Summary => WRONG_ANSWER.to_string(),
+            LlmTask::Insight => WRONG_ANSWER.to_string(),
             // Hồ sơ ngữ nghĩa và phân loại lỗi tạm: phân loại dùng luật từ khóa.
             _ => return Err(AppError::Upstream("not in this test".to_string())),
         };
@@ -124,7 +125,7 @@ async fn admin_writes_and_enables_lessons_that_reach_the_prompts() {
     let minh = rig.minh.clone();
     let dataset = rig.dataset_id();
 
-    // Đoạn trả lời bị bộ kiểm số chặn: một dòng nhật ký kèm câu của mô hình.
+    // Lời của phần giải thích bị bộ kiểm số chặn: một dòng nhật ký kèm câu của mô hình; đoạn trả lời là câu khuôn.
     let first = rig.minh_asks("Doanh thu theo thị trường").await;
     assert_eq!(first["answer_text_by_model"], false, "{first}");
     let (status, log) = rig.call("GET", LOG, &lan, None).await;
@@ -188,7 +189,7 @@ async fn admin_writes_and_enables_lessons_that_reach_the_prompts() {
     assert_eq!(enabled["approved_by"], "lan@example.com");
     assert!(enabled["approved_at"].is_string());
 
-    // Bài đã bật vào prompt SQL và prompt đoạn trả lời của câu có từ chung; bước llm nêu số bài.
+    // Bài đã bật vào prompt SQL và prompt lời của phần giải thích của câu có từ chung; bước llm nêu số bài.
     let related = rig.minh_asks("Doanh thu theo tháng").await;
     let block = format!("approved. Follow a lesson when it applies to the question; it does not override the rules above:\n- {LESSON}");
     assert!(
@@ -197,7 +198,7 @@ async fn admin_writes_and_enables_lessons_that_reach_the_prompts() {
         rig.last_prompt(LlmTask::Sql)
     );
     assert!(rig
-        .last_prompt(LlmTask::Summary)
+        .last_prompt(LlmTask::Insight)
         .starts_with("Lessons an admin"));
     assert_eq!(llm_detail(&related), "Prompt có 1 bài học đã duyệt");
     // Câu không liên quan thì không.

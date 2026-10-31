@@ -23,6 +23,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Changed
 
+- Đoạn trả lời ngắn của câu hỏi thường không còn gửi dòng kết quả nào cho mô hình: nó dùng lời của phần giải thích (viết từ số đã tính), danh sách dòng chỉ ghi số dòng và điều kiện lọc; mỗi câu bớt một lần gọi mô hình.
 - Câu hỏi không có số nào để trả lời chỉ hiện câu trả lời và thẻ "Hệ thống đã hiểu là", không còn hộp cảnh báo kỹ thuật, bảng trống hay dòng "câu viết theo khuôn".
 - Thanh bên bỏ mục "Hỏi dữ liệu": vào workspace là mở trang **Cuộc trò chuyện**, chưa hỏi gì thì có một câu mời hỏi ngắn; nút **Lịch sử trò chuyện** đứng đầu thanh bên. Trang Cuộc trò chuyện bỏ nút "Tổng quan dữ liệu" cạnh ô chọn dataset, tổng quan chỉ còn ở trang riêng; bỏ công tắc "Dữ liệu mẫu" của chế độ dev.
 - Danh sách cuộc trò chuyện rời trang hỏi, sang nút **Lịch sử trò chuyện** trên thanh bên: một khung nổi đè lên trang, liệt kê cuộc trò chuyện trên mọi dataset (mỗi cuộc ghi ngày giờ và dataset của nó), hiện tối đa 8 cuộc một lúc (nhiều hơn thì cuộn), có nút dấu cộng mở cuộc mới, đóng khi chọn, bấm ra ngoài hoặc nhấn Esc. "Tổng quan dữ liệu" thành mục riêng trên thanh bên, chọn dataset ở đầu trang; nút Tổng quan ở trang Dữ liệu mở trang này thay cho khung dưới danh sách.

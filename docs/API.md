@@ -113,11 +113,11 @@ xong hay lập lỗi, Gemini từ chối vì nội dung câu hỏi, hoặc câu 
 502, 503 khi mô hình lỗi hay chưa cấu hình trước khi có câu SQL nào.
 
 Câu answered có thẻ "Hệ thống đã hiểu là", vai trò cột và gợi ý biểu đồ. Câu thường answered có ít nhất một dòng kết quả
-thì có `answer_text`: một đến hai câu tiếng Việt trả lời câu hỏi, do mô hình viết từ tối đa 10 dòng đầu của kết quả (mọi
-số trong câu có nguyên văn trong các dòng đó, không thì backend thay bằng câu khuôn), và `answer_text_by_model` cho biết
-câu đó do mô hình viết (`true`) hay theo khuôn (`false`). Hai trường null với câu "tại sao" (đã có
-`explanation.summary`) và câu không answered. Bước này hiện trong `steps` dưới tên `narrate`. `ANSWER_TEXT=false` thì
-luôn là câu khuôn, không gọi mô hình.
+thì có `answer_text`: đoạn trả lời ngắn tiếng Việt. Đó là `insight.summary` khi lời này do mô hình viết và đã qua bước
+kiểm (mô hình chỉ nhận các câu backend đã tính, không nhận dòng kết quả nào); còn lại là câu khuôn do backend viết, kể
+cả mọi danh sách dòng không gộp ("Có 37 dòng khớp điều kiện: ..."). `answer_text_by_model` cho biết đoạn đó do mô hình
+viết (`true`) hay theo khuôn (`false`). Hai trường null với câu "tại sao" (đã có `explanation.summary`) và câu không
+answered. Đoạn trả lời không có lần gọi mô hình hay bước riêng trong `steps`. `ANSWER_TEXT=false` thì luôn là câu khuôn.
 
 Câu thường answered có ít nhất một ô có giá trị thì có `insight`: phần giải thích chọn theo hình dạng kết quả (`kind`:
 `single_value`, `time_series`, `groups`, `top_n`, `rows`), gồm `title` và `points` (`lead`, `text`) do backend viết từ số

@@ -84,7 +84,7 @@ impl LlmProvider for ScriptedLlm {
         // Lời của phần giải thích (task insight, #227) cũng vậy: lỗi thì dùng câu do code viết.
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify | LlmTask::Insight
+            LlmTask::Profile | LlmTask::Classify | LlmTask::Insight
         ) {
             return Err(AppError::Upstream(
                 "scripted model has no profile or summary".to_string(),
@@ -219,7 +219,7 @@ async fn answers_a_question_and_records_it() {
     );
     assert_eq!(
         step_names(&response),
-        ["context", "classify", "llm", "guard", "run", "narrate", "explain", "narrate", "record"]
+        ["context", "classify", "llm", "guard", "run", "explain", "narrate", "record"]
     );
     // Mock có câu phân loại viết sẵn cho câu mẫu: mô hình chọn, không phải luật từ khóa.
     let classify = &response["steps"][1];
@@ -228,7 +228,7 @@ async fn answers_a_question_and_records_it() {
         .as_str()
         .unwrap()
         .starts_with("Câu hỏi thường: "));
-    // Mock không có câu trả lời viết sẵn cho task summary nên đoạn trả lời là câu khuôn, không gọi mạng.
+    // Mock không có lời viết sẵn cho task insight nên đoạn trả lời là câu khuôn, không gọi mạng.
     assert_eq!(
         response["answer_text"],
         "Có 2 dòng; cao nhất là LATAM với 200."
@@ -275,8 +275,8 @@ async fn repairs_a_failed_run_once() {
     assert_eq!(
         step_names(&response),
         [
-            "context", "classify", "llm", "guard", "run", "repair", "guard", "run", "narrate",
-            "explain", "narrate", "record"
+            "context", "classify", "llm", "guard", "run", "repair", "guard", "run", "explain",
+            "narrate", "record"
         ]
     );
     assert!(response["sql_generated"]
@@ -521,7 +521,7 @@ impl LlmProvider for RecordingLlm {
         // Lời của phần giải thích (task insight, #227) cũng vậy: lỗi thì dùng câu do code viết.
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify | LlmTask::Insight
+            LlmTask::Profile | LlmTask::Classify | LlmTask::Insight
         ) {
             return Err(AppError::Upstream(
                 "recording model has no profile or summary".to_string(),

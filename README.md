@@ -8,9 +8,9 @@ bảng, biểu đồ cùng câu SQL đã chạy. Với câu hỏi tìm nguyên n
 cao hơn LATAM, hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một số để xem các dòng dữ liệu đứng sau nó.
 
 Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, phân loại câu hỏi, viết SQL, điền
-form cho câu hỏi tìm nguyên nhân và viết lời. Nó nhận tên cột và danh sách giá trị của cột phân loại, không nhận bảng
-dữ liệu. Riêng đoạn trả lời ngắn của câu hỏi thường gửi tối đa 10 dòng đầu của kết quả (với câu không gộp, đó là dòng
-gốc), tắt bằng `ANSWER_TEXT=false`. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
+form cho câu hỏi tìm nguyên nhân và viết lời. Nó nhận tên và mô tả cột, giá trị của cột phân loại không đánh dấu nhạy
+cảm, và các con số tổng hợp do code đã tính; không nhận dòng kết quả nào hay nội dung file. Chi tiết:
+[docs/PRIVACY.md](docs/PRIVACY.md).
 
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
 Tài liệu: https://pgiahuy.github.io/xdi-platform/

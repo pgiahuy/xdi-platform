@@ -15,7 +15,8 @@ use crate::service::insight::plan::PlainTable;
 use crate::service::insight::{build_insight, InsightInput, InsightOutcome};
 use crate::state::AppState;
 
-/// None khi câu chưa answered hay không có bảng kết quả.
+/// None khi câu chưa answered hay không có bảng kết quả. lessons là bài học đã duyệt liên quan câu hỏi, cho prompt
+/// viết lời.
 pub(super) async fn run_insight(
     state: &AppState,
     group: &TableGroup,
@@ -23,6 +24,7 @@ pub(super) async fn run_insight(
     question: &str,
     outcome: &RunOutcome,
     understanding: Option<&Understanding>,
+    lessons: &[String],
 ) -> Result<Option<InsightOutcome>, AppError> {
     let (Some(result), Some(sql_generated), Some(sql_guarded)) = (
         outcome.result.as_ref(),
@@ -61,6 +63,7 @@ pub(super) async fn run_insight(
         },
         narrate: state.config.insight_text,
         narrate_timeout: build_narrate_timeout(&state.config),
+        lessons,
     };
     build_insight(state.llm.as_ref(), &input).await
 }

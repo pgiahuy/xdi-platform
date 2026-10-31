@@ -35,6 +35,12 @@ pub async fn run_plain(
         true,
         examples_used.as_deref(),
     ));
+    let sensitive: Vec<String> = input
+        .columns
+        .iter()
+        .filter(|c| c.is_sensitive)
+        .map(|c| c.name.clone())
+        .collect();
     let run = run_with_repair(
         llm,
         RunInput {
@@ -48,6 +54,7 @@ pub async fn run_plain(
             max_rows: input.max_rows,
             timeout: input.timeout,
             jobs: input.jobs,
+            sensitive: &sensitive,
         },
     )
     .await?;

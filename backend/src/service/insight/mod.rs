@@ -19,6 +19,10 @@ Phân rã tự động dùng lại nguyên đường của câu "tại sao" (exp
 hai kỳ do code tính với ô của bảng kết quả: lệch (câu của mô hình nối hay lọc khác cách code hiểu) thì bỏ phân rã, vẫn
 giữ phần giải thích từ bảng. Mọi câu do code dựng đi qua guard với đúng bảng và bộ lọc dòng của người hỏi.
 
+Hai trường hợp không gọi mô hình viết lời, dùng câu của code: danh sách dòng (câu chỉ có số dòng và nhãn lọc, mô hình
+không thêm được gì), và bảng có cột khóa đọc từ cột đánh dấu nhạy cảm (tên nhóm khi đó là giá trị của cột đó, như email
+khách hàng, mà prompt không được chứa; cột khóa và cột chữ tự do cũng vậy, find_unsendable_key).
+
 Phần này không bao giờ làm câu hỏi dừng: lỗi của câu SQL do code dựng chỉ làm mất phân rã (ghi ở bước explain). Lỗi máy
 chủ (không mở được DuckDB) vẫn là Err như mọi bước khác. Test ở insight/tests.rs. */
 
@@ -31,16 +35,20 @@ pub mod shape;
 #[cfg(test)]
 mod tests;
 
+use std::ops::ControlFlow;
 use std::time::{Duration, Instant};
 
 use rust_decimal::Decimal;
+use sqlparser::ast::{visit_expressions, Expr};
 
 use crate::engine::llm::LlmProvider;
-use crate::engine::sql_shape::build_query_shape;
+use crate::engine::sql_shape::{build_query_shape, QueryShape};
+use crate::engine::store::{ProfileColumn, ProfileRole};
 use crate::error::AppError;
 use crate::service::ask::contract::{
     AskStep, ColumnRole, Explanation, Insight, InsightKind, ResultTable, StepName, Understanding,
 };
+use crate::service::ask::failures::StepFailure;
 use crate::service::ask::fanout::JoinLink;
 use crate::service::ask::run::build_step;
 use crate::service::ask::summary::build_cell_text;
@@ -48,7 +56,7 @@ use crate::service::explain::breakdown::{run_code_query, CodeQuery, QueryEnv};
 use crate::service::insight::facts::{
     build_group_parts, build_rows_parts, build_top_parts, InsightParts, Point,
 };
-use crate::service::insight::narrate::narrate_insight;
+use crate::service::insight::narrate::{build_code_narrated, narrate_insight};
 use crate::service::insight::periods::read_series_time;
 use crate::service::insight::plan::{read_plain_query, PlainQuery, PlainTable};
 use crate::service::insight::shape::{build_cell_decimal, build_result_shape, ResultShape};
@@ -70,6 +78,8 @@ pub struct InsightInput<'a> {
     /// Config::insight_text.
     pub narrate: bool,
     pub narrate_timeout: Duration,
+    /// Bài học đã duyệt liên quan câu hỏi (ask/lessons.rs), thêm vào prompt viết lời.
+    pub lessons: &'a [String],
 }
 
 /// Phần giải thích, phân rã tự động khi có, các bước (explain, narrate) và bảng phân rã đã đọc thêm.
@@ -79,6 +89,8 @@ pub struct InsightOutcome {
     pub steps: Vec<AskStep>,
     /// Tên bảng logic phân rã đã đọc (bảng chính và bảng liên quan), để ghi phiên bản vào lịch sử.
     pub tables_read: Vec<String>,
+    /// Bước kiểm chặn lời của mô hình, cho nhật ký lỗi (#228).
+    pub failure: Option<StepFailure>,
 }
 
 /// None khi bảng không có dòng nào hay mọi ô trống (như đoạn trả lời, ask/summary.rs).
@@ -113,14 +125,20 @@ pub async fn build_insight(
         true,
         found.detail.as_deref(),
     )];
-    let narrated = narrate_insight(
-        llm,
-        input.question,
-        &parts,
-        input.narrate,
-        input.narrate_timeout,
-    )
-    .await;
+    let narrated = match build_code_only_reason(input, &shape, result_shape) {
+        Some(detail) => build_code_narrated(&parts, Instant::now(), detail),
+        None => {
+            narrate_insight(
+                llm,
+                input.question,
+                &parts,
+                input.narrate,
+                input.narrate_timeout,
+                input.lessons,
+            )
+            .await
+        }
+    };
     steps.push(narrated.step);
     Ok(Some(InsightOutcome {
         insight: Insight {
@@ -134,7 +152,66 @@ pub async fn build_insight(
         explanation: found.explanation,
         steps,
         tables_read: found.tables_read,
+        failure: narrated.failure,
     }))
+}
+
+/// Lý do dùng câu của code mà không gọi mô hình (chi tiết bước narrate), hay None khi được gọi.
+fn build_code_only_reason(
+    input: &InsightInput<'_>,
+    shape: &QueryShape,
+    result_shape: ResultShape,
+) -> Option<String> {
+    if result_shape.kind == InsightKind::Rows {
+        return Some("Danh sách dòng: dùng câu do code viết, không gọi mô hình".to_string());
+    }
+    let key = result_shape.key?;
+    let column = find_unsendable_key(input.tables, shape, key)?;
+    Some(format!(
+        "Cột khóa đọc từ {column}, cột nhạy cảm hay không phải cột phân loại, nên không gửi tên nhóm cho mô hình; \
+         dùng câu do code viết"
+    ))
+}
+
+/// Cột mà cột khóa của bảng kết quả đọc từ đó (một cột có trong biểu thức của cột khóa) và giá trị của nó không được
+/// gửi cho mô hình, hay None. Chỉ gửi được giá trị của cột phân loại (dimension) hay cột thời gian không đánh dấu nhạy
+/// cảm, như danh sách giá trị của prompt SQL (ask/prompt.rs); cột nhạy cảm (email khách hàng), cột khóa (mã đơn), cột chữ
+/// tự do thì không. Biểu thức không đọc được (cột `*`) thì coi là không gửi được: thà mất lời của mô hình còn hơn gửi
+/// giá trị không được phép.
+pub(crate) fn find_unsendable_key(
+    tables: &[PlainTable],
+    shape: &QueryShape,
+    key: usize,
+) -> Option<String> {
+    let Some(tree) = shape.outputs.get(key).and_then(|o| o.tree.as_ref()) else {
+        return Some("*".to_string());
+    };
+    let sendable = |c: &ProfileColumn| {
+        !c.is_sensitive
+            && (c.role == ProfileRole::Dimension.as_str() || c.role == ProfileRole::Time.as_str())
+    };
+    let mut found = None;
+    let _ = visit_expressions(tree, |e| {
+        let name = match e {
+            Expr::Identifier(ident) => Some(&ident.value),
+            Expr::CompoundIdentifier(parts) => parts.last().map(|p| &p.value),
+            _ => None,
+        };
+        let column = name.and_then(|n| {
+            tables
+                .iter()
+                .flat_map(|t| t.columns.iter())
+                .find(|c| c.name.eq_ignore_ascii_case(n))
+        });
+        match column {
+            Some(column) if !sendable(column) => {
+                found = Some(column.name.clone());
+                ControlFlow::Break(())
+            }
+            _ => ControlFlow::Continue(()),
+        }
+    });
+    found
 }
 
 /// Những gì phân rã tự động tìm được, và chi tiết cho bước explain.

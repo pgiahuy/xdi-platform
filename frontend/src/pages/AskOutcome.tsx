@@ -161,7 +161,7 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
       {response.insight ? (
         // Câu thường: phần giải thích theo hình dạng kết quả (#227). Phân rã tự động của nó (explanation) chỉ hiện ở tab
         // Phân rã của pane minh chứng, để thẻ không thành một câu "tại sao" thứ hai.
-        <AnswerSummary {...buildInsightView(response.insight)} />
+        <AnswerSummary {...buildInsightView(response.insight, response.answer_text)} />
       ) : (
         breakdown && <WhyOverview breakdown={breakdown} />
       )}
@@ -194,12 +194,14 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
 
 const noDataText = 'Không có dữ liệu để trả lời câu hỏi này.'
 
-/** Câu chính, các ý và lời của mô hình (chỉ khi lời đã qua bước kiểm) cho AnswerSummary. */
-function buildInsightView(insight: Insight) {
+/** Câu chính, các ý và lời của mô hình (chỉ khi lời đã qua bước kiểm) cho AnswerSummary. Lời đó đã đứng đầu thẻ làm
+ * đoạn trả lời (answer_text, backend dùng lại lời của phần giải thích) thì không hiện lần nữa, chỉ còn các câu của code. */
+function buildInsightView(insight: Insight, answerText: string | null) {
+  const shown = insight.summary_by_model && insight.summary !== answerText
   return {
     title: insight.title,
     points: insight.points.map((point) => ({ lead: point.lead, text: point.text })),
-    modelSummary: insight.summary_by_model ? insight.summary : null,
+    modelSummary: shown ? insight.summary : null,
   }
 }
 

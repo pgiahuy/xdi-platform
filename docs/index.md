@@ -12,9 +12,8 @@ doanh thu tháng này giảm, được tách thành phần chênh lệch của t
 nó.
 
 Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, viết SQL, điền form cho câu hỏi tìm
-nguyên nhân và viết lời; nó nhận tên cột và danh sách giá trị của cột phân loại, không nhận bảng dữ liệu. Riêng đoạn trả
-lời ngắn của câu hỏi thường gửi tối đa 10 dòng đầu của kết quả (với câu không gộp, đó là dòng gốc), tắt bằng
-`ANSWER_TEXT=false` ([Dữ liệu và quyền riêng tư](PRIVACY.md)).
+nguyên nhân và viết lời; nó nhận tên và mô tả cột, giá trị của cột phân loại không đánh dấu nhạy cảm, và các con số
+tổng hợp do code đã tính, không nhận dòng kết quả nào hay nội dung file ([Dữ liệu và quyền riêng tư](PRIVACY.md)).
 
 ![Một câu hỏi đi qua xdi-platform: giao diện, API, guard SQL, DuckDB, mô hình ngôn ngữ, Postgres, theo thứ tự 12 bước](images/luong-cau-hoi.png)
 

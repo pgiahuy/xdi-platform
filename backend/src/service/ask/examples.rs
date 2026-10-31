@@ -96,12 +96,10 @@ pub fn build_simple_example() -> AskResponse {
             top: None,
             other_bucket: false,
         }),
-        answer_text: Some(
-            "Europe có doanh thu cao nhất với 10.845.230,42, tiếp theo là LATAM (10.276.850,17) và Pacific Asia \
-             (8.124.900,80)."
-                .to_string(),
-        ),
-        answer_text_by_model: Some(true),
+        // Phần giải thích của mẫu là câu do code viết (INSIGHT_TEXT=false), nên đoạn trả lời là câu khuôn
+        // (ask/summary.rs).
+        answer_text: Some("Có 5 dòng; cao nhất là Europe với 10.845.230,42.".to_string()),
+        answer_text_by_model: Some(false),
         insight: Some(build_group_insight(&rows)),
         steps: vec![
             build_step(StepName::Context, 15, true, None),
@@ -109,12 +107,13 @@ pub fn build_simple_example() -> AskResponse {
                 StepName::Classify,
                 640,
                 true,
-                Some("Câu hỏi thường: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân."),
+                Some(
+                    "Câu hỏi thường: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân.",
+                ),
             ),
             build_step(StepName::Llm, 1120, true, None),
             build_step(StepName::Guard, 3, true, Some("Thêm LIMIT 100000")),
             build_step(StepName::Run, 38, true, None),
-            build_step(StepName::Narrate, 910, true, None),
             build_step(StepName::Explain, 0, true, None),
             build_step(
                 StepName::Narrate,
