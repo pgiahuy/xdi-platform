@@ -90,7 +90,7 @@ function AdminLessons({ ws, enabled }: { ws: string; enabled: boolean }) {
   const pendingId = toggle.isPending ? (toggle.variables?.id ?? null) : remove.isPending ? (remove.variables ?? null) : null
 
   return (
-    <div className="flex max-w-4xl flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold tracking-tight">Bài học</h2>
         <p className="text-sm text-muted-foreground">

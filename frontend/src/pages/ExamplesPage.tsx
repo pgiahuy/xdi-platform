@@ -66,7 +66,7 @@ function AdminExamples({ ws, enabled }: { ws: string; enabled: boolean }) {
   }
 
   return (
-    <div className="flex max-w-4xl flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold tracking-tight">Câu mẫu</h2>
         <p className="text-sm text-muted-foreground">

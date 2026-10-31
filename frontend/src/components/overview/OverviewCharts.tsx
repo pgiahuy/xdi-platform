@@ -31,8 +31,9 @@ export function OverviewCharts({ overview, onPick }: Props) {
   if (overview.charts.length === 0) return null
   return (
     <div className="flex flex-col gap-3">
-      {/* Hai cột từ md: máy tính bảng dọc đủ chỗ cho hai biểu đồ; một cột thì mỗi biểu đồ chiếm cả màn, phải cuộn rất dài. */}
-      <div className="grid gap-3 md:grid-cols-2">
+      {/* Hai cột từ md: máy tính bảng dọc đủ chỗ cho hai biểu đồ; một cột thì mỗi biểu đồ chiếm cả màn, phải cuộn rất dài.
+      Ba cột từ 2xl, khi trang bung hết bề ngang màn rất rộng. */}
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         {[...timeCharts, ...shownValues].map((chart) => (
           <ChartCard
             key={`${chart.kind}:${chart.column}`}
