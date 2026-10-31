@@ -261,6 +261,9 @@ fn build_sliced(additive: &Additive, condition: &Expr) -> String {
         Additive::Count { value: Some(value) } => {
             format!("COUNT(CASE WHEN {condition} THEN {value} END)")
         }
+        Additive::CountDistinct { value } => {
+            format!("COUNT(DISTINCT CASE WHEN {condition} THEN {value} END)")
+        }
     }
 }
 
@@ -283,6 +286,7 @@ fn build_additive_aggregate(additive: &Additive) -> String {
         Additive::Sum { value, decimal } => format!("SUM({})", build_summand(value, *decimal)),
         Additive::Count { value: None } => "COUNT(*)".to_string(),
         Additive::Count { value: Some(value) } => format!("COUNT({value})"),
+        Additive::CountDistinct { value } => format!("COUNT(DISTINCT {value})"),
     }
 }
 

@@ -55,8 +55,15 @@ pub fn build_why_form_schema() -> serde_json::Value {
                 "type": "object",
                 "description": "The measure when no metric fits",
                 "properties": {
-                    "column": text("A column of role measure for sum, any column for count"),
-                    "agg": { "type": "string", "enum": ["sum", "count"] }
+                    "column": text(
+                        "A column of role measure for sum and avg, any column for count, a column of role key for \
+                         count_distinct, a column of role dimension for share"
+                    ),
+                    "agg": {
+                        "type": "string",
+                        "enum": ["sum", "avg", "count", "count_distinct", "share"]
+                    },
+                    "value": text("For share only: the value of the column whose share of rows is explained")
                 },
                 "required": ["column", "agg"]
             },

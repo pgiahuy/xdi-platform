@@ -84,14 +84,20 @@ pub struct WhyForm {
 pub struct FormMeasure {
     pub column: String,
     pub agg: FormAgg,
+    /// Giá trị của cột khi agg là share: tỷ lệ dòng có giá trị này.
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
-/// Hai cách tổng hợp cộng được theo nhóm: tổng nhóm con bằng tổng cả lát cắt, điều kiện để phân rã (#39) đúng.
+/// Cách tổng hợp một cột; mỗi cách một dạng phân rã, xem explain/measure_column.rs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FormAgg {
     Sum,
+    Avg,
     Count,
+    CountDistinct,
+    Share,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

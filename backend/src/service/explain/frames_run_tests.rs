@@ -8,7 +8,7 @@ Số của quý 3/2017 (COMPARE_CELLS của run_tests.rs): Pacific Asia 1.960.12
 
 use serde_json::json;
 
-use crate::service::ask::contract::{AskStatus, Comparison};
+use crate::service::ask::contract::{AskStatus, Comparison, MeasureKind, WarningCode};
 use crate::service::explain::run_tests::{items, view, Dataco, ScriptedLlm};
 use crate::service::explain::{build_number_check, check_tests::DATE};
 
@@ -106,4 +106,76 @@ async fn extended_filters_reach_every_query() {
     for item in items(&view.understanding) {
         assert!(sql.contains(&item.sql), "{} not in {sql}", item.sql);
     }
+}
+
+/// Tỷ lệ dòng Corporate của Pacific Asia so với các thị trường còn lại, quý 3/2017: độ đo tỷ lệ đi đường cơ cấu và
+/// hiệu suất. Pacific Asia có một dòng, là Corporate (1.0000); phần còn lại có 6 ô cộng 4.393 dòng 0 đồng, trong đó 2
+/// dòng Corporate (2 / 4.399 = 0.0005).
+#[tokio::test]
+async fn share_of_rows_compares_one_group_with_the_rest() {
+    let data = Dataco::new();
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Customer Segment", "agg": "share", "value": "Corporate"},
+        "time": {"column": DATE, "grain": "quarter"},
+        "compare": "2017-Q3",
+        "groups": {"column": "Market", "compare": "Pacific Asia"},
+        "filters": []
+    });
+    let llm = ScriptedLlm::new(vec![form]);
+    let question =
+        "Vì sao Pacific Asia có tỷ lệ khách doanh nghiệp cao hơn các thị trường khác quý 3/2017?";
+    let outcome = data.ask(&llm, question, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let explanation = outcome.explanation.as_ref().unwrap();
+    assert_eq!(explanation.measure_kind, MeasureKind::Ratio);
+    assert_eq!(explanation.measure, "Tỷ lệ Customer Segment là Corporate");
+    assert_eq!(explanation.compare.value, "1.0000");
+    assert_eq!(explanation.base.value, "0.0005");
+    assert_eq!(explanation.base.label, "các nhóm còn lại");
+}
+
+/// Đếm phân biệt: số đơn quý 3 so với quý 2. Đơn 1 tới 100 của quý 2 có dòng ở hai thị trường (run_tests.rs), nên theo
+/// Market các nhóm cộng lại vượt tổng: không chiều nào cộng đúng, câu vẫn answered với bảng tổng kèm cảnh báo. Lọc bỏ các
+/// đơn đó (Order Id > 100) thì mỗi đơn thuộc đúng một nhóm và phân rã có lại: 4.900 đơn quý 2, 4.400 đơn quý 3.
+#[tokio::test]
+async fn distinct_count_needs_groups_that_add_up() {
+    let data = Dataco::new();
+    let form = |filters: serde_json::Value| {
+        json!({
+            "terms": [],
+            "measure": {"column": "Order Id", "agg": "count_distinct"},
+            "time": {"column": DATE, "grain": "quarter"},
+            "compare": "2017-Q3",
+            "filters": filters
+        })
+    };
+    let question = "Vì sao số đơn quý 3/2017 giảm?";
+    let llm = ScriptedLlm::new(vec![form(json!([]))]);
+    let outcome = data.ask(&llm, question, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    assert!(outcome.explanation.is_none());
+    assert_eq!(
+        outcome.warnings[0].code,
+        WarningCode::ExplanationUnavailable
+    );
+
+    let later = json!([{"column": "Order Id", "op": ">", "value": "100"}]);
+    let llm = ScriptedLlm::new(vec![form(later)]);
+    let outcome = data.ask(&llm, question, &[]).await;
+    let explanation = outcome.explanation.as_ref().expect("a breakdown");
+    assert_eq!(
+        (
+            explanation.base.value.as_str(),
+            explanation.compare.value.as_str()
+        ),
+        ("4900", "4400")
+    );
+    assert!(explanation.volume_price.is_none());
+    let columns: Vec<&str> = explanation
+        .dimensions
+        .iter()
+        .map(|d| d.column.as_str())
+        .collect();
+    assert!(columns.contains(&"Market"), "{columns:?}");
 }

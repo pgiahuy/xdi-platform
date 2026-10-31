@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/frames_tests.rs - test phần thuần của các khuôn câu "tại sao" thêm ở #244: một nhóm so với các nhóm
-còn lại (explain/group_base.rs), bộ lọc mở rộng (explain/filter.rs), kỳ tuần và ngày (explain/period.rs): đọc và kiểm
-form, SQL dựng ra. Hồ sơ DataCo thu nhỏ của explain/check_tests.rs; trọn
-đường trên Parquet tạm ở explain/frames_run_tests.rs. */
+còn lại (explain/group_base.rs), bộ lọc mở rộng (explain/filter.rs), độ đo mới (explain/measure_column.rs), kỳ tuần và
+ngày (explain/period.rs): đọc và kiểm form, SQL dựng ra. Hồ sơ DataCo thu nhỏ của explain/check_tests.rs; trọn đường
+trên Parquet tạm ở explain/frames_run_tests.rs. */
 
 use std::collections::HashMap;
 
@@ -12,7 +12,7 @@ use crate::service::explain::check::PlanSlices;
 use crate::service::explain::check_tests::{Fixture, DATE};
 use crate::service::explain::group_base::GroupBase;
 use crate::service::explain::period::{Grain, Period};
-use crate::service::explain::sql::{build_dimension_sql, build_why_sql};
+use crate::service::explain::sql::{build_dimension_sql, build_slices_sql, build_why_sql};
 
 fn rest_form() -> serde_json::Value {
     json!({
@@ -251,4 +251,68 @@ fn weeks_and_days_are_periods() {
     ] {
         assert!(Period::parse(grain, text).is_err(), "{text}");
     }
+}
+
+// Độ đo trung bình, tỷ lệ dòng có một giá trị, đếm phân biệt (explain/measure_column.rs).
+
+fn measured(measure: serde_json::Value) -> serde_json::Value {
+    json!({
+        "measure": measure,
+        "time": {"column": DATE, "grain": "quarter"},
+        "compare": "2017-Q3",
+        "filters": []
+    })
+}
+
+#[test]
+fn average_is_a_ratio_of_sum_and_count() {
+    let fixture = Fixture::new();
+    let plan = fixture.plan(measured(
+        json!({"column": "Order Item Total", "agg": "avg"}),
+    ));
+    assert_eq!(plan.measure.label, "Trung bình Order Item Total");
+    assert!(plan.measure.denominator.is_some());
+    let slices = build_slices_sql(&plan);
+    assert!(
+        slices.contains("COUNT(CASE WHEN") && slices.contains("AS compare_denominator"),
+        "{slices}"
+    );
+    let wrong = measured(json!({"column": "Market", "agg": "avg"}));
+    assert_eq!(fixture.fields(wrong), ["measure.column"]);
+}
+
+#[test]
+fn share_counts_rows_with_one_listed_value() {
+    let fixture = Fixture::new();
+    let form = measured(json!({"column": "Market", "agg": "share", "value": "Europe"}));
+    let plan = fixture.plan(form);
+    assert_eq!(plan.measure.label, "Tỷ lệ Market là Europe");
+    assert_eq!(
+        plan.measure.aggregate.to_string(),
+        "ROUND(COUNT(CASE WHEN \"Market\" = 'Europe' THEN 1 END) / NULLIF(COUNT(*), 0), 4)"
+    );
+    let missing = measured(json!({"column": "Market", "agg": "share"}));
+    assert_eq!(fixture.fields(missing), ["measure.value"]);
+    let unknown = measured(json!({"column": "Market", "agg": "share", "value": "Asia"}));
+    assert_eq!(fixture.fields(unknown), ["measure.value"]);
+    let number = measured(json!({"column": "Order Item Total", "agg": "share", "value": "1"}));
+    assert_eq!(fixture.fields(number), ["measure.column"]);
+}
+
+#[test]
+fn distinct_count_needs_a_key_and_has_no_volume_split() {
+    let fixture = Fixture::new();
+    let plan = fixture.plan(measured(
+        json!({"column": "Order Id", "agg": "count_distinct"}),
+    ));
+    assert_eq!(plan.measure.label, "Số Order Id");
+    assert_eq!(
+        plan.measure.aggregate.to_string(),
+        "COUNT(DISTINCT \"Order Id\")"
+    );
+    assert_eq!(plan.volume, None);
+    let segment = build_dimension_sql(&plan, "Customer Segment");
+    assert!(segment.contains("COUNT(DISTINCT CASE WHEN"), "{segment}");
+    let wrong = measured(json!({"column": "Market", "agg": "count_distinct"}));
+    assert_eq!(fixture.fields(wrong), ["measure.column"]);
 }

@@ -116,3 +116,36 @@ async fn in_filter_is_answered_and_drilled() {
     assert_eq!(status, StatusCode::OK, "{page}");
     assert_eq!(source_rows(&page), (120.25, vec!["LATAM".to_string()]));
 }
+
+/// Tỷ lệ dòng có một giá trị qua route: tỷ lệ Corporate quý 2 là 0, quý 3 là 2 trên 4 dòng; truy dòng nguồn của
+/// nhóm Europe ở quý 3 ra hai dòng Europe (mọi dòng của nhóm, vì mẫu số đếm mọi dòng).
+#[tokio::test]
+async fn share_measure_is_answered_and_drilled() {
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Customer Segment", "agg": "share", "value": "Corporate"},
+        "time": {"column": "order date (DateOrders)", "grain": "quarter"},
+        "compare": "2017-Q3",
+        "filters": []
+    });
+    let Some(asking) = start_on(Some(scripted(&[form])), CSV, |_| {}).await else {
+        return;
+    };
+    let question = "Vì sao tỷ lệ khách doanh nghiệp quý 3/2017 tăng?";
+    let (status, response) = asking.ask(question, json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    let explanation = &response["explanation"];
+    assert_eq!(explanation["measure_kind"], "ratio");
+    assert_eq!(explanation["base"]["value"], "0.0000");
+    assert_eq!(explanation["compare"]["value"], "0.5000");
+    let query_id = response["query_id"].clone();
+    let europe = json!({"query_id": query_id,
+                        "breakdown": {"slice": "compare", "column": "Market", "value": "Europe"}});
+    let (status, page) = drill(&asking, europe).await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    assert_eq!(
+        source_rows(&page),
+        (80.0, vec!["Europe".to_string(), "Europe".to_string()])
+    );
+}

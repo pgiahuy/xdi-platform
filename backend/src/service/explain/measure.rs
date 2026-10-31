@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/measure.rs - phần độ đo của bước kiểm form câu "tại sao" (explain/check.rs): chỉ số trong metrics
-hoặc một cột với sum, count, đổi thành PlanMeasure để explain/sql.rs dựng SQL. Sum trên cột có cách gộp avg
-(columns.aggregation, #185) thành trung bình mỗi dòng, phân rã như tỷ lệ. Tách khỏi explain/check.rs vì đọc công thức
+hoặc một cột (explain/measure_column.rs: sum, avg, count, count_distinct, share), đổi thành PlanMeasure để
+explain/sql.rs dựng SQL. Tách khỏi explain/check.rs vì đọc công thức
 chỉ số bằng sqlparser là phần riêng: công thức do tổ chức viết, code phải tách được phần bên trong SUM để đặt điều
 kiện lát cắt vào. Test ở explain/check_tests.rs.
 
@@ -9,7 +9,8 @@ Chỉ số nhận hai dạng. Dạng cộng được theo nhóm: SUM(biểu th�
 phân rã bằng phép trừ từng nhóm (#39). Dạng tỷ lệ: AVG(x), hoặc thương của hai dạng cộng được như SUM(a) / SUM(b),
 COUNT(CASE WHEN ... THEN 1 END) / COUNT(*); tách thành tử và mẫu cộng được, phân rã thành phần cơ cấu và phần hiệu suất
 (explain/ratio.rs). AVG(x) là SUM(x) / COUNT(x): AVG bỏ dòng x trống ở cả tử và mẫu, COUNT(x) cũng vậy. Dạng khác (đếm
-phân biệt, NULLIF ở mẫu, biểu thức lồng nhiều tầng) không phân rã được, nên báo lỗi rồi câu hỏi chạy như câu thường. */
+phân biệt, NULLIF ở mẫu, biểu thức lồng nhiều tầng) không phân rã được, nên báo lỗi rồi câu hỏi chạy như câu thường;
+đếm phân biệt trên một cột key thì đi được bằng measure với count_distinct. */
 
 use sqlparser::ast::{
     BinaryOperator, DuplicateTreatment, Expr, FunctionArg, FunctionArgExpr, FunctionArguments,
@@ -19,12 +20,12 @@ use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
 use sqlparser::tokenizer::Token;
 
-use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileColumn, ProfileRole};
+use crate::engine::store::{MetricDefinition, ProfileColumn};
 use crate::service::ask::phrases::build_key;
-use crate::service::explain::check::{find_column, WhyProfile};
-use crate::service::explain::form::{FieldError, FormAgg, WhyForm};
-use crate::service::explain::lower_first;
-use crate::service::explain::sql::{build_ident, build_total_aggregate};
+use crate::service::explain::check::WhyProfile;
+use crate::service::explain::form::{FieldError, WhyForm};
+use crate::service::explain::measure_column::check_column_measure;
+use crate::service::explain::sql::build_total_aggregate;
 use crate::service::profile::is_integer_type;
 
 /// Độ đo đã kiểm.
@@ -52,6 +53,10 @@ pub enum Additive {
     Sum { value: Expr, decimal: bool },
     /// COUNT(value); None là COUNT(*).
     Count { value: Option<Expr> },
+    /// COUNT(DISTINCT value) trên một cột key (#244). Chỉ cộng được theo nhóm khi mỗi giá trị nằm trong đúng một nhóm
+    /// (khách hàng thuộc một phân khúc); chiều mà một giá trị rơi vào nhiều nhóm thì các nhóm không cộng ra tổng lát cắt
+    /// và build_dimension_score bỏ chiều đó (TotalsMismatch).
+    CountDistinct { value: Expr },
 }
 
 pub(super) fn check_measure(
@@ -70,58 +75,11 @@ pub(super) fn check_measure(
         ));
         return None;
     };
-    let field = "measure.column";
-    let column = find_column(profile, &measure.column, field, errors)?;
-    let ident = build_ident(&column.name);
-    match measure.agg {
-        FormAgg::Sum => {
-            let numeric = is_integer_type(&column.data_type)
-                || column.data_type.starts_with("DECIMAL")
-                || matches!(column.data_type.as_str(), "FLOAT" | "DOUBLE");
-            if column.role != ProfileRole::Measure.as_str() || !numeric {
-                errors.push(FieldError::new(
-                    field,
-                    format!(
-                        "\"{}\" is a {} column of type {}; \"sum\" needs a number column of role measure",
-                        column.name, column.role, column.data_type
-                    ),
-                ));
-                return None;
-            }
-            let additive = Additive::Sum {
-                decimal: !is_exact_type(&column.data_type),
-                value: ident.clone(),
-            };
-            // Cột avg (mỗi giá trị mô tả một dòng, như số tín chỉ của một sinh viên): tổng của nó vô nghĩa và chênh
-            // lệch tổng chủ yếu do số dòng của hai lát cắt. So trung bình mỗi dòng như AVG(x) của chỉ số: tử SUM(x),
-            // mẫu COUNT(x), phân rã thành phần cơ cấu và phần hiệu suất (explain/ratio.rs).
-            if column.aggregation == ColumnAggregation::Avg.as_str() {
-                let rows = Additive::Count { value: Some(ident) };
-                let label = match build_vietnamese_name(column) {
-                    Some(name) => format!("Trung bình {}", lower_first(name)),
-                    None => format!("Trung bình {}", column.name),
-                };
-                return build_plan_measure(label, None, additive, Some(rows));
-            }
-            // Tên tiếng Việt của hồ sơ ("Doanh thu") đọc tự nhiên hơn "Tổng Sales"; chưa có thì ghép từ tên cột.
-            let label = match build_vietnamese_name(column) {
-                Some(name) => name.to_string(),
-                None => format!("Tổng {}", column.name),
-            };
-            build_plan_measure(label, None, additive, None)
-        }
-        FormAgg::Count => {
-            let label = match build_vietnamese_name(column) {
-                Some(name) => format!("Số dòng có {}", lower_first(name)),
-                None => format!("Số dòng có {}", column.name),
-            };
-            build_plan_measure(label, None, Additive::Count { value: Some(ident) }, None)
-        }
-    }
+    check_column_measure(measure, profile, errors)
 }
 
 /// Tên tiếng Việt của cột: bí danh đầu tiên trong hồ sơ ngữ nghĩa, như build_labels của explain/check.rs.
-fn build_vietnamese_name(column: &ProfileColumn) -> Option<&str> {
+pub(super) fn build_vietnamese_name(column: &ProfileColumn) -> Option<&str> {
     column
         .aliases
         .iter()
@@ -129,7 +87,7 @@ fn build_vietnamese_name(column: &ProfileColumn) -> Option<&str> {
         .find(|a| !a.is_empty())
 }
 
-fn build_plan_measure(
+pub(super) fn build_plan_measure(
     label: String,
     metric: Option<String>,
     additive: Additive,
@@ -310,7 +268,7 @@ fn is_exact_expr(value: &Expr, profile: &[ProfileColumn]) -> bool {
         .is_some_and(|c| is_exact_type(&c.data_type))
 }
 
-fn is_exact_type(data_type: &str) -> bool {
+pub(super) fn is_exact_type(data_type: &str) -> bool {
     is_integer_type(data_type) || data_type.starts_with("DECIMAL")
 }
 

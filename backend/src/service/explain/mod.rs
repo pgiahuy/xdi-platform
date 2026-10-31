@@ -43,6 +43,7 @@ pub mod judge;
 mod judge_tests;
 pub mod latest;
 pub mod measure;
+mod measure_column;
 mod narrate_prompt;
 pub mod number;
 pub mod period;

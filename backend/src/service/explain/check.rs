@@ -18,7 +18,9 @@ use crate::service::ask::values::ValueIndex;
 use crate::service::explain::filter::{build_single_value_columns, check_filters};
 use crate::service::explain::form::{FieldError, WhyForm};
 use crate::service::explain::group_base::GroupBase;
-use crate::service::explain::measure::{check_measure, find_metric, parse_expr, PlanMeasure};
+use crate::service::explain::measure::{
+    check_measure, find_metric, parse_expr, Additive, PlanMeasure,
+};
 use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::source::{PlanSource, RelatedTables};
 use crate::service::explain::sql::build_time_expr;
@@ -125,7 +127,11 @@ pub fn build_why_check(
     Ok(WhyPlan {
         table: profile.table.to_string(),
         dimensions: build_dimensions(form, profile, &slices),
-        volume: build_volume(profile),
+        // Đếm phân biệt (#244) đã là một số đếm như lượng: tách "số khách trên mỗi đơn" không có nghĩa.
+        volume: match measure.additive {
+            Additive::CountDistinct { .. } => None,
+            _ => build_volume(profile),
+        },
         labels: build_labels(profile),
         measure,
         slices,
