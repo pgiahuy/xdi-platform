@@ -91,8 +91,10 @@ nguyên nhân dựng trong `backend/src/service/explain/narrate_prompt.rs`.
 | Kiểm nghĩa | Sau mỗi lời qua kiểm số | Lời vừa viết và các số hay câu nó dựa vào |
 | Báo cáo tự động | Mỗi phần của báo cáo | Như viết lời câu hỏi số liệu và kiểm nghĩa |
 
-Không bao giờ gửi: dòng dữ liệu gốc, nội dung file, đường dẫn file trên máy chủ, giá trị của cột chữ tự do, cột khóa
-và cột nhạy cảm, dữ liệu của workspace khác, mật khẩu, khóa API, token đăng nhập, thông tin kết nối nguồn database.
+Không gửi: dòng dữ liệu gốc, nội dung file, đường dẫn file trên máy chủ, danh sách giá trị của cột chữ tự do, cột khóa
+và cột nhạy cảm, dữ liệu của workspace khác, mật khẩu, khóa API, token đăng nhập, thông tin kết nối nguồn database. Một
+giá trị đơn lẻ vẫn có thể tới mô hình khi nó nằm trong câu hỏi, trong câu SQL của lượt trước hay của câu mẫu, hay trong
+lời báo lỗi của DuckDB (mục Sửa SQL).
 Truy dòng nguồn, trang Tổng quan, chỉ số, mở lại báo cáo và xuất PDF, Excel không gọi mô hình.
 
 ### Lập hồ sơ ngữ nghĩa

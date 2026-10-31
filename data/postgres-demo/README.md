@@ -218,7 +218,7 @@ bưu chính nằm ở cột bang) được dời về đúng cột, địa chỉ
 
 ## Nguyên nhân cài sẵn
 
-Để thử câu hỏi tìm nguyên nhân với đáp án biết trước, `load.sh` chạy hai file sau khi đổ dữ liệu thật:
+Để thử câu hỏi nguyên nhân với đáp án biết trước, `load.sh` chạy hai file sau khi đổ dữ liệu thật:
 `sql/plant_demo_cause_sales.sql` và `sql/plant_demo_cause_edu.sql`. Đây là dữ liệu sửa tay, không phải dữ liệu gốc.
 Không ghi gì về hai việc sửa này vào COMMENT của bảng hay cột, để mô hình ngôn ngữ không đọc được đáp án; vì vậy sơ
 đồ và tài liệu bảng trong `docs/` (sinh từ COMMENT) cũng không nhắc tới.
