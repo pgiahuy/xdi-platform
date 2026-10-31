@@ -197,7 +197,25 @@ fn check_slices(
         // Có kỳ thì kỳ đó là khoảng thời gian của câu hỏi ("quý 3/2017, vì sao Europe thấp hơn LATAM"); base của form
         // không dùng vì hai lát cắt đã là hai nhóm.
         let period = match (&form.time, non_empty(&form.compare)) {
-            (Some(_), Some(text)) => {
+            (Some(time), Some(text)) => {
+                // Kỳ là giá trị của một cột chiều (kỳ học "2014J"): mô hình hay đặt vào time. Với hai nhóm, kỳ đó là một
+                // bộ lọc; lời chỉ đúng bộ lọc cần thêm, nếu không vòng sửa lại đổi groups và câu rơi về câu thường.
+                if let Some(column) = profile
+                    .columns
+                    .iter()
+                    .find(|c| c.name == time.column && c.role == ProfileRole::Dimension.as_str())
+                {
+                    errors.push(FieldError::new(
+                        "time.column",
+                        format!(
+                            "\"{}\" has role dimension, so \"{text}\" is a value, not a period: keep \"groups\" as it is, \
+                             leave \"time\" out, write \"compare\" as an empty string and add the filter \
+                             {{\"column\": \"{}\", \"op\": \"=\", \"value\": \"{text}\"}}",
+                            column.name, column.name
+                        ),
+                    ));
+                    return None;
+                }
                 let time = check_time(form, profile, errors)?;
                 let period = check_period(&time, profile, text, "compare", errors)?;
                 Some((time, period))

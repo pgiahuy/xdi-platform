@@ -481,3 +481,26 @@ fn rest_with_a_filtered_count_points_to_share() {
     two["groups"]["base"] = json!("Europe");
     assert!(fixture.check(two).is_ok());
 }
+
+/// "Vì sao Scotland có tỷ lệ rút học cao ở đợt 2014J?": kỳ học là giá trị của cột chiều. Mô hình đặt nó vào time thì lỗi
+/// chỉ sang bộ lọc "=" đúng cột và giá trị, giữ groups.
+#[test]
+fn dimension_period_with_groups_points_to_a_filter() {
+    let fixture = Fixture::new();
+    let form = json!({
+        "metric": "doanh thu",
+        "time": {"column": "Customer Segment", "grain": "year"},
+        "compare": "Corporate",
+        "groups": {"column": "Market", "compare": "Europe"},
+        "filters": []
+    });
+    let errors = fixture.check(form).unwrap_err();
+    assert_eq!(errors[0].field, "time.column");
+    assert!(
+        errors[0].message.contains(
+            "add the filter {\"column\": \"Customer Segment\", \"op\": \"=\", \"value\": \"Corporate\"}"
+        ),
+        "{}",
+        errors[0].message
+    );
+}
