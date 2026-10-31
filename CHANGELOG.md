@@ -9,6 +9,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Chụp bảng Postgres đọc luôn mô tả bảng và cột ghi trong database (`COMMENT ON`) làm mô tả trong hồ sơ cột; mô hình không viết lại các mô tả này, giao diện ghi nguồn "từ database" hay "do mô hình viết" (#245).
 - Tab Phân rã: mỗi bảng có nhãn "Có nhóm khác thường" hay "Dàn đều" (bảng dàn đều xếp sau), cột "Chênh lệch" thay cho "Đóng góp" kèm nghĩa từng cột dưới tiêu đề, nhóm chỉ có ở một bên ghi "mới", "không còn", nhóm đổi dấu ghi "đổi dấu", nhóm đi ngược chiều ghi "kéo ngược", không có % tác động khi chênh lệch tổng gần 0, cột Nhóm đứng yên khi cuộn ngang, số dòng và số đơn của hai bên, ghi chú các cách chia đã bỏ và vì sao; màu giảm hổ phách, tăng xanh ngọc. API thêm `presence`, `share_of_change`, `percent_change`, `sign_flip`, `outlier` cho từng nhóm, `has_outliers` cho từng chiều, `explanation.dropped_dimensions` (#186).
 - Câu hỏi tìm nguyên nhân hiểu thêm các dạng hay gặp: một nhóm so với các nhóm còn lại, bộ lọc khoảng (`in`, `between`, lớn hơn, nhỏ hơn), trung bình, tỷ lệ dòng có một giá trị, số khách không trùng, tuần, ngày, cùng kỳ năm trước, và tìm kỳ hay nhóm bất thường (#244).
+- Chụp bảng Postgres nhanh hơn: DuckDB đọc thẳng bảng bằng extension `postgres` đóng gói sẵn (không tải lúc chạy) và ghi Parquet một bước; bảng 1,8 triệu dòng của database mẫu chụp trong khoảng 0,9 giây thay vì 16 giây. `SOURCE_SNAPSHOT_MODE=copy` giữ cách cũ, và là đường dự phòng khi extension không nạp được (#246).
 - Insight của câu hỏi tìm nguyên nhân do mô hình viết toàn bộ (câu mở đầu và mục "Nguyên nhân chính") từ số và cờ code đã tính, prompt không còn câu do code viết hay ví dụ theo bộ dữ liệu; khi insight qua kiểm thì không hiện mục "Căn cứ" nữa (#201).
 - Câu hỏi tìm nguyên nhân so hai nhóm (như hai thị trường) cũng do mô hình viết insight và qua hai cổng kiểm, thay cho câu khuôn (#201).
 - Câu hỏi về một số đo trong một kỳ, như "doanh thu tháng 6 năm 2017 như thế nào", trả tổng của kỳ đó thay vì hỏi lại có chia theo ngày không (#201).
@@ -17,7 +18,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Hồ sơ cột: mọi cột mã số nguyên (mã đơn, mã khách, mã sản phẩm, mã danh mục) được đề xuất vai `key` thay vì số đo; câu "tại sao" lấy số đơn từ cột mã lặp lại có nhiều giá trị nhất, nên bộ có nhiều cột mã vẫn tách được phần do số đơn và phần do giá trị mỗi đơn (#201).
 - Lời giải thích câu hỏi tìm nguyên nhân: mô hình khai từng số và nhóm nó dùng, hệ thống so mỗi khai báo với đúng ô của bảng phân rã, nên bắt được khi mô hình khai một số của bảng cho nhầm nhóm; rồi một lần gọi mô hình riêng so nghĩa của lời với các khai báo và tên hai kỳ; sai hay có chỗ đọc được nhiều nghĩa thì mô hình viết lại một lần kèm các lỗi đó, vẫn sai thì dùng câu do hệ thống viết; chỗ chưa rõ mà không chắc sai thì giữ lời, các chỗ đó hiện ngay dưới insight; tab Các bước ghi số khẳng định đã đối soát (#201).
 - `GEMINI_BACKUP_API_KEY`: khóa Gemini dự phòng; khóa chính hết hạn mức thì backend tự gọi lại bằng khóa dự phòng thay vì báo lỗi.
-- `make eval-judge`: bộ đo mô hình chấm trên 67 ca có nhãn (32 lời đúng, 35 lời sai): 55 ca lời giải thích câu tìm nguyên nhân (7 ca lấy từ lỗi thật khi chạy Gemini; 16 ca có số lời tự tính từ các số đã khai) và 12 ca lời phần giải thích câu thường; in số ca đúng trên tổng, số lời sai bị bỏ lọt hay chỉ bị cảnh báo, số lời đúng bị chặn nhầm hay bị cảnh báo thừa (#201).
+- `make eval-judge`: bộ đo mô hình chấm trên 70 ca có nhãn (33 lời đúng, 37 lời sai): 56 ca lời giải thích câu tìm nguyên nhân (8 ca lấy từ lỗi thật khi chạy Gemini; 16 ca có số lời tự tính từ các số đã khai) và 14 ca lời phần giải thích câu thường; in số ca đúng trên tổng, số lời sai bị bỏ lọt hay chỉ bị cảnh báo, số lời đúng bị chặn nhầm hay bị cảnh báo thừa (#201).
 - Lời phần giải thích của câu thường (cũng là đoạn trả lời ngắn) qua hai cổng như câu tìm nguyên nhân: sau bước kiểm số, chiều và từ chỉ nguyên nhân, một lần gọi mô hình riêng so nghĩa của lời với các câu code đã tính; trượt hay có chỗ chưa rõ thì viết lại một lần. Mô hình chấm chỉ nhận lời và các câu đó, không nhận dòng kết quả nào. Có chỗ chưa rõ thì hiện khối cảnh báo nền vàng dưới đoạn trả lời; tab Các bước có cờ match, warning, mismatch. API thêm `insight.summary_verdict`, `insight.summary_warnings` (#201).
 - Lời của mô hình nói mỗi chênh lệch một lần, phần trăm trong ngoặc, không còn câu như "cao hơn 11.205,79 hoặc cao hơn 16,7%" (#201).
 - Mô hình chấm thấy chỗ chưa rõ (warning) thì lời cũng được viết lại một lần như khi sai, kèm các chỗ chưa rõ đó; lần viết lại không khớp hẳn thì giữ lời cũ kèm cảnh báo. Khối cảnh báo dưới insight có nền vàng (#201).
@@ -44,6 +45,9 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Màn **Khái niệm ngành** (thanh bên): gói ngành lưu riêng cho từng workspace, admin thêm, sửa, tắt khái niệm, câu hỏi sau dùng bản vừa sửa; thêm gói giáo dục cho dữ liệu OULAD (#229).
 - Tab **Các bước** của khung Minh chứng ghi từng lượt gọi mô hình (thời gian, token); lệnh `xdi-backend llm-stats` tổng hợp theo loại câu; lập hồ sơ cột sau khi nạp chạy ba lượt gọi song song và hai bảng cùng lúc (`SEMANTIC_JOBS`); số đo ở `docs/PERFORMANCE.md` (#184).
 - Tải lại trang hay mở lại cuộc trò chuyện cũ vẫn thấy lời trả lời của từng lượt (kèm các chỗ chưa rõ nếu có), không chỉ câu hỏi; bảng và biểu đồ vẫn xem bằng nút Hỏi lại. Bảng `queries` thêm cột `answer`, API cuộc trò chuyện thêm `answer` cho mỗi lượt (#201).
+- Câu trả lời ghi dữ liệu có từ ngày nào đến ngày nào khi bảng có cột thời gian, theo cột câu hỏi dùng; hỏi kỳ quá ngày cuối của dữ liệu thì ghi "dữ liệu mới có đến ...". API thêm `data_range` (#201).
+- Số từ một triệu trở lên trong câu trả lời có dạng rút gọn kèm số đủ, như "khoảng 12,3 triệu (12.340.831,43)"; code tính dạng rút gọn, mô hình chép (#201).
+- Một từ khớp nhiều cột mà hệ thống tự chọn một thì câu trả lời nói đã tính theo cột nào, bằng tên tiếng Việt của cột (#201).
 
 ### Changed
 
@@ -71,8 +75,18 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Bảng kết quả: cột thời gian mà mọi ô đều là nửa đêm chỉ hiện ngày, không kèm " 00:00:00".
 - Xóa dataset thì xóa luôn lịch sử câu hỏi của nó, kể cả các lượt trò chuyện; khi cập nhật, lịch sử còn sót từ các lần xóa dataset trước bị xóa (#187).
 
+- Câu trả lời do hệ thống viết đọc như người kể lại: "Caguas có tổng doanh thu cao nhất: khoảng 13,6 triệu (13.610.266,21), tiếp theo là Chicago, Los Angeles, Brooklyn và New York." thay cho "Có 5 dòng; cao nhất là Caguas với 13.610.266,21."; bỏ dòng "Câu viết theo khuôn từ số đã tính." ở mọi nơi (#201).
+- Kết quả chỉ một dòng, tới 5 cột (như "thành phố nào có doanh thu cao nhất", "thành phố đó thuộc quốc gia nào"), được trả lời bằng lời với tên tiếng Việt của cột, như "New York City có tổng doanh thu cao nhất: 436.061,54.", thay cho "Kết quả có 1 dòng."; danh sách dòng không còn hiện khối "Kết quả có N dòng. Điều kiện lọc: ..." lặp lại câu trả lời (#201).
+- Câu hỏi lại chỉ có một ý thì mỗi phương án là một nút, bấm là chạy ngay; chọn chỉ số hay khoảng thời gian khi được hỏi lại không còn báo "không áp dụng được" (#201).
+- Prompt viết SQL dặn câu hỏi "nhóm nào cao nhất" lấy cả cột tên nhóm lẫn số dùng để xếp (#201).
+- Câu "tại sao" so một nhóm với các nhóm còn lại (như "vì sao Europe có doanh thu cao nhất") so với trung bình mỗi nhóm còn lại khi độ đo là tổng hay số đếm, thay cho tổng của mọi nhóm khác gộp lại, vốn làm nhóm cao nhất cũng thành "thấp hơn"; tỷ lệ vẫn so với mức chung của phần còn lại (#201).
+- Phần giải thích câu thường gọi số đo bằng tên tiếng Việt câu SQL đặt theo câu hỏi ("tổng số sinh viên rút học"), không còn "số dòng có mã định danh ..."; độ đo tỷ lệ hay trung bình theo nhóm không còn câu "chiếm X% tổng" (#201).
+- Prompt viết SQL dặn câu hỏi "có bao nhiêu" (sinh viên, khách hàng) đếm số giá trị khác nhau của cột khóa thay vì báo không có dữ liệu (#201).
+
 ### Fixed
 
+- Điều kiện lọc có câu con hay "hoặc" không còn in nguyên câu SQL vào câu trả lời và thẻ "Hệ thống đã hiểu là": hai vế "hoặc" đọc thành lời, câu con thành "theo một giá trị tính từ dữ liệu (xem câu SQL)" (#201).
+- Câu thường nối bảng (như orders với order_items): thẻ "Hệ thống đã hiểu là" và câu trả lời đọc hồ sơ cột của cả bảng nối, nên gọi số đo bằng mô tả tiếng Việt của cột, như "tổng doanh thu trước chiết khấu của mục hàng" thay cho "Tổng sales" (#201).
 - Câu hỏi ra kết quả toàn ô trống (ví dụ hỏi doanh thu của một năm không có dữ liệu): câu trả lời không còn cụt kiểu "Tổng Sales là ." mà nói rõ không có dữ liệu khớp; cảnh báo kèm khoảng thời gian dữ liệu có khi câu lọc theo thời gian; lời trả lời của mô hình được nhắc lại số có trong câu hỏi (năm, top N) mà không bị bước kiểm số loại.
 
 ## [0.2.0] - 2026-10-27

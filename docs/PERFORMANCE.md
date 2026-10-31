@@ -4,13 +4,17 @@
 chính:
 
 - Một câu hỏi thường mất khoảng 4 đến 4,5 giây, gồm 3 lượt gọi mô hình chạy nối tiếp (phân loại, viết SQL, viết lời
-  giải thích), thêm một lượt khi SQL phải sửa. Câu "vì sao" trên code hiện tại (có cổng chấm của #240) gồm 4 lượt
+  giải thích), thêm một lượt khi SQL phải sửa. Từ #241, lời do mô hình viết còn qua một lượt chấm: đo lại ngày 31/10
+  (mục Câu hỏi), lượt chấm mất trung vị 1,04 giây và khoảng 0,0003 USD mỗi câu. Câu "vì sao" trên code hiện tại (có cổng chấm của #240) gồm 4 lượt
   (phân loại, điền form, viết lời, chấm lời) và mất khoảng 5,7 giây. Gần hết thời gian là chờ mô hình: phần còn lại
   (đọc hồ sơ, guard, chạy SQL trên DuckDB, phân rã, ghi lịch sử) khoảng 60 đến 130 ms (hiệu hai trung vị).
 - Theo giá trả phí của mô hình này, một câu thường tốn khoảng 0,003 USD, một câu "vì sao" khoảng 0,005 USD. Gói miễn
   phí không tính tiền nhưng giới hạn số lượt gọi.
 - Lập hồ sơ cột sau khi chụp bảng: nhóm `orders` và `order_items` dùng được sau 8,5 giây thay vì 14,1 giây. Bảng
   `students` không nhanh hơn (5,1 giây trước, 5,5 giây sau) và tốn token ra gấp khoảng 2,4 lần.
+- Chụp bảng (#246): DuckDB đọc thẳng Postgres (`SOURCE_SNAPSHOT_MODE=direct`, nay là mặc định) nhanh hơn cách
+  `COPY` ra CSV: `sales.orders` 0,37 giây thay vì 0,90 giây, `sales.order_items` 0,45 thay vì 1,73 giây,
+  `edu.student_daily_clicks` (1,8 triệu dòng) 0,89 thay vì 15,9 giây; đĩa tạm ít hơn khoảng 3 đến 4 lần. Mục Chụp bảng.
 
 Số liệu dưới đây là trung vị của ít lần đo (ghi rõ ở từng bảng), trên một máy, trong một buổi. Thời gian trả lời của
 Gemini thay đổi theo tải: trong cùng buổi đo, có một lượt đo mà mỗi lượt gọi mất 7 đến 10 giây và có lượt bị trả lỗi
@@ -60,7 +64,31 @@ các câu SQL từng chiều của phân rã chạy cùng lúc; bước `explain
 | Câu thường | 4 | 3,87 s | 3,81 s | 3,25 | 7 272 | 519 | 0,0035 USD |
 | Câu "vì sao" | 3 | 5,66 s | 5,56 s | 4,0 | 7 958 | 1 011 | 0,0049 USD |
 
-Sau lượt đo này, #241 thêm cổng chấm (`judge`) cho lời của câu thường, nên câu thường có thêm một lượt gọi mô hình khi lời do mô hình viết; số của câu thường ở trên chưa gồm lượt đó và chưa đo lại.
+Sau lượt đo này, #241 thêm cổng chấm (`judge`) cho lời của câu thường: lời do mô hình viết có thêm một lượt gọi mô
+hình. Đo lại ngày 31/10/2026 tối, trên nhánh `feat/answer-clarity` (sau #243, chưa commit), cùng 5 câu thường, mỗi câu 2
+lần, nghỉ 12 giây giữa hai lần hỏi, chỉ một bản chạy. Khác với cách đo ở trên: backend build debug (`cargo run` của
+`make dev`), Postgres của ứng dụng chạy bằng Podman, các bảng `orders`, `order_items`, `customers`, `products` chụp từ
+database mẫu nạp lại bằng `load.sh` nên hồ sơ cột do mô hình viết lại. Vì build debug, cột "Tổng thời gian" không so
+được với bảng trên; số lượt gọi, token và thời gian từng lượt gọi thì so được.
+
+| Loại câu | Số câu | Tổng thời gian | Chờ mô hình | Lượt gọi | Token vào | Token ra | Chi phí mỗi câu |
+|---|---|---|---|---|---|---|---|
+| Câu thường | 10 | 6,34 s | 6,15 s | 4,1 | 7 453 | 499 | 0,0035 USD |
+
+Cả 10 câu `answered`, cả 10 lời do mô hình viết được chấm `match`; một câu ("Top 5 quốc gia có nhiều đơn nhất năm
+2016", lần hai) viết lời hai lần vì lần đầu trượt bước kiểm của code, nên trung bình 4,1 lượt. Theo loại việc:
+
+| Lượt gọi | Số lượt | Thời gian | Token vào | Token ra |
+|---|---|---|---|---|
+| `classify` | 10 | 1,41 s | 2 068 | 75 |
+| `sql` | 10 | 2,44 s | 3 733 | 273 |
+| `insight` | 11 | 1,06 s | 645 | 120 |
+| `judge` (chấm lời) | 10 | 1,04 s | 943 | 18 |
+
+Lượt chấm thêm trung vị 1,04 giây và trung bình 0,00033 USD mỗi câu. Trong buổi đo này Gemini chậm hơn buổi đo ở trên:
+`classify` mất 1,41 giây so với 1,22 giây, nên phần lớn chênh lệch của cột "Chờ mô hình" so với bảng trên (6,15 giây so
+với 3,81 giây) đến từ các lượt gọi vốn có, không chỉ từ lượt chấm. Một lượt đo trước đó cùng buổi, trên DataCo đầy đủ
+nạp từ CSV (180 519 dòng, một bảng), ra lượt chấm trung vị 0,82 giây, 917 token vào.
 
 Câu thứ năm ("Tỷ lệ giao trễ theo phương thức vận chuyển") lỗi 502 sau 61 giây: lượt viết SQL chờ hết
 `GEMINI_TIMEOUT_SECS` (60 giây) mà Gemini không trả lời, lần hỏi lại trả 503. Cùng lượt đo, phần cột của hồ sơ
@@ -107,6 +135,44 @@ có cột phân loại nào có danh sách giá trị nên không gọi phần n
 - Không làm: các lượt gọi của một câu hỏi phụ thuộc nhau (phân loại, rồi viết SQL hay điền form, rồi viết lời) nên
   vẫn nối tiếp; không chạy trước đường câu thường song song với form "vì sao", vì tốn gấp đôi lượt gọi cho mọi câu
   "vì sao".
+
+## Chụp bảng: copy và direct
+
+Đo ngày 31/10/2026 (#246), không gọi mô hình. Trung vị của 3 lần đo cho mỗi bảng và mỗi cách; đĩa tạm và bộ nhớ đỉnh ghi
+giá trị lớn nhất trong 3 lần, lần lượt là trung vị.
+
+| Bảng | Số dòng | Cách | Thời gian (3 lần) | Trung vị | Đĩa tạm đỉnh | Bộ nhớ đỉnh (trung vị) |
+|---|---|---|---|---|---|---|
+| `sales.orders` | 65 752 | copy | 0,91; 0,90; 0,88 s | 0,90 s | 12,5 MB | 106 MiB |
+| `sales.orders` | 65 752 | direct | 0,38; 0,37; 0,36 s | 0,37 s | 4,1 MB | 110 MiB |
+| `sales.order_items` | 180 519 | copy | 1,73; 1,65; 1,77 s | 1,73 s | 19,2 MB | 132 MiB |
+| `sales.order_items` | 180 519 | direct | 0,45; 0,44; 0,46 s | 0,45 s | 6,1 MB | 125 MiB |
+| `edu.student_daily_clicks` | 1 808 119 | copy | 15,92; 15,91; 19,20 s | 15,92 s | 51,4 MB | 507 MiB |
+| `edu.student_daily_clicks` | 1 808 119 | direct | 0,88; 1,05; 0,89 s | 0,89 s | 11,7 MB | 326 MiB |
+
+Hai cách cho cùng số dòng và cùng tên, kiểu từng cột trên cả ba bảng, trong cả 18 lần đo; không lần nào `direct` phải quay
+về `copy`. So từng dòng của hai cách nằm ở test `both_modes_give_the_same_types_and_rows`
+(`backend/src/service/sources/direct_tests.rs`), trên một bảng có đủ loại kiểu Postgres (số nguyên, số thực, `numeric`,
+ngày giờ, chữ có dấu phẩy, ngoặc kép và xuống dòng, `char(n)`, `uuid`, `jsonb`, mảng, `interval`, `bytea`, enum, NULL và
+chuỗi rỗng).
+
+Cách đo:
+
+- Máy như mục Cách đo ở trên. Backend build `--release` từ nhánh của #246 (commit `fba6129` cộng thay đổi đặt
+  `ISOLATION_LEVEL` khi ATTACH), chạy trên máy; Postgres của ứng dụng và database mẫu `company_demo`
+  (`data/postgres-demo`, `127.0.0.1:5440`, tài khoản `analyst`) trong Docker. Extension `postgres` của DuckDB `v1.5.6`,
+  nạp từ file (`make duckdb-extension`).
+- Mỗi lần đo: tạo lại database ứng dụng và `DATA_DIR` trống, khởi động một tiến trình backend mới (`LLM_PROVIDER=mock`,
+  `SEED_SAMPLE=false`, `SOURCE_MAX_ROWS=2000000` để chụp được `student_daily_clicks`, `MAX_UPLOAD_MB=4000`), tạo tài
+  khoản, thêm nguồn với `sslmode` `disable`, rồi gửi một request chụp một bảng. Hai cách chạy xen kẽ (copy rồi direct)
+  cho từng lần. Trong lúc đo, máy còn một bản build của nhánh khác chạy nền (load average 2 đến 5).
+- Thời gian: thời gian request `POST .../snapshot` phía người gọi, gồm chép bảng, đổi sang Parquet, lập hồ sơ cột lớp
+  cấu trúc và ghi phiên bản; không gồm lập hồ sơ bằng mô hình (chạy nền sau đó).
+- Đĩa tạm: tổng dung lượng file trong `DATA_DIR/staging`, đọc mỗi 20 ms trong lúc request chạy, lấy giá trị lớn nhất.
+  Với `copy` là file CSV cộng Parquet; với `direct` là Parquet đọc thẳng cộng Parquet cuối.
+- Bộ nhớ: `VmHWM` của tiến trình backend sau request, tức bộ nhớ đỉnh của cả tiến trình kể từ lúc khởi động (gồm cả
+  phần nền của backend, không riêng bước chụp).
+- Script đo không nằm trong repo; mỗi lần đo chỉ dùng HTTP API và `/proc`, làm lại được theo các bước trên.
 
 ## Đo lại
 

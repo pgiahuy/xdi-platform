@@ -7,9 +7,11 @@ Các bước:
 1. Danh sách bảng: bảng bắt đầu và các bảng chọn kèm, tối đa MAX_SNAPSHOT_TABLES. Chụp lại (dataset_id) lấy cả nhóm
    dataset nối với nhau qua quan hệ, cùng nguồn. Chụp lại cả dataset (snapshot_dataset, #257) lấy mọi bảng đã chụp từ
    database này, tối đa MAX_DATASET_TABLES.
-2. Chép: một kết nối, một giao dịch REPEATABLE READ, nên mọi bảng cùng là ảnh của một thời điểm. Mỗi bảng đếm dòng
-   (giới hạn SOURCE_MAX_ROWS) rồi COPY ra file riêng (giới hạn MAX_UPLOAD_MB), kèm kiểu cột Postgres và comment của
-   bảng, của cột (comments.rs). Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS.
+2. Chép: một kết nối, một giao dịch REPEATABLE READ. Đếm dòng mọi bảng trước (giới hạn SOURCE_MAX_ROWS), rồi chép mỗi
+   bảng ra file riêng (giới hạn MAX_UPLOAD_MB), kèm kiểu cột Postgres: COPY ra CSV trong chính giao dịch đó, hoặc với
+   SOURCE_SNAPSHOT_MODE=direct thì DuckDB đọc thẳng ra Parquet trong một giao dịch REPEATABLE READ riêng của nó
+   (direct.rs). Cách nào thì mọi bảng cũng là ảnh của một thời điểm. Comment của bảng, của cột (comments.rs) đọc bằng
+   sqlx trong giao dịch của bước này, cách chép nào cũng vậy. Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS.
 3. Nạp từng bảng. Bảng đã từng chụp từ nguồn này thì thêm phiên bản vào đúng dataset đó (một bảng nguồn, một dataset),
    nên bảng chiều dùng chung bởi hai bảng sự kiện không bị nhân đôi.
 4. Ghi quan hệ giữa các bảng trong nhóm, trong một giao dịch.
@@ -24,10 +26,12 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::comments;
-use super::postgres::{self, ConnectInfo, CsvCopy, SourceTable};
+use super::direct::{self, DirectError, DirectTable};
+use super::postgres::{self, ConnectInfo, SourceTable, TableCopy};
 use super::relations::{self, ForeignKey};
-use super::{find_table_in, load, recorded_table, source_file_label};
+use super::{find_table_in, load, pg_types, recorded_table, source_file_label};
 use crate::auth::Member;
+use crate::config::SnapshotMode;
 use crate::engine::store::{DatasetRelation, NewRelation, SourceRow};
 use crate::service::ingest::{self, SourceDescriptions, StagedFile, Staging, Upload, UploadResult};
 use crate::{error::AppError, state::AppState};
@@ -72,7 +76,7 @@ struct CopiedTable {
     table: SourceTable,
     staging: Staging,
     path: PathBuf,
-    copy: CsvCopy,
+    copy: TableCopy,
     descriptions: SourceDescriptions,
 }
 
@@ -266,7 +270,6 @@ async fn copy_group(
 ) -> Result<(Vec<CopiedTable>, Vec<ForeignKey>), AppError> {
     let limit = state.config.source_timeout;
     let max_rows = state.config.source_max_rows;
-    let max_bytes = state.config.max_upload_bytes;
     let copy = async {
         let mut conn = postgres::connect(info, limit).await?;
         let readable = postgres::list_tables(&mut conn).await?;
@@ -275,21 +278,15 @@ async fn copy_group(
             tables.push(find_table_in(&readable, &w.table)?);
         }
         postgres::begin_snapshot(&mut conn).await?;
-        let mut copied = Vec::new();
+        // Đếm hết các bảng trước khi chép bảng nào: một bảng quá trần thì từ chối ngay, không chép phí các bảng khác.
         for table in &tables {
             let rows = postgres::count_rows(&mut conn, table).await?;
             check_row_count(table, rows, max_rows)?;
-            let staging = Staging::new(&state.config.data_dir)?;
-            let path = staging.upload_path(0);
-            let copy = postgres::copy_to_csv(&mut conn, table, max_rows, max_bytes, &path).await?;
-            let descriptions = comments::read_descriptions(&mut conn, table).await?;
-            copied.push(CopiedTable {
-                table: table.clone(),
-                staging,
-                path,
-                copy,
-                descriptions,
-            });
+        }
+        let mut copied = copy_tables(state, info, &mut conn, &tables).await?;
+        // Comment đọc bằng sqlx trong giao dịch của conn, cách chép nào (COPY hay DuckDB) cũng vậy.
+        for c in &mut copied {
+            c.descriptions = comments::read_descriptions(&mut conn, &c.table).await?;
         }
         let mut keys = Vec::new();
         for table in &tables {
@@ -305,6 +302,83 @@ async fn copy_group(
                 .to_string(),
         )),
     }
+}
+
+/// Chép dữ liệu các bảng theo SOURCE_SNAPSHOT_MODE. direct không dùng được (thiếu file extension, lệch phiên bản,
+/// libpq không kết nối được) thì ghi log lý do và chép bằng COPY, trong cùng giao dịch của conn.
+async fn copy_tables(
+    state: &AppState,
+    info: &ConnectInfo,
+    conn: &mut sqlx::PgConnection,
+    tables: &[SourceTable],
+) -> Result<Vec<CopiedTable>, AppError> {
+    if state.config.source_snapshot_mode == SnapshotMode::Direct {
+        match copy_direct(state, info, conn, tables).await {
+            Ok(copied) => return Ok(copied),
+            Err(DirectError::Failed(e)) => return Err(e),
+            Err(DirectError::Unavailable(reason)) => tracing::warn!(
+                reason = %reason,
+                "SOURCE_SNAPSHOT_MODE=direct is unavailable, copying tables with COPY instead"
+            ),
+        }
+    }
+    let mut copied = Vec::new();
+    for table in tables {
+        let staging = Staging::new(&state.config.data_dir)?;
+        let path = staging.upload_path(0);
+        let copy = postgres::copy_to_csv(
+            conn,
+            table,
+            state.config.source_max_rows,
+            state.config.max_upload_bytes,
+            &path,
+        )
+        .await?;
+        copied.push(CopiedTable {
+            table: table.clone(),
+            staging,
+            path,
+            copy,
+            descriptions: SourceDescriptions::default(),
+        });
+    }
+    Ok(copied)
+}
+
+/// Cách direct (direct.rs): kiểu cột vẫn đọc bằng sqlx từ catalog, DuckDB chép dữ liệu.
+async fn copy_direct(
+    state: &AppState,
+    info: &ConnectInfo,
+    conn: &mut sqlx::PgConnection,
+    tables: &[SourceTable],
+) -> Result<Vec<CopiedTable>, DirectError> {
+    let mut stagings = Vec::new();
+    let mut wanted = Vec::new();
+    for table in tables {
+        let column_types = pg_types::column_types(conn, &postgres::select_all(table))
+            .await
+            .map_err(DirectError::Failed)?;
+        let staging = Staging::new(&state.config.data_dir).map_err(DirectError::Failed)?;
+        wanted.push(DirectTable {
+            table: table.clone(),
+            column_types,
+            out: staging.upload_path(0),
+        });
+        stagings.push(staging);
+    }
+    let copies = direct::copy_tables(&state.config, info, wanted).await?;
+    Ok(tables
+        .iter()
+        .zip(stagings)
+        .zip(copies)
+        .map(|((table, staging), copy)| CopiedTable {
+            table: table.clone(),
+            path: staging.upload_path(0),
+            staging,
+            copy,
+            descriptions: SourceDescriptions::default(),
+        })
+        .collect())
 }
 
 /// Bước 3 cho một bảng: nạp file đã chép thành phiên bản mới của dataset của bảng (hay dataset mới), rồi ghi bảng nguồn
@@ -351,6 +425,7 @@ async fn ingest_table(
         }],
         sheets: Vec::new(),
         database_source: Some(row.id),
+        format: Some(copied.copy.format),
         descriptions: copied.descriptions,
     };
     let result = ingest::upload(state, member, copied.staging, upload).await?;

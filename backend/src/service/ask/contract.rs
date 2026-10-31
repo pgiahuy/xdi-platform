@@ -126,6 +126,12 @@ pub struct AskResponse {
     /// Kind of the question chosen by the classify step; null when the question stopped before that step.
     #[schema(required)]
     pub question_type: Option<QuestionType>,
+    /// Dates the data covers for the time column the answer relies on: the first column of the table's time columns that
+    /// the SQL that ran names, otherwise the table's first time column. Read from the column profile of the whole table
+    /// (a user limited to some rows still sees the range of the whole table). Null for a question that is not
+    /// `answered`, or when the table has no usable time column.
+    #[schema(required)]
+    pub data_range: Option<DataRange>,
     /// Questions back to the user, only for `needs_choice`. Every entry has `selected` null.
     pub clarifications: Vec<Choice>,
     /// What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a
@@ -415,6 +421,22 @@ pub struct Warning {
     pub code: WarningCode,
     /// Text for the end user (Vietnamese).
     pub message: String,
+}
+
+/// Dates the data covers, see `AskResponse.data_range`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
+pub struct DataRange {
+    /// The time column, as named in the dataset.
+    pub column: String,
+    /// Vietnamese name of the column from its profile; null when the profile has none.
+    #[schema(required)]
+    pub label: Option<String>,
+    /// First and last day with data, `YYYY-MM-DD`.
+    pub from: String,
+    pub to: String,
+    /// True when the SQL that ran filters on a date after the last day with data: the period asked about is not fully
+    /// covered (or not covered at all).
+    pub partial: bool,
 }
 
 /// Kind of question by the purpose of the analysis, as the classify step decided: `quantitative` (a number, a list or

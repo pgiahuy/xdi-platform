@@ -30,6 +30,9 @@ pub enum FileFormat {
     /// Bản chụp một bảng database: file CSV do lệnh COPY của Postgres ghi (service/sources/), kiểu từng cột lấy từ
     /// Postgres và nằm trong InputFile.column_types. Không bao giờ đoán từ tên file.
     DatabaseCsv,
+    /// Bản chụp một bảng database do DuckDB đọc thẳng Postgres và ghi Parquet (service/sources/direct.rs), kiểu cột đã
+    /// ép theo đúng bảng kiểu của DatabaseCsv. Đọc như Parquet; không bao giờ đoán từ tên file.
+    DatabaseParquet,
 }
 
 impl FileFormat {
@@ -222,7 +225,7 @@ fn open_reader(
 ) -> Result<(String, Vec<Column>, Option<Utf8Copy>), AppError> {
     let path = sql_string(&path_text(&file.path)?);
     match file.format {
-        FileFormat::Parquet => {
+        FileFormat::Parquet | FileFormat::DatabaseParquet => {
             let reader = format!("read_parquet({path})");
             let columns = describe(conn, &reader)
                 .map_err(|e| user_file_error(&file.label(), "đọc Parquet", e))?;

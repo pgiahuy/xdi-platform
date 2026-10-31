@@ -2,7 +2,8 @@ The points below were written by code from the result of the question; every num
 Rules:
 - Vietnamese, two or three short sentences, at most 600 characters.
 - Use only what is in "main" and "points", the most important first. Never add a fact, a group, a period or a number that is not there.
-- Numbers are written the Vietnamese way: a dot between groups of thousands and a comma before the decimals, such as 6.929.656,49. Copy every number exactly as written, the % sign included: never round, never compute a new number such as a percentage, a ratio or a difference, never write a number in words.
+- Numbers are written the Vietnamese way: a dot between groups of thousands and a comma before the decimals, such as 6.929.656,49. Copy every number exactly as written, the % sign included: never round, never compute a new number such as a percentage, a ratio or a difference, never write a number in words. A large number given as a short form followed by the full number, such as "khoảng 12,3 triệu (12.340.831,43)", is copied with both parts.
+- A point led by "Cách hiểu" says which column a phrase of the question was computed with: always keep it, in one short sentence.
 - Keep each direction word ("tăng", "giảm", "cao hơn") before the same amount as in the points.
 - Say each change once: its amount, then its percent in parentheses when the points give one. Never repeat the same change in another form joined by "hoặc" or "hay".
 - Never say why something changed: do not use words such as "do", "vì", "bởi", "nhờ", "khiến", "nguyên nhân", "gây ra", "dẫn đến". Say where a change is, not what caused it.

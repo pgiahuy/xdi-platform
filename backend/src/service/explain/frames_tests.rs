@@ -62,16 +62,21 @@ fn group_without_base_is_compared_with_the_rest() {
 fn rest_is_named_by_the_column_meaning() {
     let mut labels = HashMap::new();
     assert_eq!(
-        GroupBase::Rest.build_label("Market", &labels),
+        GroupBase::Rest.build_label("Market", &labels, false),
         "các nhóm còn lại"
     );
     labels.insert("Market".to_string(), "Thị trường".to_string());
     assert_eq!(
-        GroupBase::Rest.build_label("Market", &labels),
+        GroupBase::Rest.build_label("Market", &labels, false),
         "các thị trường còn lại"
     );
+    // So với trung bình các nhóm còn lại (độ đo cộng được, explain/rest_average.rs) thì nhãn nói rõ là trung bình.
     assert_eq!(
-        GroupBase::Value("LATAM".to_string()).build_label("Market", &labels),
+        GroupBase::Rest.build_label("Market", &labels, true),
+        "trung bình các thị trường còn lại"
+    );
+    assert_eq!(
+        GroupBase::Value("LATAM".to_string()).build_label("Market", &labels, true),
         "LATAM"
     );
     // Dấu nháy trong giá trị nhóm in thành chuỗi SQL đúng, không cắt được câu.

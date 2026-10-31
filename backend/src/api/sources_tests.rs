@@ -50,7 +50,7 @@ impl Write for LogBuffer {
 
 pub(super) struct Setup {
     pub db: TestDb,
-    data: std::path::PathBuf,
+    pub data: std::path::PathBuf,
     pub app: axum::Router,
     pub lan: String,
     pub minh: String,
@@ -78,6 +78,16 @@ pub(super) async fn start_with_llm(
     key: Option<&str>,
     llm: std::sync::Arc<dyn crate::engine::llm::LlmProvider>,
     max_rows: Option<u64>,
+) -> Option<Setup> {
+    start_with_snapshot_mode(key, llm, max_rows, None).await
+}
+
+/// Như start_with_llm, kèm SOURCE_SNAPSHOT_MODE và đường dẫn extension postgres của DuckDB (source_snapshot_tests.rs).
+pub(super) async fn start_with_snapshot_mode(
+    key: Option<&str>,
+    llm: std::sync::Arc<dyn crate::engine::llm::LlmProvider>,
+    max_rows: Option<u64>,
+    snapshot_mode: Option<(crate::config::SnapshotMode, std::path::PathBuf)>,
 ) -> Option<Setup> {
     let db = fresh_database().await?;
     let url = crate::engine::store::test_support::database_url().unwrap();
@@ -113,6 +123,10 @@ pub(super) async fn start_with_llm(
         c.source_allowed_hosts = vec![allowed];
         if let Some(max_rows) = max_rows {
             c.source_max_rows = max_rows;
+        }
+        if let Some((mode, extension)) = snapshot_mode {
+            c.source_snapshot_mode = mode;
+            c.source_postgres_extension = extension;
         }
     };
     let app = app_with_llm(db.store.clone(), Some(CODE), configure, llm);

@@ -15,6 +15,7 @@
     ],
     "clarifications": [],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+    "data_range": null,
     "explanation": null,
     "insight": null,
     "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
@@ -106,6 +107,7 @@
       }
     ],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+    "data_range": null,
     "explanation": null,
     "insight": null,
     "message": "Doanh thu tính bằng cột nào?",
@@ -145,6 +147,7 @@
     "choices": [],
     "clarifications": [],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+    "data_range": null,
     "explanation": null,
     "insight": null,
     "message": "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.",
@@ -202,7 +205,7 @@
     "warnings": []
   },
   "simple": {
-    "answer_text": "Có 5 dòng; cao nhất là Europe với 10.845.230,42.",
+    "answer_text": "Europe có tổng doanh thu cao nhất: khoảng 10,8 triệu (10.845.230,42), tiếp theo là LATAM, Pacific Asia, USCA và Africa.",
     "answer_text_by_model": false,
     "chart": {
       "kind": "bar",
@@ -228,6 +231,7 @@
     ],
     "clarifications": [],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+    "data_range": null,
     "explanation": null,
     "insight": {
       "kind": "groups",
@@ -455,6 +459,7 @@
     ],
     "clarifications": [],
     "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+    "data_range": null,
     "explanation": {
       "base": {
         "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01'",

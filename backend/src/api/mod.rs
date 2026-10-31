@@ -67,6 +67,8 @@ mod security_headers;
 mod source_comments_tests;
 #[cfg(test)]
 mod source_relations_tests;
+#[cfg(test)]
+mod source_snapshot_tests;
 mod sources;
 #[cfg(test)]
 mod sources_tests;

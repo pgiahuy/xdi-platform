@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ingest.rs - nạp dữ liệu: đổi file người dùng gửi lên thành một phiên bản dataset, kèm hồ sơ cột lớp cấu trúc
-(service/profile.rs). Bảng của nguồn database đi cùng đường này: service/sources/ chép bảng ra một file CSV rồi gọi
-upload với database_source. Xem docs/ARCHITECTURE.md mục 5 và 7. Phần riêng của file
+(service/profile.rs). Bảng của nguồn database đi cùng đường này: service/sources/ chép bảng ra một file (CSV của COPY
+hay Parquet của DuckDB) rồi gọi upload với database_source và format. Xem docs/ARCHITECTURE.md mục 5 và 7. Phần riêng của file
 Excel (chọn sheet, đổi sheet sang CSV) ở service/excel.rs.
 
 Các bước, sắp để lỗi ở bước đầu không để lại gì:
@@ -108,9 +108,12 @@ pub struct Upload {
     pub files: Vec<StagedFile>,
     /// Sheet cần nạp khi file là Excel; rỗng thì file phải chỉ có một sheet.
     pub sheets: Vec<String>,
-    /// Có thì files là một file CSV chép từ bảng của nguồn database này (service/sources/): dataset mới gắn vào nguồn
+    /// Có thì files là một file chép từ bảng của nguồn database này (service/sources/): dataset mới gắn vào nguồn
     /// đó thay vì một nguồn file riêng, phiên bản ghi source_kind postgres.
     pub database_source: Option<Uuid>,
+    /// Định dạng backend đã biết chắc (bản chụp database: DatabaseCsv hay DatabaseParquet). None: đoán theo đuôi tên file
+    /// người dùng gửi.
+    pub format: Option<FileFormat>,
     /// Mô tả bảng và cột đọc từ database nguồn (COMMENT ON); rỗng với file nạp tay.
     pub descriptions: SourceDescriptions,
 }
@@ -201,10 +204,10 @@ pub async fn upload(
     upload: Upload,
 ) -> Result<UploadResult, AppError> {
     let ws = &member.workspace;
-    // Bản chụp bảng database có tên postgres://..., không có đuôi file để đoán định dạng; service/sources/ luôn ghi CSV
-    // bằng COPY, kèm kiểu từng cột.
-    let format = match upload.database_source {
-        Some(_) => FileFormat::DatabaseCsv,
+    // Bản chụp bảng database có tên postgres://..., không có đuôi file để đoán định dạng; service/sources/ ghi rõ định
+    // dạng (CSV của COPY hay Parquet của DuckDB) trong upload.format.
+    let format = match upload.format {
+        Some(format) => format,
         None => common_format(&upload.files)?,
     };
     reject_repeated_files(&upload.files)?;
@@ -648,7 +651,7 @@ fn source_kind(format: FileFormat) -> SourceKind {
         FileFormat::Csv => SourceKind::Csv,
         FileFormat::Parquet => SourceKind::Parquet,
         FileFormat::Xlsx => SourceKind::Xlsx,
-        FileFormat::DatabaseCsv => SourceKind::Postgres,
+        FileFormat::DatabaseCsv | FileFormat::DatabaseParquet => SourceKind::Postgres,
     }
 }
 

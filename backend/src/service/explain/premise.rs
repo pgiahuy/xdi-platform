@@ -14,6 +14,7 @@ use crate::service::ask::phrases::fold;
 use crate::service::explain::check::{PlanSlices, WhyPlan};
 use crate::service::explain::number::{build_change_parts, MAX_FRACTION_DIGITS};
 use crate::service::explain::ratio::RATE_SCALE;
+use crate::service::explain::rest_average::averages_rest;
 
 /// Hướng người hỏi giả định.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,7 +101,7 @@ pub fn build_premise_labels(plan: &WhyPlan) -> PremiseLabels {
             compare,
             ..
         } => (
-            base.build_label(column, &plan.labels),
+            base.build_label(column, &plan.labels, averages_rest(plan)),
             compare.clone(),
             false,
         ),
