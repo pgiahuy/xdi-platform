@@ -149,8 +149,10 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `DEMO_DB_CONTAINER`, `DEMO_DB_VOLUME` | `xdi-demo-db`, `xdi-demo-db_demo-db-data` | Tên container và volume của database mẫu khi chạy bằng `--profile demo`; mặc định trùng cách chạy riêng ở `data/postgres-demo`, nên dữ liệu đã nạp dùng được ngay. Chỉ đổi khi cần một bản thứ hai tách biệt |
 | `SOURCE_SECRET_KEY` | trống (tự sinh) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`). Để trống thì lần đầu khởi động backend tự sinh một khóa ngẫu nhiên, ghi vào `DATA_DIR/source_secret.key` (quyền 0600; compose: volume `xdidata`) và các lần sau đọc lại file đó; log ghi một dòng khi sinh, không in khóa. Mất file đó (xóa volume, `docker compose down -v`) là mất mật khẩu của mọi nguồn đã lưu: phải thêm lại nguồn. `make backup` chép cả file này, nên ai có bản sao lưu là giải mã được thông tin kết nối. Bản chạy thật nên đặt biến này và giữ khóa ngoài máy chủ. Đổi khóa thì phải thêm lại các nguồn |
 | `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối, trừ đúng máy và cổng của `SAMPLE_DATABASE_URL` (chỉ cổng đó) luôn được phép. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp: kết nối mặc định chụp mọi bảng tài khoản đó đọc được |
-| `SOURCE_MAX_ROWS`, `SOURCE_TIMEOUT_SECS` | `1000000`, `300` | Trần số dòng của một bảng và thời gian một lần chụp; bảng quá trần dòng chỉ lưu metadata (cột, kiểu, khóa, mô tả). File chép ra của một bảng theo `MAX_UPLOAD_MB` |
-| `SOURCE_SNAPSHOT_MAX_MB` | `2048` | Trần tổng dung lượng (Postgres báo, `pg_table_size`, chưa nén) của các bảng chép dữ liệu trong một lần chụp; mọi file tạm của lần chụp cùng nằm trên đĩa tới khi nạp xong. Bảng nhỏ được lấy trước, bảng không còn chỗ chỉ lưu metadata và chụp riêng được sau ([Dữ liệu](DATA.md), mục Chụp mọi bảng đọc được) |
+| `SOURCE_TABLE_MAX_MB` | `2048` | Trần dung lượng của một bảng khi chụp (Postgres báo, `pg_table_size`, chưa nén), xét trước khi chép; bảng lớn hơn chỉ lưu metadata (cột, kiểu, khóa, mô tả). File chép ra của view (không có dung lượng trước) cũng theo trần này |
+| `SOURCE_SNAPSHOT_MAX_MB` | `4096` | Trần tổng dung lượng (như trên) của các bảng chép dữ liệu trong một lần chụp; mọi file tạm của lần chụp cùng nằm trên đĩa tới khi nạp xong. Bảng nhỏ được lấy trước, bảng không còn chỗ chỉ lưu metadata và chụp riêng được sau ([Dữ liệu](DATA.md), mục Chụp mọi bảng đọc được) |
+| `SOURCE_TIMEOUT_SECS` | `300` | Thời gian tối đa của bước chép một lần chụp (kết nối, đọc mọi bảng); quá thì bỏ cả lần chụp, không giữ gì ghi dở. Số đo để đặt ba trần này ở [PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn |
+| `SOURCE_MAX_ROWS` | trống (không trần) | Trần số dòng của một bảng, chỉ khi đặt; bảng quá trần chỉ lưu metadata. File `.env` chép từ `.env.example` trước bản này có `SOURCE_MAX_ROWS=1000000`: xóa dòng đó để bỏ trần dòng |
 | `SOURCE_RESNAPSHOT_HOURS` | trống (tắt) | Chụp lại mọi nguồn database theo lịch, mỗi N giờ, trong backend; bảng không đổi không tạo phiên bản mới. Trống hay `0` là tắt, admin bấm chụp lại. Vòng đầu chạy sau N giờ kể từ lúc backend khởi động |
 | `SOURCE_SNAPSHOT_MODE` | `direct` | Cách chép bảng khi chụp: `direct` để DuckDB đọc thẳng Postgres bằng extension `postgres` và ghi Parquet một bước, `copy` để Postgres `COPY` ra file CSV tạm rồi DuckDB đổi sang Parquet. Cùng kiểu cột, cùng dữ liệu; số đo ở [PERFORMANCE.md](PERFORMANCE.md). `direct` mà extension không nạp được (thiếu file, lệch bản DuckDB) hay libpq của extension không kết nối được thì log ghi một cảnh báo và lần chụp dùng `copy` |
 | `SOURCE_POSTGRES_EXTENSION` | `/usr/local/lib/xdi/postgres_scanner.duckdb_extension` | File extension `postgres` của DuckDB cho `direct`. Image Docker có sẵn file ở đường dẫn này; backend chỉ nạp từ file, không bao giờ tải extension lúc chạy (mục 2) |
@@ -605,10 +607,11 @@ sao"). Làm trước bước 2:
    thường. Nạp lại dữ liệu sau này thì `docker compose rm -sf demo-db` ở gốc repo trước khi chạy `load.sh`.
 
 Khi bước 2 tạo xong workspace đầu tiên, backend thêm hai dataset, `sales_demo` và `edu_demo`, mỗi dataset một database,
-và chụp mọi bảng tài khoản `analyst` đọc được (#247): 12 bảng có dữ liệu kèm 11 quan hệ: `sales_demo` (`order_items`, `orders`, `customers`, `products`, `categories`, `departments`) và `edu_demo` (`students`,
+và chụp mọi bảng tài khoản `analyst` đọc được (#247), kèm quan hệ: `sales_demo` (`order_items`, `orders`, `customers`, `products`, `categories`, `departments`) và `edu_demo` (`students`,
 `courses`, `registrations`, `assessments`, `student_assessments`, `vle_materials`), kèm chỉ số mẫu "Doanh thu", "Lợi
-nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. `edu.student_daily_clicks` (1,8 triệu dòng) quá
-`SOURCE_MAX_ROWS` mặc định nên chỉ lưu metadata; câu hỏi cần nó được báo đúng tên bảng. Đo trên máy dev ngày 31/10/2026: bước tạo tài khoản quản trị kèm chụp 12 bảng
+nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. Từ khi không còn trần dòng mặc
+định, `edu.student_daily_clicks` (1,8 triệu dòng) cũng được chụp, cùng khóa ngoại của nó tới `students`: 13 bảng, 12
+quan hệ; trước đó bảng này chỉ lưu metadata. Đo trên máy dev ngày 31/10/2026 (khi còn trần dòng): bước tạo tài khoản quản trị kèm chụp 12 bảng
 mất 5,4 giây (đo trước #246, chép bằng `copy`, một database `company_demo`); sau khi tách hai nguồn, chép bằng
 `direct`, đo một lần qua compose `--profile demo`: 4,5 giây. Câu mẫu của các bảng này nằm trong `backend/src/engine/llm/mock_answers_database.json` và hiện thành câu
 gợi ý của dataset, ví dụ "Tỷ lệ bỏ học theo môn học" và "Số sinh viên theo kết quả cuối khóa" trên `students`, "Điểm
@@ -647,7 +650,8 @@ tay lỗi thì báo lỗi chứ không quay về kết nối thường; trước
 `require` khi máy chủ bắt buộc TLS, `verify-full` để kiểm chứng chỉ máy chủ (kèm ô **Chứng chỉ CA** cho CA riêng của tổ
 chức; bảng ở [Dữ liệu](DATA.md), mục Nguồn database). Bấm **Kết nối**: backend thử kết nối trước khi lưu. Kết nối xong, khung
 liệt kê mọi bảng, view tài khoản đọc được, nhóm theo schema, tick sẵn, mỗi bảng kèm số dòng ước lượng, dung lượng, số
-cột, comment, và nhãn **Quá trần dòng, chỉ lưu cấu trúc** khi bảng quá `SOURCE_MAX_ROWS`. Bỏ tick bảng không cần (hay
+cột, comment, và nhãn **Quá trần dung lượng, chỉ lưu cấu trúc** khi riêng bảng đã quá `SOURCE_TABLE_MAX_MB` (hay
+**Quá trần dòng, chỉ lưu cấu trúc** khi admin đặt `SOURCE_MAX_ROWS` và bảng quá trần đó). Bỏ tick bảng không cần (hay
 **Chọn hết**, **Bỏ hết** cho cả schema); bỏ tick một bảng mà bảng đang tick trỏ tới thì khung báo ngay bảng nào mất
 quan hệ. Bấm **Chụp N bảng**: mọi bảng chụp trong một giao dịch, xong thì khung ghi bảng đã chụp, bảng chỉ lưu cấu trúc
 kèm lý do. Nguồn đã chụp rồi thì **Chụp thêm bảng** mở lại danh sách, tick sẵn các bảng nguồn đang giữ. Thẻ dataset của

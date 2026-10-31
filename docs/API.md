@@ -80,7 +80,7 @@ Lỗi trả cùng một dạng body (`ErrorBody`), trừ hai ngoại lệ ở cu
 | `unauthorized` | 401 | Chưa đăng nhập, phiên hết hạn, sai email hoặc mật khẩu |
 | `forbidden` | 403 | Đã đăng nhập nhưng không đủ quyền (mục Vai); sai mã thiết lập hoặc bản cài đã thiết lập |
 | `not_found` | 404 | Đường dẫn dưới `/api` không tồn tại, workspace mình không thuộc, dataset không có; tham số đường dẫn không đọc được (ví dụ `%FF`) |
-| `too_large` | 413 | Tổng dung lượng một lần nạp vượt `MAX_UPLOAD_MB`; file Excel vượt trần kích thước giải nén, bảng chuỗi dùng chung hay dung lượng CSV ghi ra ([Dữ liệu](DATA.md)) |
+| `too_large` | 413 | Tổng dung lượng một lần nạp vượt `MAX_UPLOAD_MB`; file chép ra khi chụp bảng vượt `SOURCE_TABLE_MAX_MB`; file Excel vượt trần kích thước giải nén, bảng chuỗi dùng chung hay dung lượng CSV ghi ra ([Dữ liệu](DATA.md)) |
 | `internal` | 500 | Lỗi phía máy chủ, ví dụ mất kết nối Postgres |
 | `not_implemented` | 501 | Route đã có trong đặc tả nhưng chưa cài đặt: đăng nhập demo |
 | `upstream` | 502 | Dịch vụ mô hình ngôn ngữ lỗi, quá tải hoặc không trả lời |
@@ -377,7 +377,7 @@ hỏng, không ghi được) thì thêm và dùng nguồn trả 503 (`unavailabl
 - `POST .../sources/{id}/test`: kết nối lại, trả số bảng và view đọc được.
 - `GET .../sources/{id}/tables`: mọi bảng và view tài khoản đọc được (`SourceTableInfo`): `schema`, `name`, `kind`,
   `table` (`schema.table`), `estimated_rows`, `size_bytes`, `comment`, `column_count`, `references` và `referenced_by`
-  (khóa ngoại ra, vào giữa các bảng đọc được), `is_referenced` (bảng khác trỏ tới nó), `over_row_limit`, `state`
+  (khóa ngoại ra, vào giữa các bảng đọc được), `is_referenced` (bảng khác trỏ tới nó), `over_limit`, `state`
   (`snapshotted`, `metadata_only` hay null), `dataset_id`, `reason`. Ý nghĩa từng trường ở
   [DATA.md](DATA.md#chụp-mọi-bảng-đọc-được).
 - `POST .../sources/{id}/relations`: thân `{"table": "schema.table"}`. Trả `column_count` (cột đọc được của bảng),
@@ -390,10 +390,10 @@ hỏng, không ghi được) thì thêm và dùng nguồn trả 503 (`unavailabl
   `POST .../catalog/{id}/snapshot`. Mỗi bảng thành một bảng của dataset là nguồn này; bảng đã chụp từ nguồn này thì
   thêm phiên bản vào bảng cũ. Không giới hạn số bảng. Response `SnapshotResponse`: `datasets` (mỗi bảng chép được một
   `UploadResult`, `created: false` khi bảng không đổi), `relations` (quan hệ của các bảng này, dạng `DatasetRelation`),
-  `metadata_only` (bảng quá `SOURCE_MAX_ROWS` hay trần `SOURCE_SNAPSHOT_MAX_MB`: `table`, `cause` là `row_limit` hay
-  `size_limit`, `reason`, `row_count`, `size_bytes`, `description`, `columns`, `dataset_id` của lần chụp trước nếu có)
+  `metadata_only` (bảng quá `SOURCE_TABLE_MAX_MB`, trần tổng `SOURCE_SNAPSHOT_MAX_MB` hay `SOURCE_MAX_ROWS` khi đặt:
+  `table`, `cause` là `size_limit` hay `row_limit`, `reason`, `row_count`, `size_bytes`, `description`, `columns`, `dataset_id` của lần chụp trước nếu có)
   và `unreadable` (chỉ khi chụp lại cả dataset). 201 khi có ít nhất một phiên bản mới, 200 khi không bảng nào đổi; 400
-  khi có bảng không đọc được; 413 khi file chép ra của một bảng quá `MAX_UPLOAD_MB`.
+  khi có bảng không đọc được; 413 khi file chép ra của một view quá `SOURCE_TABLE_MAX_MB`.
 - `DELETE .../sources/{id}`: 204; 400 khi còn dataset chụp từ nguồn này.
 
 Bảng trả qua route cũ (kiểu `Dataset`) có thêm `parent_id` (dataset chứa nó), `row_count`, `description`, `source_kind`,

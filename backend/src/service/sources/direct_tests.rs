@@ -81,7 +81,7 @@ async fn copy_with_copy(
     dir: &Path,
 ) -> (TableCopy, PathBuf) {
     let csv = dir.join("copy.csv");
-    let copy = postgres::copy_to_csv(conn, table, 1_000_000, 1 << 30, &csv)
+    let copy = postgres::copy_to_csv(conn, table, Some(1_000_000), 1 << 30, &csv)
         .await
         .unwrap();
     let out = materialize(&csv, &copy, dir.join("copy-parquet"));

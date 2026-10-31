@@ -191,7 +191,7 @@ Ai ghi: backend, lúc chụp hay nạp; lớp ngữ nghĩa chạy nền điền 
 
 ### source_metadata_tables
 
-Bảng của một nguồn database chỉ có cấu trúc, chưa có dữ liệu: quá `SOURCE_MAX_ROWS` dòng (`row_limit`) hay cộng vào thì
+Bảng của một nguồn database chỉ có cấu trúc, chưa có dữ liệu: quá `SOURCE_MAX_ROWS` dòng khi đặt (`row_limit`), quá `SOURCE_TABLE_MAX_MB` hay cộng vào thì
 quá `SOURCE_SNAPSHOT_MAX_MB` (`size_limit`). Không có dòng `datasets` cho các bảng này. Câu hỏi cần bảng đó thì luồng hỏi
 nêu đúng tên bảng và nói nó chưa được chụp ([DATA.md](DATA.md), mục Chụp mọi bảng đọc được).
 

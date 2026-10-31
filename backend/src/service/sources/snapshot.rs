@@ -6,8 +6,8 @@ lịch chụp lại (schedule.rs) gọi `snapshot_dataset`. Chép bảng ở cop
 
 Các bước:
 1. Bảng nào (#247): mặc định mọi bảng, view tài khoản đọc được, nên phạm vi dữ liệu là quyền SELECT của tài khoản; admin
-   gửi `tables` khi bỏ tick bớt. Không giới hạn số bảng; trần là SOURCE_MAX_ROWS từng bảng và SOURCE_SNAPSHOT_MAX_MB
-   cả lần (plan.rs). Chụp lại cả dataset lấy mọi bảng nguồn đang giữ: bảng đã thành dataset và bảng chỉ có metadata;
+   gửi `tables` khi bỏ tick bớt. Không giới hạn số bảng; trần là dung lượng: SOURCE_TABLE_MAX_MB từng bảng và
+   SOURCE_SNAPSHOT_MAX_MB cả lần, cộng SOURCE_MAX_ROWS từng bảng khi admin đặt (plan.rs). Chụp lại cả dataset lấy mọi bảng nguồn đang giữ: bảng đã thành dataset và bảng chỉ có metadata;
    bảng admin bỏ tick không nằm trong đó nên vẫn ở ngoài.
    Chụp lại một nhóm (dataset_id) lấy cả nhóm dataset nối với nhau qua quan hệ, cùng nguồn.
 2. Chép trong một giao dịch (copy.rs). Bảng quá trần không chép dòng nào: cột, kiểu, khóa, mô tả ghi vào
@@ -59,7 +59,8 @@ pub struct SnapshotResponse {
     pub datasets: Vec<UploadResult>,
     /// Foreign-key relations recorded for these datasets (both ends snapshotted from this source).
     pub relations: Vec<DatasetRelation>,
-    /// Tables over SOURCE_MAX_ROWS or the SOURCE_SNAPSHOT_MAX_MB total: no rows copied, metadata kept.
+    /// Tables over SOURCE_TABLE_MAX_MB, the SOURCE_SNAPSHOT_MAX_MB total, or SOURCE_MAX_ROWS when set: no rows copied,
+    /// metadata kept.
     pub metadata_only: Vec<MetadataOnlyTable>,
     /// Tables this source held that the account can no longer read (re-snapshot only); their datasets keep their
     /// last version.
@@ -74,7 +75,7 @@ pub struct MetadataOnlyTable {
     pub cause: SkipCause,
     /// Why, in Vietnamese, with the setting to change.
     pub reason: String,
-    /// Rows counted, or estimated by Postgres when far over SOURCE_MAX_ROWS.
+    /// Rows estimated by Postgres, or counted when SOURCE_MAX_ROWS is set; null when Postgres has no statistics yet.
     #[schema(required)]
     pub row_count: Option<i64>,
     /// Size reported by Postgres; null for views.
@@ -324,7 +325,7 @@ async fn record_metadata_only(
             table: table.clone(),
             cause: s.skipped.cause,
             reason,
-            row_count: Some(s.skipped.candidate.rows.value()),
+            row_count: s.skipped.candidate.rows.map(|r| r.value()),
             size_bytes: s.skipped.candidate.size_bytes,
             description: s.description,
             columns: s.columns,

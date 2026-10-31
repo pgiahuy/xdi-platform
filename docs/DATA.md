@@ -138,10 +138,12 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   Cột không có comment vẫn nhận mô tả do mô hình viết (nguồn `model`) như cũ. Lớp ngữ nghĩa không viết lại và không ghi
   đè mô tả nguồn `database` (mục Hồ sơ lớp ngữ nghĩa). Comment tính vào hash của bản chụp khi bảng có ít nhất một
   comment: chỉ sửa comment rồi chụp lại cũng ra phiên bản mới mang comment mới; bảng không có comment giữ hash như trước.
-- Giới hạn: `SOURCE_MAX_ROWS` dòng cho mỗi bảng và `SOURCE_SNAPSHOT_MAX_MB` cho tổng dung lượng các bảng chép trong
-  một lần chụp (mục Chụp mọi bảng đọc được); bảng vượt trần không bị chụp thiếu mà chỉ lưu metadata. `MAX_UPLOAD_MB`
-  cho file chép ra của mỗi bảng (CSV với `copy`, Parquet nén với `direct`, nên cùng một bảng `direct` chịu được bảng lớn
-  hơn), quá thì từ chối cả lần chụp; `SOURCE_TIMEOUT_SECS` cho cả lần chụp. Không giới hạn số bảng.
+- Giới hạn tính bằng dung lượng Postgres báo, không bằng số dòng: `SOURCE_TABLE_MAX_MB` (mặc định 2048) cho mỗi bảng
+  và `SOURCE_SNAPSHOT_MAX_MB` (mặc định 4096) cho tổng các bảng chép trong một lần chụp (mục Chụp mọi bảng đọc được);
+  bảng vượt trần không bị chụp thiếu mà chỉ lưu metadata. Không có trần dòng, trừ khi admin đặt `SOURCE_MAX_ROWS`.
+  `MAX_UPLOAD_MB` chỉ dành cho nạp file, không áp cho chụp bảng. `SOURCE_TIMEOUT_SECS` (mặc định 300) cho cả bước chép;
+  quá thì bỏ cả lần chụp: câu đang đọc trên nguồn bị ngắt, file tạm bị xóa, không tạo phiên bản nào. Không giới hạn
+  số bảng. Số đo để đặt các mặc định này: [PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn.
 - Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`; với `direct` thêm `ATTACH ... READ_ONLY`),
   mọi bảng của một lần chụp đọc trong một giao dịch `REPEATABLE READ`. Máy chủ phải nằm trong `SOURCE_ALLOWED_HOSTS`.
 - **TLS** (#230), bằng rustls, nghĩa `sslmode` như libpq:
@@ -183,15 +185,18 @@ xdi thấy và mặc định chụp, bảng không có quyền thì không thấ
 - **Danh sách bảng** (`GET .../sources/{id}/tables`): mọi bảng, view đọc được, kèm số dòng ước lượng và dung lượng theo
   thống kê của Postgres (`pg_class.reltuples`, `pg_table_size`; null khi bảng chưa `ANALYZE` hay với view), comment
   bảng, số cột, khóa ngoại ra (`references`) và vào (`referenced_by`) giữa các bảng đọc được, `is_referenced` khi bảng
-  khác trỏ tới nó (bảng danh mục: bỏ tick thì các bảng kia mất quan hệ), `over_row_limit` khi ước lượng quá
-  `SOURCE_MAX_ROWS`, và nguồn đang giữ bảng thế nào (`state`: `snapshotted` kèm `dataset_id`, `metadata_only` kèm
+  khác trỏ tới nó (bảng danh mục: bỏ tick thì các bảng kia mất quan hệ), `over_limit` khi riêng bảng đã quá
+  trần (`size_limit`: dung lượng quá `SOURCE_TABLE_MAX_MB`; `row_limit`: ước lượng quá `SOURCE_MAX_ROWS` khi đặt), và nguồn đang giữ bảng thế nào (`state`: `snapshotted` kèm `dataset_id`, `metadata_only` kèm
   `reason`, hay null). Chỉ đọc catalog, không đọc dòng nào.
 - **Chụp** (`POST .../sources/{id}/snapshot`): không gửi `table`, `tables`, `dataset_id` thì chụp mọi bảng đọc được;
   gửi `tables` là đúng các bảng được tick; một tên là chụp riêng bảng đó. Mọi bảng trong một giao dịch như mục dưới.
-- **Trần và bảng chỉ có metadata:** mỗi bảng đếm dòng thật (bảng mà ước lượng đã quá gấp đôi `SOURCE_MAX_ROWS` thì dùng
-  ước lượng, không đếm). Bảng quá `SOURCE_MAX_ROWS` không chép dòng nào. Các bảng còn lại xếp từ nhỏ tới lớn theo
-  dung lượng Postgres báo và lấy dần cho tới `SOURCE_SNAPSHOT_MAX_MB` (mặc định 2048), để khi quá trần thì bảng lớn
-  nhất bị để lại; view tính 0. Bảng bị để lại vẫn lưu cột, kiểu Postgres, khóa chính, comment bảng và cột (bảng
+- **Trần và bảng chỉ có metadata:** xét trước khi chép, theo dung lượng Postgres báo (`pg_table_size`, là cỡ file thật
+  trên đĩa, không phải ước lượng), nên bảng quá trần không có file nào được ghi. Bảng quá `SOURCE_TABLE_MAX_MB` không
+  chép dòng nào. Các bảng còn lại xếp từ nhỏ tới lớn và lấy dần cho tới `SOURCE_SNAPSHOT_MAX_MB`, để khi quá trần thì
+  bảng lớn nhất bị để lại. View không có dung lượng trước (tính 0): file chép ra của view quá `SOURCE_TABLE_MAX_MB` thì
+  cả lần chụp bị từ chối (413); với `copy`, file CSV có thể lớn hơn bảng nên cũng theo luật đó. Khi admin đặt
+  `SOURCE_MAX_ROWS`, mỗi bảng đếm dòng thật (bảng mà ước lượng đã quá gấp đôi trần thì dùng ước lượng), bảng quá trần
+  không chép dòng nào; không đặt thì không đếm. Bảng bị để lại vẫn lưu cột, kiểu Postgres, khóa chính, comment bảng và cột (bảng
   `source_metadata_tables`, migration 0018) và có trong `metadata_only` của response kèm lý do. Câu hỏi cần bảng đó
   (câu SQL mô hình viết có tên bảng, hay cụm từ của câu hỏi có trong tên, mô tả bảng, tên, mô tả cột) mà không trả lời
   được thì lời báo nêu đúng tên bảng, nói bảng chưa được chụp và lý do, thay cho lời "không có thông tin"
@@ -220,9 +225,12 @@ bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộ
   Một bảng chụp kèm được khi tài khoản có quyền đọc nó và cột được trỏ tới là khóa duy nhất (khóa chính, ràng buộc
   `UNIQUE` hay chỉ mục `UNIQUE` trên cột thường, không điều kiện; Postgres chỉ cho khóa ngoại trỏ tới cột như vậy); không
   thì có `reason`. Giao diện không còn dùng route này: danh sách bảng ở mục trên đã có khóa ngoại của mọi bảng.
-- **Một ảnh chụp nhất quán:** mọi bảng đếm dòng và chép trong một giao dịch `REPEATABLE READ READ ONLY` trên một kết
-  nối, nên các bảng cùng là ảnh của một thời điểm (MVCC của Postgres): không có dòng hàng trỏ tới đơn chưa có trong bản
-  chụp `orders`.
+- **Một ảnh chụp nhất quán:** mọi bảng chép trong một giao dịch `REPEATABLE READ READ ONLY` (với `direct`, DuckDB mở
+  thêm một giao dịch như vậy cho phần chép), nên các bảng cùng là ảnh của một thời điểm (MVCC của Postgres): không có
+  dòng hàng trỏ tới đơn chưa có trong bản chụp `orders`. Đổi lại, trong suốt bước chép database nguồn không dọn được
+  dòng cũ (`VACUUM`) mà giao dịch còn có thể thấy. Đã đo trên một máy: một bảng 1,86 GB giữ giao dịch khoảng 19 giây,
+  năm bảng 2,6 GB cùng lần khoảng 15 giây ([PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn). Không tách thành một giao dịch mỗi bảng vì
+  khóa ngoại giữa các bảng có thể lệch; database nguồn bận ghi thì chụp bảng lớn riêng, hay hạ `SOURCE_SNAPSHOT_MAX_MB`.
 - **Một database, một dataset:** mọi bảng chụp từ một nguồn là bảng của cùng một dataset, tên theo tên database
   (`GET .../catalog`); bảng chỉ có metadata nằm trong `metadata_only` của dataset đó.
 - **Một bảng nguồn, một bảng của dataset:** bảng đã chụp từ nguồn này (tra theo `sources.config.tables`) thì lần chụp
@@ -285,8 +293,8 @@ bằng dấu phẩy; compose trỏ vào `sales_demo` và `edu_demo` của dịch
 [data/postgres-demo](../data/postgres-demo/README.md) khi bật `--profile demo`, `make dev` trỏ vào hai database đó ở
 `127.0.0.1:5440`) thì thêm mỗi database làm một dataset (nguồn Postgres) và chụp mọi bảng tài khoản `analyst` đọc được
 trong database đó, đúng như admin kết nối mà không bỏ tick bảng nào (mục Chụp mọi bảng đọc được): với
-`SOURCE_MAX_ROWS` mặc định, hai dataset (`sales_demo` 6 bảng, `edu_demo` 6 bảng) kèm 11 quan hệ, còn
-`edu.student_daily_clicks` (1,8 triệu dòng) chỉ có metadata; cộng chỉ số mẫu của bảng có file `<bảng>.metrics.json`
+cấu hình mặc định, hai dataset (`sales_demo` 6 bảng, `edu_demo` 7 bảng, gồm `edu.student_daily_clicks` 1,8 triệu
+dòng) kèm 12 quan hệ; cộng chỉ số mẫu của bảng có file `<bảng>.metrics.json`
 (`backend/src/service/samples_db.rs`).
 Một database lỗi thì giữ database còn lại. Không có database mẫu, hay không database nào chụp được, thì nạp `dataco.csv`
 trong `SAMPLES_DIR` thành dataset `DataCo` qua đường nạp file, kèm các chỉ số mẫu (`backend/src/service/samples.rs`).

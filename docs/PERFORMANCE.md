@@ -15,6 +15,8 @@ chính:
 - Chụp bảng (#246): DuckDB đọc thẳng Postgres (`SOURCE_SNAPSHOT_MODE=direct`, nay là mặc định) nhanh hơn cách
   `COPY` ra CSV: `sales.orders` 0,37 giây thay vì 0,90 giây, `sales.order_items` 0,45 thay vì 1,73 giây,
   `edu.student_daily_clicks` (1,8 triệu dòng) 0,89 thay vì 15,9 giây; đĩa tạm ít hơn khoảng 3 đến 4 lần. Mục Chụp bảng.
+- Chụp bảng lớn (01/11/2026): bảng 20 triệu dòng 6 cột (1,25 GB Postgres) chụp trong 8,5 giây, bảng 5 triệu dòng 60 cột
+  (1,86 GB) trong 24,5 giây; trần chụp bảng đặt theo dung lượng từ các số này. Mục Chụp bảng lớn.
 
 Số liệu dưới đây là trung vị của ít lần đo (ghi rõ ở từng bảng), trên một máy, trong một buổi. Thời gian trả lời của
 Gemini thay đổi theo tải: trong cùng buổi đo, có một lượt đo mà mỗi lượt gọi mất 7 đến 10 giây và có lượt bị trả lỗi
@@ -173,6 +175,60 @@ Cách đo:
 - Bộ nhớ: `VmHWM` của tiến trình backend sau request, tức bộ nhớ đỉnh của cả tiến trình kể từ lúc khởi động (gồm cả
   phần nền của backend, không riêng bước chụp).
 - Script đo không nằm trong repo; mỗi lần đo chỉ dùng HTTP API và `/proc`, làm lại được theo các bước trên.
+
+## Chụp bảng lớn
+
+Đo ngày 01/11/2026 để đặt trần của chụp bảng (`SOURCE_TABLE_MAX_MB`, `SOURCE_SNAPSHOT_MAX_MB`, `SOURCE_TIMEOUT_SECS`) theo
+dung lượng thay cho trần dòng cũ (1 triệu dòng, chưa từng đo). Cách `direct`, không gọi mô hình. Trung vị của 3 lần đo
+mỗi bảng, trên code của nhánh (không trần dòng, không `count(*)`).
+
+| Bảng | Số dòng | Số cột | Postgres | Thời gian chụp | Giao dịch trên nguồn | Parquet | Bộ nhớ đỉnh | Câu tổng hợp |
+|---|---|---|---|---|---|---|---|---|
+| `fact_1m` | 1 000 000 | 6 | 63 MB | 0,74 s | 0,2 s | 12 MB | 234 MiB | 0,01 s |
+| `fact_5m` | 5 000 000 | 6 | 313 MB | 2,13 s | 1,6 s | 62 MB | 577 MiB | 0,04 s |
+| `fact_10m` | 10 000 000 | 6 | 626 MB | 4,05 s | 3,3 s | 125 MB | 791 MiB | 0,07 s |
+| `fact_20m` | 20 000 000 | 6 | 1 251 MB | 8,48 s | 6,5 s | 250 MB | 1 075 MiB | 0,14 s |
+| `wide_1m` | 1 000 000 | 60 | 372 MB | 5,72 s | 3,8 s | 173 MB | 1 191 MiB | 0,04 s |
+| `wide_5m` | 5 000 000 | 60 | 1 860 MB | 24,53 s | 19,3 s | 867 MB | 3 684 MiB | 0,06 s |
+
+Chụp cả sáu bảng một lần với trần mặc định (thân rỗng, `scripts/bench-snapshot.sh defaults`, 3 lần): 5 bảng chép
+(2 625 MB theo Postgres) trong 18,9 s (26,6 s lần đầu), giao dịch 15,0 s, bộ nhớ đỉnh 1 272 MiB; `wide_5m` chỉ lưu
+metadata vì cộng thêm nó thì quá 4096 MB.
+
+Đọc bảng:
+
+- Cùng một triệu dòng, bảng 60 cột tốn gấp khoảng 8 lần thời gian và 14 lần Parquet so với bảng 6 cột: số dòng không
+  nói được lần chụp nặng thế nào, dung lượng Postgres thì gần hơn. Tính trên thời gian chụp, mỗi giây được khoảng 65 đến
+  155 MB theo Postgres khi bảng đã nằm trong cache của máy; lượt đầu tiên của bộ đo (cache lạnh, code trên `main`) chậm
+  hơn tới khoảng 3 lần (`wide_1m` 17,6 s so với 5,5 s).
+- Bộ nhớ đỉnh không nằm ở bước chép: đọc `VmRSS` mỗi 0,5 giây trong một lần chụp `wide_5m`, suốt giao dịch tiến trình
+  giữ khoảng 200 MiB, rồi lên 3,6 GiB trong khoảng một giây ở bước nạp sau đó (hồ sơ cột trên file Parquet), không
+  thuộc `service/sources/`. Trần một bảng 2048 MB giữ đỉnh này ở mức đã đo.
+- Câu tổng hợp (tổng theo vùng và tháng) trên file Parquet chạy dưới 0,2 s ở mọi cỡ đã đo.
+- Code trên `main` (còn `count(*)` khi có trần dòng, đặt `SOURCE_MAX_ROWS=4000000000`) cho số gần như nhau, ví dụ
+  `fact_20m` 8,12 s, `wide_5m` 23,58 s: bỏ `count(*)` không làm nhanh hơn rõ trên các bảng này.
+
+Chọn mặc định từ đó: `SOURCE_TABLE_MAX_MB=2048` (bảng lớn nhất đã đo vừa trần), `SOURCE_SNAPSHOT_MAX_MB=4096` (khoảng
+gấp rưỡi lần chụp năm bảng trên, ước 30 đến 60 s khi cache ấm), `SOURCE_TIMEOUT_SECS` giữ 300 để còn chỗ khi cache lạnh
+chậm hơn vài lần. Đây là một máy, bảng sinh tự động, nguồn và backend cùng máy (không qua mạng); database nguồn ở xa
+thì thời gian chép tăng theo đường truyền.
+
+Cách đo:
+
+- Máy: Intel Core 7 240H (16 luồng), 30 GiB RAM, SSD NVMe, Linux 7.0. Postgres 17.11 của ứng dụng trong Docker
+  (`shared_buffers` 128 MB), backend build `--release` chạy trên máy, extension `postgres` của DuckDB `v1.5.6`. Trong
+  lúc đo máy còn build và test của nhánh khác chạy nền (load average 5 đến 8).
+- Bảng sinh bằng `generate_series` trong một database riêng (`scripts/bench-snapshot.sh setup`): bảng hẹp gồm khóa,
+  hai mã số, ngày, số tiền `numeric(12,2)`, vùng (chữ); bảng rộng gồm 20 cột số nguyên, 20 cột `numeric(12,2)`, 10 cột
+  chữ, 5 cột ngày, 4 cột cờ. Không có chỉ mục, nên `pg_total_relation_size` bằng `pg_table_size`.
+- Mỗi lần đo (`scripts/bench-snapshot.sh run`): database ứng dụng và `DATA_DIR` mới, một tiến trình backend mới
+  (`LLM_PROVIDER=mock`, trần đặt rất cao), tạo tài khoản, thêm nguồn với `sslmode` `disable`, một request chụp một bảng.
+  Thời gian chụp là thời gian request phía người gọi (chép, ghi Parquet, hồ sơ cột lớp cấu trúc, ghi phiên bản). Giao
+  dịch là `now() - xact_start` lớn nhất trong `pg_stat_activity` của database đo, đọc mỗi 0,2 giây. Bộ nhớ đỉnh là
+  `VmHWM` của backend sau request. Câu tổng hợp đo bằng DuckDB 1.5.6 (Python) trên file Parquet đã nạp, lần chạy thứ
+  hai.
+- Làm lại: `BENCH_URL=postgres://...` trỏ vào một database trống, `scripts/bench-snapshot.sh setup`, rồi `run` và
+  `defaults`; biến và cột in ra ghi ở đầu script.
 
 ## Đo lại
 
