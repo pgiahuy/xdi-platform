@@ -144,6 +144,7 @@ pub fn build_group_contributions(groups: &[GroupValues]) -> Option<Vec<GroupCont
                 contribution: build_decimal_text(contribution, scale),
                 mix_effect: None,
                 rate_effect: None,
+                ..Default::default()
             }
         })
         .collect();

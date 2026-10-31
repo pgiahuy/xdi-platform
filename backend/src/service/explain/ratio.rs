@@ -159,6 +159,7 @@ pub fn build_ratio_split(
             contribution: build_rate_text(contribution),
             mix_effect: Some(build_rate_text(mix)),
             rate_effect: Some(build_rate_text(rate)),
+            ..Default::default()
         });
         split.scored.push(GroupValues {
             value: group.group.value.clone(),

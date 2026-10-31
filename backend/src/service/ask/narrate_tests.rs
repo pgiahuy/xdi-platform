@@ -83,10 +83,12 @@ fn small_explanation(
                     contribution: contribution.to_string(),
                     mix_effect: None,
                     rate_effect: None,
+                    ..Default::default()
                 })
                 .collect(),
             mix_effect: None,
             rate_effect: None,
+            has_outliers: false,
         }],
         volume_price: None,
         summary: String::new(),
@@ -95,6 +97,7 @@ fn small_explanation(
         summary_by_model: false,
         summary_warnings: Vec::new(),
         summary_verdict: None,
+        dropped_dimensions: Vec::new(),
         notes: Default::default(),
     };
     apply_notes(&mut explanation);
@@ -372,6 +375,7 @@ fn numeric_group_values_use_the_same_text_everywhere() {
         contribution: "-50.00".to_string(),
         mix_effect: None,
         rate_effect: None,
+        ..Default::default()
     }];
     let prompt = build_narrate_prompt(QUESTION, &explanation);
     assert!(prompt.contains("\"value\": \"1\""), "{prompt}");

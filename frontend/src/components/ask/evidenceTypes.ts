@@ -32,7 +32,19 @@ export type GroupView = {
   /** Chỉ có với độ đo tỷ lệ: phần do tỷ trọng của nhóm đổi (cơ cấu) và phần do tỷ lệ trong nhóm đổi (hiệu suất). */
   mixEffect: string | null
   rateEffect: string | null
+  /** Có ở cả hai bên, chỉ ở bên so sánh (mới) hay chỉ ở bên gốc (không còn). */
+  presence: GroupPresence
+  /** % tác động do backend tính, một chữ số lẻ ("41.5"); null khi chênh lệch tổng gần 0. */
+  shareOfChange: string | null
+  /** % thay đổi trong nhóm; null khi nhóm mới, không còn, đổi dấu hay bên gốc không dương. */
+  percentChange: string | null
+  /** Hai bên khác 0 và trái dấu (lãi thành lỗ). */
+  signFlip: boolean
+  /** Nhóm khác thường theo luật của backend (explain/annotate.rs): in đậm. */
+  outlier: boolean
 }
+
+export type GroupPresence = 'both' | 'new' | 'gone'
 
 export type DimensionView = {
   column: string
@@ -43,6 +55,19 @@ export type DimensionView = {
   /** Chỉ có với độ đo tỷ lệ: tổng hai phần của mọi nhóm, cộng lại bằng chênh lệch. */
   mixEffect: string | null
   rateEffect: string | null
+  /** Có ít nhất một nhóm khác thường; bảng không có thì là bảng "dàn đều", backend xếp sau. */
+  hasOutliers: boolean
+}
+
+/** Cách chia backend bỏ khỏi bảng phân rã hay khỏi lời tóm tắt, kèm lý do. */
+export type DroppedView = {
+  column: string
+  label: string | null
+  /** separates: mọi giá trị chỉ có ở một bên (tên khác của hai bên đang so); duplicates: chia y hệt cột duplicateOf. */
+  reason: 'separates_slices' | 'duplicates'
+  duplicateOf: string | null
+  baseOnly: string[]
+  compareOnly: string[]
 }
 
 export type VolumePriceView = {
@@ -78,6 +103,8 @@ export type BreakdownView = {
   sliceColumnLabel: string | null
   /** Chiều giải thích chênh lệch tốt nhất đứng đầu, đúng thứ tự backend gửi. */
   dimensions: DimensionView[]
+  /** Cách chia đã bỏ, để tab Phân rã nói vì sao không có bảng của chúng. */
+  dropped: DroppedView[]
   volumePrice: VolumePriceView | null
   /** Câu trả lời chính và các ý ngắn: do mô hình viết khi byModel (đã qua hai cổng kiểm của backend), không thì câu
    * khuôn do code viết từ số đã tính. */

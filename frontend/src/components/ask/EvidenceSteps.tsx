@@ -4,7 +4,7 @@ bước một dòng có thời gian, đạt hay lỗi, chi tiết. Bước có g
 và lời, còn số do code tính. Bước phân loại và bước viết lời thay nhãn "có mô hình" bằng cờ màu: loại câu
 (Quantitative, Causal) và kết luận hai cổng kiểm (#201: match, warning, mismatch); mô hình chấm không đúng tuyệt
 đối, nên người đọc cần thấy nó đã kết luận gì. Một bước có thể lặp lại (run trước và sau repair), nên khóa theo vị trí.
-Vẽ như dòng thời gian: mỗi bước một chấm tròn có dấu tick xanh lá (đỏ khi lỗi) nối bằng vạch dọc. Dưới dòng thời gian
+Vẽ như dòng thời gian: mỗi bước một chấm tròn có dấu tick màu tăng (token --increase, xanh ngọc; đỏ khi lỗi) nối bằng vạch dọc. Dưới dòng thời gian
 là các lần gọi mô hình của câu (#184): loại việc, thời gian, số token, để thấy thời gian chờ nằm ở mô hình hay ở
 backend. */
 
@@ -19,8 +19,8 @@ type Props = {
 
 const msFormat = new Intl.NumberFormat('vi-VN')
 
-// Cờ nhận ra nhanh bằng màu: loại câu xanh ngọc (Quantitative) hay xanh dương (Causal); kết luận đối soát xanh lá
-// (match), hổ phách (warning), đỏ (mismatch). Chữ trên cờ kết luận là đúng tên mô hình chấm trả, để đối chiếu với log.
+// Cờ nhận ra nhanh bằng màu: loại câu xanh ngọc (Quantitative) hay xanh dương (Causal); kết luận đối soát màu tăng
+// (match, token --increase), hổ phách (warning), đỏ (mismatch). Chữ trên cờ kết luận là đúng tên mô hình chấm trả, để đối chiếu với log.
 const flags: Record<StepFlag, { text: string; className: string }> = {
   quantitative: { text: 'Quantitative', className: 'border-label-border bg-label-soft text-label' },
   causal: { text: 'Causal', className: 'border-info-border bg-info-soft text-info-text' },
@@ -59,7 +59,7 @@ function StepList({ steps }: { steps: StepView[] }) {
             <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
               <span className={cn('font-medium', !step.ok && 'text-destructive')}>{step.label}</span>
               <span className="text-xs text-muted-foreground tabular-nums">{msFormat.format(step.durationMs)} ms</span>
-              {/* Bước đạt chỉ cần dấu tick xanh lá; chữ "đạt" vẫn có cho trình đọc màn hình. Bước lỗi giữ chữ hiện ra, để
+              {/* Bước đạt chỉ cần dấu tick màu tăng; chữ "đạt" vẫn có cho trình đọc màn hình. Bước lỗi giữ chữ hiện ra, để
               người mù màu phân biệt được với bước đạt. */}
               {step.ok ? (
                 <span className="sr-only">đạt</span>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/ContributionBars.tsx - biểu đồ thanh hai phía cho chênh lệch của từng nhóm (lát so sánh trừ lát gốc
 trong nhóm, cộng lại bằng chênh lệch chung), theo chiều đầu tiên backend gửi. Tiêu đề ghi tên cột kèm nghĩa tiếng Việt
-(columnText.ts). Thanh giảm sang trái màu đỏ, thanh tăng sang phải màu xanh lá (cùng cặp màu với bảng phân rã,
+(columnText.ts). Thanh giảm sang trái màu hổ phách, thanh tăng sang phải màu xanh ngọc (cùng cặp màu với bảng phân rã,
 changeFormat.directionTextClass), cùng một thang nên so được độ lớn bằng mắt. Nhóm như bảng phân rã: các nhóm lớn nhất
 rồi một dòng "Còn lại" (breakdownGroups.ts).
 Mỗi dòng ghi số có dấu (+ hay -), nên màu và hướng thanh chỉ giúp đọc nhanh; chữ chiều chỉ cho trình đọc màn hình

@@ -3,16 +3,19 @@
 bị bỏ (so hai nhóm và so hai kỳ), chiều chỉ có vài nhóm một bên thì giữ và gắn "mới", chiều trùng nhóm bị bỏ và giữ
 chiều có giá trị chữ, % tác động và % thay đổi, cờ khác thường theo luật 10 điểm và 1%, lát gốc không dương, chênh lệch
 gần 0, nhóm ngược chiều, thứ tự chiều. Dựng chiều từ giá trị hai lát cắt bằng đúng build_group_contributions của bước
-explain. Bảng phân rã đưa vào không đổi: mọi kết quả nằm trong ghi chú. */
+explain. annotate_dimensions không đổi bảng đưa vào: mọi kết quả nằm trong ghi chú. Phần cuối test apply_group_notes,
+hàm ghi cùng các số đó vào bảng trả qua API: "mới", "không còn", "đổi dấu", chiều dàn đều xếp sau, % tác động âm và làm
+tròn, chênh lệch gần 0. */
 
 use rust_decimal::Decimal;
 
-use crate::service::ask::contract::{CellValue, DimensionBreakdown, ValueKind};
+use crate::service::ask::contract::{CellValue, DimensionBreakdown, GroupContribution, ValueKind};
 use crate::service::explain::annotate::{
-    annotate_dimensions, build_percent_change, build_percent_text, build_value_presences,
-    BreakdownNotes, DimensionNotes, DropReason, GroupNotes, GroupPresence, Totals,
+    annotate_dimensions, apply_group_notes, build_percent_change, build_percent_text,
+    build_value_presences, BreakdownNotes, DimensionNotes, DropReason, GroupNotes, GroupPresence,
+    Totals,
 };
-use crate::service::explain::{build_group_contributions, GroupValues};
+use crate::service::explain::{build_group_contributions, build_value_text, GroupValues};
 
 fn d(text: &str) -> Decimal {
     text.parse().expect("decimal")
@@ -39,6 +42,7 @@ fn dimension(column: &str, kind: ValueKind, groups: &[(&str, &str, &str)]) -> Di
         groups: build_group_contributions(&values).expect("contributions"),
         mix_effect: None,
         rate_effect: None,
+        has_outliers: false,
     }
 }
 
@@ -293,4 +297,155 @@ fn percent_text_is_short() {
     assert_eq!(build_percent_text(d("41.46")), "41.5");
     assert_eq!(build_percent_text(d("-44.0")), "-44");
     assert_eq!(build_percent_text(d("-0.04")), "0");
+}
+
+// Ghi chú vào bảng trả qua API (apply_group_notes): tab Phân rã đọc thẳng các trường này.
+
+/// Bảng sau khi ghi chú, nhóm có mặt ở đâu theo giá trị 0 như breakdown.rs.
+fn apply(dimensions: &[DimensionBreakdown], totals: Totals) -> Vec<DimensionBreakdown> {
+    let mut dimensions = dimensions.to_vec();
+    let mut presences: Vec<_> = dimensions.iter().map(build_value_presences).collect();
+    apply_group_notes(&mut dimensions, &mut presences, totals);
+    dimensions
+}
+
+fn api_group<'a>(dimension: &'a DimensionBreakdown, value: &str) -> &'a GroupContribution {
+    dimension
+        .groups
+        .iter()
+        .find(|g| g.value.as_ref().map(build_value_text).as_deref() == Some(value))
+        .expect("group")
+}
+
+/// Lát gốc bằng 0 là "mới", lát so sánh bằng 0 là "không còn", hai bên trái dấu là "đổi dấu": cả ba không có % thay
+/// đổi và đều là nhóm khác thường khi chiếm từ 1% chênh lệch.
+#[test]
+fn new_gone_and_sign_flip_groups_have_no_percent_change() {
+    let dimensions = [dimension(
+        "Category",
+        ValueKind::Text,
+        &[
+            ("Golf", "0", "300"),
+            ("Fishing", "200", "0"),
+            ("Technology", "-100", "50"),
+            ("Apparel", "900", "1000"),
+        ],
+    )];
+    let table = apply(&dimensions, totals("1000", "1350"));
+    let category = &table[0];
+    let golf = api_group(category, "Golf");
+    assert_eq!(golf.presence, GroupPresence::New);
+    assert_eq!(golf.percent_change, None);
+    assert!(golf.outlier);
+    let fishing = api_group(category, "Fishing");
+    assert_eq!(fishing.presence, GroupPresence::Gone);
+    assert_eq!(fishing.percent_change, None);
+    assert_eq!(fishing.share_of_change.as_deref(), Some("-57.1"));
+    let technology = api_group(category, "Technology");
+    assert_eq!(technology.presence, GroupPresence::Both);
+    assert!(technology.sign_flip);
+    assert_eq!(technology.percent_change, None);
+    assert!(technology.outlier);
+    let apparel = api_group(category, "Apparel");
+    assert!(!apparel.sign_flip);
+    assert_eq!(apparel.percent_change.as_deref(), Some("11.1"));
+    assert!(category.has_outliers);
+}
+
+/// Lát gốc dương, lát so sánh âm (lãi thành lỗ) cũng là đổi dấu: "-250%" không đọc được nên không tính.
+#[test]
+fn a_profit_turning_into_a_loss_is_a_sign_flip() {
+    let dimensions = [dimension(
+        "Market",
+        ValueKind::Text,
+        &[("Europe", "200", "-300"), ("LATAM", "800", "820")],
+    )];
+    let table = apply(&dimensions, totals("1000", "520"));
+    let europe = api_group(&table[0], "Europe");
+    assert!(europe.sign_flip);
+    assert_eq!(europe.percent_change, None);
+    assert_eq!(europe.share_of_change.as_deref(), Some("104.2"));
+}
+
+/// Chiều dàn đều xếp sau chiều có nhóm khác thường, giữ thứ tự xếp hạng trong mỗi phần; cờ has_outliers theo đúng nhóm.
+#[test]
+fn even_dimensions_come_after_the_ones_with_outliers() {
+    let dimensions = [
+        dimension(
+            "Market",
+            ValueKind::Text,
+            &[("Europe", "500", "450"), ("LATAM", "500", "450")],
+        ),
+        dimension(
+            "Segment",
+            ValueKind::Text,
+            &[("Consumer", "600", "540"), ("Corporate", "400", "360")],
+        ),
+        dimension(
+            "Category",
+            ValueKind::Text,
+            &[("Fishing", "400", "260"), ("Golf", "600", "640")],
+        ),
+    ];
+    let table = apply(&dimensions, totals("1000", "900"));
+    let order: Vec<&str> = table.iter().map(|d| d.column.as_str()).collect();
+    assert_eq!(order, ["Category", "Market", "Segment"]);
+    let flags: Vec<bool> = table.iter().map(|d| d.has_outliers).collect();
+    assert_eq!(flags, [true, false, false]);
+    assert!(api_group(&table[0], "Fishing").outlier);
+    assert!(!api_group(&table[1], "Europe").outlier);
+    // Ghi chú cho lời tóm tắt đọc trên bảng đã xếp: chiều đầu ghi chú là chiều đầu bảng.
+    let presences: Vec<_> = table.iter().map(build_value_presences).collect();
+    let notes = annotate_dimensions(&table, &presences, totals("1000", "900"));
+    assert_eq!(notes.dimensions[0].index, 0);
+}
+
+/// Nhóm đi ngược chiều có % tác động âm ("kéo ngược"), nhóm cùng chiều có thể quá 100; làm tròn một chữ số lẻ.
+#[test]
+fn shares_against_the_change_are_negative_and_rounded() {
+    let dimensions = [dimension(
+        "Market",
+        ValueKind::Text,
+        &[
+            ("Europe", "500", "200"),
+            ("LATAM", "300", "330"),
+            ("USCA", "200", "170"),
+        ],
+    )];
+    let table = apply(&dimensions, totals("1000", "700"));
+    let share = |value| api_group(&table[0], value).share_of_change.clone();
+    assert_eq!(share("Europe").as_deref(), Some("100"));
+    assert_eq!(share("LATAM").as_deref(), Some("-10"));
+    assert_eq!(share("USCA").as_deref(), Some("10"));
+    let dimensions = [dimension(
+        "Market",
+        ValueKind::Text,
+        &[
+            ("Europe", "100", "200"),
+            ("LATAM", "100", "100"),
+            ("USCA", "100", "101"),
+        ],
+    )];
+    let table = apply(&dimensions, totals("300", "401"));
+    // 100 / 101 = 99,0099...% và 1 / 101 = 0,990...%: làm tròn từng nhóm một chữ số lẻ.
+    let share = |value| api_group(&table[0], value).share_of_change.clone();
+    assert_eq!(share("Europe").as_deref(), Some("99"));
+    assert_eq!(share("USCA").as_deref(), Some("1"));
+}
+
+/// Chênh lệch tổng gần 0: bảng không có % tác động ở nhóm nào, nên tab Phân rã ẩn cột đó.
+#[test]
+fn a_change_near_zero_leaves_no_share_in_the_table() {
+    let dimensions = [dimension(
+        "Market",
+        ValueKind::Text,
+        &[("Europe", "5000", "6000"), ("LATAM", "5000", "4001")],
+    )];
+    let table = apply(&dimensions, totals("10000", "10001"));
+    assert!(table[0].groups.iter().all(|g| g.share_of_change.is_none()));
+    assert!(!table[0].has_outliers);
+    assert_eq!(
+        api_group(&table[0], "Europe").percent_change.as_deref(),
+        Some("20")
+    );
 }

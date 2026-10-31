@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/split_tests.rs - test tách chênh lệch (explain/split.rs, #201): có lượng thì dùng đúng số của
-volume_price kèm phần trăm mỗi phần; không có lượng thì không tách (không tách theo số dòng); hai phần ngược chiều thì
-không có phần trăm. */
+volume_price kèm phần trăm mỗi phần; không có lượng hay độ đo là phép đếm thì không tách (không tách theo số dòng); hai
+phần ngược chiều thì không có phần trăm. */
 
 use crate::service::ask::contract::Explanation;
 use crate::service::ask::examples::build_why_example;
@@ -40,4 +40,12 @@ fn parts_going_opposite_ways_have_no_share() {
     vp.price_effect = "216600.00".to_string();
     let split = build_split(&e).expect("split");
     assert_eq!((split.volume_share, split.price_share), (None, None));
+}
+
+/// Độ đo đếm (số đơn) đã là quy mô: không tách thành lượng và giá, lời không nói "chủ yếu do số đơn".
+#[test]
+fn a_count_measure_is_not_split() {
+    let mut e = example();
+    e.counts_rows = true;
+    assert!(build_split(&e).is_none());
 }
