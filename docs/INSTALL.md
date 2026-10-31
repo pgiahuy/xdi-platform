@@ -737,10 +737,17 @@ còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**)
 - **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
   (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép
   nguyên văn. Guard là gì: [GUARD.md](GUARD.md).
-- **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: mỗi chiều một bảng giá trị
-  hai kỳ (hay hai nhóm) và phần chênh lệch của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách được.
-  Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường
-  thì tab này ghi `Câu hỏi này không có phần phân rã.`
+- **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã. Đầu tab ghi số dòng dữ liệu
+  (và số đơn khi tách được) của hai bên, và các cách chia đã bỏ kèm lý do (cột chỉ là tên khác của hai bên đang so, như
+  Type khi so COMPLETE với CANCELED, hay cột chia nhóm giống hệt một cột khác). Mỗi chiều một bảng, cột **Nhóm**, hai
+  bên, **Chênh lệch** (bên so sánh trừ bên gốc, cộng lại bằng dòng **Tổng**), **% tác động** (phần của tổng chênh lệch;
+  số âm kèm chữ "kéo ngược" là nhóm đi ngược chiều) và **% thay đổi** (trong nhóm, so với bên gốc; nhóm chỉ có ở một bên
+  ghi "mới" hay "không còn", nhóm trái dấu hai bên ghi "đổi dấu"); nghĩa mỗi cột ghi ngay dưới tiêu đề. Nhóm khác thường
+  (lệch % thay đổi chung từ 10 điểm và chiếm từ 1% chênh lệch, hay chỉ có ở một bên) in đậm; bảng có nhóm như vậy ghi
+  **Có nhóm khác thường** và đứng trước các bảng **Dàn đều**. Chênh lệch tổng gần 0 thì không có cột % tác động. Pane
+  hẹp thì bảng cuộn ngang, cột Nhóm đứng yên. Chiều nhiều nhóm chỉ hiện 8 nhóm lớn nhất và một dòng **Còn lại**, bấm
+  **Xem tất cả** để mở hết; cuối tab là bảng **Lượng và giá** khi tách được. Câu thường thì tab này ghi `Câu hỏi này
+  không có phần phân rã.`
 - **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm một ô số đo của bảng **Kết quả**, hay số của
   một kỳ hay một nhóm trong bảng phân rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
 - **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Phân loại câu hỏi, Mô hình

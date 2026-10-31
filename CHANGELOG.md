@@ -6,6 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
+- Tab Phân rã: mỗi bảng có nhãn "Có nhóm khác thường" hay "Dàn đều" (bảng dàn đều xếp sau), cột "Chênh lệch" thay cho "Đóng góp" kèm nghĩa từng cột dưới tiêu đề, nhóm chỉ có ở một bên ghi "mới", "không còn", nhóm đổi dấu ghi "đổi dấu", nhóm đi ngược chiều ghi "kéo ngược", không có % tác động khi chênh lệch tổng gần 0, cột Nhóm đứng yên khi cuộn ngang, số dòng và số đơn của hai bên, ghi chú các cách chia đã bỏ và vì sao; màu giảm hổ phách, tăng xanh ngọc. API thêm `presence`, `share_of_change`, `percent_change`, `sign_flip`, `outlier` cho từng nhóm, `has_outliers` cho từng chiều, `explanation.dropped_dimensions` (#186).
 - Insight của câu hỏi tìm nguyên nhân do mô hình viết toàn bộ (câu mở đầu và mục "Nguyên nhân chính") từ số và cờ code đã tính, prompt không còn câu do code viết hay ví dụ theo bộ dữ liệu; khi insight qua kiểm thì không hiện mục "Căn cứ" nữa (#201).
 - Câu hỏi tìm nguyên nhân so hai nhóm (như hai thị trường) cũng do mô hình viết insight và qua hai cổng kiểm, thay cho câu khuôn (#201).
 - Câu hỏi về một số đo trong một kỳ, như "doanh thu tháng 6 năm 2017 như thế nào", trả tổng của kỳ đó thay vì hỏi lại có chia theo ngày không (#201).
