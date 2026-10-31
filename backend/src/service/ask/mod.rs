@@ -208,7 +208,8 @@ pub async fn ask(
     // bảng; cột nó chọn quyết định cột nào được gửi đủ danh sách giá trị ở lượt viết SQL (ask/context.rs).
     let mut question_tables = load_question_tables(state, member, &group, question).await?;
     let table = dataset.logical_table.as_str();
-    apply_question_columns(&mut context, table, &mut question_tables, &[]);
+    let restricted = group.is_restricted();
+    apply_question_columns(&mut context, table, &mut question_tables, &[], restricted);
     // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
     let classify_input = ClassifyInput {
         table,
@@ -225,6 +226,7 @@ pub async fn ask(
         table,
         &mut question_tables,
         &classified.columns,
+        restricted,
     );
     let group_prompt = build_group_prompt(&group, question_tables);
     // Bài học chọn sau khi ngữ cảnh đã đủ (cột khớp, cột lượt phân loại chọn), để khớp đúng các cột câu hỏi dùng.

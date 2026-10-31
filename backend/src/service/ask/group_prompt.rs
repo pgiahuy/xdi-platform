@@ -87,11 +87,16 @@ pub async fn load_question_tables(
 
 /// Bước 2: cột lượt phân loại chọn (picked, cặp bảng logic và cột), trần metadata (apply_metadata_cap) và danh sách
 /// giá trị (apply_group_values) chung cho bảng đang chọn và mọi bảng liên quan.
+///
+/// restricted: người hỏi bị lọc dòng theo vai dữ liệu. Danh sách giá trị và gợi ý giá trị lấy từ hồ sơ của cả cột, không
+/// theo vai dữ liệu, nên có thể có giá trị của dòng người đó không được xem; khi đó không gửi danh sách hay gợi ý nào, ở
+/// mọi prompt dùng ngữ cảnh này (SQL, form câu "tại sao"), chỉ gửi metadata cột (#230).
 pub fn apply_question_columns(
     context: &mut AskContext,
     table: &str,
     tables: &mut QuestionTables,
     picked: &[(String, String)],
+    restricted: bool,
 ) {
     apply_picked_columns(table, &mut context.columns, picked);
     for t in tables.related.iter_mut() {
@@ -106,6 +111,23 @@ pub fn apply_question_columns(
         .zip(tables.indexes.iter().map(|index| index.as_ref()))
         .collect();
     apply_group_values(&mut with_values);
+    if restricted {
+        let lists = std::iter::once(&mut context.columns)
+            .chain(tables.related.iter_mut().map(|t| &mut t.columns));
+        for columns in lists {
+            apply_no_values(columns);
+        }
+        context.hints.clear();
+    }
+}
+
+/// Bỏ mọi danh sách giá trị của các cột: values_complete = false, nên luật filter_value_not_found của ngữ cảnh không kết
+/// luận trên danh sách không có.
+pub fn apply_no_values(columns: &mut [ColumnProfile]) {
+    for column in columns {
+        column.values = Vec::new();
+        column.values_complete = false;
+    }
 }
 
 /// Bước 3: phần của prompt SQL về các bảng liên quan; None khi nhóm chỉ có bảng đang chọn.

@@ -70,6 +70,15 @@ pub(super) async fn start_with_max_rows(
     llm_replies: &[Value],
     max_rows: Option<u64>,
 ) -> Option<Setup> {
+    start_with_llm(key, scripted(llm_replies), max_rows).await
+}
+
+/// Như start, với một mô hình giả bất kỳ (ví dụ mô hình giữ lại prompt, ask_tests::recording).
+pub(super) async fn start_with_llm(
+    key: Option<&str>,
+    llm: std::sync::Arc<dyn crate::engine::llm::LlmProvider>,
+    max_rows: Option<u64>,
+) -> Option<Setup> {
     let db = fresh_database().await?;
     let url = crate::engine::store::test_support::database_url().unwrap();
     let (host, port, _, _) = url_parts(&url);
@@ -106,12 +115,7 @@ pub(super) async fn start_with_max_rows(
             c.source_max_rows = max_rows;
         }
     };
-    let app = app_with_llm(
-        db.store.clone(),
-        Some(CODE),
-        configure,
-        scripted(llm_replies),
-    );
+    let app = app_with_llm(db.store.clone(), Some(CODE), configure, llm);
     let setup = json!({"setup_code": CODE, "email": "lan@example.com", "password": PASSWORD,
                        "workspace_name": "Cửa hàng"});
     let (status, lan, _) = call(&app, "POST", "/api/auth/setup", None, Some(setup)).await;

@@ -522,6 +522,16 @@ async fn model_clarify_keeps_only_real_columns() {
     assert_eq!(asking.queries_with("error").await, 1);
 }
 
+/// Mô hình giả trả lần lượt các câu viết sẵn và giữ lại prompt của từng lần gọi viết SQL, để test đọc.
+pub(super) fn recording(replies: &[Value]) -> (Arc<dyn LlmProvider>, Arc<Mutex<Vec<String>>>) {
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let llm = Arc::new(RecordingLlm {
+        replies: Mutex::new(replies.iter().map(Value::to_string).collect()),
+        prompts: prompts.clone(),
+    });
+    (llm, prompts)
+}
+
 /// Mô hình giả như ScriptedLlm, giữ lại prompt của từng câu hỏi để test đọc.
 struct RecordingLlm {
     replies: Mutex<VecDeque<String>>,
