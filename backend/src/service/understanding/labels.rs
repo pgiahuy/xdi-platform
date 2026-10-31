@@ -17,6 +17,7 @@ use sqlparser::parser::Parser;
 
 use crate::engine::store::MetricDefinition;
 use crate::service::ask::context::ColumnProfile;
+use crate::service::explain::per_unit::build_total_name;
 use crate::service::understanding::metric_words::build_metric_label;
 
 /// Hàm lấy một phần của thời gian, và chữ cho phần đó. Đọc ở nhãn khóa nhóm ("Quý của ngày đặt hàng") và để nhận biểu
@@ -420,7 +421,9 @@ fn build_aggregate_label(tree: &Expr, profile: &[ColumnProfile]) -> Option<Strin
     let label = match (name.as_str(), distinct) {
         ("count", true) => format!("{} khác nhau", build_prefixed("Số", &subject)),
         ("count", false) => format!("Số dòng có {subject}"),
-        ("sum", false) => build_prefixed("Tổng", &subject),
+        ("sum", false) => {
+            build_total_label(arg, profile).unwrap_or(build_prefixed("Tổng", &subject))
+        }
         ("avg" | "mean", false) => build_prefixed("Trung bình", &subject),
         ("min", _) => format!("Nhỏ nhất của {subject}"),
         ("max", _) => format!("Lớn nhất của {subject}"),
@@ -428,6 +431,28 @@ fn build_aggregate_label(tree: &Expr, profile: &[ColumnProfile]) -> Option<Strin
         _ => return None,
     };
     Some(label)
+}
+
+/// Nhãn của SUM trên một cột có nghĩa "mỗi đơn vị" (#260): mô tả "Lợi nhuận trên mỗi đơn hàng" của cột Benefit per order
+/// cho "Tổng lợi nhuận (Benefit per order)", không phải "Tổng lợi nhuận trên mỗi đơn hàng (...)". Không có mô tả thì đọc
+/// tên cột: "Tổng Benefit (Benefit per order)". None khi đối số không phải một cột hay tên không có phần đó.
+fn build_total_label(arg: &Expr, profile: &[ColumnProfile]) -> Option<String> {
+    let name = match arg {
+        Expr::Identifier(ident) => &ident.value,
+        Expr::CompoundIdentifier(parts) => &parts.last()?.value,
+        Expr::Nested(inner) | Expr::Cast { expr: inner, .. } => {
+            return build_total_label(inner, profile)
+        }
+        _ => return None,
+    };
+    let column = profile.iter().find(|c| c.name.eq_ignore_ascii_case(name));
+    let meaning = column
+        .and_then(|c| c.description.as_deref())
+        .map(build_plain_description)
+        .filter(|d| !d.is_empty())
+        .unwrap_or(name);
+    let total = build_total_name(meaning)?;
+    Some(format!("{total} ({name})"))
 }
 
 /// Mô tả cột do mô hình viết thường là một câu trọn ("Tổng doanh số bán hàng."): bỏ khoảng trắng và dấu câu cuối,

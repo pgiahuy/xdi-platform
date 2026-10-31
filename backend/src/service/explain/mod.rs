@@ -48,6 +48,9 @@ mod narrate_prompt;
 pub mod number;
 #[cfg(test)]
 mod number_tests;
+pub mod per_unit;
+#[cfg(test)]
+mod per_unit_tests;
 pub mod period;
 pub mod plain;
 pub mod premise;

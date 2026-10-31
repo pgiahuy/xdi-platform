@@ -11,6 +11,11 @@ dữ liệu không có nghĩa kinh doanh chung (DataCo một dòng là một mó
 thích được gì cho người đọc; trước đây câu khuôn còn gọi số dòng là lý do chính chỉ vì trung bình mỗi dòng lệch dưới
 10%, sai cả khi tính đúng. Không có lượng thì insight giải thích theo các nhóm.
 
+Quy mô là ý chính (scale_main, #260) khi lượng của bên nhiều gấp từ MIN_SCALE_RATIO lần bên ít và phần do lượng lớn hơn
+phần do giá: như COMPLETE 597 đơn với CANCELED 19 đơn, tổng chênh chủ yếu vì số đơn, không vì mỗi đơn lời hơn. Khi đó
+lời của mô hình phải nêu ý này: cổng 1 (explain/claims.rs) đòi khẳng định về lượng, mô hình chấm (explain/judge.rs) nhận
+cờ này và coi lời bỏ ý này là thiếu ý chính.
+
 Hàm thuần, tính lại từ Explanation mỗi lần gọi và không lưu, nên API không thêm trường. Test ở explain/split_tests.rs. */
 
 use rust_decimal::Decimal;
@@ -18,6 +23,12 @@ use rust_decimal::Decimal;
 use crate::service::ask::contract::Explanation;
 use crate::service::explain::annotate::build_percent_text;
 use crate::service::explain::VolumePriceNumbers;
+
+/// Bên nhiều lượng gấp từ ngần này lần bên ít thì quy mô là ý chính (khi phần do lượng cũng lớn hơn phần do giá). Gấp
+/// đôi là mức người đọc không thể bỏ qua: dù mỗi đơn vị như nhau, tổng của bên nhiều đã gấp đôi bên ít, nên so hai tổng
+/// mà không nói số lượng là nói thiếu. Dưới mức đó (5.000 với 4.400 đơn) lượng vẫn có thể là phần lớn hơn, câu khuôn
+/// vẫn nói, nhưng không bắt lời mô hình phải nói.
+pub const MIN_SCALE_RATIO: i64 = 2;
 
 /// Phần do lượng và phần do giá trị trung bình mỗi đơn vị của một chênh lệch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +40,8 @@ pub struct Split {
     /// khi đó vượt 100% hay âm, người đọc không hiểu được.
     pub volume_share: Option<String>,
     pub price_share: Option<String>,
+    /// Quy mô là ý chính: lượng hai bên chênh từ MIN_SCALE_RATIO lần và phần do lượng lớn hơn phần do giá.
+    pub scale_main: bool,
 }
 
 /// Tách của một Explanation; None khi plan không có lượng (volume_price null: độ đo tỷ lệ, không có cột lượng, hay một
@@ -49,13 +62,30 @@ pub fn build_split(e: &Explanation) -> Option<Split> {
         if_volume_unchanged: vp.if_volume_unchanged.clone(),
     };
     let (volume_share, price_share) = build_shares(e, &numbers).unzip();
+    let scale_main = is_scale_main(&numbers).unwrap_or(false);
     Some(Split {
         volume_label,
         price_label,
         numbers,
         volume_share,
         price_share,
+        scale_main,
     })
+}
+
+// None khi một số không đọc được hay một lượng không dương: khi đó không bắt lời phải nói gì thêm.
+fn is_scale_main(numbers: &VolumePriceNumbers) -> Option<bool> {
+    let (base, compare) = (
+        parse(&numbers.base_volume)?,
+        parse(&numbers.compare_volume)?,
+    );
+    let (small, large) = (base.min(compare), base.max(compare));
+    if small <= Decimal::ZERO {
+        return None;
+    }
+    let skewed = large >= small.checked_mul(Decimal::from(MIN_SCALE_RATIO))?;
+    let volume_bigger = parse(&numbers.volume_effect)?.abs() >= parse(&numbers.price_effect)?.abs();
+    Some(skewed && volume_bigger)
 }
 
 // Phần trăm của từng phần trong chênh lệch, chỉ khi cả hai phần cùng chiều chênh lệch (hay bằng 0), để mỗi phần nằm

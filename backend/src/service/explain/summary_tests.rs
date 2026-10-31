@@ -8,15 +8,18 @@ use rust_decimal::Decimal;
 
 use crate::service::ask::contract::{
     CellValue, Comparison, DimensionBreakdown, Explanation, ExplanationSlice, MeasureKind,
-    SummaryPointKind, ValueKind,
+    SummaryPointKind, ValueKind, VolumePrice,
 };
 use crate::service::ask::examples::build_why_example;
 use crate::service::explain::annotate::{
     annotate_dimensions, apply_group_notes, build_percent_change, build_percent_text,
     build_value_presences, Totals,
 };
+use crate::service::explain::split::build_split;
 use crate::service::explain::summary::{build_summary_parts, build_template_summary};
-use crate::service::explain::{build_group_contributions, build_number_check, GroupValues};
+use crate::service::explain::{
+    build_group_contributions, build_number_check, build_volume_price, GroupValues, PRICE_SCALE,
+};
 
 /// Một chiều: tên cột và các nhóm (giá trị, lát gốc, lát so sánh).
 type Dim<'a> = (&'a str, Vec<(&'a str, &'a str, &'a str)>);
@@ -402,4 +405,61 @@ fn a_count_measure_has_no_scale_reason() {
     explanation.counts_rows = true;
     let (_, points) = build_summary_parts(&explanation);
     assert!(points.iter().all(|p| p.kind != SummaryPointKind::Reason));
+}
+
+/// COMPLETE với CANCELED trên DataCo mẫu (#260): cột Benefit per order (bí danh "lợi nhuận mỗi đơn") cộng lại là tổng
+/// lợi nhuận, và CANCELED chỉ có 19 đơn so với 597 đơn của COMPLETE. Câu chính gọi "Tổng lợi nhuận", ý "Lý do chính"
+/// nói chênh lệch chủ yếu do số đơn, kèm số đơn và lợi nhuận trên mỗi đơn của hai bên.
+#[test]
+fn skewed_order_counts_make_the_scale_the_main_reason() {
+    let mut explanation = build(Case {
+        measure: "Tổng lợi nhuận",
+        comparison: Comparison::Groups,
+        slice_column: Some(("Order Status", "trạng thái đơn hàng")),
+        base: ("COMPLETE", "15675.42", "1450"),
+        compare: ("CANCELED", "704.07", "46"),
+        dimensions: vec![(
+            "Customer Segment",
+            vec![
+                ("Consumer", "8000.00", "400.00"),
+                ("Corporate", "4675.42", "204.07"),
+                ("Home Office", "3000.00", "100.00"),
+            ],
+        )],
+        labels: &[("Customer Segment", "phân khúc khách hàng")],
+    });
+    let numbers = build_volume_price(d("597"), d("19"), d("15675.42"), d("704.07"), PRICE_SCALE)
+        .expect("volume price");
+    explanation.volume_price = Some(VolumePrice {
+        volume_label: "Số đơn hàng".to_string(),
+        price_label: "Lợi nhuận trên mỗi đơn hàng".to_string(),
+        sql: String::new(),
+        base_volume: numbers.base_volume,
+        compare_volume: numbers.compare_volume,
+        base_price: numbers.base_price,
+        compare_price: numbers.compare_price,
+        volume_effect: numbers.volume_effect,
+        price_effect: numbers.price_effect,
+        if_volume_unchanged: numbers.if_volume_unchanged,
+    });
+    assert!(build_split(&explanation).expect("split").scale_main);
+    let (title, points) = build_summary_parts(&explanation);
+    assert!(
+        title.starts_with(
+            "Tổng lợi nhuận của trạng thái đơn hàng CANCELED thấp hơn COMPLETE 14.971,35"
+        ),
+        "{title}"
+    );
+    let reason = points
+        .iter()
+        .find(|p| p.kind == SummaryPointKind::Reason)
+        .expect("reason");
+    assert!(
+        reason.text.starts_with(
+            "chủ yếu do số đơn hàng (COMPLETE có 597, CANCELED có 19; lợi nhuận trên mỗi đơn hàng 26,26 và 37,06)."
+        ),
+        "{}",
+        reason.text
+    );
+    build_number_check(&build_template_summary(&explanation), &explanation).unwrap();
 }

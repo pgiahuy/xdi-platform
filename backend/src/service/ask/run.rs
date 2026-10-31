@@ -40,6 +40,7 @@ use crate::service::ask::reply::{
     Term, Unanswerable,
 };
 use crate::service::ask::result::{build_result_table, SENT_ROWS};
+use crate::service::ask::total_alias::build_total_aliases;
 
 /// Lời cho người hỏi khi câu SQL của vòng sửa vẫn bị guard từ chối. Lỗi nằm ở câu hệ thống viết, không ở câu hỏi, nên
 /// lời không đưa lý do kỹ thuật mà gợi ý cách hỏi lại.
@@ -249,6 +250,10 @@ async fn attempt(
     failures: &mut Vec<StepFailure>,
 ) -> Result<Attempt, AppError> {
     let started = Instant::now();
+    // Bí danh "mỗi đơn vị" của một SUM đổi thành tên tổng trước guard (#260, ask/total_alias.rs), để câu đã chạy, tên cột
+    // kết quả và lời trả lời cùng gọi đúng là tổng. sql_generated vẫn là câu mô hình viết.
+    let renamed = build_total_aliases(sql);
+    let sql = renamed.as_deref().unwrap_or(sql);
     let reason = match build_guarded_sql(sql, input.tables, input.links, input.max_rows) {
         Ok(guarded) => {
             // Kiểm cộng lặp trên câu mô hình viết, sau guard (câu đã hợp lệ) và trước khi chạy.

@@ -12,6 +12,8 @@ Cổng này chỉ so khẳng định với bảng:
   có số thì chép đúng giá trị ô đó, kể cả dấu, nên số sai chiều là số sai;
 - nhóm nêu là nguyên nhân chính đi cùng chiều chênh lệch và nằm trong ba nhóm đóng góp lớn nhất (theo trị tuyệt đối)
   của cột; nhóm kéo lại đi ngược chiều.
+- quy mô là ý chính (Split::scale_main, explain/split.rs) thì phải có khẳng định về lượng: số lượng hai bên, hay phần
+  do lượng (#260). Lời bỏ ý này (chỉ kể các nhóm khi CANCELED có 19 đơn so với 597 đơn của COMPLETE) là thiếu ý chính.
 Lời có nói đúng như các khẳng định không là việc của cổng 2 (mô hình chấm độc lập, phần sau của #201). */
 
 use serde::{Deserialize, Serialize};
@@ -19,6 +21,9 @@ use serde_json::json;
 
 use crate::service::ask::contract::Explanation;
 use crate::service::explain::claim_cell::check_claim;
+use crate::service::explain::number::build_number_text_with;
+use crate::service::explain::split::build_split;
+use crate::service::explain::{build_fraction_digits, lower_first};
 
 /// Câu trả lời của mô hình ở bước narrate, đúng build_narrate_schema: insight (câu mở đầu và các ý "Nguyên nhân
 /// chính") kèm khai số.
@@ -242,9 +247,33 @@ pub fn build_claim_check(
             }
         }
     }
+    if let Some(problem) = check_scale_claims(claims, explanation) {
+        problems.push(problem);
+    }
     if problems.is_empty() {
         Ok(claims.len())
     } else {
         Err(problems)
     }
+}
+
+/// Quy mô là ý chính mà không khẳng định nào nói về lượng: lý do trượt, gửi lại cho mô hình ở lần viết lại. Đủ khi có
+/// số lượng của cả hai bên, hay phần do lượng (số hay phần trăm).
+fn check_scale_claims(claims: &[Claim], explanation: &Explanation) -> Option<String> {
+    let split = build_split(explanation).filter(|s| s.scale_main)?;
+    let has = |field: ClaimField| claims.iter().any(|c| c.field == field);
+    let counts = has(ClaimField::BaseVolume) && has(ClaimField::CompareVolume);
+    if counts || has(ClaimField::VolumeEffect) || has(ClaimField::VolumeShare) {
+        return None;
+    }
+    let digits = build_fraction_digits(explanation);
+    let volume = lower_first(&split.volume_label);
+    Some(format!(
+        "Lời thiếu ý chính: {volume} hai bên chênh nhiều ({} có {}, {} có {}) và chênh lệch chủ yếu do {volume}; ý đầu \
+         tiên phải nói điều này, kèm khẳng định base_volume và compare_volume",
+        explanation.base.label,
+        build_number_text_with(&split.numbers.base_volume, digits),
+        explanation.compare.label,
+        build_number_text_with(&split.numbers.compare_volume, digits),
+    ))
 }

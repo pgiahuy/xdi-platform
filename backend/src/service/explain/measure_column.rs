@@ -20,6 +20,7 @@ use crate::service::explain::form::{FieldError, FormAgg, FormMeasure};
 use crate::service::explain::measure::{
     build_plan_measure, build_vietnamese_name, is_exact_type, parse_expr, Additive, PlanMeasure,
 };
+use crate::service::explain::per_unit::build_total_name;
 use crate::service::explain::sql::{build_equals, build_ident};
 use crate::service::explain::{build_entity_name, lower_first};
 use crate::service::profile::is_number_type;
@@ -41,12 +42,7 @@ pub(super) fn check_column_measure(
             if column.aggregation == ColumnAggregation::Avg.as_str() {
                 return build_average(column);
             }
-            // Tên tiếng Việt của hồ sơ ("Doanh thu") đọc tự nhiên hơn "Tổng Sales"; chưa có thì ghép từ tên cột.
-            let label = match build_vietnamese_name(column) {
-                Some(name) => name.to_string(),
-                None => format!("Tổng {}", column.name),
-            };
-            build_plan_measure(label, None, build_sum(column), None)
+            build_plan_measure(build_sum_label(column), None, build_sum(column), None)
         }
         FormAgg::Avg => {
             check_average(column, errors)?;
@@ -58,6 +54,20 @@ pub(super) fn check_column_measure(
         }
         FormAgg::CountDistinct => build_distinct(column, errors),
         FormAgg::Share => build_share(measure, column, profile, errors),
+    }
+}
+
+/// Nhãn của SUM trên một cột. Tên tiếng Việt của hồ sơ ("Doanh thu") đọc tự nhiên hơn "Tổng Sales"; chưa có thì ghép từ
+/// tên cột. Tên có phần "mỗi đơn vị" ("lợi nhuận mỗi đơn", "Benefit per order") thì gọi là tổng (#260,
+/// explain/per_unit.rs): cộng lợi nhuận của từng đơn ra tổng lợi nhuận, gọi "lợi nhuận mỗi đơn" là nói sai con số.
+fn build_sum_label(column: &ProfileColumn) -> String {
+    let name = build_vietnamese_name(column).unwrap_or(&column.name);
+    if let Some(total) = build_total_name(name) {
+        return total;
+    }
+    match build_vietnamese_name(column) {
+        Some(name) => name.to_string(),
+        None => format!("Tổng {}", column.name),
     }
 }
 

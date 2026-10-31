@@ -20,6 +20,7 @@ use crate::service::ask::contract::{
 use crate::service::explain::number::{
     apply_readable_numbers, build_number_text, build_number_text_with,
 };
+use crate::service::explain::per_unit::build_alias_label;
 use crate::service::explain::{drop_column_name, is_vietnamese_alias, lower_first};
 use crate::service::insight::narrate::build_facts_text;
 
@@ -139,7 +140,8 @@ pub fn build_template_answer(input: &SummaryInput<'_>) -> String {
             .measures
             .first()?;
         Some(match is_vietnamese_alias(column, &item.sql) {
-            true => column.to_string(),
+            // Bí danh "Lợi nhuận mỗi đơn" đặt cho một SUM là tổng (#260): gọi "Tổng lợi nhuận".
+            true => build_alias_label(column, &item.sql),
             false => drop_column_name(&item.label),
         })
     };

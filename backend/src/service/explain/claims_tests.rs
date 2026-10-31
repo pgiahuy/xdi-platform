@@ -4,15 +4,17 @@
 dấu (sai chiều), nguyên nhân chính ngược chiều hay ngoài ba nhóm đầu, nhóm kéo lại cùng chiều, nhóm hay ô không có
 trong bảng, phần trăm chép sai. ask/narrate_tests.rs dùng build_example_reply cho bước narrate. */
 
+use rust_decimal::Decimal;
 use serde_json::json;
 
 use crate::service::ask::contract::Explanation;
 use crate::service::ask::examples::build_why_example;
 use crate::service::explain::annotate::GroupPresence;
-use crate::service::explain::build_number_check;
 use crate::service::explain::claims::{
     build_claim_check, build_narrate_schema, parse_narrate_reply, Claim, ClaimField, NarrateReply,
 };
+use crate::service::explain::split::build_split;
+use crate::service::explain::{build_number_check, build_volume_price, PRICE_SCALE};
 
 fn example() -> Explanation {
     build_why_example().explanation.expect("why example")
@@ -225,4 +227,63 @@ fn plain_text_reply_is_not_read() {
     // Khuôn cũ {text, claims} không còn đọc được: thiếu câu mở đầu.
     assert!(parse_narrate_reply(r#"{"text": "Doanh thu giảm.", "claims": []}"#).is_err());
     assert!(parse_narrate_reply(&build_example_reply().to_string()).is_ok());
+}
+
+/// Mẫu why với số đơn quý 3 chỉ còn 2.000 (so với 5.000): số đơn chênh hơn hai lần và phần do số đơn lớn hơn phần do
+/// giá trị đơn, nên quy mô là ý chính (#260).
+pub(crate) fn build_skewed_example() -> Explanation {
+    let mut e = example();
+    let (base, compare) = (
+        e.base.value.parse().unwrap(),
+        e.compare.value.parse().unwrap(),
+    );
+    let numbers = build_volume_price(
+        Decimal::from(5000),
+        Decimal::from(2000),
+        base,
+        compare,
+        PRICE_SCALE,
+    )
+    .expect("volume price");
+    let vp = e.volume_price.as_mut().expect("volume price");
+    vp.base_volume = numbers.base_volume;
+    vp.compare_volume = numbers.compare_volume;
+    vp.base_price = numbers.base_price;
+    vp.compare_price = numbers.compare_price;
+    vp.volume_effect = numbers.volume_effect;
+    vp.price_effect = numbers.price_effect;
+    vp.if_volume_unchanged = numbers.if_volume_unchanged;
+    e
+}
+
+/// Quy mô là ý chính mà lời chỉ kể các nhóm: thiếu ý chính, trượt cổng 1 kèm số đơn của hai bên. Có số đơn hai bên, hay
+/// phần do số đơn, thì qua.
+#[test]
+fn missing_scale_reason_fails_when_counts_are_skewed() {
+    let e = build_skewed_example();
+    assert!(build_split(&e).expect("split").scale_main);
+    let groups_only = json!([
+        claim("change", "", "", "-1.283.400,00"),
+        claim("contribution", "Market", "Europe", "-639.780,25"),
+        claim("cause", "Market", "Europe", ""),
+    ]);
+    let problems = check_on(groups_only, &e).unwrap_err();
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(
+        problems[0].starts_with(
+            "Lời thiếu ý chính: số đơn hai bên chênh nhiều (Quý 2/2017 có 5.000, Quý 3/2017 có 2.000)"
+        ),
+        "{}",
+        problems[0]
+    );
+    let with_counts = json!([
+        claim("change", "", "", "-1.283.400,00"),
+        claim("base_volume", "", "", "5.000"),
+        claim("compare_volume", "", "", "2.000"),
+    ]);
+    assert_eq!(check_on(with_counts, &e), Ok(3));
+    // Mẫu gốc 5.000 với 4.400 đơn: chênh chưa tới hai lần, lời chỉ kể nhóm vẫn qua.
+    let even = json!([claim("change", "", "", "-1.283.400,00")]);
+    assert!(!build_split(&example()).expect("split").scale_main);
+    assert_eq!(check(even), Ok(1));
 }

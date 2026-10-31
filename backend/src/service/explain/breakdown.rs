@@ -40,6 +40,7 @@ use crate::service::explain::annotate::{
 use crate::service::explain::check::{PlanSlices, WhyPlan};
 use crate::service::explain::dimension_pick::{pick_dimensions, Candidate, Presence};
 use crate::service::explain::measure::Additive;
+use crate::service::explain::per_unit::drop_total_word;
 use crate::service::explain::ratio_breakdown::build_ratio_breakdown;
 use crate::service::explain::rest_average::{
     averages_rest, build_average, build_average_scale, build_group_averages,
@@ -509,7 +510,8 @@ fn build_volume(plan: &WhyPlan, totals: &SliceTotals) -> Option<VolumePrice> {
     let entity = build_entity_name(column, plan.labels.get(column).map(String::as_str));
     Some(VolumePrice {
         volume_label: format!("Số {entity}"),
-        price_label: format!("{} trên mỗi {entity}", plan.measure.label),
+        // "Tổng lợi nhuận" thành "Lợi nhuận trên mỗi đơn hàng", không phải "Tổng lợi nhuận trên mỗi đơn hàng".
+        price_label: format!("{} trên mỗi {entity}", drop_total_word(&plan.measure.label)),
         sql: totals.sql.clone(),
         base_volume: numbers.base_volume,
         compare_volume: numbers.compare_volume,
