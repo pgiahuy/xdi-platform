@@ -164,7 +164,7 @@ pub async fn dataset_detail(
     Ok(dataset)
 }
 
-/// Xóa hẳn một dataset (chỉ admin): dòng database rồi file Parquet của mọi phiên bản. File xóa sau commit; lỡ xóa
+/// Xóa hẳn một dataset (chỉ admin): dòng database, gồm cả lịch sử câu hỏi, rồi file Parquet của mọi phiên bản. File xóa sau commit; lỡ xóa
 /// file lỗi thì chỉ còn file mồ côi trên đĩa (dọn được bằng tay), không phải dữ liệu lệch giữa hai nơi.
 pub async fn delete_dataset(state: &AppState, member: &Member, id: &str) -> Result<(), AppError> {
     member.require_admin()?;
