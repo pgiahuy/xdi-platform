@@ -5,22 +5,18 @@ một mảng nghiệp vụ: `sales_demo` (bán hàng, DataCo) và `edu_demo` (h�
 tách thành nhiều bảng có khóa chính và khóa ngoại thật, để thử việc kết nối cơ sở dữ liệu của một công ty thay vì nạp
 file. Container này tách khỏi Postgres của ứng dụng (`docker-compose.yml` ở gốc repo).
 
-Trạng thái: đã chạy và kiểm trên máy dev (số liệu ở mục "Đã kiểm"). Chỉ dùng trên máy: mật khẩu ghi ngay trong file
-này và cổng chỉ mở trên `127.0.0.1`. Mặc định `load.sh` cài sẵn hai nguyên nhân biết trước: giao trễ ở
-`sales.orders` của `sales_demo` (tháng 11/2016) và bỏ học ở `edu.students` của `edu_demo` (kỳ 2014J), xem mục
-"Nguyên nhân cài sẵn";
-`SKIP_DEMO_CAUSE=1` để giữ dữ liệu đúng như CSV.
+Trạng thái: đã chạy và kiểm trên máy dev (mục "Đã kiểm"). Chỉ để chạy trên máy: mật khẩu ghi ngay trong file này, cổng
+chỉ mở trên `127.0.0.1`. Mặc định `load.sh` cài sẵn hai nguyên nhân biết trước (mục "Nguyên nhân cài sẵn"):
+giao trễ ở `sales.orders` tháng 11/2016 và bỏ học ở `edu.students` kỳ 2014J; `SKIP_DEMO_CAUSE=1` để giữ đúng CSV.
 
 | Database, schema | Nguồn | Bảng |
 |---|---|---|
 | `sales_demo`, schema `sales` | DataCo Smart Supply Chain (`DataCoSupplyChainDataset.csv`, một dòng mỗi dòng hàng) | `departments`, `categories`, `products`, `customers`, `orders`, `order_items` |
 | `edu_demo`, schema `edu` | OULAD (7 file CSV trong `oulad/`) | `courses`, `students`, `registrations`, `assessments`, `student_assessments`, `vle_materials`, `student_daily_clicks` |
 
-Mỗi database giữ tên schema cũ (`sales`, `edu`), không chuyển về `public`: dùng lại nguyên các file SQL, tên bảng mà
-ứng dụng chụp về (`orders`, `students`) không đổi, nên bộ đánh giá và câu mẫu của `mock` chạy như trước. Mỗi bảng và
-mỗi cột có mô tả tiếng Việt (`COMMENT ON`), xem bằng `\d+ sales.orders` trong psql (database `sales_demo`), đọc
-`sql/sales_schema.sql`, `sql/edu_schema.sql`, hoặc đọc tài liệu bảng sinh sẵn:
-[docs/sales_demo](docs/sales_demo/README.md), [docs/edu_demo](docs/edu_demo/README.md).
+Bảng nằm trong schema `sales` và `edu`, không phải `public`. Mỗi bảng, mỗi cột có mô tả tiếng Việt (`COMMENT ON`): xem
+bằng `\d+ sales.orders` trong psql, trong `sql/sales_schema.sql`, `sql/edu_schema.sql`, hay trong tài liệu bảng sinh
+sẵn [docs/sales_demo](docs/sales_demo/README.md), [docs/edu_demo](docs/edu_demo/README.md).
 
 ## Chạy
 
@@ -38,7 +34,7 @@ database đó (mọi cột kiểu text), tạo lại schema dữ liệu (`sales`
 bước cài nguyên nhân của mảng đó (`sql/plant_demo_cause_sales.sql`, `sql/plant_demo_cause_edu.sql`), cấp quyền cho
 `analyst`, rồi xóa `staging`. Mỗi database nạp trong một giao dịch: lỗi giữa chừng thì dữ liệu cũ của database đó còn
 nguyên. Chạy lại bao nhiêu lần cũng ra cùng kết quả. Nạp riêng một database: `sh data/postgres-demo/load.sh sales` (hay
-`edu`). Database khác trong container (ví dụ `company_demo` của bản cũ) không bị đụng tới. Đo trên máy dev 16 nhân
+`edu`). Database khác trong container không bị đụng tới. Đo trên máy dev 16 nhân
 ngày 31/10/2026, `time sh load.sh` cho cả hai database: 62,6 giây khi container đang chạy, 146,7 giây ở lần đầu sau khi
 đổi `docker-compose.yml` (compose tạo lại container). Sau khi nạp, `sales_demo` chiếm 47 MB và `edu_demo` 204 MB
 (`pg_database_size`); `staging` thêm khoảng 730 MB nếu giữ.
@@ -54,24 +50,39 @@ ngày 31/10/2026, `time sh load.sh` cho cả hai database: 62,6 giây khi contai
 | `KEEP_STAGING` | không đặt | `KEEP_STAGING=1 sh load.sh` giữ schema `staging` để chạy `sql/verify_sales.sql`, `sql/verify_edu.sql` |
 | `SKIP_DEMO_CAUSE` | không đặt | `SKIP_DEMO_CAUSE=1 sh load.sh` bỏ cả hai bước cài nguyên nhân, `sales` và `edu` đúng như CSV |
 
-Kết nối:
+Người dùng của database:
 
 | Người dùng | Mật khẩu | Quyền |
 |---|---|---|
 | `analyst` | `analyst` | Chỉ `SELECT` trên `sales` của `sales_demo` và `edu` của `edu_demo`, giao dịch mặc định chỉ đọc, không thấy `staging` |
 | `demo` | `demo` | Chủ cơ sở dữ liệu, `load.sh` dùng |
 
-Chuỗi kết nối cho ứng dụng chạy trên máy (`make dev`), mỗi database một nguồn:
-`postgres://analyst:analyst@127.0.0.1:5440/sales_demo` và `postgres://analyst:analyst@127.0.0.1:5440/edu_demo`.
-Backend chạy bằng `docker-compose.yml` ở gốc repo: compose gốc có cùng dịch vụ `demo-db` (khai `extends` từ file này) trong
-profile `demo`, chung mạng với backend. Nạp xong ở đây thì gỡ container của bản chạy riêng, volume giữ nguyên
-(`docker compose -f data/postgres-demo/docker-compose.yml rm -sf demo-db`), rồi ở gốc repo chạy
-`docker compose --profile demo up -d`; backend dùng `postgres://analyst:analyst@demo-db:5432/sales_demo` và
-`postgres://analyst:analyst@demo-db:5432/edu_demo` (`SAMPLE_DATABASE_URL` mặc định của compose, hai chuỗi cách nhau bằng
-dấu phẩy). Hai cách dùng chung volume `xdi-demo-db_demo-db-data` và cùng tên
-container `xdi-demo-db`, nên không phải nạp lại, và Docker không cho hai bản chạy cùng lúc trên một volume (hai Postgres
-trên một thư mục dữ liệu làm hỏng dữ liệu). Nạp lại bằng `load.sh` thì gỡ container ở gốc repo trước
-(`docker compose rm -sf demo-db`). Compose gốc in cảnh báo volume có sẵn không do project này tạo: bình thường.
+Xóa hẳn container và dữ liệu: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer --profile admin down -v`.
+
+Volume nạp từ bản cũ còn database `company_demo` (cả hai schema trong một database); `load.sh` không xóa nó. Không còn
+gì dùng nó thì xóa riêng, hai database kia giữ nguyên:
+`docker compose -f data/postgres-demo/docker-compose.yml exec -T demo-db dropdb -U demo --if-exists --force company_demo`
+(chạy bằng compose gốc thì `docker compose exec -T demo-db ...` ở gốc repo).
+
+## Dùng với ứng dụng
+
+Mỗi database là một dataset của ứng dụng. Nạp dữ liệu như mục trên **trước** lần thiết lập đầu của ứng dụng, thì
+thiết lập lần đầu thêm hai dataset `sales_demo`, `edu_demo` và chụp mọi bảng `analyst` đọc được: 13 bảng, 12 quan hệ
+([docs/USAGE.md](../../docs/USAGE.md#1-chọn-mô-hình-và-dữ-liệu-mẫu)).
+
+- Backend chạy trên máy (`make dev`, `make eval`): dùng `postgres://analyst:analyst@127.0.0.1:5440/sales_demo` và
+  `.../edu_demo`, không cần làm gì thêm.
+- Backend chạy bằng `docker-compose.yml` ở gốc repo: compose gốc có cùng dịch vụ `demo-db` (khai `extends` từ file này)
+  trong profile `demo`, chung mạng với backend. Gỡ container của bản chạy riêng, volume giữ nguyên
+  (`docker compose -f data/postgres-demo/docker-compose.yml rm -sf demo-db`), rồi ở gốc repo chạy
+  `docker compose --profile demo up -d --build`. Backend dùng `postgres://analyst:analyst@demo-db:5432/sales_demo` và
+  `.../edu_demo` (`SAMPLE_DATABASE_URL` mặc định của compose).
+- Hai cách dùng chung volume `xdi-demo-db_demo-db-data` và cùng tên container `xdi-demo-db`, nên không phải nạp lại, và
+  Docker không cho hai bản chạy cùng lúc trên một volume (hai Postgres trên một thư mục dữ liệu làm hỏng dữ liệu). Nạp
+  lại bằng `load.sh` thì gỡ container ở gốc repo trước (`docker compose rm -sf demo-db`). Compose gốc in cảnh báo volume
+  có sẵn không do project này tạo: bình thường.
+
+## Xem nhanh dữ liệu
 
 Xem bảng trên trình duyệt khi trình diễn: Adminer (image `adminer:5.4.1`), chỉ chạy khi bật profile `adminer`.
 
@@ -83,23 +94,6 @@ Mở http://127.0.0.1:8090 (đổi cổng bằng `DEMO_ADMINER_PORT`), chọn Sy
 Username và Password `analyst`, Database `sales_demo` hay `edu_demo`. Đăng nhập bằng `analyst` thì chỉ đọc được, như ứng dụng.
 Tắt: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer stop adminer`. `load.sh` chỉ bật
 `demo-db`, không bật Adminer.
-
-Xóa hẳn: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer --profile admin down -v`.
-
-## Xóa company_demo của bản cũ
-
-Volume nạp trước khi tách có database `company_demo` (cả hai schema). `load.sh` thêm hai database mới bên cạnh, không
-xóa nó. Khi không còn gì dùng `company_demo` (bản cài đã thiết lập với nó, `SAMPLE_DATABASE_URL` tự đặt, nhánh khác
-đang chạy `make eval` trên nó), xóa riêng nó, hai database mới và volume giữ nguyên:
-
-```bash
-docker compose -f data/postgres-demo/docker-compose.yml exec -T demo-db dropdb -U demo --if-exists --force company_demo
-```
-
-Chạy bằng compose gốc (`--profile demo`) thì dùng `docker compose exec -T demo-db dropdb -U demo --if-exists --force
-company_demo` ở gốc repo. `--force` ngắt các kết nối còn mở tới `company_demo`.
-
-## Xem nhanh dữ liệu
 
 Màn chỉ đọc bằng Flask-Admin (`admin/`), đóng vai hệ thống nội bộ của công ty, để khi trình diễn đối chiếu số ứng
 dụng trả lời với dòng dữ liệu gốc. Trang tổng quan liệt kê mọi bảng của `sales_demo` và `edu_demo` kèm mô tả, số
@@ -214,12 +208,13 @@ bưu chính nằm ở cột bang) được dời về đúng cột, địa chỉ
 - Giá trị `?` và chuỗi rỗng thành NULL: `imd_band` (1 111 dòng), ngày đăng ký (45), ngày hủy đăng ký (22 521, sinh
   viên không hủy), ngày của bài đánh giá (11), điểm (173), tuần của tài liệu (5 243).
 - `imd_band` trong nguồn có nhóm `10-20` thiếu dấu `%`, đổi thành `10-20%` cho cùng dạng với 9 nhóm còn lại.
-- `student_assessments` chép thêm môn và kỳ từ bài đánh giá để có khóa ngoại tới `students`; `sql/verify.sql` kiểm
-  chúng khớp bài đánh giá.
+- `student_assessments` chép thêm môn và kỳ từ bài đánh giá để có khóa ngoại tới `students`; `sql/verify_edu.sql`
+  kiểm chúng khớp bài đánh giá.
 - `studentVle.csv` (10,6 triệu dòng, 454 MB) không nạp nguyên. Gộp theo (sinh viên, tài liệu, ngày) vẫn còn 8,5 triệu
   dòng, quá nặng cho một bảng mà ứng dụng chụp về. Gộp theo (sinh viên, ngày) còn 1,8 triệu dòng
   (`student_daily_clicks`: tổng lượt bấm, số tài liệu đã mở), đủ để hỏi mức hoạt động theo thời gian và so với kết quả
-  cuối khóa; mất chi tiết từng tài liệu. `vle_materials` vẫn nạp đủ để hỏi về tài liệu của từng học phần.
+  cuối khóa; mất chi tiết từng tài liệu. `vle_materials` vẫn nạp đủ để hỏi về tài liệu của từng học phần. Ứng dụng
+  chụp cả bảng này cùng các bảng khác (không có trần dòng mặc định).
 
 ## Nguyên nhân cài sẵn
 
@@ -251,8 +246,8 @@ Không ghi gì về hai việc sửa này vào COMMENT của bảng hay cột, �
 | Tháng 11/2016, Pacific Asia và Standard Class, theo dòng hàng (986 dòng) | 39,6% | 95,0% |
 
 Mốc so: tháng 10/2016 có tỷ lệ 54,8% theo dòng hàng, Pacific Asia và Standard Class 40,1%. Trước khi sửa, tỷ lệ theo
-đơn của mọi tháng nằm trong khoảng 52,4% đến 57,3%. Câu hỏi mong đợi: "Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so
-với tháng 10/2016?" hay "Vì sao số dòng hàng giao trễ tháng 11/2016 tăng?", đáp án Pacific Asia và Standard Class.
+đơn của mọi tháng nằm trong khoảng 52,4% đến 57,3%. Hỏi theo dòng hàng ("Vì sao số dòng hàng giao trễ tháng 11/2016
+tăng?") cũng ra cùng đáp án.
 Phần đơn còn lại trong nhóm này không trễ là đơn đã hủy (`Shipping canceled`), bước cài không đụng tới.
 
 ### Bỏ học ở `edu`
@@ -283,8 +278,7 @@ West Midlands Region 40,4%). Tỷ lệ đạt (`Pass`) của 2014J giảm từ 3
 `KEEP_STAGING=1 sh load.sh`, rồi với từng database
 `docker compose -f data/postgres-demo/docker-compose.yml exec -T demo-db psql -U demo -d sales_demo -f - < data/postgres-demo/sql/verify_sales.sql`
 (`edu_demo` với `sql/verify_edu.sql`). Lần chạy gần nhất (31/10/2026, có hai bước cài nguyên nhân) cả 42 dòng `ok` là
-`t` (25 của `sales_demo`, 17 của `edu_demo`). Lúc tách, nội dung 13 bảng của hai database mới cũng được so với
-`company_demo` (md5 của mọi dòng mỗi bảng): giống hệt, kể cả hai nguyên nhân cài sẵn.
+`t` (25 của `sales_demo`, 17 của `edu_demo`).
 
 - Số dòng mỗi bảng bằng số dòng CSV hoặc số khóa khác nhau trong CSV (bảng "Số dòng"); tổng `sum_click` bằng tổng
   trên `studentVle.csv` (39 605 099).
@@ -302,8 +296,8 @@ West Midlands Region 40,4%). Tỷ lệ đạt (`Pass`) của 2014J giảm từ 3
 
 ## Câu hỏi mẫu và bảng cần dùng
 
-Bảng ghi bảng nào phải đọc để trả lời đúng. Hai câu "vì sao" cuối có đáp án biết trước (mục "Nguyên nhân cài sẵn");
-các câu khác chưa có đáp án ghi sẵn ở đây.
+Bảng nào phải đọc để trả lời đúng. Hai câu hỏi nguyên nhân cuối có đáp án ở mục "Nguyên nhân cài sẵn"; các câu khác
+chưa có đáp án ghi sẵn ở đây.
 
 | Câu hỏi | Bảng |
 |---|---|
@@ -316,13 +310,6 @@ các câu khác chưa có đáp án ghi sẵn ở đây.
 | Tỷ lệ bỏ học theo môn và kỳ, kèm độ dài học phần | `edu.students`, `courses` |
 | Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so với tháng 10/2016? | `sales.orders` (theo đơn); thêm `order_items` nếu đếm theo dòng hàng |
 | Vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B? | `edu.students` |
-
-Đáp án của hai câu cuối:
-
-- Giao trễ: Pacific Asia và Standard Class. Tỷ lệ giao trễ của nhóm này tháng 11/2016 từ 37,8% lên 95,7% theo đơn
-  (39,6% lên 95,0% theo dòng hàng); cả tháng từ 54,3% lên 65,2% theo đơn, tháng 10/2016 là 54,8% theo dòng hàng.
-- Bỏ học: Scotland và nhóm tuổi 0-35. Tỷ lệ bỏ học của nhóm này kỳ 2014J từ 26,3% lên 67,5%; cả kỳ từ 34,0% lên
-  37,4%, kỳ 2014B là 33,5%; phần còn lại của kỳ 2014J giữ 34,7%.
 
 ## Giấy phép và ghi công
 
