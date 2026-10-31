@@ -73,6 +73,24 @@ impl ColumnUnit {
     }
 }
 
+/// Nguồn của mô tả cột, khớp CHECK của columns.description_source (0015_database_descriptions.sql).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DescriptionSource {
+    /// Tổ chức ghi trong database nguồn (COMMENT ON COLUMN); lớp ngữ nghĩa không ghi đè.
+    Database,
+    /// Lớp ngữ nghĩa (mô hình ngôn ngữ) viết.
+    Model,
+}
+
+impl DescriptionSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DescriptionSource::Database => "database",
+            DescriptionSource::Model => "model",
+        }
+    }
+}
+
 /// Một giá trị của cột ít giá trị, kèm số dòng mang giá trị đó.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewColumnValue {
@@ -95,6 +113,9 @@ pub struct NewColumn {
     pub min_value: Option<String>,
     pub max_value: Option<String>,
     pub time_format: Option<String>,
+    /// Mô tả tổ chức đã ghi trong database nguồn (COMMENT ON COLUMN, service/sources/), đã làm sạch; ghi kèm nguồn
+    /// 'database'. None với file nạp tay hay cột không có comment: lớp ngữ nghĩa viết sau.
+    pub description: Option<String>,
     /// Ghi vào column_values; rỗng với cột nhiều giá trị.
     pub values: Vec<NewColumnValue>,
 }
@@ -112,6 +133,9 @@ pub struct ProfileColumn {
     pub data_type: String,
     pub role: String,
     pub description: Option<String>,
+    /// Ai viết mô tả (DescriptionSource::as_str): database (COMMENT ON của nguồn) hay model (lớp ngữ nghĩa); None khi
+    /// chưa có mô tả.
+    pub description_source: Option<String>,
     pub aliases: Vec<String>,
     pub is_sensitive: bool,
     pub null_count: Option<i64>,
@@ -151,7 +175,8 @@ pub struct ValueRow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticColumnUpdate {
     pub column_id: Uuid,
-    /// None khi mô hình không có mô tả hợp lệ cho cột này.
+    /// None khi mô hình không có mô tả hợp lệ cho cột này. Cột đã có mô tả từ database thì giữ mô tả đó dù ở đây có
+    /// gì (apply_semantic_profile).
     pub description: Option<String>,
     pub aliases: Vec<String>,
     /// Vai trò mới khi mô hình đề xuất và luật cho phép (xem service/semantic/mod.rs); None là giữ vai trò cũ.
@@ -218,7 +243,7 @@ impl Store {
         version_id: Uuid,
     ) -> Result<Vec<ProfileColumn>, AppError> {
         sqlx::query_as(
-            "SELECT id, position, name, data_type, role, description, aliases, is_sensitive,
+            "SELECT id, position, name, data_type, role, description, description_source, aliases, is_sensitive,
                  null_count, distinct_count, min_value, max_value, time_format, unit,
                  COALESCE(aggregation, 'sum') AS aggregation
              FROM columns WHERE workspace_id = $1 AND version_id = $2 ORDER BY position",
@@ -357,14 +382,18 @@ impl Store {
         }
 
         // Cách gộp chỉ điền khi còn NULL (chưa ai chọn): admin có thể đổi ở màn Chỉ số ngay sau khi nạp, trước khi lượt
-        // chạy nền này xong; ghi đè thì lựa chọn đó mất mà không ai báo.
+        // chạy nền này xong; ghi đè thì lựa chọn đó mất mà không ai báo. Mô tả từ database (COMMENT ON của nguồn) giữ
+        // nguyên: đó là chữ tổ chức tự viết, mô hình chỉ đoán. CASE đọc giá trị cũ của dòng, nên hai cột đổi cùng nhau.
         for column in columns {
             let role = column.role.map(|r| r.as_str());
             let unit = column.unit.map(|u| u.as_str());
             let aggregation = column.aggregation.map(|a| a.as_str());
             sqlx::query(
-                "UPDATE columns SET description = $3, aliases = $4, role = COALESCE($5, role), unit = $6,
-                                    aggregation = COALESCE(aggregation, $7)
+                "UPDATE columns SET
+                     description = CASE WHEN description_source = $8 THEN description ELSE $3 END,
+                     description_source = CASE WHEN description_source = $8 THEN description_source
+                                               WHEN $3::text IS NULL THEN NULL ELSE $9 END,
+                     aliases = $4, role = COALESCE($5, role), unit = $6, aggregation = COALESCE(aggregation, $7)
                  WHERE workspace_id = $1 AND id = $2",
             )
             .bind(ws.as_uuid())
@@ -374,6 +403,8 @@ impl Store {
             .bind(role)
             .bind(unit)
             .bind(aggregation)
+            .bind(DescriptionSource::Database.as_str())
+            .bind(DescriptionSource::Model.as_str())
             .execute(&mut *tx)
             .await
             .map_err(|e| db_error("update column semantics", e))?;
@@ -419,8 +450,8 @@ pub(super) async fn insert_columns(
     for column in columns {
         let column_id: Uuid = sqlx::query_scalar(
             "INSERT INTO columns (workspace_id, version_id, position, name, data_type, role, is_sensitive, null_count,
-                 distinct_count, min_value, max_value, time_format)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
+                 distinct_count, min_value, max_value, time_format, description, description_source)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id",
         )
         .bind(ws.as_uuid())
         .bind(version_id)
@@ -434,6 +465,13 @@ pub(super) async fn insert_columns(
         .bind(&column.min_value)
         .bind(&column.max_value)
         .bind(&column.time_format)
+        .bind(&column.description)
+        .bind(
+            column
+                .description
+                .as_ref()
+                .map(|_| DescriptionSource::Database.as_str()),
+        )
         .fetch_one(&mut *conn)
         .await
         .map_err(|e| db_error("insert column", e))?;
@@ -481,6 +519,7 @@ mod tests {
             min_value: None,
             max_value: None,
             time_format: None,
+            description: None,
             values: values
                 .iter()
                 .map(|(value, frequency)| NewColumnValue {
@@ -509,6 +548,7 @@ mod tests {
             file_hash: "h1",
             parquet_path: "x",
             row_count: 3,
+            description: None,
         };
         let v = store.create_version(&a, ds.id, &new, &[]).await.unwrap();
         assert_eq!(v.profile_status, "pending");
@@ -589,6 +629,7 @@ mod tests {
             file_hash: hash,
             parquet_path: "x",
             row_count: 3,
+            description: None,
         };
         let clash = [
             new_column(0, "a", ProfileRole::Dimension, &[("x", 1)]),
@@ -663,6 +704,7 @@ mod tests {
             file_hash: hash,
             parquet_path: "x",
             row_count: 3,
+            description: None,
         };
         // Không có cột thì pending (chưa qua lớp cấu trúc): lớp ngữ nghĩa không ghi được.
         let pending = store
@@ -787,6 +829,7 @@ mod tests {
             file_hash: "h1",
             parquet_path: "x",
             row_count: 3,
+            description: None,
         };
         let v = store
             .create_version(&ws, ds.id, &version, &columns)

@@ -22,6 +22,8 @@ export type ColumnItem = {
   /** dimension, measure, time, key, text, ignore. */
   role: string
   description: string | null
+  /** database: comment trong database nguồn; model: lớp ngữ nghĩa viết; null khi không có mô tả. */
+  descriptionSource: string | null
   /** Chỉ cột measure có; cột khác là null. */
   aggregation: Aggregation | null
 }

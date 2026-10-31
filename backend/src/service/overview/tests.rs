@@ -25,6 +25,7 @@ fn column(name: &str, role: &str) -> ProfileColumn {
         data_type: "VARCHAR".to_string(),
         role: role.to_string(),
         description: None,
+        description_source: None,
         aliases: Vec::new(),
         is_sensitive: false,
         null_count: Some(0),
@@ -147,6 +148,7 @@ fn columns_carry_labels_and_counts_but_sensitive_ones_no_values() {
     let market = ProfileColumn {
         aliases: vec!["Thị trường".to_string()],
         description: Some("Khu vực bán".to_string()),
+        description_source: None,
         null_count: Some(1),
         ..column("Market", "dimension")
     };

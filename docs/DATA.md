@@ -114,6 +114,15 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   rộng hơn 38 chữ số, thành `DOUBLE`, chỉ giữ chính xác khoảng 15 chữ số), `boolean`, `date`, `timestamp`,
   `timestamptz` giữ kiểu tương ứng. Mọi kiểu khác (`text`, `varchar`, `uuid`, `json`, mảng, enum) thành chữ, nên mã
   như `00123` giữ nguyên số 0 ở đầu. Chuỗi rỗng và `NULL` vẫn khác nhau sau khi chụp.
+- Mô tả có sẵn trong database (#245): cùng lần chụp, trong cùng giao dịch chỉ đọc, backend đọc comment của bảng
+  (`COMMENT ON TABLE`, qua `obj_description`) và của từng cột (`COMMENT ON COLUMN`, qua `col_description`) từ catalog,
+  không đọc thêm dòng dữ liệu nào (`backend/src/service/sources/comments.rs`). Comment rỗng hay chỉ có khoảng trắng coi
+  như không có; xuống dòng và khoảng trắng liền nhau gộp thành một dấu cách, ký tự vô hình bị bỏ, quá 300 ký tự thì cắt
+  ở khoảng trắng gần nhất và thêm `...`. Comment của cột thành mô tả cột trong hồ sơ, ghi nguồn `database`
+  (`description_source`); comment của bảng ghi trên phiên bản (`description` của phiên bản và của tổng quan dataset).
+  Cột không có comment vẫn nhận mô tả do mô hình viết (nguồn `model`) như cũ. Lớp ngữ nghĩa không viết lại và không ghi
+  đè mô tả nguồn `database` (mục Hồ sơ lớp ngữ nghĩa). Comment tính vào hash của bản chụp khi bảng có ít nhất một
+  comment: chỉ sửa comment rồi chụp lại cũng ra phiên bản mới mang comment mới; bảng không có comment giữ hash như trước.
 - Giới hạn: `SOURCE_MAX_ROWS` dòng và `MAX_UPLOAD_MB` dung lượng CSV cho mỗi bảng (đếm trước, quá thì từ chối cả lần
   chụp, không chụp thiếu), tối đa 10 bảng một lần chụp, `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
 - Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`). Máy chủ phải nằm trong
@@ -307,8 +316,8 @@ Postgres lỗi) giữ `structure` và không đánh dấu gì: lần khởi đ�
 `MAX_TOKENS`, bị dừng vì `SAFETY` và mã 400 không phải khóa sai cũng bằng lỗi tạm, nên các lỗi này được thử lại mỗi
 lần khởi động dù gọi lại có thể vẫn hỏng.
 
-Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: tên dataset, tên bảng logic, số dòng; mỗi cột gửi tên, kiểu,
-vai trò, tỷ lệ ô trống, số giá trị khác nhau; min, max chỉ kèm cột `time` và `measure` số thực không nhạy cảm (min, max
+Prompt chỉ gửi siêu dữ liệu, không gửi dòng dữ liệu: tên dataset, tên bảng logic, số dòng, mô tả bảng từ database
+nếu có; mỗi cột gửi tên, kiểu, vai trò, tỷ lệ ô trống, số giá trị khác nhau, mô tả từ database nếu có; min, max chỉ kèm cột `time` và `measure` số thực không nhạy cảm (min, max
 của cột chữ hay mã số nguyên như mã đơn, số điện thoại là dữ liệu thật); danh sách giá trị chỉ gửi cho cột `dimension`
 không nhạy cảm, mỗi giá trị kèm số dòng, tối đa 50 giá trị một cột (cột nhiều hơn gửi 20 giá trị nhiều dòng nhất),
 tổng tối đa 400 giá trị, bỏ giá trị dài quá 200 byte. Tên cột và giá trị in dạng chuỗi JSON nên dữ liệu không chèn
@@ -333,6 +342,11 @@ cùng cột, hay bí danh đã nhận của cùng mục. Đổi vai trò chỉ n
 nhiều hơn thì cột chiều mới sẽ không có danh sách giá trị), và cột `dimension` thành `text` (đường dẫn ảnh, mô tả
 dài). Mỗi đổi vai trò được ghi log (tên cột, vai trò cũ, mới). Cột thành `text` thì giá trị của nó không đi vào
 prompt về sau, vì các bước sau chọn giá trị theo vai trò.
+
+Cột đã có mô tả từ database (`description_source` là `database`, mục Nguồn database) thì mô tả đó đi vào prompt làm ngữ
+cảnh cho bí danh, đơn vị, cách gộp và câu gợi ý, và luật phần cột dặn mô hình không viết mô tả cho cột đó. Mô tả mô hình
+vẫn viết cho cột này bị bỏ khi kiểm câu trả lời, và câu `UPDATE` của store giữ mô tả nguồn `database` dù nhận gì; mô
+tả mô hình viết ghi nguồn `model`. Chưa có màn cho người dùng sửa mô tả cột.
 
 Đơn vị (`columns.unit`) chỉ nhận cho cột `measure` và chỉ một trong năm chữ: `money` (tiền), `quantity` (số lượng
 hàng), `percent` (tỷ lệ), `duration` (số ngày, số giờ), `other`. Danh sách cố định để so được bằng dấu bằng: luật

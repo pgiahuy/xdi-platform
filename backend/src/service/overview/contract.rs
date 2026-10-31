@@ -18,6 +18,10 @@ use crate::service::ask::contract::{ChartSuggestion, ResultTable};
 pub struct DatasetOverviewResponse {
     pub dataset_id: Uuid,
     pub name: String,
+    /// Description of the table written in the source database (`COMMENT ON TABLE`) for the current version; null for
+    /// uploaded files and tables without a comment.
+    #[schema(required)]
+    pub description: Option<String>,
     /// Current version; null when the dataset has no data yet.
     #[schema(required)]
     pub version: Option<OverviewVersion>,
@@ -84,6 +88,10 @@ pub struct OverviewColumn {
     pub label: Option<String>,
     #[schema(required)]
     pub description: Option<String>,
+    /// Who wrote `description`: `database` (a `COMMENT ON COLUMN` of the source database) or `model` (the semantic
+    /// profile); null when there is no description.
+    #[schema(required)]
+    pub description_source: Option<String>,
     pub role: OverviewRole,
     /// money, quantity, percent, duration or other; null when unknown.
     #[schema(required)]
