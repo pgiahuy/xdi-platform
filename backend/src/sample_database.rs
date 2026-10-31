@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* sample_database.rs - đọc SAMPLE_DATABASE_URL: database mẫu mà thiết lập lần đầu kết nối làm nguồn và chụp bảng
-(service/samples.rs). config.rs gọi build_sample_database lúc đọc cấu hình; máy chủ của database mẫu được thêm vào danh
-sách máy chủ được phép, vì người cài đã chọn nó.
+(service/samples.rs). config.rs gọi build_sample_database lúc đọc cấu hình; đúng máy và cổng của database mẫu được phép thêm
+làm nguồn (Config::source_host_allowed), vì người cài đã chọn nó.
 
 Chỉ nhận dạng postgres://tài-khoản:mật-khẩu@máy:cổng/database?sslmode=..., đủ cho compose (demo-db) và cho máy dev.
 Ký tự đặc biệt trong tài khoản, mật khẩu, tên database viết dạng %XX như mọi chuỗi kết nối Postgres. */

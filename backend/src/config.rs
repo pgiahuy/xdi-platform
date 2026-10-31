@@ -134,7 +134,7 @@ impl Config {
             samples_dir: PathBuf::from(var_or("SAMPLES_DIR", "../data/samples")),
             excel_worker: ExcelWorker::Process(worker_binary()),
             source_secret_key: Secret::new(var_or("SOURCE_SECRET_KEY", "")),
-            source_allowed_hosts: Vec::new(),
+            source_allowed_hosts: host_list(&var_or("SOURCE_ALLOWED_HOSTS", "")),
             source_max_rows: u64::from(positive_number(
                 "SOURCE_MAX_ROWS",
                 env::var("SOURCE_MAX_ROWS").ok().as_deref(),
@@ -143,20 +143,18 @@ impl Config {
             source_timeout: timeout_secs("SOURCE_TIMEOUT_SECS", 300),
             sample_database: sample_database(&var_or("SAMPLE_DATABASE_URL", "")),
         }
-        .with_allowed_hosts(&var_or("SOURCE_ALLOWED_HOSTS", ""))
     }
 
-    /// Danh sách máy chủ được phép, cộng máy của database mẫu: người cài đã chọn máy đó qua SAMPLE_DATABASE_URL, bắt
-    /// thêm nó vào SOURCE_ALLOWED_HOSTS thì quên một biến là thiết lập lần đầu không chụp được, và "Chụp lại" về sau
-    /// cũng bị từ chối.
-    fn with_allowed_hosts(mut self, raw: &str) -> Self {
-        self.source_allowed_hosts = host_list(raw);
-        if let Some(sample) = &self.sample_database {
-            if !self.source_allowed_hosts.contains(&sample.host) {
-                self.source_allowed_hosts.push(sample.host.clone());
-            }
-        }
-        self
+    /// Máy chủ được thêm làm nguồn: có trong SOURCE_ALLOWED_HOSTS (mọi cổng), hoặc đúng máy và cổng của
+    /// SAMPLE_DATABASE_URL. Người cài đã chọn database mẫu, bắt thêm nó vào SOURCE_ALLOWED_HOSTS thì quên một biến là
+    /// thiết lập lần đầu không chụp được. Chỉ cho đúng cổng đó: make dev đặt database mẫu ở 127.0.0.1:5440, cho cả máy
+    /// 127.0.0.1 thì admin chụp được chính Postgres của ứng dụng (cổng 5433).
+    pub fn source_host_allowed(&self, host: &str, port: u16) -> bool {
+        let sample = self
+            .sample_database
+            .as_ref()
+            .is_some_and(|s| s.host == host && s.port == port);
+        sample || self.source_allowed_hosts.iter().any(|h| h == host)
     }
 
     /// Lệnh đánh giá (`eval`, `eval-classify`, main.rs) gọi Gemini bằng khóa riêng `EVAL_GEMINI_API_KEY` khi có, để
@@ -378,14 +376,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sample_database_host_is_always_allowed() {
+    fn only_the_sample_host_and_port_are_allowed_without_listing() {
         let mut config = Config::from_env();
         config.sample_database =
-            build_sample_database("postgres://analyst:x@Demo-DB:5432/company_demo").unwrap();
-        let config = config.with_allowed_hosts("db.example.com");
-        assert_eq!(config.source_allowed_hosts, ["db.example.com", "demo-db"]);
-        let config = config.with_allowed_hosts("demo-db");
-        assert_eq!(config.source_allowed_hosts, ["demo-db"]);
+            build_sample_database("postgres://analyst:x@127.0.0.1:5440/company_demo").unwrap();
+        config.source_allowed_hosts = vec!["db.example.com".to_string()];
+        assert!(config.source_host_allowed("127.0.0.1", 5440));
+        // Cùng máy, cổng khác (Postgres của ứng dụng ở 5433): không được.
+        assert!(!config.source_host_allowed("127.0.0.1", 5433));
+        assert!(config.source_host_allowed("db.example.com", 6543));
+        assert!(!config.source_host_allowed("10.0.0.5", 5432));
     }
 
     #[test]

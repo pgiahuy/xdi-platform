@@ -123,7 +123,7 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   | `sslmode` | TLS | Kiểm chứng chỉ máy chủ |
   |---|---|---|
   | `disable` | Không | Không |
-  | `prefer` (mặc định) | Có nếu máy chủ nhận, không thì kết nối thường | Không |
+  | `prefer` (mặc định) | Có nếu máy chủ nhận, không thì kết nối thường. Máy chủ nhận TLS mà bắt tay lỗi (chỉ có TLS 1.0, 1.1, chứng chỉ quá yếu) thì báo lỗi, không quay về kết nối thường như libpq | Không |
   | `require` | Bắt buộc | Không: chống nghe lén trên đường truyền, không chống máy giả mạo |
   | `verify-full` | Bắt buộc | Có: do CA tin cậy cấp và đúng tên máy đã nhập (`host`) |
 

@@ -253,8 +253,18 @@ fn is_tls_error(e: &sqlx::Error) -> bool {
     }
 }
 
-/// Lỗi TLS: máy chủ không bật TLS (với require, verify-full), hoặc chứng chỉ không qua kiểm (verify-full).
-fn tls_error(conn: &ConnectInfo) -> AppError {
+/// Lỗi TLS: máy chủ không bật TLS (với require, verify-full), chứng chỉ không qua kiểm (verify-full), hay bắt tay TLS lỗi.
+/// Với prefer: sqlx thử TLS khi máy chủ nhận TLS, và khác libpq, bắt tay lỗi thì không thử lại kết nối thường; thường do
+/// máy chủ chỉ có TLS cũ (1.0, 1.1) hay chứng chỉ quá yếu, nên lời báo không khuyên chọn lại prefer.
+pub(super) fn tls_error(conn: &ConnectInfo) -> AppError {
+    if conn.sslmode == "prefer" {
+        return AppError::BadRequest(format!(
+            "Máy chủ {}:{} nhận TLS nhưng bắt tay TLS lỗi (sslmode prefer không quay về kết nối thường): máy chủ có thể \
+             chỉ hỗ trợ TLS 1.0, 1.1 hay dùng chứng chỉ quá yếu. Nâng cấu hình TLS của máy chủ (TLS 1.2 trở lên), hoặc \
+             chọn disable nếu mạng giữa hai máy là mạng tin cậy",
+            conn.host, conn.port
+        ));
+    }
     AppError::BadRequest(format!(
         "Không lập được kết nối TLS tới {}:{} (sslmode {}): máy chủ phải bật TLS; với verify-full, chứng chỉ của máy chủ \
          phải do một CA tin cậy cấp (CA của hệ thống hoặc CA dán vào ô chứng chỉ CA) và ghi đúng tên máy {}. Máy chủ \

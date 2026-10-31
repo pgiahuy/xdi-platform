@@ -74,10 +74,13 @@ fn old_connect_info_without_ca_still_decodes() {
 
 #[test]
 fn host_must_be_listed() {
-    let allowed = vec!["db.example.com".to_string()];
-    assert!(check_host_allowed(&allowed, "db.example.com").is_ok());
-    assert!(check_host_allowed(&allowed, "169.254.169.254").is_err());
-    assert!(check_host_allowed(&[], "db.example.com").is_err());
+    let mut config = crate::config::Config::from_env();
+    config.sample_database = None;
+    config.source_allowed_hosts = vec!["db.example.com".to_string()];
+    assert!(check_host_allowed(&config, "db.example.com", 5432).is_ok());
+    assert!(check_host_allowed(&config, "169.254.169.254", 5432).is_err());
+    config.source_allowed_hosts = Vec::new();
+    assert!(check_host_allowed(&config, "db.example.com", 5432).is_err());
 }
 
 #[test]
@@ -161,4 +164,21 @@ fn row_limit_is_per_table() {
         Err(AppError::TooLarge(m)) if m.contains("shop.orders")
     ));
     assert!(snapshot::check_row_count(&orders, 100, 100).is_ok());
+}
+
+/// Lỗi TLS ở prefer (bắt tay lỗi) không khuyên chọn lại prefer; ở require thì gợi ý prefer hay disable.
+#[test]
+fn tls_error_advice_depends_on_the_mode() {
+    let mut info = build_connect_info(request("db.example.com")).unwrap();
+    let message = |info: &postgres::ConnectInfo| match postgres::tls_error(info) {
+        AppError::BadRequest(text) => text,
+        other => panic!("{other:?}"),
+    };
+    let prefer = message(&info);
+    assert!(
+        prefer.contains("bắt tay TLS lỗi") && !prefer.contains("chọn prefer"),
+        "{prefer}"
+    );
+    info.sslmode = "require".to_string();
+    assert!(message(&info).contains("chọn prefer hoặc disable"));
 }

@@ -32,6 +32,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::auth::Member;
+use crate::config::Config;
 use crate::engine::store::SourceRow;
 use crate::{error::AppError, state::AppState};
 
@@ -101,7 +102,7 @@ pub async fn create(
     member.require_admin()?;
     let key = secret_key(state)?;
     let info = build_connect_info(req)?;
-    check_host_allowed(&state.config.source_allowed_hosts, &info.host)?;
+    check_host_allowed(&state.config, &info.host, info.port)?;
     // Thử kết nối trước khi lưu: nguồn sai mật khẩu hay không tới được thì báo ngay, không để lại dòng hỏng.
     let mut conn = postgres::connect(&info, state.config.source_timeout).await?;
     postgres::list_tables(&mut conn).await?;
@@ -197,7 +198,7 @@ pub(super) async fn load(
     let info: ConnectInfo = serde_json::from_slice(&plain)
         .map_err(|e| AppError::Internal(format!("decode source secret: {e}")))?;
     // Danh sách máy chủ được phép có thể đã hẹp lại sau khi thêm nguồn: kiểm lại mỗi lần kết nối.
-    check_host_allowed(&state.config.source_allowed_hosts, &info.host)?;
+    check_host_allowed(&state.config, &info.host, info.port)?;
     Ok((row, info))
 }
 
@@ -280,8 +281,8 @@ fn build_root_cert(pem: Option<String>, sslmode: &str) -> Result<Option<String>,
     }
 }
 
-fn check_host_allowed(allowed: &[String], host: &str) -> Result<(), AppError> {
-    if allowed.iter().any(|h| h == host) {
+fn check_host_allowed(config: &Config, host: &str, port: u16) -> Result<(), AppError> {
+    if config.source_host_allowed(host, port) {
         return Ok(());
     }
     Err(AppError::BadRequest(format!(

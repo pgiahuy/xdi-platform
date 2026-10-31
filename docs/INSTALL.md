@@ -146,7 +146,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `DEMO_DB_PORT` | `5440` | Cổng của database mẫu trên `127.0.0.1` của máy host (`data/postgres-demo/docker-compose.yml`), cho `make dev` và `make eval`. Make không đọc `.env`: đổi cổng ở `.env` thì chạy kèm cùng giá trị, ví dụ `DEMO_DB_PORT=5441 make eval` |
 | `DEMO_DB_CONTAINER`, `DEMO_DB_VOLUME` | `xdi-demo-db`, `xdi-demo-db_demo-db-data` | Tên container và volume của database mẫu khi chạy bằng `--profile demo`; mặc định trùng cách chạy riêng ở `data/postgres-demo`, nên dữ liệu đã nạp dùng được ngay. Chỉ đổi khi cần một bản thứ hai tách biệt |
 | `SOURCE_SECRET_KEY` | trống (tự sinh) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`). Để trống thì lần đầu khởi động backend tự sinh một khóa ngẫu nhiên, ghi vào `DATA_DIR/source_secret.key` (quyền 0600; compose: volume `xdidata`) và các lần sau đọc lại file đó; log ghi một dòng khi sinh, không in khóa. Mất file đó (xóa volume, `docker compose down -v`) là mất mật khẩu của mọi nguồn đã lưu: phải thêm lại nguồn. `make backup` chép cả file này, nên ai có bản sao lưu là giải mã được thông tin kết nối. Bản chạy thật nên đặt biến này và giữ khóa ngoài máy chủ. Đổi khóa thì phải thêm lại các nguồn |
-| `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối, trừ máy của `SAMPLE_DATABASE_URL` luôn được phép. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp |
+| `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối, trừ đúng máy và cổng của `SAMPLE_DATABASE_URL` (chỉ cổng đó) luôn được phép. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp |
 | `SOURCE_MAX_ROWS`, `SOURCE_TIMEOUT_SECS` | `1000000`, `300` | Trần số dòng và thời gian một lần chụp bảng; dung lượng theo `MAX_UPLOAD_MB` |
 | `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | Để dành cho đăng nhập bằng Google, backend hiện chưa đọc; để trống |
@@ -592,7 +592,7 @@ backend ghi cảnh báo và nạp `DataCo` như trên.
 
 Bản cài đã thiết lập trước khi có dataset mẫu, hay đặt `SEED_SAMPLE=false`, thì kết nối database mẫu ở bước 3 (máy
 chủ `demo-db`, cổng 5432, database `company_demo`, tài khoản và mật khẩu `analyst`, `sslmode` `disable`; máy của
-`SAMPLE_DATABASE_URL` luôn được phép), hoặc nạp tay: file
+`SAMPLE_DATABASE_URL`, đúng cổng đó, luôn được phép), hoặc nạp tay: file
 `data/samples/dataco.csv` trong repo, hoặc bản đầy đủ tải bằng `sh data/download.sh dataco`. Đặt tên dataset là
 `DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên file và câu mẫu chạy
 lỗi. Workspace đã có bảng `dataco` thì dataset thứ hai thành `dataco_2`, nên nạp DataCo vào workspace chưa có nó.
@@ -615,7 +615,8 @@ Mục **Dữ liệu** ở thanh bên.
 
 Kết nối database (chỉ `admin`, máy chủ phải có trong `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình; `SOURCE_SECRET_KEY` để
 trống thì backend tự sinh khóa): khung **Kết nối database** đứng đầu trang **Dữ liệu**, form mở sẵn khi workspace chưa có nguồn nào,
-không thì bấm **Thêm database**. Nhập máy chủ, cổng, database, tài khoản, mật khẩu và `sslmode`: `prefer` (mặc định),
+không thì bấm **Thêm database**. Nhập máy chủ, cổng, database, tài khoản, mật khẩu và `sslmode`: `prefer` (mặc định; thử TLS khi máy chủ nhận TLS, bắt
+tay lỗi thì báo lỗi chứ không quay về kết nối thường; trước #230 `prefer` luôn là kết nối thường),
 `require` khi máy chủ bắt buộc TLS, `verify-full` để kiểm chứng chỉ máy chủ (kèm ô **Chứng chỉ CA** cho CA riêng của tổ
 chức; bảng ở [Dữ liệu](DATA.md), mục Nguồn database). Bấm **Kết nối**: backend thử kết nối trước khi lưu. Chọn bảng hay
 view rồi bấm **Chụp bảng thành dataset**. Bảng có khóa ngoại thì khung hiện các bảng liên quan để chụp kèm,

@@ -80,7 +80,7 @@ services:
       ANSWER_TEXT: ${ANSWER_TEXT:-true}
       INSIGHT_TEXT: ${INSIGHT_TEXT:-true}
       # Nguồn database (docs/DATA.md): khóa trống thì backend sinh một khóa và lưu ở /data/source_secret.key (volume
-      # xdidata); danh sách máy chủ trống thì không thêm được nguồn (máy của SAMPLE_DATABASE_URL luôn được phép).
+      # xdidata); danh sách máy chủ trống thì không thêm được nguồn, trừ đúng máy và cổng của SAMPLE_DATABASE_URL.
       SOURCE_SECRET_KEY: ${SOURCE_SECRET_KEY:-}
       SOURCE_ALLOWED_HOSTS: ${SOURCE_ALLOWED_HOSTS:-}
       SOURCE_MAX_ROWS: ${SOURCE_MAX_ROWS:-1000000}
