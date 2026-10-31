@@ -143,6 +143,7 @@ async fn run_cases(
             columns: &context.columns,
             related: &[],
             earlier: &case.earlier,
+            others: &[],
         };
         let classified = classify(state.llm.as_ref(), &input, timeout).await;
         outcomes.push(ClassifyOutcome {

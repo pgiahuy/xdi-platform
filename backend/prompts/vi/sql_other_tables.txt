@@ -1,0 +1,4 @@
+Các bảng khác của database này, chỉ nêu tên; cột của chúng không được liệt kê:
+{{tables}}
+- Câu hỏi cần một bảng trong danh sách này thì ghi tên bảng vào needed_tables và để sql trống: hệ thống sẽ gửi cột của bảng đó rồi hỏi lại. Không bao giờ đoán tên cột của bảng trong danh sách này.
+- Bảng ghi "no data yet" (chưa có dữ liệu) không có dòng nào để đọc. Câu hỏi cần bảng đó thì trả lời bằng unanswerable và nêu tên bảng trong lý do.

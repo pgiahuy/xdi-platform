@@ -1,105 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/related_tests.rs - test phần thuần của ask/related.rs và ask/group_prompt.rs: chọn bảng liên quan theo số
-bước và số bảng, và prompt SQL nhiều bảng của ask/prompt.rs (khối cột mỗi bảng, quan hệ, cột khóa, trần độ dài).
+/* service/ask/related_tests.rs - test prompt SQL nhiều bảng của ask/prompt.rs (khối cột mỗi bảng, quan hệ, cột khóa,
+trần độ dài, danh sách gọn các bảng chỉ gửi tên). Thứ tự bảng của nhóm và bước chọn bảng ở ask/table_pick_tests.rs.
 Đường đọc Postgres của load_group được test qua route ở api/ask_related_tests.rs. */
 
 use uuid::Uuid;
 
-use crate::engine::store::{ColumnAggregation, DatasetRelation, MetricDefinition};
+use crate::engine::store::{ColumnAggregation, MetricDefinition};
 use crate::service::ask::context::{apply_metadata_cap, AskContext, ColumnProfile};
-use crate::service::ask::group_prompt::{GroupPrompt, JoinLine, TableContext};
+use crate::service::ask::group_prompt::{CompactTable, GroupPrompt, JoinLine, TableContext};
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput, PROMPT_MAX_CHARS};
-use crate::service::ask::related::{build_group_ids, MAX_GROUP_TABLES};
 use crate::service::ask::values::ValueEntry;
 use crate::service::prompt_fixtures::check_fixture;
-
-/// Id cố định theo số, để lời báo của assert đọc được.
-fn id(n: u128) -> Uuid {
-    Uuid::from_u128(n)
-}
-
-/// Quan hệ nhiều-một từ dataset from tới dataset to.
-fn relation(from: u128, to: u128) -> DatasetRelation {
-    DatasetRelation {
-        from_dataset_id: id(from),
-        from_dataset_name: format!("d{from}"),
-        from_columns: vec![format!("d{to}_id")],
-        to_dataset_id: id(to),
-        to_dataset_name: format!("d{to}"),
-        to_columns: vec!["id".to_string()],
-        constraint_name: format!("d{from}_d{to}_fkey"),
-        cardinality: "many_to_one".to_string(),
-    }
-}
-
-// Lược đồ bán hàng: 1 order_items, 2 orders, 3 customers, 4 products, 5 categories, 6 departments, 7 regions
-// (customers -> regions), 9 returns (returns -> orders).
-const ORDER_ITEMS: u128 = 1;
-const ORDERS: u128 = 2;
-const CUSTOMERS: u128 = 3;
-const PRODUCTS: u128 = 4;
-const CATEGORIES: u128 = 5;
-const DEPARTMENTS: u128 = 6;
-const REGIONS: u128 = 7;
-const RETURNS: u128 = 9;
-
-fn sales() -> Vec<DatasetRelation> {
-    vec![
-        relation(ORDER_ITEMS, ORDERS),
-        relation(ORDER_ITEMS, PRODUCTS),
-        relation(ORDERS, CUSTOMERS),
-        relation(PRODUCTS, CATEGORIES),
-        relation(CATEGORIES, DEPARTMENTS),
-        relation(CUSTOMERS, REGIONS),
-        relation(RETURNS, ORDERS),
-    ]
-}
-
-fn ids(list: &[u128]) -> Vec<Uuid> {
-    list.iter().map(|&n| id(n)).collect()
-}
-
-/// Hai bước, cả hai chiều, gần trước xa sau: từ order_items tới customers và categories, chưa tới regions hay
-/// departments (ba bước). returns trỏ vào orders: hai bước theo chiều ngược.
-#[test]
-fn group_follows_both_directions_up_to_two_hops() {
-    let group = build_group_ids(id(ORDER_ITEMS), &sales(), |_| true);
-    assert_eq!(
-        group,
-        ids(&[
-            ORDER_ITEMS,
-            ORDERS,
-            PRODUCTS,
-            CUSTOMERS,
-            RETURNS,
-            CATEGORIES
-        ])
-    );
-    // Từ customers: orders (ngược) và regions một bước; order_items, returns qua orders.
-    let group = build_group_ids(id(CUSTOMERS), &sales(), |_| true);
-    assert_eq!(
-        group,
-        ids(&[CUSTOMERS, ORDERS, REGIONS, ORDER_ITEMS, RETURNS])
-    );
-}
-
-/// Bảng không dùng được (chưa có phiên bản) không vào nhóm, và bảng chỉ tới được qua nó cũng không.
-#[test]
-fn unusable_tables_cut_the_path() {
-    let group = build_group_ids(id(ORDER_ITEMS), &sales(), |d| d != id(ORDERS));
-    assert_eq!(group, ids(&[ORDER_ITEMS, PRODUCTS, CATEGORIES]));
-}
-
-/// Hình sao: một bảng sự kiện với mười bảng chiều chỉ lấy MAX_GROUP_TABLES bảng, bảng đang chọn ở đầu.
-#[test]
-fn group_stops_at_the_table_limit() {
-    let relations: Vec<DatasetRelation> = (10..20).map(|d| relation(1, d)).collect();
-    let group = build_group_ids(id(1), &relations, |_| true);
-    assert_eq!(group.len(), MAX_GROUP_TABLES);
-    assert_eq!(group[0], id(1));
-}
-
-// Prompt SQL nhiều bảng
 
 fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
     ColumnProfile {
@@ -209,6 +120,7 @@ fn sales_group() -> GroupPrompt {
             join("order_items", "order_id", "orders", "order_id"),
             join("orders", "customer_id", "customers", "customer_id"),
         ],
+        others: Vec::new(),
     }
 }
 
@@ -258,6 +170,46 @@ fn group_prompt_has_a_block_per_table_and_the_relationships() {
     assert!(prompt.contains("- \"số đơn\" (table orders): COUNT(DISTINCT \"order_id\")"));
     assert!(prompt.contains("All values: 'Consumer' (also: khách lẻ), 'Corporate'"));
     check_fixture("sql_join_prompt.txt", &prompt);
+}
+
+/// Bảng chỉ gửi tên (#249) nằm trong danh sách gọn sau luật nối bảng, kèm luật xin chi tiết; bảng chưa chụp có dấu
+/// "no data yet". Guard và luật chỉ kể các bảng có khối cột.
+#[test]
+fn compact_list_follows_the_detailed_tables() {
+    let context = sales_context();
+    let mut group = sales_group();
+    group.others = vec![
+        CompactTable {
+            table: "departments".to_string(),
+            description: "Phòng ban của cửa hàng".to_string(),
+            unsnapshotted: false,
+        },
+        CompactTable {
+            table: "audit_log".to_string(),
+            description: String::new(),
+            unsnapshotted: true,
+        },
+    ];
+    let prompt = build_sql_prompt(&group_input(SEGMENT_QUESTION, &context, &[], &group));
+    let joins = prompt.find("Rules for reading several tables:").unwrap();
+    let list = prompt
+        .find("Other tables of this database, listed by name only")
+        .unwrap();
+    assert!(joins < list, "{prompt}");
+    assert!(prompt.contains("- departments: Phòng ban của cửa hàng\n- audit_log (no data yet)\n"));
+    assert!(prompt.contains("put its name in needed_tables"));
+    assert!(prompt.contains("about the tables order_items, orders, customers."));
+    assert!(!prompt.contains("Columns of table departments"));
+
+    // Chỉ bảng đang chọn có khối cột: không có luật nối bảng, danh sách gọn vẫn có.
+    group.tables.clear();
+    group.joins.clear();
+    let prompt = build_sql_prompt(&group_input(SEGMENT_QUESTION, &context, &[], &group));
+    assert!(
+        !prompt.contains("Rules for reading several tables:"),
+        "{prompt}"
+    );
+    assert!(prompt.contains("- departments: Phòng ban của cửa hàng"));
 }
 
 /// Quan hệ một-một và khóa nhiều cột; tên cột không trơn được đặt trong nháy kép.
@@ -375,6 +327,7 @@ fn six_tables_fit_in_the_prompt_limit() {
             .windows(2)
             .map(|pair| join(pair[0], "id", pair[1], "id"))
             .collect(),
+        others: Vec::new(),
     };
     let prompt = build_sql_prompt(&group_input(SEGMENT_QUESTION, &context, &[], &group));
     assert!(

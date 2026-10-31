@@ -38,6 +38,12 @@ pub const SQL_JOINS: PromptFile = PromptFile {
     text: include_str!("../../prompts/sql_joins.txt"),
 };
 
+/// Danh sách gọn các bảng của database chỉ gửi tên (service/ask/prompt.rs, #249), kèm luật xin chi tiết bảng.
+pub const SQL_OTHER_TABLES: PromptFile = PromptFile {
+    name: "sql_other_tables.txt",
+    text: include_str!("../../prompts/sql_other_tables.txt"),
+};
+
 /// Luật của trường unanswerable, chung cho prompt SQL và prompt form câu "tại sao".
 pub const UNANSWERABLE_RULE: PromptFile = PromptFile {
     name: "unanswerable_rule.txt",
@@ -115,6 +121,12 @@ pub const JUDGE_MEANING_PLAIN: PromptFile = PromptFile {
 pub const CLASSIFY_QUESTION: PromptFile = PromptFile {
     name: "classify_question.txt",
     text: include_str!("../../prompts/classify_question.txt"),
+};
+
+/// Danh sách gọn các bảng của database trong prompt phân loại (service/ask/classify.rs, #249), kèm luật trường tables.
+pub const CLASSIFY_OTHER_TABLES: PromptFile = PromptFile {
+    name: "classify_other_tables.txt",
+    text: include_str!("../../prompts/classify_other_tables.txt"),
 };
 
 // Hồ sơ ngữ nghĩa lúc nạp dataset (service/semantic/mod.rs) chia ba prompt chạy song song (#184): luật của từng phần,

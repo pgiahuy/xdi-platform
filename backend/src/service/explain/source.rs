@@ -24,9 +24,13 @@ có câu con ở FROM thì truy dòng nguồn chưa hỗ trợ và báo rõ lý 
 
 use crate::engine::store::{ProfileColumn, ProfileRole};
 use crate::service::ask::fanout::JoinLink;
-use crate::service::ask::related::MAX_HOPS;
 use crate::service::explain::check::DIMENSION_MAX_VALUES;
 use crate::service::explain::sql::build_ident;
+
+/// Số bước tối đa đi từ bảng chính lên các bảng liên quan khi tìm chiều phân rã (order_items, orders, customers là hai
+/// bước). Nhóm bảng của câu hỏi không còn giới hạn số bước (#249, ask/related.rs), nhưng mỗi bảng thêm vào là thêm các
+/// chiều ứng viên và thêm câu chạy cho phân rã; hai bước giữ đúng phạm vi phân rã của #227.
+pub const BREAKDOWN_MAX_HOPS: usize = 2;
 
 /// Bí danh của bảng chính và của câu con trong phần FROM.
 const BASE_ALIAS: &str = "b";
@@ -95,7 +99,7 @@ pub static NO_RELATED: RelatedTables = RelatedTables {
     dimensions: Vec::new(),
 };
 
-/// Đi từ base theo quan hệ, tối đa MAX_HOPS bước như nhóm bảng của câu hỏi, mỗi bảng một lần, gần trước xa sau. Chỉ
+/// Đi từ base theo quan hệ, tối đa BREAKDOWN_MAX_HOPS bước, mỗi bảng một lần, gần trước xa sau. Chỉ
 /// bảng có trong tables (đã đọc được hồ sơ) mới được nối.
 pub fn build_related_tables(
     base: &str,
@@ -107,7 +111,7 @@ pub fn build_related_tables(
     // frontier: (tên bảng, chỉ số trong joins; None là bảng chính).
     let mut frontier: Vec<(String, Option<usize>)> = vec![(base.to_string(), None)];
     let mut reached = vec![base.to_lowercase()];
-    for _ in 0..MAX_HOPS {
+    for _ in 0..BREAKDOWN_MAX_HOPS {
         let mut next = Vec::new();
         for (current, parent) in &frontier {
             for (table, keys) in build_steps(current, links) {

@@ -15,7 +15,11 @@ tổng metadata vượt trần (ask/context.rs apply_metadata_cap) thì cột kh
 backend/prompts/classify_question.txt. Test ở ask/classify_tests.rs.
 
 Mô hình trả thêm `columns`: các cột câu hỏi cần, dạng bảng.cột. Tên không có thật thì bỏ qua. ask/mod.rs dùng chúng để
-chọn cột được gửi đủ danh sách giá trị ở lượt viết SQL. Mô hình lỗi hay rơi về luật từ khóa thì columns rỗng. */
+chọn cột được gửi đủ danh sách giá trị ở lượt viết SQL. Mô hình lỗi hay rơi về luật từ khóa thì columns rỗng.
+
+Database vượt trần metadata (#249, ask/table_pick.rs): prompt có thêm danh sách gọn các bảng chỉ gửi tên
+(backend/prompts/classify_other_tables.txt), và mô hình trả thêm `tables`, các bảng trong danh sách đó câu hỏi cần. Tên
+không có trong danh sách thì bỏ qua. ask/mod.rs gửi chi tiết các bảng đó ở lượt viết SQL. */
 
 use std::time::{Duration, Instant};
 
@@ -27,8 +31,8 @@ use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
 use crate::service::ask::context::ColumnProfile;
 use crate::service::ask::contract::{AskStep, StepName};
-use crate::service::ask::group_prompt::TableContext;
-use crate::service::ask::prompt::{build_column_metadata, PROMPT_MAX_CHARS};
+use crate::service::ask::group_prompt::{CompactTable, TableContext};
+use crate::service::ask::prompt::{build_column_metadata, build_compact_tables, PROMPT_MAX_CHARS};
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::run::build_duration_text;
 use crate::service::ask::why::build_narrate_timeout;
@@ -48,6 +52,8 @@ pub struct ClassifyInput<'a> {
     pub related: &'a [TableContext],
     /// Câu hỏi của các lượt trước, cũ trước; rỗng khi câu mở đầu cuộc trò chuyện.
     pub earlier: &'a [String],
+    /// Bảng của database chỉ gửi tên (#249); rỗng khi mọi bảng đã có khối cột.
+    pub others: &'a [CompactTable],
 }
 
 /// Loại câu đã chọn, ai chọn, và bước cho timeline.
@@ -57,6 +63,8 @@ pub struct Classified {
     pub by_model: bool,
     /// Cột mô hình nói câu hỏi cần, cặp (bảng logic, tên cột), đều có thật; rỗng khi dùng luật từ khóa.
     pub columns: Vec<(String, String)>,
+    /// Bảng của danh sách gọn mô hình nói câu hỏi cần (tên đúng như trong others); rỗng khi dùng luật từ khóa.
+    pub tables: Vec<String>,
     pub step: AskStep,
 }
 
@@ -68,6 +76,8 @@ struct ClassifyReply {
     /// Mock và mô hình không theo schema có thể bỏ trường này.
     #[serde(default)]
     columns: Vec<String>,
+    #[serde(default)]
+    tables: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -120,15 +130,20 @@ pub async fn classify(
                 .take(MAX_REASON_CHARS)
                 .collect();
             let columns = build_reply_columns(input, &parsed.columns);
+            let tables = build_reply_tables(input.others, &parsed.tables);
             let mut detail = format!("{}: {reason}", build_kind_text(kind));
             if !columns.is_empty() {
                 let names: Vec<String> = columns.iter().map(|(t, c)| format!("{t}.{c}")).collect();
                 detail.push_str(&format!(" Cột cần: {}.", names.join(", ")));
             }
+            if !tables.is_empty() {
+                detail.push_str(&format!(" Bảng cần thêm: {}.", tables.join(", ")));
+            }
             Classified {
                 kind,
                 by_model: true,
                 columns,
+                tables,
                 step: build_step(started, true, detail),
             }
         }
@@ -158,6 +173,13 @@ pub fn build_classify_prompt(input: &ClassifyInput<'_>) -> String {
     let mut blocks = vec![build_table_lines(input.table, input.columns)];
     for table in input.related {
         blocks.push(build_table_lines(&table.table, &table.columns));
+    }
+    // Danh sách gọn nằm cùng chỗ trống columns: câu không có bảng nào chỉ gửi tên thì prompt giữ nguyên chữ như trước.
+    if !input.others.is_empty() {
+        blocks.push(fill(
+            &prompts::CLASSIFY_OTHER_TABLES,
+            &[("tables", &build_compact_tables(input.others))],
+        ));
     }
     let earlier = if input.earlier.is_empty() {
         "(none)".to_string()
@@ -241,6 +263,25 @@ fn build_reply_columns(input: &ClassifyInput<'_>, names: &[String]) -> Vec<(Stri
     found
 }
 
+/// Bảng mô hình trả, chỉ giữ bảng đã chụp có trong danh sách gọn (so không phân biệt hoa thường, bỏ schema và nháy
+/// kép), mỗi bảng một lần, theo thứ tự mô hình viết.
+fn build_reply_tables(others: &[CompactTable], names: &[String]) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for name in names {
+        let name = name.trim().trim_matches('"');
+        let bare = name.rsplit_once('.').map(|(_, t)| t).unwrap_or(name);
+        let table = others
+            .iter()
+            .find(|t| !t.unsnapshotted && t.table.eq_ignore_ascii_case(bare));
+        if let Some(table) = table {
+            if !found.contains(&table.table) {
+                found.push(table.table.clone());
+            }
+        }
+    }
+    found
+}
+
 /// JSON Schema của câu trả lời, gửi kèm request (LlmRequest::json_schema).
 pub fn build_classify_schema() -> serde_json::Value {
     json!({
@@ -259,6 +300,11 @@ pub fn build_classify_schema() -> serde_json::Value {
                 "type": "array",
                 "items": { "type": "string" },
                 "description": "Columns the question needs, each as table.column with names exactly as listed; empty when unsure"
+            },
+            "tables": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Only when other tables are listed by name: those the question needs; empty otherwise"
             }
         },
         "required": ["kind", "reason"]
@@ -289,6 +335,7 @@ fn fallback(question: &str, started: Instant, why: &str) -> Classified {
         kind,
         by_model: false,
         columns: Vec::new(),
+        tables: Vec::new(),
         step: build_step(started, false, detail),
     }
 }
