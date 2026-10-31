@@ -5,8 +5,8 @@ hỏi và truy dòng nguồn đi theo bảng này. Hàm pick_start_table ở đ�
 không ghim bảng.
 
 Luật, cố ý đơn giản để giải thích được, so lần lượt:
-1. Bảng giữ cột số đo câu hỏi nhắc tới (tên hay bí danh của cột vai trò measure, như "doanh thu" là
-   order_items.item_total): bảng sự kiện giữ con số được cộng, nên phân rã và truy dòng nguồn đứng trên đúng dòng của
+1. Bảng giữ cột số đo câu hỏi gọi đúng tên (một cụm bằng trọn tên hay bí danh của cột vai trò measure, như "doanh
+   thu" là order_items.item_total): bảng sự kiện giữ con số được cộng, nên phân rã và truy dòng nguồn đứng trên đúng dòng của
    con số. "Doanh thu theo phân khúc khách hàng" nhắc hai cụm của customers mà chỉ một cụm của order_items; đếm cụm
    thôi thì bảng bắt đầu thành customers.
 2. Bảng có nhiều cụm từ của câu hỏi trùng tên bảng, tên cột hay bí danh cột nhất.
@@ -39,7 +39,7 @@ pub fn pick_start_table(
     let count = |text: &str| phrases.iter().filter(|p| contains_words(text, p)).count();
     let ready = tables.iter().filter(|t| is_ready(t));
     let best = ready.max_by_key(|t| {
-        let measures = build_measure_text(t, columns);
+        let measures = build_measure_names(t, columns);
         let names = build_table_text(t, columns);
         let descriptions = build_description_text(t, columns);
         let held_keys = relations
@@ -49,7 +49,7 @@ pub fn pick_start_table(
         // Bộ so sánh của tuple đi từ trái sang phải; tên bảng đảo chiều (Reverse) để cùng điểm thì bảng tên xếp
         // trước thắng, kết quả không đổi theo thứ tự đọc từ Postgres.
         (
-            count(&measures),
+            phrases.iter().filter(|p| measures.contains(p)).count(),
             count(&names),
             count(&descriptions),
             previous == Some(t.id),
@@ -78,17 +78,18 @@ fn build_table_text(table: &Dataset, columns: &[CatalogColumnRow]) -> String {
     join_parts(parts)
 }
 
-/// Tên và bí danh của các cột số đo của bảng.
-fn build_measure_text(table: &Dataset, columns: &[CatalogColumnRow]) -> String {
-    let mut parts = Vec::new();
+/// Tên và bí danh (đã bỏ dấu) của các cột số đo của bảng. So bằng trọn tên, không so cụm nằm trong tên: một âm tiết như
+/// "học" nằm trong bí danh "độ dài học phần" của courses không có nghĩa câu hỏi đo độ dài học phần.
+fn build_measure_names(table: &Dataset, columns: &[CatalogColumnRow]) -> Vec<String> {
+    let mut names = Vec::new();
     let measures = columns
         .iter()
         .filter(|c| c.table_id == table.id && c.role == ProfileRole::Measure.as_str());
     for c in measures {
-        parts.push(fold(&c.name));
-        parts.extend(c.aliases.iter().map(|a| fold(a)));
+        names.push(fold(&c.name));
+        names.extend(c.aliases.iter().map(|a| fold(a)));
     }
-    join_parts(parts)
+    names
 }
 
 /// Mô tả bảng và mô tả các cột của bảng.
@@ -241,6 +242,23 @@ mod tests {
             &relations,
             None,
         );
+        assert_eq!(picked, Some(Uuid::from_u128(3)));
+    }
+
+    /// Một âm tiết nằm trong bí danh của cột số đo không tính là gọi cột đó: "học" trong "độ dài học phần" của courses
+    /// không kéo câu "Tỷ lệ bỏ học theo môn học" sang courses; students khớp thêm mô tả "bỏ học" nên thắng.
+    #[test]
+    fn a_syllable_inside_a_measure_alias_does_not_count() {
+        let tables = vec![table(1, "courses", 22), table(3, "students", 500)];
+        let mut result = column(3, "final_result", &[]);
+        result.description = Some("Kết quả: Withdrawn (bỏ học)".to_string());
+        let columns = vec![
+            measure(1, "module_presentation_length", &["độ dài học phần"]),
+            column(1, "code_module", &["môn học"]),
+            column(3, "code_module", &["môn học"]),
+            result,
+        ];
+        let picked = pick_start_table("Tỷ lệ bỏ học theo môn học", &tables, &columns, &[], None);
         assert_eq!(picked, Some(Uuid::from_u128(3)));
     }
 
