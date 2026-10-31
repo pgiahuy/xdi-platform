@@ -958,7 +958,7 @@ fn sample_sql_passes_the_guard() {
         }
     }
     for sql in &samples {
-        if let Err(e) = build_guarded_sql(sql, &tables, MAX_ROWS) {
+        if let Err(e) = build_guarded_sql(sql, &tables, &[], MAX_ROWS) {
             panic!("guard rejected sample {sql:?}: {e:?}");
         }
     }

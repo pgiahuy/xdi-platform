@@ -28,6 +28,7 @@ use crate::error::AppError;
 use crate::sample_database::SampleDatabase;
 use crate::service;
 use crate::service::ask::contract::{AskStatus, CellValue};
+use crate::service::ask::fanout::build_links;
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::{ask, AskHistory};
 use crate::service::lessons::contract::LessonRequest;
@@ -366,9 +367,19 @@ async fn expected_rows(
     for dataset in datasets {
         tables.push(build_allowed_table(state, member, dataset).await?);
     }
+    // Cùng luật nối bảng như câu mô hình viết (#256): quan hệ đã ghi lúc chụp database mẫu, theo tên bảng logic.
+    let relations = state
+        .store
+        .list_relations(&member.workspace, None)
+        .await
+        .map_err(|e| format!("đọc quan hệ giữa các dataset: {e:?}"))?;
+    let links = build_links(&relations, |id| {
+        let dataset = datasets.iter().find(|d| d.id == id)?;
+        Some(dataset.logical_table.clone())
+    });
     let mut last_error = String::new();
     for sql in &case.expected_sql {
-        let guarded = match build_guarded_sql(sql, &tables, state.config.ask_max_rows) {
+        let guarded = match build_guarded_sql(sql, &tables, &links, state.config.ask_max_rows) {
             Ok(g) => g,
             Err(e) => {
                 last_error = format!("expected_sql không qua được guard: {e:?}");

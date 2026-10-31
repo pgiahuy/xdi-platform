@@ -490,6 +490,7 @@ impl Orders {
     fn env<'a>(&'a self, jobs: &'a Arc<Semaphore>) -> QueryEnv<'a> {
         QueryEnv {
             tables: &self.allowed,
+            links: &[],
             max_rows: 1000,
             timeout: Duration::from_secs(10),
             jobs,

@@ -22,6 +22,7 @@ use crate::engine::guard::AllowedTable;
 use crate::engine::store::{Dataset, DatasetVersion, ProfileColumn};
 use crate::service::ask::checks::build_empty_warning;
 use crate::service::ask::contract::{AskResponse, AskStatus, AskStep, Explanation, TableRead};
+use crate::service::ask::fanout::JoinLink;
 use crate::service::ask::prompt::PromptInput;
 use crate::service::ask::related::TableGroup;
 use crate::service::ask::response_choices::{
@@ -47,6 +48,8 @@ pub(super) struct WhyAsk<'a> {
     /// Gồm bảng đang hỏi và các bảng liên quan của nhóm (ask/related.rs).
     pub tables: &'a [AllowedTable],
     pub group: &'a TableGroup,
+    /// Quan hệ của nhóm theo tên bảng (ask/fanout.rs, build_join_links), cho luật nối bảng của guard.
+    pub links: &'a [JoinLink],
     /// Bảng liên quan nối nhiều-một vào bảng đang hỏi, cho phân rã (#227).
     pub related: &'a RelatedTables,
     /// Các bước đã chạy (context).
@@ -65,6 +68,7 @@ pub(super) async fn ask_why(
         columns,
         tables,
         group,
+        links,
         related,
         mut steps,
     } = ask;
@@ -82,6 +86,7 @@ pub(super) async fn ask_why(
         values: &values,
         row_count: version.row_count,
         tables,
+        links,
         max_rows: state.config.ask_max_rows,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,

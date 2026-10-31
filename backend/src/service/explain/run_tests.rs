@@ -188,6 +188,7 @@ impl Dataco {
             values: &self.values,
             row_count: Some(self.rows),
             tables: &tables,
+            links: &[],
             max_rows: 100_000,
             timeout: Duration::from_secs(30),
             jobs: &self.jobs,

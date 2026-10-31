@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::Semaphore;
 
-use crate::engine::guard::AllowedTable;
+use crate::engine::guard::{AllowedTable, JoinLink};
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::store::ProfileColumn;
 use crate::error::AppError;
@@ -70,6 +70,8 @@ pub struct WhyInput<'a> {
     pub row_count: Option<i64>,
     /// Bảng được phép, kèm bộ lọc dòng theo vai dữ liệu của người hỏi.
     pub tables: &'a [AllowedTable],
+    /// Quan hệ khóa ngoại giữa các bảng của tables: câu do code dựng nối bảng liên quan qua luật nối bảng của guard.
+    pub links: &'a [JoinLink],
     pub max_rows: u64,
     /// Thời gian tối đa mỗi câu SQL (Config::query_timeout).
     pub timeout: Duration,
@@ -274,6 +276,7 @@ fn find_chosen<'a>(input: &WhyInput<'a>, choice_id: &str) -> Option<&'a str> {
 fn build_env<'a>(input: &WhyInput<'a>) -> QueryEnv<'a> {
     QueryEnv {
         tables: input.tables,
+        links: input.links,
         max_rows: input.max_rows,
         timeout: input.timeout,
         jobs: input.jobs,

@@ -263,8 +263,10 @@ async fn region_breakdown(
     apply_related(&mut plan, &related, &[]);
     assert_eq!(plan.dimensions, ["students.region"]);
     let jobs = Arc::new(Semaphore::new(2));
+    // Cùng quan hệ như phần FROM dựng ra: câu do code dựng phải qua luật nối bảng của guard (#256).
     let env = QueryEnv {
         tables: &tables,
+        links: &links,
         max_rows: 1000,
         timeout: Duration::from_secs(10),
         jobs: &jobs,
