@@ -42,3 +42,4 @@ Thumbs.db
 # Kết quả của make eval
 backend/eval/
 eval/result.json
+eval/result-database.json

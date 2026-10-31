@@ -97,10 +97,16 @@ restore: ## Khôi phục, THAY dữ liệu hiện có: make restore FROM=~/xdi-b
 		sh -c 'find /data -mindepth 1 -delete && tar xzf - -C /data && chown -R 10001 /data' < "$(FROM)/data.tgz"
 	$(COMPOSE) up -d
 
-eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco.csv, thoát mã 1 khi accuracy dưới eval/baseline.json
+eval: ## Bộ đánh giá câu hỏi mẫu (#37, #230): mock trên database mẫu (demo-db) và trên data/samples/dataco.csv, thoát mã 1 khi accuracy dưới eval/baseline.json
 	@# Database riêng xdi_eval để không rác vào db dev; lệnh createdb bỏ qua lỗi khi compose chưa chạy (CI đặt sẵn DATABASE_URL).
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
+	$(COMPOSE) up -d --wait demo-db
 	cd backend && cargo build -q
+	@# Lần đầu: các bảng chụp từ database mẫu, như thiết lập lần đầu của bản cài mới. Lần hai: dataset DataCo từ file.
+	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
+	  SAMPLES_DIR=data/samples SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" SOURCE_SECRET_KEY="$${SOURCE_SECRET_KEY:-$(SAMPLE_SOURCE_SECRET_KEY)}" \
+	  $(CARGO_TARGET)/debug/xdi-backend eval --sample-database --cases eval/sales_joins.json --cases eval/edu.json \
+	  --baseline eval/baseline.json --out eval/result-database.json
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
 	  $(CARGO_TARGET)/debug/xdi-backend eval --data data/samples/dataco.csv --cases eval/dataco.json --baseline eval/baseline.json
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/eval_tests.rs - ca test của bộ so kết quả đánh giá (build_eval_verdict), thuần không cần Postgres:
 cùng dòng khác thứ tự, lệch một dòng, số lệch quanh ngưỡng, null với null, cột đổi tên, ordered khác thứ tự; và SQL
-đúng của bộ câu JOIN eval/sales_joins.json qua guard. */
+đúng của bộ câu JOIN eval/sales_joins.json và bộ câu edu eval/edu.json qua guard. */
 
 use super::eval::{build_eval_verdict, load_cases};
 use crate::service::ask::contract::CellValue;
@@ -85,8 +85,8 @@ fn row_count_mismatch_is_reported() {
 }
 
 /// Bộ câu JOIN trên schema sales của database mẫu (eval/sales_joins.json, #213): mỗi SQL đúng qua guard với sáu bảng như
-/// ảnh chụp database mẫu, và đọc bảng của trường "dataset" (bảng người hỏi chọn). Chưa có lệnh chạy bộ này trên một nhóm
-/// bảng chụp từ database; số kết quả đã đối chiếu bằng psql trên database mẫu.
+/// ảnh chụp database mẫu, và đọc bảng của trường "dataset" (bảng người hỏi chọn). `make eval` chạy bộ này trên ảnh chụp
+/// thật của database mẫu nhỏ (demo-db, #230).
 #[test]
 fn sales_join_cases_pass_the_guard() {
     use crate::engine::guard::{build_guarded_sql, AllowedTable};
@@ -187,4 +187,100 @@ fn sales_join_cases_pass_the_guard() {
         load_cases(std::path::Path::new(path)).unwrap().len(),
         cases.len()
     );
+}
+
+/// Bộ câu trên schema edu của database mẫu (eval/edu.json, #230): mỗi SQL đúng qua guard với các bảng edu như ảnh chụp
+/// database mẫu và đọc bảng của trường "dataset". `make eval` chạy bộ này trên ảnh chụp thật của demo-db.
+#[test]
+fn edu_cases_pass_the_guard() {
+    use crate::engine::guard::{build_guarded_sql, AllowedTable};
+
+    let schema: [(&str, &[&str]); 5] = [
+        (
+            "students",
+            &[
+                "code_module",
+                "code_presentation",
+                "id_student",
+                "gender",
+                "region",
+                "highest_education",
+                "imd_band",
+                "age_band",
+                "num_of_prev_attempts",
+                "studied_credits",
+                "disability",
+                "final_result",
+            ],
+        ),
+        (
+            "courses",
+            &[
+                "code_module",
+                "code_presentation",
+                "presentation_year",
+                "presentation_start_month",
+                "module_presentation_length",
+            ],
+        ),
+        (
+            "assessments",
+            &[
+                "id_assessment",
+                "code_module",
+                "code_presentation",
+                "assessment_type",
+                "date",
+                "weight",
+            ],
+        ),
+        (
+            "student_assessments",
+            &[
+                "id_assessment",
+                "id_student",
+                "code_module",
+                "code_presentation",
+                "date_submitted",
+                "is_banked",
+                "score",
+            ],
+        ),
+        (
+            "student_daily_clicks",
+            &[
+                "code_module",
+                "code_presentation",
+                "id_student",
+                "date",
+                "sum_click",
+                "num_sites",
+            ],
+        ),
+    ];
+    let tables: Vec<AllowedTable> = schema
+        .iter()
+        .map(|(name, columns)| AllowedTable {
+            name: name.to_string(),
+            columns: columns.iter().map(|c| c.to_string()).collect(),
+            parquet_dir: std::path::PathBuf::from(format!("/data/{name}")),
+            row_filters: Vec::new(),
+        })
+        .collect();
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../eval/edu.json");
+    let cases = load_cases(std::path::Path::new(path)).unwrap();
+    assert!(cases.len() >= 8);
+    for case in &cases {
+        let picked = case.dataset.as_deref().unwrap();
+        for sql in &case.expected_sql {
+            let guarded = build_guarded_sql(sql, &tables, 1000)
+                .unwrap_or_else(|e| panic!("{}: {e:?}", case.id));
+            assert!(
+                guarded.tables_read.iter().any(|t| t == picked),
+                "{}: {:?}",
+                case.id,
+                guarded.tables_read
+            );
+        }
+    }
 }

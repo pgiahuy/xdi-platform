@@ -14,8 +14,11 @@ const USAGE: &str = "usage:
   xdi-backend list-admins                     list system administrators
   xdi-backend openapi                         print the OpenAPI spec (JSON) to stdout, without a database
   xdi-backend ask-examples                    print sample ask responses (JSON) to stdout, without a database
-  xdi-backend eval --data <csv> --cases <json> [--baseline <json>]
-                                              run the sample question evaluation; exit 1 when accuracy drops
+  xdi-backend eval (--data <csv> | --sample-database) --cases <json> [--cases <json>...]
+                  [--baseline <json>] [--out <json>]
+                                              run the sample question evaluation on a file or on the
+                                              snapshot of SAMPLE_DATABASE_URL; write the report to --out
+                                              (default eval/result.json); exit 1 when accuracy drops
                                               below the baseline, 2 on infrastructure errors
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
@@ -63,37 +66,65 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
     }
 }
 
-/// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu. In từng câu sai kèm lý do, dòng accuracy cuối,
-/// ghi eval/result.json. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ tầng (thiếu file, JSON
-/// hỏng, không nạp được dữ liệu) thoát mã 2.
+/// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu (--data) hay trên database mẫu của
+/// SAMPLE_DATABASE_URL (--sample-database, #230). --cases lặp được, các file nối lại thành một bộ. In từng câu sai kèm
+/// lý do, dòng accuracy cuối, ghi báo cáo ra --out. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ
+/// tầng (thiếu file, JSON hỏng, không nạp được dữ liệu) thoát mã 2.
 async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut data = None;
-    let mut cases = None;
+    let mut sample_database = false;
+    let mut case_files = Vec::new();
     let mut baseline = None;
+    let mut out = "eval/result.json".to_string();
     let mut it = args.iter();
     while let Some(flag) = it.next() {
+        if flag == "--sample-database" {
+            sample_database = true;
+            continue;
+        }
+        // Các cờ còn lại đều có một giá trị đi sau.
+        let Some(value) = it.next() else {
+            eprintln!("{USAGE}");
+            return 2;
+        };
         match flag.as_str() {
-            "--data" => data = it.next(),
-            "--cases" => cases = it.next(),
-            "--baseline" => baseline = it.next(),
+            "--data" => data = Some(value.clone()),
+            "--cases" => case_files.push(value.clone()),
+            "--baseline" => baseline = Some(value.clone()),
+            "--out" => out = value.clone(),
             _ => {
                 eprintln!("{USAGE}");
                 return 2;
             }
         }
     }
-    let (Some(data), Some(cases)) = (data, cases) else {
-        eprintln!("{USAGE}");
-        return 2;
-    };
-    let cases = match eval::load_cases(std::path::Path::new(cases)) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("eval: {e:?}");
+    let source = match (&data, sample_database, &state.config.sample_database) {
+        (Some(path), false, _) => eval::EvalData::File(std::path::Path::new(path)),
+        (None, true, Some(db)) => eval::EvalData::SampleDatabase(db),
+        (None, true, None) => {
+            eprintln!("eval: --sample-database needs SAMPLE_DATABASE_URL");
+            return 2;
+        }
+        _ => {
+            eprintln!("{USAGE}");
             return 2;
         }
     };
-    let report = match eval::run_eval(state, std::path::Path::new(data), &cases).await {
+    if case_files.is_empty() {
+        eprintln!("{USAGE}");
+        return 2;
+    }
+    let mut cases = Vec::new();
+    for file in &case_files {
+        match eval::load_cases(std::path::Path::new(file)) {
+            Ok(c) => cases.extend(c),
+            Err(e) => {
+                eprintln!("eval: {e:?}");
+                return 2;
+            }
+        }
+    }
+    let report = match eval::run_eval(state, source, &cases).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("eval: {e:?}");
@@ -114,14 +145,14 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         report.accuracy * 100.0
     );
     if let Err(e) = std::fs::write(
-        "eval/result.json",
+        &out,
         serde_json::to_string_pretty(&report).expect("report serializes"),
     ) {
-        eprintln!("eval: cannot write eval/result.json: {e}");
+        eprintln!("eval: cannot write {out}: {e}");
         return 2;
     }
     if let Some(path) = baseline {
-        let Ok(text) = std::fs::read_to_string(path) else {
+        let Ok(text) = std::fs::read_to_string(&path) else {
             eprintln!("eval: cannot read baseline {path}");
             return 2;
         };
