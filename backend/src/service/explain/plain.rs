@@ -33,6 +33,8 @@ pub async fn run_plain(
             prompt: &prompt,
             reply: &reply,
             tables: input.tables,
+            // Câu "tại sao" chỉ đọc bảng đang chọn, không có quan hệ nào.
+            links: &[],
             max_rows: input.max_rows,
             timeout: input.timeout,
             jobs: input.jobs,
