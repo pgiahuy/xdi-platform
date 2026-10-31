@@ -2,7 +2,8 @@
 /* engine/prompts.rs - chữ cố định của các prompt gửi mô hình ngôn ngữ (luật, khuôn câu) nằm trong file ở
 backend/prompts/, mỗi prompt một file; module này nhúng các file đó vào binary và điền chỗ trống. Người gọi: luật của
 guard (engine/guard/prompt_rules.rs), prompt sinh SQL và sửa SQL (service/ask/prompt.rs, ask/repair.rs), form câu "tại
-sao" và sửa form (ask/why_prompt.rs, explain/form.rs), đoạn trả lời (ask/summary.rs), phân loại câu hỏi
+sao" và sửa form (ask/why_prompt.rs, explain/form.rs), đoạn trả lời (ask/summary.rs), lời của phần giải thích
+(insight/narrate.rs), phân loại câu hỏi
 (ask/classify.rs), hồ sơ ngữ nghĩa (semantic/mod.rs).
 Phần dữ liệu (dòng cột, danh sách giá trị, JSON, lượt hỏi trước) vẫn do các file đó dựng rồi điền vào chỗ trống.
 
@@ -87,6 +88,12 @@ pub const SUMMARY: PromptFile = PromptFile {
 pub const LESSONS: PromptFile = PromptFile {
     name: "lessons.txt",
     text: include_str!("../../prompts/lessons.txt"),
+};
+
+/// Prompt lời của phần giải thích câu thường (service/insight/narrate.rs, #227).
+pub const INSIGHT: PromptFile = PromptFile {
+    name: "insight.txt",
+    text: include_str!("../../prompts/insight.txt"),
 };
 
 /// Prompt phân loại câu hỏi: câu thường hay câu hỏi tìm nguyên nhân (service/ask/classify.rs).

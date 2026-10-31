@@ -19,6 +19,8 @@ use crate::engine::store::{Dataset, DatasetRelation, DatasetVersion, ProfileColu
 use crate::service::ask::build_allowed_table;
 use crate::service::ask::context::check_profile_ready;
 use crate::service::ask::contract::TableRead;
+use crate::service::ask::fanout::JoinLink;
+use crate::service::explain::source::{build_related_tables, RelatedTables, SourceTable};
 use crate::{error::AppError, state::AppState};
 
 /// Số bảng tối đa một câu hỏi được đọc, kể cả bảng đang chọn: đủ cho chuỗi bảng sự kiện, bảng đơn, khách hàng, sản
@@ -150,6 +152,21 @@ pub fn build_group_ids(
         frontier = next;
     }
     group
+}
+
+/// Bảng liên quan của nhóm nối nhiều-một vào bảng đang chọn (explain/source.rs), cho phân rã. Nhóm một bảng thì rỗng.
+pub fn build_group_related(group: &TableGroup, links: &[JoinLink]) -> RelatedTables {
+    let tables: Vec<SourceTable> = group
+        .tables
+        .iter()
+        .skip(1)
+        .map(|t| SourceTable {
+            table: &t.dataset.logical_table,
+            columns: &t.columns,
+        })
+        .collect();
+    let base = &group.tables[0].dataset.logical_table;
+    build_related_tables(base, &tables, links)
 }
 
 impl TableGroup {

@@ -39,7 +39,7 @@ impl LlmProvider for RecordingLlm {
         // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify
+            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify | LlmTask::Insight
         ) {
             return Err(AppError::Upstream(
                 "recording model has no profile or summary".to_string(),

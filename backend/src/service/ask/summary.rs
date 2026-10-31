@@ -241,7 +241,7 @@ fn build_row_texts(result: &ResultTable, row: &[Option<CellValue>]) -> Vec<Strin
         .collect()
 }
 
-fn build_cell_text(cell: &CellValue, kind: ValueKind) -> String {
+pub(crate) fn build_cell_text(cell: &CellValue, kind: ValueKind) -> String {
     match (cell, kind) {
         (CellValue::Number(number), _) => build_float_text(*number),
         (CellValue::String(text), ValueKind::Decimal) => build_number_text_with(text, u32::MAX),

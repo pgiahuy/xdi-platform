@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/AnswerSummary.tsx - lời giải thích của câu hỏi tìm nguyên nhân ở đầu thẻ trả lời. Có lời của mô hình
-(explanation.summary khi summary_by_model, #186) thì lời đó đứng đầu: mô hình chỉ diễn đạt lại các ý code đã tính, và
-backend đã kiểm mọi số cùng chữ tăng, giảm trong đó. Ngay dưới là mục "Căn cứ": câu chính (summary_title) và các ý ngắn
+/* components/ask/AnswerSummary.tsx - lời giải thích ở thẻ trả lời của mọi câu: câu hỏi tìm nguyên nhân
+(explanation.summary, #186) và phần giải thích theo hình dạng kết quả của câu thường (insight, #227). Có lời của mô hình
+(khi summary_by_model) thì lời đó đứng đầu: mô hình chỉ diễn đạt lại các ý code đã tính, và backend đã kiểm mọi số cùng
+chữ tăng, giảm trong đó. Ngay dưới là mục "Căn cứ": câu chính (summary_title) và các ý ngắn
 (summary_points) do code viết, để người đọc đối chiếu lời của mô hình với số đã tính. Không có lời của mô hình (so hai
 nhóm, mô hình lỗi hay viết sai) thì câu chính và các ý đứng đầu, kèm dòng ghi câu viết theo khuôn. */
 
@@ -15,7 +16,7 @@ type Props = {
 
 export function AnswerSummary({ title, points, modelSummary }: Props) {
   return (
-    // Vạch hổ phách bên trái: lời giải thích là câu trả lời chính của câu hỏi tìm nguyên nhân.
+    // Vạch hổ phách bên trái: lời giải thích là phần chính của câu trả lời, tách khỏi bảng và biểu đồ.
     <section aria-labelledby="answer-summary-heading" className="flex flex-col gap-2 border-l-[3px] border-highlight pl-3.5">
       {modelSummary ? (
         <>

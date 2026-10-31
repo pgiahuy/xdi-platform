@@ -1,0 +1,31 @@
+# data/postgres-demo/.tbls.yml - cấu hình tbls (https://github.com/k1LoW/tbls, giấy phép MIT) để sinh tài liệu bảng
+# và sơ đồ ER của company_demo vào docs/. Chạy bằng docs.sh, không gọi tbls thẳng: docs.sh đặt cổng mặc định.
+# Mô tả bảng và cột lấy từ COMMENT trong sql/edu_schema.sql và sql/sales_schema.sql, nên sửa mô tả ở đó rồi sinh lại.
+
+name: company_demo
+desc: Cơ sở dữ liệu mẫu nhiều bảng dựng từ OULAD (schema edu) và DataCo (schema sales). Cách dựng ở data/postgres-demo/README.md.
+# Kết nối bằng analyst: người dùng chỉ đọc, không thấy schema staging, đúng như ứng dụng thấy.
+dsn: postgres://analyst:analyst@127.0.0.1:${DEMO_DB_PORT}/company_demo?sslmode=disable
+docPath: docs
+include:
+  - edu.*
+  - sales.*
+format:
+  adjust: true
+er:
+  format: svg
+  # Không đưa mô tả cột vào sơ đồ: mô tả dài làm sơ đồ quá rộng; mô tả nằm trong file Markdown của từng bảng.
+  comment: false
+  hideDef: true
+# Mỗi schema thêm một sơ đồ riêng, để đọc được trên màn nhỏ.
+viewpoints:
+  - id: edu
+    name: edu
+    desc: Dữ liệu học tập OULAD. Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses.
+    tables:
+      - edu.*
+  - id: sales
+    name: sales
+    desc: Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments.
+    tables:
+      - sales.*

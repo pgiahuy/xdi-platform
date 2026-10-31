@@ -18,6 +18,8 @@ use crate::service::explain::annotate::{
     annotate_dimensions, build_percent_change, build_percent_text, build_value_presences, Totals,
 };
 use crate::service::explain::summary::apply_summary_parts;
+use crate::service::insight::facts::{build_group_parts, Point};
+use crate::service::insight::narrate::build_code_text;
 
 const MODEL: &str = "gemini-2.5-flash";
 const CONVERSATION_ID: Uuid = Uuid::from_u128(0x7d4a2e91_3b6c_4f10_a5d8_6e2c1b0f9a01);
@@ -100,6 +102,7 @@ pub fn build_simple_example() -> AskResponse {
                 .to_string(),
         ),
         answer_text_by_model: Some(true),
+        insight: Some(build_group_insight(&rows)),
         steps: vec![
             build_step(StepName::Context, 15, true, None),
             build_step(
@@ -112,6 +115,13 @@ pub fn build_simple_example() -> AskResponse {
             build_step(StepName::Guard, 3, true, Some("Thêm LIMIT 100000")),
             build_step(StepName::Run, 38, true, None),
             build_step(StepName::Narrate, 910, true, None),
+            build_step(StepName::Explain, 0, true, None),
+            build_step(
+                StepName::Narrate,
+                0,
+                true,
+                Some("INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết"),
+            ),
             build_step(StepName::Record, 6, true, None),
         ],
         ..build_base(AskStatus::Answered, "Doanh thu theo khu vực", Some(1))
@@ -412,10 +422,33 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         chart: None,
         warnings: vec![],
         explanation: None,
+        insight: None,
         answer_text: None,
         answer_text_by_model: None,
         clarifications: vec![],
         steps: vec![],
+    }
+}
+
+/// Phần giải thích của mẫu theo nhóm, dựng bằng đúng code của service/insight/ từ các dòng của mẫu, nên mẫu luôn khớp
+/// cách backend viết. Lời là câu do code viết (mock không có lời viết sẵn cho bước này).
+fn build_group_insight(rows: &[(&str, f64)]) -> Insight {
+    let points: Vec<Point> = rows
+        .iter()
+        .map(|(label, value)| Point {
+            label: label.to_string(),
+            value: value.to_string().parse().unwrap_or_default(),
+        })
+        .collect();
+    let total = points.iter().map(|p| p.value).sum();
+    let parts = build_group_parts("Doanh thu", "Thị trường (Market)", &points, Some(total));
+    Insight {
+        kind: InsightKind::Groups,
+        summary: build_code_text(&parts),
+        title: parts.title,
+        points: parts.points,
+        summary_by_model: false,
+        notable: parts.notable,
     }
 }
 

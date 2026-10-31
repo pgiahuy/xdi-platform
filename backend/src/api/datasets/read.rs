@@ -59,7 +59,7 @@ pub(super) async fn detail(
     path = "/workspaces/{ws}/datasets/{id}",
     tag = "datasets",
     operation_id = "deleteDataset",
-    summary = "Delete a dataset with all its versions and files (admin only)",
+    summary = "Delete a dataset with all its versions, files and question history (admin only)",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = String, Path, description = "Dataset id (UUID)")

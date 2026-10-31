@@ -5,16 +5,17 @@ dữ liệu mà repo đã dùng, tách thành nhiều bảng có khóa chính v�
 của một công ty thay vì nạp file. Container này tách khỏi Postgres của ứng dụng (`docker-compose.yml` ở gốc repo).
 
 Trạng thái: đã chạy và kiểm trên máy dev (số liệu ở mục "Đã kiểm"). Chỉ dùng trên máy: mật khẩu ghi ngay trong file
-này và cổng chỉ mở trên `127.0.0.1`. Mặc định `load.sh` cài sẵn một nguyên nhân biết trước vào `sales.orders` (tháng
-11/2016, xem mục "Nguyên nhân cài sẵn"); `SKIP_DEMO_CAUSE=1` để giữ dữ liệu đúng như CSV.
+này và cổng chỉ mở trên `127.0.0.1`. Mặc định `load.sh` cài sẵn hai nguyên nhân biết trước: giao trễ ở
+`sales.orders` (tháng 11/2016) và bỏ học ở `edu.students` (kỳ 2014J), xem mục "Nguyên nhân cài sẵn";
+`SKIP_DEMO_CAUSE=1` để giữ dữ liệu đúng như CSV.
 
 | Schema | Nguồn | Bảng |
 |---|---|---|
 | `sales` | DataCo Smart Supply Chain (`DataCoSupplyChainDataset.csv`, một dòng mỗi dòng hàng) | `departments`, `categories`, `products`, `customers`, `orders`, `order_items` |
 | `edu` | OULAD (7 file CSV trong `oulad/`) | `courses`, `students`, `registrations`, `assessments`, `student_assessments`, `vle_materials`, `student_daily_clicks` |
 
-Mỗi bảng và mỗi cột có mô tả tiếng Việt (`COMMENT ON`), xem bằng `\d+ sales.orders` trong psql hoặc đọc
-`sql/sales_schema.sql`, `sql/edu_schema.sql`.
+Mỗi bảng và mỗi cột có mô tả tiếng Việt (`COMMENT ON`), xem bằng `\d+ sales.orders` trong psql, đọc
+`sql/sales_schema.sql`, `sql/edu_schema.sql`, hoặc đọc tài liệu bảng sinh sẵn trong [docs/](docs/README.md).
 
 ## Chạy
 
@@ -28,8 +29,8 @@ sh data/postgres-demo/load.sh
 ```
 
 `load.sh` chép CSV vào schema `staging` (mọi cột kiểu text), tạo lại `edu` và `sales`, đổ dữ liệu bằng
-`INSERT ... SELECT`, chạy bước cài nguyên nhân (`sql/plant_demo_cause.sql`), cấp quyền cho `analyst`, rồi xóa
-`staging`. Mọi bước chạy trong một giao dịch: lỗi giữa chừng thì
+`INSERT ... SELECT`, chạy hai bước cài nguyên nhân (`sql/plant_demo_cause_sales.sql`, `sql/plant_demo_cause_edu.sql`),
+cấp quyền cho `analyst`, rồi xóa `staging`. Mọi bước chạy trong một giao dịch: lỗi giữa chừng thì
 dữ liệu cũ còn nguyên. Chạy lại bao nhiêu lần cũng ra cùng kết quả. Trên máy dev 16 nhân, `time sh load.sh` đo được
 từ 37 đến 46 giây, có lần tới 1 phút 50 giây; sau khi nạp, hai schema chiếm khoảng 320 MB
 (`staging` thêm khoảng 730 MB nếu giữ).
@@ -37,10 +38,11 @@ từ 37 đến 46 giây, có lần tới 1 phút 50 giây; sau khi nạp, hai sc
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `DEMO_DB_PORT` | `5440` | Cổng trên localhost |
+| `DEMO_ADMINER_PORT` | `8090` | Cổng của Adminer trên localhost, khi bật profile `adminer` |
 | `DEMO_DB_PASSWORD` | `demo` | Mật khẩu của người dùng chủ `demo`, chỉ đặt được trước lần chạy đầu |
 | `DEMO_DATA_DIR` | `../downloads` | Thư mục chứa CSV, tính từ thư mục này, gắn chỉ đọc vào container ở `/downloads` |
 | `KEEP_STAGING` | không đặt | `KEEP_STAGING=1 sh load.sh` giữ schema `staging` để chạy `sql/verify.sql` |
-| `SKIP_DEMO_CAUSE` | không đặt | `SKIP_DEMO_CAUSE=1 sh load.sh` bỏ bước cài nguyên nhân, `sales` đúng như CSV |
+| `SKIP_DEMO_CAUSE` | không đặt | `SKIP_DEMO_CAUSE=1 sh load.sh` bỏ cả hai bước cài nguyên nhân, `sales` và `edu` đúng như CSV |
 
 Kết nối:
 
@@ -54,11 +56,33 @@ Backend chạy trong Docker không tới được cổng chỉ mở trên `127.0
 container này (`docker network connect xdi-demo-db_default <tên container backend>`) rồi dùng
 `postgres://analyst:analyst@xdi-demo-db:5432/company_demo`.
 
-Xóa hẳn: `docker compose -f data/postgres-demo/docker-compose.yml down -v`.
+Xem bảng trên trình duyệt khi trình diễn: Adminer (image `adminer:5.4.1`), chỉ chạy khi bật profile `adminer`.
+
+```bash
+docker compose -f data/postgres-demo/docker-compose.yml --profile adminer up -d
+```
+
+Mở http://127.0.0.1:8090 (đổi cổng bằng `DEMO_ADMINER_PORT`), chọn System là PostgreSQL, Server để sẵn `demo-db`,
+Username và Password `analyst`, Database `company_demo`. Đăng nhập bằng `analyst` thì chỉ đọc được, như ứng dụng.
+Tắt: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer stop adminer`. `load.sh` chỉ bật
+`demo-db`, không bật Adminer.
+
+Xóa hẳn: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer down -v`.
 
 ## Sơ đồ quan hệ
 
-Mũi tên đi từ bảng "nhiều" sang bảng "một", theo khóa ngoại. PK là khóa chính.
+Sơ đồ ER và tài liệu từng bảng (cột, kiểu, mô tả, khóa) trong [docs/](docs/README.md), sinh bằng
+[tbls](https://github.com/k1LoW/tbls) (giấy phép MIT) từ database đang chạy; mô tả lấy từ `COMMENT`.
+
+![Sơ đồ ER schema edu](docs/viewpoint-edu.svg)
+
+![Sơ đồ ER schema sales](docs/viewpoint-sales.svg)
+
+Sinh lại sau khi đổi schema: chạy `load.sh`, rồi `TBLS=/đường/dẫn/tbls sh data/postgres-demo/docs.sh`. tbls không nằm
+trong repo; tải bản cho máy ở https://github.com/k1LoW/tbls/releases (bản đã dùng: v1.96.1, linux amd64). `docs.sh`
+kết nối bằng `analyst` theo `.tbls.yml`, chỉ lấy hai schema `edu` và `sales`, và xóa `docs/` trước khi sinh.
+
+Bản chữ dưới đây: mũi tên đi từ bảng "nhiều" sang bảng "một", theo khóa ngoại. PK là khóa chính.
 
 ```
 sales
@@ -144,8 +168,17 @@ bưu chính nằm ở cột bang) được dời về đúng cột, địa chỉ
 
 ## Nguyên nhân cài sẵn
 
-Để thử câu hỏi tìm nguyên nhân với đáp án biết trước, `load.sh` chạy `sql/plant_demo_cause.sql` sau khi đổ dữ liệu
-thật. Đây là dữ liệu sửa tay, không phải DataCo gốc.
+Để thử câu hỏi tìm nguyên nhân với đáp án biết trước, `load.sh` chạy hai file sau khi đổ dữ liệu thật:
+`sql/plant_demo_cause_sales.sql` và `sql/plant_demo_cause_edu.sql`. Đây là dữ liệu sửa tay, không phải dữ liệu gốc.
+Không ghi gì về hai việc sửa này vào COMMENT của bảng hay cột, để mô hình ngôn ngữ không đọc được đáp án; vì vậy sơ
+đồ và tài liệu bảng trong `docs/` (sinh từ COMMENT) cũng không nhắc tới.
+
+| Schema | Câu hỏi mong đợi | Đáp án |
+|---|---|---|
+| `sales` | "Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so với tháng 10/2016?" | Pacific Asia và Standard Class |
+| `edu` | "Vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B?" | Scotland và nhóm tuổi 0-35 |
+
+### Giao trễ ở `sales`
 
 - Đơn bị đổi: tháng 11/2016, thị trường Pacific Asia, cách giao Standard Class, chưa hủy và đang giao sớm hoặc đúng hạn:
   187 đơn (123 giao sớm, 64 đúng hạn), 547 dòng `order_items`.
@@ -154,7 +187,6 @@ thật. Đây là dữ liệu sửa tay, không phải DataCo gốc.
   lượng và mọi bảng khác giữ nguyên.
 - Chọn tháng 11/2016 vì từ 8/2016 đến 1/2017 mỗi tháng có từ bốn thị trường trở lên; các tháng khác DataCo chỉ có một
   hoặc hai thị trường. Tháng 10/2016 có cùng các thị trường nên dùng làm mốc so.
-- Không ghi gì về việc sửa này vào COMMENT của bảng hay cột, để mô hình ngôn ngữ không đọc được đáp án.
 
 | Tỷ lệ giao trễ | Trước | Sau |
 |---|---|---|
@@ -168,11 +200,34 @@ Mốc so: tháng 10/2016 có tỷ lệ 54,8% theo dòng hàng, Pacific Asia và 
 với tháng 10/2016?" hay "Vì sao số dòng hàng giao trễ tháng 11/2016 tăng?", đáp án Pacific Asia và Standard Class.
 Phần đơn còn lại trong nhóm này không trễ là đơn đã hủy (`Shipping canceled`), bước cài không đụng tới.
 
+### Bỏ học ở `edu`
+
+- Sinh viên bị đổi: kỳ 2014J, vùng Scotland, nhóm tuổi 0-35, kết quả Pass: 381 sinh viên, rải trên cả 7 môn (AAA 12,
+  BBB 66, CCC 69, DDD 58, EEE 91, FFF 68, GGG 17), nên chia theo môn không ra đáp án.
+- Cột đổi: chỉ `edu.students.final_result`, từ `Pass` thành `Withdrawn`. Mọi bảng khác giữ nguyên.
+- Chọn nhóm này vì là nhóm (vùng, nhóm tuổi) đông nhất của kỳ 2014J (925 sinh viên) và trước khi sửa có tỷ lệ bỏ học
+  thấp hơn trung bình kỳ. Kỳ 2014B dùng làm mốc so: trước khi sửa, 2014J và 2014B gần bằng nhau.
+- Dấu vết còn lại: 381 sinh viên này vẫn có điểm thi, lượt bấm tới cuối kỳ, và `registrations.date_unregistration`
+  rỗng. Trong dữ liệu thật, 10 063 trên 10 156 sinh viên `Withdrawn` có ngày hủy đăng ký. Ai soi kỹ sẽ thấy nhóm này
+  lạ, và cũng ra đúng đáp án.
+
+| Tỷ lệ bỏ học (`final_result = 'Withdrawn'`) | Trước | Sau |
+|---|---|---|
+| Kỳ 2014J (11 260 sinh viên) | 34,0% (3 826) | 37,4% (4 207) |
+| Kỳ 2014J, Scotland và 0-35 (925 sinh viên) | 26,3% (243) | 67,5% (624) |
+| Kỳ 2014J, ngoài nhóm trên (10 335 sinh viên) | 34,7% (3 583) | 34,7% (3 583) |
+| Kỳ 2014J, Scotland mọi nhóm tuổi (1 381 sinh viên) | 25,3% (350) | 52,9% (731) |
+| Kỳ 2014J, 0-35 mọi vùng (7 885 sinh viên) | 35,6% (2 806) | 40,4% (3 187) |
+
+Mốc so: kỳ 2014B có tỷ lệ 33,5% (2 613 trên 7 804), nhóm Scotland và 0-35 của 2014B 32,3% (536 sinh viên). Các kỳ
+khác: 2013B 28,8%, 2013J 26,8%. Sau khi sửa, Scotland thành vùng có tỷ lệ bỏ học cao nhất kỳ 2014J (52,9%, vùng kế tiếp
+West Midlands Region 40,4%). Tỷ lệ đạt (`Pass`) của 2014J giảm từ 38,1% (4 293) xuống 34,7% (3 912).
+
 ## Đã kiểm
 
 `KEEP_STAGING=1 sh load.sh`, rồi
 `docker compose -f data/postgres-demo/docker-compose.yml exec -T demo-db psql -U demo -d company_demo -f - < data/postgres-demo/sql/verify.sql`.
-Lần chạy gần nhất (có bước cài nguyên nhân) mọi dòng `ok` là `t`:
+Lần chạy gần nhất (31/10/2026, có hai bước cài nguyên nhân) cả 41 dòng `ok` là `t`:
 
 - Số dòng mỗi bảng bằng số dòng CSV hoặc số khóa khác nhau trong CSV (bảng "Số dòng"); tổng `sum_click` bằng tổng
   trên `studentVle.csv` (39 605 099).
@@ -184,18 +239,33 @@ Lần chạy gần nhất (có bước cài nguyên nhân) mọi dòng `ok` là 
   7434262.652838773, USCA 4553499.921016465, khớp Postgres.
 - So từng đơn với CSV: đúng 187 đơn khác, là mọi đơn của nhóm đã định ở mục "Nguyên nhân cài sẵn", mỗi đơn đổi đúng
   như mô tả (số ngày giao cộng 3, ngày giao cộng 3 ngày, `Late delivery`, `late_delivery_risk` true).
+- So từng sinh viên với `studentInfo.csv`: đúng 381 dòng khác, là mọi sinh viên Pass của kỳ 2014J, Scotland, 0-35, chỉ
+  `final_result` đổi thành `Withdrawn`, các cột khác giữ nguyên. Điểm trung bình theo kết quả cuối khóa (câu 7) so với
+  CSV sau khi bỏ nhóm này ở cả hai phía, nên qua cả khi có và khi không có bước cài.
 
-## Câu hỏi mẫu cần nhiều bảng
+## Câu hỏi mẫu và bảng cần dùng
 
-- Lợi nhuận theo phòng ban và thị trường năm 2017 (`order_items`, `products`, `categories`, `departments`, `orders`).
-- Tỷ lệ đơn giao trễ theo cách giao và phân khúc khách (`orders`, `customers`).
-- Mười sản phẩm có doanh số cao nhất ở Europe, kèm danh mục (`order_items`, `orders`, `products`, `categories`).
-- Khách ở bang nào mua nhiều nhất từ thị trường LATAM (`order_items`, `orders`, `customers`).
-- Điểm trung bình bài TMA theo nhóm `imd_band` và kết quả cuối khóa (`student_assessments`, `assessments`,
-  `students`).
-- Sinh viên bỏ học có số lượt bấm trong 4 tuần đầu thấp hơn sinh viên đạt bao nhiêu (`student_daily_clicks`,
-  `students`).
-- Tỷ lệ bỏ học theo môn và kỳ, kèm độ dài học phần (`students`, `courses`).
+Bảng ghi bảng nào phải đọc để trả lời đúng. Hai câu "vì sao" cuối có đáp án biết trước (mục "Nguyên nhân cài sẵn");
+các câu khác chưa có đáp án ghi sẵn ở đây.
+
+| Câu hỏi | Bảng |
+|---|---|
+| Lợi nhuận theo phòng ban và thị trường năm 2017 | `sales.order_items`, `orders`, `products`, `categories`, `departments` |
+| Tỷ lệ đơn giao trễ theo cách giao và phân khúc khách | `sales.orders`, `customers` |
+| Mười sản phẩm có doanh số cao nhất ở Europe, kèm danh mục | `sales.order_items`, `orders`, `products`, `categories` |
+| Khách ở bang nào mua nhiều nhất từ thị trường LATAM | `sales.order_items`, `orders`, `customers` |
+| Điểm trung bình bài TMA theo nhóm `imd_band` và kết quả cuối khóa | `edu.student_assessments`, `assessments`, `students` |
+| Sinh viên bỏ học có số lượt bấm trong 4 tuần đầu thấp hơn sinh viên đạt bao nhiêu | `edu.student_daily_clicks`, `students` |
+| Tỷ lệ bỏ học theo môn và kỳ, kèm độ dài học phần | `edu.students`, `courses` |
+| Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so với tháng 10/2016? | `sales.orders` (theo đơn); thêm `order_items` nếu đếm theo dòng hàng |
+| Vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B? | `edu.students` |
+
+Đáp án của hai câu cuối:
+
+- Giao trễ: Pacific Asia và Standard Class. Tỷ lệ giao trễ của nhóm này tháng 11/2016 từ 37,8% lên 95,7% theo đơn
+  (39,6% lên 95,0% theo dòng hàng); cả tháng từ 54,3% lên 65,2% theo đơn, tháng 10/2016 là 54,8% theo dòng hàng.
+- Bỏ học: Scotland và nhóm tuổi 0-35. Tỷ lệ bỏ học của nhóm này kỳ 2014J từ 26,3% lên 67,5%; cả kỳ từ 34,0% lên
+  37,4%, kỳ 2014B là 33,5%; phần còn lại của kỳ 2014J giữ 34,7%.
 
 ## Giấy phép và ghi công
 
@@ -213,12 +283,15 @@ Bảng ở đây là bản đã biến đổi từ dữ liệu gốc: tách bả
 
 | File | Vai trò |
 |---|---|
-| `docker-compose.yml` | Container `xdi-demo-db` |
+| `docker-compose.yml` | Container `xdi-demo-db`; Adminer `xdi-demo-adminer` trong profile `adminer` |
 | `init/01_roles.sql` | Tạo người dùng `analyst`, chạy một lần khi volume trống |
 | `load.sh` | Nạp từ CSV, chạy lại được |
 | `sql/staging.sql` | Bảng staging, mọi cột text |
 | `sql/edu_schema.sql`, `sql/edu_load.sql` | Schema `edu` và cách đổ dữ liệu |
 | `sql/sales_schema.sql`, `sql/sales_load.sql` | Schema `sales` và cách đổ dữ liệu |
-| `sql/plant_demo_cause.sql` | Cài một nguyên nhân biết trước vào `sales.orders`, bỏ qua bằng `SKIP_DEMO_CAUSE=1` |
+| `sql/plant_demo_cause_sales.sql` | Cài một nguyên nhân biết trước vào `sales.orders`, bỏ qua bằng `SKIP_DEMO_CAUSE=1` |
+| `sql/plant_demo_cause_edu.sql` | Cài một nguyên nhân biết trước vào `edu.students`, bỏ qua cùng cờ |
 | `sql/grants.sql` | Quyền chỉ đọc cho `analyst` |
 | `sql/row_counts.sql`, `sql/verify.sql` | Đếm dòng; kiểm so với CSV |
+| `.tbls.yml`, `docs.sh` | Cấu hình tbls và lệnh sinh lại `docs/` |
+| `docs/` | Tài liệu bảng (Markdown) và sơ đồ ER (SVG), sinh bằng tbls, không sửa tay |

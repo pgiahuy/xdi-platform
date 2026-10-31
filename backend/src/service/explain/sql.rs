@@ -25,6 +25,7 @@ use crate::engine::store::ProfileColumn;
 use crate::service::explain::check::{PlanSlices, PlanTime, WhyPlan};
 use crate::service::explain::measure::Additive;
 use crate::service::explain::period::Period;
+use crate::service::explain::source::build_from_sql;
 use crate::service::profile::is_time_type;
 
 /// Tên cột của câu tổng hai lát cắt và câu từng chiều; explain/run.rs đọc kết quả theo đúng các tên này.
@@ -67,7 +68,7 @@ pub fn build_why_sql(plan: &WhyPlan) -> WhySql {
     };
     let total_sql = format!(
         "SELECT {key}, {aggregate} AS {label} FROM {} WHERE {} GROUP BY {group_by} ORDER BY {group_by}",
-        build_ident(&plan.table),
+        build_from(plan, &[]),
         build_where(plan)
     );
     WhySql {
@@ -98,7 +99,7 @@ pub fn build_slices_sql(plan: &WhyPlan) -> String {
     format!(
         "SELECT {} FROM {} WHERE {}",
         items.join(", "),
-        build_ident(&plan.table),
+        build_from(plan, &[]),
         build_where(plan)
     )
 }
@@ -106,11 +107,11 @@ pub fn build_slices_sql(plan: &WhyPlan) -> String {
 /// Độ đo của hai lát cắt theo từng nhóm của một cột chiều; nhóm null là một dòng riêng.
 pub fn build_dimension_sql(plan: &WhyPlan, column: &str) -> String {
     let (base, compare) = build_slice_conditions(plan);
+    let from = build_from(plan, &[column]);
     let column = build_ident(column);
     format!(
-        "SELECT {column}, {} FROM {} WHERE {} GROUP BY {column}",
+        "SELECT {column}, {} FROM {from} WHERE {} GROUP BY {column}",
         build_sliced_items(plan, &base, &compare).join(", "),
-        build_ident(&plan.table),
         build_where(plan)
     )
 }
@@ -122,9 +123,14 @@ pub fn build_pair_count_sql(plan: &WhyPlan, first: &str, second: &str) -> String
         "SELECT COUNT(*) AS pairs FROM (SELECT DISTINCT {}, {} FROM {} WHERE {}) AS pair_values",
         build_ident(first),
         build_ident(second),
-        build_ident(&plan.table),
+        build_from(plan, &[first, second]),
         build_where(plan)
     )
+}
+
+/// Phần FROM: bảng chính, hay câu con nối bảng liên quan khi câu cần cột của chúng (explain/source.rs).
+fn build_from(plan: &WhyPlan, columns: &[&str]) -> String {
+    build_from_sql(&plan.table, &plan.source, columns)
 }
 
 /// Độ đo của hai lát cắt: tử base, tử compare, rồi mẫu base, mẫu compare khi độ đo là tỷ lệ. explain/breakdown.rs đọc

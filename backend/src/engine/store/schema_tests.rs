@@ -207,7 +207,7 @@ async fn delete_rules_keep_data_consistent() {
         .expect("deleting a non-current version must succeed");
     tx.rollback().await.unwrap();
 
-    // Xóa dataset: lịch sử câu hỏi còn, cả hai cột trỏ tới đều null, workspace_id giữ nguyên.
+    // Xóa dataset: lịch sử câu hỏi của nó mất theo (#187), không còn dòng nào của workspace trong queries.
     let mut tx = store.pool.begin().await.expect("begin");
     let (ws, ds, _, _) = seed(&mut tx).await;
     sqlx::query("DELETE FROM datasets WHERE id = $1")
@@ -215,14 +215,12 @@ async fn delete_rules_keep_data_consistent() {
         .execute(&mut *tx)
         .await
         .expect("delete dataset");
-    let kept: (i64, bool) = sqlx::query_as(
-        "SELECT count(*), bool_and(dataset_id IS NULL AND version_id IS NULL) FROM queries WHERE workspace_id = $1",
-    )
-    .bind(ws)
-    .fetch_one(&mut *tx)
-    .await
-    .unwrap();
-    assert_eq!(kept, (1, true));
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM queries WHERE workspace_id = $1")
+        .bind(ws)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
     tx.rollback().await.unwrap();
 
     // Xóa workspace: mọi thứ của nó mất theo, kể cả nguồn đang có dataset.

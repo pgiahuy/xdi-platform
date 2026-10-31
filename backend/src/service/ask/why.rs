@@ -5,6 +5,10 @@
 (ask/view.rs), ghi lịch sử kèm form và Explanation, rồi dựng AskResponse. Trạng thái và lỗi theo cùng quy tắc với câu
 thường (đầu file ask/mod.rs); test qua route ở api/ask_why_tests.rs.
 
+Dataset chụp từ database: form chỉ nêu cột của bảng đang hỏi, còn phân rã xét thêm cột của các bảng nối nhiều-một vào
+nó (explain/source.rs, #227). tables_read và queries.read_versions ghi bảng đang hỏi cộng các bảng mà một chiều của phân
+rã đã đọc.
+
 queries.explanation lưu object {"form": <form mô hình điền>, "explanation": <Explanation>}. drill/mod.rs đọc điều kiện lát
 cắt và câu SQL từng chiều trong "explanation" để truy dòng nguồn của một dòng phân rã; "form" giữ lại để xem câu hỏi
 đã được hiểu thế nào. "explanation" là null khi có bảng tổng mà không phân rã được (cảnh báo explanation_unavailable).
@@ -17,13 +21,15 @@ use crate::config::Config;
 use crate::engine::guard::AllowedTable;
 use crate::engine::store::{Dataset, DatasetVersion, ProfileColumn};
 use crate::service::ask::checks::build_empty_warning;
-use crate::service::ask::contract::{AskResponse, AskStatus, AskStep, Explanation};
+use crate::service::ask::contract::{AskResponse, AskStatus, AskStep, Explanation, TableRead};
 use crate::service::ask::prompt::PromptInput;
+use crate::service::ask::related::TableGroup;
 use crate::service::ask::response_choices::{build_unapplied_warnings, build_used_choices};
 use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::{build_base_response, build_value_warnings, record_query, Recorded};
 use crate::service::explain::run::{run_why, WhyInput, WhyOutcome};
+use crate::service::explain::source::{build_tables_used, RelatedTables};
 use crate::service::lessons::{record_failures, FailedQuestion};
 use crate::{error::AppError, state::AppState};
 
@@ -36,7 +42,11 @@ pub(super) struct WhyAsk<'a> {
     /// Hồ sơ cột của phiên bản (Store::list_columns).
     pub columns: &'a [ProfileColumn],
     /// Bảng được phép, đã có lọc dòng theo vai dữ liệu của người hỏi: mọi câu của run_why đi qua guard với nó.
+    /// Gồm bảng đang hỏi và các bảng liên quan của nhóm (ask/related.rs).
     pub tables: &'a [AllowedTable],
+    pub group: &'a TableGroup,
+    /// Bảng liên quan nối nhiều-một vào bảng đang hỏi, cho phân rã (#227).
+    pub related: &'a RelatedTables,
     /// Các bước đã chạy (context).
     pub steps: Vec<AskStep>,
 }
@@ -52,6 +62,8 @@ pub(super) async fn ask_why(
         prompt,
         columns,
         tables,
+        group,
+        related,
         mut steps,
     } = ask;
     // Các trường của prompt là tham chiếu; chép ra trước khi prompt chuyển vào WhyInput để dùng tiếp sau run_why.
@@ -72,6 +84,7 @@ pub(super) async fn ask_why(
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,
         narrate_timeout: build_narrate_timeout(&state.config),
+        related,
     };
     let mut outcome = run_why(state.llm.as_ref(), input).await?;
     steps.append(&mut outcome.steps);
@@ -117,6 +130,7 @@ pub(super) async fn ask_why(
     let view = build_answer_view(&ran, &context.columns, metrics, &outcome.assumptions);
     let (understanding, chart) = apply_answer_view(view, outcome.result.as_mut());
 
+    let tables_read = build_why_tables_read(group, &dataset.logical_table, &outcome);
     let recorded = Recorded {
         status: outcome.status,
         message: outcome.message.as_deref(),
@@ -124,8 +138,7 @@ pub(super) async fn ask_why(
         sql_guarded: outcome.sql_guarded.as_deref(),
         result: outcome.result.as_ref(),
         explanation: build_stored_explanation(&outcome)?,
-        // Câu "tại sao" chỉ đọc dataset đang hỏi: record_query ghi cặp của nó.
-        read_versions: Vec::new(),
+        read_versions: group.build_read_versions(&tables_read),
     };
     let target = (dataset, version);
     let query_id = record_query(state, member, target, question, recorded, &mut steps).await?;
@@ -141,6 +154,11 @@ pub(super) async fn ask_why(
         choices: used,
         sql_generated: outcome.sql_generated,
         sql_guarded: outcome.sql_guarded,
+        tables_read: if outcome.status == AskStatus::Answered {
+            tables_read
+        } else {
+            Vec::new()
+        },
         understanding,
         result: outcome.result,
         chart,
@@ -149,6 +167,20 @@ pub(super) async fn ask_why(
         steps,
         ..build_base_response(state, version, question, outcome.status)
     })
+}
+
+/// Bảng câu "tại sao" đã đọc: bảng đang hỏi, cộng bảng liên quan mà một chiều của phân rã đã đọc (explain/source.rs).
+fn build_why_tables_read(group: &TableGroup, table: &str, outcome: &WhyOutcome) -> Vec<TableRead> {
+    let columns: Vec<&str> = outcome
+        .explanation
+        .iter()
+        .flat_map(|e| e.dimensions.iter().map(|d| d.column.as_str()))
+        .collect();
+    let mut names = vec![table.to_string()];
+    if let Some(plan) = &outcome.plan {
+        names.extend(build_tables_used(&plan.source, &columns));
+    }
+    group.build_tables_read(&names)
 }
 
 /// Object lưu vào queries.explanation (khuôn ở đầu file); None khi câu chạy như câu thường.

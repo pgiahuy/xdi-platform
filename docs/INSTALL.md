@@ -134,6 +134,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; chạm trần thì giao diện ghi "ít nhất N dòng". Giao diện chỉ nhận 1000 dòng đầu |
 | `RUST_LOG` | `info` | Mức log |
 | `ANSWER_TEXT` | `true` | Câu hỏi thường có đoạn trả lời do mô hình viết từ tối đa 10 dòng đầu của kết quả ([PRIVACY.md](PRIVACY.md)); `false` để không gửi dòng kết quả nào cho mô hình, đoạn trả lời là câu khuôn |
+| `INSIGHT_TEXT` | `true` | Phần giải thích của câu hỏi thường có lời do mô hình viết lại từ các câu backend đã tính (không gửi dòng kết quả nào, [PRIVACY.md](PRIVACY.md)); `false` để chỉ dùng câu do backend viết |
 | `SEED_SAMPLE` | `true` | Thiết lập lần đầu nạp dataset mẫu DataCo kèm chỉ số mẫu vào workspace đầu tiên (mục 7, bước 1); `false` để workspace trống |
 | `SOURCE_SECRET_KEY` | trống (tắt) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`); để trống thì không thêm được nguồn database. Đổi khóa thì phải thêm lại các nguồn |
 | `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp |
@@ -584,8 +585,8 @@ hạn, phiên bản và tên cột: [Dữ liệu](DATA.md). Nạp lại đúng f
 mới thành dữ liệu hiện hành, phiên bản cũ vẫn giữ.
 
 Bỏ một dataset: bấm **Xóa** ở dòng của nó rồi xác nhận **Xóa dataset** (chỉ `admin`). Mọi phiên bản, hồ sơ cột, chỉ
-số, cuộc trò chuyện và file Parquet của dataset bị xóa hẳn, không khôi phục được. Lịch sử câu hỏi (câu hỏi, SQL, bảng
-phân rã của câu "tại sao") vẫn ở lại trong database, chỉ mất khi xóa cả workspace ([PRIVACY.md](PRIVACY.md)).
+số, cuộc trò chuyện, lịch sử câu hỏi (câu hỏi, SQL, bảng phân rã của câu "tại sao") và file Parquet của dataset bị
+xóa hẳn, không khôi phục được. Bản sao lưu làm trước đó vẫn còn chúng ([PRIVACY.md](PRIVACY.md)).
 
 Chụp một bảng Postgres (chỉ `admin`, cần `SOURCE_SECRET_KEY` và `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình): khung
 **Database** của trang **Dữ liệu**, bấm **Kết nối database**, nhập máy chủ, cổng, database, tài khoản và mật khẩu, chọn

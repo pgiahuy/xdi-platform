@@ -47,9 +47,10 @@ Nội dung gửi:
 | Hỏi tiếp trong một cuộc trò chuyện | Thêm vào prompt câu thường và prompt form câu "tại sao": tối đa 4 lượt gần nhất của cùng cuộc, mỗi lượt là câu hỏi, trạng thái (đã trả lời, bị từ chối, lỗi), câu SQL mô hình viết (hoặc SQL sau guard khi không có) và phần "Hệ thống đã hiểu là" dạng chữ ngắn (độ đo, bộ lọc, nhóm, kỳ; không gồm điều kiện phân quyền); cả khối tối đa 4 000 ký tự, dài hơn thì bỏ lượt cũ trước. Câu SQL và bộ lọc có thể chứa giá trị của cột phân loại, như phần danh sách giá trị ở dòng trên | Các dòng dữ liệu; giá trị trong bảng kết quả; lời báo lỗi của các lượt; lượt của cuộc khác hay của người khác |
 | SQL chạy lỗi hoặc bị guard từ chối, sửa một lần | Prompt của lần hỏi, SQL vừa sinh và thông báo lỗi của DuckDB hay lý do guard từ chối. Thông báo của DuckDB có thể chép một giá trị của dữ liệu, ví dụ chuỗi ngày không đọc được | Đường dẫn file trên máy chủ |
 | Form câu "tại sao" sai, sửa một lần | Prompt của lần hỏi, form vừa điền và lỗi của từng trường. Lỗi có thể kèm tối đa 20 giá trị của một cột phân loại (đã có trong prompt) và ngày đầu, ngày cuối của cột thời gian | Các dòng dữ liệu; đường dẫn file |
-| Diễn giải câu "tại sao" so hai kỳ | Câu hỏi và bảng phân rã đã tính: độ đo, nhãn và giá trị hai lát cắt, chênh lệch, nhóm chính (`main_group`: nhóm đóng góp lớn nhất cùng chiều với chênh lệch ở chiều đầu), hai chiều đầu, mỗi chiều ba nhóm đầu kèm giá trị nhóm, giá trị hai lát cắt và phần đóng góp (độ đo tỷ lệ thêm phần cơ cấu và phần hiệu suất), tách lượng và giá nếu có. Câu so hai nhóm, hay chênh lệch bằng 0, thì không gửi gì: lời giải thích là câu khuôn do backend viết | Các dòng dữ liệu gốc |
+| Diễn giải câu "tại sao" so hai kỳ | Câu hỏi và bảng phân rã đã tính: độ đo, nhãn và giá trị hai lát cắt, chênh lệch, nhóm chính (`main_group`: nhóm đóng góp lớn nhất cùng chiều với chênh lệch ở chiều đầu), hai chiều đầu, mỗi chiều ba nhóm đầu kèm giá trị nhóm, giá trị hai lát cắt và phần đóng góp (độ đo tỷ lệ thêm phần cơ cấu và phần hiệu suất), tách lượng và giá nếu có; dataset chụp từ database thì chiều có thể là cột của bảng liên quan (#227), nên giá trị nhóm gửi đi có thể là giá trị của cột phân loại thuộc bảng đó. Câu so hai nhóm, hay chênh lệch bằng 0, thì không gửi gì: lời giải thích là câu khuôn do backend viết | Các dòng dữ liệu gốc |
 | Bài học đã duyệt (#228) | Thêm vào prompt SQL, prompt form câu "tại sao", prompt diễn giải và prompt trả lời câu thường: tối đa 3 bài học đã bật của dataset hay của cả workspace, có từ chung với câu hỏi hay nhắc tên một cột câu hỏi khớp. Chỉ chữ admin đã duyệt; câu hỏi, ghi chú và câu mô hình trả trong nhật ký lỗi không vào prompt | Bài nháp, bài đã tắt, bài không liên quan |
 | Trả lời câu thường | Câu hỏi, phần "Hệ thống đã hiểu là" (nhãn độ đo, nhóm, bộ lọc), tên cột kết quả, tối đa 10 dòng đầu của kết quả và tổng số dòng. Đây là dữ liệu kết quả thật: giá trị nhóm và con số đã tính, có thể chứa giá trị của mọi cột câu SQL chọn. Tắt bằng `ANSWER_TEXT=false`: không gửi dòng kết quả nào, đoạn trả lời là câu khuôn do backend viết | Các dòng dữ liệu gốc; dòng thứ 11 trở đi của kết quả; câu SQL |
+| Phần giải thích của câu thường (#227, một lần gọi thêm mỗi câu) | Câu hỏi và các câu backend đã viết: câu chính và các ý, cờ `notable`. Các câu này chứa số đã tính (tổng, chênh lệch, phần trăm, số dòng của kỳ), nhãn kỳ, tên độ đo, tên tối đa vài nhóm của bảng kết quả (nhóm đứng đầu, nhóm lệch hẳn mức trung bình, hai hạng đầu) và, khi có phân rã, tên cột chiều cùng một giá trị nhóm của nó; câu danh sách dòng thì có nhãn các điều kiện lọc của thẻ "Hệ thống đã hiểu là". Tắt bằng `INSIGHT_TEXT=false`: không gọi mô hình, phần giải thích là câu do backend viết | Các dòng dữ liệu gốc; các dòng của bảng kết quả và của bảng phân rã; câu SQL |
 
 Khung "Tổng quan dữ liệu" (`GET .../datasets/{id}/overview`) không gửi gì cho mô hình: hồ sơ cột đọc từ Postgres, biểu
 đồ do backend tính trên DuckDB. Kết quả các câu của nó giữ trong bộ nhớ của backend theo phiên bản, mất khi khởi động
@@ -75,9 +76,12 @@ database. Dataset chụp từ database được đối xử như dataset nạp t
 - Admin xóa workspace ở trang Thành viên (hoặc `DELETE /api/workspaces/{ws}`): xóa mọi dataset, hồ sơ, chỉ số, lịch
   sử câu hỏi và thành viên của nó trong Postgres (khóa ngoại `ON DELETE CASCADE`) và thư mục Parquet của workspace.
 - Admin xóa từng dataset ở trang Dữ liệu (hoặc `DELETE /api/workspaces/{ws}/datasets/{id}`): xóa mọi phiên bản, hồ
-  sơ cột, chỉ số và cuộc trò chuyện của dataset trong Postgres và file Parquet của từng phiên bản trên đĩa. Lịch sử câu
-  hỏi của dataset (câu hỏi, SQL, lỗi, bảng phân rã của câu "tại sao") vẫn còn trong Postgres, chỉ bỏ liên kết tới
-  dataset; nó mất khi xóa cả workspace.
+  sơ cột, chỉ số, cuộc trò chuyện và lịch sử câu hỏi của dataset (câu hỏi, SQL, lỗi, phần "Đã hiểu là", bảng phân rã
+  của câu "tại sao") trong Postgres, và file Parquet của từng phiên bản trên đĩa. Câu hỏi trên dataset khác mà đã nối
+  sang dataset này (hỏi qua bảng liên quan) vẫn giữ, vì chúng thuộc dataset kia.
+- Bản sao lưu (`make backup`) làm trước khi xóa vẫn còn dữ liệu cũ, kể cả lịch sử câu hỏi; xóa hẳn thì xóa cả các bản
+  sao lưu đó. Bản cài cũ có lịch sử câu hỏi còn lại từ các lần xóa dataset trước: lần cập nhật đầu tiên có migration
+  `0011_delete_query_history.sql` xóa các dòng đó.
 
 ## Bản demo công khai (thiết kế)
 

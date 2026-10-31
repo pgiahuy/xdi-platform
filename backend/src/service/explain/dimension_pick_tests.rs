@@ -106,6 +106,7 @@ fn plan(dimensions: &[&str]) -> WhyPlan {
         dimensions: dimensions.iter().map(|d| d.to_string()).collect(),
         volume: None,
         labels: HashMap::new(),
+        source: Default::default(),
     }
 }
 

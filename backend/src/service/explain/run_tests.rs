@@ -193,6 +193,7 @@ impl Dataco {
             timeout: Duration::from_secs(30),
             jobs: &self.jobs,
             narrate_timeout: Duration::from_secs(5),
+            related: &crate::service::explain::source::NO_RELATED,
         };
         run_why(llm, input).await
     }

@@ -119,6 +119,16 @@ câu đó do mô hình viết (`true`) hay theo khuôn (`false`). Hai trường 
 `explanation.summary`) và câu không answered. Bước này hiện trong `steps` dưới tên `narrate`. `ANSWER_TEXT=false` thì
 luôn là câu khuôn, không gọi mô hình.
 
+Câu thường answered có ít nhất một ô có giá trị thì có `insight`: phần giải thích chọn theo hình dạng kết quả (`kind`:
+`single_value`, `time_series`, `groups`, `top_n`, `rows`), gồm `title` và `points` (`lead`, `text`) do backend viết từ số
+đã tính, `summary` là lời của mô hình khi `summary_by_model` (đã kiểm số, chiều tăng giảm và từ chỉ nguyên nhân), không
+thì là câu chính nối các ý, và `notable` là `false` khi số liệu không cho thấy điều gì đáng kể (chênh lệch dưới 2%, một
+kỳ dưới 30 dòng, các nhóm khá đều, hay danh sách dòng). Với `single_value` so được kỳ trước và `time_series`,
+`explanation` là phân rã của kỳ đổi mạnh nhất so với kỳ liền trước (cùng hình dạng như câu "tại sao", lưu cùng câu hỏi
+nên truy dòng nguồn của một dòng phân rã như câu "tại sao"); chênh lệch không đáng kể thì `explanation` null. Hai bước
+thêm trong `steps`: `explain` (phần do code tính) và `narrate` (lời). `insight` null với câu "tại sao" và câu không
+answered. `INSIGHT_TEXT=false` thì không gọi mô hình cho phần này.
+
 Câu hỏi cần thông tin không cột nào có (mức hài lòng khi không có cột đánh giá, dự báo tương lai) thì mô hình báo
 `unanswerable`, không câu SQL nào chạy, `status` là `rejected` với `sql_generated` null và `message` nêu lý do cùng các
 cột gần nhất có thể hỏi; câu vẫn ghi vào lịch sử như câu bị từ chối.
@@ -238,10 +248,9 @@ prompt của câu hỏi kế tiếp.
 ## Xóa dataset
 
 `DELETE /api/workspaces/{ws}/datasets/{id}` xóa hẳn một dataset: mọi phiên bản, hồ sơ cột, chỉ số, cuộc trò chuyện
-(CASCADE) và file Parquet trên đĩa (`delete_dataset` trong `backend/src/service/ingest.rs`). Lịch sử câu hỏi của dataset
-(bảng `queries`) không xóa: các dòng còn lại với `dataset_id`, `version_id` null, và chỉ mất khi xóa workspace. Chỉ
-admin của workspace, `member` nhận 403; 404 khi dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không
-khôi phục được.
+và lịch sử câu hỏi (bảng `queries`, kể cả các lượt trò chuyện), bằng khóa ngoại `ON DELETE CASCADE`, rồi file Parquet
+trên đĩa (`delete_dataset` trong `backend/src/service/ingest.rs`). Chỉ admin của workspace, `member` nhận 403; 404 khi
+dataset không có hoặc thuộc workspace khác, 204 khi xóa xong. Không khôi phục được.
 
 ## Tổng quan dataset
 

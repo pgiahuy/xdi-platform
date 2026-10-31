@@ -81,9 +81,10 @@ impl LlmProvider for ScriptedLlm {
         // vào hồ sơ, nên câu viết sẵn chỉ dành cho câu hỏi và bí danh test tự đặt không bị ghi đè.
         // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn. Bước phân
         // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
+        // Lời của phần giải thích (task insight, #227) cũng vậy: lỗi thì dùng câu do code viết.
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify
+            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify | LlmTask::Insight
         ) {
             return Err(AppError::Upstream(
                 "scripted model has no profile or summary".to_string(),
@@ -218,7 +219,7 @@ async fn answers_a_question_and_records_it() {
     );
     assert_eq!(
         step_names(&response),
-        ["context", "classify", "llm", "guard", "run", "narrate", "record"]
+        ["context", "classify", "llm", "guard", "run", "narrate", "explain", "narrate", "record"]
     );
     // Mock có câu phân loại viết sẵn cho câu mẫu: mô hình chọn, không phải luật từ khóa.
     let classify = &response["steps"][1];
@@ -275,7 +276,7 @@ async fn repairs_a_failed_run_once() {
         step_names(&response),
         [
             "context", "classify", "llm", "guard", "run", "repair", "guard", "run", "narrate",
-            "record"
+            "explain", "narrate", "record"
         ]
     );
     assert!(response["sql_generated"]
@@ -517,9 +518,10 @@ impl LlmProvider for RecordingLlm {
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
         // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn. Bước phân
         // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
+        // Lời của phần giải thích (task insight, #227) cũng vậy: lỗi thì dùng câu do code viết.
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify
+            LlmTask::Profile | LlmTask::Summary | LlmTask::Classify | LlmTask::Insight
         ) {
             return Err(AppError::Upstream(
                 "recording model has no profile or summary".to_string(),

@@ -20,6 +20,7 @@ pub mod excel;
 pub mod explain;
 pub mod feedback;
 pub mod ingest;
+pub mod insight;
 pub mod lessons;
 pub mod metrics;
 pub mod overview;

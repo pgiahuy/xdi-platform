@@ -40,6 +40,10 @@ mod ratio_tests;
 pub mod run;
 #[cfg(test)]
 mod run_tests;
+pub mod significance;
+pub mod source;
+#[cfg(test)]
+mod source_tests;
 pub mod sql;
 pub mod summary;
 #[cfg(test)]
@@ -1023,18 +1027,31 @@ pub fn build_direction_check(summary: &str, explanation: &Explanation) -> Result
         changes.push(&split.volume_effect);
         changes.push(&split.price_effect);
     }
+    let expected: Vec<(String, &str)> = changes
+        .into_iter()
+        .filter_map(|change| match build_change_parts(change, digits) {
+            (Some(word @ ("tăng" | "giảm")), amount) => Some((amount, word)),
+            _ => None,
+        })
+        .collect();
+    build_amount_direction_check(summary, &expected)
+}
+
+/// Phần chung của bước kiểm chiều: trước mỗi lần độ lớn (đã viết không dấu) đứng riêng trong summary, chữ "tăng" hay
+/// "giảm" gần nhất trong cùng câu phải là chữ chờ. Phần giải thích của câu thường (service/insight/) cũng dùng. Err là
+/// các độ lớn bị nói ngược chiều.
+pub fn build_amount_direction_check(
+    summary: &str,
+    changes: &[(String, &str)],
+) -> Result<(), Vec<String>> {
     let mut wrong = Vec::new();
-    for change in changes {
-        let (Some(expected @ ("tăng" | "giảm")), amount) = build_change_parts(change, digits)
-        else {
-            continue;
-        };
-        for (start, _) in summary.match_indices(&amount) {
+    for (amount, expected) in changes {
+        for (start, _) in summary.match_indices(amount.as_str()) {
             if !stands_alone(summary, start, amount.len()) {
                 continue;
             }
             if let Some(said) = last_direction_word(&summary[..start]) {
-                if said != expected && !wrong.contains(&amount) {
+                if said != *expected && !wrong.contains(amount) {
                     wrong.push(amount.clone());
                 }
             }
