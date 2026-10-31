@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use sqlparser::ast::{BinaryOperator, Expr};
 
+use crate::service::explain::form::{FieldError, FormAgg, WhyForm};
 use crate::service::explain::lower_first;
 use crate::service::explain::sql::{build_equals, build_ident, build_string};
 
@@ -55,5 +56,36 @@ impl GroupBase {
             GroupBase::Value(value) => value.clone(),
             GroupBase::Rest => format!("the groups other than {compare}"),
         }
+    }
+}
+
+/// Một nhóm so với mọi nhóm còn lại mà độ đo là số đếm trên các dòng đã lọc bằng một giá trị ("số dòng giao trễ của
+/// Pacific Asia so với mọi thị trường khác"): phần còn lại gộp lại lớn hơn một nhóm nhiều lần, nên chênh lệch chỉ nói
+/// nhóm nhỏ hơn, không nói nhóm trễ nhiều hơn. Gemini hay điền như vậy cho câu "giao trễ nhiều hơn các thị trường khác";
+/// lỗi chỉ đường sửa sang tỷ lệ dòng có giá trị đó (share), để mô hình sửa trong một vòng. Tổng tiền thì không chặn:
+/// "doanh thu Pacific Asia so với phần còn lại" là câu hỏi về tổng.
+pub(super) fn check_rest_measure(form: &WhyForm, errors: &mut Vec<FieldError>) {
+    let rest = form
+        .groups
+        .as_ref()
+        .is_some_and(|g| g.base.as_deref().is_none_or(|b| b.trim().is_empty()));
+    let counts = form.metric.as_deref().is_none_or(|m| m.trim().is_empty())
+        && form
+            .measure
+            .as_ref()
+            .is_some_and(|m| m.agg == FormAgg::Count);
+    let Some(filter) = form.filters.iter().find(|f| f.op == "=") else {
+        return;
+    };
+    if rest && counts {
+        errors.push(FieldError::new(
+            "measure.agg",
+            format!(
+                "one group against all the other groups by a count only shows that the group is smaller; set \
+                 \"measure\" to {{\"column\": \"{}\", \"agg\": \"share\", \"value\": \"{}\"}} and remove that filter, \
+                 to compare the share of such rows",
+                filter.column, filter.value
+            ),
+        ));
     }
 }

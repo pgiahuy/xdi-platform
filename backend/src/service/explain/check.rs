@@ -16,8 +16,8 @@ use sqlparser::ast::Expr;
 use crate::engine::store::{MetricDefinition, ProfileColumn, ProfileRole};
 use crate::service::ask::values::ValueIndex;
 use crate::service::explain::filter::{build_single_value_columns, check_filters};
-use crate::service::explain::form::{CompareWith, FieldError, WhyForm};
-use crate::service::explain::group_base::GroupBase;
+use crate::service::explain::form::{CompareWith, FieldError, FormAgg, WhyForm};
+use crate::service::explain::group_base::{check_rest_measure, GroupBase};
 use crate::service::explain::measure::{
     check_measure, find_metric, parse_expr, Additive, PlanMeasure,
 };
@@ -111,6 +111,7 @@ pub fn build_why_check(
     let slices = check_slices(form, profile, base_choice, &mut errors);
     let mut filters = check_filters(form, profile, &mut errors);
     check_find(form, profile, &mut errors);
+    check_rest_measure(form, &mut errors);
     let (Some(measure), Some(slices)) = (measure, slices) else {
         return Err(errors);
     };
@@ -401,6 +402,10 @@ pub(super) fn check_value(
 fn build_dimensions(form: &WhyForm, profile: &WhyProfile, slices: &PlanSlices) -> Vec<String> {
     let single = build_single_value_columns(form);
     let mut excluded: Vec<&str> = single.iter().map(String::as_str).collect();
+    // Cột của độ đo share: chia theo chính cột đó thì nhóm có giá trị đang đếm giải thích trọn chênh lệch, không nói gì.
+    if let Some(measure) = form.measure.as_ref().filter(|m| m.agg == FormAgg::Share) {
+        excluded.push(&measure.column);
+    }
     if let PlanSlices::Groups { column, .. } = slices {
         excluded.push(column);
     }

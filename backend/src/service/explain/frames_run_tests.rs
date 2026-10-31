@@ -8,7 +8,7 @@ Số của quý 3/2017 (COMPARE_CELLS của run_tests.rs): Pacific Asia 1.960.12
 
 use serde_json::json;
 
-use crate::service::ask::contract::{AskStatus, Comparison, MeasureKind, WarningCode};
+use crate::service::ask::contract::{AskStatus, CellValue, Comparison, WarningCode};
 use crate::service::explain::run_tests::{items, view, Dataco, ScriptedLlm};
 use crate::service::explain::{build_number_check, check_tests::DATE};
 
@@ -108,9 +108,9 @@ async fn extended_filters_reach_every_query() {
     }
 }
 
-/// Tỷ lệ dòng Corporate của Pacific Asia so với các thị trường còn lại, quý 3/2017: độ đo tỷ lệ đi đường cơ cấu và
-/// hiệu suất. Pacific Asia có một dòng, là Corporate (1.0000); phần còn lại có 6 ô cộng 4.393 dòng 0 đồng, trong đó 2
-/// dòng Corporate (2 / 4.399 = 0.0005).
+/// Tỷ lệ dòng Corporate của Pacific Asia so với các thị trường còn lại, quý 3/2017. Bảng chỉ có hai cột chiều, đều đã
+/// dùng (Market làm hai lát, Customer Segment là cột của tỷ lệ, không phân rã theo chính nó), nên câu answered với bảng
+/// tổng theo thị trường và cảnh báo không phân rã được; bảng ghi tỷ lệ của từng thị trường, Pacific Asia là 1.0000.
 #[tokio::test]
 async fn share_of_rows_compares_one_group_with_the_rest() {
     let data = Dataco::new();
@@ -127,12 +127,23 @@ async fn share_of_rows_compares_one_group_with_the_rest() {
         "Vì sao Pacific Asia có tỷ lệ khách doanh nghiệp cao hơn các thị trường khác quý 3/2017?";
     let outcome = data.ask(&llm, question, &[]).await;
     assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
-    let explanation = outcome.explanation.as_ref().unwrap();
-    assert_eq!(explanation.measure_kind, MeasureKind::Ratio);
-    assert_eq!(explanation.measure, "Tỷ lệ Customer Segment là Corporate");
-    assert_eq!(explanation.compare.value, "1.0000");
-    assert_eq!(explanation.base.value, "0.0005");
-    assert_eq!(explanation.base.label, "các nhóm còn lại");
+    assert!(outcome.explanation.is_none());
+    assert_eq!(
+        outcome.warnings[0].code,
+        WarningCode::ExplanationUnavailable
+    );
+    let result = outcome.result.as_ref().unwrap();
+    let pacific = result
+        .rows
+        .iter()
+        .find(|row| matches!(&row[0], Some(CellValue::String(m)) if m == "Pacific Asia"))
+        .expect("a Pacific Asia row");
+    assert_eq!(
+        format!("{:?}", pacific[1]),
+        format!("{:?}", Some(CellValue::Number(1.0)))
+    );
+    let label = &outcome.plan.as_ref().unwrap().measure.label;
+    assert_eq!(label, "Tỷ lệ Customer Segment là Corporate");
 }
 
 /// Đếm phân biệt: số đơn quý 3 so với quý 2. Đơn 1 tới 100 của quý 2 có dòng ở hai thị trường (run_tests.rs), nên theo

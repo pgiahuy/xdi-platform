@@ -290,6 +290,7 @@ fn share_counts_rows_with_one_listed_value() {
     let form = measured(json!({"column": "Market", "agg": "share", "value": "Europe"}));
     let plan = fixture.plan(form);
     assert_eq!(plan.measure.label, "Tỷ lệ Market là Europe");
+    assert!(!plan.dimensions.contains(&"Market".to_string()));
     assert_eq!(
         plan.measure.aggregate.to_string(),
         "ROUND(COUNT(CASE WHEN \"Market\" = 'Europe' THEN 1 END) / NULLIF(COUNT(*), 0), 4)"
@@ -454,4 +455,29 @@ fn find_needs_two_periods_and_a_dimension() {
         "find": {"kind": "period"},
     });
     assert_eq!(fixture.fields(groups), ["find"]);
+}
+
+/// Đếm dòng đã lọc của một nhóm so với mọi nhóm còn lại: lỗi chỉ sang tỷ lệ (share) với đúng cột và giá trị của bộ lọc.
+#[test]
+fn rest_with_a_filtered_count_points_to_share() {
+    let fixture = Fixture::new();
+    let form = json!({
+        "measure": {"column": "Order Id", "agg": "count"},
+        "groups": {"column": "Market", "compare": "Pacific Asia"},
+        "filters": [{"column": "Customer Segment", "op": "=", "value": "Corporate"}]
+    });
+    let errors = fixture.check(form.clone()).unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].field, "measure.agg");
+    assert!(
+        errors[0].message.contains(
+            "{\"column\": \"Customer Segment\", \"agg\": \"share\", \"value\": \"Corporate\"}"
+        ),
+        "{}",
+        errors[0].message
+    );
+    // So với một nhóm khác thì số đếm vẫn nhận.
+    let mut two = form;
+    two["groups"]["base"] = json!("Europe");
+    assert!(fixture.check(two).is_ok());
 }
