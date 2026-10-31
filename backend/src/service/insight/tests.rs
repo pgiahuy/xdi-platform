@@ -464,6 +464,8 @@ async fn narration_falls_back_to_code_text_when_the_model_fails_or_is_off() {
 struct Orders {
     root: PathBuf,
     allowed: Vec<AllowedTable>,
+    /// Quan hệ của hai bảng, để câu nối của "mô hình" và câu do code dựng qua luật nối bảng của guard (#256).
+    links: Vec<JoinLink>,
 }
 
 impl Orders {
@@ -506,12 +508,17 @@ impl Orders {
                 row_filters: vec![],
             },
         ];
-        Orders { root, allowed }
+        Orders {
+            root,
+            allowed,
+            links: order_links(),
+        }
     }
 
     fn env<'a>(&'a self, jobs: &'a Arc<Semaphore>) -> QueryEnv<'a> {
         QueryEnv {
             tables: &self.allowed,
+            links: &self.links,
             max_rows: 1000,
             timeout: Duration::from_secs(10),
             jobs,

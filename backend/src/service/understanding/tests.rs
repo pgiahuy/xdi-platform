@@ -120,7 +120,7 @@ struct Card {
 
 /// Như endpoint hỏi: guard, đọc hình dạng sql_guarded, dựng thẻ và vai trò. Kiểm luôn mọi đoạn SQL nằm trong câu.
 fn build_card(sql: &str, row_filters: Vec<RowFilter>, assumptions: &[Choice]) -> Card {
-    let guarded = build_guarded_sql(sql, &tables(row_filters), MAX_ROWS).unwrap();
+    let guarded = build_guarded_sql(sql, &tables(row_filters), &[], MAX_ROWS).unwrap();
     let shape = build_query_shape(&guarded.shown).unwrap();
     let profile = profile();
     let understanding = build_understanding(
@@ -537,7 +537,7 @@ fn order_by_position_names_the_column() {
 #[test]
 fn select_star_gives_other_roles() {
     let sql = r#"SELECT * FROM dataco WHERE "Market" = 'Europe'"#;
-    let guarded = build_guarded_sql(sql, &tables(vec![]), MAX_ROWS).unwrap();
+    let guarded = build_guarded_sql(sql, &tables(vec![]), &[], MAX_ROWS).unwrap();
     let shape = build_query_shape(&guarded.shown).unwrap();
     let column_count = profile().len();
     let roles = build_column_roles(&shape, &profile(), column_count);

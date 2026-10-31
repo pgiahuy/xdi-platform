@@ -288,6 +288,7 @@ async fn ask_steps(
             columns: &columns,
             tables,
             group: &group,
+            links: &links,
             related: &related,
             steps,
         };

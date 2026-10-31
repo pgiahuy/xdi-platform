@@ -60,6 +60,7 @@ pub(super) async fn run_insight(
         links: &links,
         env: QueryEnv {
             tables: &group.allowed,
+            links: &links,
             max_rows: state.config.ask_max_rows,
             timeout: state.config.query_timeout,
             jobs: &state.query_jobs,

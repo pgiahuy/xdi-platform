@@ -180,7 +180,7 @@ fn build_check_sql(table: &AllowedTable, expression: &str, filter: Option<&str>)
 }
 
 async fn run_check(state: &AppState, table: &AllowedTable, sql: &str) -> Result<(), CheckFailure> {
-    let guarded = build_guarded_sql(sql, std::slice::from_ref(table), 1)
+    let guarded = build_guarded_sql(sql, std::slice::from_ref(table), &[], 1)
         .map_err(|e| CheckFailure::Guard(format!("{e:?}")))?;
     run_query_in_turn(
         &state.query_jobs,

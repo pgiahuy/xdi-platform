@@ -33,37 +33,41 @@ use sqlparser::ast::{Expr, Query, Select, SetExpr, Visit, Visitor};
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
 
+use uuid::Uuid;
+
 use crate::engine::guard::AllowedTable;
+use crate::engine::store::DatasetRelation;
 use crate::service::ask::fanout_grain::{
     build_from_tables, function_name, plain_args, summed_grain, FromTables, Grain,
 };
 use crate::service::ask::related::TableGroup;
 
-/// Một quan hệ giữa hai bảng của câu hỏi, theo tên bảng logic (tên câu SQL dùng).
-#[derive(Debug, Clone)]
-pub struct JoinLink {
-    /// Bảng giữ khóa ngoại (bên nhiều).
-    pub many: String,
-    pub many_columns: Vec<String>,
-    /// Bảng được trỏ tới (bên một).
-    pub one: String,
-    pub one_columns: Vec<String>,
-    /// true với many_to_one: một dòng bên một ứng với nhiều dòng bên nhiều. false với one_to_one.
-    pub fans_out: bool,
-}
+/// Một quan hệ giữa hai bảng của câu hỏi; kiểu nằm ở guard (engine/guard/join_keys.rs) vì guard cũng kiểm phép nối
+/// theo nó (#256).
+pub use crate::engine::guard::JoinLink;
 
 /// Quan hệ của nhóm bảng (ask/related.rs) đổi sang tên bảng logic. Nhóm một bảng thì rỗng, và kiểm tra không làm gì.
 pub fn build_join_links(group: &TableGroup) -> Vec<JoinLink> {
-    group
-        .relations
+    build_links(&group.relations, |id| {
+        group.logical_table(id).map(str::to_string)
+    })
+}
+
+/// Quan hệ đổi sang tên bảng logic; table_of trả tên bảng của một dataset, None thì bỏ quan hệ đó. Bộ đánh giá
+/// (service/eval.rs) dùng với mọi dataset của workspace.
+pub fn build_links(
+    relations: &[DatasetRelation],
+    table_of: impl Fn(Uuid) -> Option<String>,
+) -> Vec<JoinLink> {
+    relations
         .iter()
         .filter_map(|r| {
-            let many = group.logical_table(r.from_dataset_id)?;
-            let one = group.logical_table(r.to_dataset_id)?;
+            let many = table_of(r.from_dataset_id)?;
+            let one = table_of(r.to_dataset_id)?;
             Some(JoinLink {
-                many: many.to_string(),
+                many,
                 many_columns: r.from_columns.clone(),
-                one: one.to_string(),
+                one,
                 one_columns: r.to_columns.clone(),
                 fans_out: r.cardinality == "many_to_one",
             })

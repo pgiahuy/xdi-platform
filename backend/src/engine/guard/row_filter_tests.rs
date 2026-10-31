@@ -9,7 +9,8 @@ use std::path::Path;
 use duckdb::types::Value;
 use duckdb::Connection;
 
-use super::{build_guarded_sql, AllowedTable, RowFilter};
+use super::join_tests::link;
+use super::{build_guarded_sql, AllowedTable, JoinLink, RowFilter};
 
 /// Đủ lớn để LIMIT guard thêm vào không cắt kết quả nào, nên so được với câu gốc không có LIMIT.
 const NO_ROW_LIMIT: u64 = 1_000_000;
@@ -48,7 +49,7 @@ const QUERY_SHAPES: &[&str] = &[
     "SELECT s.region, c.segment FROM {S} s LEFT JOIN {C} c ON s.customer_id = c.customer_id",
     "SELECT s.region, c.segment FROM {S} s RIGHT JOIN {C} c ON s.customer_id = c.customer_id",
     "SELECT s.region, c.segment FROM {S} s FULL JOIN {C} c ON s.customer_id = c.customer_id",
-    "SELECT COUNT(*) AS n FROM {S} s CROSS JOIN {C} c",
+    "SELECT COUNT(*) AS n FROM {S} s, {C} c WHERE s.customer_id = c.customer_id",
     "SELECT a.region, b.region FROM {S} a, {S} b WHERE a.customer_id = b.customer_id",
     "SELECT c.segment, SUM(s.amount) AS total FROM {C} c LEFT JOIN {S} s ON s.customer_id = c.customer_id \
      GROUP BY c.segment",
@@ -70,6 +71,16 @@ const QUERY_SHAPES: &[&str] = &[
      LATERAL (SELECT SUM(amount) AS total FROM {S} x WHERE x.customer_id = s.customer_id) t",
     "SELECT region, ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount) AS n FROM {S}",
 ];
+
+/// sales.customer_id trỏ customers.customer_id, để các dạng câu JOIN qua luật nối bảng (guard/joins.rs).
+/// Thêm một khóa tự trỏ sales.customer_id -> sales.customer_id chỉ để giữ các dạng câu tự JOIN của test lọc dòng:
+/// bảng tự JOIN phải đi qua khóa tự trỏ.
+fn links() -> Vec<JoinLink> {
+    vec![
+        link("sales", &["customer_id"], "customers", &["customer_id"]),
+        link("sales", &["customer_id"], "sales", &["customer_id"]),
+    ]
+}
 
 /// sales chỉ thấy South và East; customers chỉ thấy Retail.
 fn tables_with_policies(dir: &Path) -> Vec<AllowedTable> {
@@ -152,7 +163,7 @@ fn check_one_query(
     tables: &[AllowedTable],
     sql: &str,
 ) -> Option<String> {
-    let guarded = match build_guarded_sql(sql, tables, NO_ROW_LIMIT) {
+    let guarded = match build_guarded_sql(sql, tables, &links(), NO_ROW_LIMIT) {
         Ok(guarded) => guarded,
         Err(e) => return Some(format!("{sql}\n  guard rejected: {e:?}")),
     };
