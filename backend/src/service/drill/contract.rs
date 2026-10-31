@@ -19,7 +19,7 @@ pub const MAX_DRILL_LIMIT: u32 = 1000;
 // Hai loại tên khác nhau nên ở hai trường riêng: ô trỏ cột bằng tên trong result.columns, dòng phân rã trỏ cột bằng
 // tên trong dataset. Gửi cả hai hay không gửi cái nào là 400.
 /// Which number to trace back to its source rows: set exactly one of `cell` and `breakdown`. Rows come one page at a
-/// time, in the order the analytics engine reads them.
+/// time, sorted by every column of the page, so pages do not overlap.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct DrillRequest {
     /// `AskResponse.query_id` of the answer the number belongs to.

@@ -208,10 +208,12 @@ async fn rows_of_a_cell_add_up_to_the_cell() {
         .iter()
         .all(|row| text(&row[source]).as_deref() == Some("orders.csv")));
     assert!(!drilled.result.limit_reached);
-    // SQL trả về là câu sau guard: bảng logic, không có đường dẫn file trên máy chủ, không ORDER BY của câu gốc.
+    // SQL trả về là câu sau guard: bảng logic, không có đường dẫn file trên máy chủ; ORDER BY của câu gốc thay bằng
+    // ORDER BY ALL để các trang có thứ tự cố định.
     assert!(drilled.sql.contains("FROM orders"), "{}", drilled.sql);
     assert!(!drilled.sql.contains("parquet"), "{}", drilled.sql);
-    assert!(!drilled.sql.contains("ORDER BY"), "{}", drilled.sql);
+    assert!(!drilled.sql.contains("revenue DESC"), "{}", drilled.sql);
+    assert!(drilled.sql.contains("ORDER BY ALL"), "{}", drilled.sql);
 }
 
 #[tokio::test]

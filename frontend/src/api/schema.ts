@@ -1679,7 +1679,7 @@ export interface components {
         };
         /**
          * @description Which number to trace back to its source rows: set exactly one of `cell` and `breakdown`. Rows come one page at a
-         *     time, in the order the analytics engine reads them.
+         *     time, sorted by every column of the page, so pages do not overlap.
          */
         DrillRequest: {
             breakdown?: components["schemas"]["BreakdownKey"] | null;

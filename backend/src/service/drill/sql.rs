@@ -23,8 +23,10 @@ Vì sao dựng từ sql_guarded chứ không từ sql_generated: đó là câu �
 của người đã hỏi. Giữ hộp đó là đúng nghĩa (dòng nguồn của ô chỉ gồm dòng người hỏi được thấy); guard thêm hộp của
 người đang bấm ra ngoài, nên người bấm không bao giờ thấy quá phần của mình.
 
-Không ORDER BY: DuckDB giữ thứ tự đọc (preserve_insertion_order mặc định bật), nên hai trang liền nhau không trùng dòng
-mà không phải sắp xếp cả nhóm. */
+Trang sắp theo mọi cột (`ORDER BY ALL`): với câu nối bảng (và nửa nối của hộp lọc lan theo khóa ngoại) DuckDB không giữ
+thứ tự dòng giữa hai lần chạy, nên LIMIT, OFFSET không thứ tự cho hai trang trùng dòng và sót dòng (đo trên database
+mẫu: đọc hết 32 226 dòng của Home Office theo trang 1000 dòng chỉ ra 24 000 tới 27 000 mã dòng khác nhau). Sắp theo
+mọi cột thì thứ tự cố định; hai dòng bằng nhau mọi cột đổi chỗ cho nhau cũng không đổi trang. */
 
 use std::collections::HashSet;
 
@@ -153,6 +155,7 @@ impl DrillPlan {
             conditions.clone(),
             columns.items.clone(),
         );
+        page.order_by = parse_query("SELECT 1 ORDER BY ALL")?.order_by;
         page.limit_clause = Some(LimitClause::LimitOffset {
             limit: Some(Expr::value(Value::Number(request.limit.to_string(), false))),
             offset: Some(Offset {

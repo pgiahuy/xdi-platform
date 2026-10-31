@@ -566,3 +566,33 @@ async fn unsupported_join_questions_are_refused() {
         );
     }
 }
+
+/// Trang của câu nối bảng sắp theo mọi cột: đọc hết theo trang nhỏ ra đúng mỗi dòng một lần, tổng khớp ô.
+#[tokio::test]
+async fn join_pages_are_ordered_and_do_not_overlap() {
+    let shop = Shop::new();
+    let (sql, table) = shop.answer(BY_SEGMENT, &shop.open()).await;
+    let (row, keys) = pick(&table, "segment", "Corporate", &["segment"]);
+    let mut ids = Vec::new();
+    let mut sum = 0;
+    let mut offset = 0;
+    loop {
+        let page = shop
+            .drill_with(&sql, &keys, &shop.open(), (None, None), (offset, 10))
+            .await
+            .unwrap();
+        assert!(page.sql.contains("ORDER BY ALL"), "{}", page.sql);
+        let id = column_index(&page.result, "order_item_id");
+        ids.extend(page.result.rows.iter().map(|r| text(&r[id]).unwrap()));
+        sum += sum_column(&page.result, "revenue");
+        offset += 10;
+        if offset >= page.total_rows {
+            break;
+        }
+    }
+    let count = ids.len();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(count, ids.len());
+    assert_eq!(sum, cents(&row[column_index(&table, "revenue")]));
+}
