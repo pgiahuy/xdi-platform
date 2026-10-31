@@ -532,7 +532,7 @@ async fn context_reads_one_version_of_one_workspace() {
     };
     let state = app_state(&store);
     let ws = temp_workspace(&store).await;
-    let src = store.create_local_source(&ws).await.unwrap();
+    let src = store.create_local_source(&ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(&ws, src, "Sales", "sales", None)
         .await
@@ -721,7 +721,7 @@ fn dataco_role(name: &str, values: &[String]) -> ProfileRole {
 
 async fn dataco_version(store: &Store, ws: &WorkspaceId) -> DatasetVersion {
     let profile = dataco_profile();
-    let src = store.create_local_source(ws).await.unwrap();
+    let src = store.create_local_source(ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(ws, src, "DataCo", "dataco", None)
         .await
@@ -893,7 +893,7 @@ async fn cached_values_respect_current_sensitivity() {
     };
     let state = app_state(&store);
     let ws = temp_workspace(&store).await;
-    let src = store.create_local_source(&ws).await.unwrap();
+    let src = store.create_local_source(&ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(&ws, src, "VN", "vn", None)
         .await
@@ -938,7 +938,7 @@ async fn value_loading_times_out_to_no_values() {
         return;
     };
     let ws = temp_workspace(&store).await;
-    let src = store.create_local_source(&ws).await.unwrap();
+    let src = store.create_local_source(&ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(&ws, src, "Wide", "wide", None)
         .await
@@ -1068,7 +1068,7 @@ async fn measure_dataco_values() {
     .unwrap();
     let state = app_state(&store);
     let ws = temp_workspace(&store).await;
-    let src = store.create_local_source(&ws).await.unwrap();
+    let src = store.create_local_source(&ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(&ws, src, "DataCo", "dataco", None)
         .await

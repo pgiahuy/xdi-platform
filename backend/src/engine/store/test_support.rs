@@ -63,6 +63,13 @@ pub struct TestDb {
 }
 
 pub async fn fresh_database() -> Option<TestDb> {
+    let db = empty_database().await?;
+    db.store.migrate().await.expect("migrate test database");
+    Some(db)
+}
+
+/// Như fresh_database nhưng chưa chạy migration nào: test migration (migration_tests.rs) tự áp từng file.
+pub async fn empty_database() -> Option<TestDb> {
     let url = database_url()?;
     let admin = Store::connect(&url, 2, Duration::from_secs(5))
         .await
@@ -106,7 +113,6 @@ pub async fn fresh_database() -> Option<TestDb> {
     let store = Store::connect(&format!("{base}/{name}"), 5, Duration::from_secs(5))
         .await
         .expect("connect test database");
-    store.migrate().await.expect("migrate test database");
     Some(TestDb { store, name, admin })
 }
 

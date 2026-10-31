@@ -2,7 +2,8 @@
 /* engine/store/metric_edits.rs - đọc và ghi chỉ số từ màn Chỉ số (#185, service/metrics/). Đọc cho prompt nằm ở
 metrics.rs (list_metrics); file này thêm id, phiên bản, nguồn gốc cho giao diện, và ba phép ghi: tạo, sửa, xóa.
 
-Sửa là thêm một dòng cùng tên với version lớn hơn (0001_init.sql, UNIQUE (dataset_id, name, version)), không ghi đè:
+Sửa là thêm một dòng cùng tên với version lớn hơn (UNIQUE (source_id, name, version), migration 0017: tên chỉ số không
+trùng trong một dataset), không ghi đè:
 bản cũ còn trong bảng để biết công thức đã đổi thế nào. Hai lần sửa cùng lúc tính ra cùng một version; lần sau vấp
 UNIQUE và trả lỗi BadRequest để người dùng tải lại, không ghi đè lặng lẽ bản của người kia. Xóa là xóa mọi phiên bản
 của tên đó: câu hỏi cũ lưu nguyên câu SQL đã chạy (bảng queries), không đọc lại bảng metrics. */
@@ -83,12 +84,16 @@ impl Store {
         created_by: Uuid,
     ) -> Result<Uuid, AppError> {
         // INSERT ... SELECT tính version trong cùng câu. Không khóa: hai lần ghi cùng lúc cùng tên thì lần sau vấp
-        // UNIQUE (dataset_id, name, version) và nhận lời báo bên dưới.
+        // UNIQUE (source_id, name, version) và nhận lời báo bên dưới. Version tính theo dataset của bảng (cùng phạm vi
+        // với ràng buộc đó); tên đã dùng ở một bảng khác của dataset thì service/metrics/ đã từ chối trước.
         let inserted = sqlx::query_scalar(
-            "INSERT INTO metrics (workspace_id, dataset_id, name, description, expression, filter, time_column,
-                                  unit, status, origin, version, created_by)
-             SELECT $1, $2, $3, $4, $5, $6, $7, $8, 'confirmed', 'ui', COALESCE(MAX(version), 0) + 1, $9
-             FROM metrics WHERE dataset_id = $2 AND name = $3
+            "INSERT INTO metrics (workspace_id, dataset_id, source_id, name, description, expression, filter,
+                                  time_column, unit, status, origin, version, created_by)
+             SELECT $1, d.id, d.source_id, $3, $4, $5, $6, $7, $8, 'confirmed', 'ui',
+                    COALESCE((SELECT MAX(m.version) FROM metrics m WHERE m.source_id = d.source_id AND m.name = $3), 0)
+                        + 1,
+                    $9
+             FROM datasets d WHERE d.workspace_id = $1 AND d.id = $2
              RETURNING id",
         )
         .bind(ws.as_uuid())
@@ -111,6 +116,30 @@ impl Store {
             }
             Err(e) => Err(db_error("add metric version", e)),
         }
+    }
+
+    /// Tên bảng khác của cùng dataset đã có chỉ số tên `name`; None khi tên còn trống trong dataset hay chỉ có ở chính
+    /// bảng này. Tên chỉ số không trùng trong một dataset (migration 0017), vì câu hỏi trên dataset thấy chỉ số của mọi
+    /// bảng nó đọc.
+    pub async fn find_metric_name_elsewhere(
+        &self,
+        ws: &WorkspaceId,
+        dataset_id: Uuid,
+        name: &str,
+    ) -> Result<Option<String>, AppError> {
+        sqlx::query_scalar(
+            "SELECT o.name FROM metrics m
+             JOIN datasets o ON o.id = m.dataset_id
+             JOIN datasets t ON t.source_id = m.source_id
+             WHERE m.workspace_id = $1 AND t.id = $2 AND m.dataset_id <> $2 AND m.name = $3
+             LIMIT 1",
+        )
+        .bind(ws.as_uuid())
+        .bind(dataset_id)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| db_error("find metric name elsewhere", e))
     }
 
     /// Xóa mọi phiên bản của một chỉ số theo tên. Trả số dòng đã xóa; 0 khi không có tên đó trong dataset.
@@ -157,7 +186,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "Bán hàng", "ban_hang", None)
             .await

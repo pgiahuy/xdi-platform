@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/sources/snapshot.rs - chụp bảng của nguồn Postgres: mỗi bảng thành một dataset riêng (một phiên bản Parquet
-như nạp file), cùng các quan hệ khóa ngoại giữa chúng (engine/store/relations.rs). api/sources.rs gọi `snapshot` và
-`resnapshot`; lịch chụp lại (schedule.rs) gọi `resnapshot`. Chép bảng ở copy.rs, nạp ở service/ingest.rs.
+như nạp file) trong dataset là database đó (#257), cùng các quan hệ khóa ngoại giữa chúng (engine/store/relations.rs).
+api/sources.rs gọi `snapshot` (màn kết nối); chụp lại cả dataset (service/catalog/, POST /catalog/{id}/snapshot) và
+lịch chụp lại (schedule.rs) gọi `snapshot_dataset`. Chép bảng ở copy.rs, nạp ở service/ingest.rs.
 
 Các bước:
 1. Bảng nào (#247): mặc định mọi bảng, view tài khoản đọc được, nên phạm vi dữ liệu là quyền SELECT của tài khoản; admin
    gửi `tables` khi bỏ tick bớt. Không giới hạn số bảng; trần là SOURCE_MAX_ROWS từng bảng và SOURCE_SNAPSHOT_MAX_MB
-   cả lần (plan.rs). Chụp lại cả nguồn lấy mọi bảng nguồn đang giữ: bảng đã thành dataset và bảng chỉ có metadata.
+   cả lần (plan.rs). Chụp lại cả dataset lấy mọi bảng nguồn đang giữ: bảng đã thành dataset và bảng chỉ có metadata;
+   bảng admin bỏ tick không nằm trong đó nên vẫn ở ngoài.
    Chụp lại một nhóm (dataset_id) lấy cả nhóm dataset nối với nhau qua quan hệ, cùng nguồn.
 2. Chép trong một giao dịch (copy.rs). Bảng quá trần không chép dòng nào: cột, kiểu, khóa, mô tả ghi vào
    source_metadata_tables (migration 0018), để câu hỏi cần bảng đó được báo đúng tên bảng.
@@ -30,7 +32,7 @@ use super::relations::{self, ForeignKey};
 use super::{load, recorded_table, source_file_label};
 use crate::auth::Member;
 use crate::engine::store::{
-    DatasetRelation, MetadataColumn, NewMetadataTable, NewRelation, SourceRow,
+    DatasetRelation, MetadataColumn, MetadataTableRow, NewMetadataTable, NewRelation, SourceRow,
 };
 use crate::service::ingest::{self, SourceDescriptions, StagedFile, Upload, UploadResult};
 use crate::{error::AppError, state::AppState};
@@ -87,6 +89,23 @@ pub struct MetadataOnlyTable {
     pub dataset_id: Option<Uuid>,
 }
 
+impl MetadataOnlyTable {
+    /// Bảng chỉ có metadata như đã lưu (source_metadata_tables), cho danh sách dataset (service/catalog/). Dòng chỉ có
+    /// khi bảng chưa có bảng dữ liệu nào, nên dataset_id luôn null.
+    pub fn from_stored(row: &MetadataTableRow) -> Self {
+        MetadataOnlyTable {
+            table: row.table_name.clone(),
+            cause: SkipCause::from_stored(&row.cause),
+            reason: row.reason.clone(),
+            row_count: row.row_count,
+            size_bytes: row.size_bytes,
+            description: row.description.clone(),
+            columns: row.build_columns(),
+            dataset_id: None,
+        }
+    }
+}
+
 pub async fn snapshot(
     state: &AppState,
     member: &Member,
@@ -103,8 +122,9 @@ pub async fn snapshot(
     run_snapshot(state, member, &row, &info, selection, named).await
 }
 
-/// Chụp lại mọi bảng nguồn đang giữ (#247): bảng đã thành dataset và bảng chỉ có metadata, trong một giao dịch.
-pub async fn resnapshot(
+/// Chụp lại cả dataset là database `id` (#247, #257): mọi bảng nguồn đang giữ, gồm bảng đã có dữ liệu và bảng chỉ có
+/// metadata, trong một giao dịch, cùng trần như lần chụp đầu. Bảng admin đã bỏ tick không có ở đây.
+pub async fn snapshot_dataset(
     state: &AppState,
     member: &Member,
     id: Uuid,
@@ -131,7 +151,8 @@ pub async fn resnapshot(
     }
     if wanted.is_empty() {
         return Err(AppError::BadRequest(
-            "Nguồn này chưa có bảng nào để chụp lại: chụp các bảng trước".to_string(),
+            "Dataset này chưa có bảng nào để chụp lại: kết nối database rồi chụp bảng trước"
+                .to_string(),
         ));
     }
     let selection = Selection::Tables {

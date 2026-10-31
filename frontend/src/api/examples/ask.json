@@ -78,6 +78,7 @@
         "ok": true
       }
     ],
+    "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
     "tables_read": [],
     "understanding": null,
     "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
@@ -133,6 +134,7 @@
         "ok": true
       }
     ],
+    "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
     "tables_read": [],
     "understanding": null,
     "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
@@ -196,6 +198,7 @@
         "ok": true
       }
     ],
+    "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
     "tables_read": [],
     "understanding": null,
     "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
@@ -362,6 +365,7 @@
         "ok": true
       }
     ],
+    "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
     "tables_read": [
       {
         "dataset_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
@@ -735,6 +739,7 @@
         "ok": true
       }
     ],
+    "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
     "tables_read": [
       {
         "dataset_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",

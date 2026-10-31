@@ -223,7 +223,8 @@ impl Store {
         Ok(done.rows_affected() > 0)
     }
 
-    /// Bài học đã duyệt, đang bật, của dataset hay của cả workspace, mới duyệt trước. limit chặn số bài đọc mỗi câu hỏi;
+    /// Bài học đã duyệt, đang bật, của cả workspace hay viết trên bảng `dataset_id` hay bảng khác của cùng dataset
+    /// (cùng database, #257), mới duyệt trước. limit chặn số bài đọc mỗi câu hỏi;
     /// prompt chỉ lấy vài bài liên quan trong số này (service/lessons/pick.rs).
     pub async fn list_active_lessons(
         &self,
@@ -234,7 +235,9 @@ impl Store {
         sqlx::query_as(
             "SELECT text, dataset_id FROM lessons
              WHERE workspace_id = $1 AND enabled AND approved_at IS NOT NULL
-               AND (dataset_id IS NULL OR dataset_id = $2)
+               AND (dataset_id IS NULL OR dataset_id IN (
+                   SELECT o.id FROM datasets o JOIN datasets t ON t.source_id = o.source_id
+                   WHERE t.workspace_id = $1 AND t.id = $2))
              ORDER BY approved_at DESC LIMIT $3",
         )
         .bind(ws.as_uuid())

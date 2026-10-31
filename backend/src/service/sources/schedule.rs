@@ -2,7 +2,7 @@
 /* service/sources/schedule.rs - chụp lại mọi nguồn Postgres theo lịch (SOURCE_RESNAPSHOT_HOURS, #247). main.rs chạy
 run_resnapshot_schedule trong một task nền; không đặt biến (hay đặt 0) thì không có lịch, admin bấm "Chụp lại".
 
-Mỗi vòng chụp lại từng nguồn bằng đúng hàm của route POST /sources/{id}/resnapshot, nhân danh một admin của workspace
+Mỗi vòng chụp lại từng nguồn bằng đúng hàm của route POST /catalog/{id}/snapshot, nhân danh một admin của workspace
 (auth::scheduled_source_admins): bảng không đổi không tạo phiên bản mới, bảng quá trần giữ metadata. Các nguồn chụp lần
 lượt, không song song, để database nguồn và đĩa tạm chỉ chịu một lần chụp mỗi lúc. Vòng đầu chạy sau một khoảng lịch,
 không chạy lúc khởi động: khởi động lại nhiều lần không thành nhiều lần chụp. Lỗi của một nguồn chỉ ghi log mức cảnh
@@ -37,7 +37,7 @@ async fn resnapshot_all(state: &AppState) {
         }
     };
     for (member, source_id) in sources {
-        match super::resnapshot(state, &member, source_id).await {
+        match super::snapshot_dataset(state, &member, source_id).await {
             Ok(done) => tracing::info!(
                 %source_id,
                 tables = done.datasets.len(),

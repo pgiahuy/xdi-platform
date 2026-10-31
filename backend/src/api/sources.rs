@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/sources.rs - nguồn database của workspace: thêm, thử kết nối, liệt kê bảng và quan hệ khóa ngoại, chụp bảng
-thành dataset (mặc định mọi bảng đọc được, mỗi bảng một dataset), chụp lại cả nguồn, xóa. Logic ở service/sources/. Mọi route chỉ cho admin của workspace (member 403), kể cả liệt kê nguồn: cấu hình nguồn (máy chủ, tài
+thành bảng của dataset (mặc định mọi bảng đọc được), xóa. Chụp lại cả dataset ở api/catalog.rs. Logic ở
+service/sources/. Mọi route chỉ cho admin của workspace (member 403), kể cả liệt kê nguồn: cấu hình nguồn (máy chủ, tài
 khoản) cũng là thông tin cần giữ. Không route nào trả mật khẩu. */
 
 use axum::extract::State;
@@ -26,7 +27,6 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(tables))
         .routes(routes!(relations))
         .routes(routes!(snapshot))
-        .routes(routes!(resnapshot))
 }
 
 #[utoipa::path(
@@ -214,36 +214,6 @@ async fn snapshot(
     JsonBody(req): JsonBody<SnapshotRequest>,
 ) -> Result<(StatusCode, Json<SnapshotResponse>), AppError> {
     let result = sources::snapshot(&state, &member, id, req).await?;
-    Ok((build_snapshot_status(&result), Json(result)))
-}
-
-#[utoipa::path(
-    post,
-    path = "/workspaces/{ws}/sources/{id}/resnapshot",
-    tag = "sources",
-    operation_id = "resnapshotSource",
-    summary = "Snapshot again every table the source holds (admin only)",
-    description = "Takes every table snapshotted from this source whose dataset still exists, and every table kept \
-                   as metadata only, in one transaction, with the same limits as a snapshot. Unchanged tables create \
-                   no version. A table the account can no longer read is skipped and listed in `unreadable`; its \
-                   dataset keeps its last version. SOURCE_RESNAPSHOT_HOURS runs the same on a schedule.",
-    params(
-        ("ws" = String, Path, description = "Workspace slug"),
-        ("id" = Uuid, Path, description = "Source id")
-    ),
-    responses(
-        (status = 201, body = SnapshotResponse, description = "At least one new version created"),
-        (status = 200, body = SnapshotResponse, description = "Nothing changed"),
-        (status = "4XX", body = ErrorBody, description = "400 nothing snapshotted yet or cannot connect, 401, \
-                                                         403 not admin, 404, 413 a table is bigger than MAX_UPLOAD_MB")
-    )
-)]
-async fn resnapshot(
-    State(state): State<AppState>,
-    member: Member,
-    PathParams((_ws, id)): PathParams<(String, Uuid)>,
-) -> Result<(StatusCode, Json<SnapshotResponse>), AppError> {
-    let result = sources::resnapshot(&state, &member, id).await?;
     Ok((build_snapshot_status(&result), Json(result)))
 }
 

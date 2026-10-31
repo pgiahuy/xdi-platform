@@ -861,12 +861,355 @@
         }
       }
     },
+    "/workspaces/{ws}/catalog": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Datasets of the workspace with their tables",
+        "description": "A dataset is one connected database or one uploaded file. Oldest first. Each dataset lists its tables (with columns of the current version) and the relations between them.",
+        "operationId": "listCatalog",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetSummary"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401, 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/catalog/{id}": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "One dataset with its tables",
+        "operationId": "getCatalogDataset",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetSummary"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401, 404 not a member or no such dataset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/catalog/{id}/ask": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Ask a question about a dataset",
+        "description": "Same response as `ask`. Without `table_id` the backend picks the table to start from: the one whose name, column names or column aliases match most words of the question, then the table of the conversation being continued, then the table holding most foreign keys.",
+        "operationId": "askCatalogDataset",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetAskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Answer, or why there is none",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 empty question, a dataset with no table or no data yet; 401; 404 not a member, no such dataset, a `table_id` outside the dataset, or a conversation that is not the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The language model service failed before any SQL was written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The language model is not configured on the server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/catalog/{id}/conversations": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Conversations of the caller on any table of a dataset",
+        "description": "Newest first. Conversations with no recorded question are left out. Open one with `GET .../datasets/{table_id}/conversations/{id}`.",
+        "operationId": "listCatalogConversations",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationListResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 404 not a member or no such dataset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/catalog/{id}/snapshot": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Snapshot every table of a database dataset again (admin only)",
+        "description": "Copies every table this database dataset holds: tables snapshotted before and tables kept as metadata only, never tables the admin left unticked. One read-only REPEATABLE READ transaction, so all tables show the same moment; then every declared foreign key between held tables is recorded as a relation. A table whose content did not change gets no new version (`created: false`); the status is 200 when no table changed. No table count limit: a table over SOURCE_MAX_ROWS, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (Postgres sizes, smallest tables first), keeps metadata only (`metadata_only`); MAX_UPLOAD_MB applies to each copied table. A table the account can no longer read is skipped and listed in `unreadable`. SOURCE_RESNAPSHOT_HOURS runs the same on a schedule.",
+        "operationId": "snapshotCatalogDataset",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No table changed: nothing created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "At least one table got a new version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 a file dataset, no table yet, or the database refused; 401; 403 not admin; 404 not a member or no such dataset; 413 a copied table bigger than MAX_UPLOAD_MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/datasets": {
       "get": {
         "tags": [
           "datasets"
         ],
-        "summary": "Datasets of the workspace",
+        "summary": "Tables of the workspace, every dataset mixed (deprecated: use listCatalog)",
+        "description": "Each item is one table; `parent_id` is its dataset in `GET .../catalog`. Kept for the current UI.",
         "operationId": "listDatasets",
         "parameters": [
           {
@@ -913,7 +1256,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       },
       "post": {
         "tags": [
@@ -1171,8 +1515,8 @@
         "tags": [
           "query"
         ],
-        "summary": "Ask a question about a dataset",
-        "description": "One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. Error codes are for invalid requests, access, and the language model service.",
+        "summary": "Ask a question starting from one table (deprecated: use askCatalogDataset with table_id)",
+        "description": "The path id is a table id (`DatasetTable.id`). One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. Error codes are for invalid requests, access, and the language model service.",
         "operationId": "ask",
         "parameters": [
           {
@@ -1294,6 +1638,7 @@
                           "ok": true
                         }
                       ],
+                      "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
                       "tables_read": [],
                       "understanding": null,
                       "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
@@ -1352,6 +1697,7 @@
                           "ok": true
                         }
                       ],
+                      "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
                       "tables_read": [],
                       "understanding": null,
                       "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
@@ -1418,6 +1764,7 @@
                           "ok": true
                         }
                       ],
+                      "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
                       "tables_read": [],
                       "understanding": null,
                       "version_id": "3c8e1d2a-9f4b-4a6c-8d7e-2b1f0a9c8d01",
@@ -1587,6 +1934,7 @@
                           "ok": true
                         }
                       ],
+                      "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
                       "tables_read": [
                         {
                           "dataset_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
@@ -1963,6 +2311,7 @@
                           "ok": true
                         }
                       ],
+                      "table_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
                       "tables_read": [
                         {
                           "dataset_id": "1a6f3b2c-4d5e-4f60-8a7b-9c0d1e2f3a01",
@@ -2085,7 +2434,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/workspaces/{ws}/datasets/{id}/columns/aggregation": {
@@ -2158,7 +2508,7 @@
         "tags": [
           "query"
         ],
-        "summary": "Conversations of the caller on a dataset",
+        "summary": "Conversations of the caller on one table (deprecated: use listCatalogConversations)",
         "description": "Newest first. Conversations with no recorded question are left out.",
         "operationId": "listConversations",
         "parameters": [
@@ -2211,7 +2561,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/workspaces/{ws}/datasets/{id}/conversations/{conversation_id}": {
@@ -4013,79 +4364,6 @@
         }
       }
     },
-    "/workspaces/{ws}/sources/{id}/resnapshot": {
-      "post": {
-        "tags": [
-          "sources"
-        ],
-        "summary": "Snapshot again every table the source holds (admin only)",
-        "description": "Takes every table snapshotted from this source whose dataset still exists, and every table kept as metadata only, in one transaction, with the same limits as a snapshot. Unchanged tables create no version. A table the account can no longer read is skipped and listed in `unreadable`; its dataset keeps its last version. SOURCE_RESNAPSHOT_HOURS runs the same on a schedule.",
-        "operationId": "resnapshotSource",
-        "parameters": [
-          {
-            "name": "ws",
-            "in": "path",
-            "description": "Workspace slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Source id",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Nothing changed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SnapshotResponse"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "At least one new version created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SnapshotResponse"
-                }
-              }
-            }
-          },
-          "4XX": {
-            "description": "400 nothing snapshotted yet or cannot connect, 401, 403 not admin, 404, 413 a table is bigger than MAX_UPLOAD_MB",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error; details are in the server log, not in the response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/workspaces/{ws}/sources/{id}/snapshot": {
       "post": {
         "tags": [
@@ -4361,6 +4639,7 @@
           "message",
           "query_id",
           "conversation_id",
+          "table_id",
           "version_id",
           "model",
           "choices",
@@ -4533,6 +4812,11 @@
             },
             "description": "What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a\n`repair`."
           },
+          "table_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Table the question started from (the table routes `/datasets/{id}/drill` and `/conversations` take this id).\nAsked on a whole dataset (`/catalog/{id}/ask`), the backend picks it; asked on a table, it is that table."
+          },
           "tables_read": {
             "type": "array",
             "items": {
@@ -4553,7 +4837,7 @@
           "version_id": {
             "type": "string",
             "format": "uuid",
-            "description": "Dataset version the question ran on."
+            "description": "Version of `table_id` the question ran on."
           },
           "warnings": {
             "type": "array",
@@ -5069,6 +5353,7 @@
         "description": "One conversation on a dataset.",
         "required": [
           "id",
+          "table_id",
           "title",
           "created_at"
         ],
@@ -5080,6 +5365,11 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "table_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Table the conversation is stored on: open it with `GET .../datasets/{table_id}/conversations/{id}`."
           },
           "title": {
             "type": "string",
@@ -5250,6 +5540,9 @@
           "source_id",
           "source_table",
           "current_version_at",
+          "parent_id",
+          "row_count",
+          "description",
           "relations",
           "created_at"
         ],
@@ -5280,6 +5573,13 @@
             ],
             "format": "uuid"
           },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Table comment written in the source database (`COMMENT ON TABLE`), from the current version; null for files\nand tables without a comment."
+          },
           "domain": {
             "type": [
               "string",
@@ -5297,12 +5597,25 @@
           "name": {
             "type": "string"
           },
+          "parent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Dataset (one database or one file, `GET .../catalog/{id}`) this table belongs to. The table routes under\n`/datasets/{id}` take the table id; a file has one table."
+          },
           "relations": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RelatedDataset"
             },
             "description": "Datasets linked to this one by a foreign key of the source database (snapshots of several related tables);\nempty for uploaded files."
+          },
+          "row_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Row count of the current version; null while the table has no current version."
           },
           "semantic_unavailable": {
             "type": "boolean",
@@ -5338,6 +5651,49 @@
             "description": "Suggested questions of the current version, written by the semantic profile; empty while that step has not\nfinished."
           }
         }
+      },
+      "DatasetAskRequest": {
+        "type": "object",
+        "description": "A question on a whole dataset, or starting from one of its tables.",
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChosenOption"
+            },
+            "description": "Same as `AskRequest.choices`."
+          },
+          "conversation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Conversation to continue, from `AskResponse.conversation_id`. A conversation on any table of this dataset can\nbe continued; one of another user or another dataset is 404."
+          },
+          "question": {
+            "type": "string"
+          },
+          "table_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Table to start from (`DatasetTable.id`). Leave out to let the backend pick it from the question; the answer\ntells which one in `AskResponse.table_id`. Either way the question also reads tables linked to it by relations\n(two steps, eight tables at most)."
+          }
+        }
+      },
+      "DatasetKind": {
+        "type": "string",
+        "description": "What a dataset is.",
+        "enum": [
+          "database",
+          "file"
+        ]
       },
       "DatasetOverviewResponse": {
         "type": "object",
@@ -5473,6 +5829,176 @@
           },
           "to_dataset_name": {
             "type": "string"
+          }
+        }
+      },
+      "DatasetSummary": {
+        "type": "object",
+        "description": "A dataset: one connected database or one uploaded file, with its tables.",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "domain",
+          "tables",
+          "relations",
+          "metadata_only",
+          "updated_at",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Domain pack bound to the dataset (`key` of `GET .../domains`); null when none."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Dataset id. For a database, the same id as its source in `/sources/{id}` (admin only)."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DatasetKind"
+          },
+          "metadata_only": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetadataOnlyTable"
+            },
+            "description": "Tables of the database kept with columns, types, keys and comments but no rows (over SOURCE_MAX_ROWS or the\nSOURCE_SNAPSHOT_MAX_MB total), ordered by `table`. An admin snapshots one with `POST /sources/{id}/snapshot`\nand `tables: [table]`. Empty for a file."
+          },
+          "name": {
+            "type": "string",
+            "description": "Database name for a database, the name given at upload for a file."
+          },
+          "relations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatasetRelation"
+            },
+            "description": "Foreign-key relations between tables of this dataset, copied from the source database. Empty for a file."
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatasetTable"
+            },
+            "description": "Tables, ordered by `source_table` (schema, then table) and then by name. A file has one table; a database\nconnected but not snapshotted yet has none."
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Latest `current_version_at` of its tables: the last snapshot or upload. Null while no table has data."
+          }
+        }
+      },
+      "DatasetTable": {
+        "type": "object",
+        "description": "A table of a dataset. Its id is the id the table routes take: `/datasets/{id}/overview`, `/metrics`, `/drill`,\n`/conversations/{conversation_id}`.",
+        "required": [
+          "id",
+          "name",
+          "logical_table",
+          "schema",
+          "source_table",
+          "description",
+          "row_count",
+          "current_version_id",
+          "current_version_at",
+          "current_profile_status",
+          "semantic_unavailable",
+          "suggested_questions",
+          "columns"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TableColumn"
+            },
+            "description": "Columns of the current version, in table order; empty without a current version."
+          },
+          "current_profile_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`pending`, `structure`, `semantic` or `failed`; null without a current version. Asking works from\n`structure` on."
+          },
+          "current_version_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the current version was created: upload time, or the last snapshot."
+          },
+          "current_version_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Table comment from the source database (`COMMENT ON TABLE`) at the current version; null when none."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logical_table": {
+            "type": "string",
+            "description": "Table name used in SQL; unique within the dataset only, so two databases can both have `orders`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "row_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Rows in the current version; null while the table has no data."
+          },
+          "schema": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Schema in the source database (`sales` for `sales.orders`); null for a file."
+          },
+          "semantic_unavailable": {
+            "type": "boolean",
+            "description": "Same meaning as `Dataset.semantic_unavailable`."
+          },
+          "source_table": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`schema.table` in the source database; null for a file."
+          },
+          "suggested_questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Suggested questions of the current version; empty until the semantic profile is done."
           }
         }
       },
@@ -8065,6 +8591,56 @@
           "against",
           "dropped"
         ]
+      },
+      "TableColumn": {
+        "type": "object",
+        "description": "A column of the current version of a table.",
+        "required": [
+          "name",
+          "data_type",
+          "role",
+          "description",
+          "description_source",
+          "is_sensitive",
+          "aliases"
+        ],
+        "properties": {
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other names of the column (semantic profile), used to match question words."
+          },
+          "data_type": {
+            "type": "string",
+            "description": "DuckDB type, for example `BIGINT`, `VARCHAR`, `DATE`."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description_source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`database` (comment in the source database) or `model` (written by the semantic profile); null when unknown."
+          },
+          "is_sensitive": {
+            "type": "boolean",
+            "description": "Sensitive column: its values never go to the language model."
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "description": "`dimension`, `measure`, `time`, `key`, `text` or `ignore`."
+          }
+        }
       },
       "TableLink": {
         "type": "object",

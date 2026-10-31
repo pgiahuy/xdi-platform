@@ -104,6 +104,31 @@ impl Store {
         .map_err(|e| db_error("list conversations", e))
     }
 
+    /// Các cuộc của một người trên mọi bảng của dataset `source_id` (#257), mới nhất trước, cùng luật bỏ cuộc rỗng
+    /// như list_conversations.
+    pub async fn list_dataset_conversations(
+        &self,
+        ws: &WorkspaceId,
+        source_id: Uuid,
+        user_id: Uuid,
+        limit: i64,
+    ) -> Result<Vec<Conversation>, AppError> {
+        sqlx::query_as(
+            "SELECT c.id, c.dataset_id, c.created_by, c.title, c.created_at FROM conversations c
+             JOIN datasets d ON d.workspace_id = c.workspace_id AND d.id = c.dataset_id
+             WHERE c.workspace_id = $1 AND d.source_id = $2 AND c.created_by = $3
+               AND EXISTS (SELECT 1 FROM queries q WHERE q.conversation_id = c.id)
+             ORDER BY c.created_at DESC LIMIT $4",
+        )
+        .bind(ws.as_uuid())
+        .bind(source_id)
+        .bind(user_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| db_error("list dataset conversations", e))
+    }
+
     /// Các lượt của một cuộc theo thứ tự hỏi. limit giữ các lượt mới nhất: ngữ cảnh gửi mô hình chỉ cần vài lượt cuối.
     pub async fn list_turns(
         &self,

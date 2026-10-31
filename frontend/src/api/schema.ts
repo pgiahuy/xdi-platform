@@ -301,6 +301,103 @@ export interface paths {
         patch: operations["renameWorkspace"];
         trace?: never;
     };
+    "/workspaces/{ws}/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datasets of the workspace with their tables
+         * @description A dataset is one connected database or one uploaded file. Oldest first. Each dataset lists its tables (with columns of the current version) and the relations between them.
+         */
+        get: operations["listCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/catalog/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One dataset with its tables */
+        get: operations["getCatalogDataset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/catalog/{id}/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask a question about a dataset
+         * @description Same response as `ask`. Without `table_id` the backend picks the table to start from: the one whose name, column names or column aliases match most words of the question, then the table of the conversation being continued, then the table holding most foreign keys.
+         */
+        post: operations["askCatalogDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/catalog/{id}/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversations of the caller on any table of a dataset
+         * @description Newest first. Conversations with no recorded question are left out. Open one with `GET .../datasets/{table_id}/conversations/{id}`.
+         */
+        get: operations["listCatalogConversations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/catalog/{id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Snapshot every table of a database dataset again (admin only)
+         * @description Copies every table this database dataset holds: tables snapshotted before and tables kept as metadata only, never tables the admin left unticked. One read-only REPEATABLE READ transaction, so all tables show the same moment; then every declared foreign key between held tables is recorded as a relation. A table whose content did not change gets no new version (`created: false`); the status is 200 when no table changed. No table count limit: a table over SOURCE_MAX_ROWS, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (Postgres sizes, smallest tables first), keeps metadata only (`metadata_only`); MAX_UPLOAD_MB applies to each copied table. A table the account can no longer read is skipped and listed in `unreadable`. SOURCE_RESNAPSHOT_HOURS runs the same on a schedule.
+         */
+        post: operations["snapshotCatalogDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/datasets": {
         parameters: {
             query?: never;
@@ -308,7 +405,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Datasets of the workspace */
+        /**
+         * Tables of the workspace, every dataset mixed (deprecated: use listCatalog)
+         * @deprecated
+         * @description Each item is one table; `parent_id` is its dataset in `GET .../catalog`. Kept for the current UI.
+         */
         get: operations["listDatasets"];
         put?: never;
         /**
@@ -370,8 +471,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ask a question about a dataset
-         * @description One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. Error codes are for invalid requests, access, and the language model service.
+         * Ask a question starting from one table (deprecated: use askCatalogDataset with table_id)
+         * @deprecated
+         * @description The path id is a table id (`DatasetTable.id`). One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. Error codes are for invalid requests, access, and the language model service.
          */
         post: operations["ask"];
         delete?: never;
@@ -408,7 +510,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Conversations of the caller on a dataset
+         * Conversations of the caller on one table (deprecated: use listCatalogConversations)
+         * @deprecated
          * @description Newest first. Conversations with no recorded question are left out.
          */
         get: operations["listConversations"];
@@ -832,26 +935,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/workspaces/{ws}/sources/{id}/resnapshot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Snapshot again every table the source holds (admin only)
-         * @description Takes every table snapshotted from this source whose dataset still exists, and every table kept as metadata only, in one transaction, with the same limits as a snapshot. Unchanged tables create no version. A table the account can no longer read is skipped and listed in `unreadable`; its dataset keeps its last version. SOURCE_RESNAPSHOT_HOURS runs the same on a schedule.
-         */
-        post: operations["resnapshotSource"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/workspaces/{ws}/sources/{id}/snapshot": {
         parameters: {
             query?: never;
@@ -1012,6 +1095,12 @@ export interface components {
              */
             steps: components["schemas"]["AskStep"][];
             /**
+             * Format: uuid
+             * @description Table the question started from (the table routes `/datasets/{id}/drill` and `/conversations` take this id).
+             *     Asked on a whole dataset (`/catalog/{id}/ask`), the backend picks it; asked on a table, it is that table.
+             */
+            table_id: string;
+            /**
              * @description Tables `sql_guarded` read, in the order the query first reads them: the dataset asked about, and related
              *     datasets of the same database snapshot when the SQL joins them. Empty unless the status is `answered`.
              */
@@ -1019,7 +1108,7 @@ export interface components {
             understanding: components["schemas"]["Understanding"] | null;
             /**
              * Format: uuid
-             * @description Dataset version the question ran on.
+             * @description Version of `table_id` the question ran on.
              */
             version_id: string;
             /** @description Notes shown next to the result; they never hide it. */
@@ -1259,6 +1348,11 @@ export interface components {
             created_at: string;
             /** Format: uuid */
             id: string;
+            /**
+             * Format: uuid
+             * @description Table the conversation is stored on: open it with `GET .../datasets/{table_id}/conversations/{id}`.
+             */
+            table_id: string;
             /** @description The first question of the conversation, shortened. */
             title: string;
         };
@@ -1331,6 +1425,11 @@ export interface components {
             current_version_at: string | null;
             /** Format: uuid */
             current_version_id: string | null;
+            /**
+             * @description Table comment written in the source database (`COMMENT ON TABLE`), from the current version; null for files
+             *     and tables without a comment.
+             */
+            description: string | null;
             domain: string | null;
             /** Format: uuid */
             id: string;
@@ -1338,10 +1437,21 @@ export interface components {
             logical_table: string;
             name: string;
             /**
+             * Format: uuid
+             * @description Dataset (one database or one file, `GET .../catalog/{id}`) this table belongs to. The table routes under
+             *     `/datasets/{id}` take the table id; a file has one table.
+             */
+            parent_id: string;
+            /**
              * @description Datasets linked to this one by a foreign key of the source database (snapshots of several related tables);
              *     empty for uploaded files.
              */
             relations: components["schemas"]["RelatedDataset"][];
+            /**
+             * Format: int64
+             * @description Row count of the current version; null while the table has no current version.
+             */
+            row_count: number | null;
             /**
              * @description True when the current version stays at `structure` because the semantic profile was already tried with the
              *     running LLM provider and its answer was not usable: no suggested questions will come until the provider
@@ -1363,6 +1473,30 @@ export interface components {
              */
             suggested_questions: string[];
         };
+        /** @description A question on a whole dataset, or starting from one of its tables. */
+        DatasetAskRequest: {
+            /** @description Same as `AskRequest.choices`. */
+            choices?: components["schemas"]["ChosenOption"][];
+            /**
+             * Format: uuid
+             * @description Conversation to continue, from `AskResponse.conversation_id`. A conversation on any table of this dataset can
+             *     be continued; one of another user or another dataset is 404.
+             */
+            conversation_id?: string | null;
+            question: string;
+            /**
+             * Format: uuid
+             * @description Table to start from (`DatasetTable.id`). Leave out to let the backend pick it from the question; the answer
+             *     tells which one in `AskResponse.table_id`. Either way the question also reads tables linked to it by relations
+             *     (two steps, eight tables at most).
+             */
+            table_id?: string | null;
+        };
+        /**
+         * @description What a dataset is.
+         * @enum {string}
+         */
+        DatasetKind: "database" | "file";
         /** @description Overview of a dataset for anyone who can ask it: what it holds and what to ask, computed without the language model. */
         DatasetOverviewResponse: {
             /** @description Pre-built charts: the main measure over time, row count over time, then row count by value of each dimension. */
@@ -1405,6 +1539,79 @@ export interface components {
              */
             to_dataset_id: string;
             to_dataset_name: string;
+        };
+        /** @description A dataset: one connected database or one uploaded file, with its tables. */
+        DatasetSummary: {
+            /** Format: date-time */
+            created_at: string;
+            /** @description Domain pack bound to the dataset (`key` of `GET .../domains`); null when none. */
+            domain: string | null;
+            /**
+             * Format: uuid
+             * @description Dataset id. For a database, the same id as its source in `/sources/{id}` (admin only).
+             */
+            id: string;
+            kind: components["schemas"]["DatasetKind"];
+            /**
+             * @description Tables of the database kept with columns, types, keys and comments but no rows (over SOURCE_MAX_ROWS or the
+             *     SOURCE_SNAPSHOT_MAX_MB total), ordered by `table`. An admin snapshots one with `POST /sources/{id}/snapshot`
+             *     and `tables: [table]`. Empty for a file.
+             */
+            metadata_only: components["schemas"]["MetadataOnlyTable"][];
+            /** @description Database name for a database, the name given at upload for a file. */
+            name: string;
+            /** @description Foreign-key relations between tables of this dataset, copied from the source database. Empty for a file. */
+            relations: components["schemas"]["DatasetRelation"][];
+            /**
+             * @description Tables, ordered by `source_table` (schema, then table) and then by name. A file has one table; a database
+             *     connected but not snapshotted yet has none.
+             */
+            tables: components["schemas"]["DatasetTable"][];
+            /**
+             * Format: date-time
+             * @description Latest `current_version_at` of its tables: the last snapshot or upload. Null while no table has data.
+             */
+            updated_at: string | null;
+        };
+        /**
+         * @description A table of a dataset. Its id is the id the table routes take: `/datasets/{id}/overview`, `/metrics`, `/drill`,
+         *     `/conversations/{conversation_id}`.
+         */
+        DatasetTable: {
+            /** @description Columns of the current version, in table order; empty without a current version. */
+            columns: components["schemas"]["TableColumn"][];
+            /**
+             * @description `pending`, `structure`, `semantic` or `failed`; null without a current version. Asking works from
+             *     `structure` on.
+             */
+            current_profile_status: string | null;
+            /**
+             * Format: date-time
+             * @description When the current version was created: upload time, or the last snapshot.
+             */
+            current_version_at: string | null;
+            /** Format: uuid */
+            current_version_id: string | null;
+            /** @description Table comment from the source database (`COMMENT ON TABLE`) at the current version; null when none. */
+            description: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description Table name used in SQL; unique within the dataset only, so two databases can both have `orders`. */
+            logical_table: string;
+            name: string;
+            /**
+             * Format: int64
+             * @description Rows in the current version; null while the table has no data.
+             */
+            row_count: number | null;
+            /** @description Schema in the source database (`sales` for `sales.orders`); null for a file. */
+            schema: string | null;
+            /** @description Same meaning as `Dataset.semantic_unavailable`. */
+            semantic_unavailable: boolean;
+            /** @description `schema.table` in the source database; null for a file. */
+            source_table: string | null;
+            /** @description Suggested questions of the current version; empty until the semantic profile is done. */
+            suggested_questions: string[];
         };
         DatasetVersion: {
             /** Format: date-time */
@@ -2447,6 +2654,21 @@ export interface components {
          * @enum {string}
          */
         SummaryPointKind: "reason" | "outliers" | "even" | "largest" | "against" | "dropped";
+        /** @description A column of the current version of a table. */
+        TableColumn: {
+            /** @description Other names of the column (semantic profile), used to match question words. */
+            aliases: string[];
+            /** @description DuckDB type, for example `BIGINT`, `VARCHAR`, `DATE`. */
+            data_type: string;
+            description: string | null;
+            /** @description `database` (comment in the source database) or `model` (written by the semantic profile); null when unknown. */
+            description_source: string | null;
+            /** @description Sensitive column: its values never go to the language model. */
+            is_sensitive: boolean;
+            name: string;
+            /** @description `dimension`, `measure`, `time`, `key`, `text` or `ignore`. */
+            role: string;
+        };
         /** @description A foreign key between two readable tables, as declared in the source database. */
         TableLink: {
             constraint: string;
@@ -3361,6 +3583,249 @@ export interface operations {
                 };
             };
             /** @description 400 invalid name, 401, 403 not admin, 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetSummary"][];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401, 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getCatalogDataset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetSummary"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401, 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    askCatalogDataset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetAskRequest"];
+            };
+        };
+        responses: {
+            /** @description Answer, or why there is none */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The language model service failed before any SQL was written */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The language model is not configured on the server */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 empty question, a dataset with no table or no data yet; 401; 404 not a member, no such dataset, a `table_id` outside the dataset, or a conversation that is not the caller's */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listCatalogConversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationListResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    snapshotCatalogDataset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No table changed: nothing created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotResponse"];
+                };
+            };
+            /** @description At least one table got a new version */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 a file dataset, no table yet, or the database refused; 401; 403 not admin; 404 not a member or no such dataset; 413 a copied table bigger than MAX_UPLOAD_MB */
             "4XX": {
                 headers: {
                     [name: string]: unknown;
@@ -5005,58 +5470,6 @@ export interface operations {
                 };
             };
             /** @description 400 unknown table or cannot connect, 401, 403 not admin, 404 */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    resnapshotSource: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Workspace slug */
-                ws: string;
-                /** @description Source id */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Nothing changed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SnapshotResponse"];
-                };
-            };
-            /** @description At least one new version created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SnapshotResponse"];
-                };
-            };
-            /** @description Internal error; details are in the server log, not in the response */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description 400 nothing snapshotted yet or cannot connect, 401, 403 not admin, 404, 413 a table is bigger than MAX_UPLOAD_MB */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

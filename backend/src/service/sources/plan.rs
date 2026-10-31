@@ -33,6 +33,15 @@ impl SkipCause {
             SkipCause::SizeLimit => "size_limit",
         }
     }
+
+    /// Ngược của as_str, cho dòng đọc lại từ source_metadata_tables. CHECK của migration chỉ cho hai giá trị, nên giá
+    /// trị lạ (sửa tay bằng SQL) coi là row_limit thay vì làm hỏng cả danh sách.
+    pub fn from_stored(text: &str) -> Self {
+        match text {
+            "size_limit" => SkipCause::SizeLimit,
+            _ => SkipCause::RowLimit,
+        }
+    }
 }
 
 /// Số dòng của một bảng trong kế hoạch: đếm thật, hay ước lượng khi bảng quá lớn để đếm.

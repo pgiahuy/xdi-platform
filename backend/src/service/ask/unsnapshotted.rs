@@ -92,7 +92,11 @@ mod tests {
 
     fn row(table: &str, description: &str, columns: serde_json::Value) -> MetadataTableRow {
         MetadataTableRow {
+            source_id: uuid::Uuid::nil(),
             table_name: table.to_string(),
+            cause: "row_limit".to_string(),
+            row_count: Some(1_808_119),
+            size_bytes: None,
             reason: "Bảng có 1808119 dòng, quá giới hạn 1000000 dòng (SOURCE_MAX_ROWS)."
                 .to_string(),
             description: Some(description.to_string()),

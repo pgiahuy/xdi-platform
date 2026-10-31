@@ -538,7 +538,7 @@ mod tests {
         };
         let a = temp_workspace(&store).await;
         let b = temp_workspace(&store).await;
-        let src = store.create_local_source(&a).await.unwrap();
+        let src = store.create_local_source(&a, "Test").await.unwrap();
         let ds = store
             .create_dataset(&a, src, "Sales", "sales", None)
             .await
@@ -619,7 +619,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "Sales", "sales", None)
             .await
@@ -655,7 +655,7 @@ mod tests {
         let ds = store
             .create_dataset(
                 &ws,
-                store.create_local_source(&ws).await.unwrap(),
+                store.create_local_source(&ws, "Test").await.unwrap(),
                 "Sales",
                 "sales",
                 None,
@@ -694,7 +694,7 @@ mod tests {
         };
         let a = temp_workspace(&store).await;
         let b = temp_workspace(&store).await;
-        let src = store.create_local_source(&a).await.unwrap();
+        let src = store.create_local_source(&a, "Test").await.unwrap();
         let ds = store
             .create_dataset(&a, src, "Sales", "sales", None)
             .await
@@ -815,7 +815,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "Credits", "credits", None)
             .await

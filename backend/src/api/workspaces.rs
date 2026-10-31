@@ -239,7 +239,7 @@ mod tests {
     async fn add_dataset(store: &Store, workspace: &Value, name: &str) -> String {
         let id = uuid::Uuid::parse_str(workspace["workspace_id"].as_str().unwrap()).unwrap();
         let ws = WorkspaceId::for_test(id);
-        let source = store.create_local_source(&ws).await.unwrap();
+        let source = store.create_local_source(&ws, "Test").await.unwrap();
         let dataset = store
             .create_dataset(&ws, source, name, name, None)
             .await

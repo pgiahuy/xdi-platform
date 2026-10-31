@@ -69,7 +69,7 @@ fn relation_pairs(result: &Value) -> Vec<(String, String)> {
 }
 
 /// Danh sách bảng có khóa ngoại và cờ bảng danh mục; thân rỗng chụp mọi bảng một lần với mọi quan hệ khai báo; chụp lại
-/// cả nguồn khi không đổi gì không tạo phiên bản nào.
+/// cả dataset khi không đổi gì không tạo phiên bản nào.
 #[tokio::test]
 async fn every_readable_table_is_snapshotted_by_default() {
     let Some(s) = start(Some(KEY), &[]).await else {
@@ -130,7 +130,7 @@ async fn every_readable_table_is_snapshotted_by_default() {
         "{tables:?}"
     );
 
-    let url = format!("{SHOP}/sources/{id}/resnapshot");
+    let url = format!("{SHOP}/catalog/{id}/snapshot");
     let (status, _, again) = call(&s.app, "POST", &url, Some(&s.lan), None).await;
     assert_eq!(status, StatusCode::OK, "{again}");
     assert_eq!(table_names(&again), READABLE);
@@ -178,7 +178,8 @@ async fn unticked_table_can_be_added_later() {
 }
 
 /// Trần dung lượng 1 byte: mọi bảng có dung lượng chỉ lưu metadata, view (không dung lượng) vẫn chụp. Câu hỏi trên view
-/// mà SQL cần order_items thì lời báo nêu đúng bảng đó. Chụp lại cả nguồn giữ metadata, không tạo gì.
+/// mà SQL cần order_items thì lời báo nêu đúng bảng đó. Catalog ghi các bảng chỉ có metadata. Chụp lại cả dataset giữ
+/// metadata, không tạo gì.
 #[tokio::test]
 async fn size_limit_keeps_metadata_and_questions_name_the_table() {
     let sql = "SELECT SUM(qty) AS total FROM order_items";
@@ -218,9 +219,24 @@ async fn size_limit_keeps_metadata_and_questions_name_the_table() {
         .unwrap()
         .contains("SOURCE_SNAPSHOT_MAX_MB"));
 
-    let view = result["datasets"][0]["dataset"]["id"].as_str().unwrap();
+    // Dataset (catalog) có một bảng dữ liệu và các bảng chỉ có metadata, member cũng thấy.
+    let url = format!("{SHOP}/catalog/{id}");
+    let (status, _, detail) = call(&s.app, "GET", &url, Some(&s.minh), None).await;
+    assert_eq!(status, StatusCode::OK, "{detail}");
+    assert_eq!(detail["tables"].as_array().unwrap().len(), 1, "{detail}");
+    let pending: Vec<&str> = detail["metadata_only"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["table"].as_str().unwrap())
+        .collect();
+    assert_eq!(pending.len(), READABLE.len() - 1, "{detail}");
+    assert!(pending.contains(&"shop.order_items"), "{pending:?}");
+    assert_eq!(detail["metadata_only"][0]["cause"], "size_limit");
+
+    // Hỏi trên dataset: bảng bắt đầu là view, SQL cần order_items nên lời báo nêu đúng bảng đó.
     let ask = json!({"question": "Tổng số lượng hàng", "choices": []});
-    let url = format!("{SHOP}/datasets/{view}/ask");
+    let url = format!("{SHOP}/catalog/{id}/ask");
     let (status, _, answer) = call(&s.app, "POST", &url, Some(&s.lan), Some(ask)).await;
     assert_eq!(status, StatusCode::OK, "{answer}");
     assert_ne!(answer["status"], "answered", "{answer}");
@@ -228,7 +244,7 @@ async fn size_limit_keeps_metadata_and_questions_name_the_table() {
     assert!(message.contains("bảng shop.order_items"), "{message}");
     assert!(message.contains("chưa được chụp"), "{message}");
 
-    let url = format!("{SHOP}/sources/{id}/resnapshot");
+    let url = format!("{SHOP}/catalog/{id}/snapshot");
     let (status, _, again) = call(&s.app, "POST", &url, Some(&s.lan), None).await;
     assert_eq!(status, StatusCode::OK, "{again}");
     assert_eq!(table_names(&again), ["shop.big_items"]);

@@ -158,9 +158,9 @@ async fn a_confirmed_metric_is_drawn_over_time() {
     exec(
         &db.store,
         &format!(
-            "INSERT INTO metrics (workspace_id, dataset_id, name, expression, filter, time_column, status, origin,
-                                  version)
-             SELECT workspace_id, id, 'Doanh thu', 'SUM(\"amount\")', '\"Market\" <> ''USCA''', 'ordered',
+            "INSERT INTO metrics (workspace_id, dataset_id, source_id, name, expression, filter, time_column, status,
+                                  origin, version)
+             SELECT workspace_id, id, source_id, 'Doanh thu', 'SUM(\"amount\")', '\"Market\" <> ''USCA''', 'ordered',
                     'confirmed', 'sample', 1
              FROM datasets WHERE id = '{dataset_id}'"
         ),

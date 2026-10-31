@@ -36,11 +36,16 @@ pub struct NewMetadataTable {
     pub columns: Vec<MetadataColumn>,
 }
 
-/// Phần của một dòng source_metadata_tables mà danh sách bảng và luồng hỏi cần.
+/// Một dòng source_metadata_tables, cho danh sách bảng, catalog (service/catalog/) và luồng hỏi.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MetadataTableRow {
+    pub source_id: Uuid,
     pub table_name: String,
+    /// `row_limit` hay `size_limit`.
+    pub cause: String,
     pub reason: String,
+    pub row_count: Option<i64>,
+    pub size_bytes: Option<i64>,
     pub description: Option<String>,
     pub columns: Value,
 }
@@ -52,7 +57,8 @@ impl MetadataTableRow {
     }
 }
 
-const METADATA_COLUMNS: &str = "table_name, reason, description, columns";
+const METADATA_COLUMNS: &str =
+    "source_id, table_name, cause, reason, row_count, size_bytes, description, columns";
 
 impl Store {
     /// Ghi (hay ghi đè) metadata của các bảng chưa chụp được của một nguồn.
@@ -125,6 +131,23 @@ impl Store {
             .fetch_all(&self.pool)
             .await
             .map_err(|e| db_error("list metadata tables", e))
+    }
+
+    /// Bảng mới có metadata của mọi nguồn trong workspace, theo nguồn rồi tên, cho danh sách dataset (một câu thay
+    /// vì một câu mỗi nguồn).
+    pub async fn list_workspace_metadata_tables(
+        &self,
+        ws: &WorkspaceId,
+    ) -> Result<Vec<MetadataTableRow>, AppError> {
+        let sql = format!(
+            "SELECT {METADATA_COLUMNS} FROM source_metadata_tables
+             WHERE workspace_id = $1 ORDER BY source_id, table_name"
+        );
+        sqlx::query_as(&sql)
+            .bind(ws.as_uuid())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| db_error("list workspace metadata tables", e))
     }
 
     /// Bảng đã chụp thành dataset của một nguồn mà dataset còn trong workspace: (dataset, schema.bảng), cũ trước. Đọc

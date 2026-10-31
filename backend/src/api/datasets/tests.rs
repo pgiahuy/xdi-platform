@@ -160,9 +160,10 @@ async fn upload_creates_dataset_versions_and_skips_duplicates() {
     assert_eq!(v2["version"]["version"], 2);
     assert_eq!(v2["dataset"]["current_version_id"], v2["version"]["id"]);
 
-    // Dataset khác cùng tên: tên bảng logic không trùng.
+    // File khác cùng tên là một dataset khác (#257): tên bảng logic chỉ không trùng trong một dataset, nên giữ ban_hang.
     let (_, other) = upload(&app, &lan, &[("name", "Bán hàng")], &[("x.csv", b"a\n1\n")]).await;
-    assert_eq!(other["dataset"]["logical_table"], "ban_hang_2");
+    assert_eq!(other["dataset"]["logical_table"], "ban_hang");
+    assert_ne!(other["dataset"]["parent_id"], v2["dataset"]["parent_id"]);
 
     let (_, _, list) = call(&app, "GET", URL, Some(&lan), None).await;
     assert_eq!(list.as_array().map(Vec::len), Some(2));

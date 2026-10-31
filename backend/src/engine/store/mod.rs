@@ -11,6 +11,7 @@ phiên bản chờ lập hồ sơ lúc khởi động (datasets.rs, list_pending
 
 mod accounts;
 mod aggregation;
+mod catalog;
 mod columns;
 mod conversations;
 mod feedback;
@@ -34,6 +35,8 @@ mod domains;
 mod domains_tests;
 mod metric_edits;
 mod metrics;
+#[cfg(test)]
+mod migration_tests;
 mod queries;
 mod relations;
 #[cfg(test)]
@@ -49,6 +52,7 @@ mod workspaces;
 
 pub use accounts::{Membership, NewAdmin, User};
 pub use aggregation::ColumnAggregation;
+pub use catalog::{CatalogColumnRow, CatalogSourceRow};
 pub use columns::{
     ColumnUnit, ColumnValue, DescriptionSource, NewColumn, NewColumnValue, ProfileColumn,
     ProfileRole, SemanticColumnUpdate, SemanticValueUpdate, ValueRow,

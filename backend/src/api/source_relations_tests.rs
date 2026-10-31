@@ -405,7 +405,7 @@ async fn snapshot_limits_and_roles() {
     let body = json!({"table": "shop.orders", "tables": ["shop.customers"]});
     let (status, _, _) = call(&s.app, "POST", &url, Some(&s.minh), Some(body)).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    let url = format!("{SHOP}/sources/{id}/resnapshot");
+    let url = format!("{SHOP}/catalog/{id}/snapshot");
     let (status, _, _) = call(&s.app, "POST", &url, Some(&s.minh), None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     s.finish().await;

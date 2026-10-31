@@ -471,6 +471,7 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         message: None,
         query_id: query_number.map(|n| Uuid::from_u128(0x5b2f0c1e_7a4d_4e8b_9c61_0d3e2f1a4b00 + n)),
         conversation_id: CONVERSATION_ID,
+        table_id: DATASET_ID,
         version_id: VERSION_ID,
         model: MODEL.to_string(),
         choices: vec![],

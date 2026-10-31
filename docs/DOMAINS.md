@@ -32,7 +32,7 @@ của gói (so sau khi chữ thường và bỏ dấu); tên và từ đồng ng
 admin thêm không bắt buộc có cách tính hay chiều phân rã. API ở [API.md](API.md#khái-niệm-ngành).
 
 Prompt sinh SQL và prompt form câu "tại sao" chèn tên gói và `name`, `synonyms`, `description` của từng khái niệm đang
-bật khi cột `datasets.domain` có giá trị (`build_domain_section` trong `service/ask/prompt.rs`, dùng cả ở
+bật khi cột `sources.domain` có giá trị (`build_domain_section` trong `service/ask/prompt.rs`, dùng cả ở
 `service/ask/why_prompt.rs`), đọc từ bảng của workspace ở mỗi câu hỏi, nên khái niệm vừa sửa có ngay ở câu kế tiếp.
 Workspace chưa sửa gì nhận đúng chữ như đọc từ file, cùng thứ tự khái niệm. Chưa có cách gắn gói cho dataset (lúc nạp
 hay qua API), nên hiện chưa prompt nào có phần này ngoài test. `calculations`, `dimensions`, `sanity_checks` chưa được

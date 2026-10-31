@@ -40,7 +40,7 @@ pub enum Selection {
     /// Mọi bảng, view tài khoản đọc được lúc chụp.
     All,
     /// Đúng các bảng này. skip_unreadable: bảng không còn đọc được (đã xóa, mất quyền) thì bỏ qua và báo trong
-    /// unreadable, thay vì từ chối cả lần chụp; dùng khi chụp lại cả nguồn, để một bảng đã xóa ở nguồn không chặn mãi
+    /// unreadable, thay vì từ chối cả lần chụp; dùng khi chụp lại cả dataset, để một bảng đã xóa ở nguồn không chặn mãi
     /// các bảng còn lại.
     Tables {
         wanted: Vec<Wanted>,

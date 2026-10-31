@@ -7,9 +7,9 @@ bảng ở postgres.rs (COPY ra CSV) hoặc direct.rs (DuckDB đọc thẳng ra 
 secret.rs, rồi đi tiếp service/ingest.rs như một file nạp.
 
 Kết nối xong thì mặc định chụp mọi bảng, view tài khoản đọc được (#247): phạm vi dữ liệu do quyền SELECT của tài khoản
-quyết, admin bỏ tick bảng không muốn (catalog.rs liệt kê, snapshot.rs và copy.rs chụp). Mỗi bảng thành một dataset
-riêng, khóa ngoại giữa chúng ghi thành quan hệ giữa các dataset. Không nối thành bảng phẳng, nên không có cột lặp lại để
-cộng nhầm. Bảng quá trần chỉ lưu metadata (plan.rs). Chụp lại cả nguồn theo lịch ở schedule.rs.
+quyết, admin bỏ tick bảng không muốn (catalog.rs liệt kê, snapshot.rs và copy.rs chụp). Database là một dataset (#257),
+mỗi bảng chụp thành một bảng riêng của nó, khóa ngoại giữa chúng ghi thành quan hệ giữa các bảng. Không nối thành bảng
+phẳng, nên không có cột lặp lại để cộng nhầm. Bảng quá trần chỉ lưu metadata (plan.rs). Chụp lại cả dataset theo lịch ở schedule.rs.
 
 Bảo vệ:
 - Chỉ admin của workspace làm mọi việc ở đây, kể cả xem cấu hình nguồn; member nhận 403.
@@ -55,7 +55,9 @@ use postgres::{ConnectInfo, SourceTable, SSL_MODES};
 pub use relations::{RelationsRequest, RelationsResponse};
 pub use schedule::run_resnapshot_schedule;
 use secret::SecretKey;
-pub use snapshot::{resnapshot, snapshot, SnapshotRequest, SnapshotResponse};
+pub use snapshot::{
+    snapshot, snapshot_dataset, MetadataOnlyTable, SnapshotRequest, SnapshotResponse,
+};
 
 const KIND_POSTGRES: &str = "postgres";
 
@@ -128,6 +130,8 @@ pub async fn create(
         .create_source(
             &member.workspace,
             KIND_POSTGRES,
+            // Tên dataset của database là tên database; giao diện ghi kèm máy chủ khi cần phân biệt.
+            &info.database,
             &public_config(&info),
             &sealed,
         )

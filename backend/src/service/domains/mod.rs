@@ -9,7 +9,7 @@ lần đầu cần gói: mở màn này hay hỏi trên dataset có gói (load_f
 trước migration, đều có gói mà không phải nhớ gọi ở từng chỗ. Mỗi lần đọc tốn một câu SELECT để so khóa; chỉ khi thiếu
 mới ghi (ensure_seeded).
 
-Khái niệm admin lưu vào prompt của câu hỏi kế tiếp trên dataset gắn gói đó (datasets.domain), không cần build lại. */
+Khái niệm admin lưu vào prompt của câu hỏi kế tiếp trên dataset gắn gói đó (sources.domain), không cần build lại. */
 
 pub mod check;
 pub mod contract;
@@ -81,7 +81,7 @@ pub async fn update(
 }
 
 /// Gói có khóa này của workspace kèm các khái niệm đang bật, cho prompt sinh SQL và form câu "tại sao"
-/// (service/ask/mod.rs). None khi không có gói đó, ví dụ datasets.domain trỏ tới gói đã bỏ khỏi data/domains/.
+/// (service/ask/mod.rs). None khi không có gói đó, ví dụ sources.domain trỏ tới gói đã bỏ khỏi data/domains/.
 pub async fn load_for_prompt(
     state: &AppState,
     ws: &WorkspaceId,
