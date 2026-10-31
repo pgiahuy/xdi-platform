@@ -69,7 +69,7 @@ pub struct PromptInput<'a> {
 
 /// Mức chi tiết của danh sách cột; prompt quá dài thì hạ dần theo thứ tự khai báo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) enum Detail {
+pub enum Detail {
     /// Mọi cột, mọi giá trị ngữ cảnh có.
     Full,
     /// Bỏ danh sách giá trị chỉ là mẫu (values_complete = false); cột ít giá trị vẫn đủ danh sách để ánh xạ chữ.
@@ -81,11 +81,17 @@ pub(super) enum Detail {
 
 /// Prompt sinh SQL cho câu thường.
 pub fn build_sql_prompt(input: &PromptInput) -> String {
+    build_sql_prompt_detail(input).0
+}
+
+/// Như build_sql_prompt, kèm mức chi tiết build_within_limit đã chọn: ask/mod.rs cần biết danh sách giá trị nào thật sự
+/// nằm trong prompt (values_in_prompt) để quyết định có gửi lại hay không (ask/value_retry.rs).
+pub fn build_sql_prompt_detail(input: &PromptInput) -> (String, Detail) {
     let mut tables = vec![input.table];
     if let Some(group) = input.group {
         tables.extend(group.tables.iter().map(|t| t.table.as_str()));
     }
-    build_within_limit(|detail| {
+    build_within_limit_detail(|detail| {
         join_sections(vec![
             build_sql_rules(&tables),
             build_prompt_rules(&tables),
@@ -105,22 +111,28 @@ pub fn build_sql_prompt(input: &PromptInput) -> String {
 /// Dựng prompt ở mức chi tiết cao nhất còn nằm trong PROMPT_MAX_CHARS. Hạ hết mức vẫn dài thì gửi bản ngắn nhất và ghi
 /// log: cắt tiếp là bỏ luật hay câu hỏi, còn tệ hơn để mô hình báo lỗi.
 pub(super) fn build_within_limit(build: impl Fn(Detail) -> String) -> String {
+    build_within_limit_detail(build).0
+}
+
+/// Như build_within_limit, kèm mức chi tiết của prompt trả về.
+pub(super) fn build_within_limit_detail(build: impl Fn(Detail) -> String) -> (String, Detail) {
     let mut prompt = String::new();
-    for detail in [
+    let levels = [
         Detail::Full,
         Detail::CompleteValuesOnly,
         Detail::RelatedValuesOnly,
-    ] {
+    ];
+    for detail in levels {
         prompt = build(detail);
         if prompt.chars().count() <= PROMPT_MAX_CHARS {
-            return prompt;
+            return (prompt, detail);
         }
     }
     tracing::warn!(
         chars = prompt.chars().count(),
         "prompt is over the limit even with values of related columns only; sending it anyway"
     );
-    prompt
+    (prompt, Detail::RelatedValuesOnly)
 }
 
 pub(super) fn join_sections(sections: Vec<String>) -> String {
@@ -316,12 +328,7 @@ pub(super) fn build_column_metadata(column: &ColumnProfile) -> String {
 /// Một cột đủ metadata, rồi danh sách giá trị ở dòng sau nếu có và mức chi tiết cho phép.
 fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
     let mut line = build_column_metadata(column);
-    // Cột nhạy cảm không kèm giá trị nào. #28 đã lọc; kiểm lại ở đây vì đây là chỗ cuối trước khi chữ rời máy chủ.
-    let show_values = !column.is_sensitive
-        && !column.values.is_empty()
-        && (column.values_complete || detail == Detail::Full)
-        && (detail < Detail::RelatedValuesOnly || is_related(column));
-    if show_values {
+    if values_in_prompt(column, detail) {
         let kind = if column.values_complete {
             "All values"
         } else {
@@ -331,6 +338,16 @@ fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
         line.push_str(&format!("\n  {kind}: {}", values.join(", ")));
     }
     line
+}
+
+/// Danh sách giá trị của cột có nằm trong prompt ở mức chi tiết này không. Cột nhạy cảm không kèm giá trị nào: #28 đã
+/// lọc, kiểm lại ở đây vì đây là chỗ cuối trước khi chữ rời máy chủ. Cột gọn (brief) chỉ có tên, kiểu, vai trò.
+pub fn values_in_prompt(column: &ColumnProfile, detail: Detail) -> bool {
+    !column.is_sensitive
+        && !column.brief
+        && !column.values.is_empty()
+        && (column.values_complete || detail == Detail::Full)
+        && (detail < Detail::RelatedValuesOnly || is_related(column))
 }
 
 /// Giá trị viết như chuỗi SQL ('O''Brien'): mô hình chép nguyên vào SQL được, và dấu phẩy trong giá trị không lẫn với

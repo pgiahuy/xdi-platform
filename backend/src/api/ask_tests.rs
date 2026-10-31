@@ -47,6 +47,8 @@ impl Drop for DataDir {
 struct ScriptedLlm {
     replies: Mutex<VecDeque<String>>,
     classify: Option<String>,
+    /// Hết câu viết sẵn thì trả lỗi nhà cung cấp thay vì làm test dừng: để thử nhánh mô hình lỗi giữa chừng.
+    fail_when_empty: bool,
 }
 
 pub(super) fn scripted(replies: &[Value]) -> Arc<dyn LlmProvider> {
@@ -54,6 +56,7 @@ pub(super) fn scripted(replies: &[Value]) -> Arc<dyn LlmProvider> {
     Arc::new(ScriptedLlm {
         replies: Mutex::new(replies),
         classify: None,
+        fail_when_empty: false,
     })
 }
 
@@ -64,6 +67,7 @@ pub(super) fn scripted_with_kind(kind: &str, replies: &[Value]) -> Arc<dyn LlmPr
     Arc::new(ScriptedLlm {
         replies: Mutex::new(replies),
         classify: Some(classify.to_string()),
+        fail_when_empty: false,
     })
 }
 
@@ -91,8 +95,23 @@ impl LlmProvider for ScriptedLlm {
             ));
         }
         let reply = self.replies.lock().unwrap().pop_front();
-        Ok(reply.expect("model called more times than the test expects"))
+        match reply {
+            None if self.fail_when_empty => {
+                Err(AppError::Upstream("scripted model is down".to_string()))
+            }
+            reply => Ok(reply.expect("model called more times than the test expects")),
+        }
     }
+}
+
+/// Như scripted, nhưng hết câu viết sẵn thì mô hình báo lỗi (Upstream).
+fn scripted_then_down(replies: &[Value]) -> Arc<dyn LlmProvider> {
+    let replies = replies.iter().map(Value::to_string).collect();
+    Arc::new(ScriptedLlm {
+        replies: Mutex::new(replies),
+        classify: None,
+        fail_when_empty: true,
+    })
 }
 
 pub(super) fn sql_reply(sql: &str) -> Value {
@@ -758,5 +777,57 @@ async fn wrong_filter_value_resends_the_full_values_once() {
         .filter(|d| d.starts_with("Gửi lại kèm đủ giá trị"))
         .count();
     assert_eq!(resent, 1);
+    asking.db.drop().await;
+}
+
+/// Lần gửi lại chỉ là bước thêm (#230): mô hình lỗi ở lần gửi lại, hay câu gửi lại bị guard từ chối, thì vẫn giữ câu trả
+/// lời lần đầu (answered, kèm cảnh báo), có một bước ok = false trong các bước, và câu vẫn được ghi lịch sử.
+#[tokio::test]
+async fn a_failed_resend_keeps_the_first_answer() {
+    let bad = sql_reply(r#"SELECT SUM(amount) AS total FROM dataco WHERE zone = 'Zone 7'"#);
+    let csv = wide_dimension_csv();
+    let failed_step = |response: &Value| {
+        response["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["name"] == "llm" && s["ok"] == false)
+    };
+    // Mô hình lỗi ở lần gửi lại.
+    let Some(asking) = start_on(
+        Some(scripted_then_down(std::slice::from_ref(&bad))),
+        &csv,
+        |_| {},
+    )
+    .await
+    else {
+        return;
+    };
+    let (status, response) = asking.ask("Tổng tiền", json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    assert!(failed_step(&response), "{response}");
+    assert!(warning_codes(&response).contains(&"filter_value_not_found"));
+    assert_eq!(asking.queries_with("ok").await, 1);
+    asking.db.drop().await;
+
+    // Câu gửi lại bị guard từ chối cả sau khi sửa: giữ lần đầu, lỗi của lần gửi lại vẫn vào nhật ký lỗi.
+    let delete = sql_reply("DELETE FROM dataco");
+    let llm = scripted(&[bad, delete.clone(), delete]);
+    let Some(asking) = start_on(Some(llm), &csv, |_| {}).await else {
+        return;
+    };
+    let (status, response) = asking.ask("Tổng tiền", json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    assert!(failed_step(&response), "{response}");
+    assert!(
+        fetch_count(
+            &asking.db.store,
+            "SELECT count(*) FROM error_log WHERE step = 'guard'"
+        )
+        .await
+            >= 1
+    );
     asking.db.drop().await;
 }

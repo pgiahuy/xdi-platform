@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::engine::store::{ColumnAggregation, ValueRow};
 use crate::service::ask::context::ColumnProfile;
 use crate::service::ask::filter_values::MissingValue;
+use crate::service::ask::prompt::Detail;
 use crate::service::ask::value_retry::{apply_full_values, build_resend_columns};
 use crate::service::ask::values::{ValueEntry, ValueIndex};
 
@@ -44,6 +45,10 @@ fn missing(column: &str) -> MissingValue {
 #[test]
 fn only_columns_without_a_complete_list_are_resent() {
     let mut complete = dimension("Market");
+    complete.values = vec![ValueEntry {
+        value: "Europe".to_string(),
+        aliases: Vec::new(),
+    }];
     complete.values_complete = true;
     let mut sensitive = dimension("Email");
     sensitive.is_sensitive = true;
@@ -57,6 +62,7 @@ fn only_columns_without_a_complete_list_are_resent() {
             missing("Other"),
         ],
         &columns,
+        Detail::Full,
     );
     assert_eq!(found, ["Region"]);
 }
@@ -91,4 +97,27 @@ fn full_values_replace_the_partial_list() {
     assert!(columns[0].values_complete);
     assert!(!apply_full_values(&mut columns, &index, "Region"));
     assert!(!apply_full_values(&mut columns, &index, "Nowhere"));
+}
+
+/// Danh sách đủ trong ngữ cảnh mà prompt đã hạ mức (RelatedValuesOnly) bỏ đi vì cột không liên quan: mô hình chưa thấy
+/// danh sách, nên vẫn gửi lại. Cột liên quan thì danh sách còn trong prompt, không gửi lại.
+#[test]
+fn a_list_dropped_from_the_prompt_counts_as_not_sent() {
+    let mut market = dimension("Market");
+    market.values = vec![ValueEntry {
+        value: "Europe".to_string(),
+        aliases: Vec::new(),
+    }];
+    market.values_complete = true;
+    let columns = vec![market.clone()];
+    assert!(build_resend_columns(&[missing("Market")], &columns, Detail::Full).is_empty());
+    assert_eq!(
+        build_resend_columns(&[missing("Market")], &columns, Detail::RelatedValuesOnly),
+        ["Market"]
+    );
+    market.matched = true;
+    let related = vec![market];
+    assert!(
+        build_resend_columns(&[missing("Market")], &related, Detail::RelatedValuesOnly).is_empty()
+    );
 }
