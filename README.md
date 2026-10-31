@@ -17,7 +17,7 @@ hợp kèm tên nhóm); không nhận dòng kết quả nào hay nội dung file
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
 Tài liệu: https://pgiahuy.github.io/xdi-platform/
 
-![Một câu hỏi đi qua xdi-platform: giao diện, API, guard SQL, DuckDB, mô hình ngôn ngữ, Postgres, theo thứ tự 12 bước](docs/images/luong-cau-hoi.png)
+![Một câu hỏi đi qua xdi-platform: hàng trên đi từ giao diện qua dựng ngữ cảnh, mô hình, guard SQL tới DuckDB, hàng dưới quay về qua phần giải thích, kiểm số, ghi lịch sử; 16 bước](docs/images/luong-cau-hoi.png)
 
 ## Chạy thử
 

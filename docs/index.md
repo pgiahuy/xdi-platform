@@ -17,7 +17,7 @@ nguyên nhân và viết lời; nó nhận metadata của mọi cột, danh sác
 (người bị lọc dòng theo vai dữ liệu thì không), và các ý do code tính, không nhận dòng kết quả nào hay nội dung file
 ([Dữ liệu và quyền riêng tư](PRIVACY.md)).
 
-![Một câu hỏi đi qua xdi-platform: giao diện, API, guard SQL, DuckDB, mô hình ngôn ngữ, Postgres, theo thứ tự 12 bước](images/luong-cau-hoi.png)
+![Một câu hỏi đi qua xdi-platform: hàng trên đi từ giao diện qua dựng ngữ cảnh, mô hình, guard SQL tới DuckDB, hàng dưới quay về qua phần giải thích, kiểm số, ghi lịch sử; 16 bước](images/luong-cau-hoi.png)
 
 ## Chạy thử
 
