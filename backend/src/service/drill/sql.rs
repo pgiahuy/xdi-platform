@@ -8,7 +8,7 @@ cho mỗi cột khóa của dòng được bấm, bỏ GROUP BY, ORDER BY, LIMIT
 
 Cột của trang: câu đọc một chỗ thì `*` như trước; câu nối bảng thì `<bảng sự kiện>.*` (drill/sources.rs chọn bảng),
 rồi cột khóa và cột lọc thuộc bảng nối khác, đặt tên theo cột kết quả hay "bảng.cột". Sau cùng là cột từng dòng của
-mỗi độ đo SUM, tên theo cột kết quả, để các dòng cộng ra đúng con số.
+mỗi độ đo SUM trên một biểu thức (tên theo cột kết quả); SUM trên một cột trang đã có thì trỏ tới cột đó.
 
 Dòng phân rã của câu "tại sao" dùng cùng cách trên câu của chiều được bấm (DimensionBreakdown.sql, nhóm theo cột chiều),
 cộng điều kiện của lát cắt được bấm (ExplanationSlice.filter): câu chiều đọc cả hai lát cắt, mỗi độ đo lọc một lát

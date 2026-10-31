@@ -6262,7 +6262,7 @@
           },
           "result": {
             "$ref": "#/components/schemas/ResultTable",
-            "description": "The page. For a question on one table: every column of the dataset, including `_source_file`, the file each\nrow came from. For a question that joins tables: every column of `source_table`, then `joined_columns`. Then,\nfor each measure with a `row_column`, that column. Here `result.total_rows` counts the rows of this page only."
+            "description": "The page. For a question on one table: every column of the dataset, including `_source_file`, the file each\nrow came from. For a question that joins tables: every column of `source_table`, then `joined_columns`. Then,\nfor each `sum` measure over an expression rather than one column of the page, its `row_column`. Here `result.total_rows` counts the rows of this page only."
           },
           "source_table": {
             "type": [

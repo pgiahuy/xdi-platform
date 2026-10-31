@@ -45,7 +45,7 @@ use crate::service::ask::related::load_group;
 use crate::service::ask::repair::build_safe_error;
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::run::{build_duration_text, run_query_in_turn};
-use crate::service::drill::columns::PageColumns;
+use crate::service::drill::columns::{PageColumns, RowColumn};
 use crate::service::drill::contract::{
     BreakdownKey, DrillKey, DrillMeasure, DrillRequest, DrillResponse, SliceName, MAX_DRILL_LIMIT,
 };
@@ -278,8 +278,12 @@ fn build_column_notes(
     values: Vec<Option<CellValue>>,
 ) -> (Vec<String>, Vec<DrillMeasure>) {
     let names: Vec<&str> = result.columns.iter().map(|c| c.name.as_str()).collect();
-    let row_columns = columns.measures.iter().filter(|m| m.has_row_column).count();
-    let measure_start = names.len().saturating_sub(row_columns);
+    let added = columns
+        .measures
+        .iter()
+        .filter(|m| m.row == RowColumn::Added)
+        .count();
+    let measure_start = names.len().saturating_sub(added);
     let joined_start = measure_start.saturating_sub(columns.joined_added);
     let mut joined: Vec<String> = columns
         .joined_named
@@ -292,7 +296,7 @@ fn build_column_notes(
             .iter()
             .map(|n| n.to_string()),
     );
-    let mut row_names = names[measure_start..].iter();
+    let mut added_names = names[measure_start..].iter();
     let mut values = values.into_iter();
     let measures = columns
         .measures
@@ -301,10 +305,12 @@ fn build_column_notes(
             column: measure.column.clone(),
             rule: measure.rule,
             value: values.next().flatten(),
-            row_column: measure
-                .has_row_column
-                .then(|| row_names.next().map(|n| n.to_string()))
-                .flatten(),
+            row_column: match &measure.row {
+                RowColumn::Absent => None,
+                RowColumn::Added => added_names.next().map(|n| n.to_string()),
+                // Tên cột trong câu có thể khác hoa thường với tên DuckDB trả qua `*` (`SUM(sales)` trên cột "Sales").
+                RowColumn::Existing(name) => find_name(&names[..joined_start], name),
+            },
         })
         .collect();
     (joined, measures)
@@ -343,6 +349,15 @@ async fn run(input: &DrillInput<'_>, runnable: String) -> Result<QueryOutput, Ap
         )),
         Err(QueryError::Internal(e)) => Err(e),
     }
+}
+
+/// Tên cột trang trùng name, đúng chữ trước rồi không phân biệt hoa thường.
+fn find_name(names: &[&str], name: &str) -> Option<String> {
+    names
+        .iter()
+        .find(|n| **n == name)
+        .or_else(|| names.iter().find(|n| n.eq_ignore_ascii_case(name)))
+        .map(|n| n.to_string())
 }
 
 /// Một dòng: count(*) của DuckDB (BIGINT) rồi giá trị các độ đo, đổi sang ô như bảng kết quả.

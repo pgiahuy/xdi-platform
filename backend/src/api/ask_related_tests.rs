@@ -60,7 +60,7 @@ const CUSTOMERS_BY_REGION: &str = "SELECT r.name, COUNT(*) AS customers FROM cus
      JOIN regions r ON c.region_code = r.code GROUP BY r.name ORDER BY r.name";
 
 /// Hỏi trên order_items: câu JOIN tới orders và customers chạy, response và lịch sử ghi đủ ba bảng; truy dòng nguồn trả
-/// dòng của order_items kèm cột region_code của khách, tổng qty của các dòng bằng ô. Minh bị lọc trên customers và regions: câu JOIN hai bảng đó chỉ thấy dòng North.
+/// dòng của order_items kèm cột region_code của khách; độ đo SUM(oi.qty) trỏ tới cột qty của order_items, bằng ô. Minh bị lọc trên customers và regions: câu JOIN hai bảng đó chỉ thấy dòng North.
 #[tokio::test]
 async fn join_question_reads_related_tables_with_their_row_filters() {
     let replies = [sql_reply(QTY_BY_REGION), sql_reply(CUSTOMERS_BY_REGION)];

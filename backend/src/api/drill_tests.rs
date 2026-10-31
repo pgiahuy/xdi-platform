@@ -123,7 +123,8 @@ async fn member_drills_a_cell_with_their_own_row_filters() {
     assert_eq!(columns, ["Market", "amount", "_source_file"]);
     assert_eq!(
         body["result"]["rows"],
-        json!([["Europe", "10", "sales.csv"], ["Europe", "7", "sales.csv"]])
+        // Trang sắp theo mọi cột (ORDER BY ALL): amount 7 trước 10.
+        json!([["Europe", "7", "sales.csv"], ["Europe", "10", "sales.csv"]])
     );
 
     // Minh có vai dữ liệu chỉ thấy LATAM: bấm ô Europe của câu admin hỏi thì không thấy dòng nào.

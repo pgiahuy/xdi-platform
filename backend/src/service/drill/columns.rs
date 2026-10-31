@@ -3,7 +3,8 @@
 khi truy được câu nối bảng, nên dòng nguồn của câu một bảng vẫn có mọi cột của dataset kể cả `_source_file`. Câu nối
 bảng: `<bảng sự kiện>.*` (bảng drill/sources.rs chọn), rồi cột thuộc bảng nối khác mà câu dùng làm khóa nhóm hay điều
 kiện lọc, để người dùng thấy vì sao dòng thuộc ô (segment của khách, không phải cột của order_items). Sau cùng, mỗi độ
-đo SUM một cột giá trị từng dòng (drill/measures.rs).
+đo SUM trên một biểu thức (`quantity * unit_price`, CASE) một cột giá trị từng dòng (drill/measures.rs); SUM trên một
+cột đã có trên trang thì không chép thêm, độ đo trỏ tới cột đó.
 
 Không lấy mọi cột của mọi bảng nối: trang hẹp và cột của bảng một (orders, customers) lặp lại trên mỗi dòng sự kiện;
 cột cần để kiểm con số là cột khóa, cột lọc và cột của độ đo. */
@@ -35,8 +36,18 @@ pub struct MeasureColumn {
     /// Tên cột kết quả của câu đã chạy, duy nhất như ResultTable.columns.
     pub column: String,
     pub rule: MeasureRule,
-    /// Trang có cột giá trị từng dòng của độ đo này.
-    pub has_row_column: bool,
+    pub row: RowColumn,
+}
+
+/// Cột giá trị từng dòng của một độ đo trên trang.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RowColumn {
+    /// Độ đo không cộng theo dòng (COUNT, AVG...).
+    Absent,
+    /// Thêm ở cuối trang, tên theo cột kết quả: biểu thức như `quantity * unit_price` hay CASE.
+    Added,
+    /// `SUM(cột)` trên một cột trang đã có (cột của bảng sự kiện): không chép thêm, trỏ tới cột đó theo tên.
+    Existing(String),
 }
 
 pub struct BuiltColumns {
@@ -55,6 +66,8 @@ pub fn build_page_columns(
 ) -> Result<BuiltColumns, AppError> {
     let (tables, links) = catalog;
     let mut info = PageColumns::default();
+    // None khi câu đọc một chỗ: mọi cột của chỗ đó đã có trên trang qua `*`.
+    let mut fact = None;
     let mut items = if let [only] = sources {
         info.source_table = only.table.clone().or_else(|| only.base_table.clone());
         info.joined_named = only.added_columns.clone();
@@ -66,29 +79,37 @@ pub fn build_page_columns(
             .filter(|o| o.is_aggregate)
             .filter_map(|o| o.tree.as_ref())
             .collect();
-        let fact = choose_fact(sources, &aggregates, tables, links)?;
+        let chosen = choose_fact(sources, &aggregates, tables, links)?;
+        fact = Some(chosen);
         // choose_fact chỉ chọn chỗ đọc có tên gọi.
-        let Some(qualifier) = &sources[fact].qualifier else {
+        let Some(qualifier) = &sources[chosen].qualifier else {
             return Err(AppError::Internal(
                 "drill: fact source has no name".to_string(),
             ));
         };
-        info.source_table = sources[fact].table.clone();
+        info.source_table = sources[chosen].table.clone();
         let mut items = build_projection(&format!("SELECT {qualifier}.*"))?;
-        let joined = build_joined_items(shape, select, sources, fact, names, tables);
+        let joined = build_joined_items(shape, select, sources, chosen, names, tables);
         info.joined_added = joined.len();
         items.extend(joined);
         items
     };
     for measure in measures {
         let column = names[measure.output].clone();
-        if let Some(row) = &measure.row_expr {
-            items.push(aliased(row.clone(), &column));
-        }
+        let row = match &measure.row_expr {
+            None => RowColumn::Absent,
+            Some(expr) => match find_page_column(expr, sources, fact, tables) {
+                Some(existing) => RowColumn::Existing(existing),
+                None => {
+                    items.push(aliased(expr.clone(), &column));
+                    RowColumn::Added
+                }
+            },
+        };
         info.measures.push(MeasureColumn {
             column,
             rule: measure.rule,
-            has_row_column: measure.row_expr.is_some(),
+            row,
         });
     }
     Ok(BuiltColumns { items, info })
@@ -145,6 +166,24 @@ fn build_joined_items(
         items.push(aliased(expr, &name));
     }
     items
+}
+
+/// Tên cột khi biểu thức là đúng một cột trang đã có qua `*` hay `<bảng sự kiện>.*`.
+fn find_page_column(
+    expr: &Expr,
+    sources: &[Source],
+    fact: Option<usize>,
+    tables: &[AllowedTable],
+) -> Option<String> {
+    if !matches!(expr, Expr::Identifier(_) | Expr::CompoundIdentifier(_)) {
+        return None;
+    }
+    let [column] = build_column_refs(expr).try_into().ok()?;
+    let on_page = match fact {
+        None => true,
+        Some(fact) => find_owner(sources, tables, &column) == Some(fact),
+    };
+    on_page.then(|| column.column.value.clone())
 }
 
 // Nháy kép để tên có dấu cách hay chữ hoa vẫn đúng như cột kết quả; sqlparser tự thoát dấu nháy khi in.

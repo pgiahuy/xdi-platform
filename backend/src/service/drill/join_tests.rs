@@ -323,8 +323,10 @@ async fn three_table_join_returns_fact_rows_that_add_up() {
         ("revenue", MeasureRule::Sum)
     );
     assert_eq!(text(&measure.value), text(cell));
-    let row_column = measure.row_column.as_deref().unwrap();
-    assert_eq!(sum_column(&drilled.result, row_column), cents(cell));
+    // SUM(oi.item_total) trỏ tới cột item_total đã có, không chép thêm cột.
+    assert_eq!(measure.row_column.as_deref(), Some("item_total"));
+    assert!(!drilled.result.columns.iter().any(|c| c.name == "revenue"));
+    assert_eq!(sum_column(&drilled.result, "item_total"), cents(cell));
     assert!(drilled.sql.contains("JOIN customers"), "{}", drilled.sql);
     assert!(!drilled.sql.contains("GROUP BY"), "{}", drilled.sql);
 }
@@ -359,7 +361,7 @@ async fn join_through_products_keeps_filters_and_shows_filter_columns() {
     );
     assert_eq!(drilled.measures[0].row_column, None);
     assert_eq!(
-        sum_column(&drilled.result, "revenue"),
+        sum_column(&drilled.result, "item_total"),
         cents(&row[column_index(&table, "revenue")])
     );
 }
@@ -413,7 +415,7 @@ async fn clicker_with_row_filters_sees_only_allowed_rows() {
         .all(|r| text(&r[order]).unwrap().parse::<i64>().unwrap() % 6 == 1));
     let value = cents(&drilled.measures[0].value);
     assert!(value < cell, "{value} {cell}");
-    assert_eq!(sum_column(&drilled.result, "revenue"), value);
+    assert_eq!(sum_column(&drilled.result, "item_total"), value);
 }
 
 /// Người hỏi bị lọc nên câu đã lưu có hộp lọc quanh mọi bảng: `oi.*` trên hộp vẫn qua guard, tổng khớp ô; ô của
@@ -431,7 +433,7 @@ async fn asker_with_row_filters_drills_through_filter_boxes() {
     let cell = &row[column_index(&table, "revenue")];
     assert!(drilled.total_rows > 0);
     assert_eq!(text(&drilled.measures[0].value), text(cell));
-    assert_eq!(sum_column(&drilled.result, "revenue"), cents(cell));
+    assert_eq!(sum_column(&drilled.result, "item_total"), cents(cell));
 }
 
 /// Dòng phân rã theo cột của bảng liên quan (#227): câu chiều đọc câu con `LEFT JOIN` ở FROM, như explain/source.rs
@@ -506,7 +508,7 @@ async fn row_level_with_table_is_traced() {
     let drilled = shop.drill(&sql, &keys, &shop.open()).await.unwrap();
     assert_eq!(drilled.source_table.as_deref(), Some("order_items"));
     assert_eq!(
-        sum_column(&drilled.result, "revenue"),
+        sum_column(&drilled.result, "item_total"),
         cents(&row[column_index(&table, "revenue")])
     );
 }
@@ -584,7 +586,7 @@ async fn join_pages_are_ordered_and_do_not_overlap() {
         assert!(page.sql.contains("ORDER BY ALL"), "{}", page.sql);
         let id = column_index(&page.result, "order_item_id");
         ids.extend(page.result.rows.iter().map(|r| text(&r[id]).unwrap()));
-        sum += sum_column(&page.result, "revenue");
+        sum += sum_column(&page.result, "item_total");
         offset += 10;
         if offset >= page.total_rows {
             break;

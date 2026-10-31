@@ -83,7 +83,7 @@ pub struct DrillResponse {
     pub sql: String,
     /// The page. For a question on one table: every column of the dataset, including `_source_file`, the file each
     /// row came from. For a question that joins tables: every column of `source_table`, then `joined_columns`. Then,
-    /// for each measure with a `row_column`, that column. Here `result.total_rows` counts the rows of this page only.
+    /// for each `sum` measure over an expression rather than one column of the page, its `row_column`. Here `result.total_rows` counts the rows of this page only.
     pub result: ResultTable,
     /// Number of source rows behind the number, over all pages.
     pub total_rows: u64,
