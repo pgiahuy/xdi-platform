@@ -267,21 +267,38 @@ async fn prepare_database(
     }
 }
 
+/// Thời gian tối đa không có dataset nào xong hồ sơ ngữ nghĩa thêm, trước khi báo lỗi: đủ cho ba lần chờ hết hạn mức
+/// 60 giây của service/eval_pace.rs cộng các lần gọi.
+const SEMANTIC_STALL: Duration = Duration::from_secs(240);
+
 /// Hồ sơ ngữ nghĩa chạy nền; hỏi khi chưa xong thì ngữ cảnh thiếu bí danh và câu gợi ý. Chờ mọi dataset của workspace.
+/// Đếm thời gian từ lần cuối có dataset xong, không đếm từ đầu: có giãn cách lần gọi (--pause-ms, #202) thì 12 bảng của
+/// database mẫu mất vài phút, trần cố định sẽ báo lỗi dù hồ sơ vẫn đang xong dần.
 async fn wait_semantic(state: &AppState, member: &Member) -> Result<(), AppError> {
-    for _ in 0..120 {
+    let mut done = 0;
+    let mut last_progress = std::time::Instant::now();
+    loop {
         let datasets = state.store.list_datasets(&member.workspace).await?;
-        if datasets
+        let now_done = datasets
             .iter()
-            .all(|d| d.current_profile_status.as_deref() == Some("semantic"))
-        {
+            .filter(|d| d.current_profile_status.as_deref() == Some("semantic"))
+            .count();
+        if now_done == datasets.len() {
             return Ok(());
+        }
+        if now_done > done {
+            done = now_done;
+            last_progress = std::time::Instant::now();
+        }
+        if last_progress.elapsed() > SEMANTIC_STALL {
+            return Err(AppError::Internal(format!(
+                "hồ sơ ngữ nghĩa của dữ liệu mẫu đứng ở {done}/{} dataset suốt {} giây",
+                datasets.len(),
+                SEMANTIC_STALL.as_secs()
+            )));
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
-    Err(AppError::Internal(
-        "hồ sơ ngữ nghĩa của dữ liệu mẫu chưa xong sau 120 giây".to_string(),
-    ))
 }
 
 async fn run_cases(
