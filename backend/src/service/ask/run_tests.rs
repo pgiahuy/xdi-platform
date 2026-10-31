@@ -19,7 +19,9 @@ use crate::engine::query::run_query;
 use crate::error::AppError;
 use crate::service::ask::contract::{AskStatus, StepName, ValueKind};
 use crate::service::ask::other_text::build_other_text;
-use crate::service::ask::repair::{build_safe_error, build_user_error};
+use crate::service::ask::repair::{
+    build_model_error, build_safe_error, build_user_error, HIDDEN_VALUE,
+};
 use crate::service::ask::reply::{ChoiceKind, Term, TermKind};
 use crate::service::ask::result::{build_result_table, SENT_ROWS};
 use crate::service::ask::run::{run_with_repair, RunInput, RunOutcome, REFUSED_MESSAGE};
@@ -31,6 +33,8 @@ const PROMPT: &str = "Schema: table sales (region, amount, ship_date)";
 struct Dataset {
     root: PathBuf,
     tables: Vec<AllowedTable>,
+    /// Tên cột đánh dấu nhạy cảm, cho RunInput::sensitive; rỗng trừ khi test tự đặt.
+    sensitive: Vec<String>,
 }
 
 impl Dataset {
@@ -52,7 +56,11 @@ impl Dataset {
             parquet_dir: dir,
             row_filters: vec![],
         }];
-        Dataset { root, tables }
+        Dataset {
+            root,
+            tables,
+            sensitive: Vec::new(),
+        }
     }
 
     fn sales() -> Self {
@@ -153,6 +161,7 @@ async fn try_run_reply(
         max_rows: MAX_ROWS,
         timeout,
         jobs: &jobs,
+        sensitive: &data.sensitive,
     };
     run_with_repair(llm, input).await
 }
@@ -676,6 +685,7 @@ async fn third_query_waits_for_a_turn() {
         max_rows: MAX_ROWS,
         timeout: Duration::from_secs(30),
         jobs: &jobs,
+        sensitive: &[],
     };
     let mut third = std::pin::pin!(run_with_repair(&llm, input));
     let waited = tokio::time::timeout(Duration::from_millis(300), &mut third).await;
@@ -751,6 +761,7 @@ async fn mock_fixes_its_sample_question() {
         max_rows: MAX_ROWS,
         timeout: Duration::from_secs(30),
         jobs: &jobs,
+        sensitive: &[],
     };
     let outcome = run_with_repair(mock.as_ref(), input).await.unwrap();
     assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
@@ -951,4 +962,37 @@ fn sample_sql_passes_the_guard() {
             panic!("guard rejected sample {sql:?}: {e:?}");
         }
     }
+}
+
+/// DuckDB chép ô của cột nhạy cảm vào lời báo lỗi ("Could not convert string 'lan@example.com'"): lời báo gửi mô hình ở
+/// vòng sửa ẩn giá trị đó; người hỏi vẫn thấy lời báo đầy đủ. Câu không đọc cột nhạy cảm thì giữ ô mẫu (ngày) để mô
+/// hình sửa được cách đọc.
+#[tokio::test]
+async fn repair_prompt_hides_values_of_sensitive_columns() {
+    let mut data = Dataset::new(
+        "customers",
+        &["email", "amount"],
+        "SELECT * FROM (VALUES ('lan@example.com', 10), ('minh@example.com', 5)) v(email, amount)",
+    );
+    data.sensitive = vec!["Email".to_string()];
+    let llm = ScriptedLlm::new(vec![Ok(reply(
+        "SELECT SUM(amount) AS total FROM customers",
+    ))]);
+    let sql = "SELECT CAST(email AS INTEGER) AS n FROM customers";
+    let outcome = run(&llm, &data, sql, Duration::from_secs(30)).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let prompts = llm.prompts();
+    assert_eq!(prompts.len(), 1);
+    assert!(!prompts[0].contains("@example.com"), "{}", prompts[0]);
+    assert!(prompts[0].contains(HIDDEN_VALUE), "{}", prompts[0]);
+
+    let error = "Conversion Error: Could not convert string '1/31/2018 22:56' to DATE";
+    let dates = "SELECT strptime(ship_date, '%d/%m/%Y') FROM sales";
+    assert_eq!(build_model_error(error, dates, &data.sensitive), error);
+    let quoted = "Conversion Error: Could not convert string 'abc' near '%d'";
+    let by_email = "SELECT strptime(\"Email\", '%d') FROM sales";
+    assert_eq!(
+        build_model_error(quoted, by_email, &data.sensitive),
+        format!("Conversion Error: Could not convert string '{HIDDEN_VALUE}' near '%d'")
+    );
 }

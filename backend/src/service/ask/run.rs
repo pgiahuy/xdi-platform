@@ -32,7 +32,8 @@ use crate::service::ask::fanout::{
     build_hint, build_refused_message, build_step_detail, find_double_count, JoinLink,
 };
 use crate::service::ask::repair::{
-    build_repair_prompt, build_safe_error, build_user_error, build_user_text, mentions_data_files,
+    build_model_error, build_repair_prompt, build_safe_error, build_user_error, build_user_text,
+    mentions_data_files,
 };
 use crate::service::ask::reply::{
     build_answer_from_reply, build_sql_reply_schema, Assumption, Clarify, ModelAnswer, SqlAnswer,
@@ -65,6 +66,9 @@ pub struct RunInput<'a> {
     pub timeout: Duration,
     /// Lượt chạy DuckDB (AppState::query_jobs).
     pub jobs: &'a Arc<Semaphore>,
+    /// Tên các cột đánh dấu nhạy cảm của các bảng được phép: giá trị của chúng bị ẩn khỏi lời báo lỗi gửi mô hình
+    /// (ask/repair.rs, build_model_error).
+    pub sensitive: &'a [String],
 }
 
 /// Phần của AskResponse do các bước guard, run, repair quyết định. status là answered, needs_choice, rejected hoặc
@@ -160,7 +164,10 @@ async fn run_rounds(
                 Attempt::Refused { reason } | Attempt::DoubleCounted { reason, .. } => {
                     (Some(answer), reason, None)
                 }
-                Attempt::RunFailed { shown, error } => (Some(answer), error, Some(shown)),
+                Attempt::RunFailed { shown, error } => {
+                    let error = build_model_error(&error, &answer.sql, input.sensitive);
+                    (Some(answer), error, Some(shown))
+                }
                 other => return Ok(build_outcome(other, answer, steps)),
             }
         }

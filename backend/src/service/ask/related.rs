@@ -189,6 +189,16 @@ impl TableGroup {
         self.allowed.iter().any(|t| !t.row_filters.is_empty())
     }
 
+    /// Tên các cột đánh dấu nhạy cảm của mọi bảng trong nhóm, cho vòng sửa SQL (ask/repair.rs, build_model_error).
+    pub fn sensitive_columns(&self) -> Vec<String> {
+        self.tables
+            .iter()
+            .flat_map(|t| t.columns.iter())
+            .filter(|c| c.is_sensitive)
+            .map(|c| c.name.clone())
+            .collect()
+    }
+
     /// Bảng ứng với các tên guard báo đã đọc (GuardedSql::tables_read), theo thứ tự đó.
     pub fn build_tables_read(&self, names: &[String]) -> Vec<TableRead> {
         names

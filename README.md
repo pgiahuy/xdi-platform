@@ -10,14 +10,14 @@ doanh thu tháng này giảm hay vì sao Europe cao hơn LATAM, hệ thống tí
 số để xem các dòng dữ liệu đứng sau nó.
 
 Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, phân loại câu hỏi, viết SQL, điền
-form cho câu hỏi tìm nguyên nhân và viết lời. Nó nhận tên cột và danh sách giá trị của cột phân loại, không nhận bảng
-dữ liệu. Riêng đoạn trả lời ngắn của câu hỏi thường gửi tối đa 10 dòng đầu của kết quả (với câu không gộp, đó là dòng
-gốc), tắt bằng `ANSWER_TEXT=false`. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
+form cho câu hỏi tìm nguyên nhân và viết lời. Nó nhận metadata của mọi cột (tên, kiểu, mô tả), danh sách giá trị của
+cột phân loại không đánh dấu nhạy cảm (người bị lọc dòng theo vai dữ liệu thì không), và các ý do code tính (con số tổng
+hợp kèm tên nhóm); không nhận dòng kết quả nào hay nội dung file. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
 Tài liệu: https://pgiahuy.github.io/xdi-platform/
 
-![Một câu hỏi đi qua xdi-platform: giao diện, API, guard SQL, DuckDB, mô hình ngôn ngữ, Postgres, theo thứ tự 12 bước](docs/images/luong-cau-hoi.png)
+![Một câu hỏi đi qua xdi-platform: hàng trên đi từ giao diện qua dựng ngữ cảnh, mô hình, guard SQL tới DuckDB, hàng dưới quay về qua phần giải thích, kiểm số, ghi lịch sử; 16 bước](docs/images/luong-cau-hoi.png)
 
 ## Chạy thử
 

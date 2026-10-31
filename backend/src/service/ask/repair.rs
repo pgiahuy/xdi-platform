@@ -3,6 +3,12 @@
 người dùng khi mô hình lỗi. ask/run.rs ghép các bước và gọi các hàm ở đây; câu trả lời của lần sửa đọc bằng
 ask/reply.rs như lần đầu. */
 
+use std::ops::ControlFlow;
+
+use sqlparser::ast::{visit_expressions, Expr};
+use sqlparser::dialect::DuckDbDialect;
+use sqlparser::parser::Parser;
+
 use crate::engine::analytics::parquet_glob;
 use crate::engine::guard::{build_parent_tables, AllowedTable};
 use crate::engine::prompts::{self, fill};
@@ -28,8 +34,9 @@ pub fn build_repair_prompt(prompt: &str, sql: Option<&str>, error: &str) -> Stri
 /// có read_parquet), rồi thay mọi đường dẫn thư mục Parquet còn lại bằng tên bảng logic. Phần còn lại giữ nguyên, kể cả
 /// dòng thứ hai trở đi (DuckDB ghi tên cột gần đúng, vị trí lỗi trong chuỗi ngày ở đó): mô hình cần để sửa đúng. Bảng
 /// cha của điều kiện lan theo khóa ngoại (#215) cũng được đọc trong bản runnable, nên đường dẫn của chúng cũng bị thay.
-// Lời báo có thể chép một giá trị của dòng dữ liệu ("Could not convert string 'x' to INT32"). Khi #31 tiêm điều kiện
-// phân quyền, cần thêm test: câu chạy lỗi không đưa vào lời báo giá trị của dòng mà người hỏi không được thấy.
+// Lời báo có thể chép một giá trị của dòng dữ liệu ("Could not convert string 'x' to INT32"); giá trị của cột nhạy cảm
+// được ẩn trước khi gửi mô hình (build_model_error). Khi #31 tiêm điều kiện phân quyền, cần thêm test: câu chạy lỗi
+// không đưa vào lời báo giá trị của dòng mà người hỏi không được thấy.
 pub fn build_safe_error(message: &str, tables: &[AllowedTable]) -> String {
     let mut text = without_sql_echo(message).to_string();
     let parents = build_parent_tables(tables);
@@ -42,6 +49,63 @@ pub fn build_safe_error(message: &str, tables: &[AllowedTable]) -> String {
         }
     }
     text
+}
+
+/// Chữ thay cho một giá trị bị ẩn khỏi lời báo gửi mô hình.
+pub const HIDDEN_VALUE: &str = "<hidden value>";
+
+/// Lời báo gửi mô hình ở vòng sửa. DuckDB có thể chép một ô của dữ liệu vào lời báo ("Could not convert string
+/// 'an@example.com' to INT32"). Câu đã chạy đọc cột đánh dấu nhạy cảm (sensitive là tên các cột đó) thì mọi chuỗi trong
+/// nháy đơn của lời báo mà câu SQL không có sẵn bị thay bằng HIDDEN_VALUE: chuỗi có trong câu là chữ mô hình đã viết.
+/// Câu không đọc cột nhạy cảm thì giữ nguyên, vì mô hình cần ô mẫu để sửa cách đọc ngày ("1/31/2018 22:56").
+pub fn build_model_error(error: &str, sql: &str, sensitive: &[String]) -> String {
+    if !reads_any_column(sql, sensitive) {
+        return error.to_string();
+    }
+    let mut text = String::new();
+    let mut rest = error;
+    while let Some(open) = rest.find('\'') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('\'') else {
+            break;
+        };
+        let value = &after[..close];
+        text.push_str(&rest[..=open]);
+        if value.is_empty() || sql.contains(value) {
+            text.push_str(value);
+        } else {
+            text.push_str(HIDDEN_VALUE);
+        }
+        text.push('\'');
+        rest = &after[close + 1..];
+    }
+    text.push_str(rest);
+    text
+}
+
+// Câu có nhắc một cột trong names (so không phân biệt hoa thường). Câu không đọc được thì so theo chữ: thà ẩn thừa.
+fn reads_any_column(sql: &str, names: &[String]) -> bool {
+    if names.is_empty() {
+        return false;
+    }
+    let Ok(statements) = Parser::parse_sql(&DuckDbDialect {}, sql) else {
+        let lower = sql.to_lowercase();
+        return names.iter().any(|n| lower.contains(&n.to_lowercase()));
+    };
+    let mut found = false;
+    let _ = visit_expressions(&statements, |e| {
+        let name = match e {
+            Expr::Identifier(ident) => Some(&ident.value),
+            Expr::CompoundIdentifier(parts) => parts.last().map(|p| &p.value),
+            _ => None,
+        };
+        if name.is_some_and(|n| names.iter().any(|s| s.eq_ignore_ascii_case(n))) {
+            found = true;
+            return ControlFlow::Break(());
+        }
+        ControlFlow::Continue(())
+    });
+    found
 }
 
 /// Lời báo nói về chính file Parquet của dataset (file hỏng: "Invalid Input Error: No magic bytes found at end of file

@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/summary_tests.rs - test của đoạn trả lời câu thường (ask/summary.rs): bước kiểm số, câu khuôn, prompt
-chỉ gửi tối đa SUMMARY_ROWS dòng, và tắt bằng ANSWER_TEXT thì không gọi mô hình. Mô hình là mô hình giả trong file. */
+/* service/ask/summary_tests.rs - test của đoạn trả lời câu thường (ask/summary.rs): câu khuôn, danh sách dòng chỉ có
+câu khuôn, lời của phần giải thích dùng lại khi đã qua bước kiểm, ANSWER_TEXT=false thì luôn là câu khuôn. Prompt duy
+nhất có số của kết quả là prompt phần giải thích: test cuối dựng nó cho một bảng có cột nhạy cảm và xem không có ô nào
+lọt vào. */
 
-use std::time::Duration;
-
-use async_trait::async_trait;
-
-use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
-use crate::error::AppError;
+use crate::engine::sql_shape::build_query_shape;
+use crate::engine::store::ProfileColumn;
 use crate::service::ask::contract::{
-    CellValue, ColumnRole, ResultColumn, ResultTable, Understanding, UnderstoodItem, ValueKind,
+    CellValue, ColumnRole, Insight, InsightKind, ResultColumn, ResultTable, Understanding,
+    UnderstoodItem, ValueKind,
 };
 use crate::service::ask::summary::{
-    build_answer_check, build_summary_prompt, build_template_answer, summarize, SummaryInput,
-    NO_DATA_ANSWER,
+    build_answer, build_rows_answer, build_template_answer, SummaryInput, NO_DATA_ANSWER,
 };
-use crate::service::prompt_fixtures::check_fixture;
+use crate::service::insight::facts::{build_group_parts, Point};
+use crate::service::insight::find_unsendable_key;
+use crate::service::insight::narrate::build_insight_prompt;
+use crate::service::insight::plan::PlainTable;
 
 fn column(name: &str, kind: ValueKind, role: ColumnRole) -> ResultColumn {
     ResultColumn {
@@ -74,45 +75,35 @@ fn sales() -> ResultTable {
     ])
 }
 
-#[test]
-fn answer_with_numbers_from_the_rows_passes() {
-    let result = sales();
-    let u = understanding();
-    let input = SummaryInput {
-        question: "Danh mục nào bán chạy nhất?",
-        understanding: Some(&u),
-        result: &result,
-    };
-    let text = "Fishing bán chạy nhất với 6.929.656,49, tiếp theo là Cleats (4.431.942,09) và Camping & Hiking \
-                (3.667.633,20); có 3 danh mục.";
-    assert_eq!(build_answer_check(text, &input), Ok(()));
+fn input<'a>(
+    result: &'a ResultTable,
+    understanding: Option<&'a Understanding>,
+    insight: Option<&'a Insight>,
+) -> SummaryInput<'a> {
+    SummaryInput {
+        understanding,
+        result,
+        insight,
+        enabled: true,
+    }
 }
 
-#[test]
-fn check_catches_unknown_numbers_and_ratios() {
-    let result = sales();
-    let input = SummaryInput {
-        question: "Danh mục nào bán chạy nhất?",
-        understanding: None,
-        result: &result,
-    };
-    // Làm tròn khác bảng, số tự tính và số kèm phần trăm đều sai.
-    let wrong = build_answer_check("Fishing đạt 6.929.656 và chiếm 3%.", &input).unwrap_err();
-    assert_eq!(wrong, ["6.929.656", "3"]);
-    let wrong = build_answer_check("Fishing gấp 2 lần Cleats.", &input).unwrap_err();
-    assert_eq!(wrong, ["2"]);
+fn insight(kind: InsightKind, summary: &str, by_model: bool) -> Insight {
+    Insight {
+        kind,
+        title: "Fishing đứng đầu với 6.929.656,49.".to_string(),
+        points: vec![],
+        summary: summary.to_string(),
+        summary_by_model: by_model,
+        notable: true,
+    }
 }
 
 #[test]
 fn template_names_the_top_group_when_sorted() {
     let result = sales();
-    let input = SummaryInput {
-        question: "q",
-        understanding: None,
-        result: &result,
-    };
     assert_eq!(
-        build_template_answer(&input),
+        build_template_answer(&input(&result, None, None)),
         "Có 3 dòng; cao nhất là Fishing với 6.929.656,49."
     );
 }
@@ -120,42 +111,15 @@ fn template_names_the_top_group_when_sorted() {
 #[test]
 fn template_without_order_only_counts_rows() {
     let result = table(&[("Cleats", 10.0), ("Fishing", 20.0)]);
-    let input = SummaryInput {
-        question: "q",
-        understanding: None,
-        result: &result,
-    };
-    assert_eq!(build_template_answer(&input), "Có 2 dòng kết quả.");
-}
-
-/// Số của câu hỏi nằm trong nhãn của thẻ "Đã hiểu là" (khoảng thời gian "Năm 2019", top 5): mô hình được nhắc lại, kể cả
-/// không chép nguyên nhãn. Số lạ hay số kèm chữ tỷ lệ vẫn bị loại.
-#[test]
-fn numbers_of_the_question_labels_pass_the_check() {
-    let mut u = understanding();
-    u.time_range = Some(item("Năm 2019"));
-    u.limit = Some(item("5 dòng đầu"));
-    let result = sales();
-    let input = SummaryInput {
-        question: "Top 5 danh mục năm 2019",
-        understanding: Some(&u),
-        result: &result,
-    };
-    assert!(build_answer_check("Năm 2019, Fishing cao nhất với 6.929.656,49.", &input).is_ok());
-    assert!(build_answer_check(
-        "Trong 2019, 5 danh mục đứng đầu do Fishing dẫn đầu.",
-        &input
-    )
-    .is_ok());
     assert_eq!(
-        build_answer_check("Năm 2020 Fishing tăng 2019%.", &input),
-        Err(vec!["2020".to_string(), "2019".to_string()])
+        build_template_answer(&input(&result, None, None)),
+        "Có 2 dòng kết quả."
     );
 }
 
-/// Kết quả chỉ có ô trống (tổng của năm không có dữ liệu): câu do code viết, không gọi mô hình, không ra "Tổng ... là .".
-#[tokio::test]
-async fn all_empty_result_gets_the_no_data_answer() {
+/// Kết quả chỉ có ô trống (tổng của năm không có dữ liệu): câu do code viết, không ra "Tổng ... là .".
+#[test]
+fn all_empty_result_gets_the_no_data_answer() {
     let result = ResultTable {
         columns: vec![column("total", ValueKind::Decimal, ColumnRole::Measure)],
         rows: vec![vec![None]],
@@ -164,14 +128,7 @@ async fn all_empty_result_gets_the_no_data_answer() {
         limit_reached: false,
     };
     let u = understanding();
-    let input = SummaryInput {
-        question: "Doanh thu năm 2019?",
-        understanding: Some(&u),
-        result: &result,
-    };
-    let outcome = summarize(&NeverCalled, &input, true, Duration::from_secs(5), &[])
-        .await
-        .unwrap();
+    let outcome = build_answer(&input(&result, Some(&u), None)).unwrap();
     assert_eq!(outcome.text, NO_DATA_ANSWER);
     assert!(!outcome.by_model);
 }
@@ -186,143 +143,159 @@ fn template_of_one_cell_names_the_measure() {
         limit_reached: false,
     };
     let u = understanding();
-    let input = SummaryInput {
-        question: "Tổng doanh thu?",
-        understanding: Some(&u),
-        result: &result,
-    };
     assert_eq!(
-        build_template_answer(&input),
+        build_template_answer(&input(&result, Some(&u), None)),
         "Tổng doanh thu (Sales) là 36.784.735,01."
     );
 }
 
+/// Lời của phần giải thích đã qua bước kiểm thì thành đoạn trả lời; lời của code hay ANSWER_TEXT=false thì câu khuôn.
 #[test]
-fn prompt_sends_at_most_ten_rows() {
-    let names: Vec<String> = (1..=15).map(|i| format!("group-{i:02}")).collect();
-    let rows: Vec<(&str, f64)> = names
-        .iter()
-        .enumerate()
-        .map(|(i, name)| (name.as_str(), (100 - i) as f64))
-        .collect();
-    let result = table(&rows);
-    let input = SummaryInput {
-        question: "q",
-        understanding: None,
-        result: &result,
-    };
-    let prompt = build_summary_prompt(&input);
-    assert!(prompt.contains("group-10"), "{prompt}");
-    assert!(!prompt.contains("group-11"), "{prompt}");
-    assert!(prompt.contains("\"total_rows\": \"15\""), "{prompt}");
-}
-
-// Mô hình từng mở bằng "Dạ" và kết bằng lời chúc; prompt phải đòi giọng báo cáo, không còn chữ "friendly".
-#[test]
-fn prompt_asks_for_a_neutral_report_tone() {
-    let result = table(&[("a", 1.0)]);
-    let input = SummaryInput {
-        question: "q",
-        understanding: None,
-        result: &result,
-    };
-    let prompt = build_summary_prompt(&input);
-    assert!(
-        prompt.contains("neutral tone of a written report"),
-        "{prompt}"
-    );
-    assert!(prompt.contains("no exclamation marks"), "{prompt}");
-    assert!(!prompt.contains("friendly"), "{prompt}");
-}
-
-/// Prompt đầy đủ so với file mẫu (service/prompt_fixtures.rs): có thẻ "Đã hiểu là", ba dòng kết quả.
-#[test]
-fn summary_prompt_matches_the_fixture() {
+fn checked_insight_text_becomes_the_answer() {
     let result = sales();
-    let u = understanding();
-    let input = SummaryInput {
-        question: "Danh mục nào bán chạy nhất?",
-        understanding: Some(&u),
-        result: &result,
-    };
-    check_fixture("summary_prompt.txt", &build_summary_prompt(&input));
-}
-
-struct StubLlm(&'static str);
-
-#[async_trait]
-impl LlmProvider for StubLlm {
-    fn name(&self) -> String {
-        "stub".to_string()
-    }
-
-    async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        assert_eq!(request.task, LlmTask::Summary);
-        Ok(self.0.to_string())
-    }
-}
-
-struct NeverCalled;
-
-#[async_trait]
-impl LlmProvider for NeverCalled {
-    fn name(&self) -> String {
-        "never".to_string()
-    }
-
-    async fn complete(&self, _request: &LlmRequest<'_>) -> Result<String, AppError> {
-        panic!("the model must not be called");
-    }
-}
-
-#[tokio::test]
-async fn model_answer_is_kept_or_replaced_by_the_template() {
-    let result = sales();
-    let input = SummaryInput {
-        question: "q",
-        understanding: None,
-        result: &result,
-    };
-    let timeout = Duration::from_secs(5);
-    let good = StubLlm("Fishing bán chạy nhất với 6.929.656,49.");
-    let outcome = summarize(&good, &input, true, timeout, &[]).await.unwrap();
+    let text = "Fishing đứng đầu với 6.929.656,49, chiếm 46,4% tổng doanh thu.";
+    let narrated = insight(InsightKind::Groups, text, true);
+    let outcome = build_answer(&input(&result, None, Some(&narrated))).unwrap();
+    assert_eq!(outcome.text, text);
     assert!(outcome.by_model);
-    assert!(outcome.step.ok);
-    assert_eq!(outcome.text, "Fishing bán chạy nhất với 6.929.656,49.");
 
-    let wrong = StubLlm("Fishing bán chạy nhất với 7.000.000.");
-    let outcome = summarize(&wrong, &input, true, timeout, &[]).await.unwrap();
-    assert!(!outcome.by_model);
-    assert!(!outcome.step.ok);
+    let code = insight(InsightKind::Groups, "câu của code", false);
+    let outcome = build_answer(&input(&result, None, Some(&code))).unwrap();
     assert_eq!(
         outcome.text,
         "Có 3 dòng; cao nhất là Fishing với 6.929.656,49."
     );
-}
-
-#[tokio::test]
-async fn disabled_answer_text_never_calls_the_model() {
-    let result = sales();
-    let input = SummaryInput {
-        question: "q",
-        understanding: None,
-        result: &result,
-    };
-    let outcome = summarize(&NeverCalled, &input, false, Duration::from_secs(5), &[])
-        .await
-        .unwrap();
     assert!(!outcome.by_model);
-    assert!(outcome.step.ok);
+
+    let off = SummaryInput {
+        enabled: false,
+        ..input(&result, None, Some(&narrated))
+    };
+    assert!(!build_answer(&off).unwrap().by_model);
 }
 
-#[tokio::test]
-async fn empty_result_has_no_answer_text() {
-    let result = table(&[]);
-    let input = SummaryInput {
-        question: "q",
-        understanding: None,
-        result: &result,
+/// Danh sách dòng không gộp ("danh sách khách hàng ở Scotland"): chỉ câu khuôn số dòng và điều kiện lọc, kể cả khi
+/// insight có lời của mô hình (insight/mod.rs không gọi mô hình cho loại này).
+#[test]
+fn row_list_gets_the_count_and_filters_only() {
+    let mut result = ResultTable {
+        columns: vec![
+            column("Customer Email", ValueKind::Text, ColumnRole::Dimension),
+            column("Customer City", ValueKind::Text, ColumnRole::Dimension),
+        ],
+        rows: (0..37)
+            .map(|i| {
+                vec![
+                    Some(CellValue::String(format!("person{i}@example.com"))),
+                    Some(CellValue::String("Glasgow".to_string())),
+                ]
+            })
+            .collect(),
+        total_rows: 37,
+        truncated: false,
+        limit_reached: false,
     };
-    let outcome = summarize(&NeverCalled, &input, true, Duration::from_secs(5), &[]).await;
-    assert!(outcome.is_none());
+    let mut u = understanding();
+    u.filters = vec![item("Quốc gia (Customer Country) là Scotland")];
+    let list = insight(InsightKind::Rows, "person0@example.com", true);
+    let outcome = build_answer(&input(&result, Some(&u), Some(&list))).unwrap();
+    assert_eq!(
+        outcome.text,
+        "Có 37 dòng khớp điều kiện: Quốc gia (Customer Country) là Scotland."
+    );
+    assert!(!outcome.by_model);
+    result.limit_reached = true;
+    assert_eq!(
+        build_rows_answer(&result, None),
+        "Có ít nhất 37 dòng kết quả."
+    );
+}
+
+#[test]
+fn empty_result_has_no_answer_text() {
+    let result = table(&[]);
+    assert!(build_answer(&input(&result, None, None)).is_none());
+}
+
+fn profile_column(name: &str, role: &str, sensitive: bool) -> ProfileColumn {
+    ProfileColumn {
+        id: uuid::Uuid::new_v4(),
+        position: 0,
+        name: name.to_string(),
+        data_type: "VARCHAR".to_string(),
+        role: role.to_string(),
+        description: None,
+        aliases: Vec::new(),
+        is_sensitive: sensitive,
+        null_count: Some(0),
+        distinct_count: Some(3),
+        min_value: None,
+        max_value: None,
+        time_format: None,
+        unit: None,
+        aggregation: "sum".to_string(),
+    }
+}
+
+/// Prompt duy nhất có số của kết quả câu thường là prompt lời của phần giải thích. Với bảng theo nhóm có một cột chữ
+/// nhạy cảm đi kèm, prompt chỉ có câu do code tính: không ô nào của cột nhạy cảm, không dòng nào nguyên văn.
+#[test]
+fn insight_prompt_has_no_result_rows_or_sensitive_values() {
+    let rows = [
+        ("Fishing", "lan@example.com", 6929656.49),
+        ("Cleats", "minh@example.com", 4431942.09),
+        ("Camping & Hiking", "an@example.com", 3667633.2),
+    ];
+    let points: Vec<Point> = rows
+        .iter()
+        .map(|(name, _, value)| Point {
+            label: name.to_string(),
+            value: value.to_string().parse().unwrap(),
+        })
+        .collect();
+    let parts = build_group_parts("Doanh thu", "Danh mục", &points, None);
+    let prompt = build_insight_prompt("Doanh thu theo danh mục", &parts);
+    for (_, email, value) in rows {
+        assert!(!prompt.contains(email), "{prompt}");
+        assert!(!prompt.contains(&value.to_string()), "{prompt}");
+    }
+    assert!(!prompt.contains("Cleats"), "{prompt}");
+    assert!(
+        prompt.contains("Fishing đứng đầu với 6.929.656,49"),
+        "{prompt}"
+    );
+}
+
+/// Cột khóa đọc từ cột nhạy cảm (nhóm theo email khách hàng) hay cột khóa (mã đơn): insight/mod.rs dùng câu của code,
+/// không gọi mô hình. Cột phân loại không nhạy cảm thì được gửi.
+#[test]
+fn group_key_from_a_sensitive_column_is_found() {
+    let columns = [
+        profile_column("Customer Email", "dimension", true),
+        profile_column("Category Name", "dimension", false),
+        profile_column("Sales", "measure", false),
+        profile_column("Order Id", "key", false),
+    ];
+    let tables = [PlainTable {
+        table: "sales",
+        columns: &columns,
+        row_count: Some(3),
+    }];
+    let by_email = build_query_shape(
+        r#"SELECT lower("Customer Email") AS who, SUM("Sales") FROM sales GROUP BY 1"#,
+    )
+    .unwrap();
+    assert_eq!(
+        find_unsendable_key(&tables, &by_email, 0).as_deref(),
+        Some("Customer Email")
+    );
+    let by_category =
+        build_query_shape(r#"SELECT "Category Name", SUM("Sales") FROM sales GROUP BY 1"#).unwrap();
+    assert_eq!(find_unsendable_key(&tables, &by_category, 0), None);
+    let by_order =
+        build_query_shape(r#"SELECT "Order Id", SUM("Sales") FROM sales GROUP BY 1"#).unwrap();
+    assert_eq!(
+        find_unsendable_key(&tables, &by_order, 0).as_deref(),
+        Some("Order Id")
+    );
 }

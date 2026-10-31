@@ -53,8 +53,9 @@ pub struct Config {
     pub static_dir: Option<PathBuf>,
     /// Nạp dataset mẫu vào workspace đầu tiên lúc thiết lập lần đầu (SEED_SAMPLE, service/samples.rs).
     pub seed_sample: bool,
-    /// Câu hỏi thường có đoạn trả lời do mô hình viết từ các dòng đầu của kết quả (ANSWER_TEXT, service/ask/summary.rs).
-    /// false: không gửi dòng kết quả nào cho mô hình, đoạn trả lời là câu khuôn.
+    /// Đoạn trả lời ngắn của câu thường dùng lời mô hình viết cho phần giải thích, khi lời đó qua bước kiểm (ANSWER_TEXT,
+    /// service/ask/summary.rs). false: đoạn trả lời luôn là câu khuôn do code viết. Không có lần gọi mô hình riêng nào
+    /// cho đoạn trả lời, và không dòng kết quả nào được gửi đi.
     pub answer_text: bool,
     /// Phần giải thích của câu thường có lời do mô hình viết lại từ các câu code đã viết (INSIGHT_TEXT,
     /// service/insight/narrate.rs, #227). false: không gọi mô hình, phần giải thích chỉ có câu do code viết.

@@ -401,6 +401,7 @@ async fn narration_falls_back_to_code_text_when_the_model_fails_or_is_off() {
         &parts,
         true,
         Duration::from_secs(5),
+        &[],
     )
     .await;
     assert!(!narrated.by_model);
@@ -409,7 +410,7 @@ async fn narration_falls_back_to_code_text_when_the_model_fails_or_is_off() {
         text: "Doanh thu tăng 999.".to_string(),
     };
     assert!(
-        !narrate_insight(&wrong, "q", &parts, true, Duration::from_secs(5))
+        !narrate_insight(&wrong, "q", &parts, true, Duration::from_secs(5), &[])
             .await
             .by_model
     );
@@ -417,12 +418,12 @@ async fn narration_falls_back_to_code_text_when_the_model_fails_or_is_off() {
         text: "Tháng 11/2017 tăng 400 (100%) so với Tháng 10/2017.".to_string(),
     };
     assert!(
-        narrate_insight(&right, "q", &parts, true, Duration::from_secs(5))
+        narrate_insight(&right, "q", &parts, true, Duration::from_secs(5), &[])
             .await
             .by_model
     );
     assert!(
-        !narrate_insight(&right, "q", &parts, false, Duration::from_secs(5))
+        !narrate_insight(&right, "q", &parts, false, Duration::from_secs(5), &[])
             .await
             .by_model
     );
@@ -544,6 +545,7 @@ async fn run_insight(sql: &str, roles: &[ColumnRole]) -> crate::service::insight
         env: orders.env(&jobs),
         narrate: true,
         narrate_timeout: Duration::from_secs(5),
+        lessons: &[],
     };
     build_insight(&Mock::new(), &input).await.unwrap().unwrap()
 }
