@@ -27,8 +27,12 @@ export function AskLayout(props: Props) {
   return (
     <div className={cn('grid grid-cols-1 items-start gap-6', open && 'xl:grid-cols-[minmax(0,3fr)_minmax(26rem,2fr)]')}>
       {/* Khung trò chuyện có nền riêng (secondary), khác nền trang và nền thẻ trả lời, để nhìn ra ranh giới với cột
-      minh chứng. */}
-      <div className="flex min-w-0 flex-col gap-6 border bg-secondary p-4 sm:p-5">{children}</div>
+      minh chứng. Cao ít nhất bằng màn hình trừ thanh trên (h-16) và lề trên dưới của trang (py-6, AppShell): ô hỏi
+      (mt-auto, dính đáy) luôn nằm sát đáy màn hình, không nổi giữa trang khi cuộc trò chuyện mới có một câu rồi tụt
+      xuống khi có thêm câu. Màn hẹp lề trong nhỏ hơn để ô hỏi đủ rộng. */}
+      <div className="flex min-h-[calc(100dvh-7rem)] min-w-0 flex-col gap-6 border bg-secondary p-3 sm:p-5">
+        {children}
+      </div>
       {evidence && (
         <aside
           id="evidence"
