@@ -18,6 +18,7 @@ Bảo vệ:
 
 mod direct;
 mod key_file;
+mod libpq;
 mod pg_types;
 mod postgres;
 mod relations;
