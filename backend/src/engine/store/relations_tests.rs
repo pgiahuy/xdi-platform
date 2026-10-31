@@ -11,7 +11,7 @@ use crate::auth::WorkspaceId;
 use crate::error::AppError;
 
 async fn dataset(store: &Store, ws: &WorkspaceId, name: &str) -> Uuid {
-    let source = store.create_local_source(ws).await.unwrap();
+    let source = store.create_local_source(ws, "Test").await.unwrap();
     store
         .create_dataset(ws, source, name, name, None)
         .await

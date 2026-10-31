@@ -602,8 +602,8 @@ sao"). Làm trước bước 2:
    `demo-db:5432` bằng tài khoản chỉ đọc `analyst`. Compose in cảnh báo volume có sẵn không do project này tạo: bình
    thường. Nạp lại dữ liệu sau này thì `docker compose rm -sf demo-db` ở gốc repo trước khi chạy `load.sh`.
 
-Khi bước 2 tạo xong workspace đầu tiên, backend thêm hai nguồn, `sales_demo` và `edu_demo`, và chụp 12 bảng thành 12
-dataset kèm 11 quan hệ: `sales_demo` (`order_items`, `orders`, `customers`, `products`, `categories`, `departments`) và `edu_demo` (`students`,
+Khi bước 2 tạo xong workspace đầu tiên, backend thêm hai dataset, `sales_demo` và `edu_demo`, mỗi dataset một database, và
+chụp 12 bảng kèm 11 quan hệ: `sales_demo` (`order_items`, `orders`, `customers`, `products`, `categories`, `departments`) và `edu_demo` (`students`,
 `courses`, `registrations`, `assessments`, `student_assessments`, `vle_materials`), kèm chỉ số mẫu "Doanh thu", "Lợi
 nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. `edu.student_daily_clicks` (1,8 triệu dòng) không
 chụp sẵn vì quá `SOURCE_MAX_ROWS` mặc định. Đo trên máy dev ngày 31/10/2026: bước tạo tài khoản quản trị kèm chụp 12 bảng
@@ -620,7 +620,7 @@ chủ `demo-db`, cổng 5432, database `sales_demo` rồi thêm nguồn thứ ha
 `SAMPLE_DATABASE_URL`, đúng cổng đó, luôn được phép), hoặc nạp tay: file
 `data/samples/dataco.csv` trong repo, hoặc bản đầy đủ tải bằng `sh data/download.sh dataco`. Đặt tên dataset là
 `DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên file và câu mẫu chạy
-lỗi. Workspace đã có bảng `dataco` thì dataset thứ hai thành `dataco_2`, nên nạp DataCo vào workspace chưa có nó.
+lỗi. Mỗi file là một dataset riêng, nên nạp DataCo lần nữa (nội dung khác) vẫn có bảng tên `dataco` (#257).
 
 ### Bước 2. Tạo tài khoản quản trị
 

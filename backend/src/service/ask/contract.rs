@@ -71,7 +71,10 @@ pub struct AskResponse {
     /// Conversation this question belongs to (`AskRequest.conversation_id`, or a new one when it was empty). Send it
     /// back with the next question so the model reads it as a follow-up.
     pub conversation_id: Uuid,
-    /// Dataset version the question ran on.
+    /// Table the question started from (the table routes `/datasets/{id}/drill` and `/conversations` take this id).
+    /// Asked on a whole dataset (`/catalog/{id}/ask`), the backend picks it; asked on a table, it is that table.
+    pub table_id: Uuid,
+    /// Version of `table_id` the question ran on.
     pub version_id: Uuid,
     /// Language model configured for the question, for example `gemini-2.5-flash` or `mock`.
     pub model: String,

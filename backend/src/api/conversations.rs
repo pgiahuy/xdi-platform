@@ -12,6 +12,8 @@ use crate::error::ErrorBody;
 use crate::service::conversation::contract::{ConversationListResponse, ConversationResponse};
 use crate::{error::AppError, service, state::AppState};
 
+// Route cũ đánh dấu deprecated vẫn đăng ký như thường.
+#[allow(deprecated)]
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(list_conversations))
@@ -23,7 +25,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
     path = "/workspaces/{ws}/datasets/{id}/conversations",
     tag = "query",
     operation_id = "listConversations",
-    summary = "Conversations of the caller on a dataset",
+    summary = "Conversations of the caller on one table (deprecated: use listCatalogConversations)",
     description = "Newest first. Conversations with no recorded question are left out.",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
@@ -34,6 +36,8 @@ pub fn routes() -> OpenApiRouter<AppState> {
         (status = "4XX", body = ErrorBody, description = "401; 404 not a member or invalid dataset id")
     )
 )]
+// Giao diện cũ còn gọi; #257 chuyển sang GET .../catalog/{id}/conversations (mọi bảng của dataset).
+#[deprecated(note = "use GET /workspaces/{ws}/catalog/{id}/conversations")]
 async fn list_conversations(
     State(state): State<AppState>,
     member: Member,

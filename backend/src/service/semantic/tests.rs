@@ -760,7 +760,7 @@ fn new_column(
 }
 
 async fn dataco(store: &Store, ws: &WorkspaceId) -> (Dataset, DatasetVersion) {
-    let src = store.create_local_source(ws).await.unwrap();
+    let src = store.create_local_source(ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(ws, src, "DataCo", "dataco", None)
         .await
@@ -996,7 +996,7 @@ async fn unusable_answers_are_marked_with_the_provider() {
     };
     let ws = temp_workspace(&store).await;
     // Bảng không phải dataco: mock trả BadRequest.
-    let src = store.create_local_source(&ws).await.unwrap();
+    let src = store.create_local_source(&ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(&ws, src, "Sales", "sales", None)
         .await
@@ -1071,7 +1071,7 @@ async fn startup_pass_skips_versions_attempted_meanwhile() {
     let ws = temp_workspace(&store).await;
     // Bảng không phải dataco, provider tên "failing": profile_remaining_versions của test khác (mock) chạy song song
     // trên cùng database chỉ đánh dấu "mock", không chuyển phiên bản sang semantic và không trùng tên provider ở đây.
-    let src = store.create_local_source(&ws).await.unwrap();
+    let src = store.create_local_source(&ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(&ws, src, "Sales", "sales", None)
         .await

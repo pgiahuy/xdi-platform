@@ -39,8 +39,8 @@ pub struct NewMetric {
 }
 
 impl Store {
-    /// Ghi chỉ số mẫu cho một dataset: origin 'sample', đã xác nhận, version 1. Tên đã có version 1 thì bỏ qua (ON
-    /// CONFLICT), nên gọi lại không thêm dòng. Trả số dòng thực sự ghi.
+    /// Ghi chỉ số mẫu cho một bảng: origin 'sample', đã xác nhận, version 1. Tên đã có version 1 trong dataset của
+    /// bảng (tên không trùng trong một dataset, migration 0017) thì bỏ qua (ON CONFLICT), nên gọi lại không thêm dòng. Trả số dòng thực sự ghi.
     pub async fn create_sample_metrics(
         &self,
         ws: &WorkspaceId,
@@ -50,10 +50,11 @@ impl Store {
         let mut written = 0;
         for metric in metrics {
             let result = sqlx::query(
-                "INSERT INTO metrics (workspace_id, dataset_id, name, description, expression, filter, time_column,
-                                      unit, status, origin, version)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'confirmed', 'sample', 1)
-                 ON CONFLICT (dataset_id, name, version) DO NOTHING",
+                "INSERT INTO metrics (workspace_id, dataset_id, source_id, name, description, expression, filter,
+                                      time_column, unit, status, origin, version)
+                 SELECT $1, d.id, d.source_id, $3, $4, $5, $6, $7, $8, 'confirmed', 'sample', 1
+                 FROM datasets d WHERE d.workspace_id = $1 AND d.id = $2
+                 ON CONFLICT (source_id, name, version) DO NOTHING",
             )
             .bind(ws.as_uuid())
             .bind(dataset_id)
@@ -116,8 +117,9 @@ mod tests {
         exec(
             store,
             &format!(
-                "INSERT INTO metrics (workspace_id, dataset_id, name, expression, status, origin, version)
-                 VALUES ('{}', '{dataset_id}', '{name}', '{expression}', '{status}', 'sample', {version})",
+                "INSERT INTO metrics (workspace_id, dataset_id, source_id, name, expression, status, origin, version)
+                 SELECT '{}', '{dataset_id}', source_id, '{name}', '{expression}', '{status}', 'sample', {version}
+                 FROM datasets WHERE id = '{dataset_id}'",
                 ws.as_uuid()
             ),
         )
@@ -131,7 +133,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "DataCo", "dataco", None)
             .await

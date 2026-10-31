@@ -17,13 +17,16 @@ use crate::{error::AppError, state::AppState};
     path = "/workspaces/{ws}/datasets",
     tag = "datasets",
     operation_id = "listDatasets",
-    summary = "Datasets of the workspace",
+    summary = "Tables of the workspace, every dataset mixed (deprecated: use listCatalog)",
+    description = "Each item is one table; `parent_id` is its dataset in `GET .../catalog`. Kept for the current UI.",
     params(("ws" = String, Path, description = "Workspace slug")),
     responses(
         (status = 200, body = Vec<Dataset>, description = "OK"),
         (status = "4XX", body = ErrorBody, description = "401, 404 not a member")
     )
 )]
+// Giao diện cũ còn gọi; #257 chuyển sang GET .../catalog. deprecated đi vào đặc tả (utoipa đọc thuộc tính này).
+#[deprecated(note = "use GET /workspaces/{ws}/catalog")]
 pub(super) async fn list(
     State(state): State<AppState>,
     member: Member,

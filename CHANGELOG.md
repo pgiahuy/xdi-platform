@@ -53,6 +53,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Changed
 
+- Dataset là một database đã kết nối hay một file, bảng nằm bên trong: API mới `/catalog` liệt kê dataset kèm bảng, cột, quan hệ, chụp lại cả dataset và hỏi trên dataset (backend chọn bảng bắt đầu, hay ghim bằng `table_id`); chỉ số, câu mẫu, bài học, gói ngành gắn theo dataset; hai database cùng có bảng `orders` giữ đúng tên `orders`. Migration chuyển dữ liệu cũ, câu hỏi và bằng chứng cũ vẫn mở được (#257).
 - Trang Cuộc trò chuyện: khung trò chuyện cao hết màn hình, ô hỏi luôn nằm sát đáy dù cuộc trò chuyện chưa có câu nào, mới có một câu hay đã dài; trước đây ô hỏi nổi giữa trang rồi tụt xuống khi có thêm câu. Trên điện thoại lề trong nhỏ hơn để ô hỏi rộng hơn.
 - Các trang bung hết bề ngang màn hình, không còn bị giới hạn một cột hẹp chừa trống bên phải: Tổng quan dữ liệu hai biểu đồ một hàng từ cỡ máy tính bảng, ba biểu đồ ở màn rất rộng; Dữ liệu, Thành viên, Quản lý tài khoản chia hai cột ở màn rộng; Chỉ số, Câu mẫu, Bài học, Khái niệm ngành, Mọi workspace dùng hết bề ngang. Ngày ở trang Tổng quan ghi dạng 01/01/2015 thay cho "1 thg 1, 2015".
 - Trang Dữ liệu: kết nối database là luồng chính, nạp file CSV, Parquet, Excel chuyển xuống một nút phụ (#230).

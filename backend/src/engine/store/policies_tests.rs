@@ -29,7 +29,7 @@ async fn fixture() -> Option<Fixture> {
         .await
         .unwrap();
     let ws = WorkspaceId::for_test(ws_id);
-    let source = store.create_local_source(&ws).await.unwrap();
+    let source = store.create_local_source(&ws, "Test").await.unwrap();
     let sales = store
         .create_dataset(&ws, source, "Sales", "sales", None)
         .await

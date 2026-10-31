@@ -68,7 +68,9 @@ pub struct PromptExample {
 }
 
 impl Store {
-    /// Tối đa `limit` câu mẫu đã duyệt của dataset, mới nhất trước. Lấy SQL mô hình viết (sql_generated), không lấy
+    /// Tối đa `limit` câu mẫu đã duyệt hỏi trên bảng `dataset_id` hay trên bảng khác của cùng dataset (cùng database,
+    /// #257), mới nhất trước: câu mẫu viết trên orders vẫn giúp câu hỏi bắt đầu từ order_items.
+    ///  Lấy SQL mô hình viết (sql_generated), không lấy
     /// bản sau guard: bản đó có LIMIT và điều kiện phân quyền theo vai của người đã hỏi, đưa vào prompt thì mô hình sẽ
     /// chép điều kiện của người khác vào câu mới. Câu chỉ được người hỏi đánh giá "Tốt" mà chưa duyệt thì không lấy.
     pub async fn list_approved_examples(
@@ -79,7 +81,9 @@ impl Store {
     ) -> Result<Vec<PromptExample>, AppError> {
         sqlx::query_as(
             "SELECT question, sql_generated AS sql, explanation->'form' AS form FROM queries
-             WHERE workspace_id = $1 AND dataset_id = $2 AND feedback = 'correct' AND status = 'ok'
+             WHERE workspace_id = $1 AND feedback = 'correct' AND status = 'ok'
+               AND dataset_id IN (SELECT o.id FROM datasets o JOIN datasets t ON t.source_id = o.source_id
+                                  WHERE t.workspace_id = $1 AND t.id = $2)
                AND example_approved_at IS NOT NULL AND sql_generated IS NOT NULL
              ORDER BY created_at DESC LIMIT $3",
         )
@@ -192,7 +196,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "Sales", "sales", None)
             .await
@@ -252,7 +256,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "DataCo", "dataco", None)
             .await

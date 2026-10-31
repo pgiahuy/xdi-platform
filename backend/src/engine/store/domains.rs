@@ -20,7 +20,7 @@ use crate::error::AppError;
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct DomainPackRecord {
     pub id: Uuid,
-    /// Tên file gói không đuôi, cũng là giá trị của datasets.domain.
+    /// Tên file gói không đuôi, cũng là giá trị của sources.domain (gói của một dataset).
     pub key: String,
     pub name: String,
     pub description: String,

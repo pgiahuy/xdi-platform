@@ -25,6 +25,8 @@ use crate::service::ask::examples::{
 use crate::service::drill::contract::{DrillRequest, DrillResponse};
 use crate::{error::AppError, service, state::AppState};
 
+// Route cũ đánh dấu deprecated vẫn đăng ký như thường.
+#[allow(deprecated)]
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(ask))
@@ -55,8 +57,8 @@ pub struct AskRequest {
     path = "/workspaces/{ws}/datasets/{id}/ask",
     tag = "query",
     operation_id = "ask",
-    summary = "Ask a question about a dataset",
-    description = "One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, \
+    summary = "Ask a question starting from one table (deprecated: use askCatalogDataset with table_id)",
+    description = "The path id is a table id (`DatasetTable.id`). One JSON response, no streaming. A question that cannot be answered (`rejected`, `needs_choice`, \
                    `failed`) is still 200, with `status` and `message` in the body and the evidence gathered so far. \
                    Error codes are for invalid requests, access, and the language model service.",
     params(
@@ -83,6 +85,8 @@ pub struct AskRequest {
         (status = 503, body = ErrorBody, description = "The language model is not configured on the server")
     )
 )]
+// Giao diện cũ còn gọi; #257 chuyển sang POST .../catalog/{id}/ask, ghim bảng bằng table_id.
+#[deprecated(note = "use POST /workspaces/{ws}/catalog/{id}/ask with table_id")]
 async fn ask(
     State(state): State<AppState>,
     member: Member,

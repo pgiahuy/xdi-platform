@@ -94,7 +94,7 @@ async fn cross_workspace_reference_is_rejected() {
     .await
     .expect("workspace b");
     let source_a: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO sources (workspace_id, kind) VALUES ($1, 'local_file') RETURNING id",
+        "INSERT INTO sources (workspace_id, kind, name) VALUES ($1, 'local_file', 'x') RETURNING id",
     )
     .bind(ws_a)
     .fetch_one(&mut *tx)
@@ -127,7 +127,7 @@ async fn seed(tx: &mut sqlx::PgConnection) -> (uuid::Uuid, uuid::Uuid, uuid::Uui
     .await
     .expect("workspace");
     let src: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO sources (workspace_id, kind) VALUES ($1, 'local_file') RETURNING id",
+        "INSERT INTO sources (workspace_id, kind, name) VALUES ($1, 'local_file', 'x') RETURNING id",
     )
     .bind(ws)
     .fetch_one(&mut *tx)

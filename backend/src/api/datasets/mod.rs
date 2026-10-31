@@ -34,6 +34,8 @@ const MAX_FILE_NAME: usize = 255;
 /// max_upload_bytes: MAX_UPLOAD_MB. Giới hạn body cả request đặt rộng hơn một chút để chứa phần đầu và ranh giới của
 /// multipart; nội dung các trường thì handler đếm chính xác và trả 413 JSON. Giới hạn đặt cho cả nhóm route này (layer
 /// của OpenApiRouter áp cho mọi route đã thêm); hai route GET không có body nên không bị ảnh hưởng.
+// read::list đánh dấu deprecated (#257) vẫn đăng ký như thường.
+#[allow(deprecated)]
 pub fn routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
     let body_limit = usize::try_from(max_upload_bytes)
         .unwrap_or(usize::MAX)
