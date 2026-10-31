@@ -40,7 +40,9 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
   const uploadHeading = useRef<HTMLHeadingElement>(null)
 
   const isAdmin = me.data?.workspaces.find((m) => m.slug === ws)?.role === 'admin'
-  const showUpload = uploadOpen || target !== undefined
+  // Khung chỉ đóng khi người dùng bấm đóng: nạp phiên bản mới xong (target về undefined) hay bỏ chọn dataset vẫn giữ
+  // khung, để kết quả nạp và file đã chọn còn đó.
+  const showUpload = uploadOpen
 
   // Khung nạp có thể vừa mới mở (chưa có trong trang lúc bấm) hoặc đã cuộn khuất; sau khi vẽ thì đưa tiêu điểm lên đó
   // để người dùng thấy ngay mình đang nạp cho dataset nào, và người dùng bàn phím không phải lần ngược lên.
@@ -50,7 +52,10 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
     uploadHeading.current?.scrollIntoView({ block: 'start' })
   }, [target])
 
-  const addVersion = (row: DatasetRow) => setTarget(datasets.data?.find((d) => d.id === row.id))
+  const addVersion = (row: DatasetRow) => {
+    setTarget(datasets.data?.find((d) => d.id === row.id))
+    setUploadOpen(true)
+  }
 
   // Chụp lại dùng đúng bảng của lần chụp trước (backend nhớ theo dataset) và chụp lại cả các dataset liên quan, nên
   // chỉ cần nguồn và dataset.
