@@ -89,7 +89,7 @@ fn row_count_mismatch_is_reported() {
 /// thật của database mẫu (data/postgres-demo, #230) khi nó đang chạy.
 #[test]
 fn sales_join_cases_pass_the_guard() {
-    use crate::engine::guard::{build_guarded_sql, AllowedTable};
+    use crate::engine::guard::{build_guarded_sql, AllowedTable, JoinLink};
 
     let schema: [(&str, &[&str]); 6] = [
         (
@@ -165,6 +165,26 @@ fn sales_join_cases_pass_the_guard() {
             row_filters: Vec::new(),
         })
         .collect();
+    // Khóa ngoại của schema sales trong data/postgres-demo/sql/sales_schema.sql.
+    let link = |many: &str, many_column: &str, one: &str, one_column: &str| JoinLink {
+        many: many.to_string(),
+        many_columns: vec![many_column.to_string()],
+        one: one.to_string(),
+        one_columns: vec![one_column.to_string()],
+        fans_out: true,
+    };
+    let links = [
+        link(
+            "categories",
+            "department_id",
+            "departments",
+            "department_id",
+        ),
+        link("products", "category_id", "categories", "category_id"),
+        link("orders", "customer_id", "customers", "customer_id"),
+        link("order_items", "order_id", "orders", "order_id"),
+        link("order_items", "product_id", "products", "product_id"),
+    ];
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../eval/sales_joins.json");
     let cases: Vec<serde_json::Value> =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
@@ -172,7 +192,7 @@ fn sales_join_cases_pass_the_guard() {
     for case in &cases {
         let picked = case["dataset"].as_str().unwrap();
         for sql in case["expected_sql"].as_array().unwrap() {
-            let guarded = build_guarded_sql(sql.as_str().unwrap(), &tables, 1000)
+            let guarded = build_guarded_sql(sql.as_str().unwrap(), &tables, &links, 1000)
                 .unwrap_or_else(|e| panic!("{}: {e:?}", case["id"]));
             assert!(
                 guarded.tables_read.len() > 1 && guarded.tables_read.iter().any(|t| t == picked),
@@ -193,7 +213,7 @@ fn sales_join_cases_pass_the_guard() {
 /// database mẫu và đọc bảng của trường "dataset". `make eval` chạy bộ này trên ảnh chụp thật của database mẫu khi nó đang chạy.
 #[test]
 fn edu_cases_pass_the_guard() {
-    use crate::engine::guard::{build_guarded_sql, AllowedTable};
+    use crate::engine::guard::{build_guarded_sql, AllowedTable, JoinLink};
 
     let schema: [(&str, &[&str]); 5] = [
         (
@@ -267,13 +287,30 @@ fn edu_cases_pass_the_guard() {
             row_filters: Vec::new(),
         })
         .collect();
+    // Khóa ngoại của schema edu trong data/postgres-demo/sql/edu_schema.sql.
+    let link = |many: &str, one: &str, columns: &[&str]| JoinLink {
+        many: many.to_string(),
+        many_columns: columns.iter().map(|c| c.to_string()).collect(),
+        one: one.to_string(),
+        one_columns: columns.iter().map(|c| c.to_string()).collect(),
+        fans_out: true,
+    };
+    let course = ["code_module", "code_presentation"];
+    let student = ["code_module", "code_presentation", "id_student"];
+    let links = [
+        link("students", "courses", &course),
+        link("assessments", "courses", &course),
+        link("student_assessments", "assessments", &["id_assessment"]),
+        link("student_assessments", "students", &student),
+        link("student_daily_clicks", "students", &student),
+    ];
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../eval/edu.json");
     let cases = load_cases(std::path::Path::new(path)).unwrap();
     assert!(cases.len() >= 7);
     for case in &cases {
         let picked = case.dataset.as_deref().unwrap();
         for sql in &case.expected_sql {
-            let guarded = build_guarded_sql(sql, &tables, 1000)
+            let guarded = build_guarded_sql(sql, &tables, &links, 1000)
                 .unwrap_or_else(|e| panic!("{}: {e:?}", case.id));
             assert!(
                 guarded.tables_read.iter().any(|t| t == picked),

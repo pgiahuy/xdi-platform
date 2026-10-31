@@ -58,8 +58,8 @@ pub struct RunInput<'a> {
     pub reply: &'a str,
     /// Đầu vào của guard: các bảng được phép và trần số dòng.
     pub tables: &'a [AllowedTable],
-    /// Quan hệ giữa các bảng (ask/fanout.rs): câu SQL cộng lặp khi nối bảng một-nhiều thì không chạy mà đi vòng sửa.
-    /// Rỗng khi câu hỏi chỉ có một bảng.
+    /// Quan hệ giữa các bảng: guard chỉ nhận phép nối đúng khóa ngoại (#256), và câu SQL cộng lặp khi nối bảng
+    /// một-nhiều (ask/fanout.rs) thì không chạy mà đi vòng sửa. Rỗng khi câu hỏi chỉ có một bảng.
     pub links: &'a [JoinLink],
     pub max_rows: u64,
     /// Thời gian tối đa mỗi lần chạy (Config::query_timeout).
@@ -249,7 +249,7 @@ async fn attempt(
     failures: &mut Vec<StepFailure>,
 ) -> Result<Attempt, AppError> {
     let started = Instant::now();
-    let reason = match build_guarded_sql(sql, input.tables, input.max_rows) {
+    let reason = match build_guarded_sql(sql, input.tables, input.links, input.max_rows) {
         Ok(guarded) => {
             // Kiểm cộng lặp trên câu mô hình viết, sau guard (câu đã hợp lệ) và trước khi chạy.
             if let Some(found) = find_double_count(sql, input.tables, input.links) {

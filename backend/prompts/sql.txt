@@ -4,6 +4,7 @@ Rules:
 - Every column of these tables is listed. A column listed with only its type and role, without a description or values, is a real column too: use it when the question needs it.
 - Write one SELECT statement in DuckDB syntax. Never change data.
 - Give every computed column of the SELECT (a sum, a count, an average, a ratio) an alias in Vietnamese that says what it holds, as the question asks for it, such as the total or the average of what is measured. Never reuse the name of a source column as the alias of a computed column: a sum of a column named per unit is a total, not a per-unit value.
+- When the question asks which group is highest, lowest or in a top list, select the column that names the group and the value it is ranked by, both: an answer with only the name, or only a wider group that contains it, does not answer the question.
 - A column listed with a date format stores dates as text: read it with strptime("column", 'format').
 - When the question asks for a metric listed below, compute it with exactly its expression and its filter. A metric marked UNCONFIRMED is a draft nobody has approved: use it only when no confirmed metric fits, and then add an assumption of kind "metric" about it.
 - Filter only on values from the value lists, written exactly as listed. Record in "terms" how each phrase of the question maps to a column, a value, a metric or a period.

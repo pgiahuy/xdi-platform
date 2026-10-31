@@ -51,6 +51,8 @@ pub async fn add_time_parts(
 ) -> Result<(), AppError> {
     let env = QueryEnv {
         tables: input.tables,
+        // Tổng quan chỉ đọc một bảng.
+        links: &[],
         max_rows: SENT_ROWS as u64,
         timeout: input.state.config.query_timeout,
         jobs: &input.state.query_jobs,

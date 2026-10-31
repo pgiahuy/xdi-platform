@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/ClarificationForm.tsx - màn câu hỏi lại khi câu hỏi hiểu được nhiều cách (status needs_choice): mỗi
-chỗ mơ hồ một nhóm lựa chọn, chọn đủ mọi nhóm rồi bấm Hỏi lại. Khác chip giả định (bấm là hỏi ngay): có thể có nhiều
-chỗ mơ hồ cùng lúc, hỏi lại khi mới chọn một chỗ thì backend lại hỏi chỗ kia. Trang gắn key theo response để lựa chọn
-cũ không sót sang lần hỏi lại sau. */
+/* components/ask/ClarificationForm.tsx - màn câu hỏi lại khi câu hỏi hiểu được nhiều cách (status needs_choice). Chỉ
+một chỗ cần chọn (trường hợp thường gặp: mô hình hỏi lại một câu) thì mỗi phương án là một nút, bấm là hỏi lại ngay
+với phương án đó, không phải chọn rồi bấm thêm nút. Phương án do backend lọc: chỉ cột, chỉ số hay kỳ có thật
+(ask/choices.rs), nên bấm phương án nào cũng chạy được. Nhiều chỗ cùng lúc thì chọn đủ mọi nhóm rồi bấm Hỏi lại, vì hỏi
+lại khi mới chọn một chỗ thì backend lại hỏi chỗ kia. Trang gắn key theo response để lựa chọn cũ không sót sang lần hỏi
+lại sau. */
 
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
@@ -23,6 +25,32 @@ export function ClarificationForm({ message, clarifications, onSubmit, disabled 
     event.preventDefault()
     if (!complete) return
     onSubmit(clarifications.map((choice) => ({ choiceId: choice.id, optionId: picks[choice.id] })))
+  }
+
+  if (clarifications.length === 1) {
+    const [choice] = clarifications
+    return (
+      <section aria-labelledby="clarification-heading" className="flex flex-col gap-3 rounded-lg border p-4">
+        <h3 id="clarification-heading" className="text-sm font-semibold">
+          {message}
+        </h3>
+        {choice.label !== message && <p className="text-sm text-muted-foreground">{choice.label}</p>}
+        <div className="flex flex-wrap gap-2">
+          {choice.options.map((option) => (
+            <Button
+              key={option.id}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              onClick={() => onSubmit([{ choiceId: choice.id, optionId: option.id }])}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </section>
+    )
   }
 
   return (

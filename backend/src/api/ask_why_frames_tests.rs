@@ -61,25 +61,25 @@ async fn one_group_against_the_rest_is_answered_and_drilled() {
     assert_eq!(response["status"], "answered", "{response}");
     let explanation = &response["explanation"];
     assert_eq!(explanation["comparison"], "groups");
+    // Tổng cộng được: lát gốc là trung bình mỗi thị trường còn lại (130,25 trên 2 thị trường), không phải tổng của chúng.
+    let base_label = explanation["base"]["label"].as_str().unwrap();
     assert!(
-        explanation["base"]["label"]
-            .as_str()
-            .unwrap()
-            .ends_with("còn lại"),
+        base_label.starts_with("trung bình các") && base_label.ends_with("còn lại"),
         "{explanation}"
     );
-    assert_eq!(explanation["base"]["value"], "130.25");
+    assert_eq!(explanation["base"]["value"], "65.13");
     assert_eq!(explanation["compare"]["value"], "80.00");
     let card = response["understanding"]["filters"][0]["label"]
         .as_str()
         .unwrap();
-    assert!(card.contains("Europe so với các"), "{card}");
+    assert!(card.contains("Europe so với trung bình các"), "{card}");
 
     let query_id = response["query_id"].clone();
     let corporate = |slice: &str| {
         json!({"query_id": query_id,
                "breakdown": {"slice": slice, "column": "Customer Segment", "value": "Corporate"}})
     };
+    // Truy dòng nguồn của lát gốc trả các dòng thật của các nhóm còn lại (tổng, không chia).
     let (status, page) = drill(&asking, corporate("base")).await;
     assert_eq!(status, StatusCode::OK, "{page}");
     assert_eq!(source_rows(&page), (120.25, vec!["LATAM".to_string()]));

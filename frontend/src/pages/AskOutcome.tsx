@@ -19,6 +19,7 @@ import { AnswerSummary } from '@/components/ask/AnswerSummary'
 import { AnswerText } from '@/components/ask/AnswerText'
 import { AskWarnings } from '@/components/ask/AskWarnings'
 import { ClarificationForm } from '@/components/ask/ClarificationForm'
+import { DataRangeNote } from '@/components/ask/DataRangeNote'
 import { ResultTable } from '@/components/ask/ResultTable'
 import type { DrillTarget } from '@/components/ask/evidenceTypes'
 import type { UnderstandingView } from '@/components/ask/types'
@@ -140,12 +141,17 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
       defaultOpen={latest}
     />
   )
+  const range = response.data_range
+  const dataRange = range && (
+    <DataRangeNote from={range.from} to={range.to} label={range.label ?? range.column} partial={range.partial} />
+  )
   // Không có số nào: chỉ câu trả lời và thẻ "Hệ thống đã hiểu là" (để thấy đã hỏi kỳ, nhóm nào), không bảng trống hay
   // biểu đồ rỗng. Backend cũ không gửi câu trả lời cho kết quả 0 dòng nên có câu dự phòng.
   if (hasNoData(response)) {
     return (
       <>
         <p className="text-[15px] leading-relaxed">{response.answer_text ?? noDataText}</p>
+        {dataRange}
         {understanding}
       </>
     )
@@ -163,10 +169,15 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
           warnings={response.answer_text_by_model ? (response.insight?.summary_warnings ?? []) : []}
         />
       )}
+      {dataRange}
       {response.insight ? (
         // Câu thường: phần giải thích theo hình dạng kết quả (#227). Phân rã tự động của nó (explanation) chỉ hiện ở tab
-        // Phân rã của pane minh chứng, để thẻ không thành một câu "tại sao" thứ hai.
-        <AnswerSummary {...buildInsightView(response.insight, response.answer_text)} />
+        // Phân rã của pane minh chứng, để thẻ không thành một câu "tại sao" thứ hai. Danh sách dòng mà đoạn trả lời là câu
+        // của code thì không hiện: đoạn trả lời đã dựng từ đúng các câu đó (số dòng và điều kiện lọc, hay một dòng kể bằng
+        // lời), hiện nữa chỉ lặp lại.
+        !(response.insight.kind === 'rows' && !response.answer_text_by_model) && (
+          <AnswerSummary {...buildInsightView(response.insight, response.answer_text)} />
+        )
       ) : (
         breakdown && <WhyOverview breakdown={breakdown} />
       )}

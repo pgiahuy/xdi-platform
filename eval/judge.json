@@ -2165,6 +2165,80 @@
      }
     ]
    }
+  },
+  {
+   "id": "j68",
+   "expected": "mismatch",
+   "error": "total_as_per_unit",
+   "text": "Europe có lợi nhuận trên mỗi đơn hàng cao nhất, đạt 1.318.856,90, chiếm 29,1% tổng lợi nhuận của 5 thị trường.",
+   "facts": {
+    "title": "Europe có tổng lợi nhuận cao nhất: 1.318.856,90.",
+    "points": [
+     {
+      "lead": "Tỷ trọng",
+      "text": "Europe chiếm 29,1% tổng lợi nhuận của 5 thị trường."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j69",
+   "expected": "mismatch",
+   "error": "missing_percent",
+   "text": "Doanh thu của Europe cao hơn LATAM 5,8, đạt 10.872.396,60 so với 10.277.612,64.",
+   "facts": {
+    "measure": "Doanh thu",
+    "comparison": "groups",
+    "base": "LATAM",
+    "compare": "Europe",
+    "volume_label": "Số đơn hàng",
+    "price_label": "Doanh thu trên mỗi đơn hàng",
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "594.783,96"
+     },
+     {
+      "field": "percent_change",
+      "column": "",
+      "group": "",
+      "value": "5,8"
+     },
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "10.277.612,64"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "10.872.396,60"
+     }
+    ]
+   }
+  },
+  {
+   "id": "j70",
+   "expected": "match",
+   "error": "none",
+   "text": "Europe đứng đầu với khoảng 10,9 triệu (10.872.396,80), chiếm 29,6% tổng doanh thu. 4 trên 5 thị trường chiếm từ 80% tổng trở lên. Africa thấp hẳn mức trung bình với 2.294.452,93, trong khi trung bình mỗi nhóm khoảng 7,36 triệu (7.356.947).",
+   "facts": {
+    "title": "Europe đứng đầu với khoảng 10,9 triệu (10.872.396,80), chiếm 29,6% tổng doanh thu.",
+    "points": [
+     {
+      "lead": "Mức tập trung",
+      "text": "4 trên 5 nhóm chiếm từ 80% tổng trở lên."
+     },
+     {
+      "lead": "Thấp hẳn mức trung bình",
+      "text": "Africa (2.294.452,93); trung bình mỗi nhóm khoảng 7,36 triệu (7.356.947)."
+     }
+    ]
+   }
   }
  ]
 }

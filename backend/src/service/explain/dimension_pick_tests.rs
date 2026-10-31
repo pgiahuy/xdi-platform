@@ -71,6 +71,7 @@ impl Drop for Table {
 fn env<'a>(table: &'a Table, jobs: &'a Arc<Semaphore>) -> QueryEnv<'a> {
     QueryEnv {
         tables: &table.allowed,
+        links: &[],
         max_rows: 100_000,
         timeout: Duration::from_secs(10),
         jobs,
@@ -198,6 +199,7 @@ async fn every_dimension_left_is_kept() {
         compare_rows: Decimal::from(20),
         volume: None,
         denominators: None,
+        rest: None,
     };
     let Breakdown::Ready(explanation) =
         build_breakdown(&env, &plan, &totals, (String::new(), String::new()))

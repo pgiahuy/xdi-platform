@@ -19,6 +19,9 @@ pub mod checks;
 pub mod classify;
 #[cfg(test)]
 mod classify_tests;
+pub mod data_range;
+#[cfg(test)]
+mod data_range_tests;
 // build_metric_mismatches chờ cách báo chỉ số dùng sai công thức: bốn luật kiểm hợp lý (#36) không có mã cảnh báo hợp,
 // thêm mã mới là đổi API. Phần còn lại endpoint hỏi đã gọi. Gỡ allow khi hàm đó được gọi, để clippy bắt lại mã thừa.
 #[cfg(test)]
@@ -90,11 +93,14 @@ use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, Que
 use crate::service::ask::checks::{build_result_warnings, find_missing_values, CheckedQuery};
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
-use crate::service::ask::context::{build_ask_context_with_keys, AskContext};
+use crate::service::ask::context::{
+    build_ask_context_with_keys, build_profiles, AskContext, ColumnProfile,
+};
 use crate::service::ask::contract::{
     AskResponse, AskStatus, AskStep, ChosenOption, Insight, QuestionType, ResultTable, StepName,
     Understanding, Warning, WarningCode,
 };
+use crate::service::ask::data_range::build_data_range;
 use crate::service::ask::fanout::{build_join_links, JoinLink};
 use crate::service::ask::group_prompt::{
     apply_question_columns, build_group_prompt, load_question_tables,
@@ -104,11 +110,11 @@ use crate::service::ask::plain_insight::{build_stored_breakdown, run_insight};
 use crate::service::ask::prompt::{
     build_examples_detail, build_sql_prompt, build_sql_prompt_detail, pick_examples, PromptInput,
 };
-use crate::service::ask::related::{build_group_related, load_group};
+use crate::service::ask::related::{build_group_related, load_group, TableGroup};
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
 use crate::service::ask::response_choices::{
-    build_pick_choices, build_unapplied_warnings, build_used_choices,
+    apply_answered_choices, build_pick_choices, build_unapplied_warnings, build_used_choices,
 };
 pub use crate::service::ask::row_filters::load_row_filters;
 use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
@@ -283,6 +289,7 @@ async fn ask_steps(
             columns: &columns,
             tables,
             group: &group,
+            links: &links,
             related: &related,
             steps,
         };
@@ -379,7 +386,8 @@ async fn ask_steps(
     };
     let mut assumptions = build_pick_choices(&context);
     assumptions.extend(build_assumption_choices(&answer, &context, &metrics));
-    let used = build_used_choices(&context, &assumptions);
+    let mut used = build_used_choices(&context, &assumptions);
+    apply_answered_choices(&mut used, choices, &metrics);
     let mut warnings = build_unapplied_warnings(choices, &used);
     // Gọi trước nhánh hỏi lại: câu chưa answered vẫn được báo giá trị mô hình nêu mà cột không có.
     let checked = CheckedQuery {
@@ -423,7 +431,8 @@ async fn ask_steps(
         row_filters: &outcome.row_filters,
         plan: None,
     };
-    let view = build_answer_view(&ran, &context.columns, &metrics, &assumptions);
+    let view_columns = build_view_columns(&context.columns, &group);
+    let view = build_answer_view(&ran, &view_columns, &metrics, &assumptions);
     let (understanding, chart) = apply_answer_view(view, outcome.result.as_mut());
     let mut failures = std::mem::take(&mut outcome.failures);
 
@@ -431,10 +440,10 @@ async fn ask_steps(
     let insight = run_insight(
         state,
         &group,
-        &links,
         question,
         &outcome,
         understanding.as_ref(),
+        &context,
         &lessons,
     )
     .await?;
@@ -473,6 +482,10 @@ async fn ask_steps(
         query_id: Some(query_id),
     };
     record_failures(state, member, &asked, &failures).await;
+    // Mọi câu trả lời ghi dữ liệu có đến ngày nào (data_range.rs).
+    let data_range = (outcome.status == AskStatus::Answered)
+        .then(|| build_data_range(&columns, outcome.sql_guarded.as_deref()))
+        .flatten();
     Ok(AskResponse {
         message: outcome.message,
         query_id: Some(query_id),
@@ -489,6 +502,7 @@ async fn ask_steps(
         answer_text,
         answer_text_by_model,
         question_type: Some(QuestionType::Quantitative),
+        data_range,
         steps,
         ..build_base_response(state, &version, question, outcome.status)
     })
@@ -797,8 +811,28 @@ pub(super) fn build_base_response(
         answer_text: None,
         answer_text_by_model: None,
         question_type: None,
+        data_range: None,
         clarifications: vec![],
         steps: vec![],
         model_calls: vec![],
     }
+}
+
+/// Hồ sơ cột cho thẻ "Đã hiểu là" và nhãn của câu trả lời: cột của bảng đang chọn (ngữ cảnh), thêm cột của các bảng
+/// liên quan chưa trùng tên. Câu nối bảng tính trên order_items."sales" mà chỉ có hồ sơ của bảng đang chọn thì nhãn
+/// thành "Tổng sales" thay vì tên tiếng Việt của cột. Tên trùng giữa hai bảng (thường là cột khóa nối) giữ cột của bảng
+/// đang chọn.
+fn build_view_columns(main: &[ColumnProfile], group: &TableGroup) -> Vec<ColumnProfile> {
+    let mut all = main.to_vec();
+    for table in &group.tables {
+        for column in build_profiles(table.columns.clone()) {
+            if !all
+                .iter()
+                .any(|c| c.name.eq_ignore_ascii_case(&column.name))
+            {
+                all.push(column);
+            }
+        }
+    }
+    all
 }

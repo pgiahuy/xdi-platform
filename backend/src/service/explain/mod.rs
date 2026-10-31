@@ -46,6 +46,8 @@ pub mod measure;
 mod measure_column;
 mod narrate_prompt;
 pub mod number;
+#[cfg(test)]
+mod number_tests;
 pub mod period;
 pub mod plain;
 pub mod premise;
@@ -53,6 +55,7 @@ pub mod ratio;
 pub mod ratio_breakdown;
 #[cfg(test)]
 mod ratio_tests;
+pub mod rest_average;
 pub mod run;
 #[cfg(test)]
 pub(crate) mod run_tests;
@@ -955,6 +958,33 @@ pub(crate) fn build_entity_name(column: &str, label: Option<&str>) -> String {
     match lowered.strip_prefix("mã ") {
         Some(rest) if !rest.trim().is_empty() => rest.trim().to_string(),
         _ => lowered,
+    }
+}
+
+/// Tên cột kết quả là bí danh tiếng Việt câu SQL đặt cho cột tính ra, không phải chữ của biểu thức: khác biểu thức sau
+/// khi bỏ nháy, khoảng trắng, hoa thường, và có chữ ngoài ASCII. Prompt viết SQL yêu cầu bí danh nói đúng thứ câu hỏi hỏi
+/// theo cách câu hỏi hỏi ("Số lượng sinh viên rút học"), nên câu trả lời đọc tự nhiên hơn nhãn dựng từ công thức ("số
+/// dòng có mã định danh ..."). Bí danh tiếng Anh hay không có bí danh thì giữ nhãn dựng từ hồ sơ cột. expr rỗng (không
+/// biết biểu thức) thì không coi là bí danh.
+pub(crate) fn is_vietnamese_alias(name: &str, expr: &str) -> bool {
+    let plain = |text: &str| -> String {
+        text.chars()
+            .filter(|c| *c != '"' && !c.is_whitespace())
+            .flat_map(char::to_lowercase)
+            .collect()
+    };
+    !expr.trim().is_empty() && plain(name) != plain(expr) && !name.is_ascii()
+}
+
+// "Tổng doanh thu (Sales)" thành "Tổng doanh thu". Chỉ bỏ ngoặc cuối khi chữ trong đó không dấu (tên cột tiếng Anh), để
+// tên chỉ số tiếng Việt có ngoặc như "Lợi nhuận (đã trừ chiết khấu)" giữ nguyên.
+pub(crate) fn drop_column_name(label: &str) -> String {
+    let Some(inner) = label.strip_suffix(')') else {
+        return label.to_string();
+    };
+    match inner.rfind(" (") {
+        Some(at) if at > 0 && inner[at + 2..].is_ascii() => label[..at].to_string(),
+        _ => label.to_string(),
     }
 }
 

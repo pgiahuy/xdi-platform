@@ -5,7 +5,7 @@ chỉ đọc, trên đúng các bảng, hàm và cột được phép, lọc dò
 đổi tên bảng logic sang file Parquet của dataset.
 
 Code: `backend/src/engine/guard/mod.rs`, hàm `build_guarded_sql`. Test: `backend/src/engine/guard/tests.rs`,
-`sample_tests.rs`, `row_filter_tests.rs`.
+`sample_tests.rs`, `row_filter_tests.rs`, `join_tests.rs`.
 
 Trạng thái: guard đã có và có test. Endpoint hỏi dữ liệu ([#33](https://github.com/pgiahuy/xdi-platform/issues/33),
 `service/ask/mod.rs`) gọi guard với một bảng là dataset đang hỏi và đủ mọi cột của phiên bản đang dùng: câu thường qua
@@ -17,13 +17,15 @@ Endpoint hỏi, cả câu thường và câu "tại sao", truy dòng nguồn và
 ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)), kèm điều kiện lan theo khóa ngoại
 ([#215](https://github.com/pgiahuy/xdi-platform/issues/215), mục Bước 3). Store đã có hàm gán `data_role` cho thành
 viên và thay `rls_policies` của một dataset (`set_data_role`, `replace_row_policies`), nhưng chưa có API hay màn nào
-gọi (#45), nên ngoài test `row_filters` hiện luôn rỗng.
+gọi (#45), nên ngoài test `row_filters` hiện luôn rỗng. Mọi nơi gọi guard truyền thêm quan hệ khóa ngoại giữa các bảng
+(rỗng với dataset nạp từ file), để guard chỉ nhận phép nối đúng khóa ngoại
+([#256](https://github.com/pgiahuy/xdi-platform/issues/256), mục Nối bảng ở bước 2).
 
 ## Đầu vào và đầu ra
 
 | | Nội dung |
 |---|---|
-| Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản, điều kiện lọc dòng `row_filters`); `max_rows` |
+| Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản, điều kiện lọc dòng `row_filters`); quan hệ khóa ngoại giữa các bảng (`JoinLink`, service dựng từ `dataset_relations`); `max_rows` |
 | Ra khi nhận | `GuardedSql` gồm hai bản của cùng một câu: `shown` và `runnable` (mục Bước 5), ghi chú `limit_note`, và `row_filters` là các điều kiện lọc dòng guard đã thêm (mục Bước 3) |
 | Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Oversized` khi câu có thể dựng giá trị quá lớn (luật kích thước, số tầng, mảnh ghép, độ rộng, gọi hàm dạng phương thức ở bước 2), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy hay chính sách lọc dòng sai (mục Bước 3) |
 
@@ -182,6 +184,44 @@ lại gọn hơn, như mọi lý do từ chối khác.
 **Cột.** Tên cột `cot` phải là cột trong danh sách của một bảng câu đang dùng, hoặc tên chính câu đặt ra (`AS tong`,
 `WITH t(a, b)`, `(SELECT ...) AS x(a, b)`). Dạng `bang.cot` thì `bang` phải là bảng, bảng tạm hay bí danh có trong câu.
 Tên ba phần trở lên (`main.sales.region`) bị từ chối.
+
+**Nối bảng** ([#256](https://github.com/pgiahuy/xdi-platform/issues/256), `engine/guard/joins.rs`). Prompt đã dặn chỉ nối
+theo quan hệ đã liệt kê (`backend/prompts/sql_joins.txt`), nhưng trước luật này `JOIN orders o ON i.order_item_id =
+o.customer_id` vẫn qua guard, DuckDB chạy và ra số sai mà trông hợp lý. Guard nhận quan hệ của các bảng
+(`JoinLink`: bảng giữ khóa ngoại, cột, bảng được trỏ tới, cột) cùng cách nhận danh sách bảng, cộng quan hệ suy ra từ
+điều kiện lan theo khóa ngoại (`RowFilter::Parent`, bước 3). Luật chạy sau các luật kích thước, trước bước 3, xét từng
+SELECT ở mọi tầng: câu ngoài, `WITH`, câu con ở `FROM`, `WHERE`, danh sách cột, `IN`, `EXISTS`.
+
+- Nguồn giữ nguyên dòng là bảng dữ liệu, hay câu con, bảng tạm chỉ lọc và chọn cột của một bảng (không `GROUP BY`,
+  `DISTINCT`, hàm gộp). Hai nguồn như vậy nối với nhau thì mọi phép bằng giữa cột của hai nguồn, ở `ON`, `USING` hay
+  `WHERE`, gộp lại phải đúng bằng cột của một khóa ngoại giữa hai bảng: khóa nhiều cột thì đủ cả bộ, thứ tự cặp và
+  chiều của phép bằng tùy ý. Thiếu một cột, sai cột, hay thêm một phép bằng giữa hai bảng đều bị từ chối.
+- Vế `ON` đụng hai bảng như vậy chỉ được là phép bằng giữa hai cột; vế chỉ lọc một bảng (kể cả có `OR` bên trong) thì
+  được. `OR`, so sánh lớn nhỏ hay biểu thức tính ra giữa hai bảng bị từ chối. Ở `WHERE`, vế không phải phép bằng giữa
+  hai cột là điều kiện lọc, không nối bảng.
+- Mọi bảng giữ nguyên dòng trong một `FROM` phải nối với nhau qua phép bằng, trực tiếp hay qua nguồn khác: `CROSS JOIN`,
+  `JOIN ... ON true`, `FROM a, b` không điều kiện nối bị từ chối. `NATURAL JOIN` bị từ chối. `USING (c)` là phép bằng
+  trên cột c của hai bên, nên chỉ qua khi c là khóa cùng tên ở hai bảng.
+- Bảng nối với chính nó chỉ qua khóa ngoại tự trỏ (`employees.manager_id` trỏ `employees.employee_id`).
+- Nối có nguồn đã gộp nhóm (bảng tạm một dòng mỗi đơn, mỗi khách, mỗi tháng) và nửa nối (`x IN (SELECT y ...)`,
+  `EXISTS`, câu con tương quan): guard lần cột về cột của bảng dữ liệu qua bảng tạm và câu con; mỗi phép bằng trên cột
+  biết gốc phải so hai cột cùng miền giá trị: cùng một cột, một cặp của khóa ngoại, hay hai khóa ngoại trỏ cùng cột
+  của bảng cha (`orders.customer_id` và `returns.customer_id`); phần là khóa ngoại phải đủ cột. Lỏng hơn vì nguồn gộp
+  nhóm không nhân dòng như bảng thật: gộp bảng phía nhiều trước theo khóa rồi nối là cách đúng mà luật cộng lặp gợi ý,
+  và `WHERE region IN (SELECT region FROM sales ...)` lọc theo giá trị của chính cột đó. Cột tính ra (tháng, năm) không
+  phải cột của bảng nào nên không kiểm: bảng tạm theo tháng nối với chính nó lệch một tháng vẫn qua.
+- Dataset nạp từ file không có quan hệ: câu một bảng như trước, kể cả câu con và bảng tạm trên chính bảng đó; chỉ câu
+  nối bảng với chính nó bị từ chối.
+- Cột không ghi bảng mà có ở hai nguồn trong điều kiện `ON` bị từ chối, lý do bảo ghi rõ bảng.
+- Lý do từ chối (`GuardError::Rejected`) nêu hai bảng và đúng các khóa nối được, ví dụ "Nối bảng order_items với orders
+  sai điều kiện (i.order_item_id = o.customer_id). Hai bảng order_items và orders chỉ nối theo khóa ngoại, đủ mọi cột
+  của khóa: order_items.order_id = orders.order_id", hay nói hai bảng không có quan hệ trong database; mô hình sửa một
+  lần như mọi lý do từ chối khác.
+- Câu do code dựng đi cùng luật: phân rã theo bảng liên quan (`service/explain/source.rs`, #227) nối `LEFT JOIN` đúng
+  khóa từ quan hệ; truy dòng nguồn đưa lại `sql_guarded` có hộp lọc qua guard, nửa nối của hộp khớp quan hệ service
+  truyền vào và quan hệ suy ra từ điều kiện lan.
+- Hạn chế: không lần cột qua `UNION`; câu con tương quan không có phép bằng nào (chỉ so lớn nhỏ) không bị kiểm; vế
+  `WHERE` không phải phép bằng giữa hai bảng đã nối đúng khóa được coi là điều kiện lọc.
 
 ## Bước 3: lọc dòng theo vai dữ liệu
 
@@ -345,7 +385,7 @@ Hạn chế:
 
 - Không lần theo `WITH` hay bảng con: SUM trên một bảng tạm đã nối mà chưa gộp thì không bị bắt. SELECT nằm trong `WITH`
   vẫn được xét với `FROM` của chính nó.
-- Không xét `ON` có nối đúng theo quan hệ, và không xét `GROUP BY`: nhóm theo khóa của C thì SUM cột P không còn lặp
+- Điều kiện `ON` đúng khóa do guard kiểm (mục Nối bảng ở bước 2). Không xét `GROUP BY`: nhóm theo khóa của C thì SUM cột P không còn lặp
   nhưng vẫn bị bắt.
 - `COUNT(*)` sau khi nối cũng đếm lặp, chưa xét.
 
@@ -365,6 +405,7 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
 | Câu mẫu (`sample_tests.rs`) | 32 câu phân tích dạng mô hình hay viết, 25 qua; 7 bị từ chối có chủ ý: 3 câu 5 tầng (vào vòng sửa), bảng tạm 4 tầng không ai dùng, `strftime` đảo thứ tự tham số, hàm `list_contains` ngoài danh sách, nhãn 1200 byte. 18 câu tìm cách lách (B01 tới B16, kể cả B01b, B05b): các câu nhân giá trị bị chặn, các câu vô hại qua |
 | Cột | Cột không có (cả dạng `s.profit`); chữ Unicode giống chữ Latin; bí danh bảng không có; tên ba phần |
 | Lọc dòng | Các dạng câu so nguyên `shown`: một bảng, `WHERE`, `WHERE a OR b`, `GROUP BY` và `HAVING`, `JOIN` hai bảng chỉ một bảng có lọc, tự `JOIN`, `LEFT JOIN` chính bảng, `FROM a, b`, câu con ở `FROM` và `WHERE`, `IN`, `EXISTS`, `UNION ALL`, `WITH`, bảng tạm đọc bảng tạm, `LATERAL`; giữ bí danh, lọc theo bảng không theo bí danh, tên viết hoa; nhiều chính sách nối `AND`, danh sách rỗng, giá trị có dấu nháy, cột có khoảng trắng; hai bảng cùng có lọc và `row_filters`; không có chính sách thì `shown` như cũ; cột chính sách không có trong bảng; bước 3 tự chặn chỗ đọc không nhận ra; 17 câu lách (đọc file, bảng hệ thống, tên kèm schema, chữ Unicode giống chữ Latin, bảng tạm trùng tên bảng dữ liệu). Trên DuckDB thật: 15 câu cố lấy dòng ngoài phạm vi không lấy được; 90 câu (30 dạng câu nhân 3 cách viết tên bảng, cả hai bảng có lọc) qua guard ra đúng kết quả như khi chạy trên bảng chỉ còn dòng được phép (`row_filter_tests.rs`). Điều kiện lan theo khóa ngoại (`parent_filter_tests.rs`): so `shown` với khóa một cột, khóa hai cột, lan hai bước, nhiều đường, chính sách riêng cộng điều kiện lan, bảng cha không có điều kiện; luật NULL theo từng dòng (khóa tùy chọn rỗng thấy, trỏ ra ngoài thì ẩn, mọi đường rỗng thì ẩn, khóa hai cột rỗng một phần thì ẩn); bảng tạm trùng tên bảng cha bị từ chối, đọc thẳng bảng cha không có trong danh sách bị từ chối; cột khóa không có trong hồ sơ; trên DuckDB thật 20 câu (10 dạng câu nhân 2 bộ chính sách) ra đúng kết quả như khi chạy trên bảng chỉ còn dòng được phép |
+| Nối bảng (`join_tests.rs`) | Nhận: khóa một cột viết hai chiều, khóa ba cột đổi thứ tự cặp, vế lọc một bảng kèm `OR`, `USING` đúng khóa, nối qua `WHERE`, câu con và `WITH` nối đúng, bảng tạm gộp theo khóa rồi nối, hai bảng tạm gộp theo khách từ hai bảng con, câu con một dòng để tính tỷ trọng, bảng tạm theo tháng nối lệch một tháng, `IN` và `EXISTS` theo khóa, `IN` trên chính cột đó, khóa tự trỏ, phần FROM do code dựng cho phân rã (khóa một và ba cột), câu đã qua guard có hộp lọc lan qua lại guard; dataset từ file: câu một bảng như trước. Từ chối: sai cột (lý do nêu khóa đúng), thừa một phép bằng, thiếu một cột của khóa ba cột, hai bảng không quan hệ, `CROSS JOIN`, `ON true`, `ON` chỉ lọc, `FROM a, b`, `OR` và so sánh giữa hai bảng, nối qua `WHERE` sai cột, `USING` không phải khóa, `NATURAL JOIN`, nối sai trong câu con, `WITH` và câu con của `IN`, `IN` và `EXISTS` sai cột, nửa nối thiếu cột của khóa, nối bảng với chính nó không có khóa tự trỏ, hai bảng con cùng trỏ một bảng cha nối thẳng, cột không rõ bảng trong `ON`, nối bảng với chính nó trên dataset từ file. Bộ câu JOIN của `make eval` (`eval_tests.rs`) qua với đúng khóa của database mẫu |
 | Số dòng | Thêm `LIMIT` (cả khi chỉ có `OFFSET`); hạ `LIMIT 5000`; giữ `LIMIT 10 OFFSET 5`; đọc số có gạch dưới (`LIMIT 1_0` giữ, `LIMIT 1_000` hạ); thay `LIMIT (SELECT 5000)`; giới hạn cả `UNION`; từ chối `FETCH FIRST`; ghi chú `limit_note` ("Thêm LIMIT 100", "Hạ LIMIT xuống 100") |
 | Bản chạy | Bảng logic thành `read_parquet` và giữ tên làm bí danh; giữ bí danh có sẵn; đổi tên bảng tạm; bảng tạm tên giống file không còn trong bản chạy; `shown` không chứa đường dẫn; một câu có `WITH` và `JOIN` chạy trên DuckDB thật với file Parquet và ra đúng kết quả |
 
