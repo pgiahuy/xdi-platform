@@ -13,8 +13,16 @@ services:
     ports: !reset []
     restart: unless-stopped
 
+  # Database mẫu chỉ để thử trên máy: bản chạy thật không chạy nó, trừ khi bật rõ bằng docker compose --profile demo.
+  demo-db:
+    profiles: [demo]
+
   backend:
     environment:
+      # Không dùng khóa mẫu của docker-compose.yml: để trống thì tính năng nguồn database tắt cho tới khi đặt khóa riêng
+      # (docs/INSTALL.md mục 3). Không có database mẫu, thiết lập lần đầu nạp data/samples/dataco.csv.
+      SOURCE_SECRET_KEY: ${SOURCE_SECRET_KEY:-}
+      SAMPLE_DATABASE_URL: ${SAMPLE_DATABASE_URL:-}
       DATABASE_URL: postgres://xdi:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/xdi
       # Bắt đầu bằng https:// thì cookie phiên có cờ Secure.
       PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env, for example https://du-lieu.example.com}

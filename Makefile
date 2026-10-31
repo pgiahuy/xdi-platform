@@ -11,15 +11,20 @@ BACKUP_DIR ?= $(HOME)/xdi-backups
 # file. Đường dẫn tương đối trong CARGO_TARGET_DIR được cargo tính từ thư mục chạy lệnh, ở đây là backend/.
 CARGO_TARGET := $(if $(filter /%,$(CARGO_TARGET_DIR)),$(CARGO_TARGET_DIR),backend/$(or $(CARGO_TARGET_DIR),target))
 BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
+# Database mẫu nhỏ của compose (dịch vụ demo-db, data/demo-db/README.md), mở trên 127.0.0.1 cho backend chạy ngoài
+# Docker (make dev, make eval). Khóa mẫu của SOURCE_SECRET_KEY như docker-compose.yml, chỉ dùng khi biến chưa đặt.
+DEMO_DB_PORT ?= 5434
+SAMPLE_DATABASE_URL ?= postgres://analyst:analyst@127.0.0.1:$(DEMO_DB_PORT)/company_demo
+SAMPLE_SOURCE_SECRET_KEY := eGRpIHNhbXBsZSBrZXksIGxvY2FsIHVzZSBvbmx5ISE=
 
 .PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-classify
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
-dev: ## Postgres trong Docker, backend chạy local với cargo run
-	$(COMPOSE) up -d postgres
-	cd backend && cargo run
+dev: ## Postgres và database mẫu trong Docker, backend chạy local với cargo run
+	$(COMPOSE) up -d --wait postgres demo-db
+	cd backend && SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" SOURCE_SECRET_KEY="$${SOURCE_SECRET_KEY:-$(SAMPLE_SOURCE_SECRET_KEY)}" cargo run
 
 dev-frontend: ## Giao diện chạy dev ở cổng 5173; /api chuyển sang backend
 	cd frontend && npm install && npm run dev

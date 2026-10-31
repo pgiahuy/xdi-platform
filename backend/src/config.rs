@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::engine::excel_worker::ExcelWorker;
+use crate::sample_database::{build_sample_database, SampleDatabase};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -60,6 +61,9 @@ pub struct Config {
     pub insight_text: bool,
     /// Thư mục chứa file mẫu (SAMPLES_DIR): data/samples của repo, compose gắn vào /samples.
     pub samples_dir: PathBuf,
+    /// Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng (SAMPLE_DATABASE_URL, service/samples.rs).
+    /// None: nạp dataco.csv như trước. Compose trỏ vào dịch vụ demo-db.
+    pub sample_database: Option<SampleDatabase>,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
     pub excel_worker: ExcelWorker,
     /// Khóa mã hóa thông tin kết nối của nguồn database (SOURCE_SECRET_KEY, 32 byte dạng base64). Rỗng thì tính năng
@@ -130,14 +134,29 @@ impl Config {
             samples_dir: PathBuf::from(var_or("SAMPLES_DIR", "../data/samples")),
             excel_worker: ExcelWorker::Process(worker_binary()),
             source_secret_key: Secret::new(var_or("SOURCE_SECRET_KEY", "")),
-            source_allowed_hosts: host_list(&var_or("SOURCE_ALLOWED_HOSTS", "")),
+            source_allowed_hosts: Vec::new(),
             source_max_rows: u64::from(positive_number(
                 "SOURCE_MAX_ROWS",
                 env::var("SOURCE_MAX_ROWS").ok().as_deref(),
                 1_000_000,
             )),
             source_timeout: timeout_secs("SOURCE_TIMEOUT_SECS", 300),
+            sample_database: sample_database(&var_or("SAMPLE_DATABASE_URL", "")),
         }
+        .with_allowed_hosts(&var_or("SOURCE_ALLOWED_HOSTS", ""))
+    }
+
+    /// Danh sách máy chủ được phép, cộng máy của database mẫu: người cài đã chọn máy đó qua SAMPLE_DATABASE_URL, bắt
+    /// thêm nó vào SOURCE_ALLOWED_HOSTS thì quên một biến là thiết lập lần đầu không chụp được, và "Chụp lại" về sau
+    /// cũng bị từ chối.
+    fn with_allowed_hosts(mut self, raw: &str) -> Self {
+        self.source_allowed_hosts = host_list(raw);
+        if let Some(sample) = &self.sample_database {
+            if !self.source_allowed_hosts.contains(&sample.host) {
+                self.source_allowed_hosts.push(sample.host.clone());
+            }
+        }
+        self
     }
 
     /// Cookie phiên có cờ Secure khi người dùng vào qua HTTPS: trình duyệt không bao giờ gửi cookie đó qua HTTP thường,
@@ -150,6 +169,12 @@ impl Config {
     /// In cảnh báo về cấu hình chưa an toàn khi đưa lên mạng. Server gọi một lần lúc khởi động; không chặn khởi động,
     /// vì chạy trên máy để thử thì các giá trị mẫu là bình thường.
     pub fn log_warnings(&self) {
+        if self.source_secret_key.expose() == SAMPLE_SOURCE_SECRET_KEY {
+            tracing::warn!(
+                "SOURCE_SECRET_KEY is the sample key from docker-compose.yml; fine on a local machine, but set your own \
+                 key (openssl rand -base64 32) before connecting a real database (docs/INSTALL.md, section 3)"
+            );
+        }
         if database_password(&self.database_url) == Some(SAMPLE_DB_PASSWORD) {
             tracing::warn!(
                 "DATABASE_URL uses the sample Postgres password; fine on a local machine, but set POSTGRES_PASSWORD \
@@ -185,6 +210,23 @@ const OLLAMA_NUM_CTX_DEFAULT: u32 = 12_288;
 
 /// Mật khẩu mẫu trong docker-compose.yml và .env.example.
 const SAMPLE_DB_PASSWORD: &str = "xdi";
+
+/// Khóa mẫu của SOURCE_SECRET_KEY trong docker-compose.yml và Makefile (base64 của "xdi sample key, local use only!!"),
+/// để bản cài trên máy chụp được database mẫu mà không phải tạo khóa. Ai đọc repo cũng biết khóa này, nên khởi động
+/// với nó thì cảnh báo.
+const SAMPLE_SOURCE_SECRET_KEY: &str = "eGRpIHNhbXBsZSBrZXksIGxvY2FsIHVzZSBvbmx5ISE=";
+
+/// SAMPLE_DATABASE_URL sai dạng thì cảnh báo và bỏ qua (thiết lập lần đầu nạp dataco.csv), không làm backend chết lúc
+/// khởi động.
+fn sample_database(raw: &str) -> Option<SampleDatabase> {
+    match build_sample_database(raw) {
+        Ok(db) => db,
+        Err(why) => {
+            tracing::warn!(%why, "invalid SAMPLE_DATABASE_URL, the first-run setup loads dataco.csv instead");
+            None
+        }
+    }
+}
 
 /// Mật khẩu trong DATABASE_URL dạng postgres://user:mat-khau@host/db, nếu có. Dạng khác (không có mật khẩu, hoặc
 /// chuỗi key=value) trả None.
@@ -329,6 +371,17 @@ fn worker_binary() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sample_database_host_is_always_allowed() {
+        let mut config = Config::from_env();
+        config.sample_database =
+            build_sample_database("postgres://analyst:x@Demo-DB:5432/company_demo").unwrap();
+        let config = config.with_allowed_hosts("db.example.com");
+        assert_eq!(config.source_allowed_hosts, ["db.example.com", "demo-db"]);
+        let config = config.with_allowed_hosts("demo-db");
+        assert_eq!(config.source_allowed_hosts, ["demo-db"]);
+    }
 
     #[test]
     fn host_list_parsing() {

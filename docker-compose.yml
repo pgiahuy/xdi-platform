@@ -88,10 +88,15 @@ services:
       QUERY_TIMEOUT_SECS: ${QUERY_TIMEOUT_SECS:-30}
       ASK_MAX_ROWS: ${ASK_MAX_ROWS:-100000}
       SEED_SAMPLE: ${SEED_SAMPLE:-true}
+      # Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng (data/README.md). Đặt rỗng trong .env
+      # (SAMPLE_DATABASE_URL=) để nạp data/samples/dataco.csv như trước.
+      SAMPLE_DATABASE_URL: ${SAMPLE_DATABASE_URL-postgres://analyst:analyst@demo-db:5432/company_demo}
       ANSWER_TEXT: ${ANSWER_TEXT:-true}
       INSIGHT_TEXT: ${INSIGHT_TEXT:-true}
-      # Nguồn database (docs/DATA.md): khóa trống thì tính năng tắt, danh sách máy chủ trống thì không thêm được nguồn.
-      SOURCE_SECRET_KEY: ${SOURCE_SECRET_KEY:-}
+      # Nguồn database (docs/DATA.md): khóa trống thì tính năng tắt, danh sách máy chủ trống thì không thêm được nguồn
+      # (máy của SAMPLE_DATABASE_URL luôn được phép). Khóa mặc định là khóa mẫu, chỉ để chạy trên máy như mật khẩu
+      # Postgres mẫu; backend cảnh báo khi khởi động. Bản chạy thật không dùng khóa này (docker-compose.prod.yml).
+      SOURCE_SECRET_KEY: ${SOURCE_SECRET_KEY:-eGRpIHNhbXBsZSBrZXksIGxvY2FsIHVzZSBvbmx5ISE=}
       SOURCE_ALLOWED_HOSTS: ${SOURCE_ALLOWED_HOSTS:-}
       SOURCE_MAX_ROWS: ${SOURCE_MAX_ROWS:-1000000}
       SOURCE_TIMEOUT_SECS: ${SOURCE_TIMEOUT_SECS:-300}
@@ -109,6 +114,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # Chờ database mẫu nạp xong để thiết lập lần đầu chụp được bảng. required: false để bản chạy thật tắt demo-db
+      # (docker-compose.prod.yml) mà backend vẫn chạy.
+      demo-db:
+        condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:$${BACKEND_PORT:-8000}/api/health"]
       interval: 10s

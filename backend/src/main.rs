@@ -9,6 +9,7 @@ mod cli;
 mod config;
 mod engine;
 mod error;
+mod sample_database;
 mod service;
 mod state;
 
