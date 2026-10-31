@@ -23,7 +23,7 @@ use crate::service::ask::examples::build_why_example;
 use crate::service::ask::narrate::narrate;
 use crate::service::explain::annotate::{annotate_dimensions, build_value_presences, Totals};
 use crate::service::explain::build_direction_text;
-use crate::service::explain::claims_tests::build_example_reply;
+use crate::service::explain::claims_tests::{build_example_reply, build_skewed_example};
 use crate::service::explain::number::{build_number_text, MAX_FRACTION_DIGITS};
 use crate::service::explain::{
     build_narrate_prompt, build_number_check, build_template_summary, MAX_REASONS,
@@ -995,4 +995,54 @@ async fn judge_failure_falls_back_without_rewriting() {
         assert!(detail.to_lowercase().contains("mô hình chấm"), "{detail}");
         assert_eq!(llm.prompts(LlmTask::Narrate).len(), 1);
     }
+}
+
+/// Số đơn hai bên chênh nhiều (#260): lời chỉ kể nhóm mà không nói chênh lệch chủ yếu do số đơn thì trượt cổng 1, được
+/// viết lại một lần kèm lý do; vẫn thiếu thì dùng câu khuôn, câu khuôn nói ý quy mô ở ý đầu.
+#[tokio::test]
+async fn reply_without_the_scale_reason_falls_back_to_the_template() {
+    let explanation = build_skewed_example();
+    let groups_only = json_reply(
+        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017.",
+        serde_json::json!([{ "field": "change", "column": "", "group": "", "value": "-1.283.400,00" }]),
+    );
+    let llm = SequenceLlm::new(vec![groups_only.clone(), groups_only]);
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
+    assert!(!outcome.summary_by_model);
+    assert_eq!(outcome.verdict, Some(AnswerVerdict::Mismatch));
+    let prompts = llm.prompts(LlmTask::Narrate);
+    assert_eq!(prompts.len(), 2);
+    assert!(prompts[1].contains("Lời thiếu ý chính"), "{}", prompts[1]);
+    assert!(
+        prompts[0].contains("\"scale_main\": true"),
+        "{}",
+        prompts[0]
+    );
+    assert!(
+        outcome
+            .summary
+            .contains("Lý do chính: chủ yếu do số đơn (Quý 2/2017 có 5.000, Quý 3/2017 có 2.000"),
+        "{}",
+        outcome.summary
+    );
+}
+
+/// Lời nêu số đơn hai bên qua cổng 1; mô hình chấm nhận cờ scale_main để biết ý chính là quy mô.
+#[tokio::test]
+async fn judge_is_told_that_scale_is_the_main_point() {
+    let explanation = build_skewed_example();
+    let with_counts = json_insight(
+        "Doanh thu Quý 3/2017 giảm 1.283.400,00 so với Quý 2/2017.",
+        &[("Ít đơn hơn", "Số đơn giảm từ 5.000 xuống 2.000.")],
+        serde_json::json!([
+            { "field": "change", "column": "", "group": "", "value": "-1.283.400,00" },
+            { "field": "base_volume", "column": "", "group": "", "value": "5.000" },
+            { "field": "compare_volume", "column": "", "group": "", "value": "2.000" }
+        ]),
+    );
+    let llm = SequenceLlm::new(vec![with_counts]);
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
+    assert!(outcome.summary_by_model);
+    let judged = llm.prompts(LlmTask::Judge);
+    assert!(judged[0].contains("\"scale_main\": true"), "{}", judged[0]);
 }

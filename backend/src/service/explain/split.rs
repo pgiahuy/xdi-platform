@@ -75,7 +75,10 @@ pub fn build_split(e: &Explanation) -> Option<Split> {
 
 // None khi một số không đọc được hay một lượng không dương: khi đó không bắt lời phải nói gì thêm.
 fn is_scale_main(numbers: &VolumePriceNumbers) -> Option<bool> {
-    let (base, compare) = (parse(&numbers.base_volume)?, parse(&numbers.compare_volume)?);
+    let (base, compare) = (
+        parse(&numbers.base_volume)?,
+        parse(&numbers.compare_volume)?,
+    );
     let (small, large) = (base.min(compare), base.max(compare));
     if small <= Decimal::ZERO {
         return None;

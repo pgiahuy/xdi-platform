@@ -7,7 +7,8 @@ use crate::service::ask::total_alias::build_total_aliases;
 
 #[test]
 fn a_sum_alias_and_its_order_by_are_renamed() {
-    let sql = "SELECT \"Order Status\", SUM(\"Benefit per order\") AS \"Lợi nhuận mỗi đơn\" FROM dataco \
+    let sql =
+        "SELECT \"Order Status\", SUM(\"Benefit per order\") AS \"Lợi nhuận mỗi đơn\" FROM dataco \
                GROUP BY \"Order Status\" ORDER BY \"Lợi nhuận mỗi đơn\" DESC";
     let renamed = build_total_aliases(sql).expect("renamed");
     assert_eq!(

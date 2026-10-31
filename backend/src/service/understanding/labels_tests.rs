@@ -79,3 +79,31 @@ fn measure_label_does_not_repeat_the_prefix() {
         "Tổng lợi nhuận của đơn hàng (Profit)"
     );
 }
+
+/// Cột "mỗi đơn" cộng lại là tổng (#260): thẻ gọi "Tổng lợi nhuận", không phải "Tổng lợi nhuận trên mỗi đơn hàng".
+/// AVG và COUNT giữ nghĩa "mỗi đơn" của cột.
+#[test]
+fn sum_of_a_per_order_column_is_a_total() {
+    let mut bare = column("Order Profit Per Order", "");
+    bare.description = None;
+    let profile = [
+        column("Benefit per order", "Lợi nhuận trên mỗi đơn hàng."),
+        bare,
+    ];
+    assert_eq!(
+        measure_label(r#"SUM("Benefit per order")"#, &profile),
+        "Tổng lợi nhuận (Benefit per order)"
+    );
+    assert_eq!(
+        measure_label(r#"SUM("Order Profit Per Order")"#, &profile),
+        "Tổng Order Profit (Order Profit Per Order)"
+    );
+    assert_eq!(
+        measure_label(r#"AVG("Benefit per order")"#, &profile),
+        "Trung bình lợi nhuận trên mỗi đơn hàng (Benefit per order)"
+    );
+    assert_eq!(
+        measure_label(r#"COUNT("Benefit per order")"#, &profile),
+        "Số dòng có lợi nhuận trên mỗi đơn hàng (Benefit per order)"
+    );
+}

@@ -70,12 +70,18 @@ fn only_a_sum_alias_is_renamed() {
         build_alias_label(alias, "ROUND(SUM(\"Benefit per order\"), 2)"),
         "Tổng lợi nhuận"
     );
-    assert_eq!(build_alias_label(alias, "AVG(\"Benefit per order\")"), alias);
+    assert_eq!(
+        build_alias_label(alias, "AVG(\"Benefit per order\")"),
+        alias
+    );
     assert_eq!(
         build_alias_label(alias, "COUNT(\"Benefit per order\")"),
         alias
     );
-    assert_eq!(build_alias_label("Doanh thu", "SUM(\"Sales\")"), "Doanh thu");
+    assert_eq!(
+        build_alias_label("Doanh thu", "SUM(\"Sales\")"),
+        "Doanh thu"
+    );
 }
 
 #[test]

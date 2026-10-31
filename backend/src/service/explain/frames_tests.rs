@@ -511,3 +511,22 @@ fn dimension_period_with_groups_points_to_a_filter() {
         errors[0].message
     );
 }
+
+/// Cột có bí danh "mỗi đơn" (#260): sum là tổng nên gọi "Tổng lợi nhuận"; avg và count giữ nghĩa "mỗi đơn" của cột.
+#[test]
+fn sum_of_a_per_order_column_is_called_a_total() {
+    let mut fixture = Fixture::new();
+    let total = fixture
+        .columns
+        .iter_mut()
+        .find(|c| c.name == "Order Item Total")
+        .unwrap();
+    total.aliases = vec!["lợi nhuận mỗi đơn".to_string()];
+    let label = |agg: &str| {
+        let plan = fixture.plan(measured(json!({"column": "Order Item Total", "agg": agg})));
+        plan.measure.label
+    };
+    assert_eq!(label("sum"), "Tổng lợi nhuận");
+    assert_eq!(label("avg"), "Trung bình lợi nhuận mỗi đơn");
+    assert_eq!(label("count"), "Số dòng có lợi nhuận mỗi đơn");
+}

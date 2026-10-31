@@ -23,7 +23,6 @@ use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 
 use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError, GuardedSql};
-use crate::service::ask::total_alias::build_total_aliases;
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::query::{run_query, QueryError, QueryOutput};
 use crate::error::AppError;
@@ -41,6 +40,7 @@ use crate::service::ask::reply::{
     Term, Unanswerable,
 };
 use crate::service::ask::result::{build_result_table, SENT_ROWS};
+use crate::service::ask::total_alias::build_total_aliases;
 
 /// Lời cho người hỏi khi câu SQL của vòng sửa vẫn bị guard từ chối. Lỗi nằm ở câu hệ thống viết, không ở câu hỏi, nên
 /// lời không đưa lý do kỹ thuật mà gợi ý cách hỏi lại.

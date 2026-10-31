@@ -421,7 +421,9 @@ fn build_aggregate_label(tree: &Expr, profile: &[ColumnProfile]) -> Option<Strin
     let label = match (name.as_str(), distinct) {
         ("count", true) => format!("{} khác nhau", build_prefixed("Số", &subject)),
         ("count", false) => format!("Số dòng có {subject}"),
-        ("sum", false) => build_total_label(arg, profile).unwrap_or(build_prefixed("Tổng", &subject)),
+        ("sum", false) => {
+            build_total_label(arg, profile).unwrap_or(build_prefixed("Tổng", &subject))
+        }
         ("avg" | "mean", false) => build_prefixed("Trung bình", &subject),
         ("min", _) => format!("Nhỏ nhất của {subject}"),
         ("max", _) => format!("Lớn nhất của {subject}"),
