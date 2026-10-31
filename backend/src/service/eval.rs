@@ -8,7 +8,9 @@ như thiết lập lần đầu (service/samples_db.rs), mỗi database một ng
 (bảng logic người hỏi chọn), và SQL đúng được đọc mọi bảng của workspace.
 
 So bằng tập dòng kết quả, không so chữ SQL: nhiều câu SQL khác nhau cùng trả lời đúng một câu hỏi. Một ca có thể có
-nhiều expected_sql (câu mơ hồ kiểu "doanh thu trước hay sau giảm giá"), khớp một là đúng.
+nhiều expected_sql (câu mơ hồ kiểu "doanh thu trước hay sau giảm giá"), khớp một là đúng. Luật so ở
+service/eval_grade.rs (#202). Ba trạng thái (Verdict): đạt, trượt, cần xem lại; câu cần xem lại (mô hình không trả lời
+được, đáp án không chạy, hệ thống hỏi lại) không vào tỷ lệ đúng. Câu loại why_* chạy như câu thường là trượt.
 
 Đo bài học (#228): có file bài học (`--lessons`) thì cả bộ chạy hai lượt trên cùng workspace tạm, lượt đầu không bài
 nào, rồi tạo và bật các bài đó qua đúng đường admin dùng (service/lessons/), lượt sau có bài học. Báo cáo là của lượt
@@ -27,10 +29,11 @@ use crate::engine::store::Dataset;
 use crate::error::AppError;
 use crate::sample_database::SampleDatabase;
 use crate::service;
-use crate::service::ask::contract::{AskStatus, CellValue};
+use crate::service::ask::contract::{AskResponse, AskStatus, CellValue};
 use crate::service::ask::fanout::build_links;
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::{ask, AskHistory};
+use crate::service::eval_grade::build_eval_verdict;
 use crate::service::lessons::contract::LessonRequest;
 use crate::service::samples::{upload_local_file, SAMPLE_NAME};
 use crate::service::samples_db::seed_database;
@@ -48,6 +51,18 @@ pub struct EvalCase {
     pub expected_sql: Vec<String>,
     #[serde(default)]
     pub ordered: bool,
+    /// Loại câu theo #202, ví dụ plain_simple, why_groups. Câu loại why_* phải được trả lời bằng đường giải thích.
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Vị trí (từ 0) các cột của đáp án bắt buộc có trong kết quả; rỗng là mọi cột (service/eval_grade.rs).
+    #[serde(default)]
+    pub required_columns: Vec<usize>,
+}
+
+impl EvalCase {
+    fn is_why(&self) -> bool {
+        self.kind.as_deref().is_some_and(|k| k.starts_with("why_"))
+    }
 }
 
 /// Dữ liệu của một lần đánh giá.
@@ -60,15 +75,32 @@ pub enum EvalData<'a> {
 pub struct CaseOutcome {
     pub id: String,
     pub question: String,
+    /// verdict là pass. Giữ trường này để so hai lượt có và không có bài học như trước.
     pub ok: bool,
-    /// Lý do khi sai: trạng thái không phải answered, SQL sinh ra, hoặc chỗ kết quả lệch.
+    pub verdict: Verdict,
+    /// Ghi chú khi đạt (thừa cột, cột khác thứ tự); lý do khi trượt hay cần xem lại: trạng thái không phải answered,
+    /// SQL sinh ra, chỗ kết quả lệch, lỗi của nhà cung cấp mô hình.
     pub detail: String,
+}
+
+/// Kết quả chấm một câu (#202).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    Pass,
+    Fail,
+    /// Chưa chấm được: mô hình không trả lời (hết hạn mức, quá tải, thiếu khóa), đáp án không chạy, hay hệ thống hỏi lại
+    /// để chọn cách hiểu. Không vào mẫu số của tỷ lệ đúng: một lần hết hạn mức không được kéo tỷ lệ xuống.
+    Review,
 }
 
 #[derive(Debug, Serialize)]
 pub struct EvalReport {
     pub total: usize,
     pub passed: usize,
+    pub failed: usize,
+    pub review: usize,
+    /// passed / (passed + failed): câu cần xem lại không vào mẫu số.
     pub accuracy: f64,
     pub cases: Vec<CaseOutcome>,
     /// Chỉ có khi chạy với file bài học; vắng thì eval/result.json giữ đúng hình dạng cũ.
@@ -155,32 +187,37 @@ async fn run_rounds(
     let changed = with
         .iter()
         .zip(&without)
-        .filter(|(a, b)| a.ok != b.ok)
+        .filter(|(a, b)| a.verdict != b.verdict)
         .map(|(a, _)| a.id.clone())
         .collect();
-    let passed_without = without.iter().filter(|c| c.ok).count();
     let comparison = LessonsComparison {
         lessons: lessons.len(),
-        passed_without,
-        accuracy_without: build_accuracy(passed_without, without.len()),
+        passed_without: count(&without, Verdict::Pass),
+        accuracy_without: build_accuracy(&without),
         changed,
     };
     Ok(build_report(with, Some(comparison)))
 }
 
 fn build_report(cases: Vec<CaseOutcome>, lessons: Option<LessonsComparison>) -> EvalReport {
-    let passed = cases.iter().filter(|c| c.ok).count();
     EvalReport {
         total: cases.len(),
-        passed,
-        accuracy: build_accuracy(passed, cases.len()),
+        passed: count(&cases, Verdict::Pass),
+        failed: count(&cases, Verdict::Fail),
+        review: count(&cases, Verdict::Review),
+        accuracy: build_accuracy(&cases),
         cases,
         lessons,
     }
 }
 
-fn build_accuracy(passed: usize, total: usize) -> f64 {
-    passed as f64 / total.max(1) as f64
+fn count(cases: &[CaseOutcome], verdict: Verdict) -> usize {
+    cases.iter().filter(|c| c.verdict == verdict).count()
+}
+
+fn build_accuracy(cases: &[CaseOutcome]) -> f64 {
+    let passed = count(cases, Verdict::Pass);
+    passed as f64 / (passed + count(cases, Verdict::Fail)).max(1) as f64
 }
 
 /// Tạo rồi bật từng bài, như admin làm ở màn Bài học; người chạy eval là admin của workspace tạm. Bài không áp cho cả
@@ -332,61 +369,111 @@ async fn run_case(
     datasets: &[Dataset],
     case: &EvalCase,
 ) -> CaseOutcome {
-    match run_case_inner(state, member, datasets, case).await {
-        Ok(detail) => CaseOutcome {
-            id: case.id.clone(),
-            question: case.question.clone(),
-            ok: true,
-            detail,
-        },
-        Err(detail) => CaseOutcome {
-            id: case.id.clone(),
-            question: case.question.clone(),
-            ok: false,
-            detail,
-        },
+    let (verdict, detail) = grade_case(state, member, datasets, case).await;
+    CaseOutcome {
+        id: case.id.clone(),
+        question: case.question.clone(),
+        ok: verdict == Verdict::Pass,
+        verdict,
+        detail,
     }
 }
 
-async fn run_case_inner(
+async fn grade_case(
     state: &AppState,
     member: &Member,
     datasets: &[Dataset],
     case: &EvalCase,
-) -> Result<String, String> {
-    let dataset_id = pick_dataset(datasets, case)?.id.to_string();
-    let expected = expected_rows(state, member, datasets, case).await?;
+) -> (Verdict, String) {
+    // Ca trỏ tới bảng không có, hay mọi expected_sql đều hỏng: lỗi của bộ câu, người viết câu phải sửa, không phải mô
+    // hình trả lời sai.
+    let dataset_id = match pick_dataset(datasets, case) {
+        Ok(d) => d.id.to_string(),
+        Err(why) => return (Verdict::Review, why),
+    };
+    let expected = match expected_tables(state, member, datasets, case).await {
+        Ok(t) => t,
+        Err(why) => return (Verdict::Review, why),
+    };
     // Mỗi câu của bộ đánh giá là một câu độc lập, không có hội thoại trước.
     let history = AskHistory::default();
-    let response = ask(state, member, &dataset_id, &case.question, &[], &history)
-        .await
-        .map_err(|e| format!("lỗi hệ thống khi hỏi: {e:?}"))?;
-    if response.status != AskStatus::Answered {
-        return Err(format!(
-            "status {:?} thay vì answered; message: {}",
-            response.status,
-            response.message.unwrap_or_default()
-        ));
+    match ask(state, member, &dataset_id, &case.question, &[], &history).await {
+        Ok(response) => build_answer_verdict(&response, case, &expected),
+        Err(error) => build_ask_error_verdict(&error),
     }
-    let result = response.result.ok_or("answered nhưng không có result")?;
-    build_eval_verdict(&result.rows, &expected, case.ordered).map_err(|why| {
-        format!(
-            "{why}; sql sinh ra: {}",
-            response.sql_generated.unwrap_or_default()
-        )
-    })?;
-    Ok("khớp".to_string())
 }
 
-/// Chạy các câu SQL đúng viết tay qua guard và DuckDB, lấy câu đầu chạy được. Cả expected lẫn câu mô hình sinh đều
+/// ask trả lỗi. Lỗi của nhà cung cấp mô hình (hết hạn mức sau mọi lần chờ ở service/eval_pace.rs, quá tải, thiếu khóa)
+/// chưa nói gì về câu trả lời, nên là cần xem lại; lỗi khác là trượt.
+pub fn build_ask_error_verdict(error: &AppError) -> (Verdict, String) {
+    match error {
+        AppError::Upstream(m) | AppError::Unavailable(m) => {
+            (Verdict::Review, format!("mô hình không trả lời được: {m}"))
+        }
+        e => (Verdict::Fail, format!("lỗi hệ thống khi hỏi: {e:?}")),
+    }
+}
+
+/// Chấm câu trả lời với các bảng đáp án (mỗi expected_sql chạy được một bảng, khớp một là đạt), luật so ở
+/// service/eval_grade.rs.
+pub fn build_answer_verdict(
+    response: &AskResponse,
+    case: &EvalCase,
+    expected: &[Vec<Vec<Option<CellValue>>>],
+) -> (Verdict, String) {
+    let sql = response.sql_generated.as_deref().unwrap_or_default();
+    let message = response.message.as_deref().unwrap_or_default();
+    match response.status {
+        AskStatus::Answered => {}
+        // Hỏi lại để chọn cách hiểu không sai với câu mơ hồ; người đọc kết quả quyết định câu đó có mơ hồ không.
+        AskStatus::NeedsChoice => {
+            return (
+                Verdict::Review,
+                format!("hệ thống hỏi lại để chọn cách hiểu: {message}"),
+            )
+        }
+        status => {
+            return (
+                Verdict::Fail,
+                format!("status {status:?} thay vì answered; message: {message}"),
+            )
+        }
+    }
+    // Bảng khớp mà không có phần giải thích thì câu đã chạy như câu thường (form sai hai lần, explain/plain.rs): người
+    // hỏi "vì sao" không nhận được nguyên nhân.
+    if case.is_why() && response.explanation.is_none() {
+        return (
+            Verdict::Fail,
+            format!("câu tìm nguyên nhân chạy như câu thường; sql sinh ra: {sql}"),
+        );
+    }
+    let Some(result) = &response.result else {
+        return (Verdict::Fail, "answered nhưng không có result".to_string());
+    };
+    let mut first_error = None;
+    for table in expected {
+        match build_eval_verdict(&result.rows, table, case.ordered, &case.required_columns) {
+            Ok(note) => return (Verdict::Pass, note),
+            Err(why) => {
+                first_error.get_or_insert(why);
+            }
+        }
+    }
+    (
+        Verdict::Fail,
+        format!("{}; sql sinh ra: {sql}", first_error.unwrap_or_default()),
+    )
+}
+
+/// Chạy các câu SQL đúng viết tay qua guard và DuckDB, giữ bảng của mọi câu chạy được (khớp một là đạt). Cả expected lẫn câu mô hình sinh đều
 /// qua cùng một guard và cùng một engine nên cách so không thiên vị cách viết SQL. SQL đúng được đọc mọi dataset của
 /// workspace tạm (với database mẫu là mọi bảng đã chụp), bản hiện tại của từng cái.
-async fn expected_rows(
+async fn expected_tables(
     state: &AppState,
     member: &Member,
     datasets: &[Dataset],
     case: &EvalCase,
-) -> Result<Vec<Vec<Option<CellValue>>>, String> {
+) -> Result<Vec<Vec<Vec<Option<CellValue>>>>, String> {
     let mut tables = Vec::new();
     for dataset in datasets {
         tables.push(build_allowed_table(state, member, dataset).await?);
@@ -401,6 +488,7 @@ async fn expected_rows(
         let dataset = datasets.iter().find(|d| d.id == id)?;
         Some(dataset.logical_table.clone())
     });
+    let mut tables_out = Vec::new();
     let mut last_error = String::new();
     for sql in &case.expected_sql {
         let guarded = match build_guarded_sql(sql, &tables, &links, state.config.ask_max_rows) {
@@ -416,11 +504,14 @@ async fn expected_rows(
             .await
             .map_err(|e| format!("{e:?}"))?;
         match output {
-            Ok(o) => return Ok(build_result_table(o, state.config.ask_max_rows).rows),
+            Ok(o) => tables_out.push(build_result_table(o, state.config.ask_max_rows).rows),
             Err(e) => last_error = format!("expected_sql chạy lỗi: {e:?}"),
         }
     }
-    Err(format!("không expected_sql nào chạy được: {last_error}"))
+    if tables_out.is_empty() {
+        return Err(format!("không expected_sql nào chạy được: {last_error}"));
+    }
+    Ok(tables_out)
 }
 
 /// Bảng guard cho phép của một dataset: tên bảng logic, cột và thư mục Parquet của phiên bản hiện tại.
@@ -457,90 +548,4 @@ async fn build_allowed_table(
 
 fn parse_uuid(text: &str) -> Result<uuid::Uuid, String> {
     uuid::Uuid::parse_str(text).map_err(|e| e.to_string())
-}
-
-/// Một ô kết quả đưa về dạng so được; cả hai phía đã qua build_result_table nên định dạng ô giống nhau.
-#[derive(Debug, Clone, PartialEq)]
-enum Cell {
-    Null,
-    Num(f64),
-    Str(String),
-    Bool(bool),
-}
-
-impl Cell {
-    /// Khóa sắp xếp cho chế độ không thứ tự: xếp theo loại rồi theo chữ.
-    fn sort_key(&self) -> String {
-        match self {
-            Cell::Null => "0".to_string(),
-            Cell::Bool(b) => format!("1{b}"),
-            Cell::Num(n) => format!("2{n:020}"),
-            Cell::Str(s) => format!("3{s}"),
-        }
-    }
-}
-
-fn cell_of_answer(cell: &Option<CellValue>) -> Cell {
-    match cell {
-        None => Cell::Null,
-        Some(CellValue::Number(n)) => Cell::Num(*n),
-        Some(CellValue::String(s)) => Cell::Str(s.clone()),
-        Some(CellValue::Boolean(b)) => Cell::Bool(*b),
-    }
-}
-
-/// So hai tập dòng kết quả: cùng số cột, cùng số dòng, từng ô khớp. Số so với sai số tương đối 1e-6; không `ordered`
-/// thì sắp xếp hai phía trước khi so. Bỏ qua tên cột vì bí danh SQL là chi tiết cách viết, không phải đúng sai.
-pub fn build_eval_verdict(
-    actual: &[Vec<Option<CellValue>>],
-    expected: &[Vec<Option<CellValue>>],
-    ordered: bool,
-) -> Result<(), String> {
-    let mut left: Vec<Vec<Cell>> = actual
-        .iter()
-        .map(|row| row.iter().map(cell_of_answer).collect())
-        .collect();
-    let mut right: Vec<Vec<Cell>> = expected
-        .iter()
-        .map(|row| row.iter().map(cell_of_answer).collect())
-        .collect();
-    let width = right.first().map(|r| r.len()).unwrap_or(0);
-    if left.first().map(|r| r.len()).unwrap_or(0) != width {
-        return Err(format!(
-            "số cột khác: {} thay vì {width}",
-            left.first().map(|r| r.len()).unwrap_or(0)
-        ));
-    }
-    if left.len() != right.len() {
-        return Err(format!(
-            "số dòng khác: {} thay vì {}",
-            left.len(),
-            right.len()
-        ));
-    }
-    if !ordered {
-        let key = |row: &Vec<Cell>| {
-            row.iter()
-                .map(|c| c.sort_key())
-                .collect::<Vec<_>>()
-                .join("\u{1}")
-        };
-        left.sort_by_key(key);
-        right.sort_by_key(key);
-    }
-    for (r, (a, e)) in left.iter().zip(&right).enumerate() {
-        for (c, (a, e)) in a.iter().zip(e).enumerate() {
-            if !cells_match(a, e) {
-                return Err(format!("dòng {r} cột {c} lệch: {a:?} thay vì {e:?}"));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn cells_match(a: &Cell, e: &Cell) -> bool {
-    match (a, e) {
-        (Cell::Num(x), Cell::Num(y)) => (x - y).abs() <= 1e-6 * y.abs().max(1.0),
-        _ => a == e,
-    }
 }

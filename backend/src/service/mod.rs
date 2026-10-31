@@ -16,6 +16,9 @@ pub mod eval;
 pub mod eval_classify;
 #[cfg(test)]
 mod eval_classify_tests;
+pub mod eval_grade;
+#[cfg(test)]
+mod eval_grade_tests;
 pub mod eval_judge;
 #[cfg(test)]
 mod eval_judge_tests;
@@ -24,6 +27,8 @@ pub mod eval_pace;
 mod eval_pace_tests;
 #[cfg(test)]
 mod eval_tests;
+#[cfg(test)]
+mod eval_verdict_tests;
 pub mod excel;
 pub mod explain;
 pub mod feedback;
