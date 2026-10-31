@@ -23,6 +23,7 @@ use crate::service::explain::check::{PlanSlices, WhyPlan};
 use crate::service::explain::dimension_pick::{
     build_useless_reason, has_same_numbers, pick_dimensions, prefers, Presence,
 };
+use crate::service::explain::group_base::GroupBase;
 use crate::service::explain::measure::{Additive, PlanMeasure};
 use crate::service::explain::sql::build_ident;
 
@@ -98,7 +99,7 @@ fn plan(dimensions: &[&str]) -> WhyPlan {
         },
         slices: PlanSlices::Groups {
             column: "segment".to_string(),
-            base: "A".to_string(),
+            base: GroupBase::Value("A".to_string()),
             compare: "B".to_string(),
             period: None,
         },
