@@ -14,15 +14,13 @@ Kỳ trong bộ lọc ngày tính trọn kỳ: "between 2017-03 và 2017-06" là
 use std::str::FromStr;
 
 use rust_decimal::Decimal;
-use sqlparser::ast::{BinaryOperator, Expr, Value};
+use sqlparser::ast::Expr;
 
 use crate::engine::store::{ProfileColumn, ProfileRole};
 use crate::service::explain::check::{check_value, find_column, wrong_role, WhyProfile};
+use crate::service::explain::filter_bound::{parse_date_period, Bound};
 use crate::service::explain::form::{FieldError, FormFilter, WhyForm};
-use crate::service::explain::period::{Grain, Period};
-use crate::service::explain::sql::{
-    build_binary, build_equals, build_ident, build_string, build_time_expr, build_timestamp,
-};
+use crate::service::explain::sql::{build_equals, build_ident, build_string, build_time_expr};
 use crate::service::profile::is_number_type;
 
 /// Các phép của trường op, đúng enum của schema (ask/why_prompt.rs).
@@ -248,88 +246,4 @@ impl FilterCheck<'_> {
             errors,
         )
     }
-}
-
-/// Một đầu của khoảng lọc.
-enum Bound {
-    Number(Decimal),
-    Text(String),
-    /// Một kỳ trọn vẹn: "> 2017-05" là từ đầu tháng 6.
-    Period(Period),
-}
-
-impl Bound {
-    fn is_before_or_same(&self, other: &Bound) -> bool {
-        match (self, other) {
-            (Bound::Number(a), Bound::Number(b)) => a <= b,
-            (Bound::Text(a), Bound::Text(b)) => a <= b,
-            (Bound::Period(a), Bound::Period(b)) => match (a.range(), b.range()) {
-                (Some((start, _)), Some((_, end))) => start < end,
-                _ => false,
-            },
-            _ => false,
-        }
-    }
-
-    /// `subject >= đầu`.
-    fn build_from(&self, subject: &Expr) -> Expr {
-        build_binary(subject.clone(), BinaryOperator::GtEq, self.build_start())
-    }
-
-    /// `subject <= giá trị`, hay `subject < đầu kỳ sau` với một kỳ.
-    fn build_until(&self, subject: &Expr) -> Expr {
-        match self {
-            Bound::Period(_) => build_binary(subject.clone(), BinaryOperator::Lt, self.build_end()),
-            _ => build_binary(subject.clone(), BinaryOperator::LtEq, self.build_start()),
-        }
-    }
-
-    /// `subject > giá trị`, hay `subject >= đầu kỳ sau` với một kỳ.
-    fn build_after(&self, subject: &Expr) -> Expr {
-        match self {
-            Bound::Period(_) => {
-                build_binary(subject.clone(), BinaryOperator::GtEq, self.build_end())
-            }
-            _ => build_binary(subject.clone(), BinaryOperator::Gt, self.build_start()),
-        }
-    }
-
-    /// `subject < giá trị`, hay `subject < đầu kỳ` với một kỳ.
-    fn build_before(&self, subject: &Expr) -> Expr {
-        build_binary(subject.clone(), BinaryOperator::Lt, self.build_start())
-    }
-
-    /// Giá trị, hay ngày đầu của kỳ.
-    fn build_start(&self) -> Expr {
-        match self {
-            Bound::Number(number) => build_number(*number),
-            Bound::Text(text) => build_string(text),
-            Bound::Period(period) => build_timestamp(period.range().unwrap_or_default().0),
-        }
-    }
-
-    /// Ngày đầu của kỳ sau; với số và chữ là chính giá trị.
-    fn build_end(&self) -> Expr {
-        match self {
-            Bound::Period(period) => build_timestamp(period.range().unwrap_or_default().1),
-            _ => self.build_start(),
-        }
-    }
-}
-
-fn build_number(number: Decimal) -> Expr {
-    Expr::Value(Value::Number(number.normalize().to_string(), false).with_empty_span())
-}
-
-/// Kỳ của một giá trị ngày trong bộ lọc: thử lần lượt ngày, tháng, quý, năm theo cách viết của Period::parse.
-fn parse_date_period(text: &str) -> Option<Period> {
-    [
-        Grain::Day,
-        Grain::Week,
-        Grain::Month,
-        Grain::Quarter,
-        Grain::Year,
-    ]
-    .into_iter()
-    .find_map(|grain| Period::parse(grain, text).ok())
 }

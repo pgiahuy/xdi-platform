@@ -31,6 +31,7 @@ pub mod dimension_pick;
 #[cfg(test)]
 mod dimension_pick_tests;
 pub mod filter;
+mod filter_bound;
 pub mod form;
 #[cfg(test)]
 mod frames_run_tests;
