@@ -38,6 +38,7 @@ từ 37 đến 46 giây, có lần tới 1 phút 50 giây; sau khi nạp, hai sc
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `DEMO_DB_PORT` | `5440` | Cổng trên localhost |
+| `DEMO_ADMINER_PORT` | `8090` | Cổng của Adminer trên localhost, khi bật profile `adminer` |
 | `DEMO_DB_PASSWORD` | `demo` | Mật khẩu của người dùng chủ `demo`, chỉ đặt được trước lần chạy đầu |
 | `DEMO_DATA_DIR` | `../downloads` | Thư mục chứa CSV, tính từ thư mục này, gắn chỉ đọc vào container ở `/downloads` |
 | `KEEP_STAGING` | không đặt | `KEEP_STAGING=1 sh load.sh` giữ schema `staging` để chạy `sql/verify.sql` |
@@ -55,7 +56,18 @@ Backend chạy trong Docker không tới được cổng chỉ mở trên `127.0
 container này (`docker network connect xdi-demo-db_default <tên container backend>`) rồi dùng
 `postgres://analyst:analyst@xdi-demo-db:5432/company_demo`.
 
-Xóa hẳn: `docker compose -f data/postgres-demo/docker-compose.yml down -v`.
+Xem bảng trên trình duyệt khi trình diễn: Adminer (image `adminer:5.4.1`), chỉ chạy khi bật profile `adminer`.
+
+```bash
+docker compose -f data/postgres-demo/docker-compose.yml --profile adminer up -d
+```
+
+Mở http://127.0.0.1:8090 (đổi cổng bằng `DEMO_ADMINER_PORT`), chọn System là PostgreSQL, Server để sẵn `demo-db`,
+Username và Password `analyst`, Database `company_demo`. Đăng nhập bằng `analyst` thì chỉ đọc được, như ứng dụng.
+Tắt: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer stop adminer`. `load.sh` chỉ bật
+`demo-db`, không bật Adminer.
+
+Xóa hẳn: `docker compose -f data/postgres-demo/docker-compose.yml --profile adminer down -v`.
 
 ## Sơ đồ quan hệ
 
@@ -231,17 +243,29 @@ Lần chạy gần nhất (31/10/2026, có hai bước cài nguyên nhân) cả 
   `final_result` đổi thành `Withdrawn`, các cột khác giữ nguyên. Điểm trung bình theo kết quả cuối khóa (câu 7) so với
   CSV sau khi bỏ nhóm này ở cả hai phía, nên qua cả khi có và khi không có bước cài.
 
-## Câu hỏi mẫu cần nhiều bảng
+## Câu hỏi mẫu và bảng cần dùng
 
-- Lợi nhuận theo phòng ban và thị trường năm 2017 (`order_items`, `products`, `categories`, `departments`, `orders`).
-- Tỷ lệ đơn giao trễ theo cách giao và phân khúc khách (`orders`, `customers`).
-- Mười sản phẩm có doanh số cao nhất ở Europe, kèm danh mục (`order_items`, `orders`, `products`, `categories`).
-- Khách ở bang nào mua nhiều nhất từ thị trường LATAM (`order_items`, `orders`, `customers`).
-- Điểm trung bình bài TMA theo nhóm `imd_band` và kết quả cuối khóa (`student_assessments`, `assessments`,
-  `students`).
-- Sinh viên bỏ học có số lượt bấm trong 4 tuần đầu thấp hơn sinh viên đạt bao nhiêu (`student_daily_clicks`,
-  `students`).
-- Tỷ lệ bỏ học theo môn và kỳ, kèm độ dài học phần (`students`, `courses`).
+Bảng ghi bảng nào phải đọc để trả lời đúng. Hai câu "vì sao" cuối có đáp án biết trước (mục "Nguyên nhân cài sẵn");
+các câu khác chưa có đáp án ghi sẵn ở đây.
+
+| Câu hỏi | Bảng |
+|---|---|
+| Lợi nhuận theo phòng ban và thị trường năm 2017 | `sales.order_items`, `orders`, `products`, `categories`, `departments` |
+| Tỷ lệ đơn giao trễ theo cách giao và phân khúc khách | `sales.orders`, `customers` |
+| Mười sản phẩm có doanh số cao nhất ở Europe, kèm danh mục | `sales.order_items`, `orders`, `products`, `categories` |
+| Khách ở bang nào mua nhiều nhất từ thị trường LATAM | `sales.order_items`, `orders`, `customers` |
+| Điểm trung bình bài TMA theo nhóm `imd_band` và kết quả cuối khóa | `edu.student_assessments`, `assessments`, `students` |
+| Sinh viên bỏ học có số lượt bấm trong 4 tuần đầu thấp hơn sinh viên đạt bao nhiêu | `edu.student_daily_clicks`, `students` |
+| Tỷ lệ bỏ học theo môn và kỳ, kèm độ dài học phần | `edu.students`, `courses` |
+| Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so với tháng 10/2016? | `sales.orders` (theo đơn); thêm `order_items` nếu đếm theo dòng hàng |
+| Vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B? | `edu.students` |
+
+Đáp án của hai câu cuối:
+
+- Giao trễ: Pacific Asia và Standard Class. Tỷ lệ giao trễ của nhóm này tháng 11/2016 từ 37,8% lên 95,7% theo đơn
+  (39,6% lên 95,0% theo dòng hàng); cả tháng từ 54,3% lên 65,2% theo đơn, tháng 10/2016 là 54,8% theo dòng hàng.
+- Bỏ học: Scotland và nhóm tuổi 0-35. Tỷ lệ bỏ học của nhóm này kỳ 2014J từ 26,3% lên 67,5%; cả kỳ từ 34,0% lên
+  37,4%, kỳ 2014B là 33,5%; phần còn lại của kỳ 2014J giữ 34,7%.
 
 ## Giấy phép và ghi công
 
@@ -259,7 +283,7 @@ Bảng ở đây là bản đã biến đổi từ dữ liệu gốc: tách bả
 
 | File | Vai trò |
 |---|---|
-| `docker-compose.yml` | Container `xdi-demo-db` |
+| `docker-compose.yml` | Container `xdi-demo-db`; Adminer `xdi-demo-adminer` trong profile `adminer` |
 | `init/01_roles.sql` | Tạo người dùng `analyst`, chạy một lần khi volume trống |
 | `load.sh` | Nạp từ CSV, chạy lại được |
 | `sql/staging.sql` | Bảng staging, mọi cột text |
