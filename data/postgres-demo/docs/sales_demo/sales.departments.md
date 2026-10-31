@@ -11,12 +11,6 @@ Phòng ban (nhóm hàng lớn) của cửa hàng
 | department_id   | integer |         | false    | [sales.categories](sales.categories.md) |         | Mã phòng ban (Department Id)                            |
 | department_name | text    |         | false    |                                         |         | Tên phòng ban, ví dụ Fitness, Apparel (Department Name) |
 
-## Viewpoints
-
-| Name                        | Definition                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [sales](viewpoint-sales.md) | Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments. |
-
 ## Constraints
 
 | Name             | Type        | Definition                  |

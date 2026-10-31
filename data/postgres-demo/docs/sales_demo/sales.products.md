@@ -13,12 +13,6 @@ Sản phẩm; mỗi sản phẩm thuộc một danh mục
 | category_id  | integer |         | false    |                                           | [sales.categories](sales.categories.md) | Danh mục của sản phẩm, khóa ngoại tới sales.categories      |
 | price        | numeric |         | false    |                                           |                                         | Giá niêm yết của sản phẩm, đô la Mỹ (Product Price)         |
 
-## Viewpoints
-
-| Name                        | Definition                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [sales](viewpoint-sales.md) | Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments. |
-
 ## Constraints
 
 | Name                      | Type        | Definition                                                         |

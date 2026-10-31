@@ -14,12 +14,6 @@ Học phần: một môn mở trong một kỳ. Mỗi dòng một cặp (môn, k
 | presentation_start_month   | integer |         | false    |                                                                                                                 |         | Tháng bắt đầu kỳ: 2 với chữ B, 10 với chữ J, tách từ code_presentation              |
 | module_presentation_length | integer |         | false    |                                                                                                                 |         | Độ dài học phần, tính bằng ngày                                                     |
 
-## Viewpoints
-
-| Name                    | Definition                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [edu](viewpoint-edu.md) | Dữ liệu học tập OULAD. Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses. |
-
 ## Constraints
 
 | Name                                   | Type        | Definition                                              |

@@ -41,3 +41,5 @@ Thumbs.db
 backend/eval/
 eval/result.json
 eval/result-database.json
+eval/result-sales_demo.json
+eval/result-edu_demo.json

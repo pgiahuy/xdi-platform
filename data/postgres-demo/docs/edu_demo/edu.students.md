@@ -21,12 +21,6 @@ Sinh viên trong một học phần (từ studentInfo.csv). Mỗi dòng một si
 | disability           | boolean |         | false    |                                                                                                                                                         |                               | Sinh viên có khai báo khuyết tật hay không                                                                                                |
 | final_result         | text    |         | false    |                                                                                                                                                         |                               | Kết quả cuối học phần: Distinction (giỏi), Pass (đạt), Fail (trượt), Withdrawn (bỏ học)                                                   |
 
-## Viewpoints
-
-| Name                    | Definition                                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [edu](viewpoint-edu.md) | Dữ liệu học tập OULAD. Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses. |
-
 ## Constraints
 
 | Name                                        | Type        | Definition                                                                                               |

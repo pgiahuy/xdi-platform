@@ -1,0 +1,18 @@
+# data/postgres-demo/.tbls.edu_demo.yml - cấu hình tbls (https://github.com/k1LoW/tbls, giấy phép MIT) để sinh tài liệu
+# bảng và sơ đồ ER của edu_demo vào docs/edu_demo/. Chạy bằng docs.sh, như .tbls.sales_demo.yml. Mô tả bảng và cột lấy
+# từ COMMENT trong sql/edu_schema.sql.
+
+name: edu_demo
+desc: Cơ sở dữ liệu mẫu học tập dựng từ OULAD (schema edu). Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses. Cách dựng ở data/postgres-demo/README.md.
+# Kết nối bằng analyst: người dùng chỉ đọc, không thấy schema staging, đúng như ứng dụng thấy.
+dsn: postgres://analyst:analyst@127.0.0.1:${DEMO_DB_PORT}/edu_demo?sslmode=disable
+docPath: docs/edu_demo
+include:
+  - edu.*
+format:
+  adjust: true
+er:
+  format: svg
+  # Không đưa mô tả cột vào sơ đồ: mô tả dài làm sơ đồ quá rộng; mô tả nằm trong file Markdown của từng bảng.
+  comment: false
+  hideDef: true

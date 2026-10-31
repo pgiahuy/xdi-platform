@@ -20,7 +20,7 @@ const USAGE: &str = "usage:
   xdi-backend eval (--data <csv> | --sample-database) --cases <json> [--cases <json>...]
                   [--baseline <json>] [--out <json>] [--lessons <json>]
                                               run the sample question evaluation on a file or on the
-                                              snapshot of SAMPLE_DATABASE_URL; write the report to --out
+                                              snapshot of every SAMPLE_DATABASE_URL entry; write the report to --out
                                               (default eval/result.json); exit 1 when accuracy drops
                                               below the baseline, 2 on infrastructure errors; with
                                               --lessons, run once without and once with those lessons
@@ -77,7 +77,7 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
     }
 }
 
-/// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu (--data) hay trên database mẫu của
+/// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu (--data) hay trên mọi database mẫu của
 /// SAMPLE_DATABASE_URL (--sample-database, #230). --cases lặp được, các file nối lại thành một bộ. In từng câu sai kèm
 /// lý do, dòng accuracy cuối, ghi báo cáo ra --out. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ
 /// tầng (thiếu file, JSON hỏng, không nạp được dữ liệu) thoát mã 2. Có --lessons thì chạy hai lượt, không và có bài học
@@ -112,10 +112,11 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             }
         }
     }
-    let source = match (&data, sample_database, &state.config.sample_database) {
-        (Some(path), false, _) => eval::EvalData::File(std::path::Path::new(path)),
-        (None, true, Some(db)) => eval::EvalData::SampleDatabase(db),
-        (None, true, None) => {
+    let databases = &state.config.sample_databases;
+    let source = match (&data, sample_database) {
+        (Some(path), false) => eval::EvalData::File(std::path::Path::new(path)),
+        (None, true) if !databases.is_empty() => eval::EvalData::SampleDatabases(databases),
+        (None, true) => {
             eprintln!("eval: --sample-database needs SAMPLE_DATABASE_URL");
             return 2;
         }

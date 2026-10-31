@@ -20,8 +20,8 @@ Gemini thay đổi theo tải: trong cùng buổi đo, có một lượt đo mà
 
 - Máy: Intel Core 7 240H (16 luồng), 30 GiB RAM, Linux. Backend build `--release`, chạy trên máy, Postgres của
   ứng dụng trong Docker.
-- Dữ liệu: database mẫu `company_demo`, chụp `sales.orders` (65 752 dòng) kèm `sales.order_items` (180 519 dòng),
-  và `edu.students` (32 593 dòng). Câu hỏi hỏi trên `orders`, được nối sang `order_items` khi cần doanh thu.
+- Dữ liệu: database mẫu `company_demo` (bản trước khi tách thành `sales_demo` và `edu_demo`, cùng bảng và cùng dữ
+  liệu), chụp `sales.orders` (65 752 dòng) kèm `sales.order_items` (180 519 dòng), và `edu.students` (32 593 dòng). Câu hỏi hỏi trên `orders`, được nối sang `order_items` khi cần doanh thu.
 - Bản "trước": commit `04289e0` (main tới #239, thêm phần đo của #184, chưa chạy song song), `SEMANTIC_JOBS=1` như
   semaphore cũ. Bản "sau": commit `be76ef8` (chạy song song), `SEMANTIC_JOBS=2` mặc định; vòng đo hồ sơ thứ 2 và 3
   thêm dòng log thời gian từng phần, không đổi cách chạy.

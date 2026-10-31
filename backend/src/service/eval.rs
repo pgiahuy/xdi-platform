@@ -3,8 +3,8 @@
 kết quả với SQL đúng viết tay (câu đúng cũng đi qua guard và chạy trên DuckDB như câu mô hình sinh). Lệnh
 `xdi-backend eval` ở cli.rs gọi hàm run_eval.
 
-Hai nguồn dữ liệu: một file (dataco.csv, một dataset), hoặc database mẫu (SAMPLE_DATABASE_URL, #230) chụp đúng như
-thiết lập lần đầu (service/samples_db.rs), mỗi bảng một dataset kèm quan hệ. Với database, mỗi ca ghi trường dataset
+Hai nguồn dữ liệu: một file (dataco.csv, một dataset), hoặc các database mẫu (SAMPLE_DATABASE_URL, #230) chụp đúng
+như thiết lập lần đầu (service/samples_db.rs), mỗi database một nguồn, mỗi bảng một dataset kèm quan hệ. Với database, mỗi ca ghi trường dataset
 (bảng logic người hỏi chọn), và SQL đúng được đọc mọi bảng của workspace.
 
 So bằng tập dòng kết quả, không so chữ SQL: nhiều câu SQL khác nhau cùng trả lời đúng một câu hỏi. Một ca có thể có
@@ -52,7 +52,7 @@ pub struct EvalCase {
 /// Dữ liệu của một lần đánh giá.
 pub enum EvalData<'a> {
     File(&'a Path),
-    SampleDatabase(&'a SampleDatabase),
+    SampleDatabases(&'a [SampleDatabase]),
 }
 
 #[derive(Debug, Serialize)]
@@ -130,7 +130,7 @@ pub async fn run_eval(
                 .ok_or_else(|| AppError::Internal("eval dataset vanished".to_string()))?;
             (member, vec![dataset])
         }
-        EvalData::SampleDatabase(db) => prepare_database(state, db).await?,
+        EvalData::SampleDatabases(dbs) => prepare_database(state, dbs).await?,
     };
     let outcome = run_rounds(state, &member, &datasets, cases, lessons).await;
     let _ = workspaces::delete(state, &member).await;
@@ -224,26 +224,33 @@ pub(crate) async fn prepare(state: &AppState, data: &Path) -> Result<(Member, St
     Ok((member, result.dataset.id.to_string()))
 }
 
-/// Như prepare, nhưng dữ liệu là database mẫu chụp qua đúng hàm của thiết lập lần đầu. Trả mọi dataset đã chụp.
+/// Như prepare, nhưng dữ liệu là các database mẫu chụp qua đúng hàm của thiết lập lần đầu, mỗi database một nguồn.
+/// Trả mọi dataset đã chụp.
 async fn prepare_database(
     state: &AppState,
-    db: &SampleDatabase,
+    dbs: &[SampleDatabase],
 ) -> Result<(Member, Vec<Dataset>), AppError> {
     let email = format!("eval-{}@example.com", uuid::Uuid::new_v4());
     let user = state.store.create_user(&email, "Eval", "unused").await?;
     let membership = workspaces::create(state, &user, "Eval").await?;
     let member = auth::member_of(&state.store, user, &membership.slug).await?;
-    let seeded = match seed_database(state, &member, db).await {
-        Ok(seeded) => seeded,
-        Err(e) => {
+    // Khác thiết lập lần đầu: một database lỗi là cả lần đánh giá lỗi, để không chấm trên một nửa dữ liệu mà không
+    // biết.
+    for db in dbs {
+        let seeded = match seed_database(state, &member, db).await {
+            Ok(seeded) => seeded,
+            Err(e) => {
+                let _ = workspaces::delete(state, &member).await;
+                return Err(e);
+            }
+        };
+        if seeded.is_none() {
             let _ = workspaces::delete(state, &member).await;
-            return Err(e);
+            return Err(AppError::Internal(format!(
+                "eval workspace already has the sample source {}",
+                db.database
+            )));
         }
-    };
-    if seeded.is_none() {
-        return Err(AppError::Internal(
-            "eval workspace already has the sample source".to_string(),
-        ));
     }
     // Lỗi sau khi đã tạo workspace tạm thì xóa nó luôn, như khi chụp lỗi ở trên: run_eval chỉ xóa khi bước này xong.
     let ready = match wait_semantic(state, &member).await {

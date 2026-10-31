@@ -146,10 +146,12 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   đã biên dịch; image Docker không có thư mục home cho user chạy backend, và máy cài có thể không ra được Internet.
 - Xóa nguồn chỉ được khi không còn dataset nào chụp từ nó; xóa dataset không xóa nguồn.
 
-Database mẫu để thử: Postgres nhiều bảng dựng từ DataCo và OULAD, chạy trên máy bằng Docker
+Database mẫu để thử: hai database Postgres nhiều bảng trong cùng một container, `sales_demo` dựng từ DataCo và
+`edu_demo` dựng từ OULAD, chạy trên máy bằng Docker
 ([data/postgres-demo](https://github.com/pgiahuy/xdi-platform/tree/main/data/postgres-demo)). Sơ đồ ER và mô tả từng
 bảng, cột (sinh bằng tbls):
-[data/postgres-demo/docs](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/docs/README.md).
+[sales_demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/docs/sales_demo/README.md),
+[edu_demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/docs/edu_demo/README.md).
 
 ### Chụp nhiều bảng liên quan
 
@@ -217,12 +219,13 @@ vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset
 
 ## Dataset mẫu
 
-Thiết lập lần đầu tạo xong workspace đầu tiên mà tới được database mẫu (`SAMPLE_DATABASE_URL`; compose trỏ vào dịch vụ
-`demo-db` của [data/postgres-demo](../data/postgres-demo/README.md) khi bật `--profile demo`, `make dev` trỏ vào
-`127.0.0.1:5440`) thì thêm nó làm nguồn
-Postgres và chụp các nhóm bảng ghi trong `SAMPLES_DIR/sample_database.json`, đúng như admin làm ở mục Nguồn database
-phía trên: 12 bảng thành 12 dataset kèm 11 quan hệ, cộng chỉ số mẫu của bảng có file
-`<bảng>.metrics.json` (`backend/src/service/samples_db.rs`). Không có database mẫu, hay chụp lỗi, thì nạp `dataco.csv`
+Thiết lập lần đầu tạo xong workspace đầu tiên mà tới được database mẫu (`SAMPLE_DATABASE_URL`, nhiều chuỗi cách nhau
+bằng dấu phẩy; compose trỏ vào `sales_demo` và `edu_demo` của dịch vụ `demo-db` trong
+[data/postgres-demo](../data/postgres-demo/README.md) khi bật `--profile demo`, `make dev` trỏ vào hai database đó ở
+`127.0.0.1:5440`) thì thêm mỗi database làm một nguồn Postgres và chụp các nhóm bảng ghi cho database đó (trường
+`database`) trong `SAMPLES_DIR/sample_database.json`, đúng như admin làm ở mục Nguồn database phía trên: 12 bảng thành 12
+dataset kèm 11 quan hệ, cộng chỉ số mẫu của bảng có file `<bảng>.metrics.json` (`backend/src/service/samples_db.rs`).
+Một database lỗi thì giữ database còn lại. Không có database mẫu, hay không database nào chụp được, thì nạp `dataco.csv`
 trong `SAMPLES_DIR` thành dataset `DataCo` qua đường nạp file, kèm các chỉ số mẫu (`backend/src/service/samples.rs`).
 Tắt cả hai bằng `SEED_SAMPLE=false`. Chi tiết, nguồn và giấy phép: [data/README.md](../data/README.md).
 

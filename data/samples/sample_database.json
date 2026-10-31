@@ -1,6 +1,7 @@
 {
   "snapshots": [
     {
+      "database": "sales_demo",
       "table": "sales.order_items",
       "tables": [
         "sales.orders",
@@ -11,6 +12,7 @@
       ]
     },
     {
+      "database": "edu_demo",
       "table": "edu.student_assessments",
       "tables": [
         "edu.assessments",

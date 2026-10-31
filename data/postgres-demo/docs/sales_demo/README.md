@@ -1,8 +1,8 @@
-# sales
+# sales_demo
 
 ## Description
 
-Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments.
+Cơ sở dữ liệu mẫu bán hàng dựng từ DataCo (schema sales). Bảng sự kiện order_items nối về orders, customers, products, categories, departments. Cách dựng ở data/postgres-demo/README.md.
 
 ## Tables
 
@@ -17,7 +17,7 @@ Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders,
 
 ## Relations
 
-![er](viewpoint-sales.svg)
+![er](schema.svg)
 
 ---
 

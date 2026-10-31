@@ -20,12 +20,6 @@ Dòng hàng (bảng sự kiện): một sản phẩm trong một đơn, kèm s�
 | profit        | numeric |         | false    |          |                                     | Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order; cột Benefit per order có cùng giá trị ở mọi dòng). Tên nguồn nói "per order" nhưng giá trị đổi theo từng dòng hàng |
 | profit_ratio  | numeric |         | false    |          |                                     | Tỷ suất lợi nhuận, bằng profit chia item_total (Order Item Profit Ratio)                                                                                                       |
 
-## Viewpoints
-
-| Name                        | Definition                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [sales](viewpoint-sales.md) | Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments. |
-
 ## Constraints
 
 | Name                        | Type        | Definition                                                     |
