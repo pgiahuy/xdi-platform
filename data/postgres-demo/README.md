@@ -14,8 +14,8 @@ này và cổng chỉ mở trên `127.0.0.1`. Mặc định `load.sh` cài sẵn
 | `sales` | DataCo Smart Supply Chain (`DataCoSupplyChainDataset.csv`, một dòng mỗi dòng hàng) | `departments`, `categories`, `products`, `customers`, `orders`, `order_items` |
 | `edu` | OULAD (7 file CSV trong `oulad/`) | `courses`, `students`, `registrations`, `assessments`, `student_assessments`, `vle_materials`, `student_daily_clicks` |
 
-Mỗi bảng và mỗi cột có mô tả tiếng Việt (`COMMENT ON`), xem bằng `\d+ sales.orders` trong psql hoặc đọc
-`sql/sales_schema.sql`, `sql/edu_schema.sql`.
+Mỗi bảng và mỗi cột có mô tả tiếng Việt (`COMMENT ON`), xem bằng `\d+ sales.orders` trong psql, đọc
+`sql/sales_schema.sql`, `sql/edu_schema.sql`, hoặc đọc tài liệu bảng sinh sẵn trong [docs/](docs/README.md).
 
 ## Chạy
 
@@ -59,7 +59,18 @@ Xóa hẳn: `docker compose -f data/postgres-demo/docker-compose.yml down -v`.
 
 ## Sơ đồ quan hệ
 
-Mũi tên đi từ bảng "nhiều" sang bảng "một", theo khóa ngoại. PK là khóa chính.
+Sơ đồ ER và tài liệu từng bảng (cột, kiểu, mô tả, khóa) trong [docs/](docs/README.md), sinh bằng
+[tbls](https://github.com/k1LoW/tbls) (giấy phép MIT) từ database đang chạy; mô tả lấy từ `COMMENT`.
+
+![Sơ đồ ER schema edu](docs/viewpoint-edu.svg)
+
+![Sơ đồ ER schema sales](docs/viewpoint-sales.svg)
+
+Sinh lại sau khi đổi schema: chạy `load.sh`, rồi `TBLS=/đường/dẫn/tbls sh data/postgres-demo/docs.sh`. tbls không nằm
+trong repo; tải bản cho máy ở https://github.com/k1LoW/tbls/releases (bản đã dùng: v1.96.1, linux amd64). `docs.sh`
+kết nối bằng `analyst` theo `.tbls.yml`, chỉ lấy hai schema `edu` và `sales`, và xóa `docs/` trước khi sinh.
+
+Bản chữ dưới đây: mũi tên đi từ bảng "nhiều" sang bảng "một", theo khóa ngoại. PK là khóa chính.
 
 ```
 sales
@@ -258,3 +269,5 @@ Bảng ở đây là bản đã biến đổi từ dữ liệu gốc: tách bả
 | `sql/plant_demo_cause_edu.sql` | Cài một nguyên nhân biết trước vào `edu.students`, bỏ qua cùng cờ |
 | `sql/grants.sql` | Quyền chỉ đọc cho `analyst` |
 | `sql/row_counts.sql`, `sql/verify.sql` | Đếm dòng; kiểm so với CSV |
+| `.tbls.yml`, `docs.sh` | Cấu hình tbls và lệnh sinh lại `docs/` |
+| `docs/` | Tài liệu bảng (Markdown) và sơ đồ ER (SVG), sinh bằng tbls, không sửa tay |
