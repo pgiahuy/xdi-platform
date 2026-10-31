@@ -13,6 +13,7 @@ mod accounts;
 mod aggregation;
 mod columns;
 mod conversations;
+mod feedback;
 mod members;
 // Phần ghi (set_data_role, list_row_policies, replace_row_policies) chờ service và API của #45 gọi; gỡ allow khi có
 // người gọi để clippy bắt lại.
@@ -51,6 +52,7 @@ pub use datasets::{
     Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SemanticCandidate,
     SourceKind,
 };
+pub use feedback::{ExampleRow, NewFeedback, StoredFeedback};
 pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]
 pub use metric_edits::MetricRecord;

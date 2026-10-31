@@ -460,6 +460,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/datasets/{id}/examples/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Approved example questions of a dataset as candidate evaluation cases (admin only)
+         * @description A JSON array in the format of the case files in `eval/` (`id`, `question`, `expected_sql`, `ordered`). The SQL is the one the model wrote; review every case before adding it to a case file.
+         */
+        get: operations["exportExamples"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/datasets/{id}/metrics": {
         parameters: {
             query?: never;
@@ -525,6 +545,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/examples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Answers rated good, to review as example questions (admin only)
+         * @description Answered questions of every member of the workspace rated `good`, newest rating first, with whether an admin approved them.
+         */
+        get: operations["listExamples"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/examples/{query_id}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Approve an answer rated good as an example question (admin only)
+         * @description Its question and the SQL the model wrote (for a why question, the form) become examples in the prompt of later questions on the same dataset that share a word with it. Records who approved and when.
+         */
+        put: operations["approveExample"];
+        post?: never;
+        /** Withdraw the approval of an example question (admin only) */
+        delete: operations["withdrawExample"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/members": {
         parameters: {
             query?: never;
@@ -565,6 +626,30 @@ export interface paths {
          * @description The workspace always keeps at least one admin.
          */
         patch: operations["setMemberRole"];
+        trace?: never;
+    };
+    "/workspaces/{ws}/queries/{query_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Rate an answer of the caller
+         * @description Replaces the earlier rating. Changing a `good` rating to `bad` also withdraws its approval as an example question.
+         */
+        put: operations["rateAnswer"];
+        post?: never;
+        /**
+         * Remove the rating of an answer of the caller
+         * @description Also withdraws its approval as an example question.
+         */
+        delete: operations["clearRating"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/workspaces/{ws}/sources": {
@@ -1177,6 +1262,54 @@ export interface components {
          */
         ErrorCode: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "too_large" | "internal" | "not_implemented" | "upstream" | "unavailable";
         /**
+         * @description One approved example as a candidate case for the evaluation set, in the format of the files in `eval/` (for
+         *     example `eval/dataco.json`). Review each case before adding it: check the SQL and set `ordered`.
+         */
+        EvalCaseCandidate: {
+            expected_sql: string[];
+            id: string;
+            /** @description Always false here; set it to true when the row order is part of the answer (top N, time series). */
+            ordered: boolean;
+            question: string;
+        };
+        /** @description An answer rated `good`, for admins to review as an example question. */
+        ExampleCandidate: {
+            /**
+             * Format: date-time
+             * @description Null until an admin approves it as an example question.
+             */
+            approved_at: string | null;
+            approved_by: string | null;
+            /**
+             * Format: uuid
+             * @description Null when the dataset was deleted.
+             */
+            dataset_id: string | null;
+            dataset_name: string | null;
+            /** Format: uuid */
+            query_id: string;
+            question: string;
+            /** Format: date-time */
+            rated_at: string;
+            /** @description Name or email of who rated it; null when the account was deleted. */
+            rated_by: string | null;
+            /**
+             * Format: int64
+             * @description Rows of the result when it was asked; results are not stored.
+             */
+            row_count: number | null;
+            /** @description SQL the model wrote, before the guard; for a why question, the SQL built from its form. */
+            sql: string | null;
+            /** @description Short text of the "understood as" card; null when the question was not asked in a conversation. */
+            understood: string | null;
+            /** @description A why question: its example in the prompt is the form the model filled, not SQL. */
+            why: boolean;
+        };
+        /** @description Answers rated `good`, newest rating first. */
+        ExampleCandidatesResponse: {
+            examples: components["schemas"]["ExampleCandidate"][];
+        };
+        /**
          * @description Breakdown of a change between two slices (two periods or two groups); null in `AskResponse` unless an answered
          *     "why" question has one. Numbers are exact strings of decimal digits.
          */
@@ -1232,6 +1365,18 @@ export interface components {
             rows: string;
             /** @description Value of the measure on the slice. */
             value: string;
+        };
+        /**
+         * @description Why an answer is `bad`.
+         * @enum {string}
+         */
+        FeedbackReason: "misunderstood" | "wrong_numbers" | "unclear_explanation" | "other";
+        /** @description Rating of one answer by the member who asked it. Sending a new rating replaces the old one. */
+        FeedbackRequest: {
+            /** @description Optional short note, only with `bad`, at most 500 characters. */
+            note?: string | null;
+            rating: components["schemas"]["Rating"];
+            reason?: components["schemas"]["FeedbackReason"] | null;
         };
         /** @description One group of a dimension. `value` is null for the group of rows where the dimension column is null. */
         GroupContribution: {
@@ -1480,6 +1625,24 @@ export interface components {
             /** @description pending, structure, semantic or failed (see `Dataset.current_profile_status`). */
             profile_status: string;
         };
+        /** @description The stored rating of an answer. */
+        QueryFeedback: {
+            /**
+             * @description An admin approved the answer as an example question: its question and SQL are now examples in the prompt of
+             *     later questions on the same dataset that share a word with it.
+             */
+            approved: boolean;
+            note: string | null;
+            /** Format: date-time */
+            rated_at: string;
+            rating: components["schemas"]["Rating"];
+            reason: components["schemas"]["FeedbackReason"] | null;
+        };
+        /**
+         * @description `good` is the button for a good answer, `bad` the one for an answer that falls short.
+         * @enum {string}
+         */
+        Rating: "good" | "bad";
         /** @description A dataset linked to this one by a foreign key of the source database. */
         RelatedDataset: {
             /** @description Key columns of this dataset. */
@@ -1692,6 +1855,7 @@ export interface components {
         TurnItem: {
             /** Format: date-time */
             created_at: string;
+            feedback: components["schemas"]["QueryFeedback"] | null;
             /**
              * Format: uuid
              * @description Id of the question in the history; use it to trace source rows like a single question.
@@ -3044,6 +3208,48 @@ export interface operations {
             };
         };
     };
+    exportExamples: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalCaseCandidate"][];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member or invalid dataset id */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listMetrics: {
         parameters: {
             query?: never;
@@ -3268,6 +3474,128 @@ export interface operations {
             };
         };
     };
+    listExamples: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExampleCandidatesResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    approveExample: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description `query_id` of the answer (UUID) */
+                query_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member, or no answered question rated good with this id */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    withdrawExample: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description `query_id` of the answer (UUID) */
+                query_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Withdrawn */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 403 not admin; 404 not a member, or no answered question rated good with this id */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listMembers: {
         parameters: {
             query?: never;
@@ -3428,6 +3756,94 @@ export interface operations {
                 };
             };
             /** @description 400 invalid role or last admin, 401, 403 not admin, 404 */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    rateAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description `query_id` of the answer (UUID) */
+                query_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored rating */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryFeedback"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 a reason or note with `good`, or a note over 500 characters; 401; 404 not a member, or no such answer of the caller */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    clearRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description `query_id` of the answer (UUID) */
+                query_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member, or no such answer of the caller */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

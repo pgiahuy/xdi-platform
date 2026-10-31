@@ -34,7 +34,7 @@ use crate::service::ask::contract::{
     WarningCode,
 };
 use crate::service::ask::narrate::narrate;
-use crate::service::ask::prompt::PromptInput;
+use crate::service::ask::prompt::{build_examples_detail, pick_examples, PromptInput};
 use crate::service::ask::reply::{build_sql_reply_schema, ChoiceKind, Clarify, Term};
 use crate::service::ask::run::build_step;
 use crate::service::ask::unanswerable::build_unanswerable_message;
@@ -125,7 +125,13 @@ pub async fn run_why(llm: &dyn LlmProvider, input: WhyInput<'_>) -> Result<WhyOu
     let prompt = build_why_prompt(&input.prompt);
     let started = Instant::now();
     let reply = complete(llm, &input, LlmTask::Why, &prompt).await?;
-    steps.push(build_step(StepName::Llm, started, true, None));
+    let examples_used = build_examples_detail(&pick_examples(&input.prompt, true));
+    steps.push(build_step(
+        StepName::Llm,
+        started,
+        true,
+        examples_used.as_deref(),
+    ));
     let errors = match run_round(llm, &input, &reply, &mut steps).await? {
         Round::Done(outcome) => return Ok(*outcome),
         Round::Invalid(errors) => errors,

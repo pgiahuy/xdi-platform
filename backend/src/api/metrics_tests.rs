@@ -66,7 +66,7 @@ fn revenue(expression: &str) -> Value {
 }
 
 /// Lan (admin) tạo một tài khoản và thêm vào workspace làm member; trả phiên của người đó.
-async fn add_member(asking: &Asking) -> String {
+pub(super) async fn add_member(asking: &Asking) -> String {
     let user = json!({"email": "minh@example.com", "password": "a long password"});
     let (status, _, _) = call(
         &asking.app,

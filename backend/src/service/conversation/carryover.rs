@@ -111,6 +111,11 @@ mod tests {
             sql_guarded: sql.map(str::to_string),
             understood: understood.map(str::to_string),
             created_at: chrono::Utc::now(),
+            feedback: None,
+            feedback_reason: None,
+            feedback_note: None,
+            feedback_at: None,
+            example_approved: false,
         }
     }
 

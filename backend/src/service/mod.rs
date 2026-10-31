@@ -18,6 +18,7 @@ mod eval_classify_tests;
 mod eval_tests;
 pub mod excel;
 pub mod explain;
+pub mod feedback;
 pub mod ingest;
 pub mod metrics;
 pub mod overview;

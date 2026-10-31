@@ -105,14 +105,16 @@ export function AppLayout() {
   const navWorkspace = current ?? workspaces.find((m) => m.slug === lastWorkspace) ?? workspaces.at(0)
 
   // Trang đầu của workspace chỉ sáng khi đúng là trang đầu; mục khác sáng cả ở trang con, ví dụ datasets/<id>.
+  // Mục chỉ admin dùng được (Câu mẫu) ẩn với member cho gọn; quyền vẫn do backend kiểm.
+  const navEntries = workspaceNav.filter((entry) => !entry.adminOnly || navWorkspace?.role === 'admin')
   const workspaceItems = navWorkspace
-    ? workspaceNav.map((entry) => ({
+    ? navEntries.map((entry) => ({
         ...buildNavItem(workspaceHref(navWorkspace.slug, entry.path), entry.label, entry.path === '', pathname),
         icon: entry.icon,
         section: entry.section,
       }))
     : []
-  const activeEntry = workspaceNav.find((_, i) => workspaceItems[i]?.active)
+  const activeEntry = navEntries.find((_, i) => workspaceItems[i]?.active)
   // Ngoài workspace, người chưa thuộc workspace nào không có nút đổi workspace để quay về (ví dụ gõ thẳng /account):
   // cho họ một mục về trang đầu, nơi giải thích phải làm gì.
   const homeItems = !navWorkspace ? [buildNavItem('/', 'Trang đầu', true, pathname)] : []

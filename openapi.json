@@ -2241,6 +2241,70 @@
         }
       }
     },
+    "/workspaces/{ws}/datasets/{id}/examples/export": {
+      "get": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Approved example questions of a dataset as candidate evaluation cases (admin only)",
+        "description": "A JSON array in the format of the case files in `eval/` (`id`, `question`, `expected_sql`, `ordered`). The SQL is the one the model wrote; review every case before adding it to a case file.",
+        "operationId": "exportExamples",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EvalCaseCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member or invalid dataset id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/datasets/{id}/metrics": {
       "get": {
         "tags": [
@@ -2576,6 +2640,165 @@
         }
       }
     },
+    "/workspaces/{ws}/examples": {
+      "get": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Answers rated good, to review as example questions (admin only)",
+        "description": "Answered questions of every member of the workspace rated `good`, newest rating first, with whether an admin approved them.",
+        "operationId": "listExamples",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExampleCandidatesResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/examples/{query_id}/approval": {
+      "put": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Approve an answer rated good as an example question (admin only)",
+        "description": "Its question and the SQL the model wrote (for a why question, the form) become examples in the prompt of later questions on the same dataset that share a word with it. Records who approved and when.",
+        "operationId": "approveExample",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query_id",
+            "in": "path",
+            "description": "`query_id` of the answer (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Approved"
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member, or no answered question rated good with this id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Withdraw the approval of an example question (admin only)",
+        "operationId": "withdrawExample",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query_id",
+            "in": "path",
+            "description": "`query_id` of the answer (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Withdrawn"
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member, or no answered question rated good with this id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/members": {
       "get": {
         "tags": [
@@ -2783,6 +3006,131 @@
           },
           "4XX": {
             "description": "400 invalid role or last admin, 401, 403 not admin, 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/queries/{query_id}/feedback": {
+      "put": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Rate an answer of the caller",
+        "description": "Replaces the earlier rating. Changing a `good` rating to `bad` also withdraws its approval as an example question.",
+        "operationId": "rateAnswer",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query_id",
+            "in": "path",
+            "description": "`query_id` of the answer (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The stored rating",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryFeedback"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 a reason or note with `good`, or a note over 500 characters; 401; 404 not a member, or no such answer of the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Remove the rating of an answer of the caller",
+        "description": "Also withdraws its approval as an example question.",
+        "operationId": "clearRating",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query_id",
+            "in": "path",
+            "description": "`query_id` of the answer (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "4XX": {
+            "description": "401; 404 not a member, or no such answer of the caller",
             "content": {
               "application/json": {
                 "schema": {
@@ -4408,6 +4756,141 @@
           "unavailable"
         ]
       },
+      "EvalCaseCandidate": {
+        "type": "object",
+        "description": "One approved example as a candidate case for the evaluation set, in the format of the files in `eval/` (for\nexample `eval/dataco.json`). Review each case before adding it: check the SQL and set `ordered`.",
+        "required": [
+          "id",
+          "question",
+          "expected_sql",
+          "ordered"
+        ],
+        "properties": {
+          "expected_sql": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "ordered": {
+            "type": "boolean",
+            "description": "Always false here; set it to true when the row order is part of the answer (top N, time series)."
+          },
+          "question": {
+            "type": "string"
+          }
+        }
+      },
+      "ExampleCandidate": {
+        "type": "object",
+        "description": "An answer rated `good`, for admins to review as an example question.",
+        "required": [
+          "query_id",
+          "dataset_id",
+          "dataset_name",
+          "question",
+          "sql",
+          "understood",
+          "row_count",
+          "why",
+          "rated_by",
+          "rated_at",
+          "approved_by",
+          "approved_at"
+        ],
+        "properties": {
+          "approved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Null until an admin approves it as an example question."
+          },
+          "approved_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dataset_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Null when the dataset was deleted."
+          },
+          "dataset_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "query_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "question": {
+            "type": "string"
+          },
+          "rated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rated_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name or email of who rated it; null when the account was deleted."
+          },
+          "row_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Rows of the result when it was asked; results are not stored."
+          },
+          "sql": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SQL the model wrote, before the guard; for a why question, the SQL built from its form."
+          },
+          "understood": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Short text of the \"understood as\" card; null when the question was not asked in a conversation."
+          },
+          "why": {
+            "type": "boolean",
+            "description": "A why question: its example in the prompt is the form the model filled, not SQL."
+          }
+        }
+      },
+      "ExampleCandidatesResponse": {
+        "type": "object",
+        "description": "Answers rated `good`, newest rating first.",
+        "required": [
+          "examples"
+        ],
+        "properties": {
+          "examples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExampleCandidate"
+            }
+          }
+        }
+      },
       "Explanation": {
         "type": "object",
         "description": "Breakdown of a change between two slices (two periods or two groups); null in `AskResponse` unless an answered\n\"why\" question has one. Numbers are exact strings of decimal digits.",
@@ -4542,6 +5025,46 @@
           "value": {
             "type": "string",
             "description": "Value of the measure on the slice."
+          }
+        }
+      },
+      "FeedbackReason": {
+        "type": "string",
+        "description": "Why an answer is `bad`.",
+        "enum": [
+          "misunderstood",
+          "wrong_numbers",
+          "unclear_explanation",
+          "other"
+        ]
+      },
+      "FeedbackRequest": {
+        "type": "object",
+        "description": "Rating of one answer by the member who asked it. Sending a new rating replaces the old one.",
+        "required": [
+          "rating"
+        ],
+        "properties": {
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional short note, only with `bad`, at most 500 characters."
+          },
+          "rating": {
+            "$ref": "#/components/schemas/Rating"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackReason",
+                "description": "Only with `bad`; may be left out."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -5221,6 +5744,54 @@
           }
         }
       },
+      "QueryFeedback": {
+        "type": "object",
+        "description": "The stored rating of an answer.",
+        "required": [
+          "rating",
+          "reason",
+          "note",
+          "rated_at",
+          "approved"
+        ],
+        "properties": {
+          "approved": {
+            "type": "boolean",
+            "description": "An admin approved the answer as an example question: its question and SQL are now examples in the prompt of\nlater questions on the same dataset that share a word with it."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rating": {
+            "$ref": "#/components/schemas/Rating"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Rating": {
+        "type": "string",
+        "description": "`good` is the button for a good answer, `bad` the one for an answer that falls short.",
+        "enum": [
+          "good",
+          "bad"
+        ]
+      },
       "RelatedDataset": {
         "type": "object",
         "description": "A dataset linked to this one by a foreign key of the source database.",
@@ -5761,12 +6332,24 @@
           "status",
           "sql",
           "understood",
-          "created_at"
+          "created_at",
+          "feedback"
         ],
         "properties": {
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "feedback": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/QueryFeedback",
+                "description": "The rating the caller gave this answer; null when not rated."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "query_id": {
             "type": "string",
