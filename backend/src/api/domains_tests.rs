@@ -145,8 +145,8 @@ async fn edited_concept_reaches_the_next_sql_prompt() {
     let Some(asking) = start_on(Some(llm), CSV, |_| {}).await else {
         return;
     };
-    // Chưa có API gắn gói cho dataset; đặt thẳng cột datasets.domain như bước nạp sẽ làm.
-    exec(&asking.db.store, "UPDATE datasets SET domain = 'retail'").await;
+    // Chưa có API gắn gói cho dataset; đặt thẳng cột sources.domain (gói của dataset, migration 0017).
+    exec(&asking.db.store, "UPDATE sources SET domain = 'retail'").await;
     let question = "Doanh thu theo thị trường";
 
     let (status, answer) = asking.ask(question, json!([])).await;

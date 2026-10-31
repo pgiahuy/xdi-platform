@@ -67,6 +67,7 @@ mod row_filters_tests;
 pub mod run;
 #[cfg(test)]
 mod run_tests;
+pub mod scope;
 pub mod summary;
 #[cfg(test)]
 mod summary_tests;
@@ -758,6 +759,7 @@ pub(super) fn build_base_response(
         // service/conversation/ điền id thật sau khi luồng hỏi trả về; luồng hỏi không biết gì về cuộc trò chuyện ngoài
         // khối lịch sử trong prompt.
         conversation_id: uuid::Uuid::nil(),
+        table_id: version.dataset_id,
         version_id: version.id,
         model: state.llm.name(),
         choices: vec![],

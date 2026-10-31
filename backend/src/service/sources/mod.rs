@@ -42,7 +42,7 @@ pub use postgres::SourceTable;
 use postgres::{ConnectInfo, SSL_MODES};
 pub use relations::{RelationsRequest, RelationsResponse};
 use secret::SecretKey;
-pub use snapshot::{snapshot, SnapshotRequest, SnapshotResponse};
+pub use snapshot::{snapshot, snapshot_dataset, SnapshotRequest, SnapshotResponse};
 
 const KIND_POSTGRES: &str = "postgres";
 
@@ -115,6 +115,8 @@ pub async fn create(
         .create_source(
             &member.workspace,
             KIND_POSTGRES,
+            // Tên dataset của database là tên database; giao diện ghi kèm máy chủ khi cần phân biệt.
+            &info.database,
             &public_config(&info),
             &sealed,
         )

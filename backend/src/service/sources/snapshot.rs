@@ -5,7 +5,8 @@ Parquet như nạp file), cùng các quan hệ khóa ngoại giữa chúng (engi
 
 Các bước:
 1. Danh sách bảng: bảng bắt đầu và các bảng chọn kèm, tối đa MAX_SNAPSHOT_TABLES. Chụp lại (dataset_id) lấy cả nhóm
-   dataset nối với nhau qua quan hệ, cùng nguồn.
+   dataset nối với nhau qua quan hệ, cùng nguồn. Chụp lại cả dataset (snapshot_dataset, #257) lấy mọi bảng đã chụp từ
+   database này, tối đa MAX_DATASET_TABLES.
 2. Chép: một kết nối, một giao dịch REPEATABLE READ, nên mọi bảng cùng là ảnh của một thời điểm. Mỗi bảng đếm dòng
    (giới hạn SOURCE_MAX_ROWS) rồi COPY ra file riêng (giới hạn MAX_UPLOAD_MB), kèm kiểu cột Postgres và comment của
    bảng, của cột (comments.rs). Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS.
@@ -33,6 +34,10 @@ use crate::{error::AppError, state::AppState};
 
 /// Số bảng tối đa của một lần chụp: mỗi bảng giữ một file tạm tới MAX_UPLOAD_MB trên đĩa cho tới khi nạp xong.
 pub const MAX_SNAPSHOT_TABLES: usize = 10;
+
+/// Số bảng tối đa khi chụp lại cả một dataset. Lớn hơn MAX_SNAPSHOT_TABLES vì admin đã chọn từng bảng ở các lần chụp
+/// trước (database mẫu có 12 bảng); vẫn có trần vì mọi file tạm cùng nằm trên đĩa cho tới khi nạp xong.
+pub const MAX_DATASET_TABLES: usize = 30;
 
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct SnapshotRequest {
@@ -79,15 +84,38 @@ pub async fn snapshot(
 ) -> Result<SnapshotResponse, AppError> {
     let (row, info) = load(state, member, id).await?;
     let wanted = build_wanted(state, member, &row, &req).await?;
-    let (copied, keys) = copy_group(state, &info, &wanted).await?;
+    run_snapshot(state, member, &row, &info, &wanted, req.name).await
+}
+
+/// Chụp lại mọi bảng của dataset là database `id` (#257): đúng các bảng đã chụp từ database này và còn trong
+/// workspace, trong một giao dịch như chụp một nhóm, rồi thay mọi quan hệ giữa chúng.
+pub async fn snapshot_dataset(
+    state: &AppState,
+    member: &Member,
+    id: Uuid,
+) -> Result<SnapshotResponse, AppError> {
+    let (row, info) = load(state, member, id).await?;
+    let wanted = build_dataset_tables(state, member, &row).await?;
+    run_snapshot(state, member, &row, &info, &wanted, None).await
+}
+
+/// Bước 2 đến 4 cho các bảng `wanted`; name là tên của bảng đầu khi nó còn mới.
+async fn run_snapshot(
+    state: &AppState,
+    member: &Member,
+    row: &SourceRow,
+    info: &ConnectInfo,
+    wanted: &[Wanted],
+    name: Option<String>,
+) -> Result<SnapshotResponse, AppError> {
+    let (copied, keys) = copy_group(state, info, wanted).await?;
 
     let mut results = Vec::new();
     let mut datasets: Vec<(SourceTable, Uuid)> = Vec::new();
-    for (index, (copied, want)) in copied.into_iter().zip(&wanted).enumerate() {
-        let name = if index == 0 { req.name.clone() } else { None };
+    for (index, (copied, want)) in copied.into_iter().zip(wanted).enumerate() {
+        let name = if index == 0 { name.clone() } else { None };
         let table = copied.table.clone();
-        let result =
-            ingest_table(state, member, &row, &info, copied, name, want.dataset_id).await?;
+        let result = ingest_table(state, member, row, info, copied, name, want.dataset_id).await?;
         datasets.push((table, result.dataset.id));
         results.push(result);
     }
@@ -160,6 +188,36 @@ async fn build_wanted(
     if wanted.len() > MAX_SNAPSHOT_TABLES {
         return Err(AppError::BadRequest(format!(
             "Một lần chụp tối đa {MAX_SNAPSHOT_TABLES} bảng, đang chọn {}: bỏ bớt bảng rồi chụp lại",
+            wanted.len()
+        )));
+    }
+    Ok(wanted)
+}
+
+/// Mọi bảng đã chụp từ nguồn này mà còn trong workspace (bảng đã xóa không còn dòng datasets), cũ trước.
+async fn build_dataset_tables(
+    state: &AppState,
+    member: &Member,
+    row: &SourceRow,
+) -> Result<Vec<Wanted>, AppError> {
+    let mut tables = state.store.list_datasets(&member.workspace).await?;
+    tables.retain(|t| t.parent_id == row.id);
+    tables.sort_by_key(|t| t.created_at);
+    let mut wanted = Vec::new();
+    for t in tables {
+        wanted.push(Wanted {
+            table: recorded_table(row, t.id)?,
+            dataset_id: Some(t.id),
+        });
+    }
+    if wanted.is_empty() {
+        return Err(AppError::BadRequest(
+            "Dataset này chưa có bảng nào: chọn một bảng để chụp".to_string(),
+        ));
+    }
+    if wanted.len() > MAX_DATASET_TABLES {
+        return Err(AppError::BadRequest(format!(
+            "Chụp lại cả dataset tối đa {MAX_DATASET_TABLES} bảng, dataset này có {}: chụp lại từng nhóm bảng",
             wanted.len()
         )));
     }

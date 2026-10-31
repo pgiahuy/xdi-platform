@@ -27,15 +27,17 @@ impl Store {
         &self,
         ws: &WorkspaceId,
         kind: &str,
+        name: &str,
         config: &Value,
         secret_encrypted: &[u8],
     ) -> Result<SourceRow, AppError> {
         sqlx::query_as(
-            "INSERT INTO sources (workspace_id, kind, config, secret_encrypted) VALUES ($1, $2, $3, $4)
+            "INSERT INTO sources (workspace_id, kind, name, config, secret_encrypted) VALUES ($1, $2, $3, $4, $5)
              RETURNING id, kind, config, created_at",
         )
         .bind(ws.as_uuid())
         .bind(kind)
+        .bind(name)
         .bind(config)
         .bind(secret_encrypted)
         .fetch_one(&self.pool)

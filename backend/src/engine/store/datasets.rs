@@ -102,6 +102,20 @@ pub struct Dataset {
     #[schema(required)]
     #[sqlx(default)]
     pub current_version_at: Option<DateTime<Utc>>,
+    /// Dataset (one database or one file, `GET .../catalog/{id}`) this table belongs to. The table routes under
+    /// `/datasets/{id}` take the table id; a file has one table.
+    // Khác source_id ở trên (null với file): đây luôn là datasets.source_id, cả với nguồn local_file của một file.
+    #[sqlx(default)]
+    pub parent_id: Uuid,
+    /// Row count of the current version; null while the table has no current version.
+    #[schema(required)]
+    #[sqlx(default)]
+    pub row_count: Option<i64>,
+    /// Table comment written in the source database (`COMMENT ON TABLE`), from the current version; null for files
+    /// and tables without a comment.
+    #[schema(required)]
+    #[sqlx(default)]
+    pub description: Option<String>,
     /// Datasets linked to this one by a foreign key of the source database (snapshots of several related tables);
     /// empty for uploaded files.
     // Store không nối bảng dataset_relations ở đây; service/ingest.rs điền bằng apply_relations trước khi trả qua API.
@@ -170,12 +184,17 @@ pub struct SemanticCandidate {
     pub row_count: Option<i64>,
 }
 
-const DATASET_COLUMNS: &str = "id, name, logical_table, domain, current_version_id, created_at";
+// Gói ngành nằm trên dataset (sources.domain, migration 0017), không trên bảng; RETURNING của create_dataset không nối
+// được nên đọc bằng câu con.
+const DATASET_COLUMNS: &str = "id, name, logical_table, \
+    (SELECT s.domain FROM sources s WHERE s.id = source_id) AS domain, current_version_id, created_at, \
+    source_id AS parent_id";
 // Cùng danh sách đó kèm câu hỏi gợi ý, có tiền tố bảng, dùng khi câu SQL nối datasets với phiên bản hiện hành.
 // suggested_questions là jsonb trên dataset_versions; dataset chưa có phiên bản hiện hành (mới tạo, chưa nạp xong)
 // hay phiên bản chưa qua lớp ngữ nghĩa thì ra mảng rỗng.
 const DATASET_COLUMNS_D: &str =
-    "d.id, d.name, d.logical_table, d.domain, d.current_version_id, d.created_at, \
+    "d.id, d.name, d.logical_table, s.domain, d.current_version_id, d.created_at, d.source_id AS parent_id, \
+    v.row_count, v.description, \
     v.profile_status AS current_profile_status, v.semantic_attempted_with, \
     COALESCE(v.suggested_questions, '[]'::jsonb) AS suggested_questions, \
     s.kind AS source_kind, v.created_at AS current_version_at, \
@@ -194,12 +213,17 @@ const VERSION_COLUMNS_V: &str =
     v.row_count, v.profile_status, v.description, v.created_at";
 
 impl Store {
-    /// Nguồn kiểu file nạp lên. Nguồn database thêm khi có tính năng nối database.
-    pub async fn create_local_source(&self, ws: &WorkspaceId) -> Result<Uuid, AppError> {
+    /// Nguồn kiểu file nạp lên: một file là một dataset có một bảng, cùng tên với bảng đó.
+    pub async fn create_local_source(
+        &self,
+        ws: &WorkspaceId,
+        name: &str,
+    ) -> Result<Uuid, AppError> {
         sqlx::query_scalar(
-            "INSERT INTO sources (workspace_id, kind) VALUES ($1, 'local_file') RETURNING id",
+            "INSERT INTO sources (workspace_id, kind, name) VALUES ($1, 'local_file', $2) RETURNING id",
         )
         .bind(ws.as_uuid())
+        .bind(name)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| db_error("create source", e))
@@ -255,16 +279,20 @@ impl Store {
             .map_err(|e| db_error("get dataset", e))
     }
 
-    /// Tên bảng logic đã có trong workspace chưa (so không phân biệt hoa thường, như chỉ mục datasets_logical_table_key).
+    /// Tên bảng logic đã có trong dataset `source_id` chưa (so không phân biệt hoa thường, như chỉ mục
+    /// datasets_logical_table_key). Hai dataset khác nhau được có bảng cùng tên (migration 0017).
     pub async fn logical_table_taken(
         &self,
         ws: &WorkspaceId,
+        source_id: Uuid,
         name: &str,
     ) -> Result<bool, AppError> {
         sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM datasets WHERE workspace_id = $1 AND lower(logical_table) = lower($2))",
+            "SELECT EXISTS (SELECT 1 FROM datasets
+                            WHERE workspace_id = $1 AND source_id = $2 AND lower(logical_table) = lower($3))",
         )
         .bind(ws.as_uuid())
+        .bind(source_id)
         .bind(name)
         .fetch_one(&self.pool)
         .await
@@ -699,6 +727,9 @@ mod tests {
             logical_table: "sales".to_string(),
             domain: None,
             current_version_id: Some(Uuid::nil()),
+            parent_id: Uuid::nil(),
+            row_count: None,
+            description: None,
             current_profile_status: status.map(str::to_string),
             suggested_questions: Vec::new(),
             semantic_unavailable: false,
@@ -741,7 +772,7 @@ mod tests {
         };
         let a = temp_workspace(&store).await;
         let b = temp_workspace(&store).await;
-        let src = store.create_local_source(&a).await.unwrap();
+        let src = store.create_local_source(&a, "Test").await.unwrap();
         let ds = store
             .create_dataset(&a, src, "Sales", "sales", None)
             .await
@@ -777,7 +808,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "Sales", "sales", None)
             .await
@@ -840,7 +871,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "Sales", "sales", None)
             .await
@@ -895,7 +926,7 @@ mod tests {
             return;
         };
         let ws = temp_workspace(&store).await;
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "Sales", "sales", None)
             .await

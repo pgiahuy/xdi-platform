@@ -15,6 +15,8 @@ use crate::service::feedback::contract::QueryFeedback;
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ConversationItem {
     pub id: Uuid,
+    /// Table the conversation is stored on: open it with `GET .../datasets/{table_id}/conversations/{id}`.
+    pub table_id: Uuid,
     /// The first question of the conversation, shortened.
     pub title: String,
     pub created_at: DateTime<Utc>,

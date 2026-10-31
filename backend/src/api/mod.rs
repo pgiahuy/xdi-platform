@@ -28,6 +28,9 @@ mod ask_why_frames_tests;
 #[cfg(test)]
 mod ask_why_tests;
 mod auth;
+mod catalog;
+#[cfg(test)]
+mod catalog_tests;
 #[cfg(test)]
 mod conversation_tests;
 mod conversations;
@@ -94,6 +97,7 @@ fn api_routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .merge(admin::routes())
         .merge(workspaces::routes())
         .merge(datasets::routes(max_upload_bytes))
+        .merge(catalog::routes())
         .merge(query::routes())
         .merge(conversations::routes())
         .merge(feedback::routes())

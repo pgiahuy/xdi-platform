@@ -18,7 +18,7 @@ async fn dataset_with_history(
     user: Uuid,
     name: &str,
 ) -> (Uuid, Uuid) {
-    let source = store.create_local_source(ws).await.unwrap();
+    let source = store.create_local_source(ws, "Test").await.unwrap();
     let ds = store
         .create_dataset(ws, source, name, name, None)
         .await

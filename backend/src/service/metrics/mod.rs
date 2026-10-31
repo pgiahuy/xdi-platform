@@ -157,6 +157,20 @@ async fn save(
     let version = load_current_version(state, member, dataset).await?;
     let table = build_check_table(state, &member.workspace, dataset, &version).await?;
     check_metric(state, &table, metric).await?;
+    if let Some(other) = state
+        .store
+        .find_metric_name_elsewhere(&member.workspace, dataset.id, &metric.name)
+        .await?
+    {
+        return Err(MetricProblem::new(
+            "name",
+            format!(
+                "Bảng {other} cùng dataset đã có chỉ số tên \"{}\"; đặt tên khác",
+                metric.name
+            ),
+        )
+        .into());
+    }
     let id = state
         .store
         .add_metric_version(&member.workspace, dataset.id, metric, member.user.id)

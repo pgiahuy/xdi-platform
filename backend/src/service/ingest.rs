@@ -11,7 +11,7 @@ Các bước, sắp để lỗi ở bước đầu không để lại gì:
    CPU).
 4. Ghi dataset (nếu mới), rồi phiên bản cùng hồ sơ cột trong một giao dịch (profile_status là structure ngay). Giao dịch
    lỗi thì xóa dataset vừa tạo, nên nạp lại cùng bộ file không vấp phiên bản trùng hash mà thiếu hồ sơ.
-5. Chuyển thư mục Parquet về chỗ cuối <DATA_DIR>/<workspace>/<dataset>/<thư mục phiên bản>, rồi mới đặt phiên bản
+5. Chuyển thư mục Parquet về chỗ cuối <DATA_DIR>/<workspace>/<dataset>/<bảng>/<thư mục phiên bản>, rồi mới đặt phiên bản
    hiện hành, để phiên bản hiện hành luôn có file và có hồ sơ.
 6. Trả 201 rồi lập hồ sơ lớp ngữ nghĩa nền (service/semantic/mod.rs): mô tả, bí danh, câu hỏi gợi ý.
 Thư mục tạm xóa khi Staging ra khỏi phạm vi, kể cả khi lỗi; backend chết giữa chừng thì lần khởi động sau xóa
@@ -238,6 +238,9 @@ pub async fn upload(
                 .find_version_by_hash(ws, d.id, &content_hash)
                 .await?
         }
+        // Bảng mới của một database (service/sources/ đã tìm bảng cũ theo tên): so cả workspace thì cùng bảng của cùng
+        // database kết nối hai lần sẽ rơi vào dataset kia, không vào dataset đang chụp (#257).
+        None if upload.database_source.is_some() => None,
         None => {
             state
                 .store
@@ -305,18 +308,28 @@ pub async fn upload(
         Some(d) => d,
         None => {
             let name = dataset_name(&upload)?;
-            let logical_table = free_logical_table(state, member, &name).await?;
+            // Một file là một dataset riêng (nguồn local_file) có một bảng cùng tên; bảng chụp từ database nằm trong
+            // dataset của database đó. Tên bảng logic chỉ cần không trùng trong dataset (migration 0017).
             let source = match upload.database_source {
                 Some(id) => id,
-                None => state.store.create_local_source(ws).await?,
+                None => state.store.create_local_source(ws, &name).await?,
             };
+            let logical_table = free_logical_table(state, member, source, &name).await?;
             state
                 .store
                 .create_dataset(ws, source, &name, &logical_table, Some(member.user.id))
                 .await?
         }
     };
-    let relative = format!("{}/{}/{}", ws.as_uuid(), dataset.id, Uuid::new_v4());
+    // <workspace>/<dataset>/<bảng>/<phiên bản> (#257). Phiên bản ghi trước đó nằm ở <workspace>/<bảng>/<phiên bản> và
+    // vẫn đọc được: database lưu đường dẫn tương đối của từng phiên bản, không dựng lại từ id.
+    let relative = format!(
+        "{}/{}/{}/{}",
+        ws.as_uuid(),
+        dataset.parent_id,
+        dataset.id,
+        Uuid::new_v4()
+    );
     let new_version = NewVersion {
         source_kind: match upload.database_source {
             Some(_) => SourceKind::Postgres,
@@ -487,7 +500,7 @@ fn remove_version_files(data_dir: &Path, relative: &str) {
         tracing::warn!(dir = %dir.display(), error = %e, "could not remove files of a failed upload");
         return;
     }
-    // Đi ngược lên: thư mục dataset, rồi workspace. Dừng ở thư mục đầu tiên còn file, hoặc khi tới DATA_DIR.
+    // Đi ngược lên: thư mục bảng, dataset, rồi workspace. Dừng ở thư mục đầu tiên còn file, hoặc khi tới DATA_DIR.
     while dir.pop() && dir != data_dir {
         if std::fs::remove_dir(&dir).is_err() {
             break;
@@ -591,10 +604,12 @@ fn dataset_name(upload: &Upload) -> Result<String, AppError> {
     }
 }
 
-/// Tên bảng mô hình ngôn ngữ dùng trong SQL: "Bán hàng 2024" thành "ban_hang_2024", trùng thì thêm _2, _3.
+/// Tên bảng mô hình ngôn ngữ dùng trong SQL: "Bán hàng 2024" thành "ban_hang_2024", trùng một bảng khác của cùng
+/// dataset thì thêm _2, _3.
 async fn free_logical_table(
     state: &AppState,
     member: &Member,
+    source_id: Uuid,
     name: &str,
 ) -> Result<String, AppError> {
     let base = logical_table_from_name(name);
@@ -602,7 +617,7 @@ async fn free_logical_table(
     let mut n = 2;
     while state
         .store
-        .logical_table_taken(&member.workspace, &candidate)
+        .logical_table_taken(&member.workspace, source_id, &candidate)
         .await?
     {
         candidate = format!("{base}_{n}");

@@ -701,7 +701,7 @@ mod tests {
         };
         let materialized = materialize(&[input], &data.join(relative)).unwrap();
 
-        let src = store.create_local_source(&ws).await.unwrap();
+        let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store
             .create_dataset(&ws, src, "Sales", "sales", None)
             .await
