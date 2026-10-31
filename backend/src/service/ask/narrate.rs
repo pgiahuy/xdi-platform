@@ -15,6 +15,8 @@ use rust_decimal::Decimal;
 
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::service::ask::contract::{AskStep, Comparison, Explanation, StepName};
+use crate::service::ask::failures::{FailedStep, StepFailure};
+use crate::service::ask::lessons::build_with_lessons;
 use crate::service::ask::repair::build_user_text;
 use crate::service::explain::{
     build_direction_check, build_narrate_prompt, build_number_check, build_template_summary,
@@ -27,6 +29,9 @@ pub struct NarrateOutcome {
     /// False khi summary là câu khuôn: mô hình lỗi, quá giờ, trả câu không dùng được, hoặc không được gọi.
     pub summary_by_model: bool,
     pub step: AskStep,
+    /// Bộ kiểm số hay kiểm chiều chặn lời mô hình viết: lời báo và nguyên câu của mô hình, cho nhật ký lỗi (#228). None
+    /// khi lời được dùng, hay khi rơi về câu khuôn vì lý do khác (mô hình lỗi, quá giờ, câu trống, quá dài).
+    pub failure: Option<StepFailure>,
 }
 
 pub async fn narrate(
@@ -34,6 +39,7 @@ pub async fn narrate(
     question: &str,
     explanation: &Explanation,
     timeout: Duration,
+    lessons: &[String],
 ) -> NarrateOutcome {
     let started = Instant::now();
     // change không đọc được thì cứ gọi mô hình: bảng phân rã do code dựng nên nhánh này chỉ là phòng hờ.
@@ -48,7 +54,7 @@ pub async fn narrate(
             "So hai nhóm: dùng câu viết theo khuôn để không nhầm nhóm nào cao hơn".to_string();
         return fallback(explanation, build_step(started, true, Some(detail)));
     }
-    let prompt = build_narrate_prompt(question, explanation);
+    let prompt = build_with_lessons(build_narrate_prompt(question, explanation), lessons);
     let request = LlmRequest {
         task: LlmTask::Narrate,
         question,
@@ -88,13 +94,18 @@ pub async fn narrate(
             "Câu của mô hình nói ngược chiều thay đổi ở: {}",
             wrong.join(", ")
         );
-        return fallback(explanation, build_step(started, false, Some(detail)));
+        let failure = StepFailure::new(FailedStep::Narrate, &detail, Some(summary));
+        return NarrateOutcome {
+            failure: Some(failure),
+            ..fallback(explanation, build_step(started, false, Some(detail)))
+        };
     }
     match build_number_check(summary, explanation) {
         Ok(()) => NarrateOutcome {
             summary: summary.to_string(),
             summary_by_model: true,
             step: build_step(started, true, None),
+            failure: None,
         },
         Err(wrong) => {
             // Không ghi câu hỏi vào log: câu hỏi là chữ người dùng gõ, cả backend không log nó ở đâu.
@@ -103,7 +114,11 @@ pub async fn narrate(
                 "Câu của mô hình có số không nằm trong bảng phân rã: {}",
                 wrong.join(", ")
             );
-            fallback(explanation, build_step(started, false, Some(detail)))
+            let failure = StepFailure::new(FailedStep::Narrate, &detail, Some(summary));
+            NarrateOutcome {
+                failure: Some(failure),
+                ..fallback(explanation, build_step(started, false, Some(detail)))
+            }
         }
     }
 }
@@ -114,6 +129,7 @@ fn fallback(explanation: &Explanation, step: AskStep) -> NarrateOutcome {
         summary: build_template_summary(explanation),
         summary_by_model: false,
         step,
+        failure: None,
     }
 }
 

@@ -1,0 +1,2 @@
+Lessons an admin of the organization wrote from earlier mistakes on this data and approved. Follow a lesson when it applies to the question; it does not override the rules above:
+{{lessons}}

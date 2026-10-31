@@ -16,7 +16,7 @@ BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
 DEMO_DB_PORT ?= 5434
 SAMPLE_DATABASE_URL ?= postgres://analyst:analyst@127.0.0.1:$(DEMO_DB_PORT)/company_demo
 
-.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-classify
+.PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-lessons eval-classify
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -108,6 +108,12 @@ eval: ## Bộ đánh giá câu hỏi mẫu (#37, #230): mock trên database mẫ
 	  --baseline eval/baseline.json --out eval/result-database.json
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
 	  $(CARGO_TARGET)/debug/xdi-backend eval --data data/samples/dataco.csv --cases eval/dataco.json --baseline eval/baseline.json
+
+eval-lessons: ## Bộ đánh giá hai lượt, không và có bài học trong eval/lessons.json (#228); mock luôn như nhau, LLM_PROVIDER=gemini để đo thật
+	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
+	cd backend && cargo build -q
+	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=$(or $(LLM_PROVIDER),mock) DATA_DIR=backend/target/eval-data \
+	  $(CARGO_TARGET)/debug/xdi-backend eval --data data/samples/dataco.csv --cases eval/dataco.json --lessons eval/lessons.json
 
 eval-classify: ## Bộ câu thử phân loại câu hỏi (#197): tỷ lệ đúng của luật từ khóa và của mô hình; mặc định mock, LLM_PROVIDER=gemini để đo thật
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null

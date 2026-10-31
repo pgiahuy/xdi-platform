@@ -72,6 +72,14 @@ async fn run(args: Vec<String>) {
     if let Err(why) = service::sources::apply_key_file(&mut config) {
         tracing::warn!(%why, "database sources are off until SOURCE_SECRET_KEY is set or the key file is fixed");
     }
+    // Lệnh đánh giá dùng khóa Gemini riêng nếu có (config.rs, apply_eval_gemini_key); server luôn dùng GEMINI_API_KEY.
+    if args
+        .first()
+        .is_some_and(|command| command.starts_with("eval"))
+        && config.apply_eval_gemini_key(std::env::var("EVAL_GEMINI_API_KEY").ok())
+    {
+        tracing::info!("evaluation uses EVAL_GEMINI_API_KEY");
+    }
     let addr = format!("0.0.0.0:{}", config.port);
 
     // Migration chạy trước khi nhận request, để mọi request đều thấy schema đúng.

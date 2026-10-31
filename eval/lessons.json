@@ -1,0 +1,4 @@
+[
+  {"text": "Doanh thu là cột Order Item Total (sau giảm giá), không phải Sales."},
+  {"text": "Số đơn hàng đếm COUNT(DISTINCT \"Order Id\"): mỗi dòng là một mặt hàng của đơn, không phải một đơn."}
+]

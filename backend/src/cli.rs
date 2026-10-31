@@ -15,11 +15,12 @@ const USAGE: &str = "usage:
   xdi-backend openapi                         print the OpenAPI spec (JSON) to stdout, without a database
   xdi-backend ask-examples                    print sample ask responses (JSON) to stdout, without a database
   xdi-backend eval (--data <csv> | --sample-database) --cases <json> [--cases <json>...]
-                  [--baseline <json>] [--out <json>]
+                  [--baseline <json>] [--out <json>] [--lessons <json>]
                                               run the sample question evaluation on a file or on the
                                               snapshot of SAMPLE_DATABASE_URL; write the report to --out
                                               (default eval/result.json); exit 1 when accuracy drops
-                                              below the baseline, 2 on infrastructure errors
+                                              below the baseline, 2 on infrastructure errors; with
+                                              --lessons, run once without and once with those lessons
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
                                               exit 2 on infrastructure errors";
@@ -69,13 +70,15 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
 /// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu (--data) hay trên database mẫu của
 /// SAMPLE_DATABASE_URL (--sample-database, #230). --cases lặp được, các file nối lại thành một bộ. In từng câu sai kèm
 /// lý do, dòng accuracy cuối, ghi báo cáo ra --out. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ
-/// tầng (thiếu file, JSON hỏng, không nạp được dữ liệu) thoát mã 2.
+/// tầng (thiếu file, JSON hỏng, không nạp được dữ liệu) thoát mã 2. Có --lessons thì chạy hai lượt, không và có bài học
+/// (#228), in thêm tỷ lệ đúng của lượt không bài học và các câu đổi kết quả; baseline so với lượt có bài học.
 async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut data = None;
     let mut sample_database = false;
     let mut case_files = Vec::new();
     let mut baseline = None;
     let mut out = "eval/result.json".to_string();
+    let mut lessons_path = None;
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         if flag == "--sample-database" {
@@ -92,6 +95,7 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             "--cases" => case_files.push(value.clone()),
             "--baseline" => baseline = Some(value.clone()),
             "--out" => out = value.clone(),
+            "--lessons" => lessons_path = Some(value.clone()),
             _ => {
                 eprintln!("{USAGE}");
                 return 2;
@@ -124,7 +128,15 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             }
         }
     }
-    let report = match eval::run_eval(state, source, &cases).await {
+    let lessons = match lessons_path.map(|p| eval::load_lessons(std::path::Path::new(&p))) {
+        None => Vec::new(),
+        Some(Ok(lessons)) => lessons,
+        Some(Err(e)) => {
+            eprintln!("eval: {e:?}");
+            return 2;
+        }
+    };
+    let report = match eval::run_eval(state, source, &cases, &lessons).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("eval: {e:?}");
@@ -144,6 +156,20 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         report.total,
         report.accuracy * 100.0
     );
+    if let Some(comparison) = &report.lessons {
+        println!(
+            "lessons: {}; without lessons {}/{} ({:.1}%); cases that changed: {}",
+            comparison.lessons,
+            comparison.passed_without,
+            report.total,
+            comparison.accuracy_without * 100.0,
+            if comparison.changed.is_empty() {
+                "none".to_string()
+            } else {
+                comparison.changed.join(", ")
+            }
+        );
+    }
     if let Err(e) = std::fs::write(
         &out,
         serde_json::to_string_pretty(&report).expect("report serializes"),

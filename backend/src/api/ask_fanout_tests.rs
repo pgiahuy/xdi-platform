@@ -11,7 +11,7 @@ use super::ask_tests::{sql_reply, step_names};
 use super::source_relations_tests::{dataset_id, snapshot};
 use super::sources_tests::{start, Setup, KEY, SHOP};
 use crate::api::test_support::call;
-use crate::engine::store::test_support::exec;
+use crate::engine::store::test_support::{exec, fetch_count};
 
 /// Ba sinh viên; sinh viên 1 nộp ba bài, sinh viên 2 nộp hai bài, sinh viên 3 nộp một bài. Tổng tín chỉ đúng: East
 /// Anglian 60 + 120 = 180, Wales 30. Cộng trên bảng bài nộp: East Anglian 60 * 3 + 120 * 2 = 420.
@@ -113,5 +113,8 @@ async fn credits_summed_over_submissions_are_repaired_or_refused() {
         message.contains("tính lặp") && message.contains("students"),
         "{message}"
     );
+    // Ba lần chặn cộng lặp (câu đầu của lượt một, hai câu của lượt hai), mỗi lần một dòng nhật ký lỗi (#228).
+    let sql = "SELECT count(*) FROM error_log WHERE step = 'fanout' AND model_output LIKE '%SUM(s.studied_credits)%'";
+    assert_eq!(fetch_count(&s.db.store, sql).await, 3);
     s.finish().await;
 }

@@ -36,6 +36,9 @@ mod extract;
 mod feedback;
 #[cfg(test)]
 mod feedback_tests;
+mod lessons;
+#[cfg(test)]
+mod lessons_tests;
 mod metrics;
 #[cfg(test)]
 mod metrics_tests;
@@ -85,6 +88,7 @@ fn api_routes(max_upload_bytes: u64) -> OpenApiRouter<AppState> {
         .merge(query::routes())
         .merge(conversations::routes())
         .merge(feedback::routes())
+        .merge(lessons::routes())
         .merge(metrics::routes())
         .merge(sources::routes())
 }

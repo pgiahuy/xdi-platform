@@ -8,7 +8,12 @@ thiết lập lần đầu (service/samples_db.rs), mỗi bảng một dataset k
 (bảng logic người hỏi chọn), và SQL đúng được đọc mọi bảng của workspace.
 
 So bằng tập dòng kết quả, không so chữ SQL: nhiều câu SQL khác nhau cùng trả lời đúng một câu hỏi. Một ca có thể có
-nhiều expected_sql (câu mơ hồ kiểu "doanh thu trước hay sau giảm giá"), khớp một là đúng. */
+nhiều expected_sql (câu mơ hồ kiểu "doanh thu trước hay sau giảm giá"), khớp một là đúng.
+
+Đo bài học (#228): có file bài học (`--lessons`) thì cả bộ chạy hai lượt trên cùng workspace tạm, lượt đầu không bài
+nào, rồi tạo và bật các bài đó qua đúng đường admin dùng (service/lessons/), lượt sau có bài học. Báo cáo là của lượt
+có bài học, kèm tỷ lệ đúng của lượt không bài và các câu đổi kết quả giữa hai lượt. Mock không đọc prompt nên hai lượt
+luôn như nhau; số đo có nghĩa khi chạy với mô hình thật. */
 
 use std::path::Path;
 use std::time::Duration;
@@ -21,9 +26,11 @@ use crate::engine::query::run_query;
 use crate::engine::store::Dataset;
 use crate::error::AppError;
 use crate::sample_database::SampleDatabase;
+use crate::service;
 use crate::service::ask::contract::{AskStatus, CellValue};
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::{ask, AskHistory};
+use crate::service::lessons::contract::LessonRequest;
 use crate::service::samples::{upload_local_file, SAMPLE_NAME};
 use crate::service::samples_db::seed_database;
 use crate::service::workspaces;
@@ -63,6 +70,27 @@ pub struct EvalReport {
     pub passed: usize,
     pub accuracy: f64,
     pub cases: Vec<CaseOutcome>,
+    /// Chỉ có khi chạy với file bài học; vắng thì eval/result.json giữ đúng hình dạng cũ.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lessons: Option<LessonsComparison>,
+}
+
+/// Một bài học trong file `--lessons`: chữ của bài, và có áp cho cả workspace không (mặc định chỉ dataset đang đánh giá).
+#[derive(Debug, Deserialize)]
+pub struct EvalLesson {
+    pub text: String,
+    #[serde(default)]
+    pub workspace: bool,
+}
+
+/// So hai lượt: không bài học và có bài học.
+#[derive(Debug, Serialize)]
+pub struct LessonsComparison {
+    pub lessons: usize,
+    pub passed_without: usize,
+    pub accuracy_without: f64,
+    /// Id các câu đúng ở một lượt mà sai ở lượt kia.
+    pub changed: Vec<String>,
 }
 
 /// Đọc file ca đánh giá. Lỗi đọc hay JSON hỏng là lỗi hạ tầng (mã thoát 2 ở cli), không phải câu trả lời sai.
@@ -73,11 +101,21 @@ pub fn load_cases(path: &Path) -> Result<Vec<EvalCase>, AppError> {
         .map_err(|e| AppError::Internal(format!("parse {}: {e}", path.display())))
 }
 
-/// Chạy cả bộ: tạo workspace tạm, nạp dữ liệu mẫu, chờ hồ sơ ngữ nghĩa, hỏi từng câu rồi xóa workspace tạm.
+/// Đọc file bài học: mảng JSON [{"text": "...", "workspace": false}]. Lỗi là lỗi hạ tầng như load_cases.
+pub fn load_lessons(path: &Path) -> Result<Vec<EvalLesson>, AppError> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| AppError::Internal(format!("read {}: {e}", path.display())))?;
+    serde_json::from_str(&text)
+        .map_err(|e| AppError::Internal(format!("parse {}: {e}", path.display())))
+}
+
+/// Chạy cả bộ: tạo workspace tạm, nạp dữ liệu mẫu (file hay database mẫu), chờ hồ sơ ngữ nghĩa, hỏi từng câu rồi xóa
+/// workspace tạm. lessons rỗng là một lượt như trước; có bài thì hai lượt (đầu file).
 pub async fn run_eval(
     state: &AppState,
     data: EvalData<'_>,
     cases: &[EvalCase],
+    lessons: &[EvalLesson],
 ) -> Result<EvalReport, AppError> {
     let (member, datasets) = match data {
         EvalData::File(path) => {
@@ -94,16 +132,82 @@ pub async fn run_eval(
         }
         EvalData::SampleDatabase(db) => prepare_database(state, db).await?,
     };
-    let outcome = run_cases(state, &member, &datasets, cases).await;
+    let outcome = run_rounds(state, &member, &datasets, cases, lessons).await;
     let _ = workspaces::delete(state, &member).await;
-    let outcomes = outcome?;
-    let passed = outcomes.iter().filter(|c| c.ok).count();
-    Ok(EvalReport {
+    outcome
+}
+
+/// Một hay hai lượt trên các dataset của workspace tạm (một với file, mọi bảng đã chụp với database mẫu).
+async fn run_rounds(
+    state: &AppState,
+    member: &Member,
+    datasets: &[Dataset],
+    cases: &[EvalCase],
+    lessons: &[EvalLesson],
+) -> Result<EvalReport, AppError> {
+    let without = run_cases(state, member, datasets, cases).await?;
+    if lessons.is_empty() {
+        return Ok(build_report(without, None));
+    }
+    add_lessons(state, member, datasets, lessons).await?;
+    let with = run_cases(state, member, datasets, cases).await?;
+    let changed = with
+        .iter()
+        .zip(&without)
+        .filter(|(a, b)| a.ok != b.ok)
+        .map(|(a, _)| a.id.clone())
+        .collect();
+    let passed_without = without.iter().filter(|c| c.ok).count();
+    let comparison = LessonsComparison {
+        lessons: lessons.len(),
+        passed_without,
+        accuracy_without: build_accuracy(passed_without, without.len()),
+        changed,
+    };
+    Ok(build_report(with, Some(comparison)))
+}
+
+fn build_report(cases: Vec<CaseOutcome>, lessons: Option<LessonsComparison>) -> EvalReport {
+    let passed = cases.iter().filter(|c| c.ok).count();
+    EvalReport {
         total: cases.len(),
         passed,
-        accuracy: passed as f64 / cases.len().max(1) as f64,
-        cases: outcomes,
-    })
+        accuracy: build_accuracy(passed, cases.len()),
+        cases,
+        lessons,
+    }
+}
+
+fn build_accuracy(passed: usize, total: usize) -> f64 {
+    passed as f64 / total.max(1) as f64
+}
+
+/// Tạo rồi bật từng bài, như admin làm ở màn Bài học; người chạy eval là admin của workspace tạm. Bài không áp cho cả
+/// workspace thì gắn vào từng dataset đang đánh giá: với database mẫu là mỗi bảng đã chụp một bản, vì câu nào cũng có
+/// thể hỏi trên bảng nào.
+async fn add_lessons(
+    state: &AppState,
+    member: &Member,
+    datasets: &[Dataset],
+    lessons: &[EvalLesson],
+) -> Result<(), AppError> {
+    for lesson in lessons {
+        let targets: Vec<Option<uuid::Uuid>> = if lesson.workspace {
+            vec![None]
+        } else {
+            datasets.iter().map(|d| Some(d.id)).collect()
+        };
+        for dataset_id in targets {
+            let request = LessonRequest {
+                text: lesson.text.clone(),
+                dataset_id,
+                error_id: None,
+            };
+            let created = service::lessons::create_lesson(state, member, request).await?;
+            service::lessons::set_enabled(state, member, &created.id.to_string(), true).await?;
+        }
+    }
+    Ok(())
 }
 
 /// Tài khoản và workspace tạm cho lần đánh giá, với dataset mẫu đã nạp và hồ sơ ngữ nghĩa xong (mock thì có ngay).

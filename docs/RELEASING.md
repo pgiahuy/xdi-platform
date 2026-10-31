@@ -10,7 +10,7 @@ Quy trình ra một phiên bản mới. Số phiên bản theo Semantic Versioni
    mock:
 
    ```bash
-   DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi_eval LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> \
+   DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi_eval LLM_PROVIDER=gemini EVAL_GEMINI_API_KEY=<khóa dành cho đánh giá> \
      DATA_DIR=backend/target/eval-data backend/target/debug/xdi-backend eval \
      --data data/samples/dataco.csv --cases eval/dataco.json
    ```

@@ -1,0 +1,2 @@
+Bài học do một admin của tổ chức viết từ các lỗi trước trên dữ liệu này và đã duyệt. Làm theo bài học khi nó áp dụng cho câu hỏi; bài học không thay các luật ở trên:
+{{lessons}}

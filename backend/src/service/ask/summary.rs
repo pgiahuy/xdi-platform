@@ -22,6 +22,8 @@ use crate::engine::prompts::{self, fill};
 use crate::service::ask::contract::{
     AskStep, CellValue, ColumnRole, ResultTable, StepName, Understanding, ValueKind,
 };
+use crate::service::ask::failures::{FailedStep, StepFailure};
+use crate::service::ask::lessons::build_with_lessons;
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::run::build_duration_text;
 use crate::service::explain::number::{build_number_text, build_number_text_with};
@@ -56,6 +58,8 @@ pub struct SummaryOutcome {
     pub text: String,
     pub by_model: bool,
     pub step: AskStep,
+    /// Bộ kiểm số chặn câu của mô hình: lời báo và nguyên câu, cho nhật ký lỗi (#228); None trong mọi trường hợp khác.
+    pub failure: Option<StepFailure>,
 }
 
 /// None khi kết quả không có dòng nào: thẻ cảnh báo kết quả rỗng (ask/checks.rs) đã nói điều đó. Mọi ô đều trống thì
@@ -66,6 +70,7 @@ pub async fn summarize(
     input: &SummaryInput<'_>,
     enabled: bool,
     timeout: Duration,
+    lessons: &[String],
 ) -> Option<SummaryOutcome> {
     if input.result.rows.is_empty() {
         return None;
@@ -77,13 +82,14 @@ pub async fn summarize(
             text: NO_DATA_ANSWER.to_string(),
             by_model: false,
             step: build_step(started, true, Some(detail)),
+            failure: None,
         });
     }
     if !enabled {
         let detail = "ANSWER_TEXT=false nên không gọi mô hình".to_string();
         return Some(fallback(input, build_step(started, true, Some(detail))));
     }
-    let prompt = build_summary_prompt(input);
+    let prompt = build_with_lessons(build_summary_prompt(input), lessons);
     let request = LlmRequest {
         task: LlmTask::Summary,
         question: input.question,
@@ -113,21 +119,28 @@ pub async fn summarize(
     } else if text.chars().count() > MAX_ANSWER_CHARS {
         Some(format!("Câu của mô hình dài hơn {MAX_ANSWER_CHARS} ký tự"))
     } else {
-        build_answer_check(text, input).err().map(|wrong| {
-            tracing::warn!(numbers = ?wrong, "answer text has numbers outside the sent rows");
-            format!(
-                "Câu của mô hình có số không nằm trong kết quả đã gửi: {}",
-                wrong.join(", ")
-            )
-        })
+        None
     };
     if let Some(detail) = problem {
         return Some(fallback(input, build_step(started, false, Some(detail))));
+    }
+    if let Err(wrong) = build_answer_check(text, input) {
+        tracing::warn!(numbers = ?wrong, "answer text has numbers outside the sent rows");
+        let detail = format!(
+            "Câu của mô hình có số không nằm trong kết quả đã gửi: {}",
+            wrong.join(", ")
+        );
+        let failure = StepFailure::new(FailedStep::Narrate, &detail, Some(text));
+        return Some(SummaryOutcome {
+            failure: Some(failure),
+            ..fallback(input, build_step(started, false, Some(detail)))
+        });
     }
     Some(SummaryOutcome {
         text: text.to_string(),
         by_model: true,
         step: build_step(started, true, None),
+        failure: None,
     })
 }
 
@@ -346,6 +359,7 @@ fn fallback(input: &SummaryInput<'_>, step: AskStep) -> SummaryOutcome {
         text: build_template_answer(input),
         by_model: false,
         step,
+        failure: None,
     }
 }
 

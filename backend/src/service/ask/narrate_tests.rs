@@ -186,7 +186,7 @@ fn sample_summary_passes_the_number_check() {
 #[tokio::test]
 async fn mock_narrate_answer_passes_the_number_check() {
     let explanation = example();
-    let outcome = narrate(&Mock::new(), QUESTION, &explanation, TIMEOUT).await;
+    let outcome = narrate(&Mock::new(), QUESTION, &explanation, TIMEOUT, &[]).await;
     assert!(outcome.summary_by_model);
     assert_eq!(outcome.summary, explanation.summary);
 }
@@ -338,6 +338,7 @@ async fn numbers_in_the_question_are_not_allowed() {
         "Tại sao doanh thu giảm 1283400?",
         &explanation,
         TIMEOUT,
+        &[],
     )
     .await;
     assert!(!outcome.summary_by_model);
@@ -556,7 +557,7 @@ async fn model_summary_is_used_when_it_passes_the_check() {
     let llm = StubLlm {
         reply: Reply::Text(summary.clone()),
     };
-    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
     assert_eq!(outcome.summary, summary);
     assert!(outcome.summary_by_model);
     assert!(outcome.step.ok);
@@ -571,7 +572,7 @@ async fn model_error_falls_back_to_the_template() {
     let llm = StubLlm {
         reply: Reply::Upstream("Mô hình không trả lời, thử lại sau".to_string()),
     };
-    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
     assert_eq!(outcome.summary, build_template_summary(&explanation));
     assert!(!outcome.summary_by_model);
     assert!(!outcome.step.ok);
@@ -586,7 +587,7 @@ async fn internal_model_error_shows_a_generic_message() {
     let llm = StubLlm {
         reply: Reply::Internal("chi tiết kỹ thuật".to_string()),
     };
-    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
     assert!(!outcome.summary_by_model);
     let detail = outcome.step.detail.expect("detail");
     assert!(detail.contains("Lỗi nội bộ"), "{detail}");
@@ -596,7 +597,14 @@ async fn internal_model_error_shows_a_generic_message() {
 #[tokio::test]
 async fn timeout_falls_back_to_the_template() {
     let explanation = example();
-    let outcome = narrate(&SlowLlm, QUESTION, &explanation, Duration::from_millis(10)).await;
+    let outcome = narrate(
+        &SlowLlm,
+        QUESTION,
+        &explanation,
+        Duration::from_millis(10),
+        &[],
+    )
+    .await;
     assert_eq!(outcome.summary, build_template_summary(&explanation));
     assert!(!outcome.summary_by_model);
     assert!(!outcome.step.ok);
@@ -611,7 +619,7 @@ async fn empty_or_too_long_reply_falls_back_to_the_template() {
         let llm = StubLlm {
             reply: Reply::Text(reply),
         };
-        let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
+        let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
         assert_eq!(outcome.summary, build_template_summary(&explanation));
         assert!(!outcome.summary_by_model);
         assert!(!outcome.step.ok);
@@ -626,7 +634,7 @@ async fn wrong_numbers_fall_back_to_the_template() {
         // 13,6% là % thay đổi code đã tính nên được phép; 14% thì mô hình tự làm tròn, không có trong bảng.
         reply: Reply::Text("Doanh thu quý 3/2017 giảm 14% so với quý 2/2017.".to_string()),
     };
-    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
     assert_eq!(outcome.summary, build_template_summary(&explanation));
     assert!(!outcome.summary_by_model);
     assert!(!outcome.step.ok);
@@ -639,7 +647,7 @@ async fn wrong_numbers_fall_back_to_the_template() {
 async fn zero_change_does_not_call_the_model() {
     let mut explanation = example();
     explanation.change = "0.00".to_string();
-    let outcome = narrate(&NeverCalled, QUESTION, &explanation, TIMEOUT).await;
+    let outcome = narrate(&NeverCalled, QUESTION, &explanation, TIMEOUT, &[]).await;
     assert!(outcome.summary.contains("không đổi"));
     assert!(!outcome.summary_by_model);
     assert!(outcome.step.ok);
@@ -740,7 +748,7 @@ async fn two_groups_use_the_template_without_the_model() {
     let llm = StubLlm {
         reply: Reply::Text("Câu của mô hình.".to_string()),
     };
-    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT).await;
+    let outcome = narrate(&llm, QUESTION, &explanation, TIMEOUT, &[]).await;
     assert_eq!(outcome.summary, build_template_summary(&explanation));
     assert!(!outcome.summary_by_model);
     assert!(outcome.step.ok);
