@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 
 use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError, GuardedSql};
+use crate::service::ask::total_alias::build_total_aliases;
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::query::{run_query, QueryError, QueryOutput};
 use crate::error::AppError;
@@ -249,6 +250,10 @@ async fn attempt(
     failures: &mut Vec<StepFailure>,
 ) -> Result<Attempt, AppError> {
     let started = Instant::now();
+    // Bí danh "mỗi đơn vị" của một SUM đổi thành tên tổng trước guard (#260, ask/total_alias.rs), để câu đã chạy, tên cột
+    // kết quả và lời trả lời cùng gọi đúng là tổng. sql_generated vẫn là câu mô hình viết.
+    let renamed = build_total_aliases(sql);
+    let sql = renamed.as_deref().unwrap_or(sql);
     let reason = match build_guarded_sql(sql, input.tables, input.links, input.max_rows) {
         Ok(guarded) => {
             // Kiểm cộng lặp trên câu mô hình viết, sau guard (câu đã hợp lệ) và trước khi chạy.

@@ -40,6 +40,10 @@ pub struct JudgeFacts {
     pub volume_label: String,
     #[serde(default)]
     pub price_label: String,
+    /// Quy mô là ý chính (Split::scale_main, #260): lời không nói chênh lệch chủ yếu do lượng là thiếu ý chính. Ca cũ
+    /// trong file của bộ đo không có trường này, đọc là false.
+    #[serde(default)]
+    pub scale_main: bool,
     pub claims: Vec<Claim>,
 }
 
@@ -61,6 +65,7 @@ pub fn build_judge_facts(explanation: &Explanation, claims: &[Claim]) -> JudgeFa
         compare: explanation.compare.label.clone(),
         volume_label: split.map(|s| s.volume_label.clone()).unwrap_or_default(),
         price_label: split.map(|s| s.price_label.clone()).unwrap_or_default(),
+        scale_main: split.is_some_and(|s| s.scale_main),
         claims: claims.to_vec(),
     }
 }

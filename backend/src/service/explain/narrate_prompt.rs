@@ -47,7 +47,9 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          - \"split\", when present: the change split into the part made by the count changing (\"volume_effect\") \
          and the part made by the average value per unit changing (\"price_effect\"); \"volume_share\" and \
          \"price_share\" are these parts in percent of the change, null when the two parts go opposite ways; \
-         \"if_volume_unchanged\" is the compared value if the count had stayed as on the base side.\n\
+         \"if_volume_unchanged\" is the compared value if the count had stayed as on the base side; \
+         \"scale_main\" true means the count of one side is at least twice the other and makes the larger part of \
+         the change.\n\
          - \"measure_kind\" \"ratio\": the measure is a ratio, values are ratios. A contribution is \"mix_effect\" \
          (the groups' shares changing) plus \"rate_effect\" (the ratio inside the groups changing); a column \
          carries the totals of both parts.\n\
@@ -68,7 +70,8 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          words that say what happened (not only a column or group name) and a \"text\" of one sentence with its \
          numbers. First the larger part of \"split\" (for a \
          ratio, of mix_effect and rate_effect), then the groups that made most of the change, then a group that \
-         went against the change when there is one.\n\
+         went against the change when there is one. When \"scale_main\" is true, the first point says that the \
+         change comes mainly from the count, with the counts of both sides, before any group.\n\
          - \"claims\": one item for every number used in \"headline\" and \"reasons\" and every group named as a \
          cause, as going against the change or as existing on one side only. \"field\" is the key of that number \
          in the JSON (cause for a group named as a main cause, against for a group named as going against the \
@@ -159,6 +162,7 @@ fn build_facts_json(e: &Explanation) -> serde_json::Value {
             "volume_share": split.volume_share.as_deref().map(|s| build_number_text_with(s, 1)),
             "price_share": split.price_share.as_deref().map(|s| build_number_text_with(s, 1)),
             "if_volume_unchanged": build_number_text_with(&n.if_volume_unchanged, digits),
+            "scale_main": split.scale_main,
         })
     });
     let dropped: Vec<serde_json::Value> = e

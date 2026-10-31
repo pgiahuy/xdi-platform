@@ -57,6 +57,7 @@ use crate::service::ask::run::build_step;
 use crate::service::ask::summary::build_cell_text;
 use crate::service::explain::breakdown::{run_code_query, CodeQuery, QueryEnv};
 use crate::service::explain::is_vietnamese_alias;
+use crate::service::explain::per_unit::build_alias_label;
 use crate::service::insight::facts::{
     build_group_parts, build_rows_parts, build_top_parts, InsightParts, Point,
 };
@@ -353,7 +354,9 @@ pub(super) fn build_measure_label(input: &InsightInput<'_>, measure: usize) -> S
     let name = &result.columns[measure].name;
     match input.understanding.and_then(|u| u.measures.get(position)) {
         Some(item) if !is_vietnamese_alias(name, &item.sql) => item.label.clone(),
-        _ => name.clone(),
+        // Bí danh "Lợi nhuận mỗi đơn" đặt cho một SUM là tổng (#260): gọi "Tổng lợi nhuận".
+        Some(item) => build_alias_label(name, &item.sql),
+        None => name.clone(),
     }
 }
 

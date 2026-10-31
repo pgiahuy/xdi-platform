@@ -2,6 +2,7 @@
 - "comparison": "periods" là so hai kỳ và "compare" là kỳ sau; "groups" là so hai nhóm cùng lúc, không có trước sau.
 - "base", "compare": tên bên gốc và tên bên được so.
 - "volume_label", "price_label": tên của số lượng và của giá trị trung bình mỗi đơn vị, dùng với các khóa về số lượng và giá bên dưới; trống khi không có.
+- "scale_main": true khi số lượng của một bên gấp từ hai lần bên kia và phần do số lượng lớn hơn phần do giá. Ý chính khi đó là chênh lệch chủ yếu do số lượng hai bên khác nhau: lời không nói điều này, hay nói chênh lệch chủ yếu do điều khác, là thiếu ý chính và bị coi là sai.
 - "claims": các khẳng định. Mỗi khẳng định nói về một con số hoặc một nhóm.
   - "column", "group": khẳng định thuộc nhóm nào; "group" là một giá trị của cột "column". Cả hai trống: khẳng định nói về toàn bộ phần dữ liệu đang so. Chỉ có "column": khẳng định nói về cả cột đó.
   - "value": con số, có dấu. Số viết kiểu Việt Nam: dấu chấm ngăn nhóm nghìn và dấu phẩy trước phần thập phân, nên 1.234.567,89 là khoảng 1,23 triệu.

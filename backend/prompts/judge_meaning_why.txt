@@ -2,6 +2,7 @@
 - "comparison": "periods" means two periods and "compare" is the later one; "groups" means two groups at the same time, with no before and after.
 - "base", "compare": the name of the base side and of the compared side.
 - "volume_label", "price_label": the names of the count and of the average value per unit used by the volume and price keys below; empty when there are none.
+- "scale_main": true when the count of one side is at least twice the count of the other and the count makes the larger part of the change. The main point is then that the change comes mainly from the difference in count: an explanation that does not say so, or says the change comes mainly from something else, misses its main point and is wrong.
 - "claims": the claims. Each claim is about one number or one group.
   - "column", "group": which group the claim is about; "group" is a value of the column "column". Both empty: the claim is about all the data being compared. Only "column": the claim is about that whole column.
   - "value": the number, with its sign. Numbers are written the Vietnamese way: a dot between groups of thousands and a comma before the decimals, so 1.234.567,89 is about 1,23 million.

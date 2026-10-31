@@ -74,6 +74,9 @@ pub mod scope;
 pub mod summary;
 #[cfg(test)]
 mod summary_tests;
+pub mod total_alias;
+#[cfg(test)]
+mod total_alias_tests;
 pub mod unanswerable;
 mod unsnapshotted;
 pub mod value_retry;
