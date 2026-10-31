@@ -69,7 +69,7 @@ pub use metrics::{MetricDefinition, NewMetric};
 #[allow(unused_imports)]
 pub use policies::{DataRoleOutcome, PoliciesOutcome, RowPolicy};
 #[allow(unused_imports)]
-pub use queries::{NewQuery, PromptExample, QueryStatus, StoredQuery};
+pub use queries::{NewQuery, PromptExample, QueryStatus, QueryTimings, StoredQuery};
 pub use relations::{build_related, DatasetRelation, NewRelation};
 pub use sources::SourceRow;
 pub use users::{Deactivated, UserSummary};

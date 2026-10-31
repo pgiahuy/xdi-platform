@@ -5,6 +5,7 @@ Ai chạy được binary trên máy chủ (và đọc được DATABASE_URL) l�
 Đây là đường cứu khi quản trị hệ thống duy nhất quên mật khẩu. Không có tham số thì main chạy server như thường. */
 
 use crate::error::AppError;
+use crate::service::llm_stats::{build_question_stat, build_report, TokenPrice};
 use crate::service::{eval, eval_classify, users};
 use crate::state::AppState;
 
@@ -20,7 +21,10 @@ const USAGE: &str = "usage:
                                               run once without and once with those lessons enabled
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
-                                              exit 2 on infrastructure errors";
+                                              exit 2 on infrastructure errors
+  xdi-backend llm-stats [--since <rfc3339>] [--price-in <usd> --price-out <usd>]
+                                              time, model calls and tokens of recorded questions, by question
+                                              kind and by model task; prices are USD per million tokens";
 
 /// Chạy lệnh và trả mã thoát cho tiến trình. Kết quả in ra stdout, lỗi ra stderr.
 pub async fn run(state: &AppState, args: &[String]) -> i32 {
@@ -57,6 +61,7 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
         },
         [cmd, rest @ ..] if cmd == "eval" => run_eval(state, rest).await,
         [cmd, rest @ ..] if cmd == "eval-classify" => run_eval_classify(state, rest).await,
+        [cmd, rest @ ..] if cmd == "llm-stats" => run_llm_stats(state, rest).await,
         _ => {
             eprintln!("{USAGE}");
             2
@@ -168,6 +173,47 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             return 1;
         }
     }
+    0
+}
+
+/// Lệnh llm-stats (#184): đọc lịch sử câu hỏi từ --since (mặc định mọi câu) rồi in báo cáo của
+/// service/llm_stats.rs. Giá token đưa qua tham số, vì giá đổi theo mô hình và theo thời gian.
+async fn run_llm_stats(state: &AppState, args: &[String]) -> i32 {
+    let mut since = chrono::DateTime::<chrono::Utc>::UNIX_EPOCH;
+    let (mut price_in, mut price_out) = (None, None);
+    let mut it = args.iter();
+    while let Some(flag) = it.next() {
+        let value = it.next();
+        let parsed = match (flag.as_str(), value) {
+            ("--since", Some(v)) => chrono::DateTime::parse_from_rfc3339(v)
+                .map(|t| since = t.with_timezone(&chrono::Utc))
+                .is_ok(),
+            ("--price-in", Some(v)) => v.parse::<f64>().map(|p| price_in = Some(p)).is_ok(),
+            ("--price-out", Some(v)) => v.parse::<f64>().map(|p| price_out = Some(p)).is_ok(),
+            _ => false,
+        };
+        if !parsed {
+            eprintln!("{USAGE}");
+            return 2;
+        }
+    }
+    let price = match (price_in, price_out) {
+        (Some(input), Some(output)) => Some(TokenPrice { input, output }),
+        (None, None) => None,
+        _ => {
+            eprintln!("llm-stats: give both --price-in and --price-out");
+            return 2;
+        }
+    };
+    let rows = match state.store.list_query_timings(since).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            eprintln!("llm-stats: {e:?}");
+            return 2;
+        }
+    };
+    let stats: Vec<_> = rows.iter().filter_map(build_question_stat).collect();
+    print!("{}", build_report(&stats, price));
     0
 }
 

@@ -142,3 +142,20 @@ export type StepView = {
   /** Bước có gọi mô hình ngôn ngữ. */
   byModel: boolean
 }
+
+/** Một lần gọi mô hình ngôn ngữ của câu hỏi. */
+export type ModelCallView = {
+  /** Nhãn tiếng Việt do giao diện đặt cho loại việc. */
+  label: string
+  durationMs: number
+  ok: boolean
+  /** null khi nhà cung cấp không báo số token (mock, lần gọi lỗi). */
+  inputTokens: number | null
+  outputTokens: number | null
+}
+
+/** Tab Các bước: các bước theo thứ tự, rồi các lần gọi mô hình. */
+export type StepsView = {
+  steps: StepView[]
+  calls: ModelCallView[]
+}

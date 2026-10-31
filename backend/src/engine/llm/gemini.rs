@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
-use super::{http, LlmProvider, LlmRequest};
+use super::{http, LlmProvider, LlmReply, LlmRequest, TokenUsage};
 use crate::{config::Secret, error::AppError};
 
 /// Địa chỉ gốc của Gemini API. Test thay bằng địa chỉ server giả.
@@ -121,6 +121,12 @@ impl LlmProvider for Gemini {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        self.complete_with_usage(request)
+            .await
+            .map(|reply| reply.text)
+    }
+
+    async fn complete_with_usage(&self, request: &LlmRequest<'_>) -> Result<LlmReply, AppError> {
         if self.api_key.is_empty() {
             return Err(AppError::Unavailable(
                 "Thiếu khóa Gemini: đặt GEMINI_API_KEY trong .env rồi khởi động lại backend"
@@ -170,8 +176,8 @@ impl LlmProvider for Gemini {
     }
 }
 
-/// Lấy văn bản trả lời từ body của generateContent.
-fn build_answer(body: &str) -> Result<String, AppError> {
+/// Lấy văn bản trả lời và số token từ body của generateContent.
+fn build_answer(body: &str) -> Result<LlmReply, AppError> {
     let response: GenerateResponse = serde_json::from_str(body).map_err(|err| {
         // Chỉ ghi lỗi parse, không ghi body: body có thể chứa dữ liệu của người dùng.
         tracing::warn!(error = %err, "gemini response is not valid JSON of the expected shape");
@@ -186,6 +192,10 @@ fn build_answer(body: &str) -> Result<String, AppError> {
             "Gemini từ chối trả lời câu này (lý do {reason}). Thử diễn đạt lại câu hỏi"
         )));
     }
+    let usage = response.usage_metadata.map(|u| TokenUsage {
+        input_tokens: u.prompt_token_count,
+        output_tokens: u.candidates_token_count + u.thoughts_token_count,
+    });
     let Some(candidate) = response.candidates.into_iter().next() else {
         tracing::warn!("gemini returned no candidate");
         return Err(AppError::Upstream(
@@ -225,10 +235,10 @@ fn build_answer(body: &str) -> Result<String, AppError> {
             "Gemini không trả về nội dung. Thử lại hoặc diễn đạt lại câu hỏi".to_string(),
         ));
     }
-    Ok(text)
+    Ok(LlmReply { text, usage })
 }
 
-// Các struct dưới đây chỉ khai những trường cần đọc; serde bỏ qua trường khác như usageMetadata.
+// Các struct dưới đây chỉ khai những trường cần đọc; serde bỏ qua trường khác như modelVersion.
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -236,6 +246,20 @@ struct GenerateResponse {
     #[serde(default)]
     candidates: Vec<Candidate>,
     prompt_feedback: Option<PromptFeedback>,
+    usage_metadata: Option<UsageMetadata>,
+}
+
+/// Số token Gemini đếm cho lần gọi. thoughtsTokenCount chỉ có khi mô hình suy nghĩ nháp trước khi trả lời; Google
+/// tính tiền phần đó như token trả lời.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UsageMetadata {
+    #[serde(default)]
+    prompt_token_count: u64,
+    #[serde(default)]
+    candidates_token_count: u64,
+    #[serde(default)]
+    thoughts_token_count: u64,
 }
 
 #[derive(Deserialize)]
@@ -374,6 +398,25 @@ mod tests {
         let config = &received.body["generationConfig"];
         assert_eq!(config["responseMimeType"], "application/json");
         assert_eq!(config["responseJsonSchema"], schema);
+    }
+
+    #[tokio::test]
+    async fn reads_token_counts() {
+        let _serial = SERIAL.lock().await;
+        const BODY: &str = r#"{"candidates":[{"content":{"parts":[{"text":"SELECT 1"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":3,"thoughtsTokenCount":5,"totalTokenCount":20}}"#;
+        let (url, _) = spawn(200, BODY, Duration::ZERO).await;
+        let request = LlmRequest {
+            task: LlmTask::Sql,
+            question: "doanh thu theo năm",
+            prompt: PROMPT,
+            json_schema: None,
+        };
+        let reply = gemini(&url, KEY, Duration::from_secs(5))
+            .complete_with_usage(&request)
+            .await
+            .expect("answer");
+        let usage = reply.usage.expect("usage");
+        assert_eq!((usage.input_tokens, usage.output_tokens), (12, 8));
     }
 
     #[tokio::test]

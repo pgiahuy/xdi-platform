@@ -79,6 +79,7 @@ use std::time::Instant;
 
 use crate::auth::{Member, WorkspaceId};
 use crate::engine::guard::AllowedTable;
+use crate::engine::llm::meter::{build_call_totals, CallLog};
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
 use crate::service::ask::checks::{build_result_warnings, CheckedQuery};
@@ -137,7 +138,44 @@ pub struct AskHistory {
     pub questions: Vec<String>,
 }
 
+/// Một câu hỏi, kèm danh sách lần gọi mô hình của nó (AskResponse.model_calls, #184): mọi bước bên dưới gọi mô hình
+/// qua state_for_question, nên lần gọi nào cũng được ghi, kể cả lần gọi của ask/why.rs và service/insight/.
 pub async fn ask(
+    state: &AppState,
+    member: &Member,
+    dataset_id: &str,
+    question: &str,
+    choices: &[ChosenOption],
+    history: &AskHistory,
+) -> Result<AskResponse, AppError> {
+    let log = CallLog::new();
+    let state_for_question = state.with_call_log(&log);
+    let asked = ask_steps(
+        &state_for_question,
+        member,
+        dataset_id,
+        question,
+        choices,
+        history,
+    )
+    .await;
+    let calls = log.calls();
+    let totals = build_call_totals(&calls);
+    tracing::info!(
+        total_ms = log.elapsed_ms(),
+        model_calls = totals.calls,
+        model_ms = totals.model_ms,
+        input_tokens = totals.input_tokens,
+        output_tokens = totals.output_tokens,
+        ok = asked.is_ok(),
+        "question done"
+    );
+    let mut response = asked?;
+    response.model_calls = calls;
+    Ok(response)
+}
+
+async fn ask_steps(
     state: &AppState,
     member: &Member,
     dataset_id: &str,
@@ -537,8 +575,7 @@ pub(super) async fn record_query(
             ))
         }
     };
-    let timings = serde_json::to_value(&*steps)
-        .map_err(|e| AppError::Internal(format!("serialize ask steps: {e}")))?;
+    let timings = build_timings(state, steps)?;
     let row_count = recorded
         .result
         .map(|r| i64::try_from(r.total_rows).unwrap_or(i64::MAX));
@@ -562,6 +599,22 @@ pub(super) async fn record_query(
     let id = state.store.record_query(&member.workspace, &query).await?;
     steps.push(build_step(StepName::Record, started, true, None));
     Ok(id)
+}
+
+/// queries.timings: các bước, các lần gọi mô hình tới lúc ghi và thời gian từ đầu câu hỏi (#184), để lệnh
+/// `xdi-backend llm-stats` tính thời gian, số lần gọi và token theo loại câu. Mọi lần gọi mô hình của câu hỏi đều xảy
+/// ra trước bước record.
+fn build_timings(state: &AppState, steps: &[AskStep]) -> Result<serde_json::Value, AppError> {
+    let (calls, elapsed_ms) = match &state.call_log {
+        Some(log) => (log.calls(), Some(log.elapsed_ms())),
+        None => (Vec::new(), None),
+    };
+    let timings = serde_json::json!({
+        "steps": steps,
+        "model_calls": calls,
+        "elapsed_ms": elapsed_ms,
+    });
+    Ok(timings)
 }
 
 /// Phần chung của mọi response: mỗi nhánh của ask chỉ ghi các trường của nó.
@@ -595,5 +648,6 @@ pub(super) fn build_base_response(
         answer_text_by_model: None,
         clarifications: vec![],
         steps: vec![],
+        model_calls: vec![],
     }
 }

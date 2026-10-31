@@ -14,7 +14,7 @@ import type {
   EvidenceTab,
   RowsView,
   SqlView,
-  StepView,
+  StepsView,
   TabData,
 } from '@/components/ask/evidenceTypes'
 import { cn } from '@/lib/utils'
@@ -48,6 +48,20 @@ const stepLabels: Record<StepName, string> = {
   record: 'Lưu vào lịch sử',
 }
 const modelSteps: StepName[] = ['classify', 'llm', 'repair', 'narrate']
+
+type ModelTask = AskResponse['model_calls'][number]['task']
+
+// Nhãn tiếng Việt của loại việc nhờ mô hình (engine/llm/mod.rs, LlmTask).
+const taskLabels: Record<ModelTask, string> = {
+  sql: 'Viết SQL',
+  repair: 'Sửa SQL',
+  profile: 'Lập hồ sơ cột',
+  narrate: 'Viết lời phân rã',
+  why: 'Điền form câu hỏi tìm nguyên nhân',
+  summary: 'Viết đoạn trả lời',
+  insight: 'Viết lời giải thích',
+  classify: 'Phân loại câu hỏi',
+}
 
 export function AskEvidence({ ws, answer, pending, view }: Props) {
   const { response, variables } = answer
@@ -160,15 +174,24 @@ function buildGuardedMissing(response: AskResponse, lastGuard: AskResponse['step
   return 'Câu SQL chưa qua guard.'
 }
 
-function buildSteps(response: AskResponse): TabData<StepView[]> {
+function buildSteps(response: AskResponse): TabData<StepsView> {
   if (response.steps.length === 0) return { data: null, reason: 'Backend không gửi các bước cho câu này.' }
   return {
-    data: response.steps.map((step) => ({
-      label: stepLabels[step.name],
-      durationMs: step.duration_ms,
-      ok: step.ok,
-      detail: step.detail,
-      byModel: modelSteps.includes(step.name),
-    })),
+    data: {
+      steps: response.steps.map((step) => ({
+        label: stepLabels[step.name],
+        durationMs: step.duration_ms,
+        ok: step.ok,
+        detail: step.detail,
+        byModel: modelSteps.includes(step.name),
+      })),
+      calls: response.model_calls.map((call) => ({
+        label: taskLabels[call.task],
+        durationMs: call.duration_ms,
+        ok: call.ok,
+        inputTokens: call.input_tokens,
+        outputTokens: call.output_tokens,
+      })),
+    },
   }
 }

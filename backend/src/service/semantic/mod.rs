@@ -33,6 +33,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::auth::WorkspaceId;
+use crate::engine::llm::meter::{build_call_totals, CallLog};
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
 use crate::engine::store::{
@@ -213,6 +214,32 @@ pub async fn profile_remaining_versions(state: AppState) {
 /// và đánh dấu đã thử; không bao giờ chuyển profile_status sang failed (khác lỗi lớp cấu trúc: lỗi ở đây là của mô
 /// hình, thử lại lúc khởi động hay bằng cách nạp lại cùng bộ file).
 pub async fn apply_semantic_profile(
+    state: &AppState,
+    ws: &WorkspaceId,
+    dataset: &Dataset,
+    version_id: Uuid,
+    row_count: Option<i64>,
+) -> Result<(), SemanticFailure> {
+    // Đo lượt lập hồ sơ như đo một câu hỏi (engine/llm/meter.rs, #184): một dòng log cuối lượt có tổng thời gian, số
+    // lần gọi và số token.
+    let log = CallLog::new();
+    let metered = state.with_call_log(&log);
+    let applied = profile_version(&metered, ws, dataset, version_id, row_count).await;
+    let totals = build_call_totals(&log.calls());
+    tracing::info!(
+        version_id = %version_id,
+        total_ms = log.elapsed_ms(),
+        model_calls = totals.calls,
+        model_ms = totals.model_ms,
+        input_tokens = totals.input_tokens,
+        output_tokens = totals.output_tokens,
+        ok = applied.is_ok(),
+        "semantic profile done"
+    );
+    applied
+}
+
+async fn profile_version(
     state: &AppState,
     ws: &WorkspaceId,
     dataset: &Dataset,

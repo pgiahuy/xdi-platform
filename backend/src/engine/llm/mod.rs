@@ -8,10 +8,12 @@ truy cập và giao diện phân biệt được "câu hỏi có vấn đề" v�
 - Unavailable (503): máy chủ thiếu cấu hình (chưa đặt khóa, OLLAMA_URL không hợp lệ), chưa gửi gì đi.
 - BadRequest (400): chỉ khi mô hình từ chối vì nội dung câu hỏi; gửi lại y nguyên vẫn bị từ chối.
 Không dùng Unauthorized hay Forbidden cho khóa sai: giao diện hiểu 401 là phiên đăng nhập hết hạn. Không dùng Internal:
-lời trả về bị thay bằng câu chung, người dùng không biết cách sửa. */
+lời trả về bị thay bằng câu chung, người dùng không biết cách sửa.
+Số token và thời gian của từng lần gọi đo ở engine/llm/meter.rs (#184). */
 
 mod gemini;
 mod http;
+pub mod meter;
 // pub(crate) để test ở tầng service dùng được mô hình giả (ask/narrate_tests.rs kiểm câu narrate mẫu qua bước kiểm số).
 pub(crate) mod mock;
 mod ollama;
@@ -19,12 +21,16 @@ mod ollama;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{config::Config, error::AppError};
 
-/// Loại việc nhờ mô hình làm. Mock tra câu trả lời viết sẵn theo loại việc và câu hỏi; Gemini và Ollama không cần biết.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+// Loại việc nhờ mô hình làm. Mock tra câu trả lời viết sẵn theo loại việc và câu hỏi; Gemini và Ollama không cần biết.
+// Serialize và ToSchema vì tên loại việc đi ra API trong danh sách lượt gọi mô hình của câu hỏi (meter.rs); chú thích
+// /// của enum vào openapi.json nên viết tiếng Anh.
+/// What the language model was asked to do in one call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmTask {
     /// Sinh SQL cho một câu hỏi. Câu trả lời là object JSON có SQL bên trong (service/ask/reply.rs).
@@ -64,6 +70,20 @@ pub struct LlmRequest<'a> {
     pub json_schema: Option<serde_json::Value>,
 }
 
+/// Số token nhà cung cấp báo cho một lần gọi. output_tokens gồm cả token suy nghĩ nháp của mô hình (Gemini
+/// thoughtsTokenCount), vì bảng giá của Google tính chúng như token trả lời.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+/// Văn bản trả về cùng số token, khi nhà cung cấp có báo.
+pub struct LlmReply {
+    pub text: String,
+    pub usage: Option<TokenUsage>,
+}
+
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
     /// Tên hiện trên giao diện và trong log, ví dụ "mock" hay "gemini-2.5-flash".
@@ -71,6 +91,13 @@ pub trait LlmProvider: Send + Sync {
 
     /// Gửi yêu cầu, nhận văn bản trả về.
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError>;
+
+    /// Như complete, kèm số token. Mặc định không có số token, để mock và các mô hình giả trong test chỉ cần viết
+    /// complete; Gemini và Ollama viết lại hàm này vì response của chúng có số token.
+    async fn complete_with_usage(&self, request: &LlmRequest<'_>) -> Result<LlmReply, AppError> {
+        let text = self.complete(request).await?;
+        Ok(LlmReply { text, usage: None })
+    }
 }
 
 pub fn from_config(config: &Config) -> Arc<dyn LlmProvider> {

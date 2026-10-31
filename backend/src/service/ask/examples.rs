@@ -6,12 +6,15 @@ liệu bán lẻ mẫu mà mock LLM đã biết, engine/llm/mock_answers.json). 
   và pane bằng chứng trước khi luồng hỏi chạy thật (#33).
 Mẫu dựng bằng code từ chính các struct; ask/examples_tests.rs báo khi file lệch code hay mẫu lệch đặc tả.
 
-Số liệu là số minh họa, không tính từ dữ liệu thật; thời gian các bước cũng vậy, không phải số đo. Các số trong phân
+Số liệu là số minh họa, không tính từ dữ liệu thật; thời gian các bước và số token của các lần gọi mô hình cũng vậy,
+không phải số đo. Các số trong phân
 rã được chọn để cộng khớp đúng như #39 và #40 đòi hỏi (test kiểm). */
 
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::engine::llm::meter::LlmCall;
+use crate::engine::llm::LlmTask;
 use crate::service::ask::contract::*;
 use crate::service::ask::run::REFUSED_MESSAGE;
 use crate::service::explain::annotate::{
@@ -123,6 +126,12 @@ pub fn build_simple_example() -> AskResponse {
                 Some("INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết"),
             ),
             build_step(StepName::Record, 6, true, None),
+        ],
+        // Mỗi bước có mô hình ở trên một lần gọi, cùng thời gian; số token là số minh họa, không phải số đo.
+        model_calls: vec![
+            build_call(LlmTask::Classify, 630, 410, 25),
+            build_call(LlmTask::Sql, 1100, 2900, 120),
+            build_call(LlmTask::Summary, 900, 520, 45),
         ],
         ..build_base(AskStatus::Answered, "Doanh thu theo khu vực", Some(1))
     }
@@ -427,6 +436,17 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         answer_text_by_model: None,
         clarifications: vec![],
         steps: vec![],
+        model_calls: vec![],
+    }
+}
+
+fn build_call(task: LlmTask, duration_ms: u64, input: u64, output: u64) -> LlmCall {
+    LlmCall {
+        task,
+        duration_ms,
+        ok: true,
+        input_tokens: Some(input),
+        output_tokens: Some(output),
     }
 }
 

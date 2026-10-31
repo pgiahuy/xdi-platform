@@ -10,7 +10,7 @@ import { EvidenceBreakdown } from './EvidenceBreakdown'
 import { EvidenceRows } from './EvidenceRows'
 import { EvidenceSql } from './EvidenceSql'
 import { EvidenceSteps } from './EvidenceSteps'
-import type { BreakdownView, DrillTarget, EvidenceTab, RowsView, SqlView, StepView, TabData } from './evidenceTypes'
+import type { BreakdownView, DrillTarget, EvidenceTab, RowsView, SqlView, StepsView, TabData } from './evidenceTypes'
 
 type Props = {
   tab: EvidenceTab
@@ -19,7 +19,7 @@ type Props = {
   breakdown: TabData<BreakdownView>
   /** Câu không có ô số đo lẫn phân rã để bấm thì tab này có lý do riêng. */
   rows: TabData<RowsView>
-  steps: TabData<StepView[]>
+  steps: TabData<StepsView>
   onDrill: (target: DrillTarget) => void
   onRowsPageChange: (offset: number) => void
 }
@@ -81,7 +81,7 @@ export function EvidencePane({ tab, onTabChange, sql, breakdown, rows, steps, on
         )}
       </TabsContent>
       <TabsContent value="steps" className="pt-3">
-        {steps.data ? <EvidenceSteps steps={steps.data} /> : <Reason text={steps.reason} />}
+        {steps.data ? <EvidenceSteps steps={steps.data.steps} calls={steps.data.calls} /> : <Reason text={steps.reason} />}
       </TabsContent>
     </Tabs>
   )

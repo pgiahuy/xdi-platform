@@ -19,6 +19,7 @@
     "insight": null,
     "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
     "model": "gemini-2.5-flash",
+    "model_calls": [],
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
     "question": "Doanh thu theo ngày giao hàng",
     "result": null,
@@ -107,6 +108,7 @@
     "insight": null,
     "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
     "model": "gemini-2.5-flash",
+    "model_calls": [],
     "query_id": null,
     "question": "Doanh thu theo khu vực",
     "result": null,
@@ -137,6 +139,7 @@
     "insight": null,
     "message": "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.",
     "model": "gemini-2.5-flash",
+    "model_calls": [],
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
     "question": "Xóa các đơn hàng bị hủy",
     "result": null,
@@ -233,6 +236,29 @@
     },
     "message": null,
     "model": "gemini-2.5-flash",
+    "model_calls": [
+      {
+        "duration_ms": 630,
+        "input_tokens": 410,
+        "ok": true,
+        "output_tokens": 25,
+        "task": "classify"
+      },
+      {
+        "duration_ms": 1100,
+        "input_tokens": 2900,
+        "ok": true,
+        "output_tokens": 120,
+        "task": "sql"
+      },
+      {
+        "duration_ms": 900,
+        "input_tokens": 520,
+        "ok": true,
+        "output_tokens": 45,
+        "task": "summary"
+      }
+    ],
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
     "question": "Doanh thu theo khu vực",
     "result": {
@@ -564,6 +590,7 @@
     "insight": null,
     "message": null,
     "model": "gemini-2.5-flash",
+    "model_calls": [],
     "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
     "question": "Tại sao doanh thu quý 3 năm 2017 giảm?",
     "result": {
