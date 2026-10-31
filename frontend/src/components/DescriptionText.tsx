@@ -8,6 +8,8 @@ type Props = {
   text: string
   /** database, model; giá trị khác hay null thì không ghi nguồn. */
   source: string | null
+  /** span khi đặt trong nút (nút chỉ chứa được phần tử nội dòng), mặc định p. */
+  as?: 'p' | 'span'
 }
 
 const sourceLabels: Record<string, string> = {
@@ -15,12 +17,12 @@ const sourceLabels: Record<string, string> = {
   model: 'do mô hình viết',
 }
 
-export function DescriptionText({ text, source }: Props) {
+export function DescriptionText({ text, source, as: Tag = 'p' }: Props) {
   const label = source ? sourceLabels[source] : undefined
   return (
-    <p className="text-xs text-muted-foreground">
+    <Tag className="block text-xs text-muted-foreground">
       {text}
       {label && <span className="italic"> ({label})</span>}
-    </p>
+    </Tag>
   )
 }

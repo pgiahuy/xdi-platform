@@ -242,3 +242,133 @@ fn edu_cases_pass_the_guard() {
         }
     }
 }
+
+/// Bộ câu OULAD trên database mẫu của #202 (eval/oulad_db.json và các câu chờ runner ở eval/oulad_db_pending.json): mọi
+/// expected_sql qua guard với sáu bảng edu như ảnh chụp database mẫu (data/samples/sample_database.json) và đúng khóa
+/// ngoại của data/postgres-demo/sql/edu_schema.sql. Không đòi đọc bảng của trường "dataset" như edu_cases_pass_the_guard:
+/// câu bẫy nhân dòng (kind plain_join_trap) hỏi trên một bảng mà đáp án đúng cố ý chỉ đọc bảng khác. load_cases đọc được
+/// file chính dù có các trường của #202 (kind, variants, note...), vì runner hiện tại bỏ qua trường lạ.
+#[test]
+fn oulad_db_cases_pass_the_guard() {
+    use crate::engine::guard::{build_guarded_sql, AllowedTable, JoinLink};
+
+    let course = ["code_module", "code_presentation"];
+    let student = ["code_module", "code_presentation", "id_student"];
+    let schema: [(&str, &[&str]); 6] = [
+        (
+            "students",
+            &[
+                "code_module",
+                "code_presentation",
+                "id_student",
+                "gender",
+                "region",
+                "highest_education",
+                "imd_band",
+                "age_band",
+                "num_of_prev_attempts",
+                "studied_credits",
+                "disability",
+                "final_result",
+            ],
+        ),
+        (
+            "courses",
+            &[
+                "code_module",
+                "code_presentation",
+                "presentation_year",
+                "presentation_start_month",
+                "module_presentation_length",
+            ],
+        ),
+        (
+            "registrations",
+            &[
+                "code_module",
+                "code_presentation",
+                "id_student",
+                "date_registration",
+                "date_unregistration",
+            ],
+        ),
+        (
+            "assessments",
+            &[
+                "id_assessment",
+                "code_module",
+                "code_presentation",
+                "assessment_type",
+                "date",
+                "weight",
+            ],
+        ),
+        (
+            "student_assessments",
+            &[
+                "id_assessment",
+                "id_student",
+                "code_module",
+                "code_presentation",
+                "date_submitted",
+                "is_banked",
+                "score",
+            ],
+        ),
+        (
+            "vle_materials",
+            &[
+                "id_site",
+                "code_module",
+                "code_presentation",
+                "activity_type",
+                "week_from",
+                "week_to",
+            ],
+        ),
+    ];
+    let tables: Vec<AllowedTable> = schema
+        .iter()
+        .map(|(name, columns)| AllowedTable {
+            name: name.to_string(),
+            columns: columns.iter().map(|c| c.to_string()).collect(),
+            parquet_dir: std::path::PathBuf::from(format!("/data/{name}")),
+            row_filters: Vec::new(),
+        })
+        .collect();
+    let link = |many: &str, one: &str, columns: &[&str], fans_out: bool| JoinLink {
+        many: many.to_string(),
+        many_columns: columns.iter().map(|c| c.to_string()).collect(),
+        one: one.to_string(),
+        one_columns: columns.iter().map(|c| c.to_string()).collect(),
+        fans_out,
+    };
+    let links = [
+        link("students", "courses", &course, true),
+        // Mỗi dòng students có đúng một dòng registrations (comment của bảng trong edu_schema.sql).
+        link("registrations", "students", &student, false),
+        link("assessments", "courses", &course, true),
+        link(
+            "student_assessments",
+            "assessments",
+            &["id_assessment"],
+            true,
+        ),
+        link("student_assessments", "students", &student, true),
+        link("vle_materials", "courses", &course, true),
+    ];
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../eval/");
+    let main = format!("{dir}oulad_db.json");
+    assert!(load_cases(std::path::Path::new(&main)).unwrap().len() >= 50);
+    for file in [main, format!("{dir}oulad_db_pending.json")] {
+        let cases: Vec<serde_json::Value> =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        for case in &cases {
+            for sql in case["expected_sql"].as_array().unwrap() {
+                let sql = sql.as_str().unwrap();
+                build_guarded_sql(sql, &tables, &links, 1000)
+                    .unwrap_or_else(|e| panic!("{}: {e:?}\n{sql}", case["id"]));
+            }
+        }
+    }
+}

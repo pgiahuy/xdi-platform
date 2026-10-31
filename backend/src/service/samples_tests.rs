@@ -14,7 +14,6 @@ use crate::engine::store::Store;
 use crate::sample_database::SampleDatabase;
 use crate::service::accounts::{self, SetupInput};
 use crate::service::samples::{seed_workspace, SeedOutcome, SAMPLE_NAME};
-use crate::service::samples_db::PLAN_FILE;
 use crate::state::AppState;
 
 const CODE: &str = "ABCD-EFGH-JKMN";
@@ -214,8 +213,8 @@ async fn metric_that_does_not_run_is_skipped() {
 /// Khóa mã hóa nguồn cho test (32 byte base64), như api/sources_tests.rs.
 const KEY: &str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
 
-/// Database mẫu là chính database của test: hai bảng nối bằng khóa ngoại trong schema shop, kế hoạch chụp và chỉ số
-/// của bảng orders trong thư mục mẫu tự dựng.
+/// Database mẫu là chính database của test: hai bảng nối bằng khóa ngoại trong schema shop, đọc bằng một tài khoản chỉ
+/// đọc schema đó; chỉ số của bảng orders trong thư mục mẫu tự dựng.
 async fn build_sample_database(
     db: &crate::engine::store::test_support::TestDb,
     samples: &Path,
@@ -231,11 +230,17 @@ async fn build_sample_database(
     ] {
         exec(&db.store, sql).await;
     }
-    std::fs::write(
-        samples.join(PLAN_FILE),
-        r#"{"snapshots": [{"table": "shop.orders", "tables": ["shop.customers"]}]}"#,
-    )
-    .unwrap();
+    // Tài khoản chỉ đọc schema shop, như analyst của database mẫu: thiết lập chụp mọi bảng tài khoản đọc được, nên
+    // tài khoản của test (chủ mọi bảng của ứng dụng) sẽ chụp cả bảng của xdi.
+    let tag = &uuid::Uuid::new_v4().simple().to_string()[..12];
+    let user = format!("xdi_sample_{tag}");
+    for sql in [
+        format!("CREATE ROLE {user} LOGIN PASSWORD 'sample-{tag}'"),
+        format!("GRANT USAGE ON SCHEMA shop TO {user}"),
+        format!("GRANT SELECT ON ALL TABLES IN SCHEMA shop TO {user}"),
+    ] {
+        exec(&db.store, &sql).await;
+    }
     std::fs::write(
         samples.join("orders.metrics.json"),
         r#"[{"name": "total", "expression": "SUM(amount)"}]"#,
@@ -245,6 +250,8 @@ async fn build_sample_database(
         .unwrap()
         .unwrap();
     sample.database = db.name().to_string();
+    sample.user = user;
+    sample.password = Secret::new(format!("sample-{tag}"));
     sample.sslmode = Some("disable".to_string());
     sample
 }
@@ -352,8 +359,7 @@ async fn unreachable_sample_database_falls_back_to_the_csv() {
 }
 
 /// Hai database mẫu, một tới được, một không (như sales_demo chạy mà edu_demo chưa nạp): database tới được vẫn thành
-/// nguồn với đúng các lần chụp ghi tên nó trong kế hoạch, không nạp dataco.csv. Lần chụp ghi tên database khác bị bỏ
-/// qua.
+/// nguồn với mọi bảng tài khoản mẫu đọc được, không nạp dataco.csv.
 #[tokio::test]
 async fn one_unreachable_sample_database_keeps_the_other() {
     let Some(db) = fresh_database().await else {
@@ -363,18 +369,6 @@ async fn one_unreachable_sample_database_keeps_the_other() {
     let data = TempDir::new();
     let samples = TempDir::new();
     let sample = build_sample_database(&db, &samples.0).await;
-    // Kế hoạch có tên database: orders cho database của test, một bảng không có cho database không tới được.
-    std::fs::write(
-        samples.0.join(PLAN_FILE),
-        format!(
-            r#"{{"snapshots": [
-                {{"database": "{}", "table": "shop.orders", "tables": ["shop.customers"]}},
-                {{"database": "missing_demo", "table": "shop.missing"}}
-            ]}}"#,
-            db.name()
-        ),
-    )
-    .unwrap();
     let mut unreachable = sample.clone();
     unreachable.port = 1;
     unreachable.database = "missing_demo".to_string();

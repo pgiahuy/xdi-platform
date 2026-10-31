@@ -147,6 +147,8 @@ async fn run(args: Vec<String>) {
             service::semantic::profile_remaining_versions(state).await;
         }
     });
+    // Chụp lại nguồn database theo lịch (SOURCE_RESNAPSHOT_HOURS); không đặt thì task trả về ngay.
+    tokio::spawn(service::sources::run_resnapshot_schedule(state.clone()));
     let app = api::router(state);
 
     tracing::info!(%addr, "backend listening");

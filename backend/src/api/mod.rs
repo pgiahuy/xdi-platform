@@ -68,6 +68,8 @@ mod source_comments_tests;
 #[cfg(test)]
 mod source_relations_tests;
 #[cfg(test)]
+mod source_snapshot_all_tests;
+#[cfg(test)]
 mod source_snapshot_tests;
 mod sources;
 #[cfg(test)]

@@ -6,6 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
+- Kết nối database thì mặc định chụp mọi bảng tài khoản đọc được, admin bỏ tick; không còn trần số bảng mà có trần dung lượng `SOURCE_SNAPSHOT_MAX_MB`; bảng quá trần chỉ lưu cột, kiểu, khóa, mô tả và câu hỏi cần nó được báo đúng tên bảng; chụp lại cả dataset bằng tay hay theo lịch `SOURCE_RESNAPSHOT_HOURS` (#247).
 - Database mẫu tách thành hai database trong cùng container: `sales_demo` (DataCo) và `edu_demo` (OULAD); thiết lập lần đầu thêm mỗi database làm một nguồn, `SAMPLE_DATABASE_URL` nhận nhiều chuỗi cách nhau bằng dấu phẩy; màn xem nhanh chỉ đọc bằng Flask-Admin cho hai database (`data/postgres-demo`, profile `admin`) (#250, #259).
 - Guard chỉ nhận phép nối giữa hai bảng đúng cột của một khóa ngoại trong database; nối sai cột, thiếu cột của khóa, nối hai bảng không có quan hệ hay tích chéo bị từ chối, mô hình sửa lại một lần theo đúng khóa (#256).
 - Chụp bảng Postgres đọc luôn mô tả bảng và cột ghi trong database (`COMMENT ON`) làm mô tả trong hồ sơ cột; mô hình không viết lại các mô tả này, giao diện ghi nguồn "từ database" hay "do mô hình viết" (#245).
@@ -54,6 +55,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 ### Changed
 
 - Dataset là một database đã kết nối hay một file, bảng nằm bên trong: API mới `/catalog` liệt kê dataset kèm bảng, cột, quan hệ, chụp lại cả dataset và hỏi trên dataset (backend chọn bảng bắt đầu, hay ghim bằng `table_id`); chỉ số, câu mẫu, bài học, gói ngành gắn theo dataset; hai database cùng có bảng `orders` giữ đúng tên `orders`. Migration chuyển dữ liệu cũ, câu hỏi và bằng chứng cũ vẫn mở được (#257).
+- Giao diện theo dataset: ô chọn ở trang hỏi chia nhóm Database, File, mở database ra ghim được một bảng bắt đầu; trang Dữ liệu mỗi dataset một thẻ (máy chủ, số bảng, lần chụp, "Chụp lại" cả database), mở ra thấy bảng nhóm theo schema, số dòng, mô tả và quan hệ; trang Tổng quan chọn dataset rồi chọn bảng (#257).
 - Trang Cuộc trò chuyện: khung trò chuyện cao hết màn hình, ô hỏi luôn nằm sát đáy dù cuộc trò chuyện chưa có câu nào, mới có một câu hay đã dài; trước đây ô hỏi nổi giữa trang rồi tụt xuống khi có thêm câu. Trên điện thoại lề trong nhỏ hơn để ô hỏi rộng hơn.
 - Các trang bung hết bề ngang màn hình, không còn bị giới hạn một cột hẹp chừa trống bên phải: Tổng quan dữ liệu hai biểu đồ một hàng từ cỡ máy tính bảng, ba biểu đồ ở màn rất rộng; Dữ liệu, Thành viên, Quản lý tài khoản chia hai cột ở màn rộng; Chỉ số, Câu mẫu, Bài học, Khái niệm ngành, Mọi workspace dùng hết bề ngang. Ngày ở trang Tổng quan ghi dạng 01/01/2015 thay cho "1 thg 1, 2015".
 - Trang Dữ liệu: kết nối database là luồng chính, nạp file CSV, Parquet, Excel chuyển xuống một nút phụ (#230).

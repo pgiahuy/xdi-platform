@@ -129,41 +129,40 @@ fn key(
     }
 }
 
-/// Khóa giữa hai bảng trong nhóm giữ một lần dù đọc từ cả hai đầu; khóa ra ngoài nhóm và khóa tới cột không UNIQUE bỏ.
+/// Khóa giữa hai bảng đang giữ giữ một lần dù đọc hai lần; khóa tới bảng chưa chụp, tới cột không UNIQUE, và khóa giữa
+/// hai bảng không có trong lần chụp này bỏ.
 #[test]
-fn group_keys_stay_inside_the_group_once() {
+fn group_keys_need_both_ends_held_and_one_in_the_run() {
     let items = table("shop", "order_items");
     let orders = table("shop", "orders");
     let customers = table("shop", "customers");
+    let regions = table("shop", "regions");
     let inside = key("items_order", items.clone(), orders.clone(), true);
     let keys = vec![
         inside.clone(),
         inside,
-        key("orders_customer", orders.clone(), customers, true),
+        key("orders_customer", orders.clone(), customers.clone(), true),
+        key("customers_region", customers.clone(), regions.clone(), true),
         key("items_channel", items.clone(), orders.clone(), false),
     ];
-    let kept = relations::build_group_keys(keys, &[items.clone(), orders.clone()]);
+    let held: Vec<String> = [&items, &orders, &customers, &regions]
+        .iter()
+        .map(|t| t.full_name())
+        .collect();
+    // Lần này chụp order_items và orders; customers, regions đã chụp từ trước.
+    let run = vec![items.full_name(), orders.full_name()];
+    let kept = relations::build_group_keys(keys, &held, &run);
     let names: Vec<&str> = kept.iter().map(|k| k.constraint.as_str()).collect();
-    assert_eq!(names, ["items_order"]);
+    assert_eq!(names, ["items_order", "orders_customer"]);
 
-    let ids = [(items, Uuid::new_v4()), (orders, Uuid::new_v4())];
+    let ids: Vec<(Uuid, String)> = held.iter().map(|t| (Uuid::new_v4(), t.clone())).collect();
     let rel = snapshot::build_new_relations(&kept, &ids);
-    assert_eq!(rel.len(), 1);
+    assert_eq!(rel.len(), 2);
     assert_eq!(
         (rel[0].from_dataset_id, rel[0].to_dataset_id),
-        (ids[0].1, ids[1].1)
+        (ids[0].0, ids[1].0)
     );
     assert_eq!(rel[0].cardinality, "many_to_one");
-}
-
-#[test]
-fn row_limit_is_per_table() {
-    let orders = table("shop", "orders");
-    assert!(matches!(
-        snapshot::check_row_count(&orders, 500, 100),
-        Err(AppError::TooLarge(m)) if m.contains("shop.orders")
-    ));
-    assert!(snapshot::check_row_count(&orders, 100, 100).is_ok());
 }
 
 /// Lỗi TLS ở prefer (bắt tay lỗi) không khuyên chọn lại prefer; ở require thì gợi ý prefer hay disable.

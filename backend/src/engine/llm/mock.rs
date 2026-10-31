@@ -30,8 +30,8 @@ why, để bước phân loại của câu mẫu đi đúng đường mà không
 File thứ hai, mock_answers_database.json, viết cho các bảng chụp từ database mẫu (data/postgres-demo, bảng logic như
 order_items, students): hồ sơ của từng bảng kèm câu gợi ý, và câu SQL của các câu trong eval/sales_joins.json,
 eval/edu.json (đúng SQL đúng của bộ đánh giá, nhiều câu nối bảng qua quan hệ). Thêm hồ sơ và một câu cho
-student_daily_clicks: bảng này không nằm trong data/samples/sample_database.json (1,8 triệu dòng, quá SOURCE_MAX_ROWS
-mặc định), chụp tay thì câu đó vẫn trả lời được. Câu hỏi không được trùng giữa hai file: mock không đọc prompt nên
+student_daily_clicks: với SOURCE_MAX_ROWS mặc định, thiết lập lần đầu chỉ lưu metadata của bảng này (1,8 triệu dòng),
+chụp riêng nó với trần cao hơn thì câu đó trả lời được. Câu hỏi không được trùng giữa hai file: mock không đọc prompt nên
 không biết đang hỏi trên dataset nào. */
 
 use std::collections::HashMap;

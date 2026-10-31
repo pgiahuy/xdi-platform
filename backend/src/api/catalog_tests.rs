@@ -135,7 +135,8 @@ async fn database_dataset_groups_tables_and_snapshots_again() {
     let (status, body) = snapshot(&s, &id, json!({"table": "shop.returns"})).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
 
-    // Member xem được; bảng xếp theo schema rồi tên; quan hệ chỉ có giữa các bảng chụp cùng lần.
+    // Member xem được; bảng xếp theo schema rồi tên; quan hệ là mọi khóa ngoại khai báo giữa các bảng đã chụp, kể cả
+    // returns -> orders chụp ở hai lần khác nhau (#247).
     let (status, list) = get(&s.app, &s.minh, "/catalog").await;
     assert_eq!(status, StatusCode::OK, "{list}");
     let dataset = &list[0];
@@ -151,12 +152,13 @@ async fn database_dataset_groups_tables_and_snapshots_again() {
     assert_eq!(dataset["tables"][1]["source_table"], "shop.orders");
     assert_eq!(
         dataset["relations"].as_array().unwrap().len(),
-        2,
+        3,
         "{dataset}"
     );
+    assert_eq!(dataset["metadata_only"], json!([]));
 
-    // Chụp lại cả dataset: member 403; admin nhận mọi bảng, không bảng nào đổi, và quan hệ returns -> orders có thêm
-    // vì lần này hai bảng cùng một lần chụp.
+    // Chụp lại cả dataset: member 403; admin nhận đúng bốn bảng đã chụp (bảng không tick như customers vẫn ở ngoài),
+    // không bảng nào đổi, quan hệ giữ nguyên.
     let again = format!("/catalog/{id}/snapshot");
     assert_eq!(
         post(&s.app, &s.minh, &again, json!({})).await.0,

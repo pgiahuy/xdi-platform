@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/datasets.ts - hook cho dataset của một workspace: liệt kê, nạp file, liệt kê sheet của file Excel
-(backend/src/api/datasets/). Kiểu dữ liệu lấy từ schema.ts, sinh từ openapi.json; tên ở đây chỉ là bí danh để trang
+/* api/datasets.ts - hook cho bảng của một workspace: liệt kê (route cũ, mỗi mục là một bảng; dataset theo nghĩa mới ở
+api/catalog.ts, #257), nạp file, liệt kê sheet của file Excel, xóa (backend/src/api/datasets/). Kiểu dữ liệu lấy từ schema.ts, sinh từ openapi.json; tên ở đây chỉ là bí danh để trang
 import gọn. */
 
 import { useRef } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { catalogKey } from './catalog'
 import { apiDelete, apiGet, apiUpload, type UploadOptions } from './client'
 import type { components } from './schema'
 
@@ -87,8 +88,9 @@ export function useUploadDataset(ws: string) {
       for (const file of files) form.append('file', file)
       return apiUpload<UploadResult>(datasetsPath(ws), form, options)
     },
-    // Tải lại danh sách cả khi lỗi: một lần nạp lỗi giữa chừng mạng vẫn có thể đã tạo dataset ở backend.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: datasetsKey(ws) }),
+    // Tải lại danh sách cả khi lỗi: một lần nạp lỗi giữa chừng mạng vẫn có thể đã tạo dataset ở backend. File là một
+    // dataset của catalog (api/catalog.ts), nên tải lại cả danh sách đó.
+    onSettled: () => invalidateTables(queryClient, ws),
   })
 }
 
@@ -109,6 +111,12 @@ export function useDeleteDataset(ws: string) {
   return useMutation({
     mutationFn: (datasetId: string) =>
       apiDelete<void>(`${datasetsPath(ws)}/${encodeURIComponent(datasetId)}`),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: datasetsKey(ws) }),
+    onSettled: () => invalidateTables(queryClient, ws),
   })
+}
+
+/** Bảng đổi thì cả danh sách bảng cũ lẫn danh sách dataset (catalog) đổi theo. */
+export function invalidateTables(queryClient: QueryClient, ws: string) {
+  void queryClient.invalidateQueries({ queryKey: datasetsKey(ws) })
+  void queryClient.invalidateQueries({ queryKey: catalogKey(ws) })
 }

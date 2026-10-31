@@ -105,6 +105,20 @@ pub async fn pending_profiles(
         .collect())
 }
 
+/// Nguồn Postgres của mọi workspace, mỗi nguồn kèm Member của một admin của workspace đó, cho lịch chụp lại
+/// (service/sources/schedule.rs, #247): lần chụp theo lịch đi đúng đường của admin bấm "Chụp lại", nên phiên bản mới ghi
+/// người tạo là admin đó. Member dựng qua member_of như mọi request, từ dòng memberships có thật.
+pub async fn scheduled_source_admins(store: &Store) -> Result<Vec<(Member, Uuid)>, AppError> {
+    let mut out = Vec::new();
+    for (source_id, user_id, slug) in store.list_scheduled_sources().await? {
+        let Some(user) = store.find_user(user_id).await? else {
+            continue;
+        };
+        out.push((member_of(store, user, &slug).await?, source_id));
+    }
+    Ok(out)
+}
+
 /// Như pending_profiles nhưng cho lớp ngữ nghĩa: phiên bản ở structure chưa thử với provider này, kèm WorkspaceId dựng từ
 /// dòng đọc được. Việc nền lúc khởi động (service/semantic/mod.rs) dùng, không gắn với người dùng nào.
 pub async fn pending_semantic_profiles(

@@ -12,6 +12,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::engine::store::DatasetRelation;
+use crate::service::sources::MetadataOnlyTable;
 
 /// What a dataset is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
@@ -40,6 +41,10 @@ pub struct DatasetSummary {
     pub tables: Vec<DatasetTable>,
     /// Foreign-key relations between tables of this dataset, copied from the source database. Empty for a file.
     pub relations: Vec<DatasetRelation>,
+    /// Tables of the database kept with columns, types, keys and comments but no rows (over SOURCE_MAX_ROWS or the
+    /// SOURCE_SNAPSHOT_MAX_MB total), ordered by `table`. An admin snapshots one with `POST /sources/{id}/snapshot`
+    /// and `tables: [table]`. Empty for a file.
+    pub metadata_only: Vec<MetadataOnlyTable>,
     /// Latest `current_version_at` of its tables: the last snapshot or upload. Null while no table has data.
     #[schema(required)]
     pub updated_at: Option<DateTime<Utc>>,

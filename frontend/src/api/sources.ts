@@ -4,12 +4,14 @@ kê bảng và bảng liên quan theo khóa ngoại, chụp một nhóm bảng t
 được; member nhận 403. Mật khẩu chỉ đi một chiều lúc thêm nguồn, backend không bao giờ trả lại. */
 
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { catalogKey } from './catalog'
 import { apiDelete, apiGet, apiPost } from './client'
+import { invalidateTables } from './datasets'
 import type { components } from './schema'
 
 type Schemas = components['schemas']
 export type Source = Schemas['SourceResponse']
-export type SourceTable = Schemas['SourceTable']
+export type SourceTable = Schemas['SourceTableInfo']
 export type CreateSourceRequest = Schemas['CreateSourceRequest']
 export type SnapshotRequest = Schemas['SnapshotRequest']
 export type SnapshotResponse = Schemas['SnapshotResponse']
@@ -25,11 +27,12 @@ function sourcesKey(ws: string) {
   return ['workspaces', ws, 'sources']
 }
 
-/** Chỉ gọi khi người xem là admin (trang chỉ dựng khung nguồn cho admin): member gọi chỉ nhận 403. */
-export function useSources(ws: string) {
+/** Chỉ gọi khi người xem là admin (enabled): member gọi chỉ nhận 403. */
+export function useSources(ws: string, enabled = true) {
   return useQuery({
     queryKey: sourcesKey(ws),
     queryFn: () => apiGet<Source[]>(sourcesPath(ws)),
+    enabled,
   })
 }
 
@@ -38,7 +41,11 @@ export function useCreateSource(ws: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (body: CreateSourceRequest) => apiPost<Source>(sourcesPath(ws), body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: sourcesKey(ws) }),
+    // Nguồn mới là một dataset chưa có bảng trong catalog (api/catalog.ts).
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: sourcesKey(ws) })
+      void queryClient.invalidateQueries({ queryKey: catalogKey(ws) })
+    },
   })
 }
 
@@ -76,14 +83,14 @@ export function useSourceRelations(ws: string, sourceId: string, tables: string[
   })
 }
 
-/** Chụp bảng (kèm các bảng chọn thêm) thành dataset, hoặc chụp lại cả nhóm của một dataset (dataset_id). Xong thì tải
- * lại danh sách dataset. */
+/** Chụp bảng (kèm các bảng chọn thêm) vào dataset của nguồn, hoặc chụp lại một bảng cùng các bảng nối với nó
+ * (dataset_id là id bảng). Xong thì tải lại danh sách bảng và danh sách dataset. */
 export function useSnapshot(ws: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ sourceId, ...body }: SnapshotRequest & { sourceId: string }) =>
       apiPost<SnapshotResponse>(`${sourcesPath(ws)}/${encodeURIComponent(sourceId)}/snapshot`, body),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['workspaces', ws, 'datasets'] }),
+    onSettled: () => invalidateTables(queryClient, ws),
   })
 }
 
@@ -91,6 +98,9 @@ export function useDeleteSource(ws: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (sourceId: string) => apiDelete<void>(`${sourcesPath(ws)}/${encodeURIComponent(sourceId)}`),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: sourcesKey(ws) }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: sourcesKey(ws) })
+      void queryClient.invalidateQueries({ queryKey: catalogKey(ws) })
+    },
   })
 }

@@ -1,54 +1,50 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/sources/snapshot.rs - chụp một nhóm bảng của nguồn Postgres: mỗi bảng thành một dataset riêng (một phiên bản
-Parquet như nạp file), cùng các quan hệ khóa ngoại giữa chúng (engine/store/relations.rs). api/sources.rs gọi
-`snapshot`; chép bảng ở postgres.rs, tìm khóa ngoại ở relations.rs, nạp ở service/ingest.rs.
+/* service/sources/snapshot.rs - chụp bảng của nguồn Postgres: mỗi bảng thành một dataset riêng (một phiên bản Parquet
+như nạp file) trong dataset là database đó (#257), cùng các quan hệ khóa ngoại giữa chúng (engine/store/relations.rs).
+api/sources.rs gọi `snapshot` (màn kết nối); chụp lại cả dataset (service/catalog/, POST /catalog/{id}/snapshot) và
+lịch chụp lại (schedule.rs) gọi `snapshot_dataset`. Chép bảng ở copy.rs, nạp ở service/ingest.rs.
 
 Các bước:
-1. Danh sách bảng: bảng bắt đầu và các bảng chọn kèm, tối đa MAX_SNAPSHOT_TABLES. Chụp lại (dataset_id) lấy cả nhóm
-   dataset nối với nhau qua quan hệ, cùng nguồn. Chụp lại cả dataset (snapshot_dataset, #257) lấy mọi bảng đã chụp từ
-   database này, tối đa MAX_DATASET_TABLES.
-2. Chép: một kết nối, một giao dịch REPEATABLE READ. Đếm dòng mọi bảng trước (giới hạn SOURCE_MAX_ROWS), rồi chép mỗi
-   bảng ra file riêng (giới hạn MAX_UPLOAD_MB), kèm kiểu cột Postgres: COPY ra CSV trong chính giao dịch đó, hoặc với
-   SOURCE_SNAPSHOT_MODE=direct thì DuckDB đọc thẳng ra Parquet trong một giao dịch REPEATABLE READ riêng của nó
-   (direct.rs). Cách nào thì mọi bảng cũng là ảnh của một thời điểm. Comment của bảng, của cột (comments.rs) đọc bằng
-   sqlx trong giao dịch của bước này, cách chép nào cũng vậy. Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS.
+1. Bảng nào (#247): mặc định mọi bảng, view tài khoản đọc được, nên phạm vi dữ liệu là quyền SELECT của tài khoản; admin
+   gửi `tables` khi bỏ tick bớt. Không giới hạn số bảng; trần là SOURCE_MAX_ROWS từng bảng và SOURCE_SNAPSHOT_MAX_MB
+   cả lần (plan.rs). Chụp lại cả dataset lấy mọi bảng nguồn đang giữ: bảng đã thành dataset và bảng chỉ có metadata;
+   bảng admin bỏ tick không nằm trong đó nên vẫn ở ngoài.
+   Chụp lại một nhóm (dataset_id) lấy cả nhóm dataset nối với nhau qua quan hệ, cùng nguồn.
+2. Chép trong một giao dịch (copy.rs). Bảng quá trần không chép dòng nào: cột, kiểu, khóa, mô tả ghi vào
+   source_metadata_tables (migration 0018), để câu hỏi cần bảng đó được báo đúng tên bảng.
 3. Nạp từng bảng. Bảng đã từng chụp từ nguồn này thì thêm phiên bản vào đúng dataset đó (một bảng nguồn, một dataset),
-   nên bảng chiều dùng chung bởi hai bảng sự kiện không bị nhân đôi.
-4. Ghi quan hệ giữa các bảng trong nhóm, trong một giao dịch.
+   nên bảng chiều dùng chung bởi hai bảng sự kiện không bị nhân đôi. Bảng không đổi có cùng hash nên không tạo phiên
+   bản mới.
+4. Ghi quan hệ: mọi khóa ngoại khai báo ở database nguồn giữa hai bảng nguồn đang giữ thành dataset, ít nhất một đầu
+   là bảng vừa chụp; trong một giao dịch. Không đoán quan hệ từ tên cột.
 
 Lỗi giữa bước 3: các bảng đã nạp trước đó giữ phiên bản mới, quan hệ của lần này chưa ghi. Chụp lại là đủ: bảng không
-đổi có cùng hash nội dung nên không tạo phiên bản trùng, chỉ bảng lỗi và quan hệ được ghi. */
-
-use std::path::PathBuf;
+đổi không tạo phiên bản trùng, chỉ bảng lỗi và quan hệ được ghi. */
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use super::comments;
-use super::direct::{self, DirectError, DirectTable};
-use super::postgres::{self, ConnectInfo, SourceTable, TableCopy};
+use super::copy::{copy_group, CopiedTable, Selection, SkippedTable, Wanted};
+use super::plan::SkipCause;
+use super::postgres::ConnectInfo;
 use super::relations::{self, ForeignKey};
-use super::{find_table_in, load, pg_types, recorded_table, source_file_label};
+use super::{load, recorded_table, source_file_label};
 use crate::auth::Member;
-use crate::config::SnapshotMode;
-use crate::engine::store::{DatasetRelation, NewRelation, SourceRow};
-use crate::service::ingest::{self, SourceDescriptions, StagedFile, Staging, Upload, UploadResult};
+use crate::engine::store::{
+    DatasetRelation, MetadataColumn, MetadataTableRow, NewMetadataTable, NewRelation, SourceRow,
+};
+use crate::service::ingest::{self, SourceDescriptions, StagedFile, Upload, UploadResult};
 use crate::{error::AppError, state::AppState};
-
-/// Số bảng tối đa của một lần chụp: mỗi bảng giữ một file tạm tới MAX_UPLOAD_MB trên đĩa cho tới khi nạp xong.
-pub const MAX_SNAPSHOT_TABLES: usize = 10;
-
-/// Số bảng tối đa khi chụp lại cả một dataset. Lớn hơn MAX_SNAPSHOT_TABLES vì admin đã chọn từng bảng ở các lần chụp
-/// trước (database mẫu có 12 bảng); vẫn có trần vì mọi file tạm cùng nằm trên đĩa cho tới khi nạp xong.
-pub const MAX_DATASET_TABLES: usize = 30;
 
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct SnapshotRequest {
-    /// `schema.table` to start from. Not needed with `dataset_id`.
+    /// `schema.table` named `name` when it is new. Optional: without `table`, `tables` and `dataset_id`, every table
+    /// and view the account can read is snapshotted.
     pub table: Option<String>,
-    /// More `schema.table` names snapshotted with `table`, usually picked from its relation list. Each table becomes
-    /// its own dataset. Not allowed with `dataset_id`.
+    /// `schema.table` names to snapshot (the ticked tables), each into its own dataset. Empty with no `table` and no
+    /// `dataset_id`: every readable table. One name snapshots that one table, for example a table kept as metadata
+    /// only. Not allowed with `dataset_id`.
     #[serde(default)]
     pub tables: Vec<String>,
     /// Name of the dataset of `table` when it is new; defaults to the table name. Other tables use their table name.
@@ -59,25 +55,55 @@ pub struct SnapshotRequest {
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct SnapshotResponse {
-    /// One entry per table, the starting table first. `created` is false for a table whose content did not change.
+    /// One entry per table copied. `created` is false for a table whose content did not change.
     pub datasets: Vec<UploadResult>,
-    /// Foreign-key relations among these datasets, as recorded.
+    /// Foreign-key relations recorded for these datasets (both ends snapshotted from this source).
     pub relations: Vec<DatasetRelation>,
+    /// Tables over SOURCE_MAX_ROWS or the SOURCE_SNAPSHOT_MAX_MB total: no rows copied, metadata kept.
+    pub metadata_only: Vec<MetadataOnlyTable>,
+    /// Tables this source held that the account can no longer read (re-snapshot only); their datasets keep their
+    /// last version.
+    pub unreadable: Vec<String>,
 }
 
-/// Một bảng cần chụp; dataset đã biết khi chụp lại cả nhóm.
-struct Wanted {
-    table: String,
-    dataset_id: Option<Uuid>,
+/// A table of the source with columns, types, keys and comments but no rows.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct MetadataOnlyTable {
+    /// `schema.table`.
+    pub table: String,
+    pub cause: SkipCause,
+    /// Why, in Vietnamese, with the setting to change.
+    pub reason: String,
+    /// Rows counted, or estimated by Postgres when far over SOURCE_MAX_ROWS.
+    #[schema(required)]
+    pub row_count: Option<i64>,
+    /// Size reported by Postgres; null for views.
+    #[schema(required)]
+    pub size_bytes: Option<i64>,
+    /// `COMMENT ON TABLE`, cleaned; null when none.
+    #[schema(required)]
+    pub description: Option<String>,
+    pub columns: Vec<MetadataColumn>,
+    /// Dataset of an earlier snapshot of this table, which keeps its last version; null when never snapshotted.
+    #[schema(required)]
+    pub dataset_id: Option<Uuid>,
 }
 
-/// Một bảng đã chép ra file tạm, chờ nạp. Staging giữ thư mục tạm tới khi ingest::upload nhận nó.
-struct CopiedTable {
-    table: SourceTable,
-    staging: Staging,
-    path: PathBuf,
-    copy: TableCopy,
-    descriptions: SourceDescriptions,
+impl MetadataOnlyTable {
+    /// Bảng chỉ có metadata như đã lưu (source_metadata_tables), cho danh sách dataset (service/catalog/). Dòng chỉ có
+    /// khi bảng chưa có bảng dữ liệu nào, nên dataset_id luôn null.
+    pub fn from_stored(row: &MetadataTableRow) -> Self {
+        MetadataOnlyTable {
+            table: row.table_name.clone(),
+            cause: SkipCause::from_stored(&row.cause),
+            reason: row.reason.clone(),
+            row_count: row.row_count,
+            size_bytes: row.size_bytes,
+            description: row.description.clone(),
+            columns: row.build_columns(),
+            dataset_id: None,
+        }
+    }
 }
 
 pub async fn snapshot(
@@ -87,45 +113,88 @@ pub async fn snapshot(
     req: SnapshotRequest,
 ) -> Result<SnapshotResponse, AppError> {
     let (row, info) = load(state, member, id).await?;
-    let wanted = build_wanted(state, member, &row, &req).await?;
-    run_snapshot(state, member, &row, &info, &wanted, req.name).await
+    let selection = build_selection(state, member, &row, &req).await?;
+    // Tên tự đặt chỉ cho bảng `table`, không cho bảng đầu tiên chép được: bảng đó có thể chỉ lưu metadata.
+    let named = match (req.table.as_deref().map(str::trim), req.name) {
+        (Some(table), Some(name)) if !table.is_empty() => Some((table.to_string(), name)),
+        _ => None,
+    };
+    run_snapshot(state, member, &row, &info, selection, named).await
 }
 
-/// Chụp lại mọi bảng của dataset là database `id` (#257): đúng các bảng đã chụp từ database này và còn trong
-/// workspace, trong một giao dịch như chụp một nhóm, rồi thay mọi quan hệ giữa chúng.
+/// Chụp lại cả dataset là database `id` (#247, #257): mọi bảng nguồn đang giữ, gồm bảng đã có dữ liệu và bảng chỉ có
+/// metadata, trong một giao dịch, cùng trần như lần chụp đầu. Bảng admin đã bỏ tick không có ở đây.
 pub async fn snapshot_dataset(
     state: &AppState,
     member: &Member,
     id: Uuid,
 ) -> Result<SnapshotResponse, AppError> {
     let (row, info) = load(state, member, id).await?;
-    let wanted = build_dataset_tables(state, member, &row).await?;
-    run_snapshot(state, member, &row, &info, &wanted, None).await
+    let ws = &member.workspace;
+    let mut wanted: Vec<Wanted> = state
+        .store
+        .list_source_datasets(ws, row.id)
+        .await?
+        .into_iter()
+        .map(|(dataset_id, table)| Wanted {
+            table,
+            dataset_id: Some(dataset_id),
+        })
+        .collect();
+    for m in state.store.list_metadata_tables(ws, row.id).await? {
+        if !wanted.iter().any(|w| w.table == m.table_name) {
+            wanted.push(Wanted {
+                table: m.table_name,
+                dataset_id: None,
+            });
+        }
+    }
+    if wanted.is_empty() {
+        return Err(AppError::BadRequest(
+            "Dataset này chưa có bảng nào để chụp lại: kết nối database rồi chụp bảng trước"
+                .to_string(),
+        ));
+    }
+    let selection = Selection::Tables {
+        wanted,
+        skip_unreadable: true,
+    };
+    run_snapshot(state, member, &row, &info, selection, None).await
 }
 
-/// Bước 2 đến 4 cho các bảng `wanted`; name là tên của bảng đầu khi nó còn mới.
+/// Bước 2 đến 4. named: (bảng, tên dataset) khi người gọi đặt tên cho một bảng mới.
 async fn run_snapshot(
     state: &AppState,
     member: &Member,
     row: &SourceRow,
     info: &ConnectInfo,
-    wanted: &[Wanted],
-    name: Option<String>,
+    selection: Selection,
+    named: Option<(String, String)>,
 ) -> Result<SnapshotResponse, AppError> {
-    let (copied, keys) = copy_group(state, info, wanted).await?;
+    let group = copy_group(state, info, selection).await?;
+    let ws = &member.workspace;
 
     let mut results = Vec::new();
-    let mut datasets: Vec<(SourceTable, Uuid)> = Vec::new();
-    for (index, (copied, want)) in copied.into_iter().zip(wanted).enumerate() {
-        let name = if index == 0 { name.clone() } else { None };
-        let table = copied.table.clone();
-        let result = ingest_table(state, member, row, info, copied, name, want.dataset_id).await?;
-        datasets.push((table, result.dataset.id));
+    let mut run_tables = Vec::new();
+    for copied in group.copied {
+        let full_name = copied.table.full_name();
+        let name = named
+            .as_ref()
+            .filter(|(table, _)| *table == full_name)
+            .map(|(_, name)| name.clone());
+        let result = ingest_table(state, member, row, info, copied, name).await?;
+        // Bảng từng chỉ có metadata nay đã có dữ liệu.
+        state
+            .store
+            .delete_metadata_table(ws, row.id, &full_name)
+            .await?;
+        run_tables.push(full_name);
         results.push(result);
     }
-    let ids: Vec<Uuid> = datasets.iter().map(|(_, id)| *id).collect();
-    let new_relations = build_new_relations(&keys, &datasets);
-    let ws = &member.workspace;
+    let metadata_only = record_metadata_only(state, member, row, group.skipped).await?;
+    let ids: Vec<Uuid> = results.iter().map(|r| r.dataset.id).collect();
+    let held = state.store.list_source_datasets(ws, row.id).await?;
+    let new_relations = build_run_relations(group.keys, &held, &run_tables);
     state
         .store
         .replace_relations(ws, &ids, &new_relations)
@@ -142,90 +211,58 @@ async fn run_snapshot(
         .list_relations(ws, None)
         .await?
         .into_iter()
-        .filter(|r| ids.contains(&r.from_dataset_id) && ids.contains(&r.to_dataset_id))
+        .filter(|r| ids.contains(&r.from_dataset_id) || ids.contains(&r.to_dataset_id))
         .collect();
     Ok(SnapshotResponse {
         datasets: out,
         relations,
+        metadata_only,
+        unreadable: group.unreadable,
     })
 }
 
-/// Bảng cần chụp, bảng bắt đầu đứng đầu, không trùng.
-async fn build_wanted(
+/// Bảng nào cần chụp, theo request.
+async fn build_selection(
     state: &AppState,
     member: &Member,
     row: &SourceRow,
     req: &SnapshotRequest,
-) -> Result<Vec<Wanted>, AppError> {
-    let wanted = match req.dataset_id {
-        // Chụp lại: bảng lấy từ lần chụp trước, để không chụp nhầm bảng khác vào cùng dataset.
-        Some(dataset_id) => {
-            if !req.tables.is_empty() {
-                return Err(AppError::BadRequest(
-                    "Chụp lại dùng đúng nhóm bảng đã chụp; muốn thêm bảng thì chụp từ bảng đó và chọn bảng kèm"
-                        .to_string(),
-                ));
-            }
-            build_group(state, member, row, dataset_id).await?
+) -> Result<Selection, AppError> {
+    if let Some(dataset_id) = req.dataset_id {
+        // Chụp lại một nhóm: bảng lấy từ lần chụp trước, để không chụp nhầm bảng khác vào cùng dataset.
+        if !req.tables.is_empty() {
+            return Err(AppError::BadRequest(
+                "Chụp lại dùng đúng nhóm bảng đã chụp; muốn thêm bảng thì gửi danh sách bảng, không kèm dataset_id"
+                    .to_string(),
+            ));
         }
-        None => {
-            let start = req.table.as_deref().map(str::trim).unwrap_or_default();
-            if start.is_empty() {
-                return Err(AppError::BadRequest("Chọn một bảng để chụp".to_string()));
-            }
-            let mut names: Vec<String> = vec![start.to_string()];
-            for t in &req.tables {
-                let t = t.trim();
-                if !t.is_empty() && !names.iter().any(|n| n == t) {
-                    names.push(t.to_string());
-                }
-            }
-            names
-                .into_iter()
-                .map(|table| Wanted {
-                    table,
-                    dataset_id: None,
-                })
-                .collect()
-        }
-    };
-    if wanted.len() > MAX_SNAPSHOT_TABLES {
-        return Err(AppError::BadRequest(format!(
-            "Một lần chụp tối đa {MAX_SNAPSHOT_TABLES} bảng, đang chọn {}: bỏ bớt bảng rồi chụp lại",
-            wanted.len()
-        )));
-    }
-    Ok(wanted)
-}
-
-/// Mọi bảng đã chụp từ nguồn này mà còn trong workspace (bảng đã xóa không còn dòng datasets), cũ trước.
-async fn build_dataset_tables(
-    state: &AppState,
-    member: &Member,
-    row: &SourceRow,
-) -> Result<Vec<Wanted>, AppError> {
-    let mut tables = state.store.list_datasets(&member.workspace).await?;
-    tables.retain(|t| t.parent_id == row.id);
-    tables.sort_by_key(|t| t.created_at);
-    let mut wanted = Vec::new();
-    for t in tables {
-        wanted.push(Wanted {
-            table: recorded_table(row, t.id)?,
-            dataset_id: Some(t.id),
+        let wanted = build_group(state, member, row, dataset_id).await?;
+        return Ok(Selection::Tables {
+            wanted,
+            skip_unreadable: false,
         });
     }
-    if wanted.is_empty() {
-        return Err(AppError::BadRequest(
-            "Dataset này chưa có bảng nào: chọn một bảng để chụp".to_string(),
-        ));
+    let mut names: Vec<String> = Vec::new();
+    for t in req.table.iter().chain(&req.tables) {
+        let t = t.trim();
+        if !t.is_empty() && !names.iter().any(|n| n == t) {
+            names.push(t.to_string());
+        }
     }
-    if wanted.len() > MAX_DATASET_TABLES {
-        return Err(AppError::BadRequest(format!(
-            "Chụp lại cả dataset tối đa {MAX_DATASET_TABLES} bảng, dataset này có {}: chụp lại từng nhóm bảng",
-            wanted.len()
-        )));
+    if names.is_empty() {
+        return Ok(Selection::All);
     }
-    Ok(wanted)
+    let wanted = names
+        .into_iter()
+        .map(|table| Wanted {
+            table,
+            dataset_id: None,
+        })
+        .collect();
+    Ok(Selection::Tables {
+        wanted,
+        skip_unreadable: false,
+    })
 }
 
 /// Dataset `start` và mọi dataset cùng nguồn nối với nó qua quan hệ (đi hết các bước), kèm bảng nguồn của từng cái.
@@ -262,123 +299,66 @@ async fn build_group(
     Ok(group)
 }
 
-/// Bước 2: chép mọi bảng trong một giao dịch, rồi đọc khóa ngoại giữa chúng trong cùng giao dịch đó.
-async fn copy_group(
+/// Ghi metadata của bảng không chép được. Bảng đã có dataset từ lần chụp trước thì không ghi: dataset giữ phiên bản
+/// cũ cùng hồ sơ cột của nó, câu hỏi vẫn trả lời trên phiên bản đó.
+async fn record_metadata_only(
     state: &AppState,
-    info: &ConnectInfo,
-    wanted: &[Wanted],
-) -> Result<(Vec<CopiedTable>, Vec<ForeignKey>), AppError> {
-    let limit = state.config.source_timeout;
-    let max_rows = state.config.source_max_rows;
-    let copy = async {
-        let mut conn = postgres::connect(info, limit).await?;
-        let readable = postgres::list_tables(&mut conn).await?;
-        let mut tables = Vec::new();
-        for w in wanted {
-            tables.push(find_table_in(&readable, &w.table)?);
+    member: &Member,
+    row: &SourceRow,
+    skipped: Vec<SkippedTable>,
+) -> Result<Vec<MetadataOnlyTable>, AppError> {
+    let ws = &member.workspace;
+    let mut out = Vec::new();
+    let mut rows = Vec::new();
+    for s in skipped {
+        let table = s.skipped.candidate.table.full_name();
+        let dataset_id = match s.dataset_id {
+            Some(id) => Some(id),
+            None => state.store.find_source_dataset(ws, row.id, &table).await?,
+        };
+        let mut reason = s.skipped.reason.clone();
+        if dataset_id.is_some() {
+            reason.push_str(". Dataset của bảng giữ phiên bản đã chụp lần trước");
         }
-        postgres::begin_snapshot(&mut conn).await?;
-        // Đếm hết các bảng trước khi chép bảng nào: một bảng quá trần thì từ chối ngay, không chép phí các bảng khác.
-        for table in &tables {
-            let rows = postgres::count_rows(&mut conn, table).await?;
-            check_row_count(table, rows, max_rows)?;
+        let item = MetadataOnlyTable {
+            table: table.clone(),
+            cause: s.skipped.cause,
+            reason,
+            row_count: Some(s.skipped.candidate.rows.value()),
+            size_bytes: s.skipped.candidate.size_bytes,
+            description: s.description,
+            columns: s.columns,
+            dataset_id,
+        };
+        if dataset_id.is_none() {
+            rows.push(NewMetadataTable {
+                table_name: table,
+                cause: item.cause.as_str(),
+                reason: item.reason.clone(),
+                row_count: item.row_count,
+                size_bytes: item.size_bytes,
+                description: item.description.clone(),
+                columns: item.columns.clone(),
+            });
         }
-        let mut copied = copy_tables(state, info, &mut conn, &tables).await?;
-        // Comment đọc bằng sqlx trong giao dịch của conn, cách chép nào (COPY hay DuckDB) cũng vậy.
-        for c in &mut copied {
-            c.descriptions = comments::read_descriptions(&mut conn, &c.table).await?;
-        }
-        let mut keys = Vec::new();
-        for table in &tables {
-            keys.extend(relations::list_foreign_keys(&mut conn, table).await?);
-        }
-        postgres::commit_snapshot(&mut conn).await?;
-        Ok::<_, AppError>((copied, relations::build_group_keys(keys, &tables)))
-    };
-    match tokio::time::timeout(limit, copy).await {
-        Ok(result) => result,
-        Err(_) => Err(AppError::BadRequest(
-            "Chụp bảng quá thời gian cho phép (SOURCE_TIMEOUT_SECS): chọn ít bảng hơn, bảng nhỏ hơn, hoặc tăng giới hạn"
-                .to_string(),
-        )),
+        out.push(item);
     }
-}
-
-/// Chép dữ liệu các bảng theo SOURCE_SNAPSHOT_MODE. direct không dùng được (thiếu file extension, lệch phiên bản,
-/// libpq không kết nối được) thì ghi log lý do và chép bằng COPY, trong cùng giao dịch của conn.
-async fn copy_tables(
-    state: &AppState,
-    info: &ConnectInfo,
-    conn: &mut sqlx::PgConnection,
-    tables: &[SourceTable],
-) -> Result<Vec<CopiedTable>, AppError> {
-    if state.config.source_snapshot_mode == SnapshotMode::Direct {
-        match copy_direct(state, info, conn, tables).await {
-            Ok(copied) => return Ok(copied),
-            Err(DirectError::Failed(e)) => return Err(e),
-            Err(DirectError::Unavailable(reason)) => tracing::warn!(
-                reason = %reason,
-                "SOURCE_SNAPSHOT_MODE=direct is unavailable, copying tables with COPY instead"
-            ),
-        }
-    }
-    let mut copied = Vec::new();
-    for table in tables {
-        let staging = Staging::new(&state.config.data_dir)?;
-        let path = staging.upload_path(0);
-        let copy = postgres::copy_to_csv(
-            conn,
-            table,
-            state.config.source_max_rows,
-            state.config.max_upload_bytes,
-            &path,
-        )
+    state
+        .store
+        .upsert_metadata_tables(ws, row.id, &rows)
         .await?;
-        copied.push(CopiedTable {
-            table: table.clone(),
-            staging,
-            path,
-            copy,
-            descriptions: SourceDescriptions::default(),
-        });
-    }
-    Ok(copied)
+    Ok(out)
 }
 
-/// Cách direct (direct.rs): kiểu cột vẫn đọc bằng sqlx từ catalog, DuckDB chép dữ liệu.
-async fn copy_direct(
-    state: &AppState,
-    info: &ConnectInfo,
-    conn: &mut sqlx::PgConnection,
-    tables: &[SourceTable],
-) -> Result<Vec<CopiedTable>, DirectError> {
-    let mut stagings = Vec::new();
-    let mut wanted = Vec::new();
-    for table in tables {
-        let column_types = pg_types::column_types(conn, &postgres::select_all(table))
-            .await
-            .map_err(DirectError::Failed)?;
-        let staging = Staging::new(&state.config.data_dir).map_err(DirectError::Failed)?;
-        wanted.push(DirectTable {
-            table: table.clone(),
-            column_types,
-            out: staging.upload_path(0),
-        });
-        stagings.push(staging);
-    }
-    let copies = direct::copy_tables(&state.config, info, wanted).await?;
-    Ok(tables
-        .iter()
-        .zip(stagings)
-        .zip(copies)
-        .map(|((table, staging), copy)| CopiedTable {
-            table: table.clone(),
-            path: staging.upload_path(0),
-            staging,
-            copy,
-            descriptions: SourceDescriptions::default(),
-        })
-        .collect())
+/// Quan hệ cần ghi sau lần chụp: khóa ngoại giữa hai bảng nguồn đang giữ, ít nhất một đầu vừa chụp (relations.rs).
+fn build_run_relations(
+    keys: Vec<ForeignKey>,
+    held: &[(Uuid, String)],
+    run_tables: &[String],
+) -> Vec<NewRelation> {
+    let held_names: Vec<String> = held.iter().map(|(_, t)| t.clone()).collect();
+    let kept = relations::build_group_keys(keys, &held_names, run_tables);
+    build_new_relations(&kept, held)
 }
 
 /// Bước 3 cho một bảng: nạp file đã chép thành phiên bản mới của dataset của bảng (hay dataset mới), rồi ghi bảng nguồn
@@ -390,10 +370,9 @@ async fn ingest_table(
     info: &ConnectInfo,
     copied: CopiedTable,
     name: Option<String>,
-    dataset_id: Option<Uuid>,
 ) -> Result<UploadResult, AppError> {
     let full_name = copied.table.full_name();
-    let dataset_id = match dataset_id {
+    let dataset_id = match copied.dataset_id {
         Some(id) => Some(id),
         None => {
             state
@@ -450,12 +429,15 @@ pub(super) fn build_comment_part(descriptions: &SourceDescriptions) -> String {
     part
 }
 
-/// Khóa ngoại giữa các bảng của nhóm, đổi bảng thành dataset vừa nạp.
+/// Khóa ngoại đổi bảng thành dataset: datasets là (dataset, schema.bảng) của các bảng nguồn đang giữ.
 pub(super) fn build_new_relations(
     keys: &[ForeignKey],
-    datasets: &[(SourceTable, Uuid)],
+    datasets: &[(Uuid, String)],
 ) -> Vec<NewRelation> {
-    let dataset_of = |t: &SourceTable| datasets.iter().find(|(d, _)| d.same(t)).map(|(_, id)| *id);
+    let dataset_of = |t: &super::postgres::SourceTable| {
+        let full = t.full_name();
+        datasets.iter().find(|(_, d)| *d == full).map(|(id, _)| *id)
+    };
     keys.iter()
         .filter_map(|k| {
             Some(NewRelation {
@@ -468,20 +450,4 @@ pub(super) fn build_new_relations(
             })
         })
         .collect()
-}
-
-/// Bảng quá SOURCE_MAX_ROWS thì từ chối cả lần chụp, trước khi chép: chép thiếu dòng thì mọi phép cộng, đếm sai mà
-/// không ai thấy.
-pub(super) fn check_row_count(
-    table: &SourceTable,
-    rows: i64,
-    max_rows: u64,
-) -> Result<(), AppError> {
-    if u64::try_from(rows).unwrap_or(0) > max_rows {
-        return Err(AppError::TooLarge(format!(
-            "Bảng {} có {rows} dòng, quá giới hạn {max_rows} dòng của một bảng trong một lần chụp (SOURCE_MAX_ROWS)",
-            table.full_name()
-        )));
-    }
-    Ok(())
 }

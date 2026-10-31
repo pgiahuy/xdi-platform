@@ -6,9 +6,10 @@ cột, bằng chứng, dòng nguồn và câu hỏi cũ vẫn tái lập đượ
 bảng ở postgres.rs (COPY ra CSV) hoặc direct.rs (DuckDB đọc thẳng ra Parquet, SOURCE_SNAPSHOT_MODE), mã hóa ở
 secret.rs, rồi đi tiếp service/ingest.rs như một file nạp.
 
-Một lần chụp lấy một bảng cùng các bảng nối với nó theo khóa ngoại (relations.rs tìm, snapshot.rs chụp): mỗi bảng thành
-một dataset riêng, khóa ngoại giữa chúng ghi thành quan hệ giữa các dataset. Không nối thành bảng phẳng, nên không có
-cột lặp lại để cộng nhầm.
+Kết nối xong thì mặc định chụp mọi bảng, view tài khoản đọc được (#247): phạm vi dữ liệu do quyền SELECT của tài khoản
+quyết, admin bỏ tick bảng không muốn (catalog.rs liệt kê, snapshot.rs và copy.rs chụp). Database là một dataset (#257),
+mỗi bảng chụp thành một bảng riêng của nó, khóa ngoại giữa chúng ghi thành quan hệ giữa các bảng. Không nối thành bảng
+phẳng, nên không có cột lặp lại để cộng nhầm. Bảng quá trần chỉ lưu metadata (plan.rs). Chụp lại cả dataset theo lịch ở schedule.rs.
 
 Bảo vệ:
 - Chỉ admin của workspace làm mọi việc ở đây, kể cả xem cấu hình nguồn; member nhận 403.
@@ -16,13 +17,17 @@ Bảo vệ:
 - Thông tin kết nối mã hóa bằng SOURCE_SECRET_KEY trước khi lưu; mật khẩu không bao giờ có trong response, log hay
   prompt. Cột _source_file ghi postgres://máy/database/schema.bảng, không có tài khoản hay mật khẩu. */
 
+mod catalog;
 mod comments;
+mod copy;
 mod direct;
 mod key_file;
 mod libpq;
 mod pg_types;
+mod plan;
 mod postgres;
 mod relations;
+mod schedule;
 mod secret;
 mod snapshot;
 
@@ -41,12 +46,18 @@ use crate::config::Config;
 use crate::engine::store::SourceRow;
 use crate::{error::AppError, state::AppState};
 
+use std::collections::HashMap;
+
+use catalog::Held;
+pub use catalog::SourceTableInfo;
 pub use key_file::apply_key_file;
-pub use postgres::SourceTable;
-use postgres::{ConnectInfo, SSL_MODES};
+use postgres::{ConnectInfo, SourceTable, SSL_MODES};
 pub use relations::{RelationsRequest, RelationsResponse};
+pub use schedule::run_resnapshot_schedule;
 use secret::SecretKey;
-pub use snapshot::{snapshot, snapshot_dataset, SnapshotRequest, SnapshotResponse};
+pub use snapshot::{
+    snapshot, snapshot_dataset, MetadataOnlyTable, SnapshotRequest, SnapshotResponse,
+};
 
 const KIND_POSTGRES: &str = "postgres";
 
@@ -134,20 +145,40 @@ pub async fn test(
     member: &Member,
     id: Uuid,
 ) -> Result<TestSourceResponse, AppError> {
-    let tables = tables(state, member, id).await?;
+    let (_, info) = load(state, member, id).await?;
+    let mut conn = postgres::connect(&info, state.config.source_timeout).await?;
+    let tables = postgres::list_tables(&mut conn).await?;
     Ok(TestSourceResponse {
         table_count: tables.len(),
     })
 }
 
+/// Mọi bảng, view tài khoản đọc được, kèm số dòng ước lượng, mô tả, khóa ngoại và bảng nào nguồn đã giữ (#247).
 pub async fn tables(
     state: &AppState,
     member: &Member,
     id: Uuid,
-) -> Result<Vec<SourceTable>, AppError> {
-    let (_, info) = load(state, member, id).await?;
+) -> Result<Vec<SourceTableInfo>, AppError> {
+    let (row, info) = load(state, member, id).await?;
+    let ws = &member.workspace;
+    let mut held: HashMap<String, Held> = HashMap::new();
+    for m in state.store.list_metadata_tables(ws, row.id).await? {
+        held.insert(m.table_name, Held::Metadata(m.reason));
+    }
+    for (dataset_id, table) in state.store.list_source_datasets(ws, row.id).await? {
+        held.insert(table, Held::Dataset(dataset_id));
+    }
     let mut conn = postgres::connect(&info, state.config.source_timeout).await?;
-    postgres::list_tables(&mut conn).await
+    let readable = postgres::list_tables(&mut conn).await?;
+    let stats = catalog::read_stats(&mut conn).await?;
+    let keys = relations::list_all_foreign_keys(&mut conn).await?;
+    Ok(catalog::build_table_list(
+        &readable,
+        &stats,
+        &keys,
+        &held,
+        state.config.source_max_rows,
+    ))
 }
 
 /// Bảng nối với một bảng theo khóa ngoại, cả hai chiều, kèm lý do khi một bảng không chụp kèm được.
