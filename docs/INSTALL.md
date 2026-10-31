@@ -607,7 +607,8 @@ dataset kèm 11 quan hệ: `sales_demo` (`order_items`, `orders`, `customers`, `
 `courses`, `registrations`, `assessments`, `student_assessments`, `vle_materials`), kèm chỉ số mẫu "Doanh thu", "Lợi
 nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. `edu.student_daily_clicks` (1,8 triệu dòng) không
 chụp sẵn vì quá `SOURCE_MAX_ROWS` mặc định. Đo trên máy dev ngày 31/10/2026: bước tạo tài khoản quản trị kèm chụp 12 bảng
-mất 5,4 giây (đo trước #246, chép bằng `copy`). Câu mẫu của các bảng này nằm trong `backend/src/engine/llm/mock_answers_database.json` và hiện thành câu
+mất 5,4 giây (đo trước #246, chép bằng `copy`, một database `company_demo`); sau khi tách hai nguồn, chép bằng
+`direct`, đo một lần qua compose `--profile demo`: 4,5 giây. Câu mẫu của các bảng này nằm trong `backend/src/engine/llm/mock_answers_database.json` và hiện thành câu
 gợi ý của dataset, ví dụ "Tỷ lệ bỏ học theo môn học" và "Số sinh viên theo kết quả cuối khóa" trên `students`, "Điểm
 trung bình theo loại bài đánh giá" trên `student_assessments` (nối `assessments`), "Doanh thu theo phân khúc khách
 hàng" trên `order_items` (nối `orders`, `customers`). Một database không tới được thì backend ghi cảnh báo và giữ nguồn
