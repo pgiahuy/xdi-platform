@@ -38,7 +38,7 @@ pub struct StoredTurn {
     pub feedback_at: Option<DateTime<Utc>>,
     /// Admin đã duyệt câu làm câu mẫu.
     pub example_approved: bool,
-    /// Lời trả lời đã hiện cho người hỏi (queries.answer, migration 0015); None với câu không answered hay ghi trước đó.
+    /// Lời trả lời đã hiện cho người hỏi (queries.answer, migration 0016); None với câu không answered hay ghi trước đó.
     pub answer: Option<serde_json::Value>,
 }
 
