@@ -12,8 +12,8 @@
 # Biến môi trường:
 #   DEMO_DATA_DIR  thư mục chứa DataCoSupplyChainDataset.csv và oulad/, tính từ thư mục này (mặc định ../downloads)
 #   KEEP_STAGING=1 giữ schema staging sau khi nạp (để so với CSV gốc); mặc định xóa, đỡ khoảng 730 MB
-#   SKIP_DEMO_CAUSE=1 không chạy sql/plant_demo_cause.sql: sales giữ đúng như CSV. Mặc định có chạy, xem README.md
-#                  mục "Nguyên nhân cài sẵn"
+#   SKIP_DEMO_CAUSE=1 không chạy sql/plant_demo_cause_sales.sql và sql/plant_demo_cause_edu.sql: sales và edu giữ
+#                  đúng như CSV. Mặc định có chạy, xem README.md mục "Nguyên nhân cài sẵn"
 
 set -eu
 
@@ -57,10 +57,11 @@ copy_oulad() {
     copy_oulad oulad_vle vle.csv
     copy_oulad oulad_student_vle studentVle.csv
     cat sql/edu_schema.sql sql/edu_load.sql sql/sales_schema.sql sql/sales_load.sql
-    # Bước riêng, sau dữ liệu thật: cài một nguyên nhân biết trước vào sales.orders để thử câu hỏi tìm nguyên nhân.
+    # Bước riêng, sau dữ liệu thật: cài một nguyên nhân biết trước vào sales.orders và một vào edu.students để thử
+    # câu hỏi tìm nguyên nhân.
     if [ "${SKIP_DEMO_CAUSE:-0}" != "1" ]; then
-        printf '%s\n' "\\echo 'planting demo cause (sql/plant_demo_cause.sql); set SKIP_DEMO_CAUSE=1 to skip'"
-        cat sql/plant_demo_cause.sql
+        printf '%s\n' "\\echo 'planting demo causes (sql/plant_demo_cause_sales.sql, sql/plant_demo_cause_edu.sql); set SKIP_DEMO_CAUSE=1 to skip'"
+        cat sql/plant_demo_cause_sales.sql sql/plant_demo_cause_edu.sql
     fi
     cat sql/grants.sql
     if [ "${KEEP_STAGING:-0}" != "1" ]; then
