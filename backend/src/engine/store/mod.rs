@@ -40,6 +40,7 @@ mod relations;
 mod relations_tests;
 #[cfg(test)]
 mod schema_tests;
+mod source_tables;
 mod sources;
 #[cfg(test)]
 pub mod test_support;
@@ -71,6 +72,7 @@ pub use policies::{DataRoleOutcome, PoliciesOutcome, RowPolicy};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, PromptExample, QueryStatus, QueryTimings, StoredQuery};
 pub use relations::{build_related, DatasetRelation, NewRelation};
+pub use source_tables::{MetadataColumn, MetadataTableRow, NewMetadataTable};
 pub use sources::SourceRow;
 pub use users::{Deactivated, UserSummary};
 #[allow(unused_imports)]

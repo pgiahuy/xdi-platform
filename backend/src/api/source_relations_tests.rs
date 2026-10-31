@@ -2,7 +2,7 @@
 /* api/source_relations_tests.rs - test chụp một nhóm bảng liên quan (mỗi bảng một dataset, kèm quan hệ khóa ngoại) qua
 route thật, trên Postgres thật (database riêng của test, như api/sources_tests.rs). Schema shop dựng tay đủ các ca: khóa
 ngoại nhiều cột, chuỗi orders -> customers -> regions, hai bảng sự kiện (order_items, returns) cùng trỏ vào orders,
-khóa ngoại trỏ vào bảng (một-nhiều), bảng đích chỉ có chỉ mục UNIQUE không kèm ràng buộc, bảng không có quyền đọc,
+khóa ngoại trỏ vào bảng (một-nhiều), bảng đích chỉ có chỉ mục UNIQUE không kèm ràng buộc (vẫn ghi quan hệ), bảng không có quyền đọc,
 view. Không có DATABASE_URL thì bỏ qua. */
 
 use axum::http::StatusCode;
@@ -146,12 +146,9 @@ async fn relations_list_both_directions_with_reasons() {
     assert_eq!(products["addable"], true);
     assert_eq!(products["column_count"], 4);
 
+    // channels.code chỉ có chỉ mục UNIQUE, không có ràng buộc: vẫn là khóa duy nhất, chụp kèm được (#247).
     let channel = find(many, "shop.channels");
-    assert_eq!(channel["addable"], false);
-    assert!(
-        channel["reason"].as_str().unwrap().contains("UNIQUE"),
-        "{channel}"
-    );
+    assert_eq!(channel["addable"], true, "{channel}");
     let secret = find(many, "shop.secrets");
     assert_eq!(secret["addable"], false);
     assert!(
@@ -363,40 +360,37 @@ async fn shared_dimension_is_reused() {
     s.finish().await;
 }
 
-/// Quá 10 bảng thì từ chối trước khi kết nối; giới hạn dòng tính riêng từng bảng, báo đúng bảng vượt; member 403.
+/// Không còn trần số bảng; giới hạn dòng tính riêng từng bảng: bảng vượt chỉ lưu metadata, các bảng khác vẫn chụp;
+/// member 403.
 #[tokio::test]
 async fn snapshot_limits_and_roles() {
     let Some(s) = start_with_max_rows(Some(KEY), &[], Some(4)).await else {
         return;
     };
     let id = add_source(&s).await;
-    let many: Vec<String> = (0..10).map(|i| format!("shop.t{i}")).collect();
-    let (status, body) = snapshot(&s, &id, json!({"table": "shop.orders", "tables": many})).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    assert!(
-        body["message"].as_str().unwrap().contains("tối đa 10"),
-        "{body}"
-    );
-
     // orders 3 dòng, customers 3 dòng: mỗi bảng dưới 4 thì chụp được, dù cộng lại quá 4.
     let ok = json!({"table": "shop.orders", "tables": ["shop.customers"]});
     let (status, body) = snapshot(&s, &id, ok).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
-    // order_items 5 dòng: cả lần chụp bị từ chối, lời báo nêu bảng đó.
+    // order_items 5 dòng: chỉ lưu metadata, orders không đổi, lời báo nêu bảng và trần.
     let big = json!({"table": "shop.orders", "tables": ["shop.order_items"]});
     let (status, body) = snapshot(&s, &id, big).await;
-    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{body}");
-    assert!(
-        body["message"]
-            .as_str()
-            .unwrap()
-            .contains("shop.order_items"),
-        "{body}"
-    );
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["datasets"].as_array().unwrap().len(), 1);
+    let skipped = &body["metadata_only"][0];
+    assert_eq!(skipped["table"], "shop.order_items");
+    assert_eq!(skipped["cause"], "row_limit");
+    assert_eq!(skipped["row_count"], 5);
+    let reason = skipped["reason"].as_str().unwrap();
+    assert!(reason.contains("SOURCE_MAX_ROWS"), "{reason}");
+    assert_eq!(skipped["columns"][0]["name"], "order_id");
 
     let url = format!("{SHOP}/sources/{id}/snapshot");
     let body = json!({"table": "shop.orders", "tables": ["shop.customers"]});
     let (status, _, _) = call(&s.app, "POST", &url, Some(&s.minh), Some(body)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let url = format!("{SHOP}/sources/{id}/resnapshot");
+    let (status, _, _) = call(&s.app, "POST", &url, Some(&s.minh), None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     s.finish().await;
 }

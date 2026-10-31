@@ -2,15 +2,16 @@
 /* service/sources/relations.rs - quan hệ khóa ngoại quanh một bảng của nguồn Postgres. Hai việc:
 - discover: liệt kê bảng nối với bảng đang chọn theo cả hai chiều, để người dùng chọn chụp kèm (route
   POST /sources/{id}/relations).
-- build_group_keys: lúc chụp một nhóm bảng (snapshot.rs), giữ các khóa ngoại nối hai bảng trong nhóm để ghi thành quan
-  hệ giữa các dataset (engine/store/relations.rs).
+- build_group_keys: lúc chụp (snapshot.rs), giữ các khóa ngoại nối hai bảng nguồn đã chụp, ít nhất một đầu là bảng vừa
+  chụp, để ghi thành quan hệ giữa các dataset (engine/store/relations.rs). Không giới hạn một bước quanh bảng nào.
 
 Mỗi bảng chụp thành một dataset riêng, không nối thành bảng phẳng, nên cả hai chiều đều chụp kèm được: nhiều-một (khóa
 ngoại rời bảng đang chọn, order_items -> orders) và một-nhiều (khóa ngoại của bảng khác trỏ vào nó, orders <-
-order_items). Chỉ đi một bước quanh bảng đang chọn; bảng xa hơn thì chọn tiếp từ bảng đã thêm.
+order_items). discover chỉ đi một bước quanh bảng đang chọn; lúc chụp thì mọi khóa ngoại giữa các bảng đã chụp đều được
+ghi.
 
-Chỉ ghi quan hệ khi cột đích là khóa chính hay ràng buộc UNIQUE: mỗi dòng bên nhiều khớp tối đa một dòng bên một, nên
-sau này JOIN theo quan hệ không nhân dòng phía một. Mọi thông tin đọc từ pg_catalog (tên ràng buộc, bảng, cột, quyền),
+Chỉ ghi quan hệ khi cột đích là khóa duy nhất (khóa chính, ràng buộc hay chỉ mục UNIQUE): mỗi dòng bên nhiều khớp tối
+đa một dòng bên một, nên JOIN theo quan hệ không nhân dòng phía một. Mọi thông tin đọc từ pg_catalog (tên ràng buộc, bảng, cột, quyền),
 không đọc dòng dữ liệu nào. pg_catalog cho mọi tài khoản xem tên bảng và ràng buộc, kể cả bảng không có quyền đọc; bảng
 như vậy được liệt kê kèm lý do mà không chụp được. */
 
@@ -68,9 +69,9 @@ pub struct ForeignKey {
     pub from_columns: Vec<String>,
     pub to: SourceTable,
     pub to_columns: Vec<String>,
-    /// Cột đích đúng bằng tập cột của khóa chính hay một ràng buộc UNIQUE của bảng đích.
+    /// Cột đích đúng bằng tập cột của một chỉ mục UNIQUE của bảng đích (khóa chính, ràng buộc hay chỉ mục UNIQUE).
     pub unique_target: bool,
-    /// Cột khóa ngoại cũng là khóa chính hay UNIQUE của bảng giữ nó: quan hệ một-một.
+    /// Cột khóa ngoại cũng là khóa duy nhất của bảng giữ nó: quan hệ một-một.
     pub unique_source: bool,
     /// Tài khoản có quyền SELECT trên bảng giữ khóa và trên bảng đích.
     pub readable_source: bool,
@@ -159,85 +160,105 @@ pub fn build_reason(key: &ForeignKey, other: &SourceTable, readable: bool) -> Op
     None
 }
 
-/// Khóa ngoại nối hai bảng trong nhóm `chosen`, mỗi khóa một lần (list_foreign_keys của hai đầu đều trả nó). Chỉ giữ
-/// khóa có cột đích là khóa chính hay UNIQUE, như discover cho phép.
-pub fn build_group_keys(keys: Vec<ForeignKey>, chosen: &[SourceTable]) -> Vec<ForeignKey> {
-    let in_group = |t: &SourceTable| chosen.iter().any(|c| c.same(t));
+/// Khóa ngoại cần ghi thành quan hệ sau một lần chụp, mỗi khóa một lần: cả hai đầu là bảng nguồn đang giữ thành
+/// dataset (`held`, tên schema.bảng, gồm cả bảng vừa chụp), và ít nhất một đầu là bảng vừa chụp (`run`). Khóa giữa
+/// hai bảng chụp từ trước, không có trong lần này, giữ nguyên quan hệ đã ghi. Chỉ giữ khóa có cột đích là khóa chính
+/// hay UNIQUE, như discover cho phép. Chỉ khóa ngoại khai báo ở database nguồn; không đoán quan hệ từ tên cột.
+pub fn build_group_keys(keys: Vec<ForeignKey>, held: &[String], run: &[String]) -> Vec<ForeignKey> {
+    let is_in = |list: &[String], t: &SourceTable| list.contains(&t.full_name());
     let mut seen: HashSet<(String, String)> = HashSet::new();
     keys.into_iter()
-        .filter(|k| k.unique_target && in_group(&k.from) && in_group(&k.to))
+        .filter(|k| k.unique_target && is_in(held, &k.from) && is_in(held, &k.to))
+        .filter(|k| is_in(run, &k.from) || is_in(run, &k.to))
         .filter(|k| seen.insert((k.from.full_name(), k.constraint.clone())))
         .collect()
 }
 
-/// Khóa ngoại rời hay trỏ vào một bảng. conparentid = 0 bỏ bản sao của ràng buộc mà Postgres tạo cho từng partition.
-/// Cột "có ràng buộc UNIQUE" khi tập cột của nó đúng bằng tập cột của khóa chính hay một ràng buộc UNIQUE (hai chiều
-/// chứa nhau); chỉ mục UNIQUE không kèm ràng buộc không tính, để luật dễ kiểm bằng mắt trong \d của psql.
+/// Phần chung của câu đọc khóa ngoại. conparentid = 0 bỏ bản sao của ràng buộc mà Postgres tạo cho từng partition.
+/// Cột "là khóa duy nhất" khi tập cột của nó đúng bằng tập cột của một chỉ mục UNIQUE trên cột thường, không điều kiện
+/// (hai chiều chứa nhau): khóa chính, ràng buộc UNIQUE, hay chỉ mục UNIQUE tạo riêng. Postgres chỉ cho khóa ngoại trỏ tới
+/// cột như vậy, nên mọi khóa ngoại khai báo đều được ghi thành quan hệ (#247): guard chỉ nhận JOIN theo quan hệ đã ghi.
+const FOREIGN_KEY_SELECT: &str = "SELECT c.conname::text, sn.nspname::text, s.relname::text,
+        ARRAY(SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY AS k(num, ord)
+              JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.ord),
+        tn.nspname::text, t.relname::text,
+        ARRAY(SELECT a.attname::text FROM unnest(c.confkey) WITH ORDINALITY AS k(num, ord)
+              JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num ORDER BY k.ord),
+        EXISTS (SELECT 1 FROM pg_index u
+                WHERE u.indrelid = c.confrelid AND u.indisunique AND u.indpred IS NULL AND u.indexprs IS NULL
+                  AND u.indkey::int2[] @> c.confkey AND u.indkey::int2[] <@ c.confkey),
+        EXISTS (SELECT 1 FROM pg_index u
+                WHERE u.indrelid = c.conrelid AND u.indisunique AND u.indpred IS NULL AND u.indexprs IS NULL
+                  AND u.indkey::int2[] @> c.conkey AND u.indkey::int2[] <@ c.conkey),
+        has_table_privilege(c.conrelid, 'SELECT'),
+        has_table_privilege(c.confrelid, 'SELECT')
+ FROM pg_constraint c
+ JOIN pg_class s ON s.oid = c.conrelid
+ JOIN pg_namespace sn ON sn.oid = s.relnamespace
+ JOIN pg_class t ON t.oid = c.confrelid
+ JOIN pg_namespace tn ON tn.oid = t.relnamespace
+ WHERE c.contype = 'f' AND c.conparentid = 0";
+
+type ForeignKeyRow = (
+    String,
+    String,
+    String,
+    Vec<String>,
+    String,
+    String,
+    Vec<String>,
+    bool,
+    bool,
+    bool,
+    bool,
+);
+
+/// Khóa ngoại rời hay trỏ vào một bảng.
 pub async fn list_foreign_keys(
     c: &mut PgConnection,
     table: &SourceTable,
 ) -> Result<Vec<ForeignKey>, AppError> {
-    type Row = (
-        String,
-        String,
-        String,
-        Vec<String>,
-        String,
-        String,
-        Vec<String>,
-        bool,
-        bool,
-        bool,
-        bool,
-    );
-    let rows: Vec<Row> = sqlx::query_as(
-        "SELECT c.conname::text, sn.nspname::text, s.relname::text,
-                ARRAY(SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY AS k(num, ord)
-                      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.ord),
-                tn.nspname::text, t.relname::text,
-                ARRAY(SELECT a.attname::text FROM unnest(c.confkey) WITH ORDINALITY AS k(num, ord)
-                      JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num ORDER BY k.ord),
-                EXISTS (SELECT 1 FROM pg_constraint u
-                        WHERE u.conrelid = c.confrelid AND u.contype IN ('p', 'u')
-                          AND u.conkey @> c.confkey AND u.conkey <@ c.confkey),
-                EXISTS (SELECT 1 FROM pg_constraint u
-                        WHERE u.conrelid = c.conrelid AND u.contype IN ('p', 'u')
-                          AND u.conkey @> c.conkey AND u.conkey <@ c.conkey),
-                has_table_privilege(c.conrelid, 'SELECT'),
-                has_table_privilege(c.confrelid, 'SELECT')
-         FROM pg_constraint c
-         JOIN pg_class s ON s.oid = c.conrelid
-         JOIN pg_namespace sn ON sn.oid = s.relnamespace
-         JOIN pg_class t ON t.oid = c.confrelid
-         JOIN pg_namespace tn ON tn.oid = t.relnamespace
-         WHERE c.contype = 'f' AND c.conparentid = 0
+    let sql = format!(
+        "{FOREIGN_KEY_SELECT}
            AND ((sn.nspname = $1 AND s.relname = $2) OR (tn.nspname = $1 AND t.relname = $2))
-         ORDER BY 2, 3, 1",
-    )
-    .bind(&table.schema)
-    .bind(&table.name)
-    .fetch_all(&mut *c)
-    .await
-    .map_err(|e| query_error(&e))?;
+         ORDER BY 2, 3, 1"
+    );
+    let rows: Vec<ForeignKeyRow> = sqlx::query_as(&sql)
+        .bind(&table.schema)
+        .bind(&table.name)
+        .fetch_all(&mut *c)
+        .await
+        .map_err(|e| query_error(&e))?;
+    Ok(rows.into_iter().map(build_foreign_key).collect())
+}
+
+/// Mọi khóa ngoại của database, một câu thay cho một câu mỗi bảng khi chụp hay liệt kê mọi bảng (#247).
+pub async fn list_all_foreign_keys(c: &mut PgConnection) -> Result<Vec<ForeignKey>, AppError> {
+    let sql = format!("{FOREIGN_KEY_SELECT} ORDER BY 2, 3, 1");
+    let rows: Vec<ForeignKeyRow> = sqlx::query_as(&sql)
+        .fetch_all(&mut *c)
+        .await
+        .map_err(|e| query_error(&e))?;
+    Ok(rows.into_iter().map(build_foreign_key).collect())
+}
+
+fn build_foreign_key(r: ForeignKeyRow) -> ForeignKey {
     let table_of = |schema: String, name: String| SourceTable {
         schema,
         name,
         kind: "table".to_string(),
     };
-    Ok(rows
-        .into_iter()
-        .map(|r| ForeignKey {
-            constraint: r.0,
-            from: table_of(r.1, r.2),
-            from_columns: r.3,
-            to: table_of(r.4, r.5),
-            to_columns: r.6,
-            unique_target: r.7,
-            unique_source: r.8,
-            readable_source: r.9,
-            readable_target: r.10,
-        })
-        .collect())
+    ForeignKey {
+        constraint: r.0,
+        from: table_of(r.1, r.2),
+        from_columns: r.3,
+        to: table_of(r.4, r.5),
+        to_columns: r.6,
+        unique_target: r.7,
+        unique_source: r.8,
+        readable_source: r.9,
+        readable_target: r.10,
+    }
 }
 
 /// Cột tài khoản đọc được của một bảng hay view, theo thứ tự trong bảng.

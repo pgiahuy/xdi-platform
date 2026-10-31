@@ -9,16 +9,16 @@ thêm một file JSON.
 |---|---|---|---|
 | `dataco.csv` (1500 dòng lấy ngẫu nhiên) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0 | Dataset mẫu nạp sẵn vào workspace đầu tiên, bộ đánh giá câu hỏi mẫu (`make eval`), thử nhanh với mock |
 | `dataco.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Chỉ số mẫu của dataset DataCo (bảng `metrics`) |
-| `sample_database.json`, `order_items.metrics.json`, `student_assessments.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Các nhóm bảng thiết lập lần đầu chụp từ database mẫu ([postgres-demo](postgres-demo/README.md)), và chỉ số mẫu của hai bảng |
+| `order_items.metrics.json`, `student_assessments.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Chỉ số mẫu của hai bảng thiết lập lần đầu chụp từ database mẫu ([postgres-demo](postgres-demo/README.md)) |
 
 ## Dataset mẫu nạp sẵn
 
 Khi màn thiết lập lần đầu tạo xong workspace đầu tiên, nếu tới được database mẫu ([postgres-demo](postgres-demo/README.md),
 đã nạp bằng `load.sh`; compose gốc trỏ `SAMPLE_DATABASE_URL` vào dịch vụ `demo-db` khi bật `--profile demo`, `make dev` trỏ
-vào cổng `DEMO_DB_PORT` trên `127.0.0.1`) thì backend thêm database đó làm nguồn Postgres của workspace, rồi chụp từng
-nhóm bảng trong `sample_database.json` (bảng bắt đầu và các bảng chụp kèm, như request chụp ở trang **Dữ liệu**): mỗi
-bảng một dataset, khóa ngoại ghi thành quan hệ. Kế hoạch chụp 12 bảng; bỏ `edu.student_daily_clicks` (1,8 triệu dòng,
-quá `SOURCE_MAX_ROWS` mặc định). Bảng nào có `<tên bảng>.metrics.json` (hiện có `order_items.metrics.json`,
+vào cổng `DEMO_DB_PORT` trên `127.0.0.1`) thì backend thêm database đó làm nguồn Postgres của workspace, rồi chụp mọi
+bảng tài khoản `analyst` đọc được, như admin kết nối ở trang **Dữ liệu** mà không bỏ tick bảng nào (#247): mỗi bảng một
+dataset, khóa ngoại ghi thành quan hệ. Với `SOURCE_MAX_ROWS` mặc định, 12 bảng có dữ liệu, còn
+`edu.student_daily_clicks` (1,8 triệu dòng) chỉ lưu metadata; đặt `SOURCE_MAX_ROWS=2000000` thì cả 13 bảng có dữ liệu. Bảng nào có `<tên bảng>.metrics.json` (hiện có `order_items.metrics.json`,
 `student_assessments.metrics.json`) thì ghi thêm chỉ số mẫu. Hồ sơ cột và câu gợi ý của `mock` cho các bảng này nằm ở
 `backend/src/engine/llm/mock_answers_database.json`.
 

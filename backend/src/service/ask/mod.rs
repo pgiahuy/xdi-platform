@@ -71,6 +71,7 @@ pub mod summary;
 #[cfg(test)]
 mod summary_tests;
 pub mod unanswerable;
+mod unsnapshotted;
 pub mod value_retry;
 #[cfg(test)]
 mod value_retry_tests;
@@ -369,6 +370,7 @@ async fn ask_steps(
         let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
         outcome.message = Some(build_unanswerable_message(unanswerable, &names));
     }
+    apply_needed_table_message(state, ws, &dataset, question, &mut outcome).await?;
     // Giả định thành Choice một lần, dùng cho cả thẻ "Đã hiểu là" lẫn AskResponse.choices để hai chỗ cùng id.
     let answer = SqlAnswer {
         terms: outcome.terms.clone(),
@@ -591,6 +593,28 @@ fn build_answer_text(
         insight,
         enabled: state.config.answer_text,
     })
+}
+
+/// Câu không trả lời được mà cần một bảng cùng nguồn chưa có dữ liệu (chỉ metadata, #247): lời nêu đúng bảng đó
+/// (ask/unsnapshotted.rs). Dataset nạp từ file không có nguồn database, không đọc gì thêm.
+async fn apply_needed_table_message(
+    state: &AppState,
+    ws: &WorkspaceId,
+    dataset: &Dataset,
+    question: &str,
+    outcome: &mut RunOutcome,
+) -> Result<(), AppError> {
+    let (AskStatus::Rejected | AskStatus::Failed, Some(source_id)) =
+        (outcome.status, dataset.source_id)
+    else {
+        return Ok(());
+    };
+    let tables = state.store.list_metadata_tables(ws, source_id).await?;
+    let sql = outcome.sql_generated.as_deref();
+    if let Some(table) = unsnapshotted::find_needed_table(question, sql, &tables) {
+        outcome.message = Some(unsnapshotted::build_needed_table_message(table));
+    }
+    Ok(())
 }
 
 /// Dataset của workspace người hỏi và phiên bản đang dùng. Id của workspace khác trả 404 như id không có.

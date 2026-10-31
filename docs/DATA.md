@@ -101,7 +101,8 @@ Các trường hợp sau bị từ chối (400). Lời báo ghi tên file, trừ
 ## Nguồn database (Postgres)
 
 `admin` của workspace thêm được một database Postgres làm nguồn (trang Dữ liệu, "Kết nối database", hay
-`POST /api/workspaces/{ws}/sources`), rồi chụp một bảng hay view thành dataset. Bản này chỉ có Postgres; MySQL, SQLite
+`POST /api/workspaces/{ws}/sources`), rồi chụp các bảng, view của nó thành dataset: mặc định mọi bảng tài khoản đọc
+được (#247), admin bỏ tick bảng không muốn. Bản này chỉ có Postgres; MySQL, SQLite
 và truy vấn thẳng database ngoài lúc hỏi để sau ([#165](https://github.com/pgiahuy/xdi-platform/issues/165)).
 Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
 
@@ -132,9 +133,10 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   Cột không có comment vẫn nhận mô tả do mô hình viết (nguồn `model`) như cũ. Lớp ngữ nghĩa không viết lại và không ghi
   đè mô tả nguồn `database` (mục Hồ sơ lớp ngữ nghĩa). Comment tính vào hash của bản chụp khi bảng có ít nhất một
   comment: chỉ sửa comment rồi chụp lại cũng ra phiên bản mới mang comment mới; bảng không có comment giữ hash như trước.
-- Giới hạn: `SOURCE_MAX_ROWS` dòng cho mỗi bảng (đếm mọi bảng trước khi chép, quá thì từ chối cả lần chụp, không chụp
-  thiếu), `MAX_UPLOAD_MB` cho file chép ra của mỗi bảng (CSV với `copy`, Parquet nén với `direct`, nên cùng một bảng
-  `direct` chịu được bảng lớn hơn), tối đa 10 bảng một lần chụp, `SOURCE_TIMEOUT_SECS` cho cả lần chụp.
+- Giới hạn: `SOURCE_MAX_ROWS` dòng cho mỗi bảng và `SOURCE_SNAPSHOT_MAX_MB` cho tổng dung lượng các bảng chép trong
+  một lần chụp (mục Chụp mọi bảng đọc được); bảng vượt trần không bị chụp thiếu mà chỉ lưu metadata. `MAX_UPLOAD_MB`
+  cho file chép ra của mỗi bảng (CSV với `copy`, Parquet nén với `direct`, nên cùng một bảng `direct` chịu được bảng lớn
+  hơn), quá thì từ chối cả lần chụp; `SOURCE_TIMEOUT_SECS` cho cả lần chụp. Không giới hạn số bảng.
 - Kết nối luôn chỉ đọc (`default_transaction_read_only`, `statement_timeout`; với `direct` thêm `ATTACH ... READ_ONLY`),
   mọi bảng của một lần chụp đọc trong một giao dịch `REPEATABLE READ`. Máy chủ phải nằm trong `SOURCE_ALLOWED_HOSTS`.
 - **TLS** (#230), bằng rustls, nghĩa `sslmode` như libpq:
@@ -165,29 +167,63 @@ Database mẫu để thử: Postgres nhiều bảng dựng từ DataCo và OULAD
 bảng, cột (sinh bằng tbls):
 [data/postgres-demo/docs](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/docs/README.md).
 
+### Chụp mọi bảng đọc được
+
+Phạm vi dữ liệu do tổ chức quyết bằng quyền của tài khoản nguồn: bảng, view nào tài khoản có quyền `SELECT` thì
+xdi thấy và mặc định chụp, bảng không có quyền thì không thấy (#247). Code: `backend/src/service/sources/catalog.rs`
+(danh sách), `plan.rs` (trần), `copy.rs` (chép), `snapshot.rs` (nạp, quan hệ), `schedule.rs` (lịch).
+
+- **Danh sách bảng** (`GET .../sources/{id}/tables`): mọi bảng, view đọc được, kèm số dòng ước lượng và dung lượng theo
+  thống kê của Postgres (`pg_class.reltuples`, `pg_table_size`; null khi bảng chưa `ANALYZE` hay với view), comment
+  bảng, số cột, khóa ngoại ra (`references`) và vào (`referenced_by`) giữa các bảng đọc được, `is_referenced` khi bảng
+  khác trỏ tới nó (bảng danh mục: bỏ tick thì các bảng kia mất quan hệ), `over_row_limit` khi ước lượng quá
+  `SOURCE_MAX_ROWS`, và nguồn đang giữ bảng thế nào (`state`: `snapshotted` kèm `dataset_id`, `metadata_only` kèm
+  `reason`, hay null). Chỉ đọc catalog, không đọc dòng nào.
+- **Chụp** (`POST .../sources/{id}/snapshot`): không gửi `table`, `tables`, `dataset_id` thì chụp mọi bảng đọc được;
+  gửi `tables` là đúng các bảng được tick; một tên là chụp riêng bảng đó. Mọi bảng trong một giao dịch như mục dưới.
+- **Trần và bảng chỉ có metadata:** mỗi bảng đếm dòng thật (bảng mà ước lượng đã quá gấp đôi `SOURCE_MAX_ROWS` thì dùng
+  ước lượng, không đếm). Bảng quá `SOURCE_MAX_ROWS` không chép dòng nào. Các bảng còn lại xếp từ nhỏ tới lớn theo
+  dung lượng Postgres báo và lấy dần cho tới `SOURCE_SNAPSHOT_MAX_MB` (mặc định 2048), để khi quá trần thì bảng lớn
+  nhất bị để lại; view tính 0. Bảng bị để lại vẫn lưu cột, kiểu Postgres, khóa chính, comment bảng và cột (bảng
+  `source_metadata_tables`, migration 0018) và có trong `metadata_only` của response kèm lý do. Câu hỏi cần bảng đó
+  (câu SQL mô hình viết có tên bảng, hay cụm từ của câu hỏi có trong tên, mô tả bảng, tên, mô tả cột) mà không trả lời
+  được thì lời báo nêu đúng tên bảng, nói bảng chưa được chụp và lý do, thay cho lời "không có thông tin"
+  (`backend/src/service/ask/unsnapshotted.rs`). Chụp riêng bảng đó sau (cùng route, `tables` một tên); chụp được thì
+  bảng thành dataset và dòng metadata bị xóa. Bảng đã có dataset từ trước mà lần này quá trần thì dataset giữ phiên bản
+  cũ, không ghi metadata.
+- **Chụp lại cả nguồn** (`POST .../sources/{id}/resnapshot`): mọi bảng nguồn đang giữ (bảng đã thành dataset còn trong
+  workspace và bảng chỉ có metadata), một giao dịch, cùng các trần. Bảng không đổi không tạo phiên bản mới. Bảng tài
+  khoản không còn đọc được (đã xóa, mất quyền) bị bỏ qua và ghi trong `unreadable`, dataset của nó giữ phiên bản cũ.
+  `SOURCE_RESNAPSHOT_HOURS` (mặc định tắt) chạy đúng việc này cho mọi nguồn Postgres theo lịch trong backend, lần lượt
+  từng nguồn, nhân danh admin vào workspace sớm nhất; vòng đầu chạy sau một khoảng lịch, không chạy lúc khởi động.
+  Bỏ một bảng khỏi nguồn: xóa dataset của nó.
+
 ### Chụp nhiều bảng liên quan
 
 Database của tổ chức thường tách dữ liệu ra nhiều bảng: `order_items` (mỗi dòng một dòng hàng) trỏ tới `orders`,
-`products`; `orders` trỏ tới `customers`. Một lần chụp lấy một bảng cùng các bảng admin chọn kèm; mỗi bảng thành một
+`products`; `orders` trỏ tới `customers`. Mỗi bảng thành một
 dataset riêng, khóa ngoại giữa chúng ghi thành quan hệ giữa các dataset (bảng `dataset_relations`). Không nối thành một
 bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộng nhầm. Code: `backend/src/service/sources/relations.rs`
 (tìm quan hệ), `snapshot.rs` (chụp), `backend/src/engine/store/relations.rs` (lưu).
 
 - **Bảng liên quan** (`POST .../sources/{id}/relations`): đọc khóa ngoại trong `pg_catalog`, kể cả khóa nhiều cột,
   một bước quanh bảng đang chọn, theo cả hai chiều: bảng nó trỏ tới (`many_to_one`) và bảng trỏ vào nó (`one_to_many`).
-  Một bảng chụp kèm được khi tài khoản có quyền đọc nó và cột được trỏ tới là khóa chính hay một ràng buộc `UNIQUE`
-  (chỉ mục `UNIQUE` không kèm ràng buộc không tính); không thì có `reason`. Bảng xa hơn một bước thì chọn từ bảng đã
-  thêm.
+  Một bảng chụp kèm được khi tài khoản có quyền đọc nó và cột được trỏ tới là khóa duy nhất (khóa chính, ràng buộc
+  `UNIQUE` hay chỉ mục `UNIQUE` trên cột thường, không điều kiện; Postgres chỉ cho khóa ngoại trỏ tới cột như vậy); không
+  thì có `reason`. Route này còn cho giao diện cũ chọn bảng
+  theo nhóm; danh sách bảng ở mục trên đã có khóa ngoại của mọi bảng.
 - **Một ảnh chụp nhất quán:** mọi bảng đếm dòng và chép trong một giao dịch `REPEATABLE READ READ ONLY` trên một kết
   nối, nên các bảng cùng là ảnh của một thời điểm (MVCC của Postgres): không có dòng hàng trỏ tới đơn chưa có trong bản
   chụp `orders`.
 - **Một bảng nguồn, một dataset:** bảng đã chụp từ nguồn này (tra theo `sources.config.tables`) thì lần chụp sau thêm
   phiên bản vào đúng dataset đó. Bảng chiều dùng chung, ví dụ `orders` được cả `order_items` và `returns` trỏ tới, nên
   chỉ có một dataset dù chụp trong hai nhóm khác nhau. Bảng không đổi thì không tạo phiên bản mới (`created: false`).
-- **Quan hệ:** ghi khóa ngoại nối hai bảng trong cùng lần chụp, chỉ khi cột được trỏ tới là khóa chính hay `UNIQUE`.
+- **Quan hệ:** ghi mọi khóa ngoại khai báo ở database nguồn nối hai bảng đã chụp từ nguồn này, không giới hạn một bước
+  quanh bảng nào, khi ít nhất một đầu là bảng vừa chụp, và cột được trỏ tới là khóa duy nhất như trên. Guard chỉ nhận
+  `JOIN` theo các quan hệ này. Không đoán quan hệ từ tên cột.
   Mỗi quan hệ có dataset phía nhiều (giữ khóa ngoại) và cột của nó, dataset phía một và cột của nó, tên ràng buộc, và
   `cardinality` (`one_to_one` khi cột khóa ngoại cũng là khóa chính hay `UNIQUE`, còn lại `many_to_one`). Lần chụp sau
-  của cùng nhóm thay toàn bộ quan hệ giữa các bảng trong nhóm; quan hệ với dataset ngoài nhóm giữ nguyên. Xóa một
+  thay toàn bộ quan hệ giữa các bảng vừa chụp; quan hệ giữa hai bảng không có trong lần này giữ nguyên. Xóa một
   dataset thì quan hệ của nó mất theo. API trả quan hệ trong `relations` của mỗi dataset cho mọi thành viên.
 - **Chụp lại** (`dataset_id`): chụp lại dataset đó cùng mọi dataset cùng nguồn nối với nó qua quan hệ, đi hết các bước.
 - **Lỗi giữa chừng:** các bảng nạp lần lượt sau khi chép xong. Một bảng nạp lỗi thì các bảng nạp trước đó đã có phiên
@@ -234,8 +270,9 @@ vừa nạp thành phiên bản hiện hành (`current_version_id` của dataset
 Thiết lập lần đầu tạo xong workspace đầu tiên mà tới được database mẫu (`SAMPLE_DATABASE_URL`; compose trỏ vào dịch vụ
 `demo-db` của [data/postgres-demo](../data/postgres-demo/README.md) khi bật `--profile demo`, `make dev` trỏ vào
 `127.0.0.1:5440`) thì thêm nó làm nguồn
-Postgres và chụp các nhóm bảng ghi trong `SAMPLES_DIR/sample_database.json`, đúng như admin làm ở mục Nguồn database
-phía trên: 12 bảng thành 12 dataset kèm 11 quan hệ, cộng chỉ số mẫu của bảng có file
+Postgres và chụp mọi bảng tài khoản `analyst` đọc được, đúng như admin kết nối mà không bỏ tick bảng nào (mục Chụp mọi
+bảng đọc được): với `SOURCE_MAX_ROWS` mặc định, 12 bảng thành 12 dataset kèm 11 quan hệ, còn
+`edu.student_daily_clicks` (1,8 triệu dòng) chỉ có metadata; cộng chỉ số mẫu của bảng có file
 `<bảng>.metrics.json` (`backend/src/service/samples_db.rs`). Không có database mẫu, hay chụp lỗi, thì nạp `dataco.csv`
 trong `SAMPLES_DIR` thành dataset `DataCo` qua đường nạp file, kèm các chỉ số mẫu (`backend/src/service/samples.rs`).
 Tắt cả hai bằng `SEED_SAMPLE=false`. Chi tiết, nguồn và giấy phép: [data/README.md](../data/README.md).

@@ -89,6 +89,24 @@ pub(super) async fn start_with_snapshot_mode(
     max_rows: Option<u64>,
     snapshot_mode: Option<(crate::config::SnapshotMode, std::path::PathBuf)>,
 ) -> Option<Setup> {
+    start_configured(key, llm, move |c: &mut Config| {
+        if let Some(max_rows) = max_rows {
+            c.source_max_rows = max_rows;
+        }
+        if let Some((mode, extension)) = snapshot_mode {
+            c.source_snapshot_mode = mode;
+            c.source_postgres_extension = extension;
+        }
+    })
+    .await
+}
+
+/// Như start_with_llm, với một hàm đổi cấu hình bất kỳ (trần dòng, trần dung lượng, cách chép).
+pub(super) async fn start_configured(
+    key: Option<&str>,
+    llm: std::sync::Arc<dyn crate::engine::llm::LlmProvider>,
+    extra: impl FnOnce(&mut Config),
+) -> Option<Setup> {
     let db = fresh_database().await?;
     let url = crate::engine::store::test_support::database_url().unwrap();
     let (host, port, _, _) = url_parts(&url);
@@ -121,13 +139,7 @@ pub(super) async fn start_with_snapshot_mode(
         c.data_dir = data_dir;
         c.source_secret_key = Secret::new(key.unwrap_or_default());
         c.source_allowed_hosts = vec![allowed];
-        if let Some(max_rows) = max_rows {
-            c.source_max_rows = max_rows;
-        }
-        if let Some((mode, extension)) = snapshot_mode {
-            c.source_snapshot_mode = mode;
-            c.source_postgres_extension = extension;
-        }
+        extra(c);
     };
     let app = app_with_llm(db.store.clone(), Some(CODE), configure, llm);
     let setup = json!({"setup_code": CODE, "email": "lan@example.com", "password": PASSWORD,
