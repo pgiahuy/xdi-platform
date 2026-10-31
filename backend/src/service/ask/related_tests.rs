@@ -229,6 +229,7 @@ fn group_input<'a>(
         choices: &[],
         history: "",
         group: Some(group),
+        lessons: &[],
     }
 }
 

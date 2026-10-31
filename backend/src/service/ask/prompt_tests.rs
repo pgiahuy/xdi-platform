@@ -186,6 +186,7 @@ fn input<'a>(
         choices,
         history: "",
         group: None,
+        lessons: &[],
     }
 }
 
@@ -384,7 +385,7 @@ fn why_examples_go_to_the_form_prompt_only() {
     assert!(prompt.contains("Example SQL: SELECT 1"), "{prompt}");
     assert!(!prompt.contains("built_by_code"), "{prompt}");
     assert_eq!(
-        build_examples_detail(&pick_examples(&sql_input, false)).as_deref(),
+        build_examples_detail(&pick_examples(&sql_input, false), 0).as_deref(),
         Some("Prompt có 1 câu mẫu đã duyệt: \"Doanh thu theo tháng\"")
     );
 
@@ -399,7 +400,11 @@ fn why_examples_go_to_the_form_prompt_only() {
         "{prompt}"
     );
     assert!(!prompt.contains("SELECT 1"), "{prompt}");
-    assert_eq!(build_examples_detail(&[]), None);
+    assert_eq!(build_examples_detail(&[], 0), None);
+    assert_eq!(
+        build_examples_detail(&[], 2).as_deref(),
+        Some("Prompt có 2 bài học đã duyệt")
+    );
 }
 
 /// Luật cho từng loại câu: câu không nêu thời gian, cụm khớp hai cột, câu không có cách hiểu mặc định.

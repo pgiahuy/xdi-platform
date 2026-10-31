@@ -10,6 +10,7 @@ Chỉ số chỉ có tên và mô tả, không có công thức: mô hình ghi t
 use serde_json::json;
 
 use crate::engine::prompts::{self, fill};
+use crate::service::ask::lessons::build_lessons_section;
 use crate::service::ask::prompt::{
     build_choices_section, build_columns_section, build_domain_section,
     build_form_examples_section, build_hints_section, build_metrics_section,
@@ -28,6 +29,7 @@ pub fn build_why_prompt(input: &PromptInput) -> String {
             build_metrics_section(input.metrics, false),
             build_domain_section(input.domain),
             build_form_examples_section(&pick_examples(input, true)),
+            build_lessons_section(input.lessons),
             input.history.to_string(),
             format!("Question: {}", input.question),
         ])

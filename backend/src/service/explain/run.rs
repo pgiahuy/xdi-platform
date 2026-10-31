@@ -33,6 +33,7 @@ use crate::service::ask::contract::{
     AskStatus, AskStep, Choice, ChoiceOption, Explanation, ResultTable, StepName, Warning,
     WarningCode,
 };
+use crate::service::ask::failures::{FailedStep, StepFailure};
 use crate::service::ask::narrate::narrate;
 use crate::service::ask::prompt::{build_examples_detail, pick_examples, PromptInput};
 use crate::service::ask::reply::{build_sql_reply_schema, ChoiceKind, Clarify, Term};
@@ -107,6 +108,9 @@ pub struct WhyOutcome {
     pub clarifications: Vec<Choice>,
     pub warnings: Vec<Warning>,
     pub steps: Vec<AskStep>,
+    /// Form sai, lời diễn giải bị bộ kiểm chặn, và lỗi của đường dự phòng câu thường, theo thứ tự xảy ra; ask/why.rs ghi
+    /// vào nhật ký lỗi (#228).
+    pub failures: Vec<StepFailure>,
 }
 
 /// Một lượt đọc và chạy form.
@@ -118,6 +122,20 @@ enum Round {
 
 /// Err như run_with_repair: lỗi máy chủ, và lỗi của mô hình khi chưa có kết quả nào (502, 503).
 pub async fn run_why(llm: &dyn LlmProvider, input: WhyInput<'_>) -> Result<WhyOutcome, AppError> {
+    // Như run_with_repair (ask/run.rs): các vòng form ghi lỗi vào failures, lỗi của bước sau (narrate, đường dự phòng)
+    // nằm sẵn trong outcome.failures; ghép lại theo thứ tự xảy ra.
+    let mut failures = Vec::new();
+    let mut outcome = run_why_rounds(llm, input, &mut failures).await?;
+    failures.append(&mut outcome.failures);
+    outcome.failures = failures;
+    Ok(outcome)
+}
+
+async fn run_why_rounds(
+    llm: &dyn LlmProvider,
+    input: WhyInput<'_>,
+    failures: &mut Vec<StepFailure>,
+) -> Result<WhyOutcome, AppError> {
     if let Some(outcome) = build_ambiguous_outcome(&input) {
         return Ok(outcome);
     }
@@ -125,7 +143,10 @@ pub async fn run_why(llm: &dyn LlmProvider, input: WhyInput<'_>) -> Result<WhyOu
     let prompt = build_why_prompt(&input.prompt);
     let started = Instant::now();
     let reply = complete(llm, &input, LlmTask::Why, &prompt).await?;
-    let examples_used = build_examples_detail(&pick_examples(&input.prompt, true));
+    let examples_used = build_examples_detail(
+        &pick_examples(&input.prompt, true),
+        input.prompt.lessons.len(),
+    );
     steps.push(build_step(
         StepName::Llm,
         started,
@@ -137,6 +158,7 @@ pub async fn run_why(llm: &dyn LlmProvider, input: WhyInput<'_>) -> Result<WhyOu
         Round::Invalid(errors) => errors,
     };
     log_errors(&errors, "why form has errors, asking the model to fix it");
+    failures.push(build_form_failure(&errors, &reply));
     let started = Instant::now();
     let repair_prompt = build_why_repair_prompt(&prompt, &reply, &errors);
     let reply = complete(llm, &input, LlmTask::Why, &repair_prompt).await?;
@@ -149,6 +171,7 @@ pub async fn run_why(llm: &dyn LlmProvider, input: WhyInput<'_>) -> Result<WhyOu
                 &errors,
                 "why form still has errors, answering as a plain question",
             );
+            failures.push(build_form_failure(&errors, &reply));
             run_plain(llm, &input, steps).await
         }
     }
@@ -171,6 +194,15 @@ pub(super) async fn complete(
         json_schema: Some(json_schema),
     })
     .await
+}
+
+/// Dòng nhật ký cho một lần form sai: lỗi từng trường, và nguyên câu trả lời của mô hình.
+fn build_form_failure(errors: &[FieldError], reply: &str) -> StepFailure {
+    let fields: Vec<String> = errors
+        .iter()
+        .map(|e| format!("{}: {}", e.field, e.message))
+        .collect();
+    StepFailure::new(FailedStep::WhyForm, &fields.join("; "), Some(reply))
 }
 
 // Chỉ ghi trường và lời tiếng Anh của code, không ghi câu hỏi (chữ người dùng gõ).
@@ -357,8 +389,10 @@ async fn run_plan(
         input.prompt.question,
         &explanation,
         input.narrate_timeout,
+        input.prompt.lessons,
     )
     .await;
+    outcome.failures.extend(narrated.failure);
     explanation.summary = narrated.summary;
     explanation.summary_by_model = narrated.summary_by_model;
     steps.push(narrated.step);
@@ -454,6 +488,7 @@ pub(super) fn build_empty(status: AskStatus) -> WhyOutcome {
         clarifications: Vec::new(),
         warnings: Vec::new(),
         steps: Vec::new(),
+        failures: Vec::new(),
     }
 }
 

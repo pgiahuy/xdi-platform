@@ -2640,6 +2640,58 @@
         }
       }
     },
+    "/workspaces/{ws}/error-log": {
+      "get": {
+        "tags": [
+          "lessons"
+        ],
+        "summary": "Where the model went wrong, newest first (admin only)",
+        "description": "Written automatically: guard refusals, SQL that failed to run, blocked double counting over a join, invalid why forms, text rejected by the number or direction check, and answers rated `bad`. At most 200 rows.",
+        "operationId": "listErrorLog",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorLogResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/examples": {
       "get": {
         "tags": [
@@ -2778,6 +2830,241 @@
           },
           "4XX": {
             "description": "401; 403 not admin; 404 not a member, or no answered question rated good with this id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/lessons": {
+      "get": {
+        "tags": [
+          "lessons"
+        ],
+        "summary": "Lessons of the workspace, newest first (admin only)",
+        "operationId": "listLessons",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LessonsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "lessons"
+        ],
+        "summary": "Write a lesson as a draft (admin only)",
+        "description": "A draft is not used. Enable it to approve it; then it goes into the prompts of related questions.",
+        "operationId": "createLesson",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LessonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created as a draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 empty or over 300 characters, or a dataset or error log row not in this workspace; 401; 403 not admin; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/lessons/{lesson_id}": {
+      "delete": {
+        "tags": [
+          "lessons"
+        ],
+        "summary": "Delete a lesson (admin only)",
+        "operationId": "deleteLesson",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "description": "Lesson id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member or no such lesson",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "lessons"
+        ],
+        "summary": "Enable (approve) or disable a lesson (admin only)",
+        "description": "Enabling records who approved it and when. At most 3 enabled lessons related to a question go into its prompts: same dataset or the whole workspace, sharing a word with the question or naming a column it matched.",
+        "operationId": "setLessonState",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lesson_id",
+            "in": "path",
+            "description": "Lesson id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LessonStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 403 not admin; 404 not a member or no such lesson",
             "content": {
               "application/json": {
                 "schema": {
@@ -4756,6 +5043,95 @@
           "unavailable"
         ]
       },
+      "ErrorEntry": {
+        "type": "object",
+        "description": "One row of the error log.",
+        "required": [
+          "id",
+          "dataset_id",
+          "dataset_name",
+          "query_id",
+          "question",
+          "step",
+          "error",
+          "model_output",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dataset_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "dataset_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "model_output": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the model returned at that step: SQL, the form as JSON, or the text it wrote."
+          },
+          "query_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The recorded question; null when it was not recorded (waiting for a choice) or was deleted."
+          },
+          "question": {
+            "type": "string"
+          },
+          "step": {
+            "$ref": "#/components/schemas/ErrorStep"
+          }
+        }
+      },
+      "ErrorLogResponse": {
+        "type": "object",
+        "description": "Newest rows first.",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErrorEntry"
+            }
+          }
+        }
+      },
+      "ErrorStep": {
+        "type": "string",
+        "description": "The step where the model went wrong.",
+        "enum": [
+          "guard",
+          "run",
+          "fanout",
+          "why_form",
+          "narrate",
+          "feedback"
+        ]
+      },
       "EvalCaseCandidate": {
         "type": "object",
         "description": "One approved example as a candidate case for the evaluation set, in the format of the files in `eval/` (for\nexample `eval/dataco.json`). Review each case before adding it: check the SQL and set `ordered`.",
@@ -5126,6 +5502,137 @@
           "status": {
             "type": "string",
             "description": "Always `ok` when the server answers."
+          }
+        }
+      },
+      "Lesson": {
+        "type": "object",
+        "description": "A short lesson for the model, written by an admin.",
+        "required": [
+          "id",
+          "dataset_id",
+          "dataset_name",
+          "text",
+          "enabled",
+          "error_id",
+          "created_by",
+          "created_at",
+          "approved_by",
+          "approved_at"
+        ],
+        "properties": {
+          "approved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "approved_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who last enabled it; null for a draft never enabled."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dataset_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Null for a lesson of the whole workspace."
+          },
+          "dataset_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Approved and in use: only these lessons go into prompts."
+          },
+          "error_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The error log row it was written from."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "LessonRequest": {
+        "type": "object",
+        "description": "A new lesson, saved as a draft that is not used until enabled.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "dataset_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Leave out for a lesson of the whole workspace."
+          },
+          "error_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The error log row the lesson comes from, if any."
+          },
+          "text": {
+            "type": "string",
+            "description": "One or two short sentences, at most 300 characters."
+          }
+        }
+      },
+      "LessonStateRequest": {
+        "type": "object",
+        "description": "Turn a lesson on (approve it, recording who and when) or off.",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "LessonsResponse": {
+        "type": "object",
+        "description": "Newest first.",
+        "required": [
+          "lessons"
+        ],
+        "properties": {
+          "lessons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Lesson"
+            }
           }
         }
       },

@@ -24,6 +24,7 @@ use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::{build_base_response, build_value_warnings, record_query, Recorded};
 use crate::service::explain::run::{run_why, WhyInput, WhyOutcome};
+use crate::service::lessons::{record_failures, FailedQuestion};
 use crate::{error::AppError, state::AppState};
 
 /// Những gì ask/mod.rs đã đọc và dựng trước khi rẽ nhánh.
@@ -85,7 +86,15 @@ pub(super) async fn ask_why(
     }
     warnings.append(&mut outcome.warnings);
 
+    let failures = std::mem::take(&mut outcome.failures);
     if outcome.status == AskStatus::NeedsChoice {
+        // Câu chờ chọn cách hiểu không ghi lịch sử nên dòng nhật ký không có query_id.
+        let asked = FailedQuestion {
+            dataset_id: dataset.id,
+            question,
+            query_id: None,
+        };
+        record_failures(state, member, &asked, &failures).await;
         return Ok(AskResponse {
             message: outcome.message,
             choices: used,
@@ -120,6 +129,12 @@ pub(super) async fn ask_why(
     };
     let target = (dataset, version);
     let query_id = record_query(state, member, target, question, recorded, &mut steps).await?;
+    let asked = FailedQuestion {
+        dataset_id: dataset.id,
+        question,
+        query_id: Some(query_id),
+    };
+    record_failures(state, member, &asked, &failures).await;
     Ok(AskResponse {
         message: outcome.message,
         query_id: Some(query_id),

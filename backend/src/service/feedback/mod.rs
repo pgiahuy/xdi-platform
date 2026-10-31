@@ -20,6 +20,7 @@ use crate::service::feedback::contract::{
     EvalCaseCandidate, ExampleCandidate, ExampleCandidatesResponse, FeedbackRequest, QueryFeedback,
     Rating,
 };
+use crate::service::lessons::record_bad_feedback;
 use crate::state::AppState;
 
 /// Ghi chú dài nhất của "Chưa đạt", đếm theo ký tự: đủ một hai câu, không thành chỗ dán dữ liệu.
@@ -50,6 +51,10 @@ pub async fn rate(
         .set_feedback(&member.workspace, id, member.user.id, &new)
         .await?
         .ok_or_else(answer_not_found)?;
+    // "Chưa đạt" là một lỗi người hỏi thấy mà bộ kiểm không thấy: ghi vào nhật ký lỗi (#228) để admin viết bài học.
+    if request.rating == Rating::Bad {
+        record_bad_feedback(state, member, id, new.reason, new.note).await;
+    }
     QueryFeedback::from_stored(&stored)
         .ok_or_else(|| AppError::Internal("unknown feedback value in queries".to_string()))
 }

@@ -83,6 +83,12 @@ pub const SUMMARY: PromptFile = PromptFile {
     text: include_str!("../../prompts/summary.txt"),
 };
 
+/// Khối bài học đã duyệt (#228), chung cho prompt SQL, prompt form và hai prompt viết lời (service/ask/lessons.rs).
+pub const LESSONS: PromptFile = PromptFile {
+    name: "lessons.txt",
+    text: include_str!("../../prompts/lessons.txt"),
+};
+
 /// Prompt phân loại câu hỏi: câu thường hay câu hỏi tìm nguyên nhân (service/ask/classify.rs).
 pub const CLASSIFY_QUESTION: PromptFile = PromptFile {
     name: "classify_question.txt",

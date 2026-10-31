@@ -27,6 +27,7 @@ use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::query::{run_query, QueryError, QueryOutput};
 use crate::error::AppError;
 use crate::service::ask::contract::{AskStatus, AskStep, ResultTable, StepName};
+use crate::service::ask::failures::{FailedStep, StepFailure};
 use crate::service::ask::fanout::{
     build_hint, build_refused_message, build_step_detail, find_double_count, JoinLink,
 };
@@ -98,6 +99,9 @@ pub struct RunOutcome {
     pub unanswerable: Option<Unanswerable>,
     /// Các bước theo đúng thứ tự đã chạy, ví dụ guard, run (lỗi), repair, guard, run.
     pub steps: Vec<AskStep>,
+    /// Lần guard từ chối, câu cộng lặp bị chặn, lần DuckDB báo lỗi, kèm câu SQL của mô hình, theo thứ tự xảy ra; ask/mod.rs
+    /// ghi vào nhật ký lỗi (#228).
+    pub failures: Vec<StepFailure>,
 }
 
 /// Kết quả một lượt guard rồi run của một câu.
@@ -127,6 +131,19 @@ pub async fn run_with_repair(
     llm: &dyn LlmProvider,
     input: RunInput<'_>,
 ) -> Result<RunOutcome, AppError> {
+    // Các lượt guard, run ghi lỗi vào failures qua tham chiếu &mut; mọi nhánh return của run_rounds dựng RunOutcome với
+    // failures rỗng, rồi ở đây mới gắn danh sách đã gom, để không nhánh nào quên.
+    let mut failures = Vec::new();
+    let mut outcome = run_rounds(llm, input, &mut failures).await?;
+    outcome.failures = failures;
+    Ok(outcome)
+}
+
+async fn run_rounds(
+    llm: &dyn LlmProvider,
+    input: RunInput<'_>,
+    failures: &mut Vec<StepFailure>,
+) -> Result<RunOutcome, AppError> {
     let mut steps = Vec::new();
     // first: câu trả lời đầu khi đọc được. first_shown: bản shown của câu SQL đầu khi nó đã qua guard và chạy lỗi;
     // None khi guard từ chối hay câu trả lời không đọc được.
@@ -138,13 +155,15 @@ pub async fn run_with_repair(
             terms,
             unanswerable,
         }) => return Ok(build_unanswerable_outcome(terms, unanswerable, steps)),
-        Ok(ModelAnswer::Sql(answer)) => match attempt(&input, &answer.sql, &mut steps).await? {
-            Attempt::Refused { reason } | Attempt::DoubleCounted { reason, .. } => {
-                (Some(answer), reason, None)
+        Ok(ModelAnswer::Sql(answer)) => {
+            match attempt(&input, &answer.sql, &mut steps, failures).await? {
+                Attempt::Refused { reason } | Attempt::DoubleCounted { reason, .. } => {
+                    (Some(answer), reason, None)
+                }
+                Attempt::RunFailed { shown, error } => (Some(answer), error, Some(shown)),
+                other => return Ok(build_outcome(other, answer, steps)),
             }
-            Attempt::RunFailed { shown, error } => (Some(answer), error, Some(shown)),
-            other => return Ok(build_outcome(other, answer, steps)),
-        },
+        }
         Err(unreadable) => {
             tracing::warn!(reason = %unreadable.reason, "model reply is unreadable, asking the model to fix it");
             (None, unreadable.reason, None)
@@ -211,7 +230,7 @@ pub async fn run_with_repair(
         (Some(_), None) => "Mô hình sửa SQL theo lý do guard từ chối",
     };
     steps.push(build_step(StepName::Repair, started, true, Some(detail)));
-    let second = attempt(&input, &fixed.sql, &mut steps).await?;
+    let second = attempt(&input, &fixed.sql, &mut steps, failures).await?;
     Ok(build_outcome(second, fixed, steps))
 }
 
@@ -220,6 +239,7 @@ async fn attempt(
     input: &RunInput<'_>,
     sql: &str,
     steps: &mut Vec<AskStep>,
+    failures: &mut Vec<StepFailure>,
 ) -> Result<Attempt, AppError> {
     let started = Instant::now();
     let reason = match build_guarded_sql(sql, input.tables, input.max_rows) {
@@ -228,6 +248,7 @@ async fn attempt(
             if let Some(found) = find_double_count(sql, input.tables, input.links) {
                 let detail = build_step_detail(&found);
                 steps.push(build_step(StepName::Guard, started, false, Some(&detail)));
+                failures.push(StepFailure::new(FailedStep::Fanout, &detail, Some(sql)));
                 return Ok(Attempt::DoubleCounted {
                     reason: build_hint(&found),
                     message: build_refused_message(&found),
@@ -235,7 +256,11 @@ async fn attempt(
             }
             let note = guarded.limit_note.as_deref();
             steps.push(build_step(StepName::Guard, started, true, note));
-            return run_guarded(input, guarded, steps).await;
+            let attempt = run_guarded(input, guarded, steps).await?;
+            if let Attempt::RunFailed { error, .. } = &attempt {
+                failures.push(StepFailure::new(FailedStep::Run, error, Some(sql)));
+            }
+            return Ok(attempt);
         }
         Err(GuardError::Internal(e)) => return Err(e),
         Err(
@@ -245,6 +270,7 @@ async fn attempt(
         ) => reason,
     };
     steps.push(build_step(StepName::Guard, started, false, Some(&reason)));
+    failures.push(StepFailure::new(FailedStep::Guard, &reason, Some(sql)));
     Ok(Attempt::Refused { reason })
 }
 
@@ -377,6 +403,7 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
                 clarify: None,
                 unanswerable: None,
                 steps,
+                failures: Vec::new(),
             };
         }
         // Đây luôn là câu của vòng sửa: guard từ chối câu đầu thì câu hỏi vào vòng sửa. Lý do của guard viết cho mô
@@ -409,6 +436,7 @@ fn build_outcome(attempt: Attempt, answer: SqlAnswer, steps: Vec<AskStep>) -> Ru
         clarify: None,
         unanswerable: None,
         steps,
+        failures: Vec::new(),
     }
 }
 
@@ -438,6 +466,7 @@ fn build_failed(
         clarify: None,
         unanswerable: None,
         steps,
+        failures: Vec::new(),
     }
 }
 
@@ -458,6 +487,7 @@ fn build_clarify_outcome(terms: Vec<Term>, clarify: Clarify) -> RunOutcome {
         clarify: Some(clarify),
         unanswerable: None,
         steps: Vec::new(),
+        failures: Vec::new(),
     }
 }
 
@@ -481,6 +511,7 @@ fn build_unanswerable_outcome(
         clarify: None,
         unanswerable: Some(unanswerable),
         steps,
+        failures: Vec::new(),
     }
 }
 

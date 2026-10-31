@@ -15,10 +15,10 @@ Câu hỏi đọc được bảng liên quan (#213, ask/related.rs, ask/group_pr
 đang chọn trước, theo sau là danh sách quan hệ và luật nối bảng (backend/prompts/sql_joins.txt); chỉ số ghi kèm tên
 bảng. Câu một bảng giữ nguyên chữ như trước.
 
-Thứ tự: luật, luật của guard, cột, gợi ý, lựa chọn đã có, chỉ số, khái niệm ngành, ví dụ, các lượt hỏi trước của hội
-thoại, câu hỏi cuối cùng, để mô hình đọc câu hỏi khi đã có đủ ngữ cảnh. Luật của guard sinh từ chính guard
-(engine/guard/prompt_rules.rs), để mô hình viết được câu qua guard ngay lần đầu; guard vẫn kiểm lại mọi câu. Chỉ số
-chưa xác nhận luôn ghi rõ là bản nháp. */
+Thứ tự: luật, luật của guard, cột, gợi ý, lựa chọn đã có, chỉ số, khái niệm ngành, ví dụ, bài học đã duyệt (#228),
+các lượt hỏi trước của hội thoại, câu hỏi cuối cùng, để mô hình đọc câu hỏi khi đã có đủ ngữ cảnh. Luật của guard
+sinh từ chính guard (engine/guard/prompt_rules.rs), để mô hình viết được câu qua guard ngay lần đầu; guard vẫn kiểm lại
+mọi câu. Chỉ số chưa xác nhận luôn ghi rõ là bản nháp. */
 
 use std::collections::HashSet;
 
@@ -30,6 +30,7 @@ use crate::service::ask::choices::COLUMN_CHOICE_PREFIX;
 use crate::service::ask::context::{is_always_sent, AskContext, ColumnProfile};
 use crate::service::ask::contract::ChosenOption;
 use crate::service::ask::group_prompt::{GroupPrompt, JoinLine};
+use crate::service::ask::lessons::build_lessons_section;
 use crate::service::ask::phrases::build_phrases;
 use crate::service::ask::values::ValueEntry;
 
@@ -61,6 +62,8 @@ pub struct PromptInput<'a> {
     pub history: &'a str,
     /// Các bảng liên quan và quan hệ (ask/related.rs); None khi câu chỉ đọc bảng đang chọn, luôn None với prompt form.
     pub group: Option<&'a GroupPrompt>,
+    /// Bài học đã duyệt liên quan tới câu hỏi (ask/lessons.rs, #228); rỗng khi không có bài nào.
+    pub lessons: &'a [String],
 }
 
 /// Mức chi tiết của danh sách cột; prompt quá dài thì hạ dần theo thứ tự khai báo.
@@ -90,6 +93,7 @@ pub fn build_sql_prompt(input: &PromptInput) -> String {
             build_group_metrics(input),
             build_domain_section(input.domain),
             build_examples_section(&pick_examples(input, false)),
+            build_lessons_section(input.lessons),
             input.history.to_string(),
             format!("Question: {}", input.question),
         ])
@@ -446,21 +450,28 @@ pub(crate) fn pick_examples<'a>(input: &PromptInput<'a>, why: bool) -> Vec<&'a P
         .collect()
 }
 
-/// Chi tiết của bước llm khi prompt có câu mẫu: người xem tab Các bước biết câu trả lời đã dựa vào câu mẫu đã duyệt
-/// nào. None khi không có câu nào.
-pub(crate) fn build_examples_detail(picked: &[&PromptExample]) -> Option<String> {
-    if picked.is_empty() {
+/// Chi tiết của bước llm khi prompt có câu mẫu hay bài học: người xem tab Các bước biết câu trả lời đã dựa vào câu
+/// mẫu đã duyệt nào và mấy bài học. None khi không có gì.
+pub(crate) fn build_examples_detail(picked: &[&PromptExample], lessons: usize) -> Option<String> {
+    let mut parts = Vec::new();
+    if !picked.is_empty() {
+        let questions: Vec<String> = picked
+            .iter()
+            .map(|e| format!("\"{}\"", e.question))
+            .collect();
+        parts.push(format!(
+            "Prompt có {} câu mẫu đã duyệt: {}",
+            picked.len(),
+            questions.join("; ")
+        ));
+    }
+    if lessons > 0 {
+        parts.push(format!("Prompt có {lessons} bài học đã duyệt"));
+    }
+    if parts.is_empty() {
         return None;
     }
-    let questions: Vec<String> = picked
-        .iter()
-        .map(|e| format!("\"{}\"", e.question))
-        .collect();
-    Some(format!(
-        "Prompt có {} câu mẫu đã duyệt: {}",
-        picked.len(),
-        questions.join("; ")
-    ))
+    Some(parts.join(". "))
 }
 
 fn build_examples_section(picked: &[&PromptExample]) -> String {
