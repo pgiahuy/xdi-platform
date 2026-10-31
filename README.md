@@ -3,20 +3,17 @@
 Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên: hỏi bằng tiếng Việt, nhận câu trả lời kèm lời giải thích và minh
 chứng cho từng con số.
 
-Kết nối database Postgres của tổ chức, chụp mọi bảng tài khoản đọc được (bỏ tick bảng không cần) kèm quan hệ khóa
-ngoại, rồi gõ câu hỏi; dữ liệu chưa nằm trong database thì nạp file CSV, Parquet hoặc Excel. Hệ thống viết SQL (nối
-nhiều bảng khi cần), kiểm SQL bằng guard, chạy trên DuckDB và trả về bảng, biểu đồ cùng câu SQL đã chạy. Với câu hỏi tìm nguyên nhân, như vì sao
-doanh thu tháng này giảm hay vì sao Europe cao hơn LATAM, hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một
-số để xem các dòng dữ liệu đứng sau nó.
+Kết nối database Postgres của tổ chức (hay nạp file CSV, Parquet, Excel) rồi gõ câu hỏi. Hệ thống viết SQL, nối nhiều
+bảng theo khóa ngoại khi cần, kiểm SQL bằng guard, chạy trên DuckDB và trả bảng, biểu đồ cùng câu SQL đã chạy. Với câu
+hỏi nguyên nhân, như vì sao doanh thu tháng này giảm, hệ thống tính phần chênh lệch của từng nhóm; bấm vào một số để
+xem các dòng nguồn đứng sau nó.
 
-Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, phân loại câu hỏi, viết SQL, điền
-form cho câu hỏi tìm nguyên nhân và viết lời. Nó nhận metadata của mọi cột (tên, kiểu, mô tả), danh sách giá trị của
-cột phân loại không đánh dấu nhạy cảm (người bị lọc dòng theo vai dữ liệu thì không), và các ý do code tính (con số tổng
-hợp kèm tên nhóm); không nhận dòng kết quả nào, trừ ô của kết quả chỉ một dòng khi mọi ô là số tổng hợp hay giá trị
-của cột phân loại không nhạy cảm, và không nhận nội dung file. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
+Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ nhận metadata của bảng và cột, danh sách giá trị của cột phân
+loại không nhạy cảm và các con số code đã tính; nó không nhận nội dung file hay bảng. Những gì gửi cho mô hình, kể cả
+các ngoại lệ: [docs/PRIVACY.md](docs/PRIVACY.md).
 
-Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
-Tài liệu: https://pgiahuy.github.io/xdi-platform/
+Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0. Tài liệu:
+https://pgiahuy.github.io/xdi-platform/
 
 ![Một câu hỏi đi qua xdi-platform: hàng trên đi từ giao diện qua dựng ngữ cảnh, mô hình, guard SQL tới DuckDB, hàng dưới quay về qua phần giải thích, kiểm số, ghi lịch sử; 16 bước](docs/images/luong-cau-hoi.png)
 
@@ -32,87 +29,53 @@ docker compose up -d --build
 docker compose logs backend | grep setup_code
 ```
 
-Mở http://localhost:8000, nhập mã thiết lập vừa in để tạo tài khoản quản trị. Workspace đầu tiên có sẵn dataset mẫu
-DataCo (1500 dòng, từ `data/samples/dataco.csv`). Mô hình mặc định là `mock`: không cần khóa, chỉ trả lời các câu mẫu,
-ví dụ "Doanh thu theo thị trường". Kết nối database của bạn ở trang **Dữ liệu**, khung **Kết nối database**. Hỏi câu tự
-do thì đặt `LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hoặc `ollama`) trong `.env`, rồi chạy lại `docker compose up -d`.
+Mở http://localhost:8000 và nhập mã thiết lập vừa in để tạo tài khoản quản trị. Workspace đầu tiên có dataset mẫu
+DataCo (1500 dòng). Mô hình mặc định `mock` không cần khóa và chỉ trả lời các câu mẫu, ví dụ "Doanh thu theo thị
+trường". Hỏi câu tự do: đặt `LLM_PROVIDER=gemini` và `GEMINI_API_KEY` (hay `ollama`) trong `.env`, rồi chạy lại
+`docker compose up -d`.
 
-Thử luồng database với database mẫu nhiều bảng (hai database `sales_demo` với DataCo và `edu_demo` với OULAD, đầy đủ,
-13 bảng có khóa ngoại, [data/postgres-demo](data/postgres-demo/README.md)): tải và nạp một lần (`sh data/download.sh
-dataco`, `sh data/download.sh oulad`, `sh data/postgres-demo/load.sh`, rồi gỡ container chạy riêng đó, xem README ở
-đó), sau đó chạy `docker compose --profile demo up -d --build` trước lần thiết lập đầu. Thiết lập lần đầu thêm hai
-database này làm hai nguồn và chụp 13 bảng kèm quan hệ thành dataset; câu mẫu của `mock` trên đó có "Tỷ lệ bỏ học theo môn học" trên `students` và
-"Doanh thu theo phân khúc khách hàng" trên `order_items` (nối `orders`, `customers`).
+Thử với database mẫu nhiều bảng `sales_demo` (DataCo) và `edu_demo` (OULAD): nạp một lần theo
+[data/postgres-demo](data/postgres-demo/README.md), rồi chạy `docker compose --profile demo up -d --build` trước lần
+thiết lập đầu. Thiết lập lần đầu thêm hai database này thành hai dataset và chụp mọi bảng.
 
-Build lần đầu biên dịch Rust và DuckDB (đo trên máy 16 nhân: 8 phút) và cần khoảng 1 GiB RAM trống cho mỗi nhân CPU; máy
-ít RAM thì đặt `CARGO_BUILD_JOBS`. Hướng dẫn đầy đủ (build từ nguồn, đưa lên Internet, sao lưu, lỗi hay gặp, dùng lần
-đầu): [docs/INSTALL.md](docs/INSTALL.md).
-
-## Dữ liệu dùng trong repo
-
-Bốn bộ, đều giấy phép CC BY 4.0: ba bộ bán hàng và chuỗi cung ứng, một bộ giáo dục. Chỉ bộ mẫu nằm trong repo; các
-bộ đầy đủ tải bằng `data/download.sh` (kiểm SHA-256) vào `data/downloads/`, git bỏ qua thư mục này.
-
-| Bộ | Lấy ở đâu | Dùng cho |
-|---|---|---|
-| DataCo mẫu, 1500 dòng | Có sẵn: `data/samples/dataco.csv`, kèm chỉ số mẫu `dataco.metrics.json` | Dataset nạp sẵn khi thiết lập lần đầu không tới được database mẫu, câu mẫu của `mock`, bộ đánh giá `make eval` trên CI |
-| DataCo Smart Supply Chain đầy đủ, khoảng 96 MB CSV | `sh data/download.sh dataco` | Thử trên dữ liệu lớn; nạp với tên `DataCo` thì câu mẫu của `mock` vẫn chạy (mỗi file là một dataset riêng, bảng vẫn tên `dataco`) |
-| Online Retail II, khoảng 46 MB Excel | `sh data/download.sh retail` | Thử file Excel nhiều sheet (bản đầy đủ chưa thử nạp, giới hạn Excel ở [DATA.md](docs/DATA.md)); chưa có câu mẫu cho `mock`, cần Gemini hoặc Ollama |
-| OULAD (Open University Learning Analytics), 7 bảng CSV, khoảng 464 MB | `sh data/download.sh oulad` | Dữ liệu giáo dục: nạp `studentInfo.csv` (32 593 dòng, mỗi dòng một sinh viên trong một học phần) để hỏi theo kết quả học tập; cần Gemini hoặc Ollama |
-
-DataCo từ Mendeley Data (Constante, Silva, Pereira, 2019); Online Retail II (Chen, 2019) và OULAD (Kuzilek, Hlosta,
-Zdrahal, 2015) từ UCI Machine Learning Repository. Đường dẫn nguồn, ghi công và cách nạp:
-[data/README.md](data/README.md). Bản đầy đủ của DataCo và OULAD tách thành nhiều bảng trong database mẫu duy nhất của
-repo: [data/postgres-demo](data/postgres-demo/README.md).
+Cài đặt đầy đủ: [docs/INSTALL.md](docs/INSTALL.md). Dùng lần đầu: [docs/USAGE.md](docs/USAGE.md).
 
 ## Đã có
 
-- **Tài khoản và workspace:** mỗi người nhiều workspace; vai `admin` (nạp, xóa dữ liệu, quản lý thành viên) và
-  `member` (xem, hỏi); quản trị hệ thống quản lý tài khoản.
-- **Kết nối database:** thêm nguồn Postgres (thông tin kết nối mã hóa, tài khoản chỉ đọc, TLS với `require` hay
-  `verify-full`), chụp mọi bảng đọc được, tick sẵn, admin bỏ tick; bảng quá trần chỉ lưu cấu trúc; mỗi database là
-  một dataset chứa các bảng đã chụp, có ghi quan hệ; câu hỏi chọn dataset và nối các bảng đó, có chặn cộng lặp khi
-  nối. Nạp file là lựa chọn phụ: CSV (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet. Mỗi lần chụp hay nạp là một phiên bản. Hồ sơ cột lập lúc
-  nạp; mô hình thêm mô tả cột, bí danh và câu gợi ý, gồm cả câu hỏi tìm nguyên nhân.
-- **Hỏi theo cuộc trò chuyện:** câu sau hiểu theo các câu trước. Câu hỏi qua guard (một câu `SELECT` chỉ đọc, trên
-  bảng, cột, hàm được phép, có trần số dòng) rồi chạy trên DuckDB; lỗi thì mô hình sửa một lần. Kết quả có bảng, biểu
-  đồ, tải CSV, thẻ "Hệ thống đã hiểu là" và cảnh báo khi kết quả đáng ngờ.
-- **Câu hỏi tìm nguyên nhân** (vì sao một số tăng, giảm hay khác nhau giữa hai nhóm): mô hình điền form (đo gì, hai kỳ
-  hay hai nhóm nào), code kiểm form và tự dựng mọi SQL, tính phần chênh lệch của từng nhóm (cộng lại bằng đúng chênh
-  lệch). Code tính các nhận định, mô hình viết insight (câu mở đầu và các nguyên nhân chính) kèm khai từng số và nhóm
-  nó dùng; code so mỗi khai báo với đúng ô của bảng đã tính, rồi một lần gọi mô hình riêng so nghĩa của lời với các
-  khai báo. Sai hay có chỗ đọc được nhiều nghĩa thì mô hình viết lại một lần, kèm các lỗi đó; vẫn sai thì dùng câu do
-  code viết, còn chỗ chưa rõ mà không chắc sai thì giữ insight, kèm cảnh báo.
-- **Vai dữ liệu:** admin tạo vai, đặt luật lọc dòng (bảng, cột, giá trị) ở màn **Vai dữ liệu** và gán vai cho thành
-  viên; người mang vai chỉ thấy dòng được phép khi hỏi, xem tổng quan hay truy dòng nguồn, admin không bị lọc.
-- **Chỉ số:** admin định nghĩa chỉ số của từng dataset (chọn phép tính và cột, hoặc viết SQL; chạy thử trước khi lưu)
-  và đặt cột số đo nào lấy tổng, cột nào lấy trung bình; câu hỏi sau dùng đúng công thức đó.
-- **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
-  quả hay bảng phân rã, kể cả câu nối bảng, kèm tổng của độ đo trên các dòng đó để so với ô (câu có HAVING, hàm cửa
-  sổ hay bảng tạm gộp nhóm chưa truy được).
-- **Báo cáo:** gom các câu trả lời đã chọn thành một báo cáo có tiêu đề và đoạn mở đầu, hay tạo báo cáo tự động cho
-  một dataset (độ đo theo thời gian và theo nhóm, SQL do code dựng). Mỗi mục có câu hỏi, lời trả lời kèm kết quả kiểm
-  số và kiểm nghĩa, biểu đồ, bảng, cách tính, SQL, phiên bản dữ liệu; số liệu tính lại khi mở với quyền xem của người
-  đọc. Xuất PDF và Excel.
-- **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
-- **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên file DataCo, và khi database mẫu đang chạy thì thêm 17 câu trên
-  ảnh chụp của nó (10 câu bán hàng, 7 câu học tập, phần lớn nối bảng), so với SQL đúng viết tay; CI chạy phần DataCo và
-  báo khi tỷ lệ đúng giảm. `make eval-judge LLM_PROVIDER=gemini` đo mô hình chấm trên 72 ca có nhãn (lời giải thích câu
-  "tại sao" và lời phần giải thích câu thường): số ca đúng trên tổng, số lời sai bị bỏ lọt hay chỉ bị cảnh báo, số lời
-  đúng bị chặn nhầm hay bị cảnh báo thừa.
+- Tài khoản, workspace, vai `admin` và `member`; vai dữ liệu lọc dòng theo bảng, cột, giá trị cho từng thành viên.
+- Kết nối Postgres (TLS, tài khoản chỉ đọc), chụp mọi bảng đọc được thành phiên bản Parquet; mỗi database là một
+  dataset. Nạp file CSV, Parquet, Excel.
+- Hỏi theo cuộc trò chuyện trên mọi bảng của dataset. SQL qua guard rồi chạy trên DuckDB; kết quả có bảng, biểu đồ,
+  CSV và thẻ "Cách tính".
+- Câu hỏi nguyên nhân: mô hình điền form, code dựng mọi SQL và tính phân rã chênh lệch theo từng nhóm.
+- Lời giải thích qua kiểm số (code so từng số với bảng đã tính) và kiểm nghĩa (một lần gọi mô hình riêng chấm nghĩa).
+- Minh chứng: SQL trước và sau guard, phân rã, các bước, dòng nguồn của từng ô số đo, kể cả câu nối bảng.
+- Chỉ số do admin định nghĩa, cách gộp của cột số đo, bài học, câu mẫu, gói khái niệm ngành.
+- Báo cáo từ các câu trả lời đã chọn hay tự động cho một dataset; xuất PDF và Excel.
+- Mô hình `mock`, Gemini, Ollama. Bộ đánh giá câu hỏi, phân loại và mô hình chấm: [eval/README.md](eval/README.md).
 
-## Chưa có
+Chưa có: chế độ demo, màn xem lịch sử câu hỏi của cả workspace, màn sửa mô tả và bí danh cột, chia sẻ báo cáo; nguồn
+MySQL, SQLite; truy vấn thẳng database ngoài lúc hỏi. Từng phần: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái).
+Lịch sử thay đổi: [CHANGELOG.md](CHANGELOG.md).
 
-- Chế độ demo, màn xem lịch sử câu hỏi, màn sửa mô tả, bí danh và vai trò cột.
-- Nguồn MySQL, SQLite; truy vấn thẳng database ngoài lúc hỏi (hiện là chụp bảng); `sslmode=verify-ca` và chứng chỉ phía
-  client.
+## Tài liệu
 
-Bảng trạng thái chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#trạng-thái). Lịch sử thay đổi:
-[CHANGELOG.md](CHANGELOG.md). Tiến độ: [milestones](https://github.com/pgiahuy/xdi-platform/milestones).
+| Bạn muốn | Đọc |
+|---|---|
+| Cài, cấu hình, đưa lên Internet, sao lưu, sửa lỗi | [INSTALL.md](docs/INSTALL.md) |
+| Kết nối dữ liệu, hỏi, đọc minh chứng, làm báo cáo | [USAGE.md](docs/USAGE.md) |
+| Biết dữ liệu nằm ở đâu, gửi gì cho mô hình | [PRIVACY.md](docs/PRIVACY.md) |
+| Biết file nào nhận, chụp database thế nào, phiên bản | [DATA.md](docs/DATA.md) |
+| Gọi API | [API.md](docs/API.md), đặc tả ở `/api/openapi.json`, thử ở `/api/docs` |
+| Hiểu hệ thống chia phần thế nào, phần nào đã có | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Biết guard SQL chặn gì | [GUARD.md](docs/GUARD.md) |
+| Đọc bảng Postgres của ứng dụng | [SCHEMA.md](docs/SCHEMA.md) |
+| Xem thời gian, số lượt gọi mô hình đã đo | [PERFORMANCE.md](docs/PERFORMANCE.md) |
+| Xem nguồn và giấy phép dữ liệu mẫu | [data/README.md](data/README.md) |
 
-## Build từ nguồn và phát triển
+## Phát triển
 
-Cần Rust stable từ 1.89 kèm trình biên dịch C++, Node.js 24, Docker (cho Postgres) và GNU Make.
+Cần Rust stable kèm trình biên dịch C++, Node.js 24, Docker (cho Postgres) và GNU Make.
 
 ```bash
 make dev            # Postgres trong Docker, backend bằng cargo run ở cổng 8000
@@ -121,29 +84,12 @@ make check-fast     # fmt, clippy, test
 make help           # mọi lệnh
 ```
 
-```
-backend/     crate Rust: api/ -> service/ -> engine/ và auth/; migrations/ cho Postgres
-frontend/    React, Vite, Tailwind, shadcn/ui; build ra file tĩnh, backend phục vụ
-docs/        tài liệu, cũng là nguồn GitHub Pages
-data/        nguồn và giấy phép dataset, samples/ (DataCo mẫu), postgres-demo/ (database mẫu), domains/ (gói ngành)
-```
-
-| Tài liệu | Nội dung |
-|---|---|
-| [INSTALL.md](docs/INSTALL.md) | Cài đặt, cấu hình, sao lưu, lỗi hay gặp, dùng lần đầu |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc, luồng một câu hỏi, trạng thái từng phần |
-| [API.md](docs/API.md) | API, mã lỗi; đặc tả OpenAPI ở `/api/openapi.json`, thử trên trình duyệt ở `/api/docs` |
-| [GUARD.md](docs/GUARD.md) | Guard SQL: luật, hạn chế đã biết |
-| [DATA.md](docs/DATA.md) | Định dạng file nhận, phiên bản, tên cột |
-| [SCHEMA.md](docs/SCHEMA.md) | Bảng của Postgres ứng dụng, ý nghĩa, ví dụ |
-| [PRIVACY.md](docs/PRIVACY.md) | Dữ liệu nằm ở đâu, gửi gì cho mô hình |
-| [PERFORMANCE.md](docs/PERFORMANCE.md) | Thời gian, số lượt gọi mô hình và chi phí mỗi câu hỏi, đã đo |
+Cách chạy test và gửi PR: [CONTRIBUTING.md](CONTRIBUTING.md). Quy tắc làm việc: [AGENTS.md](AGENTS.md).
 
 ## Tham gia
 
 - Lỗi: [Issues](https://github.com/pgiahuy/xdi-platform/issues). Câu hỏi và ý tưởng:
   [Discussions](https://github.com/pgiahuy/xdi-platform/discussions).
-- Đóng góp mã: [CONTRIBUTING.md](CONTRIBUTING.md); quy tắc làm việc: [AGENTS.md](AGENTS.md).
 - Lỗ hổng bảo mật: báo riêng theo [SECURITY.md](SECURITY.md), không mở issue công khai.
 
 Giấy phép: [Apache License 2.0](LICENSE); thành phần bên thứ ba: [docs/LICENSES.md](docs/LICENSES.md).
