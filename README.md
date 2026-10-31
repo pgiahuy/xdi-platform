@@ -3,9 +3,9 @@
 Nền tảng phân tích dữ liệu bằng ngôn ngữ tự nhiên: hỏi bằng tiếng Việt, nhận câu trả lời kèm lời giải thích và minh
 chứng cho từng con số.
 
-Kết nối database Postgres của tổ chức, chụp các bảng cần hỏi cùng các bảng liên quan theo khóa ngoại, rồi gõ câu hỏi;
-dữ liệu chưa nằm trong database thì nạp file CSV, Parquet hoặc Excel. Hệ thống viết SQL (nối nhiều bảng khi cần), kiểm
-SQL bằng guard, chạy trên DuckDB và trả về bảng, biểu đồ cùng câu SQL đã chạy. Với câu hỏi tìm nguyên nhân, như vì sao
+Kết nối database Postgres của tổ chức, chụp mọi bảng tài khoản đọc được (bỏ tick bảng không cần) kèm quan hệ khóa
+ngoại, rồi gõ câu hỏi; dữ liệu chưa nằm trong database thì nạp file CSV, Parquet hoặc Excel. Hệ thống viết SQL (nối
+nhiều bảng khi cần), kiểm SQL bằng guard, chạy trên DuckDB và trả về bảng, biểu đồ cùng câu SQL đã chạy. Với câu hỏi tìm nguyên nhân, như vì sao
 doanh thu tháng này giảm hay vì sao Europe cao hơn LATAM, hệ thống tính nhóm nào tạo ra phần lớn chênh lệch; bấm vào một
 số để xem các dòng dữ liệu đứng sau nó.
 
@@ -70,9 +70,9 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 - **Tài khoản và workspace:** mỗi người nhiều workspace; vai `admin` (nạp, xóa dữ liệu, quản lý thành viên) và
   `member` (xem, hỏi); quản trị hệ thống quản lý tài khoản.
 - **Kết nối database:** thêm nguồn Postgres (thông tin kết nối mã hóa, tài khoản chỉ đọc, TLS với `require` hay
-  `verify-full`), chụp một bảng cùng các bảng liên quan theo khóa ngoại; mỗi database là một dataset chứa các bảng đã
-  chụp, có ghi quan hệ; câu hỏi chọn dataset và nối các bảng đó, có chặn cộng lặp khi nối. Nạp file là lựa chọn phụ: CSV
-  (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet. Mỗi lần chụp hay nạp là một phiên bản. Hồ sơ cột lập lúc
+  `verify-full`), chụp mọi bảng đọc được, tick sẵn, admin bỏ tick; bảng quá trần chỉ lưu cấu trúc; mỗi database là
+  một dataset chứa các bảng đã chụp, có ghi quan hệ; câu hỏi chọn dataset và nối các bảng đó, có chặn cộng lặp khi
+  nối. Nạp file là lựa chọn phụ: CSV (UTF-8, windows-1252), Parquet, Excel .xlsx kèm chọn sheet. Mỗi lần chụp hay nạp là một phiên bản. Hồ sơ cột lập lúc
   nạp; mô hình thêm mô tả cột, bí danh và câu gợi ý, gồm cả câu hỏi tìm nguyên nhân.
 - **Hỏi theo cuộc trò chuyện:** câu sau hiểu theo các câu trước. Câu hỏi qua guard (một câu `SELECT` chỉ đọc, trên
   bảng, cột, hàm được phép, có trần số dòng) rồi chạy trên DuckDB; lỗi thì mô hình sửa một lần. Kết quả có bảng, biểu

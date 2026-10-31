@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/datasets/DatasetCard.tsx - một dataset trên trang Dữ liệu (#257): một database đã kết nối hay một file.
 Thẻ database ghi tên, máy chủ (chỉ admin thấy), số bảng, lần chụp gần nhất, nút "Chụp lại" (admin, chụp lại mọi bảng
-trong một giao dịch); mở ra thì thấy bảng nhóm theo schema và quan hệ giữa các bảng (DatasetTables.tsx). Thẻ file ghi
+trong một giao dịch); mở ra thì thấy bảng nhóm theo schema, gồm cả bảng chỉ có cấu trúc (#247), và quan hệ giữa các
+bảng (DatasetTables.tsx). Thẻ file ghi
 tên, số dòng, lần nạp, các nút của bảng duy nhất của nó, kèm "Nạp phiên bản mới" cho admin.
-Nút chỉ admin dùng được (onSnapshot, onAddVersion, onDeleteTable) chỉ truyền vào khi người xem là admin. */
+Nút chỉ admin dùng được (onSnapshot, onSnapshotTable, onAddVersion, onDeleteTable) chỉ truyền vào khi người xem là
+admin; member thấy cùng danh sách, không có nút. */
 
 import { useState } from 'react'
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
@@ -11,7 +13,7 @@ import { FormMessage } from '@/components/forms/FormMessage'
 import type { LinkComponent } from '@/components/shell/types'
 import { Button } from '@/components/ui/button'
 import { DatasetTables, TableActions } from './DatasetTables'
-import type { DatasetCardView, TableRow } from './types'
+import type { DatasetCardView, MetadataTableRow, TableRow } from './types'
 
 export type DatasetCardProps = {
   dataset: DatasetCardView
@@ -21,6 +23,10 @@ export type DatasetCardProps = {
   metricsHref: (table: TableRow) => string
   onSnapshot?: () => void
   snapshotPending?: boolean
+  /** Chụp riêng một bảng chỉ có cấu trúc. */
+  onSnapshotTable?: (table: MetadataTableRow) => void
+  /** schema.bảng đang chụp riêng. */
+  snapshotTablePending?: string
   onAddVersion?: (table: TableRow) => void
   onDeleteTable?: (table: TableRow) => void
   deletePending?: boolean
@@ -36,6 +42,7 @@ export function DatasetCard(props: DatasetCardProps) {
   const [open, setOpen] = useState(false)
   const file = dataset.kind === 'file' ? dataset.tables[0] : undefined
   const tablesId = `dataset-tables-${dataset.id}`
+  const hasTables = dataset.tables.length + dataset.metadataOnly.length > 0
   return (
     <li className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-3 shadow-xs">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -54,7 +61,7 @@ export function DatasetCard(props: DatasetCardProps) {
           <p className="text-xs text-muted-foreground">{buildSummary(dataset)}</p>
         </div>
         {file && <TableActions {...props} table={file} name={dataset.name} />}
-        {dataset.kind === 'database' && onSnapshot && dataset.tables.length > 0 && (
+        {dataset.kind === 'database' && onSnapshot && hasTables && (
           <Button
             variant="outline"
             size="sm"
@@ -65,7 +72,7 @@ export function DatasetCard(props: DatasetCardProps) {
             {snapshotPending ? 'Đang chụp...' : 'Chụp lại'}
           </Button>
         )}
-        {dataset.kind === 'database' && dataset.tables.length > 0 && (
+        {dataset.kind === 'database' && hasTables && (
           <Button
             variant="ghost"
             size="sm"
@@ -96,8 +103,9 @@ function buildSummary(dataset: DatasetCardView): string {
     if (at) parts.push(`nạp lúc ${at}`)
     return parts.join(', ')
   }
-  if (dataset.tables.length === 0) return 'Đã kết nối, chưa chụp bảng nào.'
+  if (dataset.tables.length + dataset.metadataOnly.length === 0) return 'Đã kết nối, chưa chụp bảng nào.'
   const parts = [`${dataset.tables.length} bảng`]
+  if (dataset.metadataOnly.length > 0) parts.push(`${dataset.metadataOnly.length} bảng chỉ có cấu trúc`)
   if (dataset.relations.length > 0) parts.push(`${dataset.relations.length} quan hệ`)
   if (at) parts.push(`lần chụp gần nhất ${at}`)
   return parts.join(', ')

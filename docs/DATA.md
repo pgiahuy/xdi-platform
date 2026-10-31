@@ -219,8 +219,7 @@ bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộ
   một bước quanh bảng đang chọn, theo cả hai chiều: bảng nó trỏ tới (`many_to_one`) và bảng trỏ vào nó (`one_to_many`).
   Một bảng chụp kèm được khi tài khoản có quyền đọc nó và cột được trỏ tới là khóa duy nhất (khóa chính, ràng buộc
   `UNIQUE` hay chỉ mục `UNIQUE` trên cột thường, không điều kiện; Postgres chỉ cho khóa ngoại trỏ tới cột như vậy); không
-  thì có `reason`. Route này còn cho giao diện cũ chọn bảng
-  theo nhóm; danh sách bảng ở mục trên đã có khóa ngoại của mọi bảng.
+  thì có `reason`. Giao diện không còn dùng route này: danh sách bảng ở mục trên đã có khóa ngoại của mọi bảng.
 - **Một ảnh chụp nhất quán:** mọi bảng đếm dòng và chép trong một giao dịch `REPEATABLE READ READ ONLY` trên một kết
   nối, nên các bảng cùng là ảnh của một thời điểm (MVCC của Postgres): không có dòng hàng trỏ tới đơn chưa có trong bản
   chụp `orders`.

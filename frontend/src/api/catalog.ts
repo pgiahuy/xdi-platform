@@ -62,8 +62,9 @@ export function useCatalog(ws: string, { watchProfiles = false }: CatalogOptions
   })
 }
 
-/** Chụp lại mọi bảng của một dataset là database trong một giao dịch (chỉ admin). Xong thì tải lại cả danh sách
- * dataset lẫn danh sách bảng cũ (api/datasets.ts), vì các màn còn theo bảng đọc danh sách đó. */
+/** Chụp lại mọi bảng của một dataset là database trong một giao dịch (chỉ admin). Xong thì tải lại danh sách dataset,
+ * danh sách bảng cũ (api/datasets.ts), vì các màn còn theo bảng đọc danh sách đó, và bảng của nguồn (api/sources.ts),
+ * vì trạng thái từng bảng ở màn kết nối đổi theo. */
 export function useSnapshotCatalog(ws: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -71,6 +72,7 @@ export function useSnapshotCatalog(ws: string) {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: catalogKey(ws) })
       void queryClient.invalidateQueries({ queryKey: ['workspaces', ws, 'datasets'] })
+      void queryClient.invalidateQueries({ queryKey: ['workspaces', ws, 'sources'] })
     },
   })
 }

@@ -33,40 +33,49 @@ export type DatasetCardView = {
   /** Lần chụp hay nạp gần nhất; null khi chưa bảng nào có dữ liệu. */
   updatedAt: string | null
   tables: TableRow[]
+  /** Bảng của database chưa chụp được dòng nào (quá trần dòng hay dung lượng); rỗng với file. */
+  metadataOnly: MetadataTableRow[]
   relations: RelationRow[]
 }
 
-/** Một bảng nối với một bảng của nhóm theo một khóa ngoại, chụp kèm được thành dataset riêng. */
-export type RelationOption = {
-  /** Khóa React: một bảng có thể nối theo hai khóa ngoại. */
-  key: string
+/** Một bảng nguồn trên màn kết nối (#247): admin tick để chụp. */
+export type SourceTableRow = {
   /** schema.bảng, đúng chuỗi gửi khi chụp. */
   table: string
-  /** Tên hiện ra: bỏ schema khi cùng schema với bảng bắt đầu. */
-  label: string
-  /** Cột khóa ngoại, ở bảng giữ khóa. */
-  columns: string[]
-  addable: boolean
-  reason: string | null
-  /** Số cột đọc được của bảng. */
+  name: string
+  isView: boolean
+  ticked: boolean
+  /** Số dòng Postgres ước lượng; null khi chưa ANALYZE, hay với view. */
+  estimatedRows: number | null
+  sizeBytes: number | null
   columnCount: number
+  comment: string | null
+  /** Ước lượng đã quá SOURCE_MAX_ROWS: chụp thì chỉ lưu cấu trúc. */
+  overRowLimit: boolean
+  /** Nguồn đang giữ bảng: đã chụp, chỉ có cấu trúc (kèm lý do), hay chưa. */
+  state: 'snapshotted' | 'metadata_only' | null
+  reason: string | null
+  /** Bỏ tick một bảng danh mục mà bảng đang tick trỏ tới: câu báo hệ quả; null khi không có gì để báo. */
+  warning: string | null
 }
 
-/** Bảng liên quan quanh một bảng, tách theo chiều của khóa ngoại. */
-export type RelationNode = {
+export type SourceTableGroup = {
+  schema: string
+  rows: SourceTableRow[]
+}
+
+/** Một bảng chỉ có cấu trúc (cột, kiểu, khóa, mô tả), chưa có dòng nào, trên thẻ database. */
+export type MetadataTableRow = {
+  /** schema.bảng, đúng chuỗi gửi khi chụp riêng bảng này. */
   table: string
-  label: string
-  /** Bảng này trỏ tới (khóa ngoại của nó, nhiều-một). */
-  parents: RelationOption[]
-  /** Trỏ tới bảng này (khóa ngoại của bảng kia, một-nhiều). */
-  children: RelationOption[]
+  name: string
+  schema: string | null
+  /** Vì sao chưa chụp, kèm biến cấu hình cần đổi (backend viết). */
+  reason: string
+  rowCount: number | null
+  columnCount: number
+  description: string | null
 }
-
-/** Đọc bảng liên quan của một bảng: đang đọc, lỗi, hoặc xong. */
-export type RelationNodeState =
-  | { kind: 'loading' }
-  | { kind: 'error'; message: string }
-  | { kind: 'ready'; node: RelationNode }
 
 /** Kết quả chụp của một bảng. */
 export type SnapshotTableResult = {
@@ -75,6 +84,14 @@ export type SnapshotTableResult = {
   created: boolean
   version: number
   rowCount: number | null
+}
+
+/** Kết quả một lần chụp: bảng chép được, quan hệ đã ghi, bảng chỉ lưu cấu trúc, bảng không còn đọc được. */
+export type SnapshotSummary = {
+  tables: SnapshotTableResult[]
+  relationCount: number
+  metadataOnly: { table: string; reason: string }[]
+  unreadable: string[]
 }
 
 export type SheetOption = {
