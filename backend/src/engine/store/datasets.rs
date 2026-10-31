@@ -417,7 +417,8 @@ impl Store {
             .map_err(|e| db_error("commit delete dataset", e))
     }
 
-    /// Xóa hẳn một dataset cùng mọi phiên bản (CASCADE lấy phiên bản, cột, hồ sơ, lịch sử hỏi), trả đường dẫn
+    /// Xóa hẳn một dataset cùng mọi phiên bản (CASCADE lấy phiên bản, cột, hồ sơ, chỉ số, cuộc trò chuyện và lịch sử
+    /// câu hỏi trong queries, kể cả các lượt trò chuyện: migration 0011, #187), trả đường dẫn
     /// Parquet tương đối của các phiên bản để service xóa file sau khi commit. Dataset không có thì coi như đã xóa
     /// (gọi lại nhiều lần không lỗi). Cùng kiểu khóa FOR UPDATE của delete_dataset_without_versions: một lần nạp đang
     /// chèn phiên bản cho dataset này phải chờ giao dịch này xong, không thể vừa xóa vừa nạp lọt qua nhau.

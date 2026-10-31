@@ -584,8 +584,8 @@ hạn, phiên bản và tên cột: [Dữ liệu](DATA.md). Nạp lại đúng f
 mới thành dữ liệu hiện hành, phiên bản cũ vẫn giữ.
 
 Bỏ một dataset: bấm **Xóa** ở dòng của nó rồi xác nhận **Xóa dataset** (chỉ `admin`). Mọi phiên bản, hồ sơ cột, chỉ
-số, cuộc trò chuyện và file Parquet của dataset bị xóa hẳn, không khôi phục được. Lịch sử câu hỏi (câu hỏi, SQL, bảng
-phân rã của câu "tại sao") vẫn ở lại trong database, chỉ mất khi xóa cả workspace ([PRIVACY.md](PRIVACY.md)).
+số, cuộc trò chuyện, lịch sử câu hỏi (câu hỏi, SQL, bảng phân rã của câu "tại sao") và file Parquet của dataset bị
+xóa hẳn, không khôi phục được. Bản sao lưu làm trước đó vẫn còn chúng ([PRIVACY.md](PRIVACY.md)).
 
 Chụp một bảng Postgres (chỉ `admin`, cần `SOURCE_SECRET_KEY` và `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình): khung
 **Database** của trang **Dữ liệu**, bấm **Kết nối database**, nhập máy chủ, cổng, database, tài khoản và mật khẩu, chọn

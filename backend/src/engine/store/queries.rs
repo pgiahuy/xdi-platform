@@ -46,9 +46,9 @@ pub struct NewQuery<'a> {
 /// Phần của một dòng queries mà truy dòng nguồn (#34) cần.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct StoredQuery {
-    /// None khi câu không gắn dataset, hay dataset đã xóa.
+    /// None khi câu không gắn dataset. Xóa dataset hay phiên bản thì dòng queries mất theo (migration 0011), không
+    /// còn dòng trỏ tới dataset đã xóa.
     pub dataset_id: Option<Uuid>,
-    /// None khi phiên bản đã xóa.
     pub version_id: Option<Uuid>,
     /// Chữ của QueryStatus::as_str.
     pub status: String,

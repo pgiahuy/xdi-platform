@@ -31,6 +31,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Tab SQL của pane Minh chứng gọn hơn: bỏ ba câu chú thích dưới bản sau guard (câu giải thích vạch đánh dấu, "Thêm LIMIT 100000", lời nhắc về phân quyền dữ liệu). Dòng guard thêm vẫn có vạch đánh dấu; chi tiết bước guard vẫn ở tab Các bước.
 - Câu hỏi tìm nguyên nhân: lời giải thích nói "giảm chủ yếu do" thay cho "nhờ", cột kỳ của bảng kết quả và biểu đồ tên "Tháng", "Quý", "Năm".
 - Bảng kết quả: cột thời gian mà mọi ô đều là nửa đêm chỉ hiện ngày, không kèm " 00:00:00".
+- Xóa dataset thì xóa luôn lịch sử câu hỏi của nó, kể cả các lượt trò chuyện; khi cập nhật, lịch sử còn sót từ các lần xóa dataset trước bị xóa (#187).
 
 ### Fixed
 

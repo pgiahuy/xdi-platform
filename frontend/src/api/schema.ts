@@ -353,7 +353,7 @@ export interface paths {
         get: operations["getDataset"];
         put?: never;
         post?: never;
-        /** Delete a dataset with all its versions and files (admin only) */
+        /** Delete a dataset with all its versions, files and question history (admin only) */
         delete: operations["deleteDataset"];
         options?: never;
         head?: never;

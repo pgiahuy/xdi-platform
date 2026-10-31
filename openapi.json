@@ -1117,7 +1117,7 @@
         "tags": [
           "datasets"
         ],
-        "summary": "Delete a dataset with all its versions and files (admin only)",
+        "summary": "Delete a dataset with all its versions, files and question history (admin only)",
         "operationId": "deleteDataset",
         "parameters": [
           {
