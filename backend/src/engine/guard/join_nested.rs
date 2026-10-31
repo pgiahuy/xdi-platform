@@ -9,9 +9,9 @@ use sqlparser::ast::{Expr, GroupByExpr, Query, Select, Visit, Visitor};
 
 pub(super) enum Nested {
     /// `x IN (SELECT y ...)`, cả NOT IN: nửa nối giữa x và cột của câu con.
-    In { left: Expr, query: Query },
+    In { left: Box<Expr>, query: Box<Query> },
     /// EXISTS, câu con vô hướng, `= ANY (SELECT ...)`.
-    Query(Query),
+    Query(Box<Query>),
 }
 
 pub(super) fn find_nested(select: &Select, on: &[&Expr]) -> Vec<Nested> {
@@ -46,8 +46,8 @@ impl Visitor for NestedFinder {
     fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
         if let (0, Expr::InSubquery { expr, subquery, .. }) = (self.depth, expr) {
             self.found.push(Nested::In {
-                left: (**expr).clone(),
-                query: (**subquery).clone(),
+                left: expr.clone(),
+                query: subquery.clone(),
             });
         }
         ControlFlow::Continue(())
@@ -58,9 +58,9 @@ impl Visitor for NestedFinder {
         let taken = self
             .found
             .iter()
-            .any(|n| matches!(n, Nested::In { query: q, .. } if q == query));
+            .any(|n| matches!(n, Nested::In { query: q, .. } if **q == *query));
         if self.depth == 0 && !taken {
-            self.found.push(Nested::Query(query.clone()));
+            self.found.push(Nested::Query(Box::new(query.clone())));
         }
         self.depth += 1;
         ControlFlow::Continue(())

@@ -11,7 +11,7 @@ use std::time::Duration;
 use rust_decimal::Decimal;
 use tokio::sync::Semaphore;
 
-use crate::engine::guard::{AllowedTable, RowFilter};
+use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError, RowFilter};
 use crate::service::ask::contract::CellValue;
 use crate::service::ask::fanout::JoinLink;
 use crate::service::explain::breakdown::{
@@ -25,7 +25,9 @@ use crate::service::explain::measure::{Additive, PlanMeasure};
 use crate::service::explain::source::{
     build_from_sql, build_related_tables, build_tables_used, SourceTable,
 };
-use crate::service::explain::sql::{build_ident, build_slices_sql, build_why_sql};
+use crate::service::explain::sql::{
+    build_dimension_sql, build_ident, build_pair_count_sql, build_slices_sql, build_why_sql,
+};
 
 fn link(
     many: &str,
@@ -352,4 +354,84 @@ async fn breakdown_over_related_tables_keeps_row_filters() {
             (Some("North".to_string()), "10".to_string()),
         ]
     );
+}
+
+/// Mọi câu do code dựng của đường câu "tại sao" (cả các khuôn của #244: một nhóm so với phần còn lại, bộ lọc IN và
+/// BETWEEN, đếm cặp giá trị, đếm dòng theo kỳ) trên nguồn nối bảng liên quan theo khóa hai cột qua luật nối bảng của
+/// guard (#256) khi có quan hệ, và bị từ chối khi không có quan hệ nào: phần FROM do code dựng thật sự đi qua luật.
+#[test]
+fn code_built_frame_sql_passes_the_join_rule() {
+    let student_columns = vec![
+        column(1, "module", "VARCHAR", "key", 2),
+        column(2, "id_student", "INTEGER", "key", 3),
+        column(3, "region", "VARCHAR", "dimension", 2),
+    ];
+    let source_tables = [SourceTable {
+        table: "students",
+        columns: &student_columns,
+    }];
+    let links = [link(
+        "scores",
+        &["module", "id_student"],
+        "students",
+        &["module", "id_student"],
+        true,
+    )];
+    let related = build_related_tables("scores", &source_tables, &links);
+    let mut plan = score_plan();
+    plan.slices = PlanSlices::Groups {
+        column: "module".to_string(),
+        base: GroupBase::Rest,
+        compare: "B".to_string(),
+        period: None,
+    };
+    let parse = |sql: &str| {
+        sqlparser::parser::Parser::new(&sqlparser::dialect::DuckDbDialect {})
+            .try_with_sql(sql)
+            .unwrap()
+            .parse_expr()
+            .unwrap()
+    };
+    plan.filters = vec![
+        parse("\"students.region\" IN ('North', 'South')"),
+        parse("\"score\" BETWEEN 0 AND 100"),
+    ];
+    apply_related(&mut plan, &related, &["students.region".to_string()]);
+    plan.source.always = vec!["students.region".to_string()];
+    let from = build_from_sql("scores", &plan.source, &[]);
+    let sqls = vec![
+        build_why_sql(&plan).total_sql,
+        build_slices_sql(&plan),
+        build_dimension_sql(&plan, "module"),
+        build_pair_count_sql(&plan, "module", "score"),
+        format!(
+            "SELECT \"module\", COUNT(*) AS row_count FROM {from} WHERE \"students.region\" IN ('North') GROUP BY 1"
+        ),
+    ];
+    let tables = [
+        table_at("scores", &["module", "id_student", "score"]),
+        table_at("students", &["module", "id_student", "region"]),
+    ];
+    for sql in &sqls {
+        assert!(sql.contains("LEFT JOIN"), "{sql}");
+        if let Err(e) = build_guarded_sql(sql, &tables, &links, 1000) {
+            panic!("{sql}: {e:?}");
+        }
+        assert!(
+            matches!(
+                build_guarded_sql(sql, &tables, &[], 1000),
+                Err(GuardError::Rejected(_))
+            ),
+            "{sql}"
+        );
+    }
+}
+
+fn table_at(name: &str, columns: &[&str]) -> AllowedTable {
+    AllowedTable {
+        name: name.to_string(),
+        columns: columns.iter().map(|c| c.to_string()).collect(),
+        parquet_dir: PathBuf::from(format!("/data/{name}")),
+        row_filters: vec![],
+    }
 }

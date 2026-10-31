@@ -575,7 +575,9 @@ async fn query_over_the_time_limit_is_stopped() {
         "SELECT 'South' AS region, range AS amount FROM range(3000)",
     );
     let llm = ScriptedLlm::new(vec![]);
-    let sql = "SELECT COUNT(*) AS n FROM sales a, sales b, sales c";
+    // Tích chéo của câu con DISTINCT: guard từ chối tích chéo của chính bảng (#256), không từ chối nguồn đã gộp.
+    let sql = "SELECT COUNT(*) AS n FROM (SELECT DISTINCT * FROM sales) a, (SELECT DISTINCT * FROM sales) b, \
+               (SELECT DISTINCT * FROM sales) c";
     let outcome = run(&llm, &data, sql, Duration::from_millis(300)).await;
     assert_eq!(outcome.status, AskStatus::Failed);
     assert_eq!(
@@ -602,7 +604,8 @@ fn big_sales() -> Dataset {
 /// Câu sửa chạy quá giờ: dừng, failed, không có vòng sửa thứ hai.
 #[tokio::test]
 async fn fixed_sql_over_the_time_limit_is_failed() {
-    let slow = "SELECT COUNT(*) AS n FROM sales a, sales b, sales c";
+    let slow = "SELECT COUNT(*) AS n FROM (SELECT DISTINCT * FROM sales) a, (SELECT DISTINCT * FROM sales) b, \
+               (SELECT DISTINCT * FROM sales) c";
     let llm = ScriptedLlm::new(vec![Ok(reply(slow))]);
     let outcome = run(&llm, &big_sales(), BAD_SQL, Duration::from_millis(300)).await;
     assert_eq!(outcome.status, AskStatus::Failed, "{outcome:?}");
@@ -626,7 +629,8 @@ async fn fixed_sql_over_the_time_limit_is_failed() {
 async fn query_over_the_memory_limit_is_failed() {
     let llm = ScriptedLlm::new(vec![]);
     let sql = format!(
-        "SELECT length(string_agg(v, '')) AS n FROM (SELECT '{}' AS v FROM sales a, sales b) t",
+        "SELECT length(string_agg(v, '')) AS n FROM (SELECT '{}' AS v FROM (SELECT DISTINCT * FROM sales) a, \
+         (SELECT DISTINCT * FROM sales) b) t",
         "y".repeat(1000)
     );
     let outcome = run(&llm, &big_sales(), &sql, Duration::from_secs(60)).await;

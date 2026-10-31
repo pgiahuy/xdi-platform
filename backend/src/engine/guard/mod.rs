@@ -1085,8 +1085,11 @@ fn unknown_name(reason: String) -> GuardError {
 
 mod depth;
 mod join_conditions;
+mod join_from;
 mod join_keys;
 mod join_nested;
+mod join_pairs;
+mod join_shape;
 mod join_sources;
 #[cfg(test)]
 mod join_tests;

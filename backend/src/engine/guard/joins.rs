@@ -2,8 +2,9 @@
 /* engine/guard/joins.rs - luật nối bảng của guard (#256): mọi phép nối giữa hai bảng dữ liệu phải đi đúng khóa ngoại
 đã khai trong database (dataset_relations, service truyền vào dạng JoinLink). build_guarded_sql (mod.rs) gọi
 check_joins sau các luật kích thước, trước bước lọc dòng: hộp lọc do guard thêm có nửa nối theo khóa ngoại, nhưng nó
-thêm sau bước này nên không bị kiểm lại. Nguồn và cột gốc ở guard/join_sources.rs, gom điều kiện ở
-guard/join_conditions.rs, so khóa ở guard/join_keys.rs. Test ở guard/join_tests.rs.
+thêm sau bước này nên không bị kiểm lại. Nguồn và cột gốc ở guard/join_sources.rs và guard/join_shape.rs,
+FROM ở guard/join_from.rs, gom điều kiện ở guard/join_conditions.rs, kiểm từng cặp ở guard/join_pairs.rs, câu con trong
+biểu thức ở guard/join_nested.rs, so khóa ở guard/join_keys.rs. Test ở guard/join_tests.rs.
 
 Vì sao: điều kiện ON trước đây chỉ được dặn qua prompt (prompts/sql_joins.txt); `JOIN orders o ON
 i.order_item_id = o.customer_id` vẫn qua guard, DuckDB chạy và ra số sai mà trông hợp lý.
@@ -25,12 +26,15 @@ Luật, xét từng SELECT ở mọi tầng (câu ngoài, WITH, câu con ở FRO
 Lý do từ chối nêu hai bảng và đúng các khóa nối được, hay nói hai bảng không có quan hệ, để vòng sửa (ask/run.rs) viết
 lại được. Hạn chế: không lần theo cột qua UNION, và câu con tương quan không có phép bằng nào thì không kiểm. */
 
-use sqlparser::ast::{Expr, JoinConstraint, JoinOperator, Query, SetExpr, TableFactor};
+use sqlparser::ast::{Expr, Query, SetExpr, TableFactor};
 
-use super::join_conditions::{check_loose, split_and, Conditions, Equality};
-use super::join_keys::{Keys, Origin};
+use super::join_conditions::{split_and, Conditions};
+use super::join_from::{add_constraint, FromParts};
+use super::join_keys::Keys;
 use super::join_nested::{find_nested, Nested};
-use super::join_sources::{build_select_shape, resolve_column, Found, Resolved, Shape, Source};
+use super::join_pairs::check_loose;
+use super::join_shape::{build_select_shape, origin_of};
+use super::join_sources::{Shape, Source};
 use super::{build_parent_tables, name_key, single_ident, AllowedTable, GuardError};
 
 pub use super::join_keys::JoinLink;
@@ -59,14 +63,6 @@ struct JoinChecker<'a> {
     keys: &'a Keys,
     /// Bảng tạm đang thấy được, trong cùng ở cuối.
     ctes: Vec<(String, Shape)>,
-}
-
-/// Các nguồn của FROM, các điều kiện ON và phép bằng của USING.
-struct FromParts<'q> {
-    sources: Vec<Source>,
-    on: Vec<&'q Expr>,
-    using: Vec<Equality>,
-    level: usize,
 }
 
 impl JoinChecker<'_> {
@@ -213,7 +209,7 @@ impl JoinChecker<'_> {
             Nested::Query(query) => self.check_query(&query, levels).map(|_| ()),
             Nested::In { left, query } => {
                 let shape = self.check_query(&query, levels)?;
-                let lefts = match &left {
+                let lefts = match left.as_ref() {
                     Expr::Tuple(items) => items.iter().collect(),
                     other => vec![other],
                 };
@@ -228,94 +224,4 @@ impl JoinChecker<'_> {
             }
         }
     }
-}
-
-fn origin_of(expr: &Expr, levels: &[&[Source]]) -> Option<Origin> {
-    match resolve_column(expr, levels) {
-        Resolved::Found(found) => found.origin,
-        _ => None,
-    }
-}
-
-/// Điều kiện của một JOIN: ON giữ lại để đọc sau, USING đổi thành phép bằng, NATURAL bị từ chối.
-fn add_constraint<'q>(
-    operator: &'q JoinOperator,
-    left_count: usize,
-    from: &mut FromParts<'q>,
-) -> Result<(), String> {
-    let constraint = match operator {
-        JoinOperator::Join(c)
-        | JoinOperator::Inner(c)
-        | JoinOperator::Left(c)
-        | JoinOperator::LeftOuter(c)
-        | JoinOperator::Right(c)
-        | JoinOperator::RightOuter(c)
-        | JoinOperator::FullOuter(c)
-        | JoinOperator::CrossJoin(c)
-        | JoinOperator::Semi(c)
-        | JoinOperator::LeftSemi(c)
-        | JoinOperator::RightSemi(c)
-        | JoinOperator::Anti(c)
-        | JoinOperator::LeftAnti(c)
-        | JoinOperator::RightAnti(c)
-        | JoinOperator::StraightJoin(c) => c,
-        other => {
-            return Err(format!(
-                "Không hỗ trợ kiểu nối {other:?}: chỉ dùng JOIN, LEFT JOIN, RIGHT JOIN, FULL JOIN kèm ON theo khóa ngoại"
-            ))
-        }
-    };
-    match constraint {
-        JoinConstraint::On(expr) => {
-            // Mượn từ cây của câu, sống lâu hơn FromParts.
-            from.on.push(expr);
-            Ok(())
-        }
-        JoinConstraint::Using(columns) => {
-            for column in columns {
-                let name = column.0.last().and_then(|p| p.as_ident()).map(name_key);
-                let equality = build_using(name.unwrap_or_default(), left_count, from)?;
-                from.using.push(equality);
-            }
-            Ok(())
-        }
-        JoinConstraint::Natural => Err(
-            "Không cho NATURAL JOIN: nó nối theo mọi cột trùng tên. Viết JOIN ... ON với đúng cột của khóa ngoại"
-                .to_string(),
-        ),
-        JoinConstraint::None => Ok(()),
-    }
-}
-
-/// `USING (c)`: phép bằng giữa cột c của nguồn bên trái và bên phải, khi mỗi bên có đúng một nguồn có cột đó.
-fn build_using(
-    column: String,
-    left_count: usize,
-    from: &FromParts<'_>,
-) -> Result<Equality, String> {
-    let has = |s: &Source| s.shape.columns.iter().any(|(name, _)| *name == column);
-    let left: Vec<usize> = (0..left_count).filter(|&i| has(&from.sources[i])).collect();
-    let right: Vec<usize> = (left_count..from.sources.len())
-        .filter(|&i| has(&from.sources[i]))
-        .collect();
-    let ([l], [r]) = (left.as_slice(), right.as_slice()) else {
-        return Err(format!(
-            "Không biết cột {column} trong USING thuộc bảng nào: viết JOIN ... ON với tên bảng trước từng cột"
-        ));
-    };
-    let found = |index: usize| Found {
-        level: from.level,
-        index,
-        origin: from.sources[index]
-            .shape
-            .columns
-            .iter()
-            .find(|(name, _)| *name == column)
-            .and_then(|(_, origin)| origin.clone()),
-    };
-    Ok(Equality {
-        a: found(*l),
-        b: found(*r),
-        text: format!("USING ({column})"),
-    })
 }
