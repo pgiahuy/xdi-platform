@@ -19,7 +19,8 @@ Giữ đúng như cách COPY:
 - Kiểu cột: mỗi cột ép về đúng kiểu DuckDB mà pg_types.rs chọn. Cột đọc thành VARCHAR hay DOUBLE thì Postgres đổi sang
   chữ trước, bằng hàm xuất của kiểu như COPY, nên ra đúng chữ mà COPY ghi: mảng, json, uuid, interval, char(n), float4
   giữ dạng chữ của Postgres thay vì dạng chữ của DuckDB, và float4 0.1 vẫn là 0.1 chứ không thành 0.10000000149011612.
-- Trần dòng: LIMIT SOURCE_MAX_ROWS. Dung lượng: file Parquet so với MAX_UPLOAD_MB sau khi ghi.
+- Trần dòng: LIMIT SOURCE_MAX_ROWS khi admin đặt. Dung lượng: bảng quá trần đã bị loại trước khi chép (plan.rs); file
+  Parquet vẫn so với SOURCE_TABLE_MAX_MB sau khi ghi, cho view (không có dung lượng trước).
 - TLS theo sslmode của nguồn, cùng tên mode như libpq. Khác rustls ở chỗ CA với verify-full: không có CA dán vào thì
   libpq dùng CA của hệ thống (sslrootcert=system); có CA dán vào thì chỉ tin CA đó, không cộng thêm CA của hệ thống.
 - Mật khẩu và CA đi qua file tạm quyền 0600 (libpq.rs), không nằm trong câu SQL của DuckDB. */
@@ -78,7 +79,7 @@ pub async fn copy_tables(
         armed: true,
     };
     let max_rows = config.source_max_rows;
-    let max_bytes = config.max_upload_bytes;
+    let max_bytes = config.source_table_max_bytes;
     // DuckDB đồng bộ và tốn CPU: chạy ngoài luồng async, như engine/analytics.rs. conn chuyển hẳn vào luồng đó.
     let task = tokio::task::spawn_blocking(move || {
         run(&conn, &extension, &conninfo, &tables, max_rows)?;
@@ -101,7 +102,7 @@ fn run(
     extension: &Path,
     conninfo: &str,
     tables: &[DirectTable],
-    max_rows: u64,
+    max_rows: Option<u64>,
 ) -> Result<(), DirectError> {
     let internal =
         |e: duckdb::Error| DirectError::Failed(AppError::Internal(format!("duckdb: {e}")));
@@ -138,7 +139,7 @@ fn run(
 
 /// Lệnh DuckDB chép một bảng. Câu chạy trên Postgres chọn từng cột, cột VARCHAR hay DOUBLE đổi sang chữ ngay trên
 /// Postgres (lý do ở đầu file); phía DuckDB ép mọi cột về đúng kiểu của pg_types.rs.
-fn build_copy_sql(t: &DirectTable, max_rows: u64) -> String {
+fn build_copy_sql(t: &DirectTable, max_rows: Option<u64>) -> String {
     let mut remote = Vec::new();
     let mut casts = Vec::new();
     for (name, duckdb_type) in &t.column_types {
@@ -156,8 +157,9 @@ fn build_copy_sql(t: &DirectTable, max_rows: u64) -> String {
         // duckdb_type do pg_types.rs viết (INTEGER, DECIMAL(10,2)...), không phải chữ người dùng gửi.
         casts.push(format!("CAST({column} AS {duckdb_type}) AS {column}"));
     }
+    let limit = max_rows.map(|n| format!(" LIMIT {n}")).unwrap_or_default();
     let remote_sql = format!(
-        "SELECT {} FROM {} LIMIT {max_rows}",
+        "SELECT {} FROM {}{limit}",
         remote.join(", "),
         qualified(&t.table)
     );
@@ -177,11 +179,9 @@ fn build_table_copy(t: &DirectTable, max_bytes: u64) -> Result<TableCopy, Direct
     };
     let size = fs::metadata(&t.out).map_err(io)?.len();
     if size > max_bytes {
-        return Err(DirectError::Failed(AppError::TooLarge(format!(
-            "Bảng {} lớn hơn giới hạn {} MB của một lần nạp (MAX_UPLOAD_MB)",
-            t.table.full_name(),
-            max_bytes / 1024 / 1024
-        ))));
+        return Err(DirectError::Failed(AppError::TooLarge(
+            super::postgres::build_too_large(&t.table, max_bytes),
+        )));
     }
     let mut file = fs::File::open(&t.out).map_err(io)?;
     let mut hasher = Sha256::new();
@@ -269,7 +269,7 @@ mod tests {
             ],
             out: PathBuf::from("/tmp/out"),
         };
-        let sql = build_copy_sql(&t, 10);
+        let sql = build_copy_sql(&t, Some(10));
         assert!(sql.contains("CAST(\"id\" AS INTEGER) AS \"id\""), "{sql}");
         assert!(
             sql.contains("CAST(\"ratio\" AS DOUBLE) AS \"ratio\""),
@@ -278,6 +278,9 @@ mod tests {
         assert!(sql.contains("'SELECT \"id\", CASE WHEN"), "{sql}");
         assert!(sql.contains("concat(\"note\") END AS \"note\""), "{sql}");
         assert!(sql.contains("FROM \"sales\".\"it''s\" LIMIT 10'"), "{sql}");
+        // Không có trần dòng: không LIMIT.
+        let sql = build_copy_sql(&t, None);
+        assert!(sql.contains("FROM \"sales\".\"it''s\"'"), "{sql}");
     }
 
     /// Bản DuckDB trong binary phải đúng bản mà scripts/fetch-duckdb-extension.sh tải extension cho: nâng crate duckdb mà

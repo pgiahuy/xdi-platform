@@ -14,12 +14,10 @@ mod aggregation;
 mod catalog;
 mod columns;
 mod conversations;
+mod data_roles;
 mod feedback;
 mod lessons;
 mod members;
-// Phần ghi (set_data_role, list_row_policies, replace_row_policies) chờ service và API của #45 gọi; gỡ allow khi có
-// người gọi để clippy bắt lại.
-#[allow(dead_code)]
 mod policies;
 #[cfg(test)]
 mod policies_tests;
@@ -58,6 +56,7 @@ pub use columns::{
     ProfileRole, SemanticColumnUpdate, SemanticValueUpdate, ValueRow,
 };
 pub use conversations::{Conversation, StoredTurn};
+pub use data_roles::{DataRoleRow, MemberRolesOutcome, RoleDeleteOutcome, RoleWriteOutcome};
 #[allow(unused_imports)]
 pub use datasets::{
     Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SemanticCandidate,
@@ -71,8 +70,7 @@ pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 pub use metric_edits::MetricRecord;
 #[allow(unused_imports)]
 pub use metrics::{MetricDefinition, NewMetric};
-#[allow(unused_imports)]
-pub use policies::{DataRoleOutcome, PoliciesOutcome, RowPolicy};
+pub use policies::{PoliciesOutcome, RolePolicy, StoredPolicy};
 #[allow(unused_imports)]
 pub use queries::{NewQuery, PromptExample, QueryStatus, QueryTimings, StoredQuery};
 pub use relations::{build_related, DatasetRelation, NewRelation};

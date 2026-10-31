@@ -10,7 +10,7 @@ use axum::http::StatusCode;
 use serde_json::{json, Value};
 
 use crate::api::test_support::{app_with, call, multipart, send_raw, CODE};
-use crate::engine::store::test_support::{exec, fetch_text, fresh_database};
+use crate::engine::store::test_support::{fetch_text, fresh_database, give_data_role};
 use crate::engine::store::Store;
 
 const PASSWORD: &str = "a long password";
@@ -128,17 +128,11 @@ async fn member_drills_a_cell_with_their_own_row_filters() {
     );
 
     // Minh có vai dữ liệu chỉ thấy LATAM: bấm ô Europe của câu admin hỏi thì không thấy dòng nào.
-    exec(
+    give_data_role(
         &db.store,
-        "UPDATE memberships SET data_role = 'latam' WHERE user_id = (SELECT id FROM users WHERE email = 'minh@example.com')",
-    )
-    .await;
-    exec(
-        &db.store,
-        &format!(
-            "INSERT INTO rls_policies (workspace_id, dataset_id, data_role, column_name, allowed_values)
-             SELECT workspace_id, id, 'latam', 'Market', ARRAY['LATAM'] FROM datasets WHERE id = '{dataset_id}'"
-        ),
+        "minh@example.com",
+        "latam",
+        &[(&dataset_id, "Market", &["LATAM"])],
     )
     .await;
     let (status, body) = drill(&app, &minh, SHOP, &dataset_id, cell(&query_id, "Europe")).await;

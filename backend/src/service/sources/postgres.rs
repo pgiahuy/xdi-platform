@@ -174,19 +174,21 @@ pub(super) fn select_all(table: &SourceTable) -> String {
     format!("SELECT * FROM {}", qualified(table))
 }
 
-/// Chép bảng ra file CSV có dòng tiêu đề. SHA-256 của nội dung tính trong lúc ghi. Quá max_bytes thì dừng và báo
-/// lỗi, như nạp file quá MAX_UPLOAD_MB. max_rows chặn thêm một lần nữa phòng bảng tăng dòng sau bước count_rows.
+/// Chép bảng ra file CSV có dòng tiêu đề. SHA-256 của nội dung tính trong lúc ghi. Quá max_bytes (SOURCE_TABLE_MAX_MB)
+/// thì dừng ngay và báo lỗi, không ghi tiếp. max_rows (SOURCE_MAX_ROWS khi đặt) chặn thêm một lần nữa phòng bảng tăng
+/// dòng sau bước count_rows.
 pub async fn copy_to_csv(
     c: &mut PgConnection,
     table: &SourceTable,
-    max_rows: u64,
+    max_rows: Option<u64>,
     max_bytes: u64,
     out_path: &Path,
 ) -> Result<TableCopy, AppError> {
     let select = select_all(table);
     // Kiểu cột đọc từ chính câu SELECT được chép, nên khớp đúng cột và thứ tự cột của file CSV.
     let column_types = pg_types::column_types(c, &select).await?;
-    let sql = format!("COPY ({select} LIMIT {max_rows}) TO STDOUT WITH (FORMAT csv, HEADER true)");
+    let limit = max_rows.map(|n| format!(" LIMIT {n}")).unwrap_or_default();
+    let sql = format!("COPY ({select}{limit}) TO STDOUT WITH (FORMAT csv, HEADER true)");
     let mut out = tokio::fs::File::create(out_path)
         .await
         .map_err(|e| AppError::Internal(format!("create {}: {e}", out_path.display())))?;
@@ -199,11 +201,7 @@ pub async fn copy_to_csv(
             let chunk = chunk.map_err(|e| query_error(&e))?;
             written += chunk.len() as u64;
             if written > max_bytes {
-                return Err(AppError::TooLarge(format!(
-                    "Bảng {} lớn hơn giới hạn {} MB của một lần nạp (MAX_UPLOAD_MB)",
-                    table.full_name(),
-                    max_bytes / 1024 / 1024
-                )));
+                return Err(AppError::TooLarge(build_too_large(table, max_bytes)));
             }
             hasher.update(&chunk);
             out.write_all(&chunk)
@@ -224,6 +222,16 @@ pub async fn copy_to_csv(
         column_types,
         format: FileFormat::DatabaseCsv,
     })
+}
+
+/// Lời báo khi file chép ra của một bảng quá SOURCE_TABLE_MAX_MB. Bảng có dung lượng đã bị loại trước khi chép
+/// (plan.rs), nên lỗi này gặp với view, hay với file CSV của cách copy lớn hơn bảng trong Postgres.
+pub fn build_too_large(table: &SourceTable, max_bytes: u64) -> String {
+    format!(
+        "Bảng {} chép ra lớn hơn giới hạn {} MB của một bảng (SOURCE_TABLE_MAX_MB): bỏ tick bảng này hoặc tăng giới hạn",
+        table.full_name(),
+        max_bytes / 1024 / 1024
+    )
 }
 
 /// Lỗi lúc kết nối thành lời báo cách sửa. Không chép nguyên văn lỗi của sqlx vào lời báo, chỉ ghi vào log ở mức debug:

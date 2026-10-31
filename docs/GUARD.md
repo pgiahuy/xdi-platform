@@ -12,12 +12,11 @@ Trạng thái: guard đã có và có test. Endpoint hỏi dữ liệu ([#33](ht
 `service/ask/run.rs`, các câu SQL của câu "tại sao" qua `service/explain/breakdown.rs`. Truy dòng nguồn
 (`service/drill/mod.rs`), dataset mẫu (`service/samples.rs`) và `make eval` (`service/eval.rs`) cũng chạy SQL qua guard.
 Endpoint hỏi, cả câu thường và câu "tại sao", truy dòng nguồn và tổng quan dataset đọc chính sách lọc dòng theo
-`data_role` của người hỏi, người bấm hay người xem (`load_row_filters` trong `service/ask/row_filters.rs`, đọc
+các vai dữ liệu của người hỏi, người bấm hay người xem (`load_row_filters` trong `service/ask/row_filters.rs`, đọc
 `engine/store/policies.rs` và `dataset_relations`; admin không bị lọc) và truyền vào guard
 ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)), kèm điều kiện lan theo khóa ngoại
-([#215](https://github.com/pgiahuy/xdi-platform/issues/215), mục Bước 3). Store đã có hàm gán `data_role` cho thành
-viên và thay `rls_policies` của một dataset (`set_data_role`, `replace_row_policies`), nhưng chưa có API hay màn nào
-gọi (#45), nên ngoài test `row_filters` hiện luôn rỗng. Mọi nơi gọi guard truyền thêm quan hệ khóa ngoại giữa các bảng
+([#215](https://github.com/pgiahuy/xdi-platform/issues/215), mục Bước 3). Admin đặt vai và luật qua API `/data-roles`
+hay màn Vai dữ liệu (#45, #167). Mọi nơi gọi guard truyền thêm quan hệ khóa ngoại giữa các bảng
 (rỗng với dataset nạp từ file), để guard chỉ nhận phép nối đúng khóa ngoại
 ([#256](https://github.com/pgiahuy/xdi-platform/issues/256), mục Nối bảng ở bước 2).
 
@@ -232,10 +231,13 @@ SELECT ở mọi tầng: câu ngoài, `WITH`, câu con ở `FROM`, `WHERE`, danh
 
 Mỗi `AllowedTable` mang `row_filters`, có hai loại, service dựng (`service/ask/row_filters.rs`):
 
-- `RowFilter::Column { column, allowed_values }`: một dòng của `rls_policies` theo `data_role` của người gọi
+- `RowFilter::Column { column, allowed_values }`: một luật (một dòng của `rls_policies`) của vai người gọi mang
   ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)).
 - `RowFilter::Parent { columns, parent_columns, parent }`: điều kiện lan theo khóa ngoại
   ([#215](https://github.com/pgiahuy/xdi-platform/issues/215)), mục bên dưới.
+- `RowFilter::AnyOf(groups)`: người gọi mang nhiều vai có điều kiện trên bảng này; mỗi nhóm là điều kiện của một vai
+  (dựng như `row_filters` của chính bảng, nối AND), các nhóm nối OR: `(("region" IN ('South')) OR ("region" IN
+  ('North')))`. Một vai thì service truyền thẳng điều kiện của vai đó, không bọc `AnyOf`.
 
 Rỗng thì bảng đó không lọc. Guard không tự đọc chính sách và không quyết ai được thấy hết.
 

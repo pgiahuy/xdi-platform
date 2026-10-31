@@ -91,7 +91,7 @@ pub(super) async fn start_with_snapshot_mode(
 ) -> Option<Setup> {
     start_configured(key, llm, move |c: &mut Config| {
         if let Some(max_rows) = max_rows {
-            c.source_max_rows = max_rows;
+            c.source_max_rows = Some(max_rows);
         }
         if let Some((mode, extension)) = snapshot_mode {
             c.source_snapshot_mode = mode;

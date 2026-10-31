@@ -2,6 +2,7 @@
 /* components/members/MemberList.tsx - danh sách thành viên của workspace. Ai cũng xem được; canManage (admin) thì mỗi
 dòng có ô đổi vai và nút xóa. Dòng của chính mình có nút rời workspace thay cho nút xóa, với mọi vai.
 Admin tự hạ vai mình thì hỏi lại trước: hạ xong là mất quyền quản lý, không tự lấy lại được.
+Vai dữ liệu của từng người chỉ hiện để đọc (gán ở màn Vai dữ liệu).
 Mỗi dòng là một khối tự xuống hàng, không dùng bảng: ở bề ngang điện thoại phần nút nằm dưới tên.
 Nút không bị disabled lúc chờ (trang chặn bấm trùng): disabled làm focus rơi khỏi nút, người dùng bàn phím mất chỗ. */
 
@@ -62,6 +63,9 @@ export function MemberList(props: Props) {
                   <p className="truncate text-xs text-muted-foreground" title={member.email}>
                     {member.email}
                   </p>
+                )}
+                {member.dataRoles && member.dataRoles.length > 0 && (
+                  <p className="text-xs text-muted-foreground">Vai dữ liệu: {member.dataRoles.join(', ')}</p>
                 )}
               </div>
               <div className="flex items-center gap-2">

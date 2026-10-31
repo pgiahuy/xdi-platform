@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useMe } from "@/api/auth";
 import { ApiError } from "@/api/client";
+import { useDataRoles, useMyDataRoles } from "@/api/dataRoles";
 import {
   useAddMember,
   useDeleteWorkspace,
@@ -48,6 +49,11 @@ function MembersContent({ ws }: { ws: string }) {
   const leave = useLeaveWorkspace(ws);
   const rename = useRenameWorkspace(ws);
   const deleteWorkspace = useDeleteWorkspace(ws);
+  // Vai dữ liệu hiện chỉ để đọc ở đây (gán ở màn Vai dữ liệu): admin thấy vai của mọi người, member chỉ thấy vai mình.
+  const adminHere =
+    me.data?.workspaces.find((m) => m.slug === ws)?.role === "admin";
+  const dataRoles = useDataRoles(ws, adminHere);
+  const myDataRoles = useMyDataRoles(ws);
   // Mỗi lần thêm xong thì tăng, để AddMemberForm gắn lại và xóa ô email.
   const [addFormKey, setAddFormKey] = useState(0);
   const [addedMessage, setAddedMessage] = useState<string>();
@@ -132,11 +138,22 @@ function MembersContent({ ws }: { ws: string }) {
     });
   };
 
+  const rolesOf = (memberId: string): string[] => {
+    if (isAdmin) {
+      return (dataRoles.data ?? [])
+        .filter((r) => r.member_ids.includes(memberId))
+        .map((r) => r.name);
+    }
+    return memberId === userId
+      ? (myDataRoles.data ?? []).map((r) => r.name)
+      : [];
+  };
   const items: MemberItem[] = (members.data ?? []).map((m) => ({
     userId: m.user_id,
     name: m.display_name,
     email: m.email,
     role: m.role,
+    dataRoles: rolesOf(m.user_id),
   }));
 
   return (

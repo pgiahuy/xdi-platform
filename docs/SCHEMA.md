@@ -1,7 +1,7 @@
 # Schema Postgres của ứng dụng
 
 Trang này nói từng bảng trong Postgres của xdi-platform dùng để làm gì, cột nào quan trọng, ai ghi và lúc nào, kèm ví
-dụ vài dòng. Schema hiện có 20 bảng, dựng bởi các migration `0001_init.sql` tới `0018_source_metadata_tables.sql` trong
+dụ vài dòng. Schema hiện có 22 bảng, dựng bởi các migration `0001_init.sql` tới `0020_data_roles.sql` trong
 [`backend/migrations/`](https://github.com/pgiahuy/xdi-platform/tree/main/backend/migrations); backend tự chạy migration
 lúc khởi động.
 
@@ -21,8 +21,8 @@ băm mật khẩu, mã phiên hay thông tin kết nối thật.
 
 - Mọi bảng nghiệp vụ có `workspace_id`. Khóa ngoại giữa các bảng nghiệp vụ gồm cả `workspace_id`, nên một dòng không
   trỏ được sang dòng của workspace khác. Ba bảng không có `workspace_id`: `workspaces`, `users`, `sessions`.
-- Khóa chính là `uuid` sinh bằng `gen_random_uuid()`, trừ `memberships`, `settings`, `sessions` và
-  `source_metadata_tables` dùng khóa tự nhiên.
+- Khóa chính là `uuid` sinh bằng `gen_random_uuid()`, trừ `memberships`, `member_data_roles`, `settings`, `sessions`
+  và `source_metadata_tables` dùng khóa tự nhiên.
 - Xóa một workspace thì mọi dòng của nó mất theo (`ON DELETE CASCADE`). Xóa một bảng dữ liệu (dòng `datasets`) thì mất
   phiên bản, hồ sơ cột, quan hệ, chỉ số, luật lọc dòng, lịch sử câu hỏi, cuộc trò chuyện và bài học của bảng đó; nhật
   ký lỗi còn lại, chỉ đặt null `dataset_id`.
@@ -84,41 +84,63 @@ Ai ghi: thiết lập lần đầu tạo workspace đầu tiên; người dùng 
 
 ### memberships
 
-Ai thuộc workspace nào, với vai gì. Hai cột vai tách riêng: `role` quyết định được làm gì, `data_role` quyết định thấy
-dòng nào (qua `rls_policies`).
+Ai thuộc workspace nào, với vai gì trong workspace. Vai này quyết định được làm gì; thấy dòng nào là việc của vai dữ
+liệu (`data_roles`, bên dưới).
 
 | Cột | Ý nghĩa |
 |---|---|
-| `role` | `admin` (nạp, xóa dữ liệu, quản lý thành viên, chỉ số, bài học) hay `member` (xem, hỏi) |
-| `data_role` | Tên vai dữ liệu, chữ tự do; null là không bị lọc dòng |
+| `role` | `admin` (nạp, xóa dữ liệu, quản lý thành viên, chỉ số, bài học, vai dữ liệu) hay `member` (xem, hỏi) |
 
 Khóa chính là cặp (`workspace_id`, `user_id`). Ai ghi: người tạo workspace thành `admin`; admin thêm thành viên theo
-email, đổi vai, xóa; thành viên tự rời. Workspace luôn còn ít nhất một admin. Gán `data_role` mới có hàm trong store,
-chưa có API hay màn nào gọi (#45).
+email, đổi vai, xóa; thành viên tự rời. Workspace luôn còn ít nhất một admin. Cột `data_role` cũ (chữ tự do, một vai mỗi
+người) được migration 0020 chuyển sang `member_data_roles` rồi bỏ.
 
-| workspace_id | user_id | role | data_role |
+| workspace_id | user_id | role |
+|---|---|---|
+| `6a71…` | `4b1e…` | admin |
+| `6a71…` | `9c20…` | member |
+
+### data_roles
+
+Vai dữ liệu của một workspace (#45, #167): tên và mô tả. Tên không trùng trong workspace, không phân biệt hoa thường.
+Luật của vai ở `rls_policies`, người mang vai ở `member_data_roles`.
+
+Ai ghi: admin, qua `/api/workspaces/{ws}/data-roles` hay màn Vai dữ liệu. Vai đang gán cho ai thì không xóa được.
+
+| id | workspace_id | name | description |
 |---|---|---|---|
-| `6a71…` | `4b1e…` | admin | null |
-| `6a71…` | `9c20…` | member | `mien_nam` |
+| `3f0a…` | `6a71…` | Châu Âu | Nhân viên kinh doanh phụ trách thị trường châu Âu |
+
+### member_data_roles
+
+Thành viên nào mang vai dữ liệu nào; một người mang được nhiều vai. Khóa chính (`workspace_id`, `user_id`,
+`data_role_id`); rời workspace hay xóa vai thì dòng mất theo. Không có dòng nào thì người đó thấy mọi dòng.
+
+Ai ghi: admin (`PUT .../members/{user_id}/data-roles` thay cả bộ vai của một người). Chỉ gán được vai đã có luật.
+
+| workspace_id | user_id | data_role_id |
+|---|---|---|
+| `6a71…` | `9c20…` | `3f0a…` (Châu Âu) |
 
 ### rls_policies
 
-Luật lọc dòng theo vai dữ liệu trên một bảng: thành viên có `data_role` này chỉ thấy dòng mà `column_name` nằm trong
+Luật lọc dòng của một vai dữ liệu trên một bảng: người mang vai chỉ thấy dòng mà `column_name` nằm trong
 `allowed_values`. Guard thêm điều kiện đó vào mọi câu SQL chạy cho người đó (hỏi, truy dòng nguồn, tổng quan), kèm
-điều kiện lan qua khóa ngoại sang bảng liên quan ([GUARD.md](GUARD.md), bước 3). Admin không bị lọc.
+điều kiện lan qua khóa ngoại sang bảng liên quan ([GUARD.md](GUARD.md), bước 3). Trong một vai các luật nối AND; người
+mang nhiều vai thấy dòng mà ít nhất một vai có điều kiện trên bảng đó cho thấy (OR). Admin không bị lọc.
 
 | Cột | Ý nghĩa |
 |---|---|
 | `dataset_id` | Bảng áp luật (dòng `datasets`) |
-| `data_role` | Vai dữ liệu, khớp `memberships.data_role` |
-| `column_name`, `allowed_values` | Cột của bảng và các giá trị được thấy; mảng rỗng là không thấy dòng nào |
+| `data_role_id` | Vai của luật (dòng `data_roles`) |
+| `column_name`, `allowed_values` | Cột chiều của bảng và các giá trị được thấy, đã sắp xếp; mảng rỗng là không thấy dòng nào |
 
-Ai ghi: hiện chỉ test ghi bảng này. Store đã có hàm thay bộ luật của một bảng, chưa có API hay màn (#45), nên ngoài test
-bảng luôn rỗng. Ví dụ dưới đây là dòng giả định:
+Mỗi vai một luật cho mỗi cặp bảng, cột (`UNIQUE (dataset_id, data_role_id, column_name)`). Ai ghi: admin thay cả bộ
+luật của một vai (`PUT .../data-roles/{role_id}/policies`); hai vai không được có đúng cùng bộ luật.
 
-| dataset_id | data_role | column_name | allowed_values |
+| dataset_id | data_role_id | column_name | allowed_values |
 |---|---|---|---|
-| `831c…` (orders) | `mien_nam` | `region` | `{South}` |
+| `831c…` (orders) | `3f0a…` (Châu Âu) | `market` | `{Europe}` |
 
 ### settings
 
@@ -191,7 +213,7 @@ Ai ghi: backend, lúc chụp hay nạp; lớp ngữ nghĩa chạy nền điền 
 
 ### source_metadata_tables
 
-Bảng của một nguồn database chỉ có cấu trúc, chưa có dữ liệu: quá `SOURCE_MAX_ROWS` dòng (`row_limit`) hay cộng vào thì
+Bảng của một nguồn database chỉ có cấu trúc, chưa có dữ liệu: quá `SOURCE_MAX_ROWS` dòng khi đặt (`row_limit`), quá `SOURCE_TABLE_MAX_MB` hay cộng vào thì
 quá `SOURCE_SNAPSHOT_MAX_MB` (`size_limit`). Không có dòng `datasets` cho các bảng này. Câu hỏi cần bảng đó thì luồng hỏi
 nêu đúng tên bảng và nói nó chưa được chụp ([DATA.md](DATA.md), mục Chụp mọi bảng đọc được).
 
@@ -425,8 +447,8 @@ Ai ghi: chỉ admin, ở màn Bài học (viết tay, hay từ một dòng của
   bài `enabled = true` (đã duyệt) vào prompt.
 - **Chỉ số theo dataset, công thức theo bảng.** Tên chỉ số không trùng trong một dataset (`metrics.source_id`), còn
   `metrics.dataset_id` là bảng mà công thức đọc cột.
-- **Lọc dòng chưa bật được ngoài test.** `memberships.data_role` và `rls_policies` có sẵn, guard đã áp, nhưng chưa có
-  API để đặt (#45).
+- **Vai trong workspace và vai dữ liệu là hai thứ.** `memberships.role` quyết định được làm gì; `data_roles` cùng
+  `member_data_roles` và `rls_policies` quyết định thấy dòng nào. Admin mang vai dữ liệu vẫn không bị lọc.
 - **Dữ liệu phân tích không nằm trong Postgres.** Các dòng dữ liệu là file Parquet dưới `DATA_DIR`
   (`dataset_versions.parquet_path`). Postgres chỉ có hồ sơ: số dòng, min, max, danh sách giá trị của cột phân loại.
 

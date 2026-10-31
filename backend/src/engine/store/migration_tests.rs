@@ -141,3 +141,85 @@ async fn migration_0017_moves_tables_into_datasets() {
     );
     db.drop().await;
 }
+
+// Dữ liệu vai kiểu cũ (trước 0020): Binh mang 'south', Chi mang 'South' (cùng vai, khác hoa thường), Dung không có vai;
+// luật của 'south' và 'South' trên cùng cột region, luật 'north' không ai mang. Thời điểm tạo khác nhau để biết dòng
+// nào được giữ khi gộp.
+const OLD_ROLES: &str = "
+INSERT INTO workspaces (id, name, slug) VALUES ('00000000-0000-0000-0000-0000000000a1', 'Shop', 'shop');
+INSERT INTO sources (id, workspace_id, kind, name) VALUES
+  ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000a1', 'local_file', 'sales');
+INSERT INTO datasets (id, workspace_id, source_id, name, logical_table) VALUES
+  ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1',
+   '00000000-0000-0000-0000-0000000000b1', 'sales', 'sales');
+INSERT INTO users (id, email) VALUES
+  ('00000000-0000-0000-0000-0000000000d1', 'binh@example.com'),
+  ('00000000-0000-0000-0000-0000000000d2', 'chi@example.com'),
+  ('00000000-0000-0000-0000-0000000000d3', 'dung@example.com');
+INSERT INTO memberships (workspace_id, user_id, role, data_role) VALUES
+  ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000d1', 'member', 'south'),
+  ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000d2', 'member', 'South'),
+  ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000d3', 'member', NULL);
+INSERT INTO rls_policies (id, workspace_id, dataset_id, data_role, column_name, allowed_values) VALUES
+  ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000a1',
+   '00000000-0000-0000-0000-0000000000c1', 'south', 'region', ARRAY['South']),
+  ('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000a1',
+   '00000000-0000-0000-0000-0000000000c1', 'South', 'region', ARRAY['East', 'South']),
+  ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-0000000000a1',
+   '00000000-0000-0000-0000-0000000000c1', 'north', 'region', ARRAY['North']);
+";
+
+/// 0020 (#45, #167): mỗi tên vai thành một dòng data_roles (tên chỉ khác hoa thường gộp làm một), người đang mang vai
+/// vẫn mang vai đó, luật giữ nguyên (luật trùng cột của hai tên gộp giá trị), cột cũ bị bỏ.
+#[tokio::test]
+async fn migration_0020_keeps_every_member_scope() {
+    let Some(db) = empty_database().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let store = &db.store;
+    apply_migrations(store, 1, 18).await;
+    run(store, OLD_ROLES).await;
+    apply_migrations(store, 19, 20).await;
+
+    let roles = fetch_text(
+        store,
+        "SELECT string_agg(lower(name), ',' ORDER BY lower(name)) FROM data_roles",
+    )
+    .await;
+    assert_eq!(roles, "north,south");
+    let held = fetch_text(
+        store,
+        "SELECT string_agg(u.email || '=' || lower(r.name), ',' ORDER BY u.email) FROM member_data_roles m
+         JOIN users u ON u.id = m.user_id JOIN data_roles r ON r.id = m.data_role_id",
+    )
+    .await;
+    assert_eq!(held, "binh@example.com=south,chi@example.com=south");
+    let rules = fetch_text(
+        store,
+        "SELECT string_agg(lower(r.name) || ':' || p.column_name || '=' || array_to_string(p.allowed_values, '|'), ','
+                           ORDER BY lower(r.name))
+         FROM rls_policies p JOIN data_roles r ON r.id = p.data_role_id",
+    )
+    .await;
+    assert_eq!(rules, "north:region=North,south:region=East|South");
+    let old_columns = fetch_count(
+        store,
+        "SELECT count(*) FROM information_schema.columns
+         WHERE column_name = 'data_role' AND table_name IN ('memberships', 'rls_policies')",
+    )
+    .await;
+    assert_eq!(old_columns, 0);
+
+    // Store đọc lại đúng phạm vi: Binh và Chi có luật South, East; Dung không có luật nào.
+    let ws = WorkspaceId::for_test(Uuid::from_u128(0xa1));
+    let sales = Uuid::from_u128(0xc1);
+    for (user, expected) in [(0xd1, 1), (0xd2, 1), (0xd3, 0)] {
+        let policies = store
+            .list_member_policies(&ws, Uuid::from_u128(user), &[sales])
+            .await
+            .unwrap();
+        assert_eq!(policies.len(), expected, "user {user:x}");
+    }
+    db.drop().await;
+}

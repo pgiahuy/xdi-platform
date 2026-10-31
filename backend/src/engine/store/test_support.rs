@@ -159,3 +159,53 @@ pub async fn fetch_text(store: &Store, sql: &str) -> String {
         .await
         .expect("fetch test text")
 }
+
+/// Cho tài khoản `email` mang vai dữ liệu `role` với các luật (id bảng, cột, giá trị), ghi thẳng database cho test của
+/// luồng hỏi, truy dòng nguồn và tổng quan. Vai thuộc workspace của bảng đầu tiên; gọi lại với tên vai khác để người đó
+/// mang nhiều vai. Đường qua API có test riêng ở api/data_roles_tests.rs.
+pub async fn give_data_role(
+    store: &Store,
+    email: &str,
+    role: &str,
+    rules: &[(&str, &str, &[&str])],
+) {
+    let first: Uuid = rules[0].0.parse().expect("table id");
+    let workspace_id: Uuid = sqlx::query_scalar("SELECT workspace_id FROM datasets WHERE id = $1")
+        .bind(first)
+        .fetch_one(&store.pool)
+        .await
+        .expect("table workspace");
+    let role_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO data_roles (workspace_id, name) VALUES ($1, $2) RETURNING id",
+    )
+    .bind(workspace_id)
+    .bind(role)
+    .fetch_one(&store.pool)
+    .await
+    .expect("insert data role");
+    sqlx::query(
+        "INSERT INTO member_data_roles (workspace_id, user_id, data_role_id)
+         SELECT $1, id, $3 FROM users WHERE email = $2",
+    )
+    .bind(workspace_id)
+    .bind(email)
+    .bind(role_id)
+    .execute(&store.pool)
+    .await
+    .expect("give data role");
+    for (table, column, values) in rules {
+        let table: Uuid = table.parse().expect("table id");
+        sqlx::query(
+            "INSERT INTO rls_policies (workspace_id, dataset_id, data_role_id, column_name, allowed_values)
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(workspace_id)
+        .bind(table)
+        .bind(role_id)
+        .bind(column)
+        .bind(values.to_vec())
+        .execute(&store.pool)
+        .await
+        .expect("insert row policy");
+    }
+}

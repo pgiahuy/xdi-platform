@@ -35,7 +35,7 @@ pub use prompt_rules::build_prompt_rules;
 
 /// Bảng logic mà SQL của LLM được phép đọc, ví dụ "sales". Cũng là bảng cha trong RowFilter::Parent: khi đó mô hình
 /// không đọc được nó, guard chỉ dùng nó trong điều kiện lọc của bảng con.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AllowedTable {
     /// Cột datasets.logical_table.
     pub name: String,
@@ -48,7 +48,7 @@ pub struct AllowedTable {
 }
 
 /// Một điều kiện lọc dòng. Mọi điều kiện của một bảng nối bằng AND.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RowFilter {
     /// Một dòng của rls_policies: chỉ thấy dòng có `column` nằm trong `allowed_values`. Dòng có `column` rỗng (NULL)
     /// cũng bị ẩn, vì NULL không khớp IN.
@@ -68,6 +68,36 @@ pub enum RowFilter {
         /// Bảng cha kèm điều kiện lọc của chính nó với người hỏi, có thể lại gồm RowFilter::Parent (lan nhiều bước).
         parent: AllowedTable,
     },
+    /// Người hỏi mang nhiều vai dữ liệu (#45): dòng được thấy khi qua ít nhất một nhóm (OR giữa các vai); trong một
+    /// nhóm, các điều kiện nối AND như row_filters của bảng (AND trong một vai). Thành `((<nhóm 1>) OR (<nhóm 2>))`.
+    /// Một nhóm rỗng nghĩa là vai đó thấy hết bảng, nên cả AnyOf không lọc gì; service không dựng nhóm rỗng.
+    AnyOf(Vec<Vec<RowFilter>>),
+}
+
+/// Một đường lan theo khóa ngoại (RowFilter::Parent) đã tách ra: cột khóa của bảng, cột của bảng cha, bảng cha.
+pub(crate) type ParentPath<'a> = (&'a [String], &'a [String], &'a AllowedTable);
+
+/// Mọi RowFilter::Parent trong filters, kể cả trong các nhóm của AnyOf; không đi vào bảng cha. Ba chỗ cần biết bảng cha
+/// (khóa nối của guard/join_keys.rs, build_parent_tables, truy dòng nguồn) đi qua hàm này, để đường lan nằm trong một
+/// nhóm của AnyOf không bị bỏ sót.
+pub(crate) fn find_parent_paths(filters: &[RowFilter]) -> Vec<ParentPath<'_>> {
+    let mut found = Vec::new();
+    for filter in filters {
+        match filter {
+            RowFilter::Parent {
+                columns,
+                parent_columns,
+                parent,
+            } => found.push((columns.as_slice(), parent_columns.as_slice(), parent)),
+            RowFilter::AnyOf(groups) => {
+                for group in groups {
+                    found.extend(find_parent_paths(group));
+                }
+            }
+            RowFilter::Column { .. } => {}
+        }
+    }
+    found
 }
 
 /// Hai bản của cùng một câu, vì bản chạy chứa đường dẫn file trên máy chủ, không được lộ ra cho người dùng.
@@ -631,17 +661,43 @@ fn unfilterable_read(read: impl std::fmt::Display) -> AppError {
 fn build_row_conditions(table: &AllowedTable) -> Result<Vec<Expr>, AppError> {
     let mut conditions = Vec::new();
     for filter in &table.row_filters {
-        if let RowFilter::Column {
-            column,
-            allowed_values,
-        } = filter
-        {
-            check_filter_columns(table, std::slice::from_ref(column))?;
-            conditions.push(build_column_condition(column, allowed_values));
+        match filter {
+            RowFilter::Column {
+                column,
+                allowed_values,
+            } => {
+                check_filter_columns(table, std::slice::from_ref(column))?;
+                conditions.push(build_column_condition(column, allowed_values));
+            }
+            RowFilter::AnyOf(groups) => conditions.extend(build_any_of(table, groups)?),
+            // Các đường lan dựng chung ở build_parent_conditions, vì luật NULL xét mọi đường cùng lúc.
+            RowFilter::Parent { .. } => {}
         }
     }
     conditions.extend(build_parent_conditions(table)?);
     Ok(conditions)
+}
+
+/// `((<nhóm 1>) OR (<nhóm 2>))`. Mỗi nhóm dựng như row_filters của chính bảng này (bản sao chỉ khác row_filters), nên
+/// một nhóm có đủ luật của bảng: chính sách theo cột, đường lan và luật NULL khi nhiều đường. None khi một nhóm không có
+/// điều kiện nào (vai đó thấy hết bảng). Không có nhóm nào thì không thấy dòng nào (FALSE): đóng chặt khi service dựng
+/// sai, thay vì mở hết.
+fn build_any_of(table: &AllowedTable, groups: &[Vec<RowFilter>]) -> Result<Option<Expr>, AppError> {
+    let mut options = Vec::new();
+    for group in groups {
+        let one = AllowedTable {
+            row_filters: group.clone(),
+            ..table.clone()
+        };
+        match build_all_of(&build_row_conditions(&one)?) {
+            Some(condition) => options.push(nested(condition)),
+            None => return Ok(None),
+        }
+    }
+    Ok(Some(match options.into_iter().reduce(or) {
+        Some(any) => Expr::Nested(Box::new(any)),
+        None => Expr::value(Value::Boolean(false)),
+    }))
 }
 
 /// Điều kiện của các RowFilter::Parent (các đường lan) của một bảng.
@@ -1046,10 +1102,7 @@ pub fn build_parent_tables(tables: &[AllowedTable]) -> Vec<AllowedTable> {
     let mut found: Vec<AllowedTable> = Vec::new();
     let mut pending: Vec<&AllowedTable> = tables.iter().collect();
     while let Some(table) = pending.pop() {
-        for filter in &table.row_filters {
-            let RowFilter::Parent { parent, .. } = filter else {
-                continue;
-            };
+        for (_, _, parent) in find_parent_paths(&table.row_filters) {
             let key = parent.name.to_lowercase();
             if find_table(tables, &key).is_none() && find_table(&found, &key).is_none() {
                 found.push(parent.clone());
