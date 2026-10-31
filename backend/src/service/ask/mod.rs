@@ -90,8 +90,8 @@ use crate::service::ask::choices::{build_assumption_choices, build_clarify_choic
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
 use crate::service::ask::context::{build_ask_context_with_keys, AskContext};
 use crate::service::ask::contract::{
-    AskResponse, AskStatus, AskStep, ChosenOption, ResultTable, StepName, Understanding, Warning,
-    WarningCode,
+    AskResponse, AskStatus, AskStep, ChosenOption, Insight, ResultTable, StepName, Understanding,
+    Warning, WarningCode,
 };
 use crate::service::ask::fanout::{build_join_links, JoinLink};
 use crate::service::ask::group_prompt::{
@@ -111,12 +111,12 @@ use crate::service::ask::response_choices::{
 };
 pub use crate::service::ask::row_filters::load_row_filters;
 use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
-use crate::service::ask::summary::{summarize, SummaryInput, SummaryOutcome};
+use crate::service::ask::summary::{build_answer, SummaryInput, SummaryOutcome};
 use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::value_retry::{apply_full_values, build_resend_columns};
 use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
-use crate::service::ask::why::{ask_why, build_narrate_timeout, WhyAsk};
+use crate::service::ask::why::{ask_why, WhyAsk};
 use crate::service::domains::load_for_prompt;
 use crate::service::explain::form::QuestionKind;
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
@@ -323,6 +323,7 @@ async fn ask_steps(
         examples_used.as_deref(),
     ));
 
+    let sensitive = group.sensitive_columns();
     let input = RunInput {
         question,
         prompt: &prompt,
@@ -332,6 +333,7 @@ async fn ask_steps(
         max_rows: state.config.ask_max_rows,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,
+        sensitive: &sensitive,
     };
     let mut outcome = run_with_repair(state.llm.as_ref(), input).await?;
     steps.append(&mut outcome.steps);
@@ -373,6 +375,7 @@ async fn ask_steps(
                 columns: &applied,
                 tables,
                 links: &links,
+                sensitive: &sensitive,
             };
             run_value_retry(state, retry, &mut outcome, &mut steps).await;
         }
@@ -433,19 +436,9 @@ async fn ask_steps(
     };
     let view = build_answer_view(&ran, &context.columns, &metrics, &assumptions);
     let (understanding, chart) = apply_answer_view(view, outcome.result.as_mut());
-    let answer =
-        build_answer_text(state, question, understanding.as_ref(), &outcome, &lessons).await;
     let mut failures = std::mem::take(&mut outcome.failures);
-    let (answer_text, answer_text_by_model) = match answer {
-        Some(answer) => {
-            steps.push(answer.step);
-            failures.extend(answer.failure);
-            (Some(answer.text), Some(answer.by_model))
-        }
-        None => (None, None),
-    };
 
-    // Phần giải thích theo hình dạng kết quả (#227): một lần gọi mô hình thêm để viết lời, phân rã tự động do code.
+    // Phần giải thích theo hình dạng kết quả (#227): một lần gọi mô hình để viết lời, phân rã tự động do code.
     let insight = run_insight(
         state,
         &group,
@@ -453,12 +446,14 @@ async fn ask_steps(
         question,
         &outcome,
         understanding.as_ref(),
+        &lessons,
     )
     .await?;
     let mut read_names = outcome.tables_read.clone();
     let (insight, explanation) = match insight {
         Some(found) => {
             steps.extend(found.steps);
+            failures.extend(found.failure);
             for name in found.tables_read {
                 if !read_names.contains(&name) {
                     read_names.push(name);
@@ -468,6 +463,9 @@ async fn ask_steps(
         }
         None => (None, None),
     };
+    let answer = build_answer_text(state, understanding.as_ref(), &outcome, insight.as_ref());
+    let answer_text_by_model = answer.as_ref().map(|a| a.by_model);
+    let answer_text = answer.map(|a| a.text);
     let tables_read = group.build_tables_read(&read_names);
     let recorded = Recorded {
         status: outcome.status,
@@ -513,6 +511,7 @@ struct ValueRetry<'a> {
     columns: &'a [String],
     tables: &'a [AllowedTable],
     links: &'a [JoinLink],
+    sensitive: &'a [String],
 }
 
 /// Gọi lại lượt viết SQL một lần. Lần gửi lại chỉ là bước thêm: chỉ khi nó answered thì kết quả của nó thay kết quả lần
@@ -558,6 +557,7 @@ async fn run_value_retry(
         max_rows: state.config.ask_max_rows,
         timeout: state.config.query_timeout,
         jobs: &state.query_jobs,
+        sensitive: retry.sensitive,
     };
     let started = Instant::now();
     match run_with_repair(state.llm.as_ref(), input).await {
@@ -585,32 +585,24 @@ async fn run_value_retry(
     }
 }
 
-/// Đoạn trả lời bằng lời (ask/summary.rs), chỉ cho câu answered có kết quả.
-async fn build_answer_text(
+/// Đoạn trả lời ngắn (ask/summary.rs), chỉ cho câu answered có kết quả: lời của phần giải thích hay câu khuôn, không
+/// gọi mô hình.
+fn build_answer_text(
     state: &AppState,
-    question: &str,
     understanding: Option<&Understanding>,
     outcome: &RunOutcome,
-    lessons: &[String],
+    insight: Option<&Insight>,
 ) -> Option<SummaryOutcome> {
     let result = outcome.result.as_ref()?;
     if outcome.status != AskStatus::Answered {
         return None;
     }
-    let input = SummaryInput {
-        question,
+    build_answer(&SummaryInput {
         understanding,
         result,
-    };
-    let timeout = build_narrate_timeout(&state.config);
-    summarize(
-        state.llm.as_ref(),
-        &input,
-        state.config.answer_text,
-        timeout,
-        lessons,
-    )
-    .await
+        insight,
+        enabled: state.config.answer_text,
+    })
 }
 
 /// Dataset của workspace người hỏi và phiên bản đang dùng. Id của workspace khác trả 404 như id không có.

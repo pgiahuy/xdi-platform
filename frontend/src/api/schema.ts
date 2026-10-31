@@ -918,13 +918,15 @@ export interface components {
         AskResponse: {
             /**
              * @description Short answer in Vietnamese for an `answered` question that is not a "why" question and has at least one row:
-             *     written by the language model from the first 10 rows of the result, every number checked against those rows,
-             *     or a template sentence written by the backend. Null otherwise; a "why" question has `explanation.summary`.
+             *     `insight.summary` when the language model wrote it and it passed the checks (the model only sees the sentences
+             *     the backend computed, never result rows), otherwise a template sentence written by the backend. A list of rows
+             *     without aggregates always gets the template (row count and filters). Null otherwise; a "why" question has
+             *     `explanation.summary`.
              */
             answer_text: string | null;
             /**
-             * @description True when `answer_text` was written by the language model, false for the template sentence (the model failed,
-             *     timed out, wrote a number that is not in the rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null.
+             * @description True when `answer_text` is the language model's text of `insight.summary`, false for the template sentence (no
+             *     checked model text, a list of rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null.
              */
             answer_text_by_model: boolean | null;
             chart: components["schemas"]["ChartSuggestion"] | null;
@@ -2157,7 +2159,8 @@ export interface components {
          *     - `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column
          *       does not exist or because it could build a value too large (at most once).
          *     - `explain`: compute the breakdown of a "why" question (code, no model).
-         *     - `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.
+         *     - `narrate`: the language model writes the summary of the breakdown, or the `insight.summary` of a plain question
+         *       (also used as its `answer_text`).
          *     - `record`: save the question in the history.
          * @enum {string}
          */

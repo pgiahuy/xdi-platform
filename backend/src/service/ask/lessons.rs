@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/lessons.rs - chọn bài học đưa vào prompt (#228). ask/mod.rs đọc bài học đã duyệt, đang bật của dataset và
 của cả workspace (Store::list_active_lessons), pick_lessons giữ tối đa LESSONS_MAX bài liên quan tới câu đang hỏi, rồi
-prompt SQL, prompt form câu "tại sao" (ask/prompt.rs, ask/why_prompt.rs) và hai prompt viết lời (ask/summary.rs,
+prompt SQL, prompt form câu "tại sao" (ask/prompt.rs, ask/why_prompt.rs) và hai prompt viết lời (insight/narrate.rs,
 ask/narrate.rs) nhận đúng các bài đó trong một khối riêng, chữ ở backend/prompts/lessons.txt.
 
 Chỉ bài admin đã duyệt mới tới đây: chữ người dùng gõ (ghi chú "Chưa đạt", câu hỏi trong nhật ký) không bao giờ đi

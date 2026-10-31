@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/AnswerText.tsx - đoạn trả lời bằng lời của câu hỏi thường (AskResponse.answer_text): mô hình ngôn ngữ
-viết từ các dòng đầu của kết quả, mọi con số trong đoạn đều có trong các dòng đó. Khi câu của mô hình không qua bước so
-số, không gọi được mô hình hay người quản trị tắt ANSWER_TEXT, backend thay bằng câu viết theo khuôn; ghi rõ điều đó
-để người đọc biết. */
+/* components/ask/AnswerText.tsx - đoạn trả lời bằng lời của câu hỏi thường (AskResponse.answer_text): lời mô hình
+ngôn ngữ viết lại từ các câu backend đã tính cho phần giải thích, mọi con số trong đoạn đều có trong các câu đó. Khi lời
+của mô hình không qua bước kiểm, không gọi được mô hình, câu hỏi là danh sách dòng hay người quản trị tắt ANSWER_TEXT,
+backend thay bằng câu viết theo khuôn; ghi rõ điều đó để người đọc biết. */
 
 type Props = {
   text: string

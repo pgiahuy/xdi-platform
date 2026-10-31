@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/insight/narrate.rs - lời của phần giải thích câu thường (#227): nhờ mô hình diễn đạt lại câu chính và các ý do
 code viết (insight/facts.rs) thành một đoạn ngắn, rồi kiểm lời đó bằng code; không qua thì dùng chính các câu của code.
-Đây là lần gọi mô hình thêm duy nhất của phần giải thích. Mô hình chỉ nhận câu hỏi và các câu code đã viết (số đã tính,
-tên nhóm, tên kỳ), không nhận dòng nào của bảng kết quả hay bảng phân rã (docs/PRIVACY.md); INSIGHT_TEXT=false thì không
-gọi mô hình.
+Đây là lần gọi mô hình viết lời duy nhất của câu thường: lời qua bước kiểm cũng là đoạn trả lời ngắn ở đầu thẻ
+(ask/summary.rs). Mô hình chỉ nhận câu hỏi, bài học đã duyệt và các câu code đã viết (số đã tính, tên nhóm, tên kỳ), không
+nhận dòng nào của bảng kết quả hay bảng phân rã (docs/PRIVACY.md); INSIGHT_TEXT=false thì không gọi mô hình. Danh sách
+dòng và bảng nhóm theo cột nhạy cảm thì insight/mod.rs không gọi hàm này mà dùng build_code_narrated.
 
 Bốn bước kiểm, trượt một bước là dùng câu của code (bước narrate ghi lý do):
 - độ dài tối đa MAX_INSIGHT_CHARS;
@@ -21,6 +22,8 @@ use std::time::{Duration, Instant};
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
 use crate::service::ask::contract::{AskStep, StepName};
+use crate::service::ask::failures::{FailedStep, StepFailure};
+use crate::service::ask::lessons::build_with_lessons;
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::run::build_duration_text;
 use crate::service::explain::{
@@ -50,22 +53,26 @@ pub struct Narrated {
     pub summary: String,
     pub by_model: bool,
     pub step: AskStep,
+    /// Bước kiểm chặn lời của mô hình: lý do và nguyên lời, cho nhật ký lỗi (#228); None trong mọi trường hợp khác.
+    pub failure: Option<StepFailure>,
 }
 
-/// enabled là Config::insight_text; false thì không gọi mô hình.
+/// enabled là Config::insight_text; false thì không gọi mô hình. lessons là bài học đã duyệt liên quan câu hỏi
+/// (ask/lessons.rs).
 pub async fn narrate_insight(
     llm: &dyn LlmProvider,
     question: &str,
     parts: &InsightParts,
     enabled: bool,
     timeout: Duration,
+    lessons: &[String],
 ) -> Narrated {
     let started = Instant::now();
     if !enabled {
         let detail = "INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết";
-        return fallback(parts, started, true, detail.to_string());
+        return build_code_narrated(parts, started, detail.to_string());
     }
-    let prompt = build_insight_prompt(question, parts);
+    let prompt = build_with_lessons(build_insight_prompt(question, parts), lessons);
     let request = LlmRequest {
         task: LlmTask::Insight,
         question,
@@ -92,12 +99,17 @@ pub async fn narrate_insight(
     let text = reply.trim();
     if let Err(problem) = build_insight_check(text, parts) {
         tracing::warn!(%problem, "insight text failed the checks");
-        return fallback(parts, started, false, problem);
+        let failure = StepFailure::new(FailedStep::Narrate, &problem, Some(text));
+        return Narrated {
+            failure: Some(failure),
+            ..fallback(parts, started, false, problem)
+        };
     }
     Narrated {
         summary: text.to_string(),
         by_model: true,
         step: build_step(started, true, None),
+        failure: None,
     }
 }
 
@@ -205,11 +217,18 @@ pub fn find_causal_word(text: &str) -> Option<&'static str> {
     })
 }
 
+/// Câu của code thay cho lời của mô hình, không gọi mô hình; detail là lý do, ghi ở bước narrate (ok = true: không có
+/// gì hỏng).
+pub fn build_code_narrated(parts: &InsightParts, started: Instant, detail: String) -> Narrated {
+    fallback(parts, started, true, detail)
+}
+
 fn fallback(parts: &InsightParts, started: Instant, ok: bool, detail: String) -> Narrated {
     Narrated {
         summary: build_code_text(parts),
         by_model: false,
         step: build_step(started, ok, Some(detail)),
+        failure: None,
     }
 }
 

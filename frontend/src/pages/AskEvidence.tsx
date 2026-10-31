@@ -58,7 +58,6 @@ const taskLabels: Record<ModelTask, string> = {
   profile: 'Lập hồ sơ cột',
   narrate: 'Viết lời phân rã',
   why: 'Điền form câu hỏi tìm nguyên nhân',
-  summary: 'Viết đoạn trả lời',
   insight: 'Viết lời giải thích',
   classify: 'Phân loại câu hỏi',
 }

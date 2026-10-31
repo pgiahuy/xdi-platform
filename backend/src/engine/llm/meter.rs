@@ -4,7 +4,7 @@ có báo. Metered bọc provider thật và ghi mỗi lần gọi vào một Cal
 lập hồ sơ ngữ nghĩa (service/semantic/mod.rs) có CallLog riêng, nên số đếm không lẫn giữa các request chạy cùng lúc.
 Mỗi lần gọi cũng ghi một dòng log "llm call" để đọc được từ log máy chủ mà không cần mở lịch sử câu hỏi.
 
-Metered cũng là một LlmProvider, nên người gọi (summary.rs, classify.rs...) không phải đổi gì: họ vẫn gọi complete. */
+Metered cũng là một LlmProvider, nên người gọi (ask/classify.rs, insight/narrate.rs...) không phải đổi gì: họ vẫn gọi complete. */
 
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -115,7 +115,7 @@ impl Metered {
     }
 }
 
-/// Một lần gọi đang chờ. Người gọi bọc lời gọi trong tokio::time::timeout (summary.rs, classify.rs): hết giờ thì
+/// Một lần gọi đang chờ. Người gọi bọc lời gọi trong tokio::time::timeout (ask/classify.rs, insight/narrate.rs): hết giờ thì
 /// future bị hủy giữa chừng và dòng sau .await không bao giờ chạy. Drop vẫn chạy khi future bị hủy, nên lần gọi đó
 /// vẫn được ghi (ok false, không có token) thay vì biến mất khỏi số đếm.
 struct PendingCall<'a> {
@@ -223,7 +223,7 @@ mod tests {
 
     fn request(question: &str) -> LlmRequest<'_> {
         LlmRequest {
-            task: LlmTask::Summary,
+            task: LlmTask::Insight,
             question,
             prompt: "prompt",
             json_schema: None,

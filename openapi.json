@@ -1415,8 +1415,8 @@
                   "simple": {
                     "summary": "One dimension, one measure",
                     "value": {
-                      "answer_text": "Europe có doanh thu cao nhất với 10.845.230,42, tiếp theo là LATAM (10.276.850,17) và Pacific Asia (8.124.900,80).",
-                      "answer_text_by_model": true,
+                      "answer_text": "Có 5 dòng; cao nhất là Europe với 10.845.230,42.",
+                      "answer_text_by_model": false,
                       "chart": {
                         "kind": "bar",
                         "layout": "single",
@@ -1557,12 +1557,6 @@
                           "detail": null,
                           "duration_ms": 38,
                           "name": "run",
-                          "ok": true
-                        },
-                        {
-                          "detail": null,
-                          "duration_ms": 910,
-                          "name": "narrate",
                           "ok": true
                         },
                         {
@@ -4247,14 +4241,14 @@
               "string",
               "null"
             ],
-            "description": "Short answer in Vietnamese for an `answered` question that is not a \"why\" question and has at least one row:\nwritten by the language model from the first 10 rows of the result, every number checked against those rows,\nor a template sentence written by the backend. Null otherwise; a \"why\" question has `explanation.summary`."
+            "description": "Short answer in Vietnamese for an `answered` question that is not a \"why\" question and has at least one row:\n`insight.summary` when the language model wrote it and it passed the checks (the model only sees the sentences\nthe backend computed, never result rows), otherwise a template sentence written by the backend. A list of rows\nwithout aggregates always gets the template (row count and filters). Null otherwise; a \"why\" question has\n`explanation.summary`."
           },
           "answer_text_by_model": {
             "type": [
               "boolean",
               "null"
             ],
-            "description": "True when `answer_text` was written by the language model, false for the template sentence (the model failed,\ntimed out, wrote a number that is not in the rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null."
+            "description": "True when `answer_text` is the language model's text of `insight.summary`, false for the template sentence (no\nchecked model text, a list of rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null."
           },
           "chart": {
             "oneOf": [
@@ -7382,7 +7376,7 @@
       },
       "StepName": {
         "type": "string",
-        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `classify`: the language model tells a plain question from a question that asks for a cause; when the model\n  fails, the keyword rule decides and the step is not ok.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `answer_text` of a plain question.\n- `record`: save the question in the history.",
+        "description": "Step of the backend:\n- `context`: read the dataset profile and build the prompt.\n- `classify`: the language model tells a plain question from a question that asks for a cause; when the model\n  fails, the keyword rule decides and the step is not ok.\n- `llm`: the language model writes SQL.\n- `guard`: check the SQL, add row-level filters and a row limit.\n- `run`: run the SQL on the analytics engine.\n- `repair`: the language model fixes SQL that failed to run, or that the guard refused because a table or column\n  does not exist or because it could build a value too large (at most once).\n- `explain`: compute the breakdown of a \"why\" question (code, no model).\n- `narrate`: the language model writes the summary of the breakdown, or the `insight.summary` of a plain question\n  (also used as its `answer_text`).\n- `record`: save the question in the history.",
         "enum": [
           "context",
           "classify",

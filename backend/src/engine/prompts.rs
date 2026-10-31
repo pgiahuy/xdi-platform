@@ -78,13 +78,8 @@ pub const WHY_FORM_REPAIR: PromptFile = PromptFile {
     text: include_str!("../../prompts/why_form_repair.txt"),
 };
 
-/// Prompt đoạn trả lời của câu thường (service/ask/summary.rs).
-pub const SUMMARY: PromptFile = PromptFile {
-    name: "summary.txt",
-    text: include_str!("../../prompts/summary.txt"),
-};
-
-/// Khối bài học đã duyệt (#228), chung cho prompt SQL, prompt form và hai prompt viết lời (service/ask/lessons.rs).
+/// Khối bài học đã duyệt (#228), chung cho prompt SQL, prompt form, prompt diễn giải câu "tại sao" và prompt lời của
+/// phần giải thích câu thường (service/ask/lessons.rs).
 pub const LESSONS: PromptFile = PromptFile {
     name: "lessons.txt",
     text: include_str!("../../prompts/lessons.txt"),

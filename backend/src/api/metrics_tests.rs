@@ -38,7 +38,7 @@ impl LlmProvider for RecordingLlm {
         // luật từ khóa, hai bước kia bỏ qua.
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Classify | LlmTask::Summary | LlmTask::Insight
+            LlmTask::Profile | LlmTask::Classify | LlmTask::Insight
         ) {
             return Err(AppError::Upstream(
                 "no profile, classify or summary".to_string(),

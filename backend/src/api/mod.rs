@@ -18,6 +18,8 @@ mod admin;
 #[cfg(test)]
 mod ask_fanout_tests;
 #[cfg(test)]
+mod ask_privacy_tests;
+#[cfg(test)]
 mod ask_related_tests;
 #[cfg(test)]
 mod ask_tests;

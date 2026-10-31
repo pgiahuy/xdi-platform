@@ -190,8 +190,8 @@
     "warnings": []
   },
   "simple": {
-    "answer_text": "Europe có doanh thu cao nhất với 10.845.230,42, tiếp theo là LATAM (10.276.850,17) và Pacific Asia (8.124.900,80).",
-    "answer_text_by_model": true,
+    "answer_text": "Có 5 dòng; cao nhất là Europe với 10.845.230,42.",
+    "answer_text_by_model": false,
     "chart": {
       "kind": "bar",
       "layout": "single",
@@ -332,12 +332,6 @@
         "detail": null,
         "duration_ms": 38,
         "name": "run",
-        "ok": true
-      },
-      {
-        "detail": null,
-        "duration_ms": 910,
-        "name": "narrate",
         "ok": true
       },
       {
