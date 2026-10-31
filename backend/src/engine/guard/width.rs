@@ -20,6 +20,7 @@ use sqlparser::ast::{
 };
 
 use super::{find_table, name_key, single_ident, AllowedTable};
+use crate::engine::sql_shape::read_box_table;
 
 /// Độ dài tối đa của một chuỗi hằng, tính bằng byte: đủ cho tên, mã, định dạng ngày, mẫu tìm kiếm.
 pub const MAX_LITERAL_BYTES: usize = 1000;
@@ -59,14 +60,17 @@ struct WidthChecker<'a> {
 impl WidthChecker<'_> {
     /// Số cột của một nguồn khi biết chắc: bảng dữ liệu thì lấy từ hồ sơ. Bảng tạm, câu con thì không tính (None).
     fn source_width(&self, source: &TableFactor) -> Option<usize> {
-        let TableFactor::Table {
-            name, args: None, ..
-        } = source
-        else {
-            return None;
+        let table = match source {
+            TableFactor::Table {
+                name, args: None, ..
+            } => single_ident(name).and_then(|ident| find_table(self.tables, &name_key(ident)))?,
+            // Hộp `(SELECT * FROM t WHERE ...)` ra đúng các cột của t. Câu đã qua guard có hộp lọc quanh mỗi bảng bị
+            // lọc, nên truy dòng nguồn đưa lại `o.*` hay câu con `"b".*` của phân rã (#227) qua guard vẫn đếm được cột.
+            TableFactor::Derived { .. } => {
+                find_table(self.tables, &read_box_table(source)?.to_lowercase())?
+            }
+            _ => return None,
         };
-        let table =
-            single_ident(name).and_then(|ident| find_table(self.tables, &name_key(ident)))?;
         Some(table.columns.len())
     }
 

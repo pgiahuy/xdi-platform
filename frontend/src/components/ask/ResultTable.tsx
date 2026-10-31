@@ -236,7 +236,7 @@ function buildTarget(
     value: row[k],
     kind: kinds[k],
   }))
-  return { from: 'cell', keys, measure: result.columns[column].name }
+  return { from: 'cell', keys, measure: result.columns[column].name, value: row[column], kind: kinds[column] }
 }
 
 function describeCount({ rows, totalRows, truncated, limitReached }: ResultView): string {

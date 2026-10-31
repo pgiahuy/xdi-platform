@@ -249,8 +249,10 @@ bảng phẳng, nên không có cột lặp lại trên nhiều dòng để cộ
   bản mới, còn quan hệ của lần này chưa ghi. Chụp lại là đủ: bảng không đổi trùng hash nội dung nên không tạo phiên bản
   trùng.
 - **Hỏi:** câu thường trên một dataset của nhóm được đọc mọi bảng đã chụp của cùng database (#249), mô hình viết
-  `JOIN` theo đúng các quan hệ đó; khung Minh chứng ghi các bảng câu đã đọc. Câu "tại
-  sao" và truy dòng nguồn vẫn chỉ một bảng. Cách chọn bảng và luật cho người bị lọc dòng:
+  `JOIN` theo đúng các quan hệ đó; khung Minh chứng ghi các bảng câu đã đọc. Câu "tại sao" vẫn đọc một bảng chính
+  (phân rã xét thêm cột của bảng liên quan, #227). Bấm một số của câu nối bảng thì truy dòng nguồn trả dòng của bảng
+  mà độ đo cộng, kèm cột khóa và cột lọc của bảng nối; giới hạn ở [ARCHITECTURE.md](ARCHITECTURE.md), mục 8. Cách
+  chọn bảng và luật cho người bị lọc dòng:
   [ARCHITECTURE.md](ARCHITECTURE.md), mục 6.
 
 ## Gộp nhiều file và cột `_source_file`
@@ -457,5 +459,7 @@ hình đã thử mà không lập được; trang hỏi hiện câu gợi ý và
 - Nạp nguyên tử: ghi phiên bản vào Postgres và chuyển file Parquet về chỗ cuối chưa nằm trong một giao dịch, lỗi giữa
   hai bước có thể để lại dòng thừa trong Postgres ([#79](https://github.com/pgiahuy/xdi-platform/issues/79)).
 - Nguồn dữ liệu là MySQL, SQLite, hay truy vấn thẳng database ngoài lúc hỏi; TLS tới Postgres.
-- Câu "tại sao" và truy dòng nguồn qua nhiều dataset chụp cùng nhau; chặn cộng lặp khi `JOIN` bằng code
+- Câu "tại sao" có bảng chính là bảng khác ngoài bảng đang chọn; chặn cộng lặp khi `JOIN` bằng code
   ([#214](https://github.com/pgiahuy/xdi-platform/issues/214)).
+- Truy dòng nguồn của câu cộng trên bảng tạm hay câu con đã gộp nhóm (tổng theo đơn rồi nối khách): một dòng của bảng
+  tạm đó là tổng của nhiều dòng, nên truy dòng nguồn từ chối thay vì trả dòng đã gộp.

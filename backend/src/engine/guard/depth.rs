@@ -17,6 +17,7 @@ use std::ops::ControlFlow;
 use sqlparser::ast::{Query, TableFactor, Visit, Visitor};
 
 use super::{name_key, single_ident};
+use crate::engine::sql_shape::is_table_box;
 
 /// Số tầng câu tối đa, tính cả câu ngoài cùng.
 pub const MAX_QUERY_DEPTH: usize = 4;
@@ -87,7 +88,12 @@ impl Visitor for DepthCounter {
     }
 
     fn post_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
-        let depth = self.open.pop().map_or(0, |done| done.inner) + 1;
+        // Hộp `SELECT * FROM bảng WHERE ...` không ghép giá trị mới ở danh sách cột, như hộp lọc guard tự thêm sau bước
+        // này (mod.rs), nên không tính tầng của chính nó; câu con trong WHERE của hộp vẫn tính. Truy dòng nguồn đưa lại
+        // câu đã lưu có hộp lọc của người đã hỏi qua guard: tính tầng hộp thì câu phân rã theo bảng liên quan (#227) của
+        // người bị lọc lan qua hai bước thành 5 tầng và bị từ chối, dù lúc hỏi chỉ 2 tầng.
+        let own = usize::from(!is_table_box(query));
+        let depth = self.open.pop().map_or(0, |done| done.inner) + own;
         let address: *const Query = query;
         // Thân bảng tạm là câu con trực tiếp của câu định nghĩa nó, nên câu đó đang ở đỉnh `open`.
         let cte = self.cte_bodies.iter().find(|(body, _)| *body == address);

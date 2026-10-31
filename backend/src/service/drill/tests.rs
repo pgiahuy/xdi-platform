@@ -93,6 +93,7 @@ impl Orders {
             sql_guarded,
             keys,
             slice_filter: None,
+            only_measure: None,
             offset: page.0,
             limit: page.1,
             tables: &tables,
@@ -207,10 +208,12 @@ async fn rows_of_a_cell_add_up_to_the_cell() {
         .iter()
         .all(|row| text(&row[source]).as_deref() == Some("orders.csv")));
     assert!(!drilled.result.limit_reached);
-    // SQL trả về là câu sau guard: bảng logic, không có đường dẫn file trên máy chủ, không ORDER BY của câu gốc.
+    // SQL trả về là câu sau guard: bảng logic, không có đường dẫn file trên máy chủ; ORDER BY của câu gốc thay bằng
+    // ORDER BY ALL để các trang có thứ tự cố định.
     assert!(drilled.sql.contains("FROM orders"), "{}", drilled.sql);
     assert!(!drilled.sql.contains("parquet"), "{}", drilled.sql);
-    assert!(!drilled.sql.contains("ORDER BY"), "{}", drilled.sql);
+    assert!(!drilled.sql.contains("revenue DESC"), "{}", drilled.sql);
+    assert!(drilled.sql.contains("ORDER BY ALL"), "{}", drilled.sql);
 }
 
 #[tokio::test]
@@ -392,8 +395,9 @@ async fn unsupported_questions_are_refused() {
             "ROLLUP",
         ),
         (
-            "WITH t AS (SELECT * FROM orders) SELECT \"Market\", count(*) FROM t GROUP BY \"Market\"",
-            "bảng tạm",
+            "WITH t AS (SELECT \"Market\", count(*) AS n FROM orders GROUP BY \"Market\")
+             SELECT \"Market\", sum(n) FROM t GROUP BY \"Market\"",
+            "bảng tạm (WITH) t gộp nhóm",
         ),
         ("SELECT \"Market\", \"Order Id\" FROM orders", "không có độ đo"),
     ];
