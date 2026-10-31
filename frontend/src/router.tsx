@@ -3,7 +3,7 @@
 trong khung chung AppLayout; thêm trang trong workspace là thêm một route con ở đây và một dòng ở pages/workspaceNav.ts.
 Trang quản trị hệ thống và trang tài khoản ngoài workspace cũng hiện trong AppLayout nhưng không cần workspace, đường
 dẫn ở pages/globalNav.ts. Màn đăng nhập và thiết lập nằm ngoài khung, đường dẫn ở pages/authNav.ts.
-Đăng nhập, thiết lập, tài khoản, thành viên, các trang quản trị, trang Tổng quan dữ liệu và trang Dữ liệu tải riêng khi
+Đăng nhập, thiết lập, tài khoản, thành viên, khái niệm ngành, các trang quản trị, trang Tổng quan dữ liệu và trang Dữ liệu tải riêng khi
 mở (lazy): ít khi cần so với hỏi, hoặc kéo theo phần nạp file, nên không đóng vào gói chính. Mọi route nằm dưới một
 route gốc có errorElement, để lỗi ở bất kỳ trang nào cũng hiện câu tiếng Việt. */
 
@@ -16,7 +16,15 @@ import { accountRoute, adminAccountsRoute, adminWorkspacesRoute } from '@/pages/
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { RootPage } from '@/pages/RootPage'
 import { RouteErrorPage } from '@/pages/RouteErrorPage'
-import { accountPath, examplesPath, lessonsPath, membersPath, overviewPath, workspaceRoute } from '@/pages/workspaceNav'
+import {
+  accountPath,
+  domainsPath,
+  examplesPath,
+  lessonsPath,
+  membersPath,
+  overviewPath,
+  workspaceRoute,
+} from '@/pages/workspaceNav'
 import { WorkspaceNotFoundPage } from '@/pages/WorkspaceNotFoundPage'
 
 async function loadAccountPage() {
@@ -69,6 +77,10 @@ export const router = createBrowserRouter([
               {
                 path: examplesPath,
                 lazy: async () => ({ Component: (await import('@/pages/ExamplesPage')).ExamplesPage }),
+              },
+              {
+                path: domainsPath,
+                lazy: async () => ({ Component: (await import('@/pages/DomainsPage')).DomainsPage }),
               },
               {
                 path: membersPath,

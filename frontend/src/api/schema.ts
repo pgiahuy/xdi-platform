@@ -545,6 +545,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Industry packs of the workspace with all their concepts
+         * @description The first call in a workspace copies the packs of `data/domains/` into it; later calls add only packs and concepts it does not have yet and never overwrite an edit.
+         */
+        get: operations["listConcepts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/domains/{pack}/concepts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a concept to a pack (admin only)
+         * @description The concept goes last in the pack and is used by the next question on a dataset with this pack.
+         */
+        post: operations["createConcept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/domains/{pack}/concepts/{concept_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a concept (admin only)
+         * @description Checked like a new concept. Send `enabled: false` to leave the concept out of the prompt.
+         */
+        put: operations["updateConcept"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/error-log": {
         parameters: {
             query?: never;
@@ -977,6 +1037,13 @@ export interface components {
             slice: components["schemas"]["SliceName"];
             value: components["schemas"]["CellValue"] | null;
         };
+        /** @description A common way to compute the concept, in words, not tied to the columns of a dataset. */
+        Calculation: {
+            /** @description What it computes and when to pick it over the others. */
+            description: string;
+            /** @description Short name of the method. */
+            name: string;
+        };
         /** @description One cell: a JSON number, string or boolean; read it with the `kind` of its column. */
         CellValue: number | string | boolean;
         ChangePasswordRequest: {
@@ -1099,6 +1166,54 @@ export interface components {
          * @enum {string}
          */
         Comparison: "periods" | "groups";
+        /** @description A business concept of an industry pack in this workspace. */
+        Concept: {
+            calculations: components["schemas"]["Calculation"][];
+            description: string;
+            dimensions: string[];
+            /** @description False for a concept an admin turned off; it stays here but is left out of the prompt. */
+            enabled: boolean;
+            /** Format: uuid */
+            id: string;
+            /** @description Id of the concept in the pack file (`data/domains/<pack>.json`); null for a concept an admin added. */
+            key: string | null;
+            name: string;
+            sanity_checks: components["schemas"]["SanityCheck"][];
+            /** @description Other words for the concept, Vietnamese and English; the prompt lists them next to the name. */
+            synonyms: string[];
+            /**
+             * Format: date-time
+             * @description Last edit on the concepts screen; null when unchanged since it was copied from the pack file.
+             */
+            updated_at: string | null;
+        };
+        /** @description An industry pack of the workspace with all its concepts, enabled or not. */
+        ConceptPack: {
+            /** @description In prompt order: the order of the pack file, concepts added by admins last. */
+            concepts: components["schemas"]["Concept"][];
+            description: string;
+            /** @description Pack id, the file name without `.json`; a dataset uses the pack whose key is in its `domain`. */
+            key: string;
+            name: string;
+        };
+        /** @description A concept to add, or the new content of one. Errors name the wrong field in `field`. */
+        ConceptRequest: {
+            /** @description At most three. */
+            calculations?: components["schemas"]["Calculation"][];
+            description: string;
+            dimensions?: string[];
+            /** @description Defaults to true. */
+            enabled?: boolean;
+            /** @description Unique in the pack, compared ignoring case and where the tone mark sits (not ignoring tone marks). */
+            name: string;
+            sanity_checks?: components["schemas"]["SanityCheck"][];
+            /** @description At least one; a word may belong to only one concept of the pack, compared without case and accents. */
+            synonyms: string[];
+        };
+        /** @description Industry packs of the workspace, sorted by key. */
+        ConceptsResponse: {
+            packs: components["schemas"]["ConceptPack"][];
+        };
         /** @description One conversation on a dataset. */
         ConversationItem: {
             /** Format: date-time */
@@ -1901,6 +2016,19 @@ export interface components {
             /** @description True when `rows` holds fewer rows than `total_rows`. */
             truncated: boolean;
         };
+        /** @description A plausibility rule for values of the concept. `min` and `max` only with `value_range`, at least one of them. */
+        SanityCheck: {
+            kind: components["schemas"]["SanityCheckKind"];
+            /** Format: double */
+            max?: number | null;
+            /** Format: double */
+            min?: number | null;
+        };
+        /**
+         * @description `value_range`: the value lies in [min, max], one end may be missing. `non_negative`: the value is not negative.
+         * @enum {string}
+         */
+        SanityCheckKind: "value_range" | "non_negative";
         SetRoleRequest: {
             /** @description `admin` or `member`. */
             role: string;
@@ -3647,6 +3775,142 @@ export interface operations {
                 };
             };
             /** @description 401, 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listConcepts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptsResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createConcept: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Pack key, for example `retail` */
+                pack: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Concept"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 invalid concept, `field` names the field; 401; 403 not admin; 404 not a member or no such pack */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    updateConcept: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Pack key, for example `retail` */
+                pack: string;
+                /** @description Concept id (UUID) */
+                concept_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Concept"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 invalid concept, `field` names the field; 401; 403 not admin; 404 no such pack or concept */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

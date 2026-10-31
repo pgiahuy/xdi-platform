@@ -2,8 +2,9 @@
 /* service/ask/prompt.rs - prompt SQL cho câu thường (#29), và các phần chung với prompt form câu "tại sao"
 (ask/why_prompt.rs): cột, gợi ý, lựa chọn đã có, chỉ số, khái niệm ngành, trần độ dài. Câu trả lời theo
 build_sql_reply_schema (ask/reply.rs). Ngữ cảnh (cột, giá trị, gợi ý, cột đã chọn) lấy từ AskContext (ask/context.rs),
-chỉ số và câu mẫu đã duyệt đọc từ engine/store (metrics.rs, queries.rs), gói khái niệm ngành từ engine/domains.rs. Endpoint
-hỏi (#33) đọc các thứ đó rồi gọi build_sql_prompt. Test ở ask/prompt_tests.rs.
+chỉ số và câu mẫu đã duyệt đọc từ engine/store (metrics.rs, queries.rs), gói khái niệm ngành của workspace từ
+service/domains/ (bảng domain_concepts, #229). Endpoint hỏi (#33) đọc các thứ đó rồi gọi build_sql_prompt. Test ở
+ask/prompt_tests.rs.
 
 Prompt chỉ có tên bảng logic, tên cột, mô tả, bí danh, giá trị của cột chiều không nhạy cảm và định nghĩa chỉ số; không
 có dòng dữ liệu, đường dẫn file hay read_parquet (docs/PRIVACY.md). Phần luật viết tiếng Anh vì là phần máy đọc, như
@@ -53,7 +54,7 @@ pub struct PromptInput<'a> {
     /// Câu mẫu admin đã duyệt, mới nhất trước (Store::list_approved_examples, #212). Prompt SQL lấy câu thường, prompt
     /// form lấy câu "tại sao" (có form).
     pub examples: &'a [PromptExample],
-    /// Gói khái niệm ngành của dataset; None khi dataset chưa gắn gói.
+    /// Gói khái niệm ngành của dataset, chỉ các khái niệm đang bật; None khi dataset chưa gắn gói.
     pub domain: Option<&'a DomainPackage>,
     /// Lựa chọn người hỏi gửi kèm câu hỏi. Lựa chọn cột đã nằm trong context.picks (#28); ở đây chỉ thêm lựa chọn chỉ
     /// số và khoảng thời gian.
@@ -416,6 +417,10 @@ pub(super) fn build_domain_section(domain: Option<&DomainPackage>) -> String {
     let Some(package) = domain else {
         return String::new();
     };
+    // Admin tắt hết khái niệm của gói thì bỏ cả phần, không để lại dòng tiêu đề không có khái niệm nào.
+    if package.concepts.is_empty() {
+        return String::new();
+    }
     let lines: Vec<String> = package
         .concepts
         .iter()

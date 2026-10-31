@@ -20,10 +20,11 @@ const CSV: &str = "Market,Order Region,Order Item Total,Days\n\
                    LATAM,South America,200,5\n\
                    Europe,Northern Europe,50,4\n";
 
-/// Mô hình giả trả lần lượt các câu viết sẵn và giữ lại mọi prompt nhận được, như ở api/conversation_tests.rs.
-struct RecordingLlm {
-    replies: Mutex<VecDeque<String>>,
-    prompts: Arc<Mutex<Vec<String>>>,
+/// Mô hình giả trả lần lượt các câu viết sẵn và giữ lại mọi prompt nhận được, như ở api/conversation_tests.rs. Test
+/// của khái niệm ngành (api/domains_tests.rs) dùng lại.
+pub(super) struct RecordingLlm {
+    pub(super) replies: Mutex<VecDeque<String>>,
+    pub(super) prompts: Arc<Mutex<Vec<String>>>,
 }
 
 #[async_trait]

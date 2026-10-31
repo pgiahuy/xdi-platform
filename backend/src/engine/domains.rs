@@ -1,20 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/domains.rs - gói khái niệm ngành: đọc các file .json trong data/domains/ mà build.rs nhúng vào binary, kiểm
-theo schema và cho tra cứu theo id. Engine chỉ biết hình dạng của một gói, không biết nội dung từng ngành.
+theo schema, và các luật kiểm dùng chung cho file và cho khái niệm admin sửa. Engine chỉ biết hình dạng của một gói,
+không biết nội dung từng ngành.
 
 Ba tầng tách riêng: engine không biết ngành; gói mô tả khái niệm chung của mọi doanh nghiệp cùng ngành (doanh thu, tỷ
 lệ giao trễ...) bằng lời, không ghi tên cột của dataset cụ thể; chỉ số của workspace (bảng metrics) mới quyết định
-công thức trên cột thật. Prompt sinh SQL và prompt form câu "tại sao" (service/ask/prompt.rs) gọi find_domain_package
-theo datasets.domain; chưa có chỗ nào đặt cột đó (chọn gói lúc nạp, một dataset một gói, làm ở issue sau), nên hiện
-chưa prompt nào có gói. Schema của file ghi ở docs/DOMAINS.md. */
+công thức trên cột thật.
 
-use serde::Deserialize;
+File là dữ liệu khởi tạo (#229): service/domains/ chép gói và khái niệm còn thiếu vào bảng domain_packs,
+domain_concepts của từng workspace (engine/store/domains.rs), admin sửa ở đó. Prompt sinh SQL và prompt form câu "tại
+sao" (service/ask/prompt.rs) nhận DomainPackage dựng từ bảng, không đọc file. Schema của file ghi ở docs/DOMAINS.md. */
+
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 // build.rs sinh DOMAIN_PACKAGE_FILES: mỗi file data/domains/<id>.json một mục (tên file không đuôi, nội dung JSON).
 include!(concat!(env!("OUT_DIR"), "/domain_packages.rs"));
 
-/// Một gói khái niệm của một ngành, tương ứng một file data/domains/<id>.json.
-#[derive(Debug, Deserialize)]
+/// Một gói khái niệm của một ngành, tương ứng một file data/domains/<id>.json, hoặc một dòng domain_packs kèm các
+/// khái niệm đang bật (engine/store/domains.rs).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DomainPackage {
     /// Khóa của gói, phải trùng tên file (retail.json thì id là "retail"); dataset sẽ trỏ tới khóa này.
@@ -27,7 +32,7 @@ pub struct DomainPackage {
 }
 
 /// Một khái niệm kinh doanh chung của ngành, ví dụ doanh thu hay tỷ lệ giao trễ.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DomainConcept {
     /// Khóa của khái niệm trong gói, tiếng Anh, không trùng nhau.
@@ -48,32 +53,37 @@ pub struct DomainConcept {
     pub sanity_checks: Vec<SanityCheck>,
 }
 
-/// Một cách tính phổ biến của khái niệm, bằng lời, không gắn với cột của dataset cụ thể.
-#[derive(Debug, Deserialize)]
+// Calculation, SanityCheck, SanityCheckKind đi thẳng ra API của màn Khái niệm ngành (service/domains/contract.rs) và
+// vào cột jsonb, nên có Serialize và ToSchema; chú thích /// là mô tả tiếng Anh trong đặc tả OpenAPI.
+/// A common way to compute the concept, in words, not tied to the columns of a dataset.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Calculation {
-    /// Tên cách tính, ví dụ "Tổng theo đơn".
+    /// Short name of the method.
     pub name: String,
-    /// Cách tính làm gì và khi nào chọn nó thay các cách còn lại.
+    /// What it computes and when to pick it over the others.
     pub description: String,
 }
 
-/// Một luật kiểm hợp lý của giá trị khái niệm. min và max chỉ có khi kind là value_range, và cần ít nhất một đầu
-/// (ví dụ biên lợi nhuận chỉ chặn cận trên: {"kind": "value_range", "max": 1.0}).
-#[derive(Debug, Deserialize)]
+// Một luật kiểm hợp lý của giá trị khái niệm. min và max chỉ có khi kind là value_range, và cần ít nhất một đầu
+// (ví dụ biên lợi nhuận chỉ chặn cận trên: {"kind": "value_range", "max": 1.0}); check_sanity_check kiểm điều này.
+/// A plausibility rule for values of the concept. `min` and `max` only with `value_range`, at least one of them.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SanityCheck {
     pub kind: SanityCheckKind,
+    // skip_serializing_if: cột jsonb giữ đúng dạng của file ({"kind": "non_negative"}), không thêm "min": null.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<f64>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+/// `value_range`: the value lies in [min, max], one end may be missing. `non_negative`: the value is not negative.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SanityCheckKind {
-    /// Giá trị phải nằm trong khoảng [min, max], một đầu có thể vắng: chỉ min là chặn dưới, chỉ max là chặn trên.
     ValueRange,
-    /// Giá trị không được âm.
     NonNegative,
 }
 
@@ -94,7 +104,9 @@ pub fn list_domain_packages() -> &'static [DomainPackage] {
     })
 }
 
-/// Tìm gói theo khóa (tên file, cũng là trường id trong file).
+/// Tìm gói theo khóa (tên file, cũng là trường id trong file). Chỉ test dùng: lúc chạy, prompt đọc gói từ bảng của
+/// workspace (service/domains/), không đọc file.
+#[cfg(test)]
 pub fn find_domain_package(id: &str) -> Option<&'static DomainPackage> {
     list_domain_packages()
         .iter()
@@ -111,18 +123,42 @@ fn parse_package(file: &str, json: &str) -> Result<DomainPackage, String> {
     Ok(package)
 }
 
+/// Dạng so của một từ đồng nghĩa: chữ thường, bỏ dấu, gộp khoảng trắng. "Doanh thu" và "doanh thu" hay "doanh thu"
+/// gõ không dấu là cùng một từ, hai khái niệm trong một gói không được nhận cùng từ đó. Test của file gói và kiểm khái
+/// niệm admin sửa (service/domains/check.rs) dùng chung hàm này.
+pub fn build_synonym_key(text: &str) -> String {
+    let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    deunicode::deunicode(&joined).to_lowercase()
+}
+
+/// Luật kiểm có nhất quán không: non_negative không kèm min, max; value_range có ít nhất một đầu và min không quá
+/// max. Trả lời báo tiếng Việt, vì service/domains/check.rs đưa thẳng cho admin.
+pub fn check_sanity_check(check: &SanityCheck) -> Result<(), String> {
+    match check.kind {
+        SanityCheckKind::ValueRange => {
+            if check.min.is_none() && check.max.is_none() {
+                return Err("Khoảng giá trị cần ít nhất một đầu min hoặc max".to_string());
+            }
+            if let (Some(min), Some(max)) = (check.min, check.max) {
+                if min > max {
+                    return Err("Khoảng giá trị có min lớn hơn max".to_string());
+                }
+            }
+        }
+        SanityCheckKind::NonNegative => {
+            if check.min.is_some() || check.max.is_some() {
+                return Err("Luật không âm không kèm min, max".to_string());
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{HashMap, HashSet};
 
     use super::*;
-
-    /// So từ đồng nghĩa sau chuẩn hóa: chữ thường, bỏ dấu, gộp khoảng trắng. "Doanh thu" và "doanh thu" hay "doanh
-    /// thu" gõ không dấu là cùng một từ, hai khái niệm không được nhận cùng từ đó.
-    fn normalize(text: &str) -> String {
-        let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
-        deunicode::deunicode(&joined).to_lowercase()
-    }
 
     fn packages() -> Vec<(&'static str, DomainPackage)> {
         DOMAIN_PACKAGE_FILES
@@ -199,7 +235,7 @@ mod tests {
             let mut seen: HashMap<String, String> = HashMap::new();
             for concept in &package.concepts {
                 for synonym in &concept.synonyms {
-                    let key = normalize(synonym);
+                    let key = build_synonym_key(synonym);
                     assert!(
                         !key.is_empty(),
                         "{file}/{}: từ đồng nghĩa rỗng hoặc toàn khoảng trắng",
@@ -222,33 +258,26 @@ mod tests {
         for (file, package) in packages() {
             for concept in &package.concepts {
                 for check in &concept.sanity_checks {
-                    match check.kind {
-                        SanityCheckKind::ValueRange => {
-                            let (min, max) = (check.min, check.max);
-                            assert!(
-                                min.is_some() || max.is_some(),
-                                "{file}/{}: value_range cần ít nhất một đầu min hoặc max",
-                                concept.id
-                            );
-                            if let (Some(min), Some(max)) = (min, max) {
-                                assert!(
-                                    min <= max,
-                                    "{file}/{}: value_range có min lớn hơn max",
-                                    concept.id
-                                );
-                            }
-                        }
-                        SanityCheckKind::NonNegative => {
-                            assert!(
-                                check.min.is_none() && check.max.is_none(),
-                                "{file}/{}: non_negative không có min, max",
-                                concept.id
-                            );
-                        }
+                    if let Err(problem) = check_sanity_check(check) {
+                        panic!("{file}/{}: {problem}", concept.id);
                     }
                 }
             }
         }
+        let range = |min, max| SanityCheck {
+            kind: SanityCheckKind::ValueRange,
+            min,
+            max,
+        };
+        assert!(check_sanity_check(&range(None, None)).is_err());
+        assert!(check_sanity_check(&range(Some(1.0), Some(0.0))).is_err());
+        assert!(check_sanity_check(&range(None, Some(1.0))).is_ok());
+        let non_negative_with_max = SanityCheck {
+            kind: SanityCheckKind::NonNegative,
+            min: None,
+            max: Some(1.0),
+        };
+        assert!(check_sanity_check(&non_negative_with_max).is_err());
     }
 
     /// Trường lạ trong file gói phải bị từ chối (deny_unknown_fields), để gõ sai tên trường không lặng lẽ mất tác

@@ -2673,6 +2673,211 @@
         }
       }
     },
+    "/workspaces/{ws}/domains": {
+      "get": {
+        "tags": [
+          "domains"
+        ],
+        "summary": "Industry packs of the workspace with all their concepts",
+        "description": "The first call in a workspace copies the packs of `data/domains/` into it; later calls add only packs and concepts it does not have yet and never overwrite an edit.",
+        "operationId": "listConcepts",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "401; 404 not a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/domains/{pack}/concepts": {
+      "post": {
+        "tags": [
+          "domains"
+        ],
+        "summary": "Add a concept to a pack (admin only)",
+        "description": "The concept goes last in the pack and is used by the next question on a dataset with this pack.",
+        "operationId": "createConcept",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pack",
+            "in": "path",
+            "description": "Pack key, for example `retail`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Concept"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 invalid concept, `field` names the field; 401; 403 not admin; 404 not a member or no such pack",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{ws}/domains/{pack}/concepts/{concept_id}": {
+      "put": {
+        "tags": [
+          "domains"
+        ],
+        "summary": "Replace a concept (admin only)",
+        "description": "Checked like a new concept. Send `enabled: false` to leave the concept out of the prompt.",
+        "operationId": "updateConcept",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pack",
+            "in": "path",
+            "description": "Pack key, for example `retail`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "concept_id",
+            "in": "path",
+            "description": "Concept id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Concept"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 invalid concept, `field` names the field; 401; 403 not admin; 404 no such pack or concept",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/error-log": {
       "get": {
         "tags": [
@@ -4243,6 +4448,25 @@
           }
         }
       },
+      "Calculation": {
+        "type": "object",
+        "description": "A common way to compute the concept, in words, not tied to the columns of a dataset.",
+        "required": [
+          "name",
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "What it computes and when to pick it over the others."
+          },
+          "name": {
+            "type": "string",
+            "description": "Short name of the method."
+          }
+        },
+        "additionalProperties": false
+      },
       "CellValue": {
         "oneOf": [
           {
@@ -4478,6 +4702,170 @@
           "periods",
           "groups"
         ]
+      },
+      "Concept": {
+        "type": "object",
+        "description": "A business concept of an industry pack in this workspace.",
+        "required": [
+          "id",
+          "key",
+          "name",
+          "description",
+          "synonyms",
+          "calculations",
+          "dimensions",
+          "sanity_checks",
+          "enabled",
+          "updated_at"
+        ],
+        "properties": {
+          "calculations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Calculation"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "False for a concept an admin turned off; it stays here but is left out of the prompt."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id of the concept in the pack file (`data/domains/<pack>.json`); null for a concept an admin added."
+          },
+          "name": {
+            "type": "string"
+          },
+          "sanity_checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SanityCheck"
+            }
+          },
+          "synonyms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other words for the concept, Vietnamese and English; the prompt lists them next to the name."
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Last edit on the concepts screen; null when unchanged since it was copied from the pack file."
+          }
+        }
+      },
+      "ConceptPack": {
+        "type": "object",
+        "description": "An industry pack of the workspace with all its concepts, enabled or not.",
+        "required": [
+          "key",
+          "name",
+          "description",
+          "concepts"
+        ],
+        "properties": {
+          "concepts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Concept"
+            },
+            "description": "In prompt order: the order of the pack file, concepts added by admins last."
+          },
+          "description": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "Pack id, the file name without `.json`; a dataset uses the pack whose key is in its `domain`."
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ConceptRequest": {
+        "type": "object",
+        "description": "A concept to add, or the new content of one. Errors name the wrong field in `field`.",
+        "required": [
+          "name",
+          "description",
+          "synonyms"
+        ],
+        "properties": {
+          "calculations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Calculation"
+            },
+            "description": "At most three."
+          },
+          "description": {
+            "type": "string"
+          },
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Defaults to true."
+          },
+          "name": {
+            "type": "string",
+            "description": "Unique in the pack, compared ignoring case and where the tone mark sits (not ignoring tone marks)."
+          },
+          "sanity_checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SanityCheck"
+            }
+          },
+          "synonyms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "At least one; a word may belong to only one concept of the pack, compared without case and accents."
+          }
+        }
+      },
+      "ConceptsResponse": {
+        "type": "object",
+        "description": "Industry packs of the workspace, sorted by key.",
+        "required": [
+          "packs"
+        ],
+        "properties": {
+          "packs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConceptPack"
+            }
+          }
+        }
       },
       "ConversationItem": {
         "type": "object",
@@ -6638,6 +7026,41 @@
             "description": "True when `rows` holds fewer rows than `total_rows`."
           }
         }
+      },
+      "SanityCheck": {
+        "type": "object",
+        "description": "A plausibility rule for values of the concept. `min` and `max` only with `value_range`, at least one of them.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/SanityCheckKind"
+          },
+          "max": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "min": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SanityCheckKind": {
+        "type": "string",
+        "description": "`value_range`: the value lies in [min, max], one end may be missing. `non_negative`: the value is not negative.",
+        "enum": [
+          "value_range",
+          "non_negative"
+        ]
       },
       "SetRoleRequest": {
         "type": "object",
