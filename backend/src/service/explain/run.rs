@@ -558,7 +558,7 @@ fn build_measure_choice(
 
 /// Giá trị hai lát cắt để kiểm tiền đề: tổng như đã đọc, hay tỷ lệ tử trên mẫu làm tròn RATE_SCALE chữ số khi độ đo là
 /// tỷ lệ. None khi một mẫu số bằng 0 (không có tỷ lệ để so).
-fn build_premise_values(
+pub(crate) fn build_premise_values(
     totals: &SliceTotals,
 ) -> Option<(rust_decimal::Decimal, rust_decimal::Decimal)> {
     match totals.denominators {

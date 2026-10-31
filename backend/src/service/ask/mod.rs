@@ -45,6 +45,7 @@ pub mod narrate;
 mod narrate_tests;
 pub mod other_text;
 pub mod phrases;
+mod plain_insight;
 pub mod prompt;
 #[cfg(test)]
 mod prompt_tests;
@@ -87,6 +88,7 @@ use crate::service::ask::contract::{
 };
 use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::group_prompt::build_group_prompt;
+use crate::service::ask::plain_insight::{build_stored_breakdown, run_insight};
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput};
 use crate::service::ask::related::{build_group_related, load_group};
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
@@ -246,7 +248,6 @@ pub async fn ask(
         let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
         outcome.message = Some(build_unanswerable_message(unanswerable, &names));
     }
-    let tables_read = group.build_tables_read(&outcome.tables_read);
     // Giả định thành Choice một lần, dùng cho cả thẻ "Đã hiểu là" lẫn AskResponse.choices để hai chỗ cùng id.
     let answer = SqlAnswer {
         terms: outcome.terms.clone(),
@@ -308,13 +309,37 @@ pub async fn ask(
         None => (None, None),
     };
 
+    // Phần giải thích theo hình dạng kết quả (#227): một lần gọi mô hình thêm để viết lời, phân rã tự động do code.
+    let insight = run_insight(
+        state,
+        &group,
+        &links,
+        question,
+        &outcome,
+        understanding.as_ref(),
+    )
+    .await?;
+    let mut read_names = outcome.tables_read.clone();
+    let (insight, explanation) = match insight {
+        Some(found) => {
+            steps.extend(found.steps);
+            for name in found.tables_read {
+                if !read_names.contains(&name) {
+                    read_names.push(name);
+                }
+            }
+            (Some(found.insight), found.explanation)
+        }
+        None => (None, None),
+    };
+    let tables_read = group.build_tables_read(&read_names);
     let recorded = Recorded {
         status: outcome.status,
         message: outcome.message.as_deref(),
         sql_generated: outcome.sql_generated.as_deref(),
         sql_guarded: outcome.sql_guarded.as_deref(),
         result: outcome.result.as_ref(),
-        explanation: None,
+        explanation: build_stored_breakdown(explanation.as_ref())?,
         read_versions: group.build_read_versions(&tables_read),
     };
     let target = (&dataset, &version);
@@ -330,6 +355,8 @@ pub async fn ask(
         result: outcome.result,
         chart,
         warnings,
+        explanation,
+        insight,
         answer_text,
         answer_text_by_model,
         steps,
@@ -444,7 +471,7 @@ pub(super) struct Recorded<'a> {
     pub sql_generated: Option<&'a str>,
     pub sql_guarded: Option<&'a str>,
     pub result: Option<&'a ResultTable>,
-    /// Form và Explanation của câu "tại sao" (ask/why.rs); None với câu thường.
+    /// Form và Explanation của câu "tại sao" (ask/why.rs), hay phân rã tự động của câu thường (ask/plain_insight.rs).
     pub explanation: Option<serde_json::Value>,
     /// Cặp (dataset, phiên bản) câu đã đọc, ghi vào queries.read_versions; rỗng thì ghi cặp của dataset đang hỏi.
     pub read_versions: Vec<(uuid::Uuid, uuid::Uuid)>,
@@ -524,6 +551,7 @@ pub(super) fn build_base_response(
         chart: None,
         warnings: vec![],
         explanation: None,
+        insight: None,
         answer_text: None,
         answer_text_by_model: None,
         clarifications: vec![],

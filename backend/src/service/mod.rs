@@ -19,6 +19,7 @@ mod eval_tests;
 pub mod excel;
 pub mod explain;
 pub mod ingest;
+pub mod insight;
 pub mod metrics;
 pub mod overview;
 pub mod profile;

@@ -83,7 +83,7 @@ pub(crate) fn build_user_error(text: &str) -> String {
 /// Lời cho người dùng từ lỗi của mô hình: các loại lỗi của LlmProvider đã viết lời tiếng Việt (engine/llm/mod.rs). Lỗi
 /// nội bộ chỉ ghi chi tiết vào log, như AppError::Internal ở error.rs. `step` là tên bước đang gọi mô hình ("repair",
 /// "narrate"), chỉ để dòng log của lỗi nội bộ nói đúng bước.
-pub(super) fn build_user_text(error: &AppError, step: &str) -> String {
+pub(crate) fn build_user_text(error: &AppError, step: &str) -> String {
     match error {
         AppError::BadRequest(text)
         | AppError::Upstream(text)
