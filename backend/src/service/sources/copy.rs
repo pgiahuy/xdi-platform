@@ -3,13 +3,21 @@
 REPEATABLE READ READ ONLY cho mọi bảng, nên mọi bảng là ảnh của cùng một thời điểm.
 
 Trong giao dịch đó, theo thứ tự:
-1. Thống kê mọi bảng (catalog.rs), đếm dòng thật từng bảng chọn (trừ bảng ước lượng đã quá xa trần, plan.rs).
-2. plan.rs chia bảng chép dữ liệu và bảng chỉ lưu metadata (quá SOURCE_MAX_ROWS hay trần SOURCE_SNAPSHOT_MAX_MB).
-3. Chép bảng chép được ra file riêng (giới hạn MAX_UPLOAD_MB từng bảng): COPY ra CSV ngay trên kết nối này, hoặc với
+1. Thống kê mọi bảng (catalog.rs): dung lượng, số dòng ước lượng. Chỉ khi admin đặt SOURCE_MAX_ROWS mới đếm dòng
+   thật (trừ bảng ước lượng đã quá xa trần, plan.rs).
+2. plan.rs chia bảng chép dữ liệu và bảng chỉ lưu metadata (quá SOURCE_TABLE_MAX_MB, trần tổng SOURCE_SNAPSHOT_MAX_MB,
+   hay SOURCE_MAX_ROWS nếu đặt), trước khi chép, nên bảng quá trần không có file nào.
+3. Chép bảng chép được ra file riêng (file quá SOURCE_TABLE_MAX_MB thì từ chối, chỉ gặp với view hay file CSV lớn
+   hơn bảng): COPY ra CSV ngay trên kết nối này, hoặc với
    SOURCE_SNAPSHOT_MODE=direct thì DuckDB đọc thẳng ra Parquet trong một giao dịch REPEATABLE READ riêng của nó
    (direct.rs). Comment bảng, cột (comments.rs) đọc bằng sqlx ở đây, cách chép nào cũng vậy.
 4. Cột, kiểu, khóa, comment của bảng chỉ lưu metadata; mọi khóa ngoại của database (relations.rs).
-Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS. */
+Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS; quá thì bỏ cả lần chụp: file tạm (Staging) bị xóa khi future bị bỏ,
+câu DuckDB đang chạy bị ngắt (direct.rs), nên không còn gì ghi dở.
+
+Giao dịch REPEATABLE READ giữ suốt bước này, nên database nguồn không dọn được dòng cũ (VACUUM) của mọi bảng trong lúc
+đó. Không tách thành nhiều giao dịch: mỗi bảng sẽ là ảnh của một thời điểm khác, khóa ngoại giữa chúng có thể lệch.
+Bảng quá lớn thì trần dung lượng giữ nó ngoài lần chụp chung; admin chụp riêng sau (docs/DATA.md). */
 
 use std::path::PathBuf;
 
@@ -88,11 +96,8 @@ pub async fn copy_group(
         postgres::begin_snapshot(&mut conn).await?;
         let stats = catalog::read_stats(&mut conn).await?;
         let candidates = count_tables(state, &mut conn, &wanted, &stats).await?;
-        let (taken, skipped) = plan::build_plan(
-            candidates,
-            state.config.source_max_rows,
-            state.config.source_snapshot_max_bytes,
-        );
+        let (taken, skipped) =
+            plan::build_plan(candidates, &plan::Limits::from_config(&state.config));
         let dataset_of = |t: &SourceTable| {
             wanted
                 .iter()
@@ -184,7 +189,7 @@ fn resolve(
     Ok((tables, unreadable))
 }
 
-/// Số dòng của từng bảng: đếm thật, trừ bảng mà ước lượng đã quá xa trần (plan::needs_exact_count).
+/// Số dòng của từng bảng: ước lượng của Postgres; đếm thật chỉ khi có trần dòng (plan::needs_exact_count).
 async fn count_tables(
     state: &AppState,
     conn: &mut sqlx::PgConnection,
@@ -195,9 +200,10 @@ async fn count_tables(
     let mut candidates = Vec::new();
     for (table, _) in wanted {
         let st = stats.get(&table.full_name()).cloned().unwrap_or_default();
-        let rows = match st.estimated_rows {
-            Some(n) if !plan::needs_exact_count(Some(n), max_rows) => RowCount::Estimate(n),
-            _ => RowCount::Exact(postgres::count_rows(conn, table).await?),
+        let rows = if plan::needs_exact_count(st.estimated_rows, max_rows) {
+            Some(RowCount::Exact(postgres::count_rows(conn, table).await?))
+        } else {
+            st.estimated_rows.map(RowCount::Estimate)
         };
         candidates.push(Candidate {
             table: table.clone(),
@@ -234,7 +240,7 @@ async fn copy_tables(
             conn,
             table,
             state.config.source_max_rows,
-            state.config.max_upload_bytes,
+            state.config.source_table_max_bytes,
             &path,
         )
         .await?;

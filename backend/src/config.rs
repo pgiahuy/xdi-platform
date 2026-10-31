@@ -80,8 +80,12 @@ pub struct Config {
     /// Máy chủ database được phép thêm làm nguồn (SOURCE_ALLOWED_HOSTS, cách nhau bằng dấu phẩy). Rỗng thì không thêm
     /// được nguồn nào: backend không bị dùng để dò máy trong mạng nội bộ.
     pub source_allowed_hosts: Vec<String>,
-    /// Trần số dòng một lần chụp bảng (SOURCE_MAX_ROWS); bảng lớn hơn thì từ chối thay vì chụp thiếu.
-    pub source_max_rows: u64,
+    /// Trần số dòng một bảng khi chụp (SOURCE_MAX_ROWS); None (mặc định) là không có trần dòng. Bảng quá trần chỉ lưu
+    /// metadata thay vì chụp thiếu (service/sources/plan.rs).
+    pub source_max_rows: Option<u64>,
+    /// Trần dung lượng (theo Postgres) một bảng khi chụp (SOURCE_TABLE_MAX_MB); bảng lớn hơn chỉ lưu metadata, xét trước
+    /// khi chép nên không ghi file nào cho bảng đó.
+    pub source_table_max_bytes: u64,
     /// Trần tổng dung lượng (theo Postgres) các bảng chép dữ liệu trong một lần chụp (SOURCE_SNAPSHOT_MAX_MB, #247); bảng
     /// không còn chỗ chỉ lưu metadata (service/sources/plan.rs).
     pub source_snapshot_max_bytes: u64,
@@ -169,21 +173,26 @@ impl Config {
             excel_worker: ExcelWorker::Process(worker_binary()),
             source_secret_key: Secret::new(var_or("SOURCE_SECRET_KEY", "")),
             source_allowed_hosts: host_list(&var_or("SOURCE_ALLOWED_HOSTS", "")),
-            source_max_rows: u64::from(positive_number(
+            source_max_rows: optional_limit(
                 "SOURCE_MAX_ROWS",
                 env::var("SOURCE_MAX_ROWS").ok().as_deref(),
-                1_000_000,
-            )),
+            ),
+            source_table_max_bytes: u64::from(positive_number(
+                "SOURCE_TABLE_MAX_MB",
+                env::var("SOURCE_TABLE_MAX_MB").ok().as_deref(),
+                DEFAULT_SOURCE_TABLE_MAX_MB,
+            )) * 1024
+                * 1024,
             source_snapshot_max_bytes: u64::from(positive_number(
                 "SOURCE_SNAPSHOT_MAX_MB",
                 env::var("SOURCE_SNAPSHOT_MAX_MB").ok().as_deref(),
-                2048,
+                DEFAULT_SOURCE_SNAPSHOT_MAX_MB,
             )) * 1024
                 * 1024,
             source_resnapshot_every: resnapshot_every(
                 env::var("SOURCE_RESNAPSHOT_HOURS").ok().as_deref(),
             ),
-            source_timeout: timeout_secs("SOURCE_TIMEOUT_SECS", 300),
+            source_timeout: timeout_secs("SOURCE_TIMEOUT_SECS", DEFAULT_SOURCE_TIMEOUT_SECS),
             source_snapshot_mode: snapshot_mode(env::var("SOURCE_SNAPSHOT_MODE").ok().as_deref()),
             source_postgres_extension: PathBuf::from(var_or(
                 "SOURCE_POSTGRES_EXTENSION",
@@ -341,6 +350,23 @@ fn positive_number(key: &str, raw: Option<&str>, default: u32) -> u32 {
     }
 }
 
+/// Trần không bắt buộc (SOURCE_MAX_ROWS): không đặt hay để trống là không có trần; số nguyên dương là trần. Giá trị
+/// khác (chữ, số âm, 0) thì cảnh báo và không đặt trần, như khi không đặt biến.
+fn optional_limit(key: &str, raw: Option<&str>) -> Option<u64> {
+    let raw = raw.map(str::trim).filter(|v| !v.is_empty())?;
+    match raw.parse::<u64>() {
+        Ok(value) if value > 0 => Some(value),
+        _ => {
+            tracing::warn!(
+                variable = key,
+                value = raw,
+                "invalid value, expected a positive whole number; no limit is set"
+            );
+            None
+        }
+    }
+}
+
 /// Biến bật tắt: true, false, 1, 0, yes, no (không phân biệt hoa thường). Không đặt hoặc để trống thì dùng mặc định;
 /// giá trị khác thì cảnh báo và dùng mặc định như positive_number, để lỗi gõ không lặng lẽ đổi hành vi.
 fn flag(key: &str, raw: Option<&str>, default: bool) -> bool {
@@ -386,6 +412,13 @@ fn snapshot_mode(raw: Option<&str>) -> SnapshotMode {
         }
     }
 }
+
+/// Trần mặc định của chụp bảng, đặt từ số đo ở docs/PERFORMANCE.md (mục Chụp bảng lớn, scripts/bench-snapshot.sh): bảng
+/// 1,8 GB (60 cột) chép trong khoảng 20 giây, nên 4096 MB cả lần còn xa 300 giây kể cả khi đọc chậm hơn vài lần (đĩa
+/// nguồn chưa có trong cache). Trần một bảng giữ bộ nhớ đỉnh lúc nạp ở mức đã đo (3,6 GiB với bảng 1,8 GB).
+const DEFAULT_SOURCE_TABLE_MAX_MB: u32 = 2048;
+const DEFAULT_SOURCE_SNAPSHOT_MAX_MB: u32 = 4096;
+const DEFAULT_SOURCE_TIMEOUT_SECS: u32 = 300;
 
 /// direct nhanh hơn và tốn ít đĩa tạm hơn copy trên database mẫu (docs/PERFORMANCE.md, #246); copy vẫn là đường dự phòng
 /// khi extension không nạp được.
@@ -551,6 +584,15 @@ mod tests {
             resnapshot_every(Some(" 24 ")),
             Some(Duration::from_secs(24 * 3600))
         );
+    }
+
+    #[test]
+    fn optional_limit_parsing() {
+        assert_eq!(optional_limit("X", None), None);
+        assert_eq!(optional_limit("X", Some(" ")), None);
+        assert_eq!(optional_limit("X", Some("5000000")), Some(5_000_000));
+        assert_eq!(optional_limit("X", Some("0")), None);
+        assert_eq!(optional_limit("X", Some("many")), None);
     }
 
     #[test]

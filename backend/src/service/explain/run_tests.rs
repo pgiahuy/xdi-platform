@@ -801,7 +801,7 @@ async fn why_card_names_the_two_groups() {
         .collect();
     assert_eq!(labels.len(), 2, "{labels:?}");
     assert_eq!(labels[0], "Market: Europe so với LATAM");
-    assert!(labels[1].starts_with("Phân quyền"), "{labels:?}");
+    assert!(labels[1].starts_with("Lọc theo quyền xem"), "{labels:?}");
     assert!(view.understanding.time_range.is_none());
     assert_eq!(view.roles, [ColumnRole::Dimension, ColumnRole::Measure]);
     assert_eq!(view.chart.unwrap().kind, ChartKind::Bar);

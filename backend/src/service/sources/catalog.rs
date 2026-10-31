@@ -6,8 +6,9 @@
   "bảng khác đang trỏ tới", để giao diện cảnh báo khi admin bỏ tick một bảng danh mục.
 - read_metadata_columns: cột, kiểu, khóa chính, mô tả của một bảng không chép dữ liệu (plan.rs quyết bảng nào).
 
-Chỉ đọc catalog, không đọc dòng dữ liệu nào. Số ước lượng là thống kê của Postgres (lần ANALYZE gần nhất), có thể lệch
-số thật; lúc chụp vẫn đếm thật (snapshot.rs) trừ khi ước lượng đã quá xa trần (plan::needs_exact_count). */
+Chỉ đọc catalog, không đọc dòng dữ liệu nào. Số dòng ước lượng là thống kê của Postgres (lần ANALYZE gần nhất), có thể
+lệch số thật; dung lượng là số thật của file. Lúc chụp chỉ đếm dòng thật khi admin đặt SOURCE_MAX_ROWS
+(plan::needs_exact_count). */
 
 use std::collections::HashMap;
 
@@ -16,6 +17,7 @@ use sqlx::postgres::PgConnection;
 use uuid::Uuid;
 
 use super::comments::build_clean_comment;
+use super::plan::{build_table_cause, Limits, SkipCause};
 use super::postgres::{query_error, SourceTable};
 use super::relations::ForeignKey;
 use crate::engine::store::MetadataColumn;
@@ -81,8 +83,11 @@ pub struct SourceTableInfo {
     /// True when another readable table points to this one (a lookup table): unticking it leaves those tables without
     /// the relation.
     pub is_referenced: bool,
-    /// True when the row estimate is above SOURCE_MAX_ROWS: a snapshot keeps its metadata only.
-    pub over_row_limit: bool,
+    /// Limit this table alone is over, from Postgres statistics: `size_limit` above SOURCE_TABLE_MAX_MB, `row_limit`
+    /// above SOURCE_MAX_ROWS when set. A snapshot keeps its metadata only. Null when it fits (the SOURCE_SNAPSHOT_MAX_MB
+    /// total depends on the other ticked tables and is not checked here).
+    #[schema(required)]
+    pub over_limit: Option<SkipCause>,
     /// What this source already holds for the table; null when never snapshotted.
     #[schema(required)]
     pub state: Option<TableState>,
@@ -146,7 +151,7 @@ pub fn build_table_list(
     stats: &HashMap<String, TableStats>,
     keys: &[ForeignKey],
     held: &HashMap<String, Held>,
-    max_rows: u64,
+    limits: &Limits,
 ) -> Vec<SourceTableInfo> {
     let is_readable = |t: &SourceTable| readable.iter().any(|r| r.same(t));
     let links: Vec<(&ForeignKey, TableLink)> = keys
@@ -171,9 +176,7 @@ pub fn build_table_list(
                 .collect();
             // Khóa trỏ về chính bảng (quản lý trỏ tới nhân viên) không làm bảng thành bảng danh mục của bảng khác.
             let is_referenced = links.iter().any(|(k, _)| k.to.same(t) && !k.from.same(t));
-            let over_row_limit = st
-                .estimated_rows
-                .is_some_and(|n| u64::try_from(n).unwrap_or(0) > max_rows);
+            let over_limit = build_table_cause(st.estimated_rows, st.size_bytes, limits);
             let (state, dataset_id, reason) = match held.get(&full) {
                 Some(Held::Dataset(id)) => (Some(TableState::Snapshotted), Some(*id), None),
                 Some(Held::Metadata(why)) => {
@@ -193,7 +196,7 @@ pub fn build_table_list(
                 references,
                 referenced_by,
                 is_referenced,
-                over_row_limit,
+                over_limit,
                 state,
                 dataset_id,
                 reason,

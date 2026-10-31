@@ -9,6 +9,7 @@ Phần luật viết tiếng Anh như các phần khác của prompt. Test ở c
 
 use crate::engine::store::StoredTurn;
 use crate::service::ask::contract::{Understanding, UnderstoodItem};
+use crate::service::understanding::labels::ROW_FILTER_LABEL_PREFIX;
 
 /// Số lượt gần nhất gửi mô hình. Câu tiếp nối thường chỉ dựa vào một hai lượt trước; gửi nhiều hơn thì prompt dài mà
 /// mô hình dễ lấy nhầm bộ lọc của lượt cũ.
@@ -18,9 +19,10 @@ pub const HISTORY_TURNS: i64 = 4;
 /// chi tiết của danh sách cột; giữ khối lịch sử nhỏ để nó không đẩy phần cột ra ngoài.
 pub const HISTORY_MAX_CHARS: usize = 4_000;
 
-/// Đầu nhãn của điều kiện phân quyền guard thêm (understanding/labels.rs, build_row_filter_label). Phần này không đưa
-/// vào lịch sử: guard tự thêm lại ở mỗi lượt, còn mô hình thấy nó thì có thể chép thành bộ lọc của câu hỏi.
-const ROW_FILTER_LABEL_PREFIX: &str = "Phân quyền:";
+/// Đầu nhãn cũ của điều kiện lọc dòng (trước #45), còn trong các lượt đã lưu. Điều kiện lọc dòng (đầu nhãn mới ở
+/// understanding/labels.rs) không đưa vào lịch sử: guard tự thêm lại ở mỗi lượt, còn mô hình thấy nó thì có thể chép
+/// thành bộ lọc của câu hỏi.
+const OLD_ROW_FILTER_LABEL_PREFIX: &str = "Phân quyền:";
 
 const HISTORY_RULES: &str = "Earlier turns of this conversation, oldest first. They hold the questions and how they \
 were understood, never data rows. If the question below follows on from them (for example it only names another \
@@ -85,7 +87,10 @@ pub fn build_understood_text(understanding: &Understanding) -> Option<String> {
     let filters: Vec<&UnderstoodItem> = understanding
         .filters
         .iter()
-        .filter(|item| !item.label.starts_with(ROW_FILTER_LABEL_PREFIX))
+        .filter(|item| {
+            !item.label.starts_with(ROW_FILTER_LABEL_PREFIX)
+                && !item.label.starts_with(OLD_ROW_FILTER_LABEL_PREFIX)
+        })
         .collect();
     let parts = [
         build_part("measures", understanding.measures.iter().collect()),

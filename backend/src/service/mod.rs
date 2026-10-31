@@ -10,6 +10,7 @@ pub mod accounts;
 pub mod ask;
 pub mod catalog;
 pub mod conversation;
+pub mod data_roles;
 pub mod domains;
 pub mod drill;
 pub mod eval;

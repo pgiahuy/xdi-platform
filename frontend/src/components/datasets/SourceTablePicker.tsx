@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/datasets/SourceTablePicker.tsx - danh sách mọi bảng, view tài khoản nguồn đọc được trên màn kết nối
 (#247): nhóm theo schema, mỗi bảng ghi số dòng ước lượng, dung lượng, số cột, comment, trạng thái (đã chụp, chỉ có cấu
-trúc) và nhãn khi bảng quá trần dòng; tick, bỏ tick từng bảng hay cả schema; bỏ tick bảng danh mục thì hiện câu báo
-hệ quả ngay dưới bảng đó; một nút "Chụp N bảng". Nhóm, lựa chọn và câu báo do trang dựng (pages/sourceTablesView.ts). */
+trúc) và nhãn khi riêng bảng đã quá trần dung lượng (hay trần dòng, nếu admin đặt); tick, bỏ tick từng bảng hay cả
+schema; bỏ tick bảng danh mục thì hiện câu báo hệ quả ngay dưới bảng đó; một nút "Chụp N bảng". Nhóm, lựa chọn và câu
+báo do trang dựng (pages/sourceTablesView.ts). */
 
 import { useId } from 'react'
 import { TriangleAlert } from 'lucide-react'
@@ -157,10 +158,10 @@ function StateBadge({ row }: { row: SourceTableRow }) {
       </span>
     )
   }
-  if (row.overRowLimit) {
+  if (row.overLimit) {
     return (
       <span className={`${badgeClass} border-highlight-border bg-highlight-soft text-highlight-text`}>
-        Quá trần dòng, chỉ lưu cấu trúc
+        {row.overLimit === 'size_limit' ? 'Quá trần dung lượng, chỉ lưu cấu trúc' : 'Quá trần dòng, chỉ lưu cấu trúc'}
       </span>
     )
   }

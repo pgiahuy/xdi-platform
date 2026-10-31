@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-/* engine/store/policies_tests.rs - test phần ghi của engine/store/policies.rs trên Postgres thật: gán vai, thay bộ
-luật, luật "vai đang gán phải còn luật", và khóa workspace. Mỗi test một database mới (fresh_database) vì test tạo tài
-khoản, mà bảng users dùng chung cho mọi workspace. */
+/* engine/store/policies_tests.rs - test engine/store/data_roles.rs và engine/store/policies.rs trên Postgres thật: tạo
+vai, gán nhiều vai, thay bộ luật của một vai, các luật giữ trong giao dịch (vai đang gán phải còn luật, không xóa vai
+đang gán, không hai vai trùng bộ luật, tên không trùng) và khóa workspace. Mỗi test một database mới (fresh_database)
+vì test tạo tài khoản, mà bảng users dùng chung cho mọi workspace. */
 
 use std::time::Duration;
 
 use uuid::Uuid;
 
 use super::test_support::{fresh_database, TestDb};
-use super::{DataRoleOutcome, PoliciesOutcome, RowPolicy, Store, WorkspaceKind};
+use super::{
+    MemberRolesOutcome, PoliciesOutcome, RoleDeleteOutcome, RolePolicy, RoleWriteOutcome, Store,
+    WorkspaceKind,
+};
 use crate::auth::{Role, WorkspaceId};
-use crate::engine::guard::RowFilter;
 
 struct Fixture {
     db: TestDb,
@@ -20,7 +23,7 @@ struct Fixture {
     member: Uuid,
 }
 
-/// Workspace có hai dataset và một thành viên chưa có vai dữ liệu.
+/// Workspace có hai bảng và một thành viên chưa có vai dữ liệu.
 async fn fixture() -> Option<Fixture> {
     let db = fresh_database().await?;
     let store = &db.store;
@@ -55,242 +58,227 @@ async fn fixture() -> Option<Fixture> {
     })
 }
 
-fn rule(data_role: &str, column: &str, values: &[&str]) -> RowPolicy {
-    RowPolicy {
-        data_role: data_role.to_string(),
+fn rule(table_id: Uuid, column: &str, values: &[&str]) -> RolePolicy {
+    RolePolicy {
+        table_id,
         column: column.to_string(),
         allowed_values: values.iter().map(|v| v.to_string()).collect(),
     }
 }
 
-async fn replace(store: &Store, f: &Fixture, dataset: Uuid, rules: &[RowPolicy]) {
-    let outcome = store
-        .replace_row_policies(&f.ws, dataset, rules)
-        .await
-        .unwrap();
-    assert!(matches!(outcome, PoliciesOutcome::Done));
+async fn create(store: &Store, f: &Fixture, name: &str) -> Uuid {
+    match store.create_data_role(&f.ws, name, None).await.unwrap() {
+        RoleWriteOutcome::Done(row) => row.id,
+        _ => panic!("create data role {name}"),
+    }
 }
 
-async fn set_role(store: &Store, f: &Fixture, role: Option<&str>) -> DataRoleOutcome {
-    store.set_data_role(&f.ws, f.member, role).await.unwrap()
-}
-
-async fn stored_role(store: &Store, f: &Fixture) -> Option<String> {
-    sqlx::query_scalar("SELECT data_role FROM memberships WHERE workspace_id = $1 AND user_id = $2")
-        .bind(f.ws.as_uuid())
-        .bind(f.member)
-        .fetch_one(&store.pool)
+async fn replace(store: &Store, f: &Fixture, role: Uuid, rules: &[RolePolicy]) -> PoliciesOutcome {
+    let mut rules = rules.to_vec();
+    rules.sort();
+    store
+        .replace_role_policies(&f.ws, role, &rules)
         .await
         .unwrap()
 }
 
-async fn filter_columns(store: &Store, f: &Fixture, dataset: Uuid) -> Vec<String> {
+async fn assign(store: &Store, f: &Fixture, roles: &[Uuid]) -> MemberRolesOutcome {
     store
-        .list_row_filters(&f.ws, dataset, f.member)
+        .set_member_data_roles(&f.ws, f.member, roles)
+        .await
+        .unwrap()
+}
+
+async fn held(store: &Store, f: &Fixture) -> Vec<Uuid> {
+    let mut roles: Vec<Uuid> = store
+        .list_member_data_roles(&f.ws)
         .await
         .unwrap()
         .into_iter()
-        .filter_map(|filter| match filter {
-            RowFilter::Column { column, .. } => Some(column),
-            RowFilter::Parent { .. } => None,
-        })
-        .collect()
+        .filter(|(user, _)| *user == f.member)
+        .map(|(_, role)| role)
+        .collect();
+    roles.sort();
+    roles
 }
 
-/// Gán vai chưa có luật nào (gõ sai tên) bị từ chối: nhận thì người đó thấy hết dữ liệu mà không ai biết.
+/// Vai chưa có luật không gán được; vai có luật gán được, nhiều vai một lúc, và gán lại thay hẳn bộ cũ.
 #[tokio::test]
-async fn role_without_rules_cannot_be_assigned() {
+async fn member_holds_several_roles_with_rules() {
     let Some(f) = fixture().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
     let store = &f.db.store;
-    replace(
-        store,
-        &f,
-        f.sales,
-        &[rule("sales_south", "region", &["South"])],
-    )
-    .await;
+    let south = create(store, &f, "Miền Nam").await;
+    let north = create(store, &f, "Miền Bắc").await;
+    let outcome = assign(store, &f, &[south]).await;
+    assert!(
+        matches!(&outcome, MemberRolesOutcome::RolesWithoutRules(names) if names == &["Miền Nam"])
+    );
+    assert!(held(store, &f).await.is_empty());
 
-    // Đọc thẳng cột data_role: vai sai tên không có luật nên list_row_filters ra rỗng dù tên đó đã bị lưu hay chưa.
+    replace(store, &f, south, &[rule(f.sales, "region", &["South"])]).await;
+    replace(store, &f, north, &[rule(f.sales, "region", &["North"])]).await;
     assert!(matches!(
-        set_role(store, &f, Some("sale_south")).await,
-        DataRoleOutcome::UnknownRole
+        assign(store, &f, &[south, north]).await,
+        MemberRolesOutcome::Done
     ));
-    assert_eq!(stored_role(store, &f).await, None);
+    let mut both = vec![south, north];
+    both.sort();
+    assert_eq!(held(store, &f).await, both);
 
-    assert!(matches!(
-        set_role(store, &f, Some("sales_south")).await,
-        DataRoleOutcome::Done
-    ));
-    assert_eq!(filter_columns(store, &f, f.sales).await, ["region"]);
-
-    // Bị từ chối thì vai đang có giữ nguyên.
-    assert!(matches!(
-        set_role(store, &f, Some("sale_south")).await,
-        DataRoleOutcome::UnknownRole
-    ));
-    assert_eq!(stored_role(store, &f).await.as_deref(), Some("sales_south"));
-
-    // Gỡ vai: không lọc nữa.
-    assert!(matches!(
-        set_role(store, &f, None).await,
-        DataRoleOutcome::Done
-    ));
-    assert_eq!(stored_role(store, &f).await, None);
-    assert!(filter_columns(store, &f, f.sales).await.is_empty());
-
-    let stranger = store
-        .set_data_role(&f.ws, Uuid::new_v4(), Some("sales_south"))
+    let policies = store
+        .list_member_policies(&f.ws, f.member, &[f.sales, f.orders])
         .await
         .unwrap();
-    assert!(matches!(stranger, DataRoleOutcome::NotMember));
+    assert_eq!(policies.len(), 2);
+
+    assert!(matches!(
+        assign(store, &f, &[north]).await,
+        MemberRolesOutcome::Done
+    ));
+    assert_eq!(held(store, &f).await, [north]);
+    assert!(matches!(
+        assign(store, &f, &[Uuid::new_v4()]).await,
+        MemberRolesOutcome::UnknownRole
+    ));
+    assert!(matches!(
+        store
+            .set_member_data_roles(&f.ws, Uuid::new_v4(), &[north])
+            .await
+            .unwrap(),
+        MemberRolesOutcome::NotMember
+    ));
     f.db.drop().await;
 }
 
-/// Thay luật chỉ đụng dataset được chỉ định, và bộ mới thay hẳn bộ cũ.
+/// Thay luật chỉ đụng vai được chỉ định, bộ mới thay hẳn bộ cũ; vai đang gán không được thành không luật.
 #[tokio::test]
-async fn replace_touches_only_its_dataset() {
+async fn replace_touches_only_its_role_and_keeps_assigned_roles_ruled() {
     let Some(f) = fixture().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
     let store = &f.db.store;
-    replace(
+    let south = create(store, &f, "south").await;
+    let north = create(store, &f, "north").await;
+    replace(store, &f, south, &[rule(f.sales, "region", &["South"])]).await;
+    replace(store, &f, north, &[rule(f.sales, "region", &["North"])]).await;
+    let outcome = replace(
         store,
         &f,
-        f.sales,
-        &[rule("sales_south", "region", &["South"])],
-    )
-    .await;
-    replace(
-        store,
-        &f,
-        f.orders,
-        &[rule("sales_south", "channel", &["web"])],
-    )
-    .await;
-    replace(
-        store,
-        &f,
-        f.sales,
+        south,
         &[
-            rule("sales_south", "segment", &["Consumer"]),
-            rule("sales_north", "region", &["North"]),
+            rule(f.sales, "region", &["South", "East"]),
+            rule(f.orders, "channel", &["web"]),
         ],
     )
     .await;
+    assert!(matches!(outcome, PoliciesOutcome::Done));
+    let all = store.list_role_policies(&f.ws).await.unwrap();
+    assert_eq!(all.iter().filter(|p| p.data_role_id == south).count(), 2);
+    assert_eq!(all.iter().filter(|p| p.data_role_id == north).count(), 1);
 
-    assert_eq!(
-        store.list_row_policies(&f.ws, f.sales).await.unwrap(),
-        [
-            rule("sales_north", "region", &["North"]),
-            rule("sales_south", "segment", &["Consumer"]),
-        ]
-    );
-    assert_eq!(
-        store.list_row_policies(&f.ws, f.orders).await.unwrap(),
-        [rule("sales_south", "channel", &["web"])]
-    );
+    assert!(matches!(
+        assign(store, &f, &[south]).await,
+        MemberRolesOutcome::Done
+    ));
+    assert!(matches!(
+        replace(store, &f, south, &[]).await,
+        PoliciesOutcome::AssignedWithoutRules
+    ));
+    assert_eq!(store.list_role_policies(&f.ws).await.unwrap().len(), 3);
+    // Vai chưa gán thì xóa hết luật được.
+    assert!(matches!(
+        replace(store, &f, north, &[]).await,
+        PoliciesOutcome::Done
+    ));
+    assert!(matches!(
+        replace(store, &f, Uuid::new_v4(), &[]).await,
+        PoliciesOutcome::NotFound
+    ));
     f.db.drop().await;
 }
 
-/// Thay luật làm một vai đang gán mất luật cuối cùng thì bị từ chối và luật cũ còn nguyên. Vai còn luật ở dataset
-/// khác thì được.
+/// Hai vai không được có đúng cùng bộ luật (#167), kể cả khi gửi giá trị theo thứ tự khác; khác một giá trị thì được.
 #[tokio::test]
-async fn last_rule_of_an_assigned_role_cannot_be_removed() {
+async fn two_roles_cannot_have_the_same_rules() {
     let Some(f) = fixture().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
     let store = &f.db.store;
-    replace(
+    let first = create(store, &f, "sales_south").await;
+    let second = create(store, &f, "z1").await;
+    let rules = [
+        rule(f.sales, "region", &["East", "South"]),
+        rule(f.orders, "channel", &["web"]),
+    ];
+    replace(store, &f, first, &rules).await;
+    let outcome = replace(store, &f, second, &rules).await;
+    assert!(matches!(&outcome, PoliciesOutcome::SameRulesAs(name) if name == "sales_south"));
+    let outcome = replace(
         store,
         &f,
-        f.sales,
-        &[rule("sales_south", "region", &["South"])],
+        second,
+        &[rule(f.sales, "region", &["East", "South"])],
     )
     .await;
-    assert!(matches!(
-        set_role(store, &f, Some("sales_south")).await,
-        DataRoleOutcome::Done
-    ));
-
-    let outcome = store
-        .replace_row_policies(&f.ws, f.sales, &[])
-        .await
-        .unwrap();
-    let PoliciesOutcome::RolesLeftWithoutRules(roles) = outcome else {
-        panic!("removing the last rule of an assigned role must be refused");
-    };
-    assert_eq!(roles, ["sales_south"]);
-    assert_eq!(filter_columns(store, &f, f.sales).await, ["region"]);
-
-    replace(
-        store,
-        &f,
-        f.orders,
-        &[rule("sales_south", "channel", &["web"])],
-    )
-    .await;
-    replace(store, &f, f.sales, &[]).await;
-    assert!(filter_columns(store, &f, f.sales).await.is_empty());
-    assert_eq!(filter_columns(store, &f, f.orders).await, ["channel"]);
+    assert!(matches!(outcome, PoliciesOutcome::Done));
     f.db.drop().await;
 }
 
-/// Vai đã mất hết luật vì dataset chứa luật của nó bị xóa không chặn việc sửa luật của dataset khác.
+/// Tên không trùng trong workspace, không phân biệt hoa thường; vai đang gán không xóa được, vai chưa gán xóa cùng luật.
 #[tokio::test]
-async fn role_emptied_by_a_deleted_dataset_does_not_block_other_datasets() {
+async fn names_are_unique_and_assigned_roles_are_not_deleted() {
     let Some(f) = fixture().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
     let store = &f.db.store;
-    replace(
-        store,
-        &f,
-        f.sales,
-        &[rule("sales_south", "region", &["South"])],
-    )
-    .await;
-    assert!(matches!(
-        set_role(store, &f, Some("sales_south")).await,
-        DataRoleOutcome::Done
-    ));
-    sqlx::query("DELETE FROM datasets WHERE id = $1")
-        .bind(f.sales)
-        .execute(&store.pool)
+    let south = create(store, &f, "Miền Nam").await;
+    let taken = store
+        .create_data_role(&f.ws, "miền nam", None)
         .await
         .unwrap();
+    assert!(matches!(taken, RoleWriteOutcome::NameTaken));
+    let other = create(store, &f, "Miền Bắc").await;
+    let renamed = store
+        .update_data_role(&f.ws, other, "MIỀN NAM", None)
+        .await
+        .unwrap();
+    assert!(matches!(renamed, RoleWriteOutcome::NameTaken));
+    let renamed = store
+        .update_data_role(&f.ws, other, "Miền Trung", Some("Đà Nẵng, Huế"))
+        .await
+        .unwrap();
+    assert!(matches!(renamed, RoleWriteOutcome::Done(row) if row.name == "Miền Trung"));
 
-    replace(
-        store,
-        &f,
-        f.orders,
-        &[rule("sales_north", "channel", &["web"])],
-    )
-    .await;
+    replace(store, &f, south, &[rule(f.sales, "region", &["South"])]).await;
+    assign(store, &f, &[south]).await;
+    let outcome = store.delete_data_role(&f.ws, south).await.unwrap();
+    assert!(matches!(outcome, RoleDeleteOutcome::Assigned(1)));
+    assign(store, &f, &[]).await;
+    let outcome = store.delete_data_role(&f.ws, south).await.unwrap();
+    assert!(matches!(outcome, RoleDeleteOutcome::Done));
+    assert!(store.list_role_policies(&f.ws).await.unwrap().is_empty());
+    let outcome = store.delete_data_role(&f.ws, south).await.unwrap();
+    assert!(matches!(outcome, RoleDeleteOutcome::NotFound));
     f.db.drop().await;
 }
 
 /// Gán vai phải chờ giao dịch khác đang giữ khóa workspace (một lần thay luật đang dở). Bỏ lock_workspace thì test hỏng:
-/// set_data_role đọc thấy luật cũ còn đó và gán xong ngay, trong khi lần thay luật kia sắp xóa luật đó.
+/// set_member_data_roles đọc thấy luật cũ còn đó và gán xong ngay, trong khi lần thay luật kia sắp xóa luật đó.
 #[tokio::test]
-async fn set_data_role_waits_for_the_workspace_lock() {
+async fn assigning_waits_for_the_workspace_lock() {
     let Some(f) = fixture().await else {
         eprintln!("skip: DATABASE_URL not set");
         return;
     };
     let store = &f.db.store;
-    replace(
-        store,
-        &f,
-        f.sales,
-        &[rule("sales_south", "region", &["South"])],
-    )
-    .await;
+    let south = create(store, &f, "south").await;
+    replace(store, &f, south, &[rule(f.sales, "region", &["South"])]).await;
 
     let mut other = store.pool.begin().await.unwrap();
     sqlx::query("SELECT 1 FROM workspaces WHERE id = $1 FOR NO KEY UPDATE")
@@ -304,72 +292,16 @@ async fn set_data_role_waits_for_the_workspace_lock() {
         .await
         .unwrap();
 
-    let assign = tokio::spawn({
+    let task = tokio::spawn({
         let store = store.clone();
         let ws = f.ws;
         let member = f.member;
-        async move { store.set_data_role(&ws, member, Some("sales_south")).await }
+        async move { store.set_member_data_roles(&ws, member, &[south]).await }
     });
     tokio::time::sleep(Duration::from_millis(300)).await;
-    assert!(
-        !assign.is_finished(),
-        "set_data_role must wait for the lock"
-    );
+    assert!(!task.is_finished(), "assigning must wait for the lock");
     other.commit().await.unwrap();
-    let outcome = assign.await.unwrap().unwrap();
-    assert!(matches!(outcome, DataRoleOutcome::UnknownRole));
-    f.db.drop().await;
-}
-
-/// Thay luật phải chờ giao dịch khác đang giữ khóa workspace (một lần gán vai đang dở). Bỏ lock_workspace trong
-/// replace_row_policies thì test hỏng: lần thay luật không thấy vai vừa gán (chưa commit), xóa luật cuối của vai đó và
-/// xong ngay, để lại một người mang vai không còn luật.
-#[tokio::test]
-async fn replace_row_policies_waits_for_the_workspace_lock() {
-    let Some(f) = fixture().await else {
-        eprintln!("skip: DATABASE_URL not set");
-        return;
-    };
-    let store = &f.db.store;
-    replace(
-        store,
-        &f,
-        f.sales,
-        &[rule("sales_south", "region", &["South"])],
-    )
-    .await;
-
-    let mut other = store.pool.begin().await.unwrap();
-    sqlx::query("SELECT 1 FROM workspaces WHERE id = $1 FOR NO KEY UPDATE")
-        .bind(f.ws.as_uuid())
-        .execute(&mut *other)
-        .await
-        .unwrap();
-    sqlx::query(
-        "UPDATE memberships SET data_role = 'sales_south' WHERE workspace_id = $1 AND user_id = $2",
-    )
-    .bind(f.ws.as_uuid())
-    .bind(f.member)
-    .execute(&mut *other)
-    .await
-    .unwrap();
-
-    let remove_rules = tokio::spawn({
-        let store = store.clone();
-        let ws = f.ws;
-        let sales = f.sales;
-        async move { store.replace_row_policies(&ws, sales, &[]).await }
-    });
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    assert!(
-        !remove_rules.is_finished(),
-        "replace_row_policies must wait for the lock"
-    );
-    other.commit().await.unwrap();
-    let outcome = remove_rules.await.unwrap().unwrap();
-    let PoliciesOutcome::RolesLeftWithoutRules(roles) = outcome else {
-        panic!("the role assigned meanwhile must keep its last rule");
-    };
-    assert_eq!(roles, ["sales_south"]);
+    let outcome = task.await.unwrap().unwrap();
+    assert!(matches!(outcome, MemberRolesOutcome::RolesWithoutRules(_)));
     f.db.drop().await;
 }

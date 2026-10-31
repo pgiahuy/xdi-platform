@@ -32,13 +32,28 @@ trong [ARCHITECTURE.md](ARCHITECTURE.md).
 | Bài học (#228): chữ admin viết, áp cho dataset nào hay cả workspace, có bật không, người tạo, người duyệt và thời điểm, dòng nhật ký nó viết từ | Postgres, bảng `lessons`; chỉ admin xem được. Xóa dataset thì bài của dataset đó mất theo |
 | Báo cáo: tiêu đề, đoạn mở đầu người tạo viết, thứ tự các mục, mỗi mục trỏ tới một câu hỏi đã lưu; báo cáo tự động ghi thêm dataset và số lần gọi mô hình, và mỗi phần của nó là một dòng lịch sử câu hỏi như trên (câu SQL do code dựng, lời trả lời kèm hai cổng kiểm, bảng phân rã) | Postgres, bảng `reports` và `report_items`; chỉ người tạo đọc được, admin của workspace cũng không. Bảng kết quả không lưu: mở báo cáo hay xuất Excel thì backend chạy lại câu SQL đã lưu với quyền xem của người mở. File PDF, Excel tải về nằm ở máy người tải. Xóa dataset thì mục của nó mất theo câu hỏi; xóa tài khoản thì báo cáo của người đó mất theo |
 | Bảng chụp từ nguồn database (Postgres) | Như file nạp lên: chép một lần thành Parquet trong `DATA_DIR`, mỗi bảng một bảng của dataset là database đó; bản CSV trung gian chỉ nằm trong thư mục tạm lúc chụp. Phạm vi là quyền của tài khoản nguồn: kết nối mặc định chụp mọi bảng, view tài khoản đó có quyền `SELECT` (#247), admin bỏ tick bảng không muốn; bảng không cấp quyền thì xdi không thấy. Muốn giới hạn dữ liệu thì cấp quyền hẹp cho tài khoản, không dựa vào việc bỏ tick |
-| Bảng của nguồn chỉ lưu metadata (quá `SOURCE_MAX_ROWS` hay trần `SOURCE_SNAPSHOT_MAX_MB`) | Postgres, bảng `source_metadata_tables`: tên bảng, số dòng, dung lượng, tên, kiểu, khóa chính và mô tả cột, mô tả bảng; không có dòng dữ liệu nào. Mọi thành viên workspace đọc được qua `GET .../catalog` (`metadata_only`), như cột của bảng đã chụp; luồng hỏi đọc để nêu tên bảng chưa chụp trong lời báo, không gửi cho mô hình |
+| Bảng của nguồn chỉ lưu metadata (quá `SOURCE_TABLE_MAX_MB`, trần `SOURCE_SNAPSHOT_MAX_MB`, hay `SOURCE_MAX_ROWS` khi đặt) | Postgres, bảng `source_metadata_tables`: tên bảng, số dòng, dung lượng, tên, kiểu, khóa chính và mô tả cột, mô tả bảng; không có dòng dữ liệu nào. Mọi thành viên workspace đọc được qua `GET .../catalog` (`metadata_only`), như cột của bảng đã chụp; luồng hỏi đọc để nêu tên bảng chưa chụp trong lời báo, không gửi cho mô hình |
 | Quan hệ giữa các bảng chụp cùng nhau: tên ràng buộc khóa ngoại, cột khóa hai đầu | Postgres, bảng `dataset_relations`; mọi thành viên workspace đọc được qua API. Danh sách bảng liên quan đọc từ `pg_catalog` của database nguồn lúc admin chọn bảng, không lưu |
 | Mô tả bảng và cột mà tổ chức ghi trong database nguồn (`COMMENT ON`, #245), đọc từ catalog lúc chụp | Postgres: mô tả cột trong hồ sơ cột (nguồn `database`), mô tả bảng trên phiên bản; mọi thành viên workspace đọc được qua API, như mô tả cột do mô hình viết |
 | Thông tin kết nối của nguồn database: máy chủ, cổng, database, tài khoản, mật khẩu, sslmode, chứng chỉ CA nếu có | Postgres, bảng `sources`. Cả bộ (kể cả mật khẩu) mã hóa AES-256-GCM bằng `SOURCE_SECRET_KEY` trong cột `secret_encrypted`; máy chủ, cổng, database, tài khoản và sslmode còn một bản chữ thường để hiển thị cho admin. Mật khẩu không bao giờ trả qua API, không ghi log; cột `_source_file` chỉ ghi máy chủ, database và bảng. `SOURCE_SECRET_KEY` để trống thì backend tự sinh khóa và lưu ở `DATA_DIR/source_secret.key` (quyền 0600), cùng volume với file dữ liệu: bản sao lưu của `make backup` có cả khóa lẫn bản mã, nên giữ bản sao lưu như giữ mật khẩu; bản chạy thật nên đặt biến để khóa nằm ngoài volume |
 | Database mẫu (`data/postgres-demo`, dịch vụ `demo-db` khi bật `--profile demo`) | Dữ liệu mẫu công khai (DataCo, OULAD) trong volume `xdi-demo-db_demo-db-data`, cổng chỉ mở trên `127.0.0.1`; thiết lập lần đầu chụp nó như mọi nguồn database, không gửi gì ra ngoài máy |
 | Tài khoản: email, tên, mật khẩu đã băm (Argon2id) | Postgres; không lưu mật khẩu gốc |
 | Phiên đăng nhập: mã băm SHA-256, người dùng, hạn | Postgres; mã gốc chỉ nằm trong cookie của trình duyệt, xóa khi đăng xuất |
+
+## Ai thấy dòng nào
+
+- Admin của workspace thấy mọi dòng của mọi bảng trong workspace, kể cả khi mang vai dữ liệu: họ tự sửa được luật, lọc
+  với họ không bảo vệ được gì.
+- Member không mang vai dữ liệu nào thấy mọi dòng. Member mang vai chỉ thấy dòng các vai của mình cho phép: trong một
+  vai mọi luật nối AND, giữa các vai nối OR, chỉ tính vai có luật trên bảng đang đọc hay bảng nó trỏ tới; bảng trỏ tới
+  bảng bị lọc (đơn hàng của khách) bị lọc theo. Luật áp cho mọi SQL chạy trên dữ liệu thay mặt người đó: câu hỏi, câu
+  "tại sao" và bảng phân rã, truy dòng nguồn, tổng quan dataset. Người bị lọc không nhận danh sách giá trị nào trong
+  prompt (mục dưới) và không thấy số đếm của hồ sơ cột.
+- Vai, luật và người mang vai chỉ admin xem và sửa (`/data-roles`). Member chỉ xem được tên và mô tả các vai của
+  chính mình (trang Thành viên); thẻ "Hệ thống đã hiểu là" của họ ghi điều kiện đã áp ("Lọc theo quyền xem: ..."),
+  gồm cả các giá trị họ được thấy. Admin thấy vai của mọi thành viên ở trang Thành viên và màn Vai dữ liệu.
+- Vai và luật nằm trong Postgres (`data_roles`, `member_data_roles`, `rls_policies`), xóa theo workspace. Đổi vai hay
+  luật có hiệu lực từ request kế tiếp; câu trả lời cũ trong lịch sử giữ kết quả đã tính lúc hỏi.
 
 ## Gửi gì cho mô hình ngôn ngữ
 

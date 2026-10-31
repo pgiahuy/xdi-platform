@@ -130,8 +130,8 @@ async fn test(
     description = "Every table and view the account can read (its SELECT grants decide the scope), with the row \
                    estimate and size from Postgres statistics, the table comment, foreign keys in and out among \
                    readable tables, `is_referenced` when another table points to it (warn before unticking a lookup \
-                   table), `over_row_limit` when the estimate is above SOURCE_MAX_ROWS, and what this source already \
-                   holds for it (`state`).",
+                   table), `over_limit` when the table alone is over SOURCE_TABLE_MAX_MB (or SOURCE_MAX_ROWS when \
+                   set), and what this source already holds for it (`state`).",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = Uuid, Path, description = "Source id")
@@ -190,10 +190,11 @@ async fn relations(
                    transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from \
                    this source gets a new version of its dataset, and one with unchanged content creates nothing \
                    (`created` false). Every declared foreign key between tables snapshotted from this source is \
-                   recorded as a relation; relations are never inferred. A table over SOURCE_MAX_ROWS, or that would \
-                   take the snapshot over SOURCE_SNAPSHOT_MAX_MB (Postgres sizes, smallest tables first), keeps \
-                   columns, types, keys and comments only (`metadata_only`). MAX_UPLOAD_MB still applies to each \
-                   copied table. `dataset_id` snapshots that dataset again with every dataset linked to it.",
+                   recorded as a relation; relations are never inferred. Limits are checked on Postgres sizes before \
+                   copying: a table over SOURCE_TABLE_MAX_MB, or that would take the snapshot over \
+                   SOURCE_SNAPSHOT_MAX_MB (smallest tables first), or over SOURCE_MAX_ROWS when that is set, keeps \
+                   columns, types, keys and comments only (`metadata_only`). There is no row limit by default. \
+                   `dataset_id` snapshots that dataset again with every dataset linked to it.",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = Uuid, Path, description = "Source id")
@@ -203,8 +204,8 @@ async fn relations(
         (status = 201, body = SnapshotResponse, description = "At least one new dataset or version created"),
         (status = 200, body = SnapshotResponse, description = "No table created anything (unchanged or metadata only)"),
         (status = "4XX", body = ErrorBody, description = "400 unknown table, cannot read it or cannot connect, \
-                                                         401, 403 not admin, 404, 413 a copied table is bigger \
-                                                         than MAX_UPLOAD_MB")
+                                                         401, 403 not admin, 404, 413 a copied view (no size \
+                                                         known before copying) is bigger than SOURCE_TABLE_MAX_MB")
     )
 )]
 async fn snapshot(
