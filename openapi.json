@@ -1231,6 +1231,7 @@
                       ],
                       "clarifications": [],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+                      "data_range": null,
                       "explanation": null,
                       "insight": null,
                       "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
@@ -1324,6 +1325,7 @@
                         }
                       ],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+                      "data_range": null,
                       "explanation": null,
                       "insight": null,
                       "message": "Doanh thu tính bằng cột nào?",
@@ -1365,6 +1367,7 @@
                       "choices": [],
                       "clarifications": [],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+                      "data_range": null,
                       "explanation": null,
                       "insight": null,
                       "message": "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.",
@@ -1424,7 +1427,7 @@
                   "simple": {
                     "summary": "One dimension, one measure",
                     "value": {
-                      "answer_text": "Có 5 dòng; cao nhất là Europe với 10.845.230,42.",
+                      "answer_text": "Europe có tổng doanh thu cao nhất: khoảng 10,8 triệu (10.845.230,42), tiếp theo là LATAM, Pacific Asia, USCA và Africa.",
                       "answer_text_by_model": false,
                       "chart": {
                         "kind": "bar",
@@ -1450,6 +1453,7 @@
                       ],
                       "clarifications": [],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+                      "data_range": null,
                       "explanation": null,
                       "insight": {
                         "kind": "groups",
@@ -1679,6 +1683,7 @@
                       ],
                       "clarifications": [],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
+                      "data_range": null,
                       "explanation": {
                         "base": {
                           "filter": "strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') >= TIMESTAMP '2017-04-01' AND strptime(\"order date (DateOrders)\", '%m/%d/%Y %H:%M') < TIMESTAMP '2017-07-01'",
@@ -4297,6 +4302,7 @@
           "answer_text",
           "answer_text_by_model",
           "question_type",
+          "data_range",
           "clarifications",
           "steps",
           "model_calls"
@@ -4344,6 +4350,17 @@
             "type": "string",
             "format": "uuid",
             "description": "Conversation this question belongs to (`AskRequest.conversation_id`, or a new one when it was empty). Send it\nback with the next question so the model reads it as a follow-up."
+          },
+          "data_range": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DataRange",
+                "description": "Dates the data covers for the time column the answer relies on: the first column of the table's time columns that\nthe SQL that ran names, otherwise the table's first time column. Read from the column profile of the whole table\n(a user limited to some rows still sees the range of the whole table). Null for a question that is not\n`answered`, or when the table has no usable time column."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "explanation": {
             "oneOf": [
@@ -5106,6 +5123,41 @@
           "name": {
             "type": "string",
             "description": "1 to 100 characters. The slug is derived from it."
+          }
+        }
+      },
+      "DataRange": {
+        "type": "object",
+        "description": "Dates the data covers, see `AskResponse.data_range`.",
+        "required": [
+          "column",
+          "label",
+          "from",
+          "to",
+          "partial"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "The time column, as named in the dataset."
+          },
+          "from": {
+            "type": "string",
+            "description": "First and last day with data, `YYYY-MM-DD`."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vietnamese name of the column from its profile; null when the profile has none."
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "True when the SQL that ran filters on a date after the last day with data: the period asked about is not fully\ncovered (or not covered at all)."
+          },
+          "to": {
+            "type": "string"
           }
         }
       },

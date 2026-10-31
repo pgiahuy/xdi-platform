@@ -5,25 +5,27 @@ phân rã tự động để ghi vào queries.explanation cùng khuôn với câ
 dòng phân rã (service/drill/) chạy như nhau. */
 
 use crate::error::AppError;
+use crate::service::ask::context::AskContext;
 use crate::service::ask::contract::{AskStatus, Explanation, Understanding};
-use crate::service::ask::fanout::JoinLink;
+use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::related::TableGroup;
 use crate::service::ask::run::RunOutcome;
 use crate::service::ask::why::build_narrate_timeout;
 use crate::service::explain::breakdown::{QueryEnv, ASK_STOP_HINT};
+use crate::service::explain::lower_first;
 use crate::service::insight::plan::PlainTable;
-use crate::service::insight::{build_insight, InsightInput, InsightOutcome};
+use crate::service::insight::{build_insight, ColumnReading, InsightInput, InsightOutcome};
 use crate::state::AppState;
 
 /// None khi câu chưa answered hay không có bảng kết quả. lessons là bài học đã duyệt liên quan câu hỏi, cho prompt
-/// viết lời.
+/// viết lời; context cho biết cụm nào ngữ cảnh đã tự chọn cột, để lời nói rõ đã tính theo cột nào.
 pub(super) async fn run_insight(
     state: &AppState,
     group: &TableGroup,
-    links: &[JoinLink],
     question: &str,
     outcome: &RunOutcome,
     understanding: Option<&Understanding>,
+    context: &AskContext,
     lessons: &[String],
 ) -> Result<Option<InsightOutcome>, AppError> {
     let (Some(result), Some(sql_generated), Some(sql_guarded)) = (
@@ -45,6 +47,8 @@ pub(super) async fn run_insight(
             row_count: t.version.row_count,
         })
         .collect();
+    // Quan hệ giữa các bảng, dựng lại từ nhóm như ask/mod.rs: rẻ, và hàm bớt một tham số.
+    let links = build_join_links(group);
     let input = InsightInput {
         question,
         result,
@@ -53,7 +57,7 @@ pub(super) async fn run_insight(
         limit_kept: outcome.limit_kept,
         understanding,
         tables: &tables,
-        links,
+        links: &links,
         env: QueryEnv {
             tables: &group.allowed,
             max_rows: state.config.ask_max_rows,
@@ -64,8 +68,34 @@ pub(super) async fn run_insight(
         narrate: state.config.insight_text,
         narrate_timeout: build_narrate_timeout(&state.config),
         lessons,
+        readings: &build_readings(context),
     };
     build_insight(state.llm.as_ref(), &input).await
+}
+
+/// Cụm ngữ cảnh đã tự chọn một trong nhiều cột (còn cột khác để đổi, người hỏi chưa chọn), với tên tiếng Việt của cột:
+/// bí danh đầu của hồ sơ, không có thì mô tả, cuối cùng là tên cột.
+fn build_readings(context: &AskContext) -> Vec<ColumnReading> {
+    context
+        .picks
+        .iter()
+        .filter(|pick| !pick.others.is_empty() && !pick.chosen_by_user)
+        .map(|pick| {
+            let profile = context.columns.iter().find(|c| c.name == pick.column);
+            let alias =
+                profile.and_then(|c| c.aliases.iter().map(|a| a.trim()).find(|a| !a.is_empty()));
+            let description = profile
+                .and_then(|c| c.description.as_deref())
+                .map(str::trim);
+            let label = alias
+                .or(description.filter(|d| !d.is_empty()))
+                .unwrap_or(&pick.column);
+            ColumnReading {
+                phrase: pick.phrase.clone(),
+                label: lower_first(label),
+            }
+        })
+        .collect()
 }
 
 /// Object ghi vào queries.explanation: cùng khuôn {"form", "explanation"} với câu "tại sao", form là null vì không có

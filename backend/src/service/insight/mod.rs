@@ -28,6 +28,7 @@ chủ (không mở được DuckDB) vẫn là Err như mọi bước khác. Test
 
 pub mod facts;
 pub mod narrate;
+mod one_row;
 mod period_breakdown;
 pub mod periods;
 pub mod plan;
@@ -80,6 +81,16 @@ pub struct InsightInput<'a> {
     pub narrate_timeout: Duration,
     /// Bài học đã duyệt liên quan câu hỏi (ask/lessons.rs), thêm vào prompt viết lời.
     pub lessons: &'a [String],
+    /// Cụm của câu hỏi khớp nhiều cột mà ngữ cảnh tự chọn một (ask/context.rs), kèm tên tiếng Việt của cột đã chọn: phần
+    /// giải thích nói rõ đã tính theo cột nào, người hỏi không phải mở thẻ "Hệ thống đã hiểu là" mới biết.
+    pub readings: &'a [ColumnReading],
+}
+
+/// Một cụm và cột ngữ cảnh đã chọn cho nó, bằng lời.
+pub struct ColumnReading {
+    pub phrase: String,
+    /// Tên tiếng Việt của cột (bí danh đầu của hồ sơ, không có thì mô tả, cuối cùng mới là tên cột).
+    pub label: String,
 }
 
 /// Phần giải thích, phân rã tự động khi có, các bước (explain, narrate) và bảng phân rã đã đọc thêm.
@@ -118,14 +129,29 @@ pub async fn build_insight(
     }
     let started = Instant::now();
     let mut found = Found::default();
-    let parts = build_parts(input, result_shape, &mut found).await?;
+    // Một dòng ngắn của danh sách dòng được kể bằng lời (insight/one_row.rs), thay cho câu đếm dòng.
+    let one_row = (result_shape.kind == InsightKind::Rows)
+        .then(|| one_row::build_one_row(input, &shape))
+        .flatten();
+    let (mut parts, one_row_code_only) = match one_row {
+        Some(row) => (row.parts, Some(row.code_only)),
+        None => (build_parts(input, result_shape, &mut found).await?, None),
+    };
+    for reading in input.readings {
+        parts.add_reading(&reading.phrase, &reading.label);
+    }
+    parts.apply_readable_numbers();
     let mut steps = vec![build_step(
         StepName::Explain,
         started,
         true,
         found.detail.as_deref(),
     )];
-    let narrated = match build_code_only_reason(input, &shape, result_shape) {
+    let code_only = match one_row_code_only {
+        Some(reason) => reason,
+        None => build_code_only_reason(input, &shape, result_shape),
+    };
+    let narrated = match code_only {
         Some(detail) => build_code_narrated(&parts, Instant::now(), detail),
         None => {
             narrate_insight(
@@ -267,7 +293,7 @@ async fn build_parts(
 }
 
 /// Tên độ đo: nhãn tiếng Việt của thẻ "Đã hiểu là" khi có (cùng thứ tự với các cột tổng hợp), không thì tên cột.
-fn build_measure_label(input: &InsightInput<'_>, measure: usize) -> String {
+pub(super) fn build_measure_label(input: &InsightInput<'_>, measure: usize) -> String {
     let result = input.result;
     let position = result.columns[..measure]
         .iter()

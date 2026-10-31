@@ -45,6 +45,9 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Màn **Khái niệm ngành** (thanh bên): gói ngành lưu riêng cho từng workspace, admin thêm, sửa, tắt khái niệm, câu hỏi sau dùng bản vừa sửa; thêm gói giáo dục cho dữ liệu OULAD (#229).
 - Tab **Các bước** của khung Minh chứng ghi từng lượt gọi mô hình (thời gian, token); lệnh `xdi-backend llm-stats` tổng hợp theo loại câu; lập hồ sơ cột sau khi nạp chạy ba lượt gọi song song và hai bảng cùng lúc (`SEMANTIC_JOBS`); số đo ở `docs/PERFORMANCE.md` (#184).
 - Tải lại trang hay mở lại cuộc trò chuyện cũ vẫn thấy lời trả lời của từng lượt (kèm các chỗ chưa rõ nếu có), không chỉ câu hỏi; bảng và biểu đồ vẫn xem bằng nút Hỏi lại. Bảng `queries` thêm cột `answer`, API cuộc trò chuyện thêm `answer` cho mỗi lượt (#201).
+- Câu trả lời ghi dữ liệu có từ ngày nào đến ngày nào khi bảng có cột thời gian, theo cột câu hỏi dùng; hỏi kỳ quá ngày cuối của dữ liệu thì ghi "dữ liệu mới có đến ...". API thêm `data_range` (#201).
+- Số từ một triệu trở lên trong câu trả lời có dạng rút gọn kèm số đủ, như "khoảng 12,3 triệu (12.340.831,43)"; code tính dạng rút gọn, mô hình chép (#201).
+- Một từ khớp nhiều cột mà hệ thống tự chọn một thì câu trả lời nói đã tính theo cột nào, bằng tên tiếng Việt của cột (#201).
 
 ### Changed
 
@@ -71,8 +74,14 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Bảng kết quả: cột thời gian mà mọi ô đều là nửa đêm chỉ hiện ngày, không kèm " 00:00:00".
 - Xóa dataset thì xóa luôn lịch sử câu hỏi của nó, kể cả các lượt trò chuyện; khi cập nhật, lịch sử còn sót từ các lần xóa dataset trước bị xóa (#187).
 
+- Câu trả lời do hệ thống viết đọc như người kể lại: "Caguas có tổng doanh thu cao nhất: khoảng 13,6 triệu (13.610.266,21), tiếp theo là Chicago, Los Angeles, Brooklyn và New York." thay cho "Có 5 dòng; cao nhất là Caguas với 13.610.266,21."; bỏ dòng "Câu viết theo khuôn từ số đã tính." ở mọi nơi (#201).
+- Kết quả chỉ một dòng, tới 5 cột (như "thành phố nào có doanh thu cao nhất", "thành phố đó thuộc quốc gia nào"), được trả lời bằng lời với tên tiếng Việt của cột, như "New York City có tổng doanh thu cao nhất: 436.061,54.", thay cho "Kết quả có 1 dòng."; danh sách dòng không còn hiện khối "Kết quả có N dòng. Điều kiện lọc: ..." lặp lại câu trả lời (#201).
+- Câu hỏi lại chỉ có một ý thì mỗi phương án là một nút, bấm là chạy ngay; chọn chỉ số hay khoảng thời gian khi được hỏi lại không còn báo "không áp dụng được" (#201).
+- Prompt viết SQL dặn câu hỏi "nhóm nào cao nhất" lấy cả cột tên nhóm lẫn số dùng để xếp (#201).
 ### Fixed
 
+- Điều kiện lọc có câu con hay "hoặc" không còn in nguyên câu SQL vào câu trả lời và thẻ "Hệ thống đã hiểu là": hai vế "hoặc" đọc thành lời, câu con thành "theo một giá trị tính từ dữ liệu (xem câu SQL)" (#201).
+- Câu thường nối bảng (như orders với order_items): thẻ "Hệ thống đã hiểu là" và câu trả lời đọc hồ sơ cột của cả bảng nối, nên gọi số đo bằng mô tả tiếng Việt của cột, như "tổng doanh thu trước chiết khấu của mục hàng" thay cho "Tổng sales" (#201).
 - Câu hỏi ra kết quả toàn ô trống (ví dụ hỏi doanh thu của một năm không có dữ liệu): câu trả lời không còn cụt kiểu "Tổng Sales là ." mà nói rõ không có dữ liệu khớp; cảnh báo kèm khoảng thời gian dữ liệu có khi câu lọc theo thời gian; lời trả lời của mô hình được nhắc lại số có trong câu hỏi (năm, top N) mà không bị bước kiểm số loại.
 
 ## [0.2.0] - 2026-10-27

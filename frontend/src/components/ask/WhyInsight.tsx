@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/WhyInsight.tsx - insight của câu hỏi tìm nguyên nhân ở đầu thẻ trả lời: câu chính (summary_title)
-rồi mục "Nguyên nhân chính" (summary_points, mỗi ý có đầu ý in đậm). Khi byModel, mô hình viết cả hai phần từ số code
-đã tính, và insight đã qua hai cổng của backend (#201): khẳng định của mô hình so với bảng, rồi mô hình chấm so nghĩa
-của lời với khẳng định; chỗ mô hình chấm thấy chưa rõ (warnings) hiện ngay dưới. Không có insight của mô hình (mô hình
-lỗi, trượt cổng ở mọi lần viết hay chênh lệch bằng 0) thì hiện câu khuôn do code viết, kèm dòng ghi câu viết theo
-khuôn. */
+/* components/ask/WhyInsight.tsx - insight của câu hỏi tìm nguyên nhân ở đầu thẻ trả lời: câu chính (summary_title) rồi
+mục "Nguyên nhân chính" (summary_points, mỗi ý có đầu ý in đậm). Khi byModel, mô hình viết cả hai phần từ số code đã
+tính, và insight đã qua hai cổng của backend (#201): khẳng định của mô hình so với bảng, rồi mô hình chấm so nghĩa
+của lời với khẳng định; chỗ mô hình chấm thấy chưa rõ (warnings) hiện ngay dưới. Không có insight của mô hình (mô
+hình lỗi, trượt cổng ở mọi lần viết hay chênh lệch bằng 0) thì hiện câu khuôn do code viết, không kèm dòng ghi chú:
+người đọc chỉ cần câu trả lời, còn lời của mô hình có được dùng không thì tab Các bước ghi (cờ của bước viết lời). */
 
 import type { SummaryPointView } from './evidenceTypes'
 import { UnclearPoints } from './UnclearPoints'
@@ -30,7 +30,6 @@ export function WhyInsight({ title, points, byModel, warnings }: Props) {
         </div>
       )}
       {byModel && warnings.length > 0 && <UnclearPoints warnings={warnings} checkAgainst="tab Phân rã" />}
-      {!byModel && <p className="text-xs text-muted-foreground">Câu viết theo khuôn từ số đã tính.</p>}
     </section>
   )
 }

@@ -106,8 +106,47 @@ fn template_names_the_top_group_when_sorted() {
     let result = sales();
     assert_eq!(
         build_template_answer(&input(&result, None, None)),
-        "Có 3 dòng; cao nhất là Fishing với 6.929.656,49."
+        "Fishing có sales cao nhất: khoảng 6,93 triệu (6.929.656,49), tiếp theo là Cleats và Camping & Hiking."
     );
+}
+
+/// Một dòng ít cột: câu kể từng ô, số lớn có dạng rút gọn.
+#[test]
+fn template_of_one_row_lists_each_cell() {
+    let result = table(&[("Fishing", 6929656.49)]);
+    assert_eq!(
+        build_template_answer(&input(&result, None, None)),
+        "Kết quả: category là Fishing, sales là khoảng 6,93 triệu (6.929.656,49)."
+    );
+}
+
+/// Tên độ đo chỉ bỏ ngoặc cuối khi đó là tên cột tiếng Anh; ngoặc tiếng Việt của tên chỉ số giữ nguyên.
+#[test]
+fn template_keeps_a_vietnamese_parenthesis_of_the_measure() {
+    let result = sales();
+    let mut u = understanding();
+    u.measures = vec![item("Lợi nhuận (đã trừ chiết khấu)")];
+    assert_eq!(
+        build_template_answer(&input(&result, Some(&u), None)),
+        "Fishing có lợi nhuận (đã trừ chiết khấu) cao nhất: khoảng 6,93 triệu (6.929.656,49), tiếp theo là Cleats và \
+         Camping & Hiking."
+    );
+}
+
+/// Danh sách dòng chỉ một dòng ngắn (câu "nhóm nào cao nhất" có LIMIT 1): đoạn trả lời là câu phần giải thích đã kể
+/// dòng đó (insight/one_row.rs), hay lời của mô hình khi lời đó qua hai cổng.
+#[test]
+fn one_short_row_of_a_list_uses_the_insight_text() {
+    let result = table(&[("Caguas", 74846.31)]);
+    let mut list = insight(InsightKind::Rows, "Caguas cao nhất, với 74.846,31.", false);
+    list.title = "Caguas có sales cao nhất: 74.846,31.".to_string();
+    let outcome = build_answer(&input(&result, None, Some(&list))).unwrap();
+    assert_eq!(outcome.text, "Caguas có sales cao nhất: 74.846,31.");
+    assert!(!outcome.by_model);
+    list.summary_by_model = true;
+    let outcome = build_answer(&input(&result, None, Some(&list))).unwrap();
+    assert_eq!(outcome.text, "Caguas cao nhất, với 74.846,31.");
+    assert!(outcome.by_model);
 }
 
 #[test]
@@ -115,7 +154,7 @@ fn template_without_order_only_counts_rows() {
     let result = table(&[("Cleats", 10.0), ("Fishing", 20.0)]);
     assert_eq!(
         build_template_answer(&input(&result, None, None)),
-        "Có 2 dòng kết quả."
+        "Kết quả có 2 dòng, xem bảng bên dưới."
     );
 }
 
@@ -147,7 +186,7 @@ fn template_of_one_cell_names_the_measure() {
     let u = understanding();
     assert_eq!(
         build_template_answer(&input(&result, Some(&u), None)),
-        "Tổng doanh thu (Sales) là 36.784.735,01."
+        "Tổng doanh thu là khoảng 36,8 triệu (36.784.735,01)."
     );
 }
 
@@ -165,7 +204,7 @@ fn checked_insight_text_becomes_the_answer() {
     let outcome = build_answer(&input(&result, None, Some(&code))).unwrap();
     assert_eq!(
         outcome.text,
-        "Có 3 dòng; cao nhất là Fishing với 6.929.656,49."
+        "Fishing có sales cao nhất: khoảng 6,93 triệu (6.929.656,49), tiếp theo là Cleats và Camping & Hiking."
     );
     assert!(!outcome.by_model);
 

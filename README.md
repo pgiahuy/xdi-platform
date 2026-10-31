@@ -12,7 +12,8 @@ số để xem các dòng dữ liệu đứng sau nó.
 Con số do DuckDB tính trên máy của bạn. Mô hình ngôn ngữ viết mô tả cột lúc nạp, phân loại câu hỏi, viết SQL, điền
 form cho câu hỏi tìm nguyên nhân và viết lời. Nó nhận metadata của mọi cột (tên, kiểu, mô tả), danh sách giá trị của
 cột phân loại không đánh dấu nhạy cảm (người bị lọc dòng theo vai dữ liệu thì không), và các ý do code tính (con số tổng
-hợp kèm tên nhóm); không nhận dòng kết quả nào hay nội dung file. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
+hợp kèm tên nhóm); không nhận dòng kết quả nào, trừ ô của kết quả chỉ một dòng khi mọi ô là số tổng hợp hay giá trị
+của cột phân loại không nhạy cảm, và không nhận nội dung file. Chi tiết: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 Bản phát hành mới nhất: [v0.2.0](https://github.com/pgiahuy/xdi-platform/releases). Giấy phép Apache 2.0.
 Tài liệu: https://pgiahuy.github.io/xdi-platform/

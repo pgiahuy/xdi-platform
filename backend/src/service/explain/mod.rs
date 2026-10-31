@@ -46,6 +46,8 @@ pub mod measure;
 mod measure_column;
 mod narrate_prompt;
 pub mod number;
+#[cfg(test)]
+mod number_tests;
 pub mod period;
 pub mod plain;
 pub mod premise;
@@ -955,6 +957,18 @@ pub(crate) fn build_entity_name(column: &str, label: Option<&str>) -> String {
     match lowered.strip_prefix("mã ") {
         Some(rest) if !rest.trim().is_empty() => rest.trim().to_string(),
         _ => lowered,
+    }
+}
+
+// "Tổng doanh thu (Sales)" thành "Tổng doanh thu". Chỉ bỏ ngoặc cuối khi chữ trong đó không dấu (tên cột tiếng Anh), để
+// tên chỉ số tiếng Việt có ngoặc như "Lợi nhuận (đã trừ chiết khấu)" giữ nguyên.
+pub(crate) fn drop_column_name(label: &str) -> String {
+    let Some(inner) = label.strip_suffix(')') else {
+        return label.to_string();
+    };
+    match inner.rfind(" (") {
+        Some(at) if at > 0 && inner[at + 2..].is_ascii() => label[..at].to_string(),
+        _ => label.to_string(),
     }
 }
 

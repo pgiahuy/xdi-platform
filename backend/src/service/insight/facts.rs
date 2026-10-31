@@ -11,7 +11,9 @@ số kiểu "gấp 3 lần": bước kiểm số coi đó là số mô hình t�
 use rust_decimal::{Decimal, RoundingStrategy};
 
 use crate::service::ask::contract::{Comparison, Explanation, InsightPoint};
-use crate::service::explain::number::{build_number_text, build_number_text_with};
+use crate::service::explain::number::{
+    apply_readable_numbers, build_number_text, build_number_text_with,
+};
 use crate::service::explain::significance::{build_change_weight, ChangeWeight};
 use crate::service::explain::summary::build_column_text;
 use crate::service::explain::{build_direction_text, build_value_text, lower_first};
@@ -46,7 +48,25 @@ pub struct InsightParts {
 }
 
 impl InsightParts {
-    fn new(title: String) -> Self {
+    /// Ý "Cách hiểu": cụm của câu hỏi khớp nhiều cột và cột đã chọn, bằng lời. Cụm và tên cột là chữ dữ liệu (names),
+    /// để số nằm trong đó không bị bước kiểm coi là số mô hình tự viết.
+    pub fn add_reading(&mut self, phrase: &str, label: &str) {
+        self.push("Cách hiểu", format!("\"{phrase}\" được tính theo {label}."));
+        self.names.push(phrase.to_string());
+        self.names.push(label.to_string());
+    }
+
+    /// Số từ một triệu trở lên trong câu chính và các ý viết thêm dạng rút gọn (explain/number.rs,
+    /// apply_readable_numbers). Gọi một lần sau khi dựng xong các câu. Độ lớn ghi cho bước kiểm chiều (changes) vẫn là số
+    /// đủ, và số đủ vẫn đứng trong ngoặc, nên bước kiểm vẫn tìm thấy nó.
+    pub fn apply_readable_numbers(&mut self) {
+        self.title = apply_readable_numbers(&self.title);
+        for point in &mut self.points {
+            point.text = apply_readable_numbers(&point.text);
+        }
+    }
+
+    pub(super) fn new(title: String) -> Self {
         InsightParts {
             title,
             points: Vec::new(),

@@ -951,6 +951,7 @@ export interface components {
              *     back with the next question so the model reads it as a follow-up.
              */
             conversation_id: string;
+            data_range: components["schemas"]["DataRange"] | null;
             explanation: components["schemas"]["Explanation"] | null;
             insight: components["schemas"]["Insight"] | null;
             /**
@@ -1276,6 +1277,21 @@ export interface components {
         CreateWorkspaceRequest: {
             /** @description 1 to 100 characters. The slug is derived from it. */
             name: string;
+        };
+        /** @description Dates the data covers, see `AskResponse.data_range`. */
+        DataRange: {
+            /** @description The time column, as named in the dataset. */
+            column: string;
+            /** @description First and last day with data, `YYYY-MM-DD`. */
+            from: string;
+            /** @description Vietnamese name of the column from its profile; null when the profile has none. */
+            label: string | null;
+            /**
+             * @description True when the SQL that ran filters on a date after the last day with data: the period asked about is not fully
+             *     covered (or not covered at all).
+             */
+            partial: boolean;
+            to: string;
         };
         Dataset: {
             /** Format: date-time */

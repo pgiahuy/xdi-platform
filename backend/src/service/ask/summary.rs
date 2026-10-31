@@ -1,25 +1,38 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/summary.rs - đoạn trả lời ngắn ở đầu thẻ của câu hỏi thường đã answered (AskResponse.answer_text). Bước
 này không gọi mô hình và không gửi dòng kết quả nào ra ngoài: đoạn trả lời là lời của phần giải thích
-(service/insight/narrate.rs) khi mô hình đã viết lại các câu do code tính và lời đó qua bước kiểm số, chiều tăng giảm,
-từ chỉ nguyên nhân; còn lại là câu khuôn do code viết từ bảng kết quả. ask/mod.rs gọi build_answer sau phần giải thích.
+(service/insight/narrate.rs) khi mô hình đã viết lại các câu do code tính và lời đó qua hai cổng kiểm (code kiểm số,
+chiều tăng giảm, từ chỉ nguyên nhân; mô hình chấm so nghĩa); còn lại là câu khuôn do code viết từ bảng kết quả.
+ask/mod.rs gọi build_answer sau phần giải thích.
 
 Không gửi dòng kết quả vì dòng có thể chứa giá trị của mọi cột câu SQL chọn, kể cả cột nhạy cảm; mô hình chỉ nhận số
 đã tính qua phần giải thích (docs/PRIVACY.md). Dùng lại lời của phần giải thích cũng tránh một lần gọi mô hình thứ hai
 viết lại cùng các con số.
 
-Danh sách dòng không gộp (insight kind rows) luôn dùng câu khuôn: số dòng và điều kiện lọc. ANSWER_TEXT=false thì luôn
-dùng câu khuôn. Test ở ask/summary_tests.rs. */
+Danh sách dòng không gộp (insight kind rows) luôn dùng câu khuôn: số dòng và điều kiện lọc, hay từng ô khi chỉ có một
+dòng ít cột. ANSWER_TEXT=false thì luôn dùng câu khuôn. Test ở ask/summary_tests.rs. */
 
 use rust_decimal::Decimal;
 
 use crate::service::ask::contract::{
     CellValue, ColumnRole, Insight, InsightKind, ResultTable, Understanding, ValueKind,
 };
-use crate::service::explain::number::{build_number_text, build_number_text_with};
+use crate::service::explain::number::{
+    apply_readable_numbers, build_number_text, build_number_text_with,
+};
+use crate::service::explain::{drop_column_name, lower_first};
+use crate::service::insight::narrate::build_facts_text;
 
 /// Giá trị ô có chữ dài quá thì cắt khi đưa vào câu khuôn, để đoạn dữ liệu dài không lọt nguyên văn ra giao diện.
 const TEMPLATE_CELL_CHARS: usize = 80;
+
+/// Kết quả có tới chừng này dòng xếp theo số đo thì câu khuôn kể tên mọi nhóm theo sau nhóm đứng đầu, như câu trả lời
+/// cho "top 5"; nhiều dòng hơn thì chỉ nêu nhóm đứng đầu.
+const TEMPLATE_NAMED_ROWS: usize = 5;
+
+/// Kết quả một dòng có tới chừng này cột thì câu khuôn kể từng ô; nhiều cột hơn thì câu kể dài như một bảng, để người
+/// đọc xem bảng.
+const TEMPLATE_ROW_COLUMNS: usize = 5;
 
 /// Câu trả lời khi mọi ô của kết quả đều trống, thường là tổng hợp trên tập không có dòng nào (hỏi năm 2019 trên dữ liệu
 /// tới tháng 1/2018 ra một dòng SUM là null). Câu khuôn "<độ đo> là <giá trị>." khi đó thành "Tổng Sales là ." vì giá trị
@@ -60,8 +73,21 @@ pub fn build_answer(input: &SummaryInput<'_>) -> Option<SummaryOutcome> {
         return code(NO_DATA_ANSWER.to_string());
     }
     match input.insight {
-        Some(insight) if insight.kind == InsightKind::Rows => {
+        // Một dòng ngắn (câu "thành phố nào cao nhất" ra đúng một dòng) thì kể từng ô: câu đếm dòng không nêu được tên nào.
+        Some(insight) if insight.kind == InsightKind::Rows && !is_short_row(result) => {
             code(build_rows_answer(result, input.understanding))
+        }
+        // Một dòng ngắn đã được phần giải thích kể bằng lời (insight/one_row.rs): dùng lời đó, hay câu của code khi lời
+        // của mô hình không được dùng.
+        Some(insight) if insight.kind == InsightKind::Rows => {
+            if input.enabled && insight.summary_by_model {
+                Some(SummaryOutcome {
+                    text: insight.summary.clone(),
+                    by_model: true,
+                })
+            } else {
+                code(build_facts_text(&insight.title, &insight.points))
+            }
         }
         // Lời này đã qua bước kiểm của phần giải thích (insight/narrate.rs): mọi số có trong câu do code tính.
         Some(insight) if input.enabled && insight.summary_by_model => Some(SummaryOutcome {
@@ -75,12 +101,7 @@ pub fn build_answer(input: &SummaryInput<'_>) -> Option<SummaryOutcome> {
 /// Câu khuôn của danh sách dòng không gộp: "Có 37 dòng khớp điều kiện: <lọc>." Điều kiện là nhãn khoảng thời gian và
 /// bộ lọc của thẻ "Đã hiểu là"; limit_reached (bảng chạm trần số dòng) thì nói "ít nhất".
 pub fn build_rows_answer(result: &ResultTable, understanding: Option<&Understanding>) -> String {
-    let count = build_number_text(&result.total_rows.to_string());
-    let count = if result.limit_reached {
-        format!("ít nhất {count}")
-    } else {
-        count
-    };
+    let count = build_row_count(result);
     let filters: Vec<String> = understanding
         .map(|u| {
             u.time_range
@@ -97,23 +118,71 @@ pub fn build_rows_answer(result: &ResultTable, understanding: Option<&Understand
     }
 }
 
-/// Câu khuôn: kết quả một ô là "<độ đo> là <số>."; nhiều dòng có cột số đo xếp giảm dần và một cột nhóm là "Có N
-/// dòng; cao nhất là <nhóm> với <số>."; còn lại "Có N dòng kết quả.".
+/// Câu khuôn, viết như người kể lại kết quả:
+/// - một ô: "Tổng doanh thu là khoảng 36,8 triệu (36.784.735,01).";
+/// - một dòng ít cột: "Kết quả: Market là Europe, Sales là khoảng 12,3 triệu (12.340.831,43).";
+/// - cột số đo xếp giảm dần theo nhóm, tới năm dòng: "Caguas có tổng doanh thu cao nhất: khoảng 13,6 triệu
+///   (13.610.266,21), tiếp theo là Chicago, Los Angeles và Brooklyn."; nhiều dòng hơn thì câu sau là "Kết quả có N dòng,
+///   xem bảng bên dưới.";
+/// - còn lại: "Kết quả có N dòng, xem bảng bên dưới."
+///
+/// Số từ một triệu trở lên có dạng rút gọn đứng trước số đủ; tên độ đo bỏ tên cột trong ngoặc, tên cột đã có ở thẻ
+/// "Đã hiểu là".
 pub fn build_template_answer(input: &SummaryInput<'_>) -> String {
     let result = input.result;
-    let total = build_number_text(&result.total_rows.to_string());
+    let measure = input
+        .understanding
+        .filter(|u| u.measures.len() == 1)
+        .map(|u| drop_column_name(&u.measures[0].label));
     if result.columns.len() == 1 && result.total_rows == 1 {
-        let measure = input
-            .understanding
-            .and_then(|u| u.measures.first())
-            .map_or(result.columns[0].name.as_str(), |m| m.label.as_str());
+        let measure = measure.unwrap_or_else(|| result.columns[0].name.clone());
         let value = build_row_texts(result, &result.rows[0]).remove(0);
-        return format!("{measure} là {value}.");
+        return format!("{measure} là {}.", apply_readable_numbers(&value));
     }
-    if let Some((group, value)) = build_top_group(result) {
-        return format!("Có {total} dòng; cao nhất là {group} với {value}.");
+    if is_short_row(result) {
+        let texts = build_row_texts(result, &result.rows[0]);
+        let cells: Vec<String> = result
+            .columns
+            .iter()
+            .zip(&texts)
+            .filter(|(_, text)| !text.is_empty())
+            .map(|(column, text)| {
+                let text: String = text.chars().take(TEMPLATE_CELL_CHARS).collect();
+                format!("{} là {}", column.name, apply_readable_numbers(&text))
+            })
+            .collect();
+        return format!("Kết quả: {}.", cells.join(", "));
     }
-    format!("Có {total} dòng kết quả.")
+    let rows = build_row_count(result);
+    if let Some(top) = build_top_group(result) {
+        // Tên độ đo của thẻ "Đã hiểu là" là chữ thường đứng giữa câu; tên cột giữ nguyên vì là tên trong dữ liệu.
+        let measure = measure.map_or(top.measure, |label| lower_first(&label));
+        let lead = format!(
+            "{} có {measure} cao nhất: {}",
+            top.group,
+            apply_readable_numbers(&top.value)
+        );
+        return match top.next.split_last() {
+            Some((last, [])) => format!("{lead}, tiếp theo là {last}."),
+            Some((last, rest)) => format!("{lead}, tiếp theo là {} và {last}.", rest.join(", ")),
+            None => format!("{lead}. Kết quả có {rows} dòng, xem bảng bên dưới."),
+        };
+    }
+    format!("Kết quả có {rows} dòng, xem bảng bên dưới.")
+}
+
+fn is_short_row(result: &ResultTable) -> bool {
+    result.total_rows == 1 && result.columns.len() <= TEMPLATE_ROW_COLUMNS
+}
+
+/// Số dòng của kết quả bằng chữ; bảng chạm trần số dòng (limit_reached) thì "ít nhất N".
+fn build_row_count(result: &ResultTable) -> String {
+    let count = build_number_text(&result.total_rows.to_string());
+    if result.limit_reached {
+        format!("ít nhất {count}")
+    } else {
+        count
+    }
 }
 
 /// Chữ của từng ô trong một dòng, như giao diện hiện (cellFormat.ts): số kiểu Việt Nam, ngày dd/mm/yyyy, ô trống là
@@ -166,9 +235,18 @@ fn build_date_text(text: &str) -> String {
     }
 }
 
-/// Nhóm đứng đầu và số đo của nó, khi bảng có đúng một cột số đo, ít nhất một cột nhóm (hay thời gian) và cột số đo
-/// xếp giảm dần trên các dòng đã có. Không xếp giảm dần thì dòng đầu không phải "cao nhất", nên không nói.
-fn build_top_group(result: &ResultTable) -> Option<(String, String)> {
+/// Nhóm đứng đầu của bảng, tên cột số đo và giá trị của nhóm đó.
+struct TopGroup {
+    group: String,
+    measure: String,
+    value: String,
+    /// Tên các nhóm theo sau, theo thứ tự; rỗng khi bảng nhiều hơn TEMPLATE_NAMED_ROWS dòng.
+    next: Vec<String>,
+}
+
+/// Nhóm đứng đầu khi bảng có đúng một cột số đo, ít nhất một cột nhóm (hay thời gian) và cột số đo xếp giảm dần trên
+/// các dòng đã có. Không xếp giảm dần thì dòng đầu không phải "cao nhất", nên không nói.
+fn build_top_group(result: &ResultTable) -> Option<TopGroup> {
     let measures: Vec<usize> = indexes_with(result, |role| role == ColumnRole::Measure);
     let groups: Vec<usize> = indexes_with(result, |role| {
         matches!(role, ColumnRole::Dimension | ColumnRole::Time)
@@ -190,7 +268,22 @@ fn build_top_group(result: &ResultTable) -> Option<(String, String)> {
     if name.is_empty() {
         return None;
     }
-    Some((name, texts[measure].clone()))
+    let named = result.total_rows as usize <= TEMPLATE_NAMED_ROWS && !result.limit_reached;
+    let next = if named {
+        result.rows[1..]
+            .iter()
+            .map(|row| build_row_texts(result, row).swap_remove(group))
+            .map(|text| text.chars().take(TEMPLATE_CELL_CHARS).collect())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Some(TopGroup {
+        group: name,
+        measure: result.columns[measure].name.clone(),
+        value: texts[measure].clone(),
+        next,
+    })
 }
 
 fn indexes_with(result: &ResultTable, wanted: impl Fn(ColumnRole) -> bool) -> Vec<usize> {
