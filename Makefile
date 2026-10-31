@@ -22,7 +22,7 @@ SAMPLE_DATABASE_URL ?= $(SALES_DEMO_URL),$(EDU_DEMO_URL)
 # context build của Docker bỏ qua thư mục này; image tự tải ở stage riêng (backend/Dockerfile).
 DUCKDB_EXTENSION := $(CURDIR)/duckdb-extensions/postgres_scanner.duckdb_extension
 
-.PHONY: help duckdb-extension dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-lessons eval-classify eval-judge
+.PHONY: help duckdb-extension dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses schema-docs hooks install uninstall release-artifacts clean eval eval-lessons eval-classify eval-judge
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -151,6 +151,9 @@ openapi: ## Sinh openapi.json, response mẫu của ask và kiểu TypeScript fr
 
 licenses: ## Sinh docs/licenses-dependencies.md từ Cargo.lock và package-lock.json
 	node scripts/licenses.mjs
+
+schema-docs: ## Sinh lại docs/images/schema.svg (sơ đồ ER của Postgres ứng dụng): TBLS=<đường dẫn tbls> DATABASE_URL=<database đã migrate> make schema-docs
+	scripts/schema-docs.sh
 
 hooks: ## Cài hook pre-push: check-fast, thêm check-frontend khi nhánh đổi frontend/, openapi.json hoặc Makefile
 	@# git rev-parse tìm đúng thư mục hook, kể cả khi đang ở một git worktree (.git là file, không phải thư mục).
