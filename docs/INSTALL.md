@@ -167,7 +167,12 @@ Mô hình ngôn ngữ:
   Ollama](https://docs.ollama.com/context-length)) và lặng lẽ bỏ phần đầu của prompt dài hơn, tức phần luật. Đếm bằng
   tokenizer của Qwen2.5-Coder trên DataCo: prompt SQL khoảng 3 050 token, prompt dài nhất backend gửi (trần 24 000 ký
   tự) khoảng 7 180 token, prompt ở trần mà toàn danh sách giá trị khoảng 8 000 token. Prompt SQL nay có thêm mục luật
-  của guard (khoảng 3 000 ký tự), chưa đếm lại. 12288 đủ cho prompt đó cộng phần sửa SQL và câu trả lời. Mỗi token cần
+  của guard (khoảng 3 000 ký tự), chưa đếm lại. 12288 đủ cho prompt đó cộng phần sửa SQL và câu trả lời. Từ #230 trần
+  24 000 ký tự chỉ còn để bỏ dần danh sách giá trị: mọi cột của mọi bảng câu hỏi đọc luôn có metadata, tới 60 000 ký tự
+  metadata trước khi rút gọn, nên với schema rất rộng (vài trăm cột có mô tả) prompt cỡ 85 000 ký tự, ước chừng 25 000
+  token (ước lượng theo tỷ lệ 3,3 ký tự một token ở trên, chưa đo). Khi đó đặt `OLLAMA_NUM_CTX=32768` (bộ nhớ K/V cỡ
+  1,8 GiB với `qwen2.5-coder:7b`, tính như dưới). Backend ghi cảnh báo `prompt is likely longer than OLLAMA_NUM_CTX` khi
+  một prompt ước lượng vượt giá trị đã đặt. Mỗi token cần
   thêm bộ nhớ K/V: với `qwen2.5-coder:7b` và bộ đệm `f16` là 56 KiB, tức khoảng 672 MiB ở 12288 token (tính từ
   `config.json` của mô hình, chưa đo; số thật xem bằng `ollama ps`). Đặt nhỏ hơn mặc định thì backend ghi cảnh báo lúc
   khởi động.

@@ -210,9 +210,12 @@ impl Config {
     }
 }
 
-/// Mặc định của OLLAMA_NUM_CTX. Prompt dài nhất (PROMPT_MAX_CHARS, 24 000 ký tự) khoảng 7 200 đến 8 000 token theo
-/// tokenizer của qwen2.5-coder, cộng prompt sửa và câu trả lời thì vượt 8192; 12 288 còn dư khoảng 3 000 token. Cách đo
-/// ở docs/INSTALL.md, mục 1.
+/// Mặc định của OLLAMA_NUM_CTX. Prompt ở trần PROMPT_MAX_CHARS (24 000 ký tự) khoảng 7 200 đến 8 000 token theo tokenizer
+/// của qwen2.5-coder, cộng prompt sửa và câu trả lời thì vượt 8192; 12 288 còn dư khoảng 3 000 token. Từ #230 prompt có
+/// thể dài hơn trần đó: mọi cột luôn có metadata, tới 60 000 ký tự metadata (COLUMN_METADATA_MAX_CHARS) trước khi rút
+/// gọn, cộng danh sách giá trị và phần luật thì cỡ 85 000 ký tự, ước chừng 25 000 token; schema vài trăm cột cần đặt
+/// OLLAMA_NUM_CTX=32768. Ollama backend (engine/llm/ollama.rs) cảnh báo khi một prompt ước lượng vượt giá trị đã đặt.
+/// Cách đo ở docs/INSTALL.md, mục 1.
 const OLLAMA_NUM_CTX_DEFAULT: u32 = 12_288;
 
 /// Mật khẩu mẫu trong docker-compose.yml và .env.example.
