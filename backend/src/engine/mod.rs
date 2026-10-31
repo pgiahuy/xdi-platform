@@ -13,7 +13,7 @@ pub mod llm;
 pub mod profile;
 pub mod prompts;
 pub mod query;
-// Hình dạng câu đã chạy, cho thẻ "Đã hiểu là" (#35), truy dòng nguồn (#34), kiểm hợp lý (#36).
+// Hình dạng câu đã chạy, cho thẻ "Cách tính" (#35), truy dòng nguồn (#34), kiểm hợp lý (#36).
 pub mod sql_shape;
 #[cfg(test)]
 mod sql_shape_tests;

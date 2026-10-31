@@ -323,7 +323,7 @@
         "ok": true
       },
       {
-        "detail": "Câu hỏi thường: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân.",
+        "detail": "Câu hỏi số liệu: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân.",
         "duration_ms": 640,
         "name": "classify",
         "ok": true
@@ -353,7 +353,7 @@
         "ok": true
       },
       {
-        "detail": "INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết",
+        "detail": "INSIGHT_TEXT=false nên lời giải thích dùng câu do code viết",
         "duration_ms": 0,
         "name": "narrate",
         "ok": true
@@ -697,7 +697,7 @@
         "ok": true
       },
       {
-        "detail": "Câu hỏi tìm nguyên nhân: câu hỏi hỏi vì sao doanh thu quý 3 giảm.",
+        "detail": "Câu hỏi nguyên nhân: câu hỏi hỏi vì sao doanh thu quý 3 giảm.",
         "duration_ms": 710,
         "name": "classify",
         "ok": true

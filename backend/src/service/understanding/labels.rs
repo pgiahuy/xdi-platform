@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/understanding/labels.rs - nhãn tiếng Việt cho từng mục của thẻ "Đã hiểu là" (service/understanding/mod.rs), đọc
+/* service/understanding/labels.rs - nhãn tiếng Việt cho từng mục của thẻ "Cách tính" (service/understanding/mod.rs), đọc
 từ cây sqlparser của một biểu thức trong engine/sql_shape.rs và hồ sơ cột. Nhãn chỉ để người dùng đọc; đoạn SQL đi kèm
 mỗi mục mới là thứ đối chiếu được, nên dạng nào không theo khuôn thì nhãn là chính đoạn SQL, không đoán nghĩa.
 

@@ -59,6 +59,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Changed
 
+- Đổi chữ trên giao diện theo một bộ từ: "câu hỏi nguyên nhân" và "câu hỏi số liệu" thay cho "câu tìm nguyên nhân" và "câu thường", thẻ "Hệ thống đã hiểu là" thành "Cách tính", mục "Căn cứ" thành "Minh chứng", "hai cổng kiểm" thành "kiểm số và kiểm nghĩa".
 - Chụp bảng Postgres không còn trần dòng mặc định; trần theo dung lượng, xét trước khi chép: `SOURCE_TABLE_MAX_MB` (2048) mỗi bảng, `SOURCE_SNAPSHOT_MAX_MB` (4096) cả lần. `.env` cũ có `SOURCE_MAX_ROWS=1000000` thì xóa dòng đó.
 - Dataset là một database đã kết nối hay một file, bảng nằm bên trong: API mới `/catalog` liệt kê dataset kèm bảng, cột, quan hệ, chụp lại cả dataset và hỏi trên dataset (backend chọn bảng bắt đầu, hay ghim bằng `table_id`); chỉ số, câu mẫu, bài học, gói ngành gắn theo dataset; hai database cùng có bảng `orders` giữ đúng tên `orders`. Migration chuyển dữ liệu cũ, câu hỏi và bằng chứng cũ vẫn mở được (#257).
 - Giao diện theo dataset: ô chọn ở trang hỏi chia nhóm Database, File, mở database ra ghim được một bảng bắt đầu; trang Dữ liệu mỗi dataset một thẻ (máy chủ, số bảng, lần chụp, "Chụp lại" cả database), mở ra thấy bảng nhóm theo schema, số dòng, mô tả và quan hệ; trang Tổng quan chọn dataset rồi chọn bảng (#257).

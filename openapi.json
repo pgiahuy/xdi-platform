@@ -2258,7 +2258,7 @@
                           "ok": true
                         },
                         {
-                          "detail": "Câu hỏi thường: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân.",
+                          "detail": "Câu hỏi số liệu: câu hỏi hỏi doanh thu theo thị trường, không hỏi nguyên nhân.",
                           "duration_ms": 640,
                           "name": "classify",
                           "ok": true
@@ -2288,7 +2288,7 @@
                           "ok": true
                         },
                         {
-                          "detail": "INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết",
+                          "detail": "INSIGHT_TEXT=false nên lời giải thích dùng câu do code viết",
                           "duration_ms": 0,
                           "name": "narrate",
                           "ok": true
@@ -2635,7 +2635,7 @@
                           "ok": true
                         },
                         {
-                          "detail": "Câu hỏi tìm nguyên nhân: câu hỏi hỏi vì sao doanh thu quý 3 giảm.",
+                          "detail": "Câu hỏi nguyên nhân: câu hỏi hỏi vì sao doanh thu quý 3 giảm.",
                           "duration_ms": 710,
                           "name": "classify",
                           "ok": true
@@ -5477,8 +5477,8 @@
         "tags": [
           "sources"
         ],
-        "summary": "Snapshot tables of the source, every readable table by default, one dataset per table (admin only)",
-        "description": "Without `table`, `tables` and `dataset_id`, every table and view the account can read is snapshotted; `tables` lists the ticked tables instead, and one name snapshots that table alone (for example one kept as metadata only). All tables are copied in one read-only REPEATABLE READ transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from this source gets a new version of its dataset, and one with unchanged content creates nothing (`created` false). Every declared foreign key between tables snapshotted from this source is recorded as a relation; relations are never inferred. Limits are checked on Postgres sizes before copying: a table over SOURCE_TABLE_MAX_MB, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (smallest tables first), or over SOURCE_MAX_ROWS when that is set, keeps columns, types, keys and comments only (`metadata_only`). There is no row limit by default. `dataset_id` snapshots that dataset again with every dataset linked to it.",
+        "summary": "Snapshot tables of the source into its database dataset, every readable table by default (admin only)",
+        "description": "Without `table`, `tables` and `dataset_id`, every table and view the account can read is snapshotted; `tables` lists the ticked tables instead, and one name snapshots that table alone (for example one kept as metadata only). All tables are copied in one read-only REPEATABLE READ transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from this source gets a new version of that table, and one with unchanged content creates nothing (`created` false). Every declared foreign key between tables snapshotted from this source is recorded as a relation; relations are never inferred. Limits are checked on Postgres sizes before copying: a table over SOURCE_TABLE_MAX_MB, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (smallest tables first), or over SOURCE_MAX_ROWS when that is set, keeps columns, types, keys and comments only (`metadata_only`). There is no row limit by default. `dataset_id` (a table id) snapshots that table again with every table linked to it.",
         "operationId": "snapshotSource",
         "parameters": [
           {
@@ -10166,14 +10166,14 @@
               "null"
             ],
             "format": "uuid",
-            "description": "Snapshot this dataset again, with every dataset of the same source linked to it by relations."
+            "description": "Snapshot this table (a `datasets.id`, the field name predates tables) again, with every table of the same source\nlinked to it by relations."
           },
           "name": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Name of the dataset of `table` when it is new; defaults to the table name. Other tables use their table name."
+            "description": "Name stored for `table` when it is new; defaults to the table name. Other tables use their table name."
           },
           "table": {
             "type": [
@@ -10187,7 +10187,7 @@
             "items": {
               "type": "string"
             },
-            "description": "`schema.table` names to snapshot (the ticked tables), each into its own dataset. Empty with no `table` and no\n`dataset_id`: every readable table. One name snapshots that one table, for example a table kept as metadata\nonly. Not allowed with `dataset_id`."
+            "description": "`schema.table` names to snapshot (the ticked tables), each stored as one table of the database dataset. Empty\nwith no `table` and no `dataset_id`: every readable table. One name snapshots that one table, for example a table kept as metadata\nonly. Not allowed with `dataset_id`."
           }
         }
       },

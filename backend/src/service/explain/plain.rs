@@ -108,7 +108,7 @@ fn build_plain_outcome(
     outcome.terms = run.terms;
     outcome.warnings.push(Warning {
         code: WarningCode::ExplanationUnavailable,
-        message: "Không hiểu được câu hỏi thành hai kỳ hay hai nhóm để so sánh, nên kết quả chưa có phần giải thích."
+        message: "Không hiểu được câu hỏi thành hai kỳ hay hai nhóm để so sánh, nên kết quả chưa có lời giải thích."
             .to_string(),
     });
     outcome

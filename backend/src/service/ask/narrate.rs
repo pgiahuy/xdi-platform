@@ -215,7 +215,7 @@ pub async fn narrate(
         return finish_unclear(unclear, started);
     }
     let detail = format!(
-        "Lời của mô hình chưa qua hai cổng kiểm sau {MAX_NARRATE_ATTEMPTS} lần viết: {}",
+        "Lời của mô hình chưa qua kiểm số và kiểm nghĩa sau {MAX_NARRATE_ATTEMPTS} lần viết: {}",
         problems.join("; ")
     );
     // Lời trượt mọi lần viết thì không trả cho người dùng: câu khuôn thay vào, kết luận ghi là mismatch.
@@ -250,7 +250,9 @@ fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<St
     }
     let text = parsed.build_text();
     if text.chars().count() > MAX_SUMMARY_CHARS {
-        return Err(vec![format!("Insight dài hơn {MAX_SUMMARY_CHARS} ký tự")]);
+        return Err(vec![format!(
+            "Lời giải thích dài hơn {MAX_SUMMARY_CHARS} ký tự"
+        )]);
     }
     build_claim_check(&parsed.claims, explanation)?;
     let points = parsed

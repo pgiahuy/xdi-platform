@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/understanding/why.rs - thẻ "Đã hiểu là" của câu "tại sao" (#38), dựng từ form đã kiểm (WhyPlan của
+/* service/understanding/why.rs - thẻ "Cách tính" của câu "tại sao" (#38), dựng từ form đã kiểm (WhyPlan của
 explain/check.rs) thay vì đoán nghĩa từ cây SQL: đọc theo cây thì vế `(<kỳ gốc> OR <kỳ so>)` của bảng tổng chỉ là một
 điều kiện OR khó hiểu, còn plan biết đó là hai kỳ hay hai nhóm đang so. ask/view.rs gọi build_why_understanding khi
 câu "tại sao" đã có bảng tổng; test ở understanding/tests.rs.

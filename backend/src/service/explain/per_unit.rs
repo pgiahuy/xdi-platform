@@ -9,7 +9,7 @@ riêng và có ít nhất một từ sau nó (đơn vị), bỏ từ đó trở 
 thêm "Tổng". Tên không có phần "mỗi đơn vị" thì giữ như cũ. Chỉ áp cho SUM: AVG giữ "Trung bình ...", COUNT giữ "Số dòng
 có ...", vì hai cách đó không đổi nghĩa "mỗi đơn vị" của cột.
 
-Bên dùng: explain/measure_column.rs (nhãn độ đo của câu "tại sao": thẻ "Đã hiểu là", câu chính, tiêu đề bảng phân rã,
+Bên dùng: explain/measure_column.rs (nhãn độ đo của câu "tại sao": thẻ "Cách tính", câu chính, tiêu đề bảng phân rã,
 JSON gửi mô hình viết lời), explain/breakdown.rs (nhãn giá trị trung bình mỗi đơn vị), understanding/labels.rs (thẻ của
 câu thường), insight/mod.rs và ask/summary.rs (bí danh tiếng Việt câu SQL đặt), ask/total_alias.rs (đổi chính bí danh
 trong câu SQL). Test ở explain/per_unit_tests.rs. */

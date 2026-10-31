@@ -86,7 +86,7 @@ pub struct InsightInput<'a> {
     /// Bài học đã duyệt liên quan câu hỏi (ask/lessons.rs), thêm vào prompt viết lời.
     pub lessons: &'a [String],
     /// Cụm của câu hỏi khớp nhiều cột mà ngữ cảnh tự chọn một (ask/context.rs), kèm tên tiếng Việt của cột đã chọn: phần
-    /// giải thích nói rõ đã tính theo cột nào, người hỏi không phải mở thẻ "Hệ thống đã hiểu là" mới biết.
+    /// giải thích nói rõ đã tính theo cột nào, người hỏi không phải mở thẻ "Cách tính" mới biết.
     pub readings: &'a [ColumnReading],
 }
 
@@ -343,7 +343,7 @@ async fn build_parts(
     Ok(parts)
 }
 
-/// Tên độ đo: bí danh tiếng Việt câu SQL đặt cho cột (is_vietnamese_alias), không thì nhãn của thẻ "Đã hiểu là" (cùng
+/// Tên độ đo: bí danh tiếng Việt câu SQL đặt cho cột (is_vietnamese_alias), không thì nhãn của thẻ "Cách tính" (cùng
 /// thứ tự với các cột tổng hợp), không có thẻ thì tên cột.
 pub(super) fn build_measure_label(input: &InsightInput<'_>, measure: usize) -> String {
     let result = input.result;

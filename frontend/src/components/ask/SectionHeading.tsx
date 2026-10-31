@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/SectionHeading.tsx - hàng tiêu đề nhỏ của một phần trong câu trả lời (thẻ "Đã hiểu là", bảng kết
+/* components/ask/SectionHeading.tsx - hàng tiêu đề nhỏ của một phần trong câu trả lời (thẻ "Cách tính", bảng kết
 quả) kèm nút mở hay thu gọn phần đó. Theo mẫu disclosure: nút nằm trong thẻ tiêu đề, mang aria-expanded và
 aria-controls trỏ tới phần thân, nên trình đọc màn hình đọc được cả tên phần lẫn trạng thái mở. Cả hàng chữ là nút, không
 chỉ mũi tên, để bấm dễ trên màn cảm ứng. Trạng thái mở giữ bằng useSectionOpen (sectionOpen.ts). */

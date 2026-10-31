@@ -18,7 +18,7 @@ export function buildLeadNames(target: DrillTarget, response: AskResponse): stri
   return [...target.keys.map((key) => key.column), ...groupBy, ...readMeasureNames(target.measure, response)]
 }
 
-// Cột số đo thứ i của kết quả ứng với measures[i] của thẻ "Đã hiểu là" khi hai bên cùng số lượng (cùng đọc từ danh
+// Cột số đo thứ i của kết quả ứng với measures[i] của thẻ "Cách tính" khi hai bên cùng số lượng (cùng đọc từ danh
 // sách SELECT); lệch số lượng thì chỉ đọc tên cột kết quả.
 function readMeasureNames(measure: string, response: AskResponse): string[] {
   const measureColumns = response.result?.columns.filter((column) => column.role === 'measure') ?? []

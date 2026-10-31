@@ -311,7 +311,7 @@ async fn snapshot_table_becomes_a_dataset() {
     assert_eq!(next["datasets"][0]["version"]["version"], 2);
     assert_eq!(next["datasets"][0]["version"]["row_count"], 4);
 
-    // Nguồn còn dataset thì không xóa được; xóa dataset rồi xóa nguồn.
+    // Nguồn còn bảng thì không xóa được; xóa bảng rồi xóa nguồn.
     let (status, _, _) = call(
         &s.app,
         "DELETE",

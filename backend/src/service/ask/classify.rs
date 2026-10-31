@@ -342,8 +342,8 @@ fn fallback(question: &str, started: Instant, why: &str) -> Classified {
 
 fn build_kind_text(kind: QuestionKind) -> &'static str {
     match kind {
-        QuestionKind::Why => "Câu hỏi tìm nguyên nhân",
-        QuestionKind::Plain => "Câu hỏi thường",
+        QuestionKind::Why => "Câu hỏi nguyên nhân",
+        QuestionKind::Plain => "Câu hỏi số liệu",
     }
 }
 

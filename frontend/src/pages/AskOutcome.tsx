@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AskOutcome.tsx - phần dưới ô hỏi của trang hỏi: hiện một AskResponse theo status (hợp đồng ở
 backend/src/service/ask/contract.rs). answered: lời trả lời và phần giải thích (insight của câu thường, hay lời giải
-thích của câu "tại sao"), biểu đồ nếu backend gợi ý, bảng kết quả, thẻ "Đã hiểu là"; needs_choice: màn câu hỏi lại; rejected, failed: lời báo của backend. Cảnh báo hiện với mọi
+thích của câu "tại sao"), biểu đồ nếu backend gợi ý, bảng kết quả, thẻ "Cách tính"; needs_choice: màn câu hỏi lại; rejected, failed: lời báo của backend. Cảnh báo hiện với mọi
 status. Khối này là phần trả lời của một lượt trong khung trò chuyện; bong bóng câu hỏi và thẻ bọc ngoài do
 ChatTurn (AskConversation.tsx). Dựng dữ liệu cho component từ response; việc gửi câu hỏi do AskPage.
 Biểu đồ tải riêng (lazy) vì Recharts nặng, lý do ở components/ask/ResultChart.tsx; nó nằm trong ErrorBoundary riêng
@@ -47,7 +47,7 @@ type Props = {
   answer: Answer
   /** Đang hỏi lại: câu trả lời cũ vẫn hiện, mờ đi, không bấm được. */
   pending: boolean
-  /** Lượt cuối của khung trò chuyện: thẻ "Đã hiểu là" mở sẵn; lượt cũ thì thu gọn. */
+  /** Lượt cuối của khung trò chuyện: thẻ "Cách tính" mở sẵn; lượt cũ thì thu gọn. */
   latest: boolean
   /** Bấm một ô số đo của bảng kết quả: trang mở tab Dòng nguồn của ô đó. */
   onCellDrill: (target: DrillTarget) => void
@@ -130,7 +130,7 @@ type AnsweredProps = {
 }
 
 // Thứ tự đọc: lời trả lời trước (answer_text và phần giải thích, hay ba số lớn và lời giải thích của câu "tại sao"), rồi
-// biểu đồ và bảng, cuối cùng thẻ "Đã hiểu là": người hỏi cần con số trước, cách hệ thống hiểu câu hỏi là phần để kiểm
+// biểu đồ và bảng, cuối cùng thẻ "Cách tính": người hỏi cần con số trước, cách hệ thống hiểu câu hỏi là phần để kiểm
 // lại. Bảng phân rã đủ mọi chiều và SQL đứng sau từng con số thuộc pane minh chứng (#52).
 function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumption }: AnsweredProps) {
   const understanding = response.understanding && (
@@ -145,7 +145,7 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
   const dataRange = range && (
     <DataRangeNote from={range.from} to={range.to} label={range.label ?? range.column} partial={range.partial} />
   )
-  // Không có số nào: chỉ câu trả lời và thẻ "Hệ thống đã hiểu là" (để thấy đã hỏi kỳ, nhóm nào), không bảng trống hay
+  // Không có số nào: chỉ câu trả lời và thẻ "Cách tính" (để thấy đã hỏi kỳ, nhóm nào), không bảng trống hay
   // biểu đồ rỗng. Backend cũ không gửi câu trả lời cho kết quả 0 dòng nên có câu dự phòng.
   if (hasNoData(response)) {
     return (

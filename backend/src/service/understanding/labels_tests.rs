@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/understanding/labels_tests.rs - test nhãn cột và nhãn độ đo của thẻ "Đã hiểu là" (understanding/labels.rs)
+/* service/understanding/labels_tests.rs - test nhãn cột và nhãn độ đo của thẻ "Cách tính" (understanding/labels.rs)
 khi mô tả cột do mô hình viết là một câu trọn: bỏ dấu câu cuối, không lặp tiền tố "Tổng", "Trung bình", "Số". */
 
 use sqlparser::dialect::DuckDbDialect;

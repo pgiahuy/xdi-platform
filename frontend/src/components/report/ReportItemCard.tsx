@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/report/ReportItemCard.tsx - một mục của báo cáo, đọc từ trên xuống như một câu trả lời: câu hỏi và nguồn
-(bảng, phiên bản, lúc hỏi), ghi chú khác lúc hỏi, lời trả lời kèm kiểm số và kiểm nghĩa, các ý "Căn cứ" do hệ thống tính
+(bảng, phiên bản, lúc hỏi), ghi chú khác lúc hỏi, lời trả lời kèm kiểm số và kiểm nghĩa, các ý "Minh chứng" do hệ thống tính
 lại, biểu đồ (trang truyền vào, vì biểu đồ tải riêng), bảng kết quả, phân rã, phần "Cách tính", rồi câu SQL đã chạy.
 SQL thu gọn trên màn hình, luôn hiện trong bản in (hai khối, một khối chỉ cho màn hình, một khối chỉ cho bản in). Mỗi
 mục bắt đầu một trang in mới, trừ mục đầu. Nút đổi thứ tự và bỏ mục do trang truyền vào và không in. */
@@ -68,7 +68,7 @@ export function ReportItemCard({ item, number, chart, actions }: Props) {
         <div className="flex flex-col gap-2">
           <p className="text-[15px] leading-relaxed tabular-nums">{item.answer.text}</p>
           {item.answer.byModel && item.answer.warnings.length > 0 && (
-            <UnclearPoints warnings={item.answer.warnings} checkAgainst="bảng và các ý căn cứ bên dưới" />
+            <UnclearPoints warnings={item.answer.warnings} checkAgainst="bảng và mục Minh chứng bên dưới" />
           )}
           <ReportChecks numberCheck={item.numberCheck} meaningCheck={item.meaningCheck} />
         </div>
@@ -76,7 +76,7 @@ export function ReportItemCard({ item, number, chart, actions }: Props) {
 
       {item.facts && (
         <section className="flex flex-col gap-1 text-sm">
-          <h4 className="font-semibold">Căn cứ do hệ thống tính</h4>
+          <h4 className="font-semibold">Minh chứng do hệ thống tính</h4>
           <p>{item.facts.title}</p>
           {item.facts.points.length > 0 && (
             <ul className="list-disc pl-5 text-muted-foreground">

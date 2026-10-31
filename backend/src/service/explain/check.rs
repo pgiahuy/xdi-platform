@@ -77,7 +77,7 @@ pub enum PlanSlices {
         time: PlanTime,
         base: Period,
         compare: Period,
-        /// base là kỳ liền trước vì mô hình để trống và người hỏi chưa chọn; giả định để hiện ở thẻ "Đã hiểu là".
+        /// base là kỳ liền trước vì mô hình để trống và người hỏi chưa chọn; giả định để hiện ở thẻ "Cách tính".
         base_by_default: bool,
     },
     /// So hai nhóm của một cột chiều: một nhóm với một nhóm khác, hay với mọi nhóm còn lại (GroupBase); period là kỳ

@@ -28,7 +28,7 @@ pub struct StoredTurn {
     pub status: String,
     pub sql_generated: Option<String>,
     pub sql_guarded: Option<String>,
-    /// Phần "Đã hiểu là" dạng chữ ngắn (service/conversation/history.rs); None với câu không answered.
+    /// Phần "Cách tính" dạng chữ ngắn (service/conversation/history.rs); None với câu không answered.
     pub understood: Option<String>,
     pub created_at: DateTime<Utc>,
     /// Đánh giá của người hỏi (#212): chữ của queries.feedback, None khi chưa đánh giá; ba trường sau đi cùng nó.

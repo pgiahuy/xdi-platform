@@ -1204,8 +1204,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Snapshot tables of the source, every readable table by default, one dataset per table (admin only)
-         * @description Without `table`, `tables` and `dataset_id`, every table and view the account can read is snapshotted; `tables` lists the ticked tables instead, and one name snapshots that table alone (for example one kept as metadata only). All tables are copied in one read-only REPEATABLE READ transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from this source gets a new version of its dataset, and one with unchanged content creates nothing (`created` false). Every declared foreign key between tables snapshotted from this source is recorded as a relation; relations are never inferred. Limits are checked on Postgres sizes before copying: a table over SOURCE_TABLE_MAX_MB, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (smallest tables first), or over SOURCE_MAX_ROWS when that is set, keeps columns, types, keys and comments only (`metadata_only`). There is no row limit by default. `dataset_id` snapshots that dataset again with every dataset linked to it.
+         * Snapshot tables of the source into its database dataset, every readable table by default (admin only)
+         * @description Without `table`, `tables` and `dataset_id`, every table and view the account can read is snapshotted; `tables` lists the ticked tables instead, and one name snapshots that table alone (for example one kept as metadata only). All tables are copied in one read-only REPEATABLE READ transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from this source gets a new version of that table, and one with unchanged content creates nothing (`created` false). Every declared foreign key between tables snapshotted from this source is recorded as a relation; relations are never inferred. Limits are checked on Postgres sizes before copying: a table over SOURCE_TABLE_MAX_MB, or that would take the snapshot over SOURCE_SNAPSHOT_MAX_MB (smallest tables first), or over SOURCE_MAX_ROWS when that is set, keeps columns, types, keys and comments only (`metadata_only`). There is no row limit by default. `dataset_id` (a table id) snapshots that table again with every table linked to it.
          */
         post: operations["snapshotSource"];
         delete?: never;
@@ -3052,10 +3052,11 @@ export interface components {
         SnapshotRequest: {
             /**
              * Format: uuid
-             * @description Snapshot this dataset again, with every dataset of the same source linked to it by relations.
+             * @description Snapshot this table (a `datasets.id`, the field name predates tables) again, with every table of the same source
+             *     linked to it by relations.
              */
             dataset_id?: string | null;
-            /** @description Name of the dataset of `table` when it is new; defaults to the table name. Other tables use their table name. */
+            /** @description Name stored for `table` when it is new; defaults to the table name. Other tables use their table name. */
             name?: string | null;
             /**
              * @description `schema.table` named `name` when it is new. Optional: without `table`, `tables` and `dataset_id`, every table
@@ -3063,8 +3064,8 @@ export interface components {
              */
             table?: string | null;
             /**
-             * @description `schema.table` names to snapshot (the ticked tables), each into its own dataset. Empty with no `table` and no
-             *     `dataset_id`: every readable table. One name snapshots that one table, for example a table kept as metadata
+             * @description `schema.table` names to snapshot (the ticked tables), each stored as one table of the database dataset. Empty
+             *     with no `table` and no `dataset_id`: every readable table. One name snapshots that one table, for example a table kept as metadata
              *     only. Not allowed with `dataset_id`.
              */
             tables?: string[];
