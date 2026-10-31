@@ -18,7 +18,8 @@ type Props = {
 }
 
 const numberFormat = new Intl.NumberFormat('vi-VN')
-const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' })
+// Ngày dạng 01/01/2015 như bảng kết quả; dateStyle "medium" của vi-VN ra "1 thg 1, 2015", khó đọc.
+const dateFormat = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 export function DataOverview({ overview, onPick }: Props) {
   return (
@@ -76,7 +77,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-/** "1.500 dòng, dữ liệu từ 1 thg 1, 2015 tới 31 thg 1, 2018 (cột order date), phiên bản 1." */
+/** "1.500 dòng, dữ liệu từ 01/01/2015 tới 31/01/2018 (cột order date), phiên bản 1." */
 function buildSummary(overview: OverviewView): string {
   const parts: string[] = []
   if (overview.rowCount !== null) {

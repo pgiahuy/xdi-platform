@@ -43,6 +43,8 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Changed
 
+- Trang Cuộc trò chuyện: khung trò chuyện cao hết màn hình, ô hỏi luôn nằm sát đáy dù cuộc trò chuyện chưa có câu nào, mới có một câu hay đã dài; trước đây ô hỏi nổi giữa trang rồi tụt xuống khi có thêm câu. Trên điện thoại lề trong nhỏ hơn để ô hỏi rộng hơn.
+- Các trang bung hết bề ngang màn hình, không còn bị giới hạn một cột hẹp chừa trống bên phải: Tổng quan dữ liệu hai biểu đồ một hàng từ cỡ máy tính bảng, ba biểu đồ ở màn rất rộng; Dữ liệu, Thành viên, Quản lý tài khoản chia hai cột ở màn rộng; Chỉ số, Câu mẫu, Bài học, Khái niệm ngành, Mọi workspace dùng hết bề ngang. Ngày ở trang Tổng quan ghi dạng 01/01/2015 thay cho "1 thg 1, 2015".
 - Trang Dữ liệu: kết nối database là luồng chính, nạp file CSV, Parquet, Excel chuyển xuống một nút phụ (#230).
 - Prompt phân loại và prompt viết SQL có metadata đủ (kiểu, vai trò, đơn vị, cách gộp, mô tả, bí danh) của mọi cột của mọi bảng câu hỏi đọc, không bỏ cột khi dài; lượt phân loại nêu thêm các cột câu hỏi cần (#230).
 - Danh sách giá trị ở lượt viết SQL: tổng tới 1000 giá trị thì gửi đủ mọi cột phân loại, vượt thì chỉ cột liên quan (kể cả cột lượt phân loại nêu), tới 200 giá trị mỗi cột (#230).

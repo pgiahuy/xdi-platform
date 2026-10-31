@@ -182,7 +182,8 @@ function WorkspaceAsk({ ws }: { ws: string }) {
     >
       {canAsk && (
         // Dòng dataset dính dưới thanh trên (h-16) khi cuộn cuộc trò chuyện dài: luôn thấy đang hỏi trên dataset nào.
-        <div className="sticky top-16 z-10 -mx-4 -mt-4 bg-secondary px-4 pt-4 pb-2 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5">
+        // Lề âm khớp lề trong của khung trò chuyện (AskLayout: p-3, từ sm p-5) để nền dính phủ hết bề ngang khung.
+        <div className="sticky top-16 z-10 -mx-3 -mt-3 bg-secondary px-3 pt-3 pb-2 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5">
           <DatasetPicker
             datasets={(datasets.data ?? []).map((d) => ({ id: d.id, name: d.name }))}
             datasetId={datasetId}
@@ -239,7 +240,7 @@ function WorkspaceAsk({ ws }: { ws: string }) {
       {canAsk ? (
         // Ô hỏi dính đáy khung trò chuyện khi cuộn; nền đặc cùng màu khung che phần trả lời trôi bên dưới.
         <div className="sticky bottom-0 z-10 mt-auto bg-secondary pt-1">
-          <div className="rounded-xl border bg-card p-3 text-card-foreground shadow-sm">
+          <div className="rounded-xl border bg-card p-2 text-card-foreground shadow-sm sm:p-3">
             <QuestionForm
               question={question}
               onQuestionChange={setQuestion}

@@ -105,7 +105,7 @@ function DatasetMetrics({ ws, datasetId }: { ws: string; datasetId: string }) {
   const measures = columns.filter((c) => c.role === 'measure')
 
   return (
-    <div className="flex max-w-4xl flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-1">
         {back}
         <h2 className="text-lg font-semibold tracking-tight">Chỉ số của {dataset?.name ?? 'dataset'}</h2>
