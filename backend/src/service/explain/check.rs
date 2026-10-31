@@ -16,7 +16,7 @@ use sqlparser::ast::Expr;
 use crate::engine::store::{MetricDefinition, ProfileColumn, ProfileRole};
 use crate::service::ask::values::ValueIndex;
 use crate::service::explain::filter::{build_single_value_columns, check_filters};
-use crate::service::explain::form::{FieldError, WhyForm};
+use crate::service::explain::form::{CompareWith, FieldError, WhyForm};
 use crate::service::explain::group_base::GroupBase;
 use crate::service::explain::measure::{
     check_measure, find_metric, parse_expr, Additive, PlanMeasure,
@@ -226,9 +226,15 @@ fn check_slices(
     let compare = check_period(&time, profile, compare_text, "compare", errors)?;
     let (base, base_by_default) = match build_chosen_base(compare, base_choice) {
         Some(base) => (base, false),
-        None => match non_empty(&form.base) {
-            Some(text) => (check_period(&time, profile, text, "base", errors)?, false),
-            None => (compare.previous(), true),
+        None => match (non_empty(&form.base), form.compare_with) {
+            (Some(text), _) => (check_period(&time, profile, text, "base", errors)?, false),
+            // Cùng kỳ năm trước do mô hình chọn theo câu hỏi: không là giả định, nhưng vẫn phải có dữ liệu.
+            (None, Some(CompareWith::SamePeriodLastYear)) => {
+                let base = compare.same_last_year();
+                check_period_in_data(&time, profile, base, "compare_with", errors)?;
+                (base, false)
+            }
+            (None, _) => (compare.previous(), true),
         },
     };
     if base == compare {

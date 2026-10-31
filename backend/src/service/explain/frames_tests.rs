@@ -316,3 +316,86 @@ fn distinct_count_needs_a_key_and_has_no_volume_split() {
     let wrong = measured(json!({"column": "Market", "agg": "count_distinct"}));
     assert_eq!(fixture.fields(wrong), ["measure.column"]);
 }
+
+// Kỳ mở rộng: độ chi tiết tuần, ngày và kiểu so (compare_with).
+
+fn compared_periods(form: serde_json::Value) -> (String, String) {
+    let fixture = Fixture::new();
+    match fixture.plan(form).slices {
+        PlanSlices::Periods { base, compare, .. } => (base.text(), compare.text()),
+        other => panic!("expected two periods, got {other:?}"),
+    }
+}
+
+#[test]
+fn week_and_day_grains_compare_with_the_period_before() {
+    let week = json!({
+        "metric": "doanh thu",
+        "time": {"column": DATE, "grain": "week"},
+        "compare": "2017-W33",
+        "filters": []
+    });
+    assert_eq!(
+        compared_periods(week.clone()),
+        ("2017-W32".to_string(), "2017-W33".to_string())
+    );
+    let plan = Fixture::new().plan(week);
+    let sql = build_why_sql(&plan);
+    assert!(
+        sql.total_sql.starts_with("SELECT date_trunc('week', "),
+        "{}",
+        sql.total_sql
+    );
+    assert!(
+        sql.compare_filter.contains("TIMESTAMP '2017-08-14'"),
+        "{}",
+        sql.compare_filter
+    );
+    assert!(
+        sql.compare_filter.contains("TIMESTAMP '2017-08-21'"),
+        "{}",
+        sql.compare_filter
+    );
+    let day = json!({
+        "metric": "doanh thu",
+        "time": {"column": DATE, "grain": "day"},
+        "compare": "2017-08-15",
+        "filters": []
+    });
+    assert_eq!(
+        compared_periods(day),
+        ("2017-08-14".to_string(), "2017-08-15".to_string())
+    );
+}
+
+#[test]
+fn compare_with_picks_the_same_period_last_year() {
+    let form = |compare_with: &str| {
+        json!({
+            "metric": "doanh thu",
+            "time": {"column": DATE, "grain": "quarter"},
+            "compare": "2017-Q3",
+            "compare_with": compare_with,
+            "filters": []
+        })
+    };
+    assert_eq!(
+        compared_periods(form("same_period_last_year")),
+        ("2016-Q3".to_string(), "2017-Q3".to_string())
+    );
+    assert_eq!(
+        compared_periods(form("previous")),
+        ("2017-Q2".to_string(), "2017-Q3".to_string())
+    );
+    // base ghi rõ thì thắng compare_with.
+    let mut explicit = form("same_period_last_year");
+    explicit["base"] = json!("2017-Q1");
+    assert_eq!(
+        compared_periods(explicit),
+        ("2017-Q1".to_string(), "2017-Q3".to_string())
+    );
+    // Hồ sơ có dữ liệu từ 2015-01: cùng kỳ năm trước của quý 1/2015 không có dòng nào.
+    let mut early = form("same_period_last_year");
+    early["compare"] = json!("2015-Q1");
+    assert_eq!(Fixture::new().fields(early), ["compare_with"]);
+}

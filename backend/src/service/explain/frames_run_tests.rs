@@ -179,3 +179,56 @@ async fn distinct_count_needs_groups_that_add_up() {
         .collect();
     assert!(columns.contains(&"Market"), "{columns:?}");
 }
+
+/// Tuần trên DuckDB: tuần 28/8 - 3/9/2017 (các dòng 0 đồng ngày 1/9) so với tuần 14/8 - 20/8/2017 (mọi ô của quý 3), kỳ
+/// gốc ghi rõ trong form; date_trunc('week') của DuckDB và tuần ISO của Period trùng nhau nên bảng tổng có đúng hai dòng.
+#[tokio::test]
+async fn weeks_are_compared_on_duckdb() {
+    let data = Dataco::new();
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Item Total", "agg": "sum"},
+        "time": {"column": DATE, "grain": "week"},
+        "compare": "2017-W35",
+        "base": "2017-W33",
+        "filters": []
+    });
+    let llm = ScriptedLlm::new(vec![form]);
+    let outcome = data
+        .ask(
+            &llm,
+            "Vì sao doanh thu tuần này giảm so với hai tuần trước?",
+            &[],
+        )
+        .await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let explanation = outcome.explanation.as_ref().unwrap();
+    assert_eq!(explanation.base.label, "Tuần 14/8/2017 - 20/8/2017");
+    assert_eq!(explanation.base.value, "8119100.00");
+    assert_eq!(explanation.compare.value, "0.00");
+    let result = outcome.result.as_ref().unwrap();
+    assert_eq!(result.total_rows, 2);
+    assert_eq!(result.columns[0].name, "Tuần");
+}
+
+/// Cùng kỳ năm trước theo tháng: tháng 8/2017 so với tháng 8/2016 (một dòng 1.000).
+#[tokio::test]
+async fn same_month_last_year_is_compared() {
+    let data = Dataco::new();
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Item Total", "agg": "sum"},
+        "time": {"column": DATE, "grain": "month"},
+        "compare": "2017-08",
+        "compare_with": "same_period_last_year",
+        "filters": []
+    });
+    let llm = ScriptedLlm::new(vec![form]);
+    let question = "Vì sao doanh thu tháng 8/2017 tăng so với cùng kỳ năm trước?";
+    let outcome = data.ask(&llm, question, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let explanation = outcome.explanation.as_ref().unwrap();
+    assert_eq!(explanation.base.label, "Tháng 8/2016");
+    assert_eq!(explanation.base.value, "1000.00");
+    assert_eq!(explanation.compare.label, "Tháng 8/2017");
+}

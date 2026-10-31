@@ -540,7 +540,7 @@ fn why_prompt_has_metric_names_without_formulas() {
     assert!(!prompt.contains("SUM("), "{prompt}");
     assert!(!prompt.contains("only rows where"), "{prompt}");
     assert!(!prompt.contains("Earlier questions"), "{prompt}");
-    assert!(prompt.contains("write \"compare\" and \"base\" as 2017, 2017-Q3 or 2017-05"));
+    assert!(prompt.contains("write \"compare\" and \"base\" as 2017-05-31, 2017-W22 (ISO week)"));
     assert!(prompt.contains("To compare one group with all the other groups"));
     assert!(prompt.contains("All values: 'Europe'"));
     assert!(prompt.ends_with(&format!("Question: {question}")));

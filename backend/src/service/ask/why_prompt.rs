@@ -72,15 +72,21 @@ pub fn build_why_form_schema() -> serde_json::Value {
                 "description": "Set to compare two periods; with groups, set only when the question names a period",
                 "properties": {
                     "column": text("A column of role time"),
-                    "grain": { "type": "string", "enum": ["month", "quarter", "year"] }
+                    "grain": { "type": "string", "enum": ["day", "week", "month", "quarter", "year"] }
                 },
                 "required": ["column", "grain"]
             },
             "compare": text(
-                "The period being explained, such as 2017, 2017-Q3 or 2017-05, matching the grain; an empty string \
-                 when the question names no period"
+                "The period being explained, such as 2017, 2017-Q3, 2017-05, 2017-W22 or 2017-05-31, matching the \
+                 grain; an empty string when the question names no period"
             ),
-            "base": text("The period to compare with; leave out to use the period just before"),
+            "base": text("The period to compare with; leave out to use compare_with"),
+            "compare_with": {
+                "type": "string",
+                "description": "When base is left out: the period just before (the default) or the same period \
+                                one year before",
+                "enum": ["previous", "same_period_last_year"]
+            },
             "filters": {
                 "type": "array",
                 "description": "Conditions on the rows the question is about",

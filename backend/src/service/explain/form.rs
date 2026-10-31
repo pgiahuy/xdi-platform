@@ -67,9 +67,12 @@ pub struct WhyForm {
     /// Kỳ cần giải thích, dạng 2017, 2017-Q3, 2017-05.
     #[serde(default)]
     pub compare: Option<String>,
-    /// Kỳ để so; trống là kỳ liền trước.
+    /// Kỳ để so; trống thì theo compare_with.
     #[serde(default)]
     pub base: Option<String>,
+    /// Kỳ so khi base trống (#244): kỳ liền trước (mặc định) hay cùng kỳ năm trước.
+    #[serde(default)]
+    pub compare_with: Option<CompareWith>,
     #[serde(default)]
     pub filters: Vec<FormFilter>,
     /// Có khi so hai nhóm.
@@ -98,6 +101,14 @@ pub enum FormAgg {
     Count,
     CountDistinct,
     Share,
+}
+
+/// Kỳ gốc khi form không ghi base: "tuần này so với tuần trước" hay "quý 3/2017 so với cùng kỳ năm trước".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompareWith {
+    Previous,
+    SamePeriodLastYear,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

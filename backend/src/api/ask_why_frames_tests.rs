@@ -149,3 +149,43 @@ async fn share_measure_is_answered_and_drilled() {
         (80.0, vec!["Europe".to_string(), "Europe".to_string()])
     );
 }
+
+/// Cùng kỳ năm trước qua route: quý 3/2017 so với quý 3/2016; thẻ nói đúng hai kỳ, truy dòng nguồn nhóm Europe ở kỳ
+/// gốc ra dòng của năm 2016.
+#[tokio::test]
+async fn same_quarter_last_year_is_answered_and_drilled() {
+    let csv =
+        format!("{CSV}Europe,Consumer,8/10/2016 10:00,70\nLATAM,Consumer,9/10/2016 10:00,40\n");
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Item Total", "agg": "sum"},
+        "time": {"column": "order date (DateOrders)", "grain": "quarter"},
+        "compare": "2017-Q3",
+        "compare_with": "same_period_last_year",
+        "filters": []
+    });
+    let Some(asking) = start_on(Some(scripted(&[form])), &csv, |_| {}).await else {
+        return;
+    };
+    let question = "Vì sao doanh thu quý 3/2017 tăng so với cùng kỳ năm trước?";
+    let (status, response) = asking.ask(question, json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    let explanation = &response["explanation"];
+    assert_eq!(explanation["base"]["label"], "Quý 3/2016");
+    assert_eq!(explanation["base"]["value"], "110.00");
+    assert_eq!(explanation["compare"]["value"], "210.25");
+    let period = response["understanding"]["time_range"]["label"]
+        .as_str()
+        .unwrap();
+    assert!(
+        period.starts_with("Quý 3/2017 so với quý 3/2016"),
+        "{period}"
+    );
+    let query_id = response["query_id"].clone();
+    let europe = json!({"query_id": query_id,
+                        "breakdown": {"slice": "base", "column": "Market", "value": "Europe"}});
+    let (status, page) = drill(&asking, europe).await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    assert_eq!(source_rows(&page), (70.0, vec!["Europe".to_string()]));
+}
