@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres): nút mở form thêm nguồn,
+/* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres), luồng chính của trang
+(#230, nạp file là lựa chọn phụ bên dưới): nút mở form thêm nguồn, workspace chưa có nguồn nào thì form mở sẵn,
 rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chọn bảng chụp kèm, chụp thành dataset. DatasetsPage chỉ hiện khung
 này cho admin; backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel,
 RelatedTablePicker). Cách chọn sẵn, mở thêm một bước và giới hạn số bảng ở relatedTablesView.ts. */
@@ -31,8 +32,10 @@ const EMPTY: ConnectValues = { host: '', port: '5432', database: '', user: '', p
 export function DatabaseSources({ ws }: { ws: string }) {
   const sources = useSources(ws)
   const create = useCreateSource(ws)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState<boolean>()
   const [values, setValues] = useState(EMPTY)
+  // Chưa bấm gì thì form mở khi workspace chưa có nguồn: đó là việc đầu tiên admin cần làm ở trang này.
+  const formOpen = open ?? sources.data?.length === 0
 
   const submit = () => {
     const port = Number(values.port)
@@ -54,19 +57,19 @@ export function DatabaseSources({ ws }: { ws: string }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="database-sources-heading" className="text-[15px] font-semibold tracking-tight">
-          Database
+          Kết nối database
         </h2>
-        {!open && (
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-            Kết nối database
+        {!formOpen && (
+          <Button size="sm" onClick={() => setOpen(true)}>
+            Thêm database
           </Button>
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        Chụp bảng Postgres thành dataset, có thể kèm các bảng liên quan theo khóa ngoại (mỗi bảng một dataset); mỗi lần
-        chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
+        Chụp bảng Postgres của tổ chức thành dataset, kèm các bảng liên quan theo khóa ngoại (mỗi bảng một dataset, hỏi
+        được qua nhiều bảng); mỗi lần chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
       </p>
-      {open && (
+      {formOpen && (
         <ConnectForm
           values={values}
           onChange={setValues}
