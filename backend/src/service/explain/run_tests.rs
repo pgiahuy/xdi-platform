@@ -24,7 +24,7 @@ use crate::engine::llm::mock::Mock;
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::store::{MetricDefinition, ProfileColumn};
 use crate::error::AppError;
-use crate::service::ask::context::{AmbiguousWord, AskContext};
+use crate::service::ask::context::AskContext;
 use crate::service::ask::contract::{
     AskStatus, CellValue, ChartKind, ChosenOption, ColumnRole, DimensionBreakdown, MeasureKind,
     StepName, Understanding, UnderstoodItem, WarningCode,
@@ -136,7 +136,6 @@ impl Dataco {
             context: AskContext {
                 columns: Vec::new(),
                 hints: Vec::new(),
-                ambiguous: Vec::new(),
                 picks: Vec::new(),
             },
             jobs: Arc::new(Semaphore::new(2)),
@@ -667,22 +666,6 @@ async fn missing_measure_asks_which_metric() {
     assert_eq!(choice.options[0].id, "doanh thu");
     assert!(outcome.result.is_none());
     assert_eq!(steps(&outcome), [(StepName::Llm, true)]);
-}
-
-/// Cụm khớp hai cột gần nhau mà người hỏi chưa chọn: hỏi lại trước khi gọi mô hình, cùng id như #28.
-#[tokio::test]
-async fn ambiguous_word_asks_before_the_model() {
-    let mut data = Dataco::new();
-    data.context.ambiguous.push(AmbiguousWord {
-        choice_id: "column:khu vuc".to_string(),
-        phrase: "khu vực".to_string(),
-        columns: vec!["Market".to_string(), "Customer Segment".to_string()],
-    });
-    let llm = ScriptedLlm::new(vec![]);
-    let outcome = data.ask(&llm, "Tại sao doanh thu khu vực giảm", &[]).await;
-    assert_eq!(outcome.status, AskStatus::NeedsChoice);
-    assert_eq!(outcome.clarifications[0].id, "column:khu vuc");
-    assert!(llm.tasks().is_empty());
 }
 
 /// Mô hình lỗi ngay lần đầu: lỗi của request (502), như câu thường.

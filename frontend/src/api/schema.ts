@@ -896,6 +896,13 @@ export interface components {
             /** @description `admin` or `member`. */
             role: string;
         };
+        /**
+         * @description Verdict of the two checks on a text written by the language model: `match` (agrees with the computed numbers),
+         *     `warning` (some parts can be read several ways, not certainly wrong), `mismatch` (wrong on every attempt; the model's
+         *     text is replaced by a template sentence).
+         * @enum {string}
+         */
+        AnswerVerdict: "match" | "warning" | "mismatch";
         AskRequest: {
             /**
              * @description Choices for the question, empty the first time. To change an assumption or answer a clarification, send the
@@ -960,6 +967,7 @@ export interface components {
             query_id: string | null;
             /** @description The question exactly as sent in `AskRequest.question`. */
             question: string;
+            question_type: components["schemas"]["QuestionType"] | null;
             result: components["schemas"]["ResultTable"] | null;
             /** @description SQL written by the model, on logical table names. After a fix round, the fixed SQL. */
             sql_generated: string | null;
@@ -1553,20 +1561,36 @@ export interface components {
             slice_column: string | null;
             /** @description Vietnamese name of `slice_column` from the column profile; null when the profile has none. */
             slice_column_label: string | null;
-            /** @description Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown. */
+            /**
+             * @description Plain-language summary for the end user (Vietnamese), as one text: `summary_title` then each point as
+             *     "lead: text". When `summary_by_model` the model wrote it from the numbers the backend computed, its claims were
+             *     checked against this breakdown and an independent model call compared the meaning of the text with the claims
+             *     and the names of the two slices; otherwise the backend wrote it from a template.
+             */
             summary: string;
             /**
-             * @description False when the model's text failed the number check, or the model was not reached, and `summary` is a template
-             *     sentence written by the backend.
+             * @description False when `summary` is a template sentence written by the backend: the change is zero (the model is not
+             *     called), the model was not reached, the independent check could not judge the text, or
+             *     the text failed the checks twice (one rewrite is asked).
              */
             summary_by_model: boolean;
             /**
-             * @description Points under the main answer, written by the backend from the numbers above; each is said only when the numbers
-             *     support it.
+             * @description Points under the main answer (Vietnamese). When `summary_by_model`, the main causes the model wrote, all of kind
+             *     `reason`; otherwise written by the backend, each said only when the numbers support it.
              */
             summary_points: components["schemas"]["SummaryPoint"][];
-            /** @description Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese). */
+            /**
+             * @description Main answer, one sentence (Vietnamese): written by the model when `summary_by_model`, otherwise by the backend
+             *     from the numbers above.
+             */
             summary_title: string;
+            summary_verdict: components["schemas"]["AnswerVerdict"] | null;
+            /**
+             * @description Parts of the model's text that the independent check found unclear but not certainly wrong, one Vietnamese
+             *     sentence each, written by the checking model; show them with `summary`. Empty when nothing was unclear or
+             *     `summary` is a template sentence.
+             */
+            summary_warnings: string[];
             volume_price: components["schemas"]["VolumePrice"] | null;
         };
         /** @description One of the two slices. */
@@ -1944,6 +1968,13 @@ export interface components {
             reason: components["schemas"]["FeedbackReason"] | null;
         };
         /**
+         * @description Kind of question by the purpose of the analysis, as the classify step decided: `quantitative` (a number, a list or
+         *     a comparison, answered by one SQL query) or `causal` (why a number changed or differs between two groups, answered by
+         *     a breakdown).
+         * @enum {string}
+         */
+        QuestionType: "quantitative" | "causal";
+        /**
          * @description `good` is the button for a good answer, `bad` the one for an answer that falls short.
          * @enum {string}
          */
@@ -2143,8 +2174,8 @@ export interface components {
             text: string;
         };
         /**
-         * @description - `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the
-         *       rate).
+         * @description - `reason`: what mostly makes the change (the volume and the value per unit, or the mix and the rate); every point
+         *       written by the model has this kind.
          *     - `outliers`: groups that changed much more or much less than the whole, or exist on one side only.
          *     - `even`: no group stands out; the largest contributions are the largest groups.
          *     - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow

@@ -14,8 +14,9 @@ use crate::service::ask::context::{ColumnProfile, ValueHint};
 use crate::service::ask::phrases::{build_key, fold, Phrase};
 use crate::service::ask::values::ValueIndex;
 
-// Điểm của tên hay bí danh cột bằng một cụm: đúng nguyên văn (cả dấu), hoặc bằng sau bỏ dấu khi một bên không dấu. Hai
-// bậc cách nhau quá CLOSE_SCORE (ask/context.rs), nên khớp đúng nguyên văn luôn thắng mà không hỏi lại.
+// Điểm của tên hay bí danh cột bằng một cụm: đúng nguyên văn (cả dấu), hoặc bằng sau bỏ dấu khi một bên không dấu.
+// Khớp đúng nguyên văn điểm cao hơn nên được chọn khi người hỏi chưa chọn cột nào (ask/context.rs), cột khớp sau bỏ dấu
+// thành giả định.
 const SCORE_SAME_TEXT: f32 = 1.0;
 const SCORE_SAME_FOLDED: f32 = 0.85;
 

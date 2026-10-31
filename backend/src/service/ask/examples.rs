@@ -43,8 +43,8 @@ pub fn build_examples_json() -> String {
     json
 }
 
-/// "Doanh thu theo khu vực" hỏi lại sau mẫu needs_choice, người dùng chọn Market: lựa chọn đó nằm trong choices và
-/// assumptions. Một chiều, một độ đo, nên gợi ý biểu đồ cột.
+/// "Doanh thu theo khu vực": "khu vực" khớp hai cột, nên trả lời bằng Market và để Order Region thành giả định đổi được;
+/// cột đang dùng nằm trong choices và assumptions. Một chiều, một độ đo, nên gợi ý biểu đồ cột.
 pub fn build_simple_example() -> AskResponse {
     let sql = r#"SELECT "Market" AS market, SUM("Order Item Total") AS revenue FROM dataco GROUP BY "Market" ORDER BY revenue DESC"#;
     let rows = [
@@ -69,7 +69,7 @@ pub fn build_simple_example() -> AskResponse {
             order_by: vec![build_item("Doanh thu, giảm dần", "revenue DESC")],
             limit: None,
             time_range: None,
-            assumptions: vec![build_region_choice(Some("market")), build_revenue_choice()],
+            assumptions: vec![build_region_choice(), build_revenue_choice()],
         }),
         result: Some(ResultTable {
             columns: vec![
@@ -123,6 +123,7 @@ pub fn build_simple_example() -> AskResponse {
             ),
             build_step(StepName::Record, 6, true, None),
         ],
+        question_type: Some(QuestionType::Quantitative),
         ..build_base(AskStatus::Answered, "Doanh thu theo khu vực", Some(1))
     }
 }
@@ -225,6 +226,7 @@ pub fn build_why_example() -> AskResponse {
             build_step(StepName::Narrate, 1840, true, None),
             build_step(StepName::Record, 7, true, None),
         ],
+        question_type: Some(QuestionType::Causal),
         ..build_base(AskStatus::Answered, "Tại sao doanh thu quý 3 năm 2017 giảm?", Some(2))
     }
 }
@@ -304,15 +306,12 @@ fn build_why_explanation() -> Explanation {
             price_effect: "-165675.00".to_string(),
             if_volume_unchanged: "9226250.00".to_string(),
         }),
-        summary: "Doanh thu quý 3/2017 giảm 1.283.400,00 so với quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. \
-                  Thị trường Europe giảm nhiều nhất (giảm 639.780,25), sau đó là LATAM (giảm 339.049,50). Phần lớn \
-                  mức giảm do số đơn ít đi, từ 5.000 xuống 4.400 đơn (giảm 1.117.725,00); giá trị đơn trung bình \
-                  giảm từ 1.880,50 xuống 1.845,25 (giảm 165.675,00). Nếu số đơn giữ như quý 2/2017, doanh thu quý \
-                  3/2017 là 9.226.250,00."
-            .to_string(),
+        summary: String::new(),
         summary_title: String::new(),
         summary_points: Vec::new(),
         summary_by_model: true,
+        summary_warnings: Vec::new(),
+        summary_verdict: Some(AnswerVerdict::Match),
         notes: Default::default(),
     };
     // % thay đổi, ghi chú và các ý tóm tắt tính bằng đúng hàm của bước explain, để mẫu khớp response thật.
@@ -329,21 +328,67 @@ fn build_why_explanation() -> Explanation {
     explanation.percent_change = build_percent_change(totals).map(build_percent_text);
     explanation.notes = annotate_dimensions(&explanation.dimensions, &presences, totals);
     apply_summary_parts(&mut explanation);
+    apply_model_insight(&mut explanation);
     explanation
 }
 
-/// "Doanh thu theo khu vực": "khu vực" khớp hai cột, nên hỏi lại trước khi gọi mô hình.
+/// Insight mô hình viết cho mẫu why (cũng là câu trả lời narrate của mock, engine/llm/mock_answers.json): câu mở đầu
+/// và các ý thay câu khuôn, summary là các phần đó nối lại như NarrateReply::build_text.
+fn apply_model_insight(explanation: &mut Explanation) {
+    let reason = |lead: &str, text: &str| SummaryPoint {
+        kind: SummaryPointKind::Reason,
+        lead: lead.to_string(),
+        text: text.to_string(),
+    };
+    explanation.summary_title =
+        "Doanh thu Quý 3/2017 giảm 1.283.400,00 (13,6%) so với Quý 2/2017, từ \
+                                 9.402.500,00 xuống 8.119.100,00."
+            .to_string();
+    explanation.summary_points = vec![
+        reason(
+            "Số đơn ít đi",
+            "Số đơn giảm từ 5.000 xuống 4.400, làm doanh thu giảm 1.117.725,00, chiếm 87,1% mức giảm.",
+        ),
+        reason(
+            "Giá trị đơn trung bình thấp hơn",
+            "Giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25, làm doanh thu giảm thêm 165.675,00.",
+        ),
+        reason(
+            "Thị trường Europe giảm nhiều nhất",
+            "Europe giảm 639.780,25, sau đó là LATAM giảm 339.049,50.",
+        ),
+    ];
+    let mut text = explanation.summary_title.clone();
+    for point in &explanation.summary_points {
+        text.push_str(&format!(" {}: {}", point.lead, point.text));
+    }
+    explanation.summary = text;
+}
+
+/// "Doanh thu từng tháng năm 2017" trên dataset chưa có chỉ số: mô hình hỏi lại doanh thu tính bằng cột nào.
 pub fn build_needs_choice_example() -> AskResponse {
+    let question = "Doanh thu tính bằng cột nào?";
     AskResponse {
-        message: Some("Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.".to_string()),
-        clarifications: vec![build_region_choice(None)],
-        steps: vec![build_step(
-            StepName::Context,
-            12,
-            true,
-            Some("\"khu vực\" khớp hai cột: Order Region, Market"),
-        )],
-        ..build_base(AskStatus::NeedsChoice, "Doanh thu theo khu vực", None)
+        message: Some(question.to_string()),
+        clarifications: vec![Choice {
+            id: "revenue_measure".to_string(),
+            label: question.to_string(),
+            selected: None,
+            options: vec![
+                build_option("order_item_total", "Order Item Total, sau giảm giá"),
+                build_option("sales", "Sales, trước giảm giá"),
+            ],
+        }],
+        steps: vec![
+            build_step(StepName::Context, 12, true, None),
+            build_step(StepName::Llm, 940, true, None),
+        ],
+        question_type: Some(QuestionType::Quantitative),
+        ..build_base(
+            AskStatus::NeedsChoice,
+            "Doanh thu từng tháng năm 2017",
+            None,
+        )
     }
 }
 
@@ -366,6 +411,7 @@ pub fn build_rejected_example() -> AskResponse {
             build_step(StepName::Guard, 2, false, Some(reason)),
             build_step(StepName::Record, 5, true, None),
         ],
+        question_type: Some(QuestionType::Quantitative),
         ..build_base(AskStatus::Rejected, "Xóa các đơn hàng bị hủy", Some(3))
     }
 }
@@ -397,6 +443,7 @@ pub fn build_failed_example() -> AskResponse {
             build_step(StepName::Run, 8, false, Some(second_error)),
             build_step(StepName::Record, 6, true, None),
         ],
+        question_type: Some(QuestionType::Quantitative),
         ..build_base(AskStatus::Failed, "Doanh thu theo ngày giao hàng", Some(4))
     }
 }
@@ -424,6 +471,7 @@ fn build_base(status: AskStatus, question: &str, query_number: Option<u128>) -> 
         insight: None,
         answer_text: None,
         answer_text_by_model: None,
+        question_type: None,
         clarifications: vec![],
         steps: vec![],
     }
@@ -470,15 +518,18 @@ fn build_revenue_item() -> UnderstoodItem {
     )
 }
 
-// Câu hỏi lại "khu vực là cột nào": chưa chọn trong needs_choice, đã chọn trong câu trả lời sau đó.
-fn build_region_choice(selected: Option<&str>) -> Choice {
+// Giả định "khu vực" là cột nào: cột đang dùng đứng đầu, cột còn lại là phương án đổi được.
+fn build_region_choice() -> Choice {
     Choice {
         id: "region_column".to_string(),
-        label: "\"Khu vực\" là cột nào?".to_string(),
-        selected: selected.map(str::to_string),
+        label: "Hiểu \"khu vực\" là".to_string(),
+        selected: Some("market".to_string()),
         options: vec![
-            build_option("order_region", "Order Region, ví dụ Western Europe"),
-            build_option("market", "Market, ví dụ Europe"),
+            build_option("market", "5 nhóm, như Europe, LATAM, Pacific Asia (Market)"),
+            build_option(
+                "order_region",
+                "23 nhóm, như Western Europe, Central America, South America (Order Region)",
+            ),
         ],
     }
 }

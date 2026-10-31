@@ -119,6 +119,9 @@ pub struct AskResponse {
     /// checked model text, a list of rows, or `ANSWER_TEXT=false`). Null when `answer_text` is null.
     #[schema(required)]
     pub answer_text_by_model: Option<bool>,
+    /// Kind of the question chosen by the classify step; null when the question stopped before that step.
+    #[schema(required)]
+    pub question_type: Option<QuestionType>,
     /// Questions back to the user, only for `needs_choice`. Every entry has `selected` null.
     pub clarifications: Vec<Choice>,
     /// What the backend did, in order, with timings. A step may appear twice, for example `run` before and after a
@@ -407,11 +410,34 @@ pub struct Warning {
     pub message: String,
 }
 
+/// Kind of question by the purpose of the analysis, as the classify step decided: `quantitative` (a number, a list or
+/// a comparison, answered by one SQL query) or `causal` (why a number changed or differs between two groups, answered by
+/// a breakdown).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QuestionType {
+    Quantitative,
+    Causal,
+}
+
+// Kết luận hai cổng của #201; giao diện vẽ thành cờ màu ở bước viết lời của tab Các bước. Đoạn trả lời câu thường sẽ
+// dùng cùng enum khi qua hai cổng.
+/// Verdict of the two checks on a text written by the language model: `match` (agrees with the computed numbers),
+/// `warning` (some parts can be read several ways, not certainly wrong), `mismatch` (wrong on every attempt; the model's
+/// text is replaced by a template sentence).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AnswerVerdict {
+    Match,
+    Warning,
+    Mismatch,
+}
+
 // Số trong phân rã là chuỗi chữ số thập phân như ô Decimal. Độ đo đổi sang DECIMAL ở từng dòng nguồn trước khi cộng
 // (số chữ số do #39 chọn), nên mọi tổng và hiệu sau đó là phép tính đúng: không làm tròn từng nhóm, tổng đóng góp bằng
-// đúng chênh lệch, và #41 so số trong lời với đúng các chuỗi này. Bảng kết quả thì cộng theo kiểu cột (DOUBLE cộng
-// bằng số thực), nên giá trị hai lát cắt có thể lệch ô tương ứng của bảng ở chữ số cuối; con số của phân rã là con số
-// ở đây.
+// đúng chênh lệch, và cổng 1 của #201 so số mô hình khai với đúng các chuỗi này. Bảng kết quả thì cộng theo kiểu cột
+// (DOUBLE cộng bằng số thực), nên giá trị hai lát cắt có thể lệch ô tương ứng của bảng ở chữ số cuối; con số của phân
+// rã là con số ở đây.
 // Phần giải thích của câu thường (#227), dựng ở service/insight/: code chọn loại theo hình dạng bảng kết quả và viết câu
 // chính cùng các ý; mô hình chỉ diễn đạt lại, mọi số trong lời của mô hình được kiểm như lời của câu "tại sao".
 /// Explanation of a plain answer, chosen by the shape of the result.
@@ -492,18 +518,33 @@ pub struct Explanation {
     pub dimensions: Vec<DimensionBreakdown>,
     #[schema(required)]
     pub volume_price: Option<VolumePrice>,
-    /// Plain-language summary for the end user (Vietnamese). Every number in it appears in this breakdown.
+    /// Plain-language summary for the end user (Vietnamese), as one text: `summary_title` then each point as
+    /// "lead: text". When `summary_by_model` the model wrote it from the numbers the backend computed, its claims were
+    /// checked against this breakdown and an independent model call compared the meaning of the text with the claims
+    /// and the names of the two slices; otherwise the backend wrote it from a template.
     pub summary: String,
-    /// Main answer of the summary, one sentence written by the backend from the numbers above (Vietnamese).
+    /// Main answer, one sentence (Vietnamese): written by the model when `summary_by_model`, otherwise by the backend
+    /// from the numbers above.
     pub summary_title: String,
-    /// Points under the main answer, written by the backend from the numbers above; each is said only when the numbers
-    /// support it.
+    /// Points under the main answer (Vietnamese). When `summary_by_model`, the main causes the model wrote, all of kind
+    /// `reason`; otherwise written by the backend, each said only when the numbers support it.
     pub summary_points: Vec<SummaryPoint>,
-    /// False when the model's text failed the number check, or the model was not reached, and `summary` is a template
-    /// sentence written by the backend.
+    /// False when `summary` is a template sentence written by the backend: the change is zero (the model is not
+    /// called), the model was not reached, the independent check could not judge the text, or
+    /// the text failed the checks twice (one rewrite is asked).
     pub summary_by_model: bool,
+    /// Parts of the model's text that the independent check found unclear but not certainly wrong, one Vietnamese
+    /// sentence each, written by the checking model; show them with `summary`. Empty when nothing was unclear or
+    /// `summary` is a template sentence.
+    pub summary_warnings: Vec<String>,
+    /// Outcome of the two checks on the model's text: `match` or `warning` when `summary` is the model's text,
+    /// `mismatch` when the model's text failed every attempt and `summary` is the template, null when no check ran (no
+    /// change to explain, or the model or the checking model failed).
+    #[schema(required)]
+    pub summary_verdict: Option<AnswerVerdict>,
     // Ghi chú nội bộ cho lời tóm tắt (% tác động, nhóm khác thường, chiều bỏ qua), không gửi qua API: annotate.rs
-    // tính, summary.rs và bước kiểm số của narrate đọc. Bảng `dimensions` ở trên không đổi vì ghi chú này.
+    // tính, summary.rs và cổng 1 của narrate (explain/claim_cell.rs) đọc. Bảng `dimensions` ở trên không đổi vì ghi
+    // chú này.
     #[serde(skip)]
     pub notes: BreakdownNotes,
 }
@@ -556,8 +597,8 @@ pub struct SummaryPoint {
     pub text: String,
 }
 
-/// - `reason`: what mostly makes the change (the size of the slices, the volume and the price, or the mix and the
-///   rate).
+/// - `reason`: what mostly makes the change (the volume and the value per unit, or the mix and the rate); every point
+///   written by the model has this kind.
 /// - `outliers`: groups that changed much more or much less than the whole, or exist on one side only.
 /// - `even`: no group stands out; the largest contributions are the largest groups.
 /// - `largest`: the group with the largest contribution in the direction of the change, when the numbers do not allow

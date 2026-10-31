@@ -793,9 +793,20 @@ fn dimensions_and_volume_follow_the_profile() {
     fixture
         .columns
         .push(column(30, "Order Item Id", "INTEGER", "key", 20_000));
-    // Hai cột key: không đoán cột nào là đơn.
-    assert_eq!(fixture.plan(quarter_form()).volume, None);
+    fixture
+        .columns
+        .push(column(31, "Customer Id", "INTEGER", "key", 3_000));
+    // Nhiều cột key: cột lặp có nhiều giá trị nhất là đơn; Order Item Id không lặp, Customer Id ít giá trị hơn.
+    assert_eq!(
+        fixture.plan(quarter_form()).volume.as_deref(),
+        Some("Order Id")
+    );
     fixture.columns.retain(|c| c.name != "Order Id");
+    assert_eq!(
+        fixture.plan(quarter_form()).volume.as_deref(),
+        Some("Customer Id")
+    );
+    fixture.columns.retain(|c| c.name != "Customer Id");
     // Cột key không lặp lại: đếm nó chỉ là đếm dòng.
     assert_eq!(fixture.plan(quarter_form()).volume, None);
 }

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/ask/response_choices.rs - phần lựa chọn của AskResponse mà endpoint hỏi (service/ask/mod.rs) dựng: câu hỏi lại
-khi một cụm khớp nhiều cột (hỏi trước khi gọi mô hình), danh sách lựa chọn đã dùng (AskResponse.choices) và cảnh báo
-choice_not_applied. Cách hiểu của mô hình thành Choice (giả định, câu hỏi lại của mô hình) ở ask/choices.rs; file này
+/* service/ask/response_choices.rs - phần lựa chọn của AskResponse mà endpoint hỏi (service/ask/mod.rs) dựng: giả định
+đổi được khi một cụm khớp nhiều cột (trả lời bằng cột đầu, cột khác là phương án), danh sách lựa chọn đã dùng
+(AskResponse.choices) và cảnh báo choice_not_applied. Cách hiểu của mô hình thành Choice (giả định, câu hỏi lại của mô hình) ở ask/choices.rs; file này
 chỉ gom kết quả đó cùng ngữ cảnh (ask/context.rs) thành dạng của hợp đồng.
 
-Phương án hỏi lại nói bằng nghĩa của cột trước tên cột: người hỏi nghĩ theo chữ mình gõ, không biết dữ liệu chia thành
+Phương án nói bằng nghĩa của cột trước tên cột: người hỏi nghĩ theo chữ mình gõ, không biết dữ liệu chia thành
 cột nào. */
 
 use crate::service::ask::context::{AskContext, ColumnProfile};
@@ -23,10 +23,14 @@ pub fn build_used_choices(context: &AskContext, assumptions: &[Choice]) -> Vec<C
         .iter()
         .filter(|pick| pick.chosen_by_user || !pick.others.is_empty())
         .map(|pick| build_chosen(&pick.choice_id, &pick.column));
-    let chosen_assumptions = assumptions.iter().filter_map(|choice| {
-        let selected = choice.selected.as_deref()?;
-        Some(build_chosen(&choice.id, selected))
-    });
+    // Giả định cột của ngữ cảnh (build_pick_choices) đã có ở trên qua picks: bỏ để không lặp id.
+    let chosen_assumptions = assumptions
+        .iter()
+        .filter(|choice| !context.picks.iter().any(|p| p.choice_id == choice.id))
+        .filter_map(|choice| {
+            let selected = choice.selected.as_deref()?;
+            Some(build_chosen(&choice.id, selected))
+        });
     picks.chain(chosen_assumptions).collect()
 }
 
@@ -49,58 +53,23 @@ pub fn build_unapplied_warnings(sent: &[ChosenOption], used: &[ChosenOption]) ->
         .collect()
 }
 
-/// Lời hỏi lại khi một cụm khớp nhiều cột gần nhau. Hỏi bằng lời thường, không nói "cột".
-pub fn build_ambiguity_message(context: &AskContext) -> String {
-    match context.ambiguous.as_slice() {
-        [word] => format!(
-            "Bạn muốn xem \"{}\" theo cách nào? Mỗi cách cho ra kết quả khác nhau.",
-            word.phrase
-        ),
-        words => format!(
-            "Câu hỏi có {} chỗ hiểu được nhiều cách, mỗi cách cho ra kết quả khác nhau. Chọn cách hiểu cho từng chỗ \
-             rồi hỏi lại.",
-            words.len()
-        ),
-    }
-}
-
-/// Mỗi chỗ mơ hồ một câu hỏi lại, mỗi cột ứng viên một phương án. Id là id của ngữ cảnh (`column:` cộng cụm đã bỏ dấu),
-/// để lần hỏi sau build_ask_context áp đúng lựa chọn.
-pub fn build_ambiguity_choices(context: &AskContext) -> Vec<Choice> {
+/// Giả định đổi được cho mỗi cụm khớp nhiều cột: cột đang dùng là lựa chọn đã chọn, các cột còn lại là phương án,
+/// cùng id với lựa chọn cột của ngữ cảnh, để người hỏi bấm đổi rồi hỏi lại mà không phải chọn trước khi có câu trả lời.
+pub fn build_pick_choices(context: &AskContext) -> Vec<Choice> {
     context
-        .ambiguous
+        .picks
         .iter()
-        .map(|word| Choice {
-            id: word.choice_id.clone(),
-            label: format!("Hiểu \"{}\" là", word.phrase),
-            selected: None,
-            options: word
-                .columns
-                .iter()
+        .filter(|pick| !pick.others.is_empty())
+        .map(|pick| Choice {
+            id: pick.choice_id.clone(),
+            label: format!("Hiểu \"{}\" là", pick.phrase),
+            selected: Some(pick.column.clone()),
+            options: std::iter::once(&pick.column)
+                .chain(&pick.others)
                 .map(|column| build_column_option(column, context))
                 .collect(),
         })
         .collect()
-}
-
-/// Lý do hỏi lại cho bước context, ví dụ `"khu vực" khớp 2 cột: Order Region, Market`; None khi không mơ hồ.
-pub fn build_ambiguity_detail(context: &AskContext) -> Option<String> {
-    if context.ambiguous.is_empty() {
-        return None;
-    }
-    let parts: Vec<String> = context
-        .ambiguous
-        .iter()
-        .map(|word| {
-            format!(
-                "\"{}\" khớp {} cột: {}",
-                word.phrase,
-                word.columns.len(),
-                word.columns.join(", ")
-            )
-        })
-        .collect();
-    Some(parts.join("; "))
 }
 
 fn build_chosen(choice_id: &str, option_id: &str) -> ChosenOption {
@@ -168,7 +137,6 @@ mod tests {
         AskContext {
             columns: vec![],
             hints: vec![],
-            ambiguous: vec![],
             picks: vec![],
         }
     }

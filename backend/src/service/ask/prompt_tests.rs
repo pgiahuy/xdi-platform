@@ -122,7 +122,6 @@ fn dataco_context() -> AskContext {
             value: "Europe".to_string(),
             matched_text: "châu Âu".to_string(),
         }],
-        ambiguous: Vec::new(),
         picks: vec![ColumnPick {
             choice_id: "column:doanh thu".to_string(),
             phrase: "doanh thu".to_string(),

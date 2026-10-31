@@ -1,0 +1,24 @@
+- "measure": tên độ đo được so.
+- "comparison": "periods" là so hai kỳ và "compare" là kỳ sau; "groups" là so hai nhóm cùng lúc, không có trước sau.
+- "base", "compare": tên bên gốc và tên bên được so.
+- "volume_label", "price_label": tên của số lượng và của giá trị trung bình mỗi đơn vị, dùng với các khóa về số lượng và giá bên dưới; trống khi không có.
+- "claims": các khẳng định. Mỗi khẳng định nói về một con số hoặc một nhóm.
+  - "column", "group": khẳng định thuộc nhóm nào; "group" là một giá trị của cột "column". Cả hai trống: khẳng định nói về toàn bộ phần dữ liệu đang so. Chỉ có "column": khẳng định nói về cả cột đó.
+  - "value": con số, có dấu. Số viết kiểu Việt Nam: dấu chấm ngăn nhóm nghìn và dấu phẩy trước phần thập phân, nên 1.234.567,89 là khoảng 1,23 triệu.
+  - "amount": cùng con số đó viết kiểu máy với dấu chấm thập phân; dùng nó để xét độ lớn và cách làm tròn. Với một mức thay đổi, âm là giảm (so hai nhóm: bên được so thấp hơn bên gốc), dương là tăng (cao hơn). Trống với cause và against.
+  - "field": loại khẳng định.
+    base_value, compare_value: giá trị ở bên gốc và ở bên được so.
+    change: bên được so trừ bên gốc.
+    percent_change: mức thay đổi tính theo phần trăm của bên gốc.
+    contribution: mức thay đổi của riêng một nhóm (giá trị bên được so của nhóm trừ giá trị bên gốc của nhóm). Các contribution của mọi nhóm cộng lại bằng mức thay đổi, nên contribution của một nhóm có thể lớn hơn cả mức thay đổi khi các nhóm khác đi ngược chiều; nói nhóm đó tăng hay giảm bằng số này, hay gọi đó là phần đóng góp của nhóm, đều đúng.
+    share_of_change: phần của mức thay đổi do một nhóm tạo ra, tính theo phần trăm của cả mức thay đổi; âm khi nhóm đi ngược mức thay đổi.
+    base_volume, compare_volume: số lượng ở hai bên.
+    base_price, compare_price: giá trị trung bình mỗi đơn vị ở hai bên.
+    volume_effect, price_effect: phần của mức thay đổi do số lượng thay đổi, và do giá trị trung bình mỗi đơn vị thay đổi.
+    volume_share, price_share: volume_effect và price_effect tính theo phần trăm của cả mức thay đổi.
+    if_volume_unchanged: giá trị bên được so nếu số lượng giữ như bên gốc.
+    mix_effect, rate_effect: khi độ đo là tỷ lệ, phần của mức thay đổi do cơ cấu các nhóm thay đổi, và do tỷ lệ trong từng nhóm thay đổi.
+    cause: nhóm này là nguyên nhân chính của mức thay đổi.
+    against: nhóm này đi ngược mức thay đổi và kéo lại một phần.
+    new: nhóm này chỉ có giá trị ở bên được so (không có số).
+    gone: nhóm này chỉ có giá trị ở bên gốc, không có ở bên được so (không có số).

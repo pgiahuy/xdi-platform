@@ -58,8 +58,7 @@ fn source_total(page: &Value) -> f64 {
 
 #[tokio::test]
 async fn why_question_is_answered_recorded_and_drilled() {
-    let narrate = json!("Doanh thu giảm vì Europe và LATAM cùng giảm.");
-    let llm = scripted(&[quarter_form(), narrate]);
+    let llm = scripted(&[quarter_form()]);
     let Some(asking) = start_on(Some(llm), CSV, |_| {}).await else {
         return;
     };
@@ -200,7 +199,7 @@ async fn wrong_form_twice_answers_as_a_plain_question() {
 /// vai đó, và thẻ có mục phân quyền. Lan (admin) không bị lọc.
 #[tokio::test]
 async fn member_data_role_filters_every_why_query() {
-    let llm = scripted(&[quarter_form(), json!("Doanh thu giảm.")]);
+    let llm = scripted(&[quarter_form()]);
     let Some(mut asking) = start_on(Some(llm), CSV, |_| {}).await else {
         return;
     };
@@ -270,8 +269,7 @@ async fn member_data_role_filters_every_why_query() {
 #[tokio::test]
 async fn model_routes_a_cause_question_without_keywords() {
     let question = "Doanh thu quý 3 năm 2017 giảm do gì?";
-    let narrate = json!("Doanh thu giảm vì Europe và LATAM cùng giảm.");
-    let llm = scripted_with_kind("cause", &[quarter_form(), narrate]);
+    let llm = scripted_with_kind("cause", &[quarter_form()]);
     let Some(asking) = start_on(Some(llm), CSV, |_| {}).await else {
         return;
     };

@@ -24,6 +24,11 @@ export function directionTextClass(direction: ChangeDirection): string {
   return direction === 'down' ? 'text-decrease' : direction === 'up' ? 'text-increase' : ''
 }
 
+/** Nền nhạt cùng màu chiều, cho nhãn cần nổi như "tăng 5,7% so với Quý 2/2017". */
+export function directionSoftClass(direction: ChangeDirection): string {
+  return direction === 'down' ? 'bg-decrease/10' : direction === 'up' ? 'bg-increase/10' : 'bg-muted'
+}
+
 /** Màu nền của thanh đóng góp theo chiều, cùng cặp màu với directionTextClass. */
 export function directionFillClass(direction: ChangeDirection): string {
   return direction === 'down' ? 'bg-decrease' : direction === 'up' ? 'bg-increase' : ''

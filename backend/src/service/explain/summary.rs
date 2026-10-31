@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/summary.rs - lời tóm tắt do code viết cho câu hỏi tìm nguyên nhân (#186): một câu trả lời chính và
 vài ý ngắn, mỗi ý chỉ nói khi số đã tính xác nhận. Đọc bảng phân rã cùng ghi chú nội bộ của explain/annotate.rs
-(Explanation.notes: % tác động, % thay đổi, nhóm khác thường, chiều bỏ qua); không đổi bảng phân rã. run.rs ghi summary_title, summary_points vào Explanation; narrate.rs dùng
-build_template_summary khi không dùng lời của mô hình; prompt narrate (explain/mod.rs) gửi đúng các ý này để mô hình chỉ
-diễn đạt lại, không tự tìm nguyên nhân.
+(Explanation.notes: % tác động, % thay đổi, nhóm khác thường, chiều bỏ qua); không đổi bảng phân rã. Đây là câu khuôn:
+run.rs ghi summary_title, summary_points vào Explanation, rồi thay bằng insight của mô hình khi insight đó qua hai cổng
+của ask/narrate.rs; không qua thì giữ câu khuôn, và narrate.rs dùng build_template_summary cho summary. Prompt của mô
+hình (explain/narrate_prompt.rs) không nhận các câu này, chỉ nhận số và cờ code đã tính.
 
 Các ý, theo thứ tự:
-- "Lý do chính": độ đo tỷ lệ thì phần do cơ cấu hay phần do hiệu suất; độ đo tổng có tách lượng và giá thì phần nào
-  lớn hơn; độ đo tổng (không phải đếm) mà trung bình mỗi dòng hai bên gần nhau thì chênh lệch chủ yếu do số dòng.
-- "Khác thường theo <cột>": các nhóm lệch hẳn mức chung hay chỉ có ở một bên, nhóm chiếm nhiều chênh lệch trước.
-- "Không có nơi nào đặc biệt": không chiều nào có nhóm khác thường; nhóm chênh nhiều nhất chỉ vì là nhóm lớn nhất khi
+- "Lý do chính": độ đo tỷ lệ thì phần do cơ cấu hay phần do hiệu suất; độ đo tổng có lượng (như số đơn) thì phần nào
+  lớn hơn trong hai phần của explain/split.rs: do lượng hay do giá trị trung bình mỗi đơn vị. Không có lượng thì không
+  có ý này: số dòng dữ liệu không mang nghĩa kinh doanh nên không dùng làm lý do.
+- "Khác thường theo <cột>": các nhóm lệch hẳn mức chung hay chỉ có ở một bên, nhóm chiếm nhiều chênh lệch trước; phần
+  của chênh lệch chỉ nêu khi không quá 100%.
+- "Không nhóm nào khác thường": không chiều nào có nhóm khác thường; nhóm chênh nhiều nhất chỉ vì là nhóm lớn nhất khi
   đúng là nhóm lớn nhất.
 - "Nhóm góp nhiều nhất": khi không so được nhóm với mức chung (lát gốc không dương, chênh lệch gần 0), nêu nhóm có
   phần chênh lệch lớn nhất cùng chiều với chênh lệch chung.
@@ -17,8 +20,9 @@ Các ý, theo thứ tự:
 - "Bỏ qua <cột>": chiều tách hẳn hai lát cắt hay trùng chiều khác (annotate.rs).
 
 Mọi số lấy từ Explanation, viết kiểu Việt Nam như bảng (explain/number.rs); phần trăm do annotate.rs tính và nằm trong
-tập số được phép (build_allowed_numbers), nên lời này qua được bước kiểm số. Tên cột kèm nghĩa tiếng Việt trong ngoặc
-khi hồ sơ có bí danh: "Type (hình thức thanh toán)". Test ở explain/summary_tests.rs. */
+tập số được phép của bước kiểm số cũ (build_allowed_numbers), test dùng bước đó để giữ câu khuôn đúng số. Cột gọi bằng
+nghĩa tiếng Việt của hồ sơ khi có ("hình thức thanh toán"), không kèm tên cột gốc; không có nghĩa thì dùng tên cột.
+Test ở explain/summary_tests.rs. */
 
 use rust_decimal::Decimal;
 
@@ -30,13 +34,12 @@ use crate::service::explain::annotate::{
     DimensionNotes, DropReason, DroppedDimension, GroupNotes, GroupPresence,
 };
 use crate::service::explain::number::build_number_text_with;
+use crate::service::explain::split::build_split;
 use crate::service::explain::{
     between, build_direction_text, build_direction_word, build_fraction_digits, build_value_text,
-    lower_first, truncate_text, MAX_SUMMARY_CHARS, TEMPLATE_GROUP_CHARS,
+    lower_first, truncate_text, upper_first, MAX_SUMMARY_CHARS, TEMPLATE_GROUP_CHARS,
 };
 
-/// Trung bình mỗi dòng hai bên lệch nhau không quá ngần này phần trăm thì coi là gần nhau.
-const SIMILAR_AVERAGE_PERCENT: i64 = 10;
 /// Nhóm ngược chiều chiếm từ ngần này phần trăm chênh lệch (âm) trở lên mới nêu.
 const AGAINST_MIN_SHARE: i64 = 5;
 /// Số nhóm, số cột nêu tên trong một ý; nhiều hơn thì câu dài mà không thêm ý.
@@ -111,7 +114,8 @@ pub fn apply_summary_parts(explanation: &mut Explanation) {
 }
 
 // Câu chính: so cái gì với cái gì, chênh bao nhiêu, kèm hai giá trị. Hai kỳ đọc "từ ... lên ...", hai nhóm không có
-// trước sau nên đọc "... so với ...". So hai nhóm thì nêu cột của hai nhóm: "Order Status (trạng thái đơn) CANCELED".
+// trước sau nên đọc "... so với ...". So hai nhóm thì nêu cột của hai nhóm bằng nghĩa của nó: "trạng thái đơn hàng
+// CANCELED".
 fn build_title(e: &Explanation) -> String {
     let digits = build_fraction_digits(e);
     let comparison = e.comparison;
@@ -176,73 +180,39 @@ fn build_reason(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
             ),
         ));
     }
-    if let Some(split) = &e.volume_price {
-        let volume_bigger = parse(&split.volume_effect)?.abs() >= parse(&split.price_effect)?.abs();
-        let (base, compare) = (&e.base.label, &e.compare.label);
-        let lead_text = if volume_bigger {
-            format!(
-                "chủ yếu do {}: {base} có {}, {compare} có {}",
-                lower_first(&split.volume_label),
-                build_number_text_with(&split.base_volume, digits),
-                build_number_text_with(&split.compare_volume, digits)
-            )
-        } else {
-            format!(
-                "chủ yếu do {}: {} ở {base}, {} ở {compare}",
-                lower_first(&split.price_label),
-                build_number_text_with(&split.base_price, digits),
-                build_number_text_with(&split.compare_price, digits)
-            )
-        };
-        return Some(point(
-            SummaryPointKind::Reason,
-            "Lý do chính".to_string(),
-            format!(
-                "{lead_text}. Phần do {} {}, phần do {} {}. Nếu {} giữ nguyên như {base}, {} {compare} là {}.",
-                lower_first(&split.volume_label),
-                build_direction_text(&split.volume_effect, digits, comparison),
-                lower_first(&split.price_label),
-                build_direction_text(&split.price_effect, digits, comparison),
-                lower_first(&split.volume_label),
-                lower_first(&e.measure),
-                build_number_text_with(&split.if_volume_unchanged, digits)
-            ),
-        ));
-    }
-    // Độ đo đếm chính là quy mô của lát cắt: nói "do số dòng" thì chỉ nhắc lại câu chính.
-    if e.counts_rows || !similar_row_averages(e)? {
-        return None;
-    }
+    let split = build_split(e)?;
+    let numbers = &split.numbers;
+    let volume_bigger = parse(&numbers.volume_effect)?.abs() >= parse(&numbers.price_effect)?.abs();
+    let (base, compare) = (&e.base.label, &e.compare.label);
+    let lead_text = if volume_bigger {
+        format!(
+            "chủ yếu do {} ({base} có {}, {compare} có {})",
+            lower_first(&split.volume_label),
+            build_number_text_with(&numbers.base_volume, digits),
+            build_number_text_with(&numbers.compare_volume, digits)
+        )
+    } else {
+        format!(
+            "chủ yếu do {} ({} ở {base}, {} ở {compare})",
+            lower_first(&split.price_label),
+            build_number_text_with(&numbers.base_price, digits),
+            build_number_text_with(&numbers.compare_price, digits)
+        )
+    };
     Some(point(
         SummaryPointKind::Reason,
         "Lý do chính".to_string(),
         format!(
-            "số dòng dữ liệu hai bên khác nhau: {} có {} dòng, {} có {} dòng, còn trung bình mỗi dòng hai bên gần như \
-             nhau.",
-            e.base.label,
-            build_number_text_with(&e.base.rows, 0),
-            e.compare.label,
-            build_number_text_with(&e.compare.rows, 0)
+            "{lead_text}. Phần do {} {}, phần do {} {}. Nếu {} giữ như {base}, {} {compare} sẽ là {}.",
+            lower_first(&split.volume_label),
+            build_direction_text(&numbers.volume_effect, digits, comparison),
+            lower_first(&split.price_label),
+            build_direction_text(&numbers.price_effect, digits, comparison),
+            lower_first(&split.volume_label),
+            lower_first(&e.measure),
+            build_number_text_with(&numbers.if_volume_unchanged, digits)
         ),
     ))
-}
-
-// Trung bình mỗi dòng (giá trị chia số dòng) hai bên lệch nhau không quá SIMILAR_AVERAGE_PERCENT. None khi thiếu số
-// dòng hay giá trị không dương (trung bình của lợi nhuận âm không so được theo phần trăm).
-fn similar_row_averages(e: &Explanation) -> Option<bool> {
-    let (base, compare) = (parse(&e.base.value)?, parse(&e.compare.value)?);
-    let (base_rows, compare_rows) = (parse(&e.base.rows)?, parse(&e.compare.rows)?);
-    if base <= Decimal::ZERO
-        || compare <= Decimal::ZERO
-        || base_rows.is_zero()
-        || compare_rows.is_zero()
-    {
-        return None;
-    }
-    let base_average = base.checked_div(base_rows)?;
-    let compare_average = compare.checked_div(compare_rows)?;
-    let gap = (compare_average - base_average).abs() * Decimal::ONE_HUNDRED;
-    Some(gap <= base_average * Decimal::from(SIMILAR_AVERAGE_PERCENT))
 }
 
 fn build_outliers(e: &Explanation, dimension: Dimension) -> SummaryPoint {
@@ -288,8 +258,14 @@ fn build_outlier_item(e: &Explanation, group: &GroupContribution, notes: &GroupN
             _ => format!("{name} {amount}"),
         },
     };
-    // Phần âm nghĩa là nhóm đi ngược chênh lệch chung: "chiếm -36%" khó hiểu, nên nói "kéo ngược 36%".
-    match notes.share_of_change.as_deref().and_then(parse) {
+    // Phần âm nghĩa là nhóm đi ngược chênh lệch chung: "chiếm -36%" khó hiểu, nên nói "kéo ngược 36%". Phần quá 100%
+    // (các nhóm bù trừ nhau, "chiếm 1.600,8% chênh lệch") người đọc không hiểu được, nên bỏ, chỉ giữ số tiền.
+    match notes
+        .share_of_change
+        .as_deref()
+        .and_then(parse)
+        .filter(|share| share.abs() <= Decimal::ONE_HUNDRED)
+    {
         Some(share) if share < Decimal::ZERO => format!(
             "{what}, kéo ngược {} chênh lệch",
             build_percent_text(&share.abs().to_string())
@@ -311,7 +287,7 @@ fn build_even(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
         .map(|d| d.column_text())
         .collect();
     let mut text = format!(
-        "theo {}, không nhóm nào lệch hẳn mức chung ({}).",
+        "theo {}, không nhóm nào thay đổi khác hẳn mức chung ({}).",
         join_words(&columns),
         build_percent_change_text(whole, e.comparison)
     );
@@ -326,7 +302,7 @@ fn build_even(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     }
     Some(point(
         SummaryPointKind::Even,
-        "Không có nơi nào đặc biệt".to_string(),
+        "Không nhóm nào khác thường".to_string(),
         text,
     ))
 }
@@ -444,10 +420,22 @@ fn build_dropped(e: &Explanation) -> Option<SummaryPoint> {
         .iter()
         .filter(|d| d.reason == DropReason::Duplicates)
     {
+        // Cột trùng cũng gọi bằng nghĩa tiếng Việt khi bảng phân rã có nó.
+        let duplicate = dropped.duplicate_of.as_deref().map(|column| {
+            let label = e
+                .dimensions
+                .iter()
+                .find(|d| d.column == column)
+                .and_then(|d| d.label.as_deref());
+            build_column_text(column, label)
+        });
         sentences.push(format!(
             "{} chia nhóm giống hệt {}.",
-            build_column_text(&dropped.column, dropped.label.as_deref()),
-            dropped.duplicate_of.as_deref().unwrap_or("một cột khác")
+            upper_first(&build_column_text(
+                &dropped.column,
+                dropped.label.as_deref()
+            )),
+            duplicate.as_deref().unwrap_or("một cột khác")
         ));
     }
     Some(point(
@@ -457,11 +445,11 @@ fn build_dropped(e: &Explanation) -> Option<SummaryPoint> {
     ))
 }
 
-// "theo Type, COMPLETE chỉ có DEBIT, CANCELED chỉ có TRANSFER": tên cột không kèm nghĩa, vì đầu ý đã ghi.
+// "theo hình thức thanh toán, COMPLETE chỉ có DEBIT, CANCELED chỉ có TRANSFER".
 fn build_separated_text(e: &Explanation, dropped: &DroppedDimension) -> String {
     format!(
         "theo {}, {} chỉ có {}, {} chỉ có {}",
-        dropped.column,
+        build_column_text(&dropped.column, dropped.label.as_deref()),
         e.base.label,
         join_values(&dropped.base_only),
         e.compare.label,
@@ -469,10 +457,11 @@ fn build_separated_text(e: &Explanation, dropped: &DroppedDimension) -> String {
     )
 }
 
-/// "Type (hình thức thanh toán)"; không có nghĩa tiếng Việt thì chỉ tên cột.
+/// Tên cột trong câu khuôn: nghĩa tiếng Việt của hồ sơ ("hình thức thanh toán"), không kèm tên cột gốc, vì câu viết cho
+/// người dùng nghiệp vụ; tên cột gốc vẫn ở tab Phân rã và câu SQL. Không có nghĩa tiếng Việt thì dùng tên cột.
 pub fn build_column_text(column: &str, label: Option<&str>) -> String {
     match label {
-        Some(label) => format!("{column} ({label})"),
+        Some(label) => label.to_string(),
         None => column.to_string(),
     }
 }

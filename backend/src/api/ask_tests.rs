@@ -83,15 +83,20 @@ impl LlmProvider for ScriptedLlm {
         }
         // Nạp file xong, lớp ngữ nghĩa (service/semantic/mod.rs) chạy nền và cũng gọi mô hình. Lỗi tạm thì nó không ghi gì
         // vào hồ sơ, nên câu viết sẵn chỉ dành cho câu hỏi và bí danh test tự đặt không bị ghi đè.
-        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn. Bước phân
-        // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
-        // Lời của phần giải thích (task insight, #227) cũng vậy: lỗi thì dùng câu do code viết.
+        // Lời của phần giải thích (task insight, #227), insight của câu "tại sao" (task narrate) và mô hình chấm (task
+        // judge) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu do code viết. Bước phân loại (task classify) lỗi thì dùng
+        // luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước. Insight câu "tại sao" và hai cổng kiểm có
+        // test riêng (service/ask/narrate_tests.rs).
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Classify | LlmTask::Insight
+            LlmTask::Profile
+                | LlmTask::Classify
+                | LlmTask::Insight
+                | LlmTask::Narrate
+                | LlmTask::Judge
         ) {
             return Err(AppError::Upstream(
-                "scripted model has no profile or summary".to_string(),
+                "scripted model has no profile, insight or narrate reply".to_string(),
             ));
         }
         let reply = self.replies.lock().unwrap().pop_front();
@@ -432,13 +437,18 @@ async fn failed_run_after_repair_is_recorded_as_error() {
     assert_eq!(asking.queries_with("error").await, 1);
 }
 
-/// "khu vực" là bí danh của hai cột: hỏi lại trước khi gọi mô hình, không ghi lịch sử. Gửi lại kèm lựa chọn thì trả lời;
-/// lựa chọn lạ thì báo choice_not_applied.
+/// "khu vực" là bí danh của hai cột: không hỏi lại, trả lời ngay bằng Market (cột đứng trước trong bảng) và để Order
+/// Region thành giả định đổi được trên thẻ. Chọn Order Region thì câu sau dùng nó; lựa chọn lạ thì báo choice_not_applied.
 #[tokio::test]
-async fn ambiguous_word_asks_back_until_the_user_picks() {
+async fn word_matching_two_columns_is_answered_with_a_changeable_assumption() {
     let market =
         r#"SELECT "Market", SUM("Order Item Total") AS revenue FROM dataco GROUP BY "Market""#;
-    let llm = scripted(&[sql_reply(market)]);
+    let region = r#"SELECT "Order Region", SUM("Order Item Total") AS revenue FROM dataco GROUP BY "Order Region""#;
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let llm = Arc::new(RecordingLlm {
+        replies: Mutex::new([sql_reply(market).to_string(), sql_reply(region).to_string()].into()),
+        prompts: prompts.clone(),
+    });
     let Some(asking) = start(Some(llm)).await else {
         return;
     };
@@ -450,29 +460,31 @@ async fn ambiguous_word_asks_back_until_the_user_picks() {
 
     let (status, response) = asking.ask("Doanh thu theo khu vực", json!([])).await;
     assert_eq!(status, StatusCode::OK, "{response}");
-    assert_eq!(response["status"], "needs_choice", "{response}");
-    assert!(response["query_id"].is_null());
-    assert_eq!(step_names(&response), ["context"]);
-    let choice = &response["clarifications"][0];
-    assert_eq!(choice["id"], "column:khu vuc");
-    assert!(choice["selected"].is_null());
-    assert_eq!(choice["options"].as_array().unwrap().len(), 2);
-    // Người dùng nhận ra cột qua giá trị của nó: nhãn kèm giá trị nhiều dòng nhất, id vẫn là tên cột.
-    let market = choice["options"]
+    assert_eq!(response["status"], "answered", "{response}");
+    assert!(response["clarifications"].as_array().unwrap().is_empty());
+    let assumption = &response["understanding"]["assumptions"][0];
+    assert_eq!(assumption["id"], "column:khu vuc");
+    assert_eq!(assumption["selected"], "Market");
+    let options: Vec<&str> = assumption["options"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|o| o["id"] == "Market")
-        .unwrap();
-    assert_eq!(market["label"], "gồm Europe, LATAM (Market)");
-    assert!(response["message"]
-        .as_str()
-        .unwrap()
-        .contains("theo cách nào"));
-    assert_eq!(asking.queries_with("ok").await, 0);
+        .map(|o| o["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(options, ["Market", "Order Region"]);
+    // Người dùng nhận ra cột qua giá trị của nó: nhãn kèm giá trị nhiều dòng nhất, id vẫn là tên cột.
+    assert_eq!(
+        assumption["options"][0]["label"],
+        "gồm Europe, LATAM (Market)"
+    );
+    assert_eq!(
+        response["choices"],
+        json!([{"choice_id": "column:khu vuc", "option_id": "Market"}])
+    );
+    assert_eq!(asking.queries_with("ok").await, 1);
 
     let picked = json!([
-        {"choice_id": "column:khu vuc", "option_id": "Market"},
+        {"choice_id": "column:khu vuc", "option_id": "Order Region"},
         {"choice_id": "column:san pham", "option_id": "Product"}
     ]);
     let (status, response) = asking.ask("Doanh thu theo khu vực", picked).await;
@@ -480,11 +492,22 @@ async fn ambiguous_word_asks_back_until_the_user_picks() {
     assert_eq!(response["status"], "answered", "{response}");
     assert_eq!(
         response["choices"],
-        json!([{"choice_id": "column:khu vuc", "option_id": "Market"}])
+        json!([{"choice_id": "column:khu vuc", "option_id": "Order Region"}])
+    );
+    assert_eq!(
+        response["understanding"]["assumptions"][0]["selected"],
+        "Order Region"
     );
     let warnings = response["warnings"].as_array().unwrap();
     assert_eq!(warnings.len(), 1, "{response}");
     assert_eq!(warnings[0]["code"], "choice_not_applied");
+    assert!(warnings[0]["message"].as_str().unwrap().contains("Product"));
+    let prompts = prompts.lock().unwrap();
+    assert!(
+        prompts[1].contains(r#"means the column "Order Region" (chosen by the user)"#),
+        "{}",
+        prompts[1]
+    );
 }
 
 /// Mô hình hỏi lại: phương án không phải cột có thật bị bỏ; không còn phương án nào thì câu là failed và vẫn ghi lịch
@@ -545,15 +568,20 @@ impl LlmProvider for RecordingLlm {
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
-        // Đoạn trả lời của câu thường (task summary) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu khuôn. Bước phân
-        // loại (task classify) lỗi thì dùng luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước.
-        // Lời của phần giải thích (task insight, #227) cũng vậy: lỗi thì dùng câu do code viết.
+        // Lời của phần giải thích (task insight, #227), insight của câu "tại sao" (task narrate) và mô hình chấm (task
+        // judge) cũng gọi mô hình; lỗi thì luồng hỏi dùng câu do code viết. Bước phân loại (task classify) lỗi thì dùng
+        // luật từ khóa, nên câu viết sẵn chỉ dành cho SQL và form như trước. Insight câu "tại sao" và hai cổng kiểm có
+        // test riêng (service/ask/narrate_tests.rs).
         if matches!(
             request.task,
-            LlmTask::Profile | LlmTask::Classify | LlmTask::Insight
+            LlmTask::Profile
+                | LlmTask::Classify
+                | LlmTask::Insight
+                | LlmTask::Narrate
+                | LlmTask::Judge
         ) {
             return Err(AppError::Upstream(
-                "recording model has no profile or summary".to_string(),
+                "recording model has no profile, insight or narrate reply".to_string(),
             ));
         }
         self.prompts
@@ -606,6 +634,47 @@ async fn metric_clarify_with_columns_asks_for_a_column_and_applies_it() {
     assert!(
         prompts[1]
             .contains(r#""doanh thu" means the column "Order Item Total" (chosen by the user)"#),
+        "{}",
+        prompts[1]
+    );
+}
+
+/// Mô hình hỏi lại bằng một cụm không có trong câu hỏi (ở đây "tiền bán hàng" cho câu "Doanh thu ..."): lựa chọn của
+/// người hỏi vẫn vào prompt và được dùng, không báo choice_not_applied. Trước đây lựa chọn bị bỏ vì cụm không khớp câu,
+/// người hỏi chọn xong lại nhận "không áp dụng được".
+#[tokio::test]
+async fn picked_column_applies_even_when_the_clarify_phrase_is_not_in_the_question() {
+    let clarify = json!({"terms": [], "assumptions": [], "sql": "",
+        "clarify": {"kind": "metric", "phrase": "tiền bán hàng", "question": "Bạn muốn tính bằng cột nào?",
+                    "options": ["Sales", "Order Item Total"]}});
+    let total = r#"SELECT SUM("Order Item Total") AS revenue FROM dataco"#;
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let llm = Arc::new(RecordingLlm {
+        replies: Mutex::new([clarify.to_string(), sql_reply(total).to_string()].into()),
+        prompts: prompts.clone(),
+    });
+    let Some(asking) = start(Some(llm)).await else {
+        return;
+    };
+    let question = "Doanh thu từng tháng năm 2017";
+    let (_, response) = asking.ask(question, json!([])).await;
+    assert_eq!(response["status"], "needs_choice", "{response}");
+    let id = response["clarifications"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let picked = json!([{"choice_id": id, "option_id": "Order Item Total"}]);
+    let (status, response) = asking.ask(question, picked).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    assert!(
+        response["warnings"].as_array().unwrap().is_empty(),
+        "{response}"
+    );
+    let prompts = prompts.lock().unwrap();
+    assert!(
+        prompts[1].contains(r#"means the column "Order Item Total" (chosen by the user)"#),
         "{}",
         prompts[1]
     );
