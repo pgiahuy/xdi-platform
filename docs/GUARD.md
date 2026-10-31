@@ -314,6 +314,41 @@ runnable:  SELECT sales.region FROM read_parquet('/data/sales/*.parquet', union_
   nếu giữ tên, một bảng tạm tên `"secret.csv"` gọi ở ngoài chỗ định nghĩa sẽ thành đọc file `secret.csv`. Đổi tên rồi
   thì chỗ gọi đó trỏ tới một bảng không tồn tại và DuckDB chỉ báo lỗi.
 
+## Kiểm cộng lặp sau guard
+
+Câu qua guard rồi vẫn có thể ra số sai mà trông hợp lý: nối `students` với `student_assessments` rồi
+`SUM(s.studied_credits)` thì tín chỉ của mỗi sinh viên được cộng một lần cho mỗi bài nộp (trên OULAD của database mẫu,
+vùng East Anglian Region ra 1 357 190 thay vì 260 380, đo bằng psql). Prompt đã dặn gộp bảng phía nhiều trước, nhưng mô
+hình không luôn làm theo. Vì vậy luồng hỏi (`service/ask/run.rs`) gọi `find_double_count` của `service/ask/fanout.rs`
+sau khi guard nhận câu và trước khi chạy. Kiểm tra này không thuộc guard: nó cần quan hệ giữa các bảng
+(`dataset_relations`, bảng giữ khóa ngoại là phía nhiều), guard không biết.
+
+Luật, xét từng SELECT với các bảng trong `FROM` và `JOIN` của chính nó:
+
+- Bị bắt khi đối số của `SUM` hay `AVG` chỉ gồm cột của một bảng P (cộng hằng số), và `FROM` có bảng C làm dòng của P
+  lặp: C trỏ tới P theo quan hệ `many_to_one`, hay trỏ tới một bảng mà P đi tới được không nhân dòng (P trỏ lên bảng
+  đó, hay qua quan hệ `one_to_one`). Ví dụ `order_items` và `returns` cùng trỏ `orders`: `SUM(oi.qty)` khi nối cả ba bảng
+  cũng bị bắt.
+- Đọc đối số bỏ qua ngoặc, `CAST`, dấu âm, `COALESCE`, `IFNULL`, `ROUND`, `ABS`, `DISTINCT`; `CASE` chỉ xét nhánh
+  `THEN` và `ELSE`, không xét điều kiện `WHEN`. Cột không ghi bảng thì tìm bảng có cột đó.
+- Không bị bắt: nhân cột của P với cột của C (`SUM(oi.quantity * p.price)`), cột của P chỉ nằm trong điều kiện `WHEN`,
+  quan hệ `one_to_one`, `MIN`, `MAX`, `COUNT(DISTINCT ...)`.
+- Không chắc thì không bắt: cột không ghi bảng mà có ở hai bảng, hay `FROM` có bảng tạm hoặc câu con; bí danh lạ; hàm
+  khác; quan hệ của một bảng với chính nó.
+
+Bị bắt thì câu không chạy; bước `guard` ghi lý do bằng tiếng Việt, và mô hình nhận gợi ý (tiếng Anh) trong vòng sửa
+duy nhất: gộp bảng C trong câu con hay `WITH` theo khóa nối trước, hoặc giữ một dòng cho mỗi dòng P (`SELECT DISTINCT`
+theo khóa của P) rồi mới cộng, hoặc bỏ phép nối nếu câu hỏi không cần C. Câu sửa vẫn cộng lặp thì câu hỏi trả
+`rejected` với lời nói rõ cột của bảng nào bị tính lặp. Câu hỏi một bảng không có quan hệ nào nên không bị ảnh hưởng.
+
+Hạn chế:
+
+- Không lần theo `WITH` hay bảng con: SUM trên một bảng tạm đã nối mà chưa gộp thì không bị bắt. SELECT nằm trong `WITH`
+  vẫn được xét với `FROM` của chính nó.
+- Không xét `ON` có nối đúng theo quan hệ, và không xét `GROUP BY`: nhóm theo khóa của C thì SUM cột P không còn lặp
+  nhưng vẫn bị bắt.
+- `COUNT(*)` sau khi nối cũng đếm lặp, chưa xét.
+
 ## Các ca đã có test
 
 Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu, và kiểm lý do từ chối có nêu đúng tên ở các ca cần.
