@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/ask_related_tests.rs - hỏi trên dataset chụp từ database cùng các bảng liên quan (#213), qua route thật, trên
 Postgres thật: chụp schema shop của api/source_relations_tests.rs (mỗi bảng một dataset, kèm quan hệ), rồi mô hình giả
-trả câu SQL có JOIN. Kiểm bảng đã đọc trong response và queries.read_versions, bộ lọc dòng trên từng bảng, luật tạm thời
-bỏ bảng trỏ tới bảng bị lọc, câu "truy dòng nguồn" từ chối câu nhiều bảng. Không có DATABASE_URL thì bỏ qua. */
+trả câu SQL có JOIN. Kiểm bảng đã đọc trong response và queries.read_versions, bộ lọc dòng trên từng bảng, câu "truy
+dòng nguồn" từ chối câu nhiều bảng. Bộ lọc lan theo khóa ngoại (#215) ở api/row_filter_fk_tests.rs. Không có
+DATABASE_URL thì bỏ qua. */
 
 use axum::http::StatusCode;
 use serde_json::{json, Value};
@@ -14,7 +15,7 @@ use crate::api::test_support::call;
 use crate::engine::store::test_support::{exec, fetch_count};
 
 /// Hỏi một câu trên dataset, bằng phiên của session.
-async fn ask(s: &Setup, session: &str, dataset: &str, question: &str) -> Value {
+pub(super) async fn ask(s: &Setup, session: &str, dataset: &str, question: &str) -> Value {
     let body = json!({"question": question, "choices": []});
     let url = format!("{SHOP}/datasets/{dataset}/ask");
     let (status, _, answer) = call(&s.app, "POST", &url, Some(session), Some(body)).await;
@@ -23,7 +24,7 @@ async fn ask(s: &Setup, session: &str, dataset: &str, question: &str) -> Value {
 }
 
 /// Tên bảng logic trong AskResponse.tables_read.
-fn tables_read(answer: &Value) -> Vec<&str> {
+pub(super) fn tables_read(answer: &Value) -> Vec<&str> {
     answer["tables_read"]
         .as_array()
         .unwrap()
@@ -33,7 +34,7 @@ fn tables_read(answer: &Value) -> Vec<&str> {
 }
 
 /// Minh có vai dữ liệu north; mỗi cặp (dataset, cột, giá trị) là một chính sách của vai đó.
-async fn give_north_role(s: &Setup, policies: &[(&str, &str, &str)]) {
+pub(super) async fn give_north_role(s: &Setup, policies: &[(&str, &str, &str)]) {
     exec(
         &s.db.store,
         "UPDATE memberships SET data_role = 'north' WHERE user_id = (SELECT id FROM users WHERE email = 'minh@example.com')",
@@ -117,58 +118,5 @@ async fn join_question_reads_related_tables_with_their_row_filters() {
         guarded.contains("\"region_code\" IN ('N')") && guarded.contains("\"code\" IN ('N')"),
         "{guarded}"
     );
-    s.finish().await;
-}
-
-/// Minh bị lọc theo customers.region_code: orders trỏ tới customers mà không có cột vùng, nên không vào nhóm khi Minh
-/// hỏi trên customers hay order_items; câu cần orders bị từ chối và lời báo nói rõ lý do. products không dính tới
-/// customers nên vẫn nối được. Admin vẫn đọc được orders.
-#[tokio::test]
-async fn member_filtered_on_customers_cannot_reach_orders() {
-    let orders_by_status = "SELECT o.status, COUNT(*) AS orders FROM orders o GROUP BY o.status";
-    let replies = [
-        sql_reply(orders_by_status),
-        sql_reply(orders_by_status),
-        sql_reply(
-            "SELECT p.title, SUM(oi.qty) AS qty FROM order_items oi JOIN products p \
-             ON oi.maker = p.maker AND oi.sku = p.sku GROUP BY p.title ORDER BY p.title",
-        ),
-        sql_reply(orders_by_status),
-    ];
-    let Some(s) = start(Some(KEY), &replies).await else {
-        return;
-    };
-    let id = add_source(&s).await;
-    let body = json!({"table": "shop.order_items",
-                      "tables": ["shop.orders", "shop.customers", "shop.products"]});
-    let (status, result) = snapshot(&s, &id, body).await;
-    assert_eq!(status, StatusCode::CREATED, "{result}");
-    let customers = dataset_id(&result, "customers");
-    let items = dataset_id(&result, "order_items");
-    give_north_role(&s, &[(&customers, "region_code", "N")]).await;
-
-    // Câu đọc orders, cả câu sửa: guard không biết bảng orders, câu bị từ chối kèm lý do vai dữ liệu.
-    let answer = ask(&s, &s.minh, &customers, "Số đơn theo trạng thái").await;
-    assert_eq!(answer["status"], "rejected", "{answer}");
-    let message = answer["message"].as_str().unwrap();
-    assert!(
-        message.contains("giới hạn dữ liệu theo vai") && message.contains("orders"),
-        "{message}"
-    );
-
-    // Hỏi trên order_items: products vẫn nối được.
-    let answer = ask(&s, &s.minh, &items, "Số lượng theo sản phẩm").await;
-    assert_eq!(answer["status"], "answered", "{answer}");
-    assert_eq!(tables_read(&answer), ["order_items", "products"]);
-    assert_eq!(
-        answer["result"]["rows"],
-        json!([["Book", "4"], ["Lamp", "2"], ["Pen", "5"]]),
-        "{answer}"
-    );
-
-    // Admin không bị lọc nên có cả orders.
-    let answer = ask(&s, &s.lan, &customers, "Số đơn theo trạng thái").await;
-    assert_eq!(answer["status"], "answered", "{answer}");
-    assert_eq!(tables_read(&answer), ["orders"]);
     s.finish().await;
 }

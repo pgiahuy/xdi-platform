@@ -23,7 +23,7 @@ fn guarded(sql: &str, row_filters: Vec<RowFilter>) -> String {
 }
 
 fn south_only() -> Vec<RowFilter> {
-    vec![RowFilter {
+    vec![RowFilter::Column {
         column: "region".to_string(),
         allowed_values: vec!["South".to_string()],
     }]

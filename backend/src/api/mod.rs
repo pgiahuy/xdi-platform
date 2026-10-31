@@ -44,6 +44,8 @@ mod profile_tests;
 mod query;
 #[cfg(test)]
 mod roles_tests;
+#[cfg(test)]
+mod row_filter_fk_tests;
 mod security_headers;
 #[cfg(test)]
 mod source_relations_tests;

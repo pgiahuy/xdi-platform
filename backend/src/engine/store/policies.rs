@@ -66,7 +66,7 @@ impl Store {
         .map_err(|e| db_error("list row filters", e))?;
         Ok(rows
             .into_iter()
-            .map(|(column, allowed_values)| RowFilter {
+            .map(|(column, allowed_values)| RowFilter::Column {
                 column,
                 allowed_values,
             })

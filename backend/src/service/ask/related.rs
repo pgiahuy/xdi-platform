@@ -6,11 +6,8 @@ ngữ cảnh: mỗi bảng thành một AllowedTable của guard với bộ lọ
 của các bảng liên quan cho prompt SQL. Dataset nạp từ file
 không có quan hệ nào, nên nhóm chỉ có một bảng và prompt như trước.
 
-Luật lọc dòng tạm thời, bỏ khi bộ lọc lan theo khóa ngoại (#215): người hỏi có bộ lọc dòng trên một bảng của nhóm thì
-không nhận các bảng trỏ tới bảng bị lọc, trực tiếp hay qua bảng khác của nhóm, theo chiều nhiều-một. Lý do: bộ lọc chỉ
-gắn với bảng có cột lọc; customers lọc theo vùng mà orders không có cột vùng, nên câu đọc orders sẽ thấy đơn của mọi
-vùng. Bảng đang chọn luôn giữ: người hỏi đã đọc được nó khi hỏi riêng. Bảng không trỏ tới bảng bị lọc (products) vẫn
-nối được. Tên các bảng bị bỏ nằm trong TableGroup::left_out để câu trả lời nói rõ lý do. */
+Người bị lọc dòng nhận đủ các bảng như mọi người: bảng trỏ tới bảng bị lọc mang điều kiện lan theo khóa ngoại
+(ask/row_filters.rs, #215), nên đọc orders một mình hay JOIN với customers đều chỉ thấy đơn của khách được thấy. */
 
 use std::collections::HashSet;
 
@@ -46,8 +43,6 @@ pub struct TableGroup {
     pub allowed: Vec<AllowedTable>,
     /// Quan hệ có cả hai đầu trong nhóm.
     pub relations: Vec<DatasetRelation>,
-    /// Tên dataset liên quan bị bỏ vì luật lọc dòng ở đầu file; rỗng với admin và người không bị lọc.
-    pub left_out: Vec<String>,
 }
 
 /// Nhóm bảng của câu hỏi. picked là AllowedTable của dataset đang chọn (ask/mod.rs đã dựng).
@@ -68,7 +63,6 @@ pub async fn load_group(
         }],
         allowed: vec![picked_table],
         relations: Vec::new(),
-        left_out: Vec::new(),
     };
     // Đọc các bảng ứng viên; bảng chưa có phiên bản, chưa lập hồ sơ xong hay không có file Parquet thì bỏ.
     let candidates = build_group_ids(dataset.id, &relations, |_| true);
@@ -78,28 +72,13 @@ pub async fn load_group(
             loaded.push(found);
         }
     }
+    // Tính lại sau khi bỏ bảng không dùng được: bảng chỉ nối được qua bảng đó không viết JOIN tới được.
     let usable: HashSet<Uuid> = loaded.iter().map(|(t, _)| t.dataset.id).collect();
-    let reachable = build_group_ids(dataset.id, &relations, |id| usable.contains(&id));
-    let mut filtered: HashSet<Uuid> = loaded
-        .iter()
-        .filter(|(_, allowed)| !allowed.row_filters.is_empty())
-        .map(|(t, _)| t.dataset.id)
-        .collect();
-    if !group.allowed[0].row_filters.is_empty() {
-        filtered.insert(dataset.id);
-    }
-    let blocked = build_blocked_ids(dataset.id, &reachable, &relations, &filtered);
-    // Tính lại sau khi bỏ bảng bị chặn: bảng chỉ nối được qua bảng bị chặn cũng không viết JOIN tới được.
-    let kept = build_group_ids(dataset.id, &relations, |id| {
-        usable.contains(&id) && !blocked.contains(&id)
-    });
+    let kept = build_group_ids(dataset.id, &relations, |id| usable.contains(&id));
     for (table, allowed) in loaded {
-        let id = table.dataset.id;
-        if kept.contains(&id) {
+        if kept.contains(&table.dataset.id) {
             group.tables.push(table);
             group.allowed.push(allowed);
-        } else if blocked.contains(&id) {
-            group.left_out.push(table.dataset.name);
         }
     }
     group.relations = relations
@@ -173,45 +152,6 @@ pub fn build_group_ids(
     group
 }
 
-/// Dataset của group (trừ picked) trỏ tới một dataset của filtered theo chiều from -> to (nhiều-một), trực tiếp hay qua
-/// dataset khác của group. Rỗng khi filtered rỗng.
-pub fn build_blocked_ids(
-    picked: Uuid,
-    group: &[Uuid],
-    relations: &[DatasetRelation],
-    filtered: &HashSet<Uuid>,
-) -> HashSet<Uuid> {
-    group
-        .iter()
-        .copied()
-        .filter(|&id| id != picked && reaches_filtered(id, group, relations, filtered))
-        .collect()
-}
-
-fn reaches_filtered(
-    start: Uuid,
-    group: &[Uuid],
-    relations: &[DatasetRelation],
-    filtered: &HashSet<Uuid>,
-) -> bool {
-    let mut seen = vec![start];
-    let mut stack = vec![start];
-    while let Some(id) = stack.pop() {
-        for r in relations.iter().filter(|r| r.from_dataset_id == id) {
-            let to = r.to_dataset_id;
-            if !group.contains(&to) || seen.contains(&to) {
-                continue;
-            }
-            if filtered.contains(&to) {
-                return true;
-            }
-            seen.push(to);
-            stack.push(to);
-        }
-    }
-    false
-}
-
 impl TableGroup {
     /// Cột khóa của dataset id trong các quan hệ của nhóm.
     pub fn join_keys(&self, id: Uuid) -> Vec<String> {
@@ -265,15 +205,4 @@ impl TableGroup {
             .find(|t| t.dataset.id == id)
             .map(|t| t.dataset.logical_table.as_str())
     }
-}
-
-/// Câu thêm vào lời báo khi câu hỏi không được trả lời mà có bảng bị bỏ vì luật lọc dòng.
-pub fn build_left_out_note(left_out: &[String]) -> Option<String> {
-    if left_out.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "Tài khoản của bạn bị giới hạn dữ liệu theo vai nên một số bảng liên quan không dùng được khi hỏi: {}.",
-        left_out.join(", ")
-    ))
 }

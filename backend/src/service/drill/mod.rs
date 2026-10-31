@@ -24,10 +24,13 @@ use serde::Deserialize;
 use tokio::sync::Semaphore;
 
 use crate::auth::Member;
-use crate::engine::guard::{build_guarded_sql, AllowedTable, GuardError, GuardedSql};
+use crate::engine::guard::{
+    build_guarded_sql, build_parent_tables, AllowedTable, GuardError, GuardedSql,
+};
 use crate::engine::query::{QueryError, QueryOutput};
 use crate::engine::store::QueryStatus;
-use crate::service::ask::load_row_filters;
+use crate::service::ask::build_allowed_table;
+use crate::service::ask::related::load_group;
 use crate::service::ask::repair::build_safe_error;
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::run::{build_duration_text, run_query_in_turn};
@@ -89,17 +92,16 @@ pub async fn drill(
         .get_version(ws, dataset_id, version_id)
         .await?
         .ok_or_else(version_gone)?;
-    // Phiên bản nạp từ file luôn có đường dẫn; nguồn database (sau này) thì không.
-    let relative = version
-        .parquet_path
-        .ok_or_else(|| AppError::Internal("version has no parquet path".to_string()))?;
+    // Cùng đường dựng bảng với luồng hỏi (ask/related.rs), trên phiên bản câu hỏi đã dùng: hộp lọc trong câu đã lưu có
+    // thể nhắc tới bảng khác (điều kiện lan theo khóa ngoại của người đã hỏi, #215), nên các bảng liên quan và bảng cha
+    // của điều kiện phải có trong danh sách, mỗi bảng với bộ lọc của người đang bấm. Câu ngoài cùng vẫn chỉ được đọc một
+    // bảng (drill/sql.rs).
     let columns = state.store.list_columns(ws, version_id).await?;
-    let tables = [AllowedTable {
-        name: dataset.logical_table,
-        columns: columns.into_iter().map(|c| c.name).collect(),
-        parquet_dir: state.config.data_dir.join(relative),
-        row_filters: load_row_filters(state, member, dataset_id).await?,
-    }];
+    let picked = build_allowed_table(state, member, &dataset, &version, &columns).await?;
+    let group = load_group(state, member, (&dataset, &version, &columns), picked).await?;
+    let mut tables = group.allowed;
+    let parents = build_parent_tables(&tables);
+    tables.extend(parents);
     let input = DrillInput {
         sql_guarded: &sql,
         keys: &keys,

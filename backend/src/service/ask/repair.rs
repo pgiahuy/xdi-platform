@@ -4,7 +4,7 @@ người dùng khi mô hình lỗi. ask/run.rs ghép các bước và gọi các
 ask/reply.rs như lần đầu. */
 
 use crate::engine::analytics::parquet_glob;
-use crate::engine::guard::AllowedTable;
+use crate::engine::guard::{build_parent_tables, AllowedTable};
 use crate::engine::prompts::{self, fill};
 use crate::error::AppError;
 
@@ -26,12 +26,14 @@ pub fn build_repair_prompt(prompt: &str, sql: Option<&str>, error: &str) -> Stri
 
 /// Lời báo của DuckDB không lộ đường dẫn trên máy chủ: bỏ phần "LINE n:" DuckDB chép lại cả câu đã chạy (bản runnable,
 /// có read_parquet), rồi thay mọi đường dẫn thư mục Parquet còn lại bằng tên bảng logic. Phần còn lại giữ nguyên, kể cả
-/// dòng thứ hai trở đi (DuckDB ghi tên cột gần đúng, vị trí lỗi trong chuỗi ngày ở đó): mô hình cần để sửa đúng.
+/// dòng thứ hai trở đi (DuckDB ghi tên cột gần đúng, vị trí lỗi trong chuỗi ngày ở đó): mô hình cần để sửa đúng. Bảng
+/// cha của điều kiện lan theo khóa ngoại (#215) cũng được đọc trong bản runnable, nên đường dẫn của chúng cũng bị thay.
 // Lời báo có thể chép một giá trị của dòng dữ liệu ("Could not convert string 'x' to INT32"). Khi #31 tiêm điều kiện
 // phân quyền, cần thêm test: câu chạy lỗi không đưa vào lời báo giá trị của dòng mà người hỏi không được thấy.
 pub fn build_safe_error(message: &str, tables: &[AllowedTable]) -> String {
     let mut text = without_sql_echo(message).to_string();
-    for table in tables {
+    let parents = build_parent_tables(tables);
+    for table in tables.iter().chain(&parents) {
         if let Ok(source) = parquet_glob(&table.parquet_dir) {
             text = text.replace(&source, &table.name);
         }
@@ -48,7 +50,8 @@ pub fn build_safe_error(message: &str, tables: &[AllowedTable]) -> String {
 /// lại câu đã bị bỏ trước khi so).
 pub(crate) fn mentions_data_files(message: &str, tables: &[AllowedTable]) -> bool {
     let text = without_sql_echo(message);
-    tables.iter().any(|table| {
+    let parents = build_parent_tables(tables);
+    tables.iter().chain(&parents).any(|table| {
         table
             .parquet_dir
             .to_str()

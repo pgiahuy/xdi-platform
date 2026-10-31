@@ -82,7 +82,7 @@ fn tables_with_policies(dir: &Path) -> Vec<AllowedTable> {
                 "customer_id".to_string(),
             ],
             parquet_dir: dir.join("sales"),
-            row_filters: vec![RowFilter {
+            row_filters: vec![RowFilter::Column {
                 column: "region".to_string(),
                 allowed_values: vec!["South".to_string(), "East".to_string()],
             }],
@@ -91,7 +91,7 @@ fn tables_with_policies(dir: &Path) -> Vec<AllowedTable> {
             name: "customers".to_string(),
             columns: vec!["customer_id".to_string(), "segment".to_string()],
             parquet_dir: dir.join("customers"),
-            row_filters: vec![RowFilter {
+            row_filters: vec![RowFilter::Column {
                 column: "segment".to_string(),
                 allowed_values: vec!["Retail".to_string()],
             }],

@@ -11,17 +11,19 @@ Trạng thái: guard đã có và có test. Endpoint hỏi dữ liệu ([#33](ht
 `service/ask/mod.rs`) gọi guard với một bảng là dataset đang hỏi và đủ mọi cột của phiên bản đang dùng: câu thường qua
 `service/ask/run.rs`, các câu SQL của câu "tại sao" qua `service/explain/breakdown.rs`. Truy dòng nguồn
 (`service/drill/mod.rs`), dataset mẫu (`service/samples.rs`) và `make eval` (`service/eval.rs`) cũng chạy SQL qua guard.
-Endpoint hỏi, cả câu thường và câu "tại sao", và truy dòng nguồn đọc chính sách lọc dòng theo `data_role` của người
-hỏi hay người bấm (`load_row_filters` trong `service/ask/mod.rs`, đọc `engine/store/policies.rs`; admin không bị lọc)
-và truyền vào guard ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Store đã có hàm gán `data_role` cho
-thành viên và thay `rls_policies` của một dataset (`set_data_role`, `replace_row_policies`), nhưng chưa có API hay màn
-nào gọi, nên ngoài test `row_filters` hiện luôn rỗng.
+Endpoint hỏi, cả câu thường và câu "tại sao", truy dòng nguồn và tổng quan dataset đọc chính sách lọc dòng theo
+`data_role` của người hỏi, người bấm hay người xem (`load_row_filters` trong `service/ask/row_filters.rs`, đọc
+`engine/store/policies.rs` và `dataset_relations`; admin không bị lọc) và truyền vào guard
+([#45](https://github.com/pgiahuy/xdi-platform/issues/45)), kèm điều kiện lan theo khóa ngoại
+([#215](https://github.com/pgiahuy/xdi-platform/issues/215), mục Bước 3). Store đã có hàm gán `data_role` cho thành
+viên và thay `rls_policies` của một dataset (`set_data_role`, `replace_row_policies`), nhưng chưa có API hay màn nào
+gọi (#45), nên ngoài test `row_filters` hiện luôn rỗng.
 
 ## Đầu vào và đầu ra
 
 | | Nội dung |
 |---|---|
-| Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản, chính sách lọc dòng `row_filters`); `max_rows` |
+| Vào | Câu SQL; danh sách bảng được phép (`AllowedTable`: tên bảng logic, tên các cột, thư mục Parquet của phiên bản, điều kiện lọc dòng `row_filters`); `max_rows` |
 | Ra khi nhận | `GuardedSql` gồm hai bản của cùng một câu: `shown` và `runnable` (mục Bước 5), ghi chú `limit_note`, và `row_filters` là các điều kiện lọc dòng guard đã thêm (mục Bước 3) |
 | Ra khi từ chối | `GuardError` kèm lý do tiếng Việt chỉ đúng chỗ sai: `UnknownName` khi bảng, bí danh hay cột không có (ví dụ "Không có bảng orders. Các bảng dùng được: sales, customers"), `Oversized` khi câu có thể dựng giá trị quá lớn (luật kích thước, số tầng, mảnh ghép, độ rộng, gọi hàm dạng phương thức ở bước 2), `Rejected` cho mọi lý do khác; `Internal` khi máy chủ lỗi lúc dựng bản chạy hay chính sách lọc dòng sai (mục Bước 3) |
 
@@ -183,10 +185,14 @@ Tên ba phần trở lên (`main.sales.region`) bị từ chối.
 
 ## Bước 3: lọc dòng theo vai dữ liệu
 
-Mỗi `AllowedTable` mang `row_filters`: các `RowFilter { column, allowed_values }` service lấy từ `rls_policies` theo
-`data_role` của người gọi (luồng hỏi và truy dòng nguồn,
-[#45](https://github.com/pgiahuy/xdi-platform/issues/45)). Rỗng thì bảng đó không lọc.
-Guard không tự đọc chính sách và không quyết ai được thấy hết.
+Mỗi `AllowedTable` mang `row_filters`, có hai loại, service dựng (`service/ask/row_filters.rs`):
+
+- `RowFilter::Column { column, allowed_values }`: một dòng của `rls_policies` theo `data_role` của người gọi
+  ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)).
+- `RowFilter::Parent { columns, parent_columns, parent }`: điều kiện lan theo khóa ngoại
+  ([#215](https://github.com/pgiahuy/xdi-platform/issues/215)), mục bên dưới.
+
+Rỗng thì bảng đó không lọc. Guard không tự đọc chính sách và không quyết ai được thấy hết.
 
 Guard thay mỗi chỗ đọc bảng có chính sách bằng một câu con chỉ chứa dòng được phép, giữ bí danh của câu. Ví dụ chính
 sách `region` chỉ `South` (dòng `runnable` lấy từ test):
@@ -224,6 +230,54 @@ row_filters:  "region" IN ('South')
 - `GuardedSql.row_filters` liệt kê điều kiện đã thêm, in đúng như trong `shown`, mỗi điều kiện một lần, để thẻ "Hệ thống
   đã hiểu là" ([#35](https://github.com/pgiahuy/xdi-platform/issues/35)) gắn nhãn điều kiện do phân quyền. Không có
   chính sách thì danh sách rỗng, `shown` và `runnable` như khi chưa có bước này.
+
+### Điều kiện lan theo khóa ngoại
+
+Chính sách chỉ gắn với bảng có cột lọc. Người bị lọc theo `customers.region` mà đọc `orders` (không có cột vùng nên
+không có chính sách) sẽ thấy đơn của mọi vùng. Vì vậy với mỗi quan hệ trong `dataset_relations` (`orders.customer_id`
+trỏ tới `customers.id`) mà bảng được trỏ tới có điều kiện với người hỏi, service thêm cho bảng trỏ đi một
+`RowFilter::Parent`, và guard in thành (ví dụ lấy từ test):
+
+```
+Câu vào:      SELECT COUNT(*) AS n FROM orders
+shown:        SELECT COUNT(*) AS n FROM (SELECT * FROM orders WHERE "customer_id" IN (SELECT "id" FROM "customers" WHERE "region" IN ('South'))) AS orders LIMIT 100
+row_filters:  "customer_id" IN (SELECT "id" FROM "customers" WHERE "region" IN ('South'))
+```
+
+- Điều kiện do code dựng từ quan hệ đã ghi lúc chụp, không do mô hình viết. Nó nằm trong hộp lọc như chính sách thường,
+  nên có hiệu lực cả khi câu chỉ đọc `orders` (chọn thẳng `orders` để hỏi, tổng quan của `orders`, truy dòng nguồn).
+- Nửa nối (`IN` câu con) chứ không `JOIN` bảng cha vào hộp: `JOIN` nhân dòng khi khóa bên cha lặp và thêm cột lạ vào
+  `SELECT *` của hộp; `IN` chỉ giữ hay bỏ từng dòng.
+- Câu con trên bảng cha mang chính điều kiện của bảng cha, nên lan nhiều bước: đường `order_id` của `order_items` có
+  `"order_id" IN (SELECT "id" FROM "orders" WHERE "customer_id" IN (SELECT "id" FROM "customers" WHERE ...))`. Service
+  đi hết các quan hệ theo chiều khóa ngoại, không dừng ở 2 bước như nhóm bảng của câu hỏi.
+- Khóa nhiều cột: `("maker", "sku") IN (SELECT "maker", "sku" FROM "products" WHERE ...)`. DuckDB so `IN` nhiều cột
+  theo luật chuẩn: một ô khóa ngoại rỗng thì không khớp.
+- Khóa ngoại rỗng (NULL), một đường: dòng bị ẩn (`IN` không khớp NULL). Dòng không nối với dòng nào được thấy của
+  bảng cha thì không có lý do để thấy.
+- Bảng có nhiều đường tới bảng bị lọc (`order_items.order_id` qua `orders`, và `order_items.gift_customer_id`): mỗi đường
+  thành `("fk" IS NULL OR "fk" IN (SELECT ...))`, các đường nối `AND`, cộng điều kiện ít nhất một khóa ngoại không rỗng
+  (`("order_id" IS NOT NULL OR "gift_customer_id" IS NOT NULL)`). Lý do: khóa ngoại tùy chọn như khách nhận quà thường
+  rỗng; ẩn dòng vì nó rỗng thì người bị lọc không thấy cả dòng hàng của đơn trong vùng mình. Khóa rỗng nghĩa là đường đó
+  không nối tới đâu nên không cần qua; khóa trỏ tới dòng ngoài phần được thấy thì dòng bị ẩn; mọi đường đều rỗng thì dòng
+  không nối với phần được thấy nào nên vẫn ẩn. Khóa nhiều cột chỉ tính là rỗng khi mọi cột đều rỗng; rỗng một phần thì
+  không khớp `IN` và dòng bị ẩn. Một đường là ca riêng của luật này, nên viết gọn `"fk" IN (...)`.
+- Bảng có chính sách riêng giữ chính sách đó (luật NULL của chính sách không đổi) và cộng thêm điều kiện lan xuống
+  (`AND`). Quan hệ một-một lan như nhiều-một: điều kiện đi theo chiều khóa ngoại.
+- Vòng quan hệ (bảng trỏ vào chính nó, hay A trỏ B trỏ A) dừng ở bảng đã có trên đường đang đi; bảng trỏ vào chính nó
+  không nhận điều kiện lan từ chính nó. Bảng cha bị lọc mà chưa đọc được (chưa có phiên bản) thì bảng con thành
+  `WHERE false`.
+- Bảng cha đọc từ file Parquet của phiên bản đang dùng (bước 5 đổi nó như mọi bảng), kể cả khi mô hình không được đọc
+  bảng đó: bước 2 vẫn từ chối câu đọc thẳng bảng cha không có trong danh sách, và từ chối bảng tạm trùng tên bảng cha
+  (nhận thì bước 5 đổi `FROM customers` của câu sang file của `customers`, không qua hộp lọc nào).
+- Cột khóa phải có trong hồ sơ của cả hai bảng, số cột hai bên bằng nhau; sai thì `GuardError::Internal`, cùng lý do
+  với cột của chính sách. Tên cột trong câu con không kèm tên bảng: chúng là cột của bảng cha nên DuckDB gắn với bảng
+  gần nhất.
+- Hiệu năng: đo trên dữ liệu tổng hợp cỡ schema `sales` của database mẫu (20 652 khách, 65 752 đơn, 180 519 dòng hàng),
+  câu `SELECT COUNT(*), SUM(qty) FROM order_items` với điều kiện lan hai bước tới `customers` (một vùng trong năm) mất
+  khoảng 7 ms, câu không lọc khoảng 0,7 ms (trung vị của 7 lần chạy, bản build release, kết nối DuckDB trong bộ nhớ mặc
+  định, file Parquet trên đĩa máy 16 nhân, 30/10/2026; test tạm, không giữ trong repo). Chưa đo trên dữ liệu thật hay
+  câu nhiều bảng.
 
 ## Bước 4: giới hạn số dòng
 
@@ -310,7 +364,7 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
 | Số tầng, mảnh, độ rộng | 4 tầng nhận, 5 tầng từ chối ở mọi chỗ (`FROM`, `WHERE`, cột, `WITH`, bảng tạm đọc bảng tạm); bảng tạm cùng tên trong `WITH` lồng không che số tầng; bảng tạm kèm câu con kiểu mô hình hay viết vẫn qua; 20 mảnh nhận, 21 từ chối (`||`, `concat`, `concat_ws`, cộng qua các tầng, danh sách và struct viết thẳng, bí danh dùng lại); tuple, mảng trong `IN`, `ANY`, `ALL` không tính; gọi hàm dạng phương thức bị từ chối; chuỗi hằng 1000 byte nhận, 1001 từ chối (tính theo byte, ở `IN`, đối số hàm); 200 cột nhận, 201 từ chối; `*` trên nhiều nguồn tính theo số cột thật, từ chối khi có bảng tạm; 6 nguồn trong `FROM` nhận, 7 từ chối; guard báo đúng các bảng câu đọc (`tables_read`); 10 nhánh `UNION`, `INTERSECT`, `EXCEPT` nhận, 11 từ chối, cộng qua các tầng; câu mẫu của mock và của `service/ask/examples.rs` vẫn qua (`service/ask/run_tests.rs`) |
 | Câu mẫu (`sample_tests.rs`) | 32 câu phân tích dạng mô hình hay viết, 25 qua; 7 bị từ chối có chủ ý: 3 câu 5 tầng (vào vòng sửa), bảng tạm 4 tầng không ai dùng, `strftime` đảo thứ tự tham số, hàm `list_contains` ngoài danh sách, nhãn 1200 byte. 18 câu tìm cách lách (B01 tới B16, kể cả B01b, B05b): các câu nhân giá trị bị chặn, các câu vô hại qua |
 | Cột | Cột không có (cả dạng `s.profit`); chữ Unicode giống chữ Latin; bí danh bảng không có; tên ba phần |
-| Lọc dòng | Các dạng câu so nguyên `shown`: một bảng, `WHERE`, `WHERE a OR b`, `GROUP BY` và `HAVING`, `JOIN` hai bảng chỉ một bảng có lọc, tự `JOIN`, `LEFT JOIN` chính bảng, `FROM a, b`, câu con ở `FROM` và `WHERE`, `IN`, `EXISTS`, `UNION ALL`, `WITH`, bảng tạm đọc bảng tạm, `LATERAL`; giữ bí danh, lọc theo bảng không theo bí danh, tên viết hoa; nhiều chính sách nối `AND`, danh sách rỗng, giá trị có dấu nháy, cột có khoảng trắng; hai bảng cùng có lọc và `row_filters`; không có chính sách thì `shown` như cũ; cột chính sách không có trong bảng; bước 3 tự chặn chỗ đọc không nhận ra; 17 câu lách (đọc file, bảng hệ thống, tên kèm schema, chữ Unicode giống chữ Latin, bảng tạm trùng tên bảng dữ liệu). Trên DuckDB thật: 15 câu cố lấy dòng ngoài phạm vi không lấy được; 90 câu (30 dạng câu nhân 3 cách viết tên bảng, cả hai bảng có lọc) qua guard ra đúng kết quả như khi chạy trên bảng chỉ còn dòng được phép (`row_filter_tests.rs`) |
+| Lọc dòng | Các dạng câu so nguyên `shown`: một bảng, `WHERE`, `WHERE a OR b`, `GROUP BY` và `HAVING`, `JOIN` hai bảng chỉ một bảng có lọc, tự `JOIN`, `LEFT JOIN` chính bảng, `FROM a, b`, câu con ở `FROM` và `WHERE`, `IN`, `EXISTS`, `UNION ALL`, `WITH`, bảng tạm đọc bảng tạm, `LATERAL`; giữ bí danh, lọc theo bảng không theo bí danh, tên viết hoa; nhiều chính sách nối `AND`, danh sách rỗng, giá trị có dấu nháy, cột có khoảng trắng; hai bảng cùng có lọc và `row_filters`; không có chính sách thì `shown` như cũ; cột chính sách không có trong bảng; bước 3 tự chặn chỗ đọc không nhận ra; 17 câu lách (đọc file, bảng hệ thống, tên kèm schema, chữ Unicode giống chữ Latin, bảng tạm trùng tên bảng dữ liệu). Trên DuckDB thật: 15 câu cố lấy dòng ngoài phạm vi không lấy được; 90 câu (30 dạng câu nhân 3 cách viết tên bảng, cả hai bảng có lọc) qua guard ra đúng kết quả như khi chạy trên bảng chỉ còn dòng được phép (`row_filter_tests.rs`). Điều kiện lan theo khóa ngoại (`parent_filter_tests.rs`): so `shown` với khóa một cột, khóa hai cột, lan hai bước, nhiều đường, chính sách riêng cộng điều kiện lan, bảng cha không có điều kiện; luật NULL theo từng dòng (khóa tùy chọn rỗng thấy, trỏ ra ngoài thì ẩn, mọi đường rỗng thì ẩn, khóa hai cột rỗng một phần thì ẩn); bảng tạm trùng tên bảng cha bị từ chối, đọc thẳng bảng cha không có trong danh sách bị từ chối; cột khóa không có trong hồ sơ; trên DuckDB thật 20 câu (10 dạng câu nhân 2 bộ chính sách) ra đúng kết quả như khi chạy trên bảng chỉ còn dòng được phép |
 | Số dòng | Thêm `LIMIT` (cả khi chỉ có `OFFSET`); hạ `LIMIT 5000`; giữ `LIMIT 10 OFFSET 5`; đọc số có gạch dưới (`LIMIT 1_0` giữ, `LIMIT 1_000` hạ); thay `LIMIT (SELECT 5000)`; giới hạn cả `UNION`; từ chối `FETCH FIRST`; ghi chú `limit_note` ("Thêm LIMIT 100", "Hạ LIMIT xuống 100") |
 | Bản chạy | Bảng logic thành `read_parquet` và giữ tên làm bí danh; giữ bí danh có sẵn; đổi tên bảng tạm; bảng tạm tên giống file không còn trong bản chạy; `shown` không chứa đường dẫn; một câu có `WITH` và `JOIN` chạy trên DuckDB thật với file Parquet và ra đúng kết quả |
 
@@ -333,6 +387,11 @@ Test so nguyên chuỗi `shown` hoặc `runnable` ở phần lớn ca sửa câu
   (`engine/excel_worker.rs`). Refs [#119](https://github.com/pgiahuy/xdi-platform/issues/119).
 - `row_filters` rỗng là không lọc: guard không biết người hỏi có đáng bị lọc hay không. Service
   ([#45](https://github.com/pgiahuy/xdi-platform/issues/45)) phải luôn truyền đủ chính sách của người hỏi; quên truyền
-  thì người đó thấy mọi dòng. Luồng hỏi và truy dòng nguồn lấy chính sách qua cùng một hàm (`load_row_filters`).
+  thì người đó thấy mọi dòng. Luồng hỏi, truy dòng nguồn và tổng quan dataset lấy chính sách qua cùng một hàm
+  (`load_row_filters`).
+- Điều kiện lan theo khóa ngoại chỉ đi theo quan hệ đã ghi trong `dataset_relations` lúc chụp từ database. Dataset nạp
+  từ file không có quan hệ nên không nhận điều kiện lan, kể cả khi nó có cột trỏ tới một dataset bị lọc.
+- Mỗi người bị lọc đọc thêm bảng cha trong mỗi câu chạy trên bảng con. Số đo ở mục Bước 3 là một câu trên dữ liệu tổng
+  hợp, không phải số đo trên dữ liệu thật hay câu nhiều bảng.
 - Trong luồng hỏi, câu bị guard từ chối (sau vòng sửa) trả 200 với `status: rejected`
   ([Kiến trúc](ARCHITECTURE.md), mục 8), không trả lỗi 400.
