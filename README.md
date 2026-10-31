@@ -86,7 +86,8 @@ repo: [data/postgres-demo](data/postgres-demo/README.md).
 - **Chỉ số:** admin định nghĩa chỉ số của từng dataset (chọn phép tính và cột, hoặc viết SQL; chạy thử trước khi lưu)
   và đặt cột số đo nào lấy tổng, cột nào lấy trung bình; câu hỏi sau dùng đúng công thức đó.
 - **Minh chứng:** câu SQL trước và sau guard, bảng phân rã, các bước đã chạy, và dòng nguồn của ô số đo trong bảng kết
-  quả hay bảng phân rã (câu có CTE, HAVING, hàm cửa sổ hay nhiều bảng chưa truy được).
+  quả hay bảng phân rã, kể cả câu nối bảng, kèm tổng của độ đo trên các dòng đó để so với ô (câu có HAVING, hàm cửa
+  sổ hay bảng tạm gộp nhóm chưa truy được).
 - **Mô hình ngôn ngữ:** `mock`, Gemini, Ollama.
 - **Kiểm chất lượng:** `make eval` hỏi 14 câu mẫu trên file DataCo, và khi database mẫu đang chạy thì thêm 17 câu trên
   ảnh chụp của nó (10 câu bán hàng, 7 câu học tập, phần lớn nối bảng), so với SQL đúng viết tay; CI chạy phần DataCo và

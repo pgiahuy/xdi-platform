@@ -6,6 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
+- Bấm một số của câu nối bảng (như doanh thu theo phân khúc khách hàng trên `order_items`, `orders`, `customers`) cũng xem được dòng nguồn: dòng của bảng mà độ đo cộng kèm cột khóa và cột lọc của bảng nối, cả dòng phân rã theo cột của bảng liên quan; tab Dòng nguồn ghi dòng đến từ bảng nào và tổng của độ đo trên các dòng đó so với ô đã bấm. API drill thêm `source_table`, `joined_columns`, `measures`.
 - Tổng của một cột "mỗi đơn" (như `Benefit per order`) gọi là tổng ("Tổng lợi nhuận") ở thẻ, câu trả lời, bảng phân rã và tên cột kết quả; lời câu tìm nguyên nhân phải nói chênh lệch chủ yếu do số đơn khi số đơn hai bên chênh từ hai lần (#260).
 - Kết nối database thì mặc định chụp mọi bảng tài khoản đọc được, admin bỏ tick; không còn trần số bảng mà có trần dung lượng `SOURCE_SNAPSHOT_MAX_MB`; bảng quá trần chỉ lưu cột, kiểu, khóa, mô tả và câu hỏi cần nó được báo đúng tên bảng; chụp lại cả dataset bằng tay hay theo lịch `SOURCE_RESNAPSHOT_HOURS`. Màn kết nối liệt kê mọi bảng theo schema kèm số dòng, dung lượng, báo khi bỏ tick bảng danh mục; thẻ database ghi bảng "Chỉ có cấu trúc" kèm nút chụp riêng (#247).
 - Database mẫu tách thành hai database trong cùng container: `sales_demo` (DataCo) và `edu_demo` (OULAD); thiết lập lần đầu thêm mỗi database làm một nguồn, `SAMPLE_DATABASE_URL` nhận nhiều chuỗi cách nhau bằng dấu phẩy; màn xem nhanh chỉ đọc bằng Flask-Admin cho hai database (`data/postgres-demo`, profile `admin`) (#250, #259).
