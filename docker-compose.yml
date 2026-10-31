@@ -1,4 +1,5 @@
-# docker-compose.yml - hai dịch vụ: postgres, backend. Backend phục vụ cả API (/api) và giao diện, một cổng.
+# docker-compose.yml - ba dịch vụ: postgres (dữ liệu của ứng dụng), demo-db (database mẫu nhiều bảng, đóng vai database
+# của tổ chức), backend. Backend phục vụ cả API (/api) và giao diện, một cổng.
 # Mặc định chạy không cần khóa ngoài: LLM_PROVIDER=mock. Đổi trong .env.
 # Bản chạy thật đè thêm docker-compose.prod.yml (docs/INSTALL.md mục 3).
 
@@ -26,6 +27,37 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Database mẫu nhỏ "company_demo" (data/demo-db/README.md): schema sales (từ data/samples/dataco.csv) và edu (bản nhỏ
+  # của OULAD trong data/samples/oulad/), tách bảng có khóa ngoại như data/postgres-demo. Nạp một lần khi volume trống,
+  # bằng file init; không cần tải gì thêm. Thiết lập lần đầu kết nối vào đây bằng tài khoản chỉ đọc analyst và chụp
+  # bảng thành dataset (SAMPLE_DATABASE_URL của backend). Cùng image với postgres để bản cài mới chỉ tải một image.
+  demo-db:
+    image: pgvector/pgvector:pg17
+    # Cùng lý do như postgres ở trên.
+    init: true
+    environment:
+      # Mật khẩu mẫu của người dùng chủ, chỉ dùng trong file init. Ứng dụng dùng analyst (chỉ SELECT).
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:-demo}
+      POSTGRES_DB: company_demo
+    ports:
+      # Chỉ mở trên localhost, cho make dev và make eval chạy backend ngoài Docker. Backend trong compose nối qua mạng
+      # riêng (demo-db:5432).
+      - "127.0.0.1:${DEMO_DB_PORT:-5434}:5432"
+    volumes:
+      - demodata:/var/lib/postgresql/data
+      - ./data/postgres-demo/init/01_roles.sql:/docker-entrypoint-initdb.d/01_roles.sql:ro
+      - ./data/demo-db/init/02_load.sh:/docker-entrypoint-initdb.d/02_load.sh:ro
+      - ./data/postgres-demo/sql:/demo-sql:ro
+      - ./data/samples:/samples:ro
+    healthcheck:
+      # -h 127.0.0.1: hỏi qua TCP. Lúc chạy file init, image mở một máy chủ tạm chỉ nghe unix socket; không có -h thì
+      # pg_isready báo sẵn sàng trước khi nạp xong.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "demo", "-d", "company_demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   backend:
     build:
@@ -85,4 +117,5 @@ services:
 
 volumes:
   pgdata:
+  demodata:
   xdidata:

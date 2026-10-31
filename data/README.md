@@ -9,6 +9,9 @@ thêm một file JSON.
 |---|---|---|---|
 | `dataco.csv` (1500 dòng lấy ngẫu nhiên) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0 | Dataset mẫu nạp sẵn vào workspace đầu tiên, bộ đánh giá câu hỏi mẫu (`make eval`), thử nhanh với mock |
 | `dataco.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Chỉ số mẫu của dataset DataCo (bảng `metrics`) |
+| `oulad/` (7 file CSV: 22 học phần, 660 sinh viên lấy ngẫu nhiên 30 người mỗi học phần, điểm, lượt bấm gộp theo ngày) | Bản nhỏ của OULAD, UCI Machine Learning Repository, https://doi.org/10.24432/C5KK69, dựng bằng `data/demo-db/build_oulad_subset.py` | CC BY 4.0; Jakub Kuzilek, Martin Hlosta, Zdenek Zdrahal (2015). Đã biến đổi: lấy mẫu sinh viên, gộp `studentVle.csv` theo sinh viên và ngày | Schema `edu` của database mẫu nhỏ trong compose ([demo-db/README.md](demo-db/README.md)) |
+
+`dataco.csv` cũng là nguồn của schema `sales` trong database mẫu nhỏ đó.
 
 ## Dataset mẫu nạp sẵn
 
