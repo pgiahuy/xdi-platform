@@ -70,6 +70,9 @@ pub mod summary;
 #[cfg(test)]
 mod summary_tests;
 pub mod unanswerable;
+pub mod value_retry;
+#[cfg(test)]
+mod value_retry_tests;
 pub mod values;
 pub(crate) mod view;
 mod why;
@@ -81,7 +84,7 @@ use crate::auth::{Member, WorkspaceId};
 use crate::engine::guard::AllowedTable;
 use crate::engine::llm::{LlmRequest, LlmTask};
 use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, QueryStatus};
-use crate::service::ask::checks::{build_result_warnings, CheckedQuery};
+use crate::service::ask::checks::{build_result_warnings, find_missing_values, CheckedQuery};
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
 use crate::service::ask::context::{build_ask_context_with_keys, AskContext};
@@ -89,14 +92,17 @@ use crate::service::ask::contract::{
     AskResponse, AskStatus, AskStep, ChosenOption, Insight, ResultTable, StepName, Understanding,
     Warning, WarningCode,
 };
-use crate::service::ask::fanout::build_join_links;
-use crate::service::ask::group_prompt::build_group_prompt;
+use crate::service::ask::fanout::{build_join_links, JoinLink};
+use crate::service::ask::group_prompt::{
+    apply_question_columns, build_group_prompt, load_question_tables,
+};
 use crate::service::ask::lessons::pick_lessons;
 use crate::service::ask::plain_insight::{build_stored_breakdown, run_insight};
 use crate::service::ask::prompt::{
-    build_examples_detail, build_sql_prompt, pick_examples, PromptInput,
+    build_examples_detail, build_sql_prompt, build_sql_prompt_detail, pick_examples, PromptInput,
 };
 use crate::service::ask::related::{build_group_related, load_group};
+use crate::service::ask::repair::build_user_text;
 use crate::service::ask::reply::{build_sql_reply_schema, SqlAnswer, Term, TermKind};
 use crate::service::ask::response_choices::{
     build_ambiguity_choices, build_ambiguity_detail, build_ambiguity_message,
@@ -106,6 +112,8 @@ pub use crate::service::ask::row_filters::load_row_filters;
 use crate::service::ask::run::{build_step, run_with_repair, RunInput, RunOutcome};
 use crate::service::ask::summary::{build_answer, SummaryInput, SummaryOutcome};
 use crate::service::ask::unanswerable::build_unanswerable_message;
+use crate::service::ask::value_retry::{apply_full_values, build_resend_columns};
+use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::why::{ask_why, WhyAsk};
 use crate::service::domains::load_for_prompt;
@@ -158,9 +166,11 @@ pub async fn ask(
     let picked = build_allowed_table(state, member, &dataset, &version, &columns).await?;
     let group = load_group(state, member, (&dataset, &version, &columns), picked).await?;
     let join_keys = group.join_keys(dataset.id);
-    let mut context =
-        build_ask_context_with_keys(state, ws, &version, question, choices, &join_keys).await?;
+    // Chỉ số đọc trước ngữ cảnh: cột trong công thức chỉ số luôn được gửi đủ chi tiết (ask/context.rs).
     let metrics = state.store.list_metrics(ws, dataset.id).await?;
+    let mut context =
+        build_ask_context_with_keys(state, ws, &version, question, choices, &join_keys, &metrics)
+            .await?;
     let examples = state
         .store
         .list_approved_examples(ws, dataset.id, EXAMPLE_POOL)
@@ -194,8 +204,32 @@ pub async fn ask(
         });
     }
 
-    // Sau bước hỏi lại: câu còn mơ hồ thì không cần đọc giá trị của các bảng liên quan.
-    let group_prompt = build_group_prompt(state, member, &group, question, &mut context).await?;
+    // Sau bước hỏi lại: câu còn mơ hồ thì không cần đọc các bảng liên quan. Lượt phân loại nhận metadata cột của mọi
+    // bảng; cột nó chọn quyết định cột nào được gửi đủ danh sách giá trị ở lượt viết SQL (ask/context.rs).
+    let mut question_tables = load_question_tables(state, member, &group, question).await?;
+    let table = dataset.logical_table.as_str();
+    let restricted = group.is_restricted();
+    apply_question_columns(&mut context, table, &mut question_tables, &[], restricted);
+    // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
+    let classify_input = ClassifyInput {
+        table,
+        question,
+        columns: &context.columns,
+        related: &question_tables.related,
+        earlier: &history.questions,
+    };
+    let timeout = build_classify_timeout(&state.config);
+    let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
+    steps.push(classified.step);
+    apply_question_columns(
+        &mut context,
+        table,
+        &mut question_tables,
+        &classified.columns,
+        restricted,
+    );
+    let group_prompt = build_group_prompt(&group, question_tables);
+    // Bài học chọn sau khi ngữ cảnh đã đủ (cột khớp, cột lượt phân loại chọn), để khớp đúng các cột câu hỏi dùng.
     let lessons = pick_lessons(question, &context.columns, &active_lessons);
     let input = PromptInput {
         table: &dataset.logical_table,
@@ -210,16 +244,6 @@ pub async fn ask(
         lessons: &lessons,
     };
     let tables = &group.allowed;
-    // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
-    let classify_input = ClassifyInput {
-        table: &dataset.logical_table,
-        question,
-        columns: &context.columns,
-        earlier: &history.questions,
-    };
-    let timeout = build_classify_timeout(&state.config);
-    let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
-    steps.push(classified.step);
     // Quan hệ giữa các bảng của câu hỏi, để chặn câu cộng lặp khi nối bảng một-nhiều (ask/fanout.rs) và để phân rã
     // nối bảng liên quan theo đúng chiều nhiều-một (explain/source.rs).
     let links = build_join_links(&group);
@@ -243,7 +267,8 @@ pub async fn ask(
         return ask_why(state, member, why).await;
     }
 
-    let prompt = build_sql_prompt(&input);
+    // Mức chi tiết của prompt: danh sách giá trị nào thật sự đã gửi (ask/value_retry.rs).
+    let (prompt, detail) = build_sql_prompt_detail(&input);
     let started = Instant::now();
     let request = LlmRequest {
         task: LlmTask::Sql,
@@ -274,6 +299,49 @@ pub async fn ask(
     };
     let mut outcome = run_with_repair(state.llm.as_ref(), input).await?;
     steps.append(&mut outcome.steps);
+
+    // Câu lọc theo giá trị cột không có, mà prompt chưa có đủ danh sách của cột: gửi lại một lần kèm đủ giá trị của cột
+    // đó (ask/value_retry.rs). Người bị lọc dòng không nhận danh sách giá trị nào, nên không gửi lại.
+    let checked = CheckedQuery {
+        status: outcome.status,
+        sql_guarded: outcome.sql_guarded.as_deref(),
+        result: outcome.result.as_ref(),
+        row_filters: &outcome.row_filters,
+        terms: &outcome.terms,
+        columns: &columns,
+        restricted: group.is_restricted(),
+    };
+    let (_, missing) = find_missing_values(state, ws, &version, &checked).await;
+    let resend = build_resend_columns(&missing, &context.columns, detail);
+    if !resend.is_empty() && !group.is_restricted() {
+        let index = load_value_index(state, ws, &version).await?;
+        let applied: Vec<String> = resend
+            .into_iter()
+            .filter(|name| apply_full_values(&mut context.columns, &index, name))
+            .collect();
+        if !applied.is_empty() {
+            let retry_input = PromptInput {
+                table: &dataset.logical_table,
+                question,
+                context: &context,
+                metrics: &metrics,
+                examples: &examples,
+                domain: domain.as_ref(),
+                choices,
+                history: &history.section,
+                group: group_prompt.as_ref(),
+                lessons: &lessons,
+            };
+            let retry = ValueRetry {
+                input: &retry_input,
+                columns: &applied,
+                tables,
+                links: &links,
+                sensitive: &sensitive,
+            };
+            run_value_retry(state, retry, &mut outcome, &mut steps).await;
+        }
+    }
     if let Some(unanswerable) = &outcome.unanswerable {
         let names: Vec<&str> = context.columns.iter().map(|c| c.name.as_str()).collect();
         outcome.message = Some(build_unanswerable_message(unanswerable, &names));
@@ -396,6 +464,87 @@ pub async fn ask(
         steps,
         ..build_base_response(state, &version, question, outcome.status)
     })
+}
+
+/// Phần của lần gửi lại kèm đủ giá trị (ask/value_retry.rs) mà run_value_retry cần.
+struct ValueRetry<'a> {
+    input: &'a PromptInput<'a>,
+    /// Cột được gửi lại đủ danh sách giá trị.
+    columns: &'a [String],
+    tables: &'a [AllowedTable],
+    links: &'a [JoinLink],
+    sensitive: &'a [String],
+}
+
+/// Gọi lại lượt viết SQL một lần. Lần gửi lại chỉ là bước thêm: chỉ khi nó answered thì kết quả của nó thay kết quả lần
+/// đầu. Lỗi mô hình hay lỗi chạy, hay kết quả không answered, thì giữ kết quả lần đầu và ghi một bước ok = false.
+/// failures (nhật ký lỗi, #228) của cả hai lần đều được giữ. Lỗi gọi nhà cung cấp mô hình (mạng, hạn mức) không phải chỗ
+/// mô hình sai nên chỉ ghi log máy chủ và bước, không vào nhật ký lỗi.
+async fn run_value_retry(
+    state: &AppState,
+    retry: ValueRetry<'_>,
+    outcome: &mut RunOutcome,
+    steps: &mut Vec<AskStep>,
+) {
+    let names = retry.columns.join(", ");
+    let prompt = build_sql_prompt(retry.input);
+    let started = Instant::now();
+    let request = LlmRequest {
+        task: LlmTask::Sql,
+        question: retry.input.question,
+        prompt: &prompt,
+        json_schema: Some(build_sql_reply_schema()),
+    };
+    let reply = match state.llm.complete(&request).await {
+        Ok(reply) => reply,
+        Err(e) => {
+            tracing::warn!(error = ?e, "value retry: the model call failed, keeping the first answer");
+            let detail = format!(
+                "Gửi lại kèm đủ giá trị của cột {names} không được ({}): giữ kết quả lần đầu",
+                build_user_text(&e, "llm")
+            );
+            steps.push(build_step(StepName::Llm, started, false, Some(&detail)));
+            return;
+        }
+    };
+    let detail =
+        format!("Gửi lại kèm đủ giá trị của cột {names}: câu trước lọc theo giá trị cột không có");
+    steps.push(build_step(StepName::Llm, started, true, Some(&detail)));
+    let input = RunInput {
+        question: retry.input.question,
+        prompt: &prompt,
+        reply: &reply,
+        tables: retry.tables,
+        links: retry.links,
+        max_rows: state.config.ask_max_rows,
+        timeout: state.config.query_timeout,
+        jobs: &state.query_jobs,
+        sensitive: retry.sensitive,
+    };
+    let started = Instant::now();
+    match run_with_repair(state.llm.as_ref(), input).await {
+        Ok(mut retried) => {
+            steps.append(&mut retried.steps);
+            if retried.status == AskStatus::Answered {
+                let mut failures = std::mem::take(&mut outcome.failures);
+                failures.append(&mut retried.failures);
+                retried.failures = failures;
+                *outcome = retried;
+            } else {
+                outcome.failures.append(&mut retried.failures);
+                let detail = "Lần gửi lại không ra câu trả lời: giữ kết quả lần đầu";
+                steps.push(build_step(StepName::Llm, started, false, Some(detail)));
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = ?e, "value retry: running the new SQL failed, keeping the first answer");
+            let detail = format!(
+                "Lần gửi lại lỗi ({}): giữ kết quả lần đầu",
+                build_user_text(&e, "llm")
+            );
+            steps.push(build_step(StepName::Llm, started, false, Some(&detail)));
+        }
+    }
 }
 
 /// Đoạn trả lời ngắn (ask/summary.rs), chỉ cho câu answered có kết quả: lời của phần giải thích hay câu khuôn, không

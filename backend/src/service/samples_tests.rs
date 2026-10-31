@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/samples_tests.rs - test nạp dataset mẫu (service/samples.rs) qua thiết lập lần đầu thật, trên file mẫu của
-repo (data/samples). Mỗi test một database mới vì thiết lập cần "chưa có tài khoản nào"; bỏ qua khi không có
+/* service/samples_tests.rs - test nạp dataset mẫu (service/samples.rs, service/samples_db.rs) qua thiết lập lần đầu
+thật: trên file mẫu của repo (data/samples), và trên database mẫu là chính database của test (chụp bảng, quan hệ, chỉ
+số; không tới được thì nạp file). Mỗi test một database mới vì thiết lập cần "chưa có tài khoản nào"; bỏ qua khi không có
 DATABASE_URL. */
 
 use std::path::{Path, PathBuf};
 
 use crate::auth::{self, Member};
-use crate::config::Config;
+use crate::config::{Config, Secret};
 use crate::engine::excel_worker::ExcelWorker;
 use crate::engine::store::test_support::{fetch_count, fresh_database};
 use crate::engine::store::Store;
+use crate::sample_database::SampleDatabase;
 use crate::service::accounts::{self, SetupInput};
 use crate::service::samples::{seed_workspace, SeedOutcome, SAMPLE_NAME};
+use crate::service::samples_db::PLAN_FILE;
 use crate::state::AppState;
 
 const CODE: &str = "ABCD-EFGH-JKMN";
@@ -204,6 +207,146 @@ async fn metric_that_does_not_run_is_skipped() {
     assert_eq!(
         metrics.iter().map(|m| m.name.as_str()).collect::<Vec<_>>(),
         ["revenue"]
+    );
+    db.drop().await;
+}
+
+/// Khóa mã hóa nguồn cho test (32 byte base64), như api/sources_tests.rs.
+const KEY: &str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+
+/// Database mẫu là chính database của test: hai bảng nối bằng khóa ngoại trong schema shop, kế hoạch chụp và chỉ số
+/// của bảng orders trong thư mục mẫu tự dựng.
+async fn build_sample_database(
+    db: &crate::engine::store::test_support::TestDb,
+    samples: &Path,
+) -> SampleDatabase {
+    use crate::engine::store::test_support::{database_url, exec};
+    for sql in [
+        "CREATE SCHEMA shop",
+        "CREATE TABLE shop.customers (customer_id integer PRIMARY KEY, segment text NOT NULL)",
+        "CREATE TABLE shop.orders (order_id integer PRIMARY KEY, \
+         customer_id integer NOT NULL REFERENCES shop.customers (customer_id), amount numeric NOT NULL)",
+        "INSERT INTO shop.customers VALUES (1, 'Consumer'), (2, 'Corporate')",
+        "INSERT INTO shop.orders VALUES (10, 1, 5), (11, 1, 7), (12, 2, 9)",
+    ] {
+        exec(&db.store, sql).await;
+    }
+    std::fs::write(
+        samples.join(PLAN_FILE),
+        r#"{"snapshots": [{"table": "shop.orders", "tables": ["shop.customers"]}]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        samples.join("orders.metrics.json"),
+        r#"[{"name": "total", "expression": "SUM(amount)"}]"#,
+    )
+    .unwrap();
+    let mut sample = crate::sample_database::build_sample_database(&database_url().unwrap())
+        .unwrap()
+        .unwrap();
+    sample.database = db.name().to_string();
+    sample.sslmode = Some("disable".to_string());
+    sample
+}
+
+fn with_sample_database(mut state: AppState, sample: SampleDatabase) -> AppState {
+    let mut config = (*state.config).clone();
+    config.source_secret_key = Secret::new(KEY);
+    config.source_allowed_hosts = vec![sample.host.clone()];
+    config.sample_database = Some(sample);
+    state.config = std::sync::Arc::new(config);
+    state
+}
+
+#[tokio::test]
+async fn setup_snapshots_the_sample_database() {
+    let Some(db) = fresh_database().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let data = TempDir::new();
+    let samples = TempDir::new();
+    let sample = build_sample_database(&db, &samples.0).await;
+    let state = with_sample_database(
+        build_state(db.store.clone(), &data.0, &samples.0, true),
+        sample,
+    );
+    let member = setup(&state).await;
+
+    // Mỗi bảng một dataset, không có DataCo; quan hệ orders -> customers được ghi; chỉ số của orders được ghi.
+    let datasets = state.store.list_datasets(&member.workspace).await.unwrap();
+    let mut tables: Vec<&str> = datasets.iter().map(|d| d.logical_table.as_str()).collect();
+    tables.sort();
+    assert_eq!(tables, ["customers", "orders"]);
+    let relations = state
+        .store
+        .list_relations(&member.workspace, None)
+        .await
+        .unwrap();
+    assert_eq!(relations.len(), 1);
+    let orders = datasets
+        .iter()
+        .find(|d| d.logical_table == "orders")
+        .unwrap();
+    let metrics = state
+        .store
+        .list_metrics(&member.workspace, orders.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        metrics.iter().map(|m| m.name.as_str()).collect::<Vec<_>>(),
+        ["total"]
+    );
+    assert_eq!(
+        state
+            .store
+            .list_sources(&member.workspace)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // Gọi lại: nguồn đã có, không thêm gì.
+    assert_eq!(
+        seed_workspace(&state, &member).await.unwrap(),
+        SeedOutcome::AlreadyPresent
+    );
+    assert_eq!(
+        state
+            .store
+            .list_datasets(&member.workspace)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    db.drop().await;
+}
+
+/// Database mẫu không tới được: thiết lập vẫn xong và workspace đầu tiên có DataCo từ file.
+#[tokio::test]
+async fn unreachable_sample_database_falls_back_to_the_csv() {
+    let Some(db) = fresh_database().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let data = TempDir::new();
+    let sample = crate::sample_database::build_sample_database(
+        "postgres://analyst:analyst@127.0.0.1:1/company_demo",
+    )
+    .unwrap()
+    .unwrap();
+    let state = with_sample_database(
+        build_state(db.store.clone(), &data.0, &repo_samples(), true),
+        sample,
+    );
+    let member = setup(&state).await;
+
+    let datasets = state.store.list_datasets(&member.workspace).await.unwrap();
+    assert_eq!(
+        datasets.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
+        [SAMPLE_NAME]
     );
     db.drop().await;
 }

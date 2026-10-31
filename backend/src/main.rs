@@ -9,6 +9,7 @@ mod cli;
 mod config;
 mod engine;
 mod error;
+mod sample_database;
 mod service;
 mod state;
 
@@ -66,6 +67,11 @@ async fn run(args: Vec<String>) {
         .init();
 
     let mut config = config::Config::from_env();
+    // SOURCE_SECRET_KEY trống: khóa sinh một lần và lưu trong DATA_DIR (service/sources/key_file.rs). Trước nhánh lệnh
+    // quản trị, vì make eval chụp database mẫu cũng cần khóa.
+    if let Err(why) = service::sources::apply_key_file(&mut config) {
+        tracing::warn!(%why, "database sources are off until SOURCE_SECRET_KEY is set or the key file is fixed");
+    }
     // Lệnh đánh giá dùng khóa Gemini riêng nếu có (config.rs, apply_eval_gemini_key); server luôn dùng GEMINI_API_KEY.
     if args
         .first()

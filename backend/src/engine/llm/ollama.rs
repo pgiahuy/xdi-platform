@@ -92,6 +92,29 @@ impl Ollama {
     }
 }
 
+/// Số ký tự trên một token, ước lượng thô từ lần đếm bằng tokenizer của Qwen2.5-Coder (docs/INSTALL.md mục 1: 24 000 ký tự
+/// khoảng 7 180 token, tức 3,3 ký tự một token). Chỉ để cảnh báo, không chặn gì.
+const CHARS_PER_TOKEN_TENTHS: usize = 33;
+
+/// Số token ước lượng của một prompt.
+fn estimate_tokens(prompt: &str) -> usize {
+    prompt.chars().count() * 10 / CHARS_PER_TOKEN_TENTHS
+}
+
+/// Prompt ước lượng dài hơn cửa sổ ngữ cảnh đã đặt thì ghi cảnh báo: Ollama lặng lẽ bỏ phần đầu prompt (phần luật), câu
+/// trả lời tệ đi mà không có lỗi nào. Prompt có thể vượt PROMPT_MAX_CHARS từ #230, vì mọi cột luôn có metadata.
+fn warn_if_over_context(prompt: &str, num_ctx: u32) {
+    let tokens = estimate_tokens(prompt);
+    if tokens > num_ctx as usize {
+        tracing::warn!(
+            estimated_tokens = tokens,
+            num_ctx,
+            "prompt is likely longer than OLLAMA_NUM_CTX, Ollama drops its start (the rules); raise OLLAMA_NUM_CTX \
+             (docs/INSTALL.md, section 1)"
+        );
+    }
+}
+
 #[async_trait]
 impl LlmProvider for Ollama {
     fn name(&self) -> String {
@@ -104,6 +127,7 @@ impl LlmProvider for Ollama {
                 "Máy chủ không tạo được client HTTP để gọi Ollama, xem log của backend".to_string(),
             )
         })?;
+        warn_if_over_context(request.prompt, self.num_ctx);
         let mut body = serde_json::json!({
             "model": self.model,
             "prompt": request.prompt,
@@ -174,6 +198,13 @@ struct ErrorResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 24 000 ký tự khoảng 7 200 token như lần đếm ở docs/INSTALL.md; prompt 85 000 ký tự vượt 12 288 token mặc định.
+    #[test]
+    fn token_estimate_follows_the_measured_ratio() {
+        assert_eq!(estimate_tokens(&"x".repeat(24_000)), 7_272);
+        assert!(estimate_tokens(&"x".repeat(85_000)) > 12_288);
+    }
     use crate::engine::llm::http::test_support::{closed_url, spawn, spawn_redirect, unresponsive};
     use crate::engine::llm::LlmTask;
 

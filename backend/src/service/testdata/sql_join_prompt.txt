@@ -1,6 +1,7 @@
 You write one DuckDB SQL query that answers a question about the tables order_items, orders, customers. Reply with one JSON object only, in the required format.
 Rules:
 - Query only the tables order_items, orders, customers and the columns listed below. Put every column name in double quotes, exactly as listed.
+- Every column of these tables is listed. A column listed with only its type and role, without a description or values, is a real column too: use it when the question needs it.
 - Write one SELECT statement in DuckDB syntax. Never change data.
 - A column listed with a date format stores dates as text: read it with strptime("column", 'format').
 - When the question asks for a metric listed below, compute it with exactly its expression and its filter. A metric marked UNCONFIRMED is a draft nobody has approved: use it only when no confirmed metric fits, and then add an assumption of kind "metric" about it.
@@ -20,8 +21,8 @@ SQL rules. They have no exceptions: a query that breaks any of them is refused a
 
 Columns of table order_items:
 - "order_id" (INTEGER, key)
-- "quantity" (INTEGER, measure)
-- "item_total" (DECIMAL(18,3), measure): Doanh thu sau giảm giá của dòng hàng
+- "quantity" (INTEGER, measure, aggregate with SUM)
+- "item_total" (DECIMAL(18,3), measure, aggregate with SUM): Doanh thu sau giảm giá của dòng hàng
 
 Columns of table orders:
 - "order_id" (INTEGER, key)

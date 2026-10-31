@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/eval.rs - bộ đánh giá câu hỏi mẫu (#37): nạp một dataset mẫu vào workspace tạm, hỏi từng câu của file ca,
-so kết quả với SQL đúng viết tay (câu đúng cũng đi qua guard và chạy trên DuckDB như câu mô hình sinh). Lệnh
+/* service/eval.rs - bộ đánh giá câu hỏi mẫu (#37): nạp dữ liệu mẫu vào workspace tạm, hỏi từng câu của file ca, so
+kết quả với SQL đúng viết tay (câu đúng cũng đi qua guard và chạy trên DuckDB như câu mô hình sinh). Lệnh
 `xdi-backend eval` ở cli.rs gọi hàm run_eval.
+
+Hai nguồn dữ liệu: một file (dataco.csv, một dataset), hoặc database mẫu (SAMPLE_DATABASE_URL, #230) chụp đúng như
+thiết lập lần đầu (service/samples_db.rs), mỗi bảng một dataset kèm quan hệ. Với database, mỗi ca ghi trường dataset
+(bảng logic người hỏi chọn), và SQL đúng được đọc mọi bảng của workspace.
 
 So bằng tập dòng kết quả, không so chữ SQL: nhiều câu SQL khác nhau cùng trả lời đúng một câu hỏi. Một ca có thể có
 nhiều expected_sql (câu mơ hồ kiểu "doanh thu trước hay sau giảm giá"), khớp một là đúng.
@@ -19,13 +23,16 @@ use serde::{Deserialize, Serialize};
 use crate::auth::{self, Member};
 use crate::engine::guard::{build_guarded_sql, AllowedTable};
 use crate::engine::query::run_query;
+use crate::engine::store::Dataset;
 use crate::error::AppError;
+use crate::sample_database::SampleDatabase;
 use crate::service;
 use crate::service::ask::contract::{AskStatus, CellValue};
 use crate::service::ask::result::build_result_table;
 use crate::service::ask::{ask, AskHistory};
 use crate::service::lessons::contract::LessonRequest;
 use crate::service::samples::{upload_local_file, SAMPLE_NAME};
+use crate::service::samples_db::seed_database;
 use crate::service::workspaces;
 use crate::state::AppState;
 
@@ -33,10 +40,19 @@ use crate::state::AppState;
 #[derive(Debug, Deserialize)]
 pub struct EvalCase {
     pub id: String,
+    /// Bảng logic của dataset để hỏi. Bỏ trống khi dữ liệu là một file (chỉ có một dataset).
+    #[serde(default)]
+    pub dataset: Option<String>,
     pub question: String,
     pub expected_sql: Vec<String>,
     #[serde(default)]
     pub ordered: bool,
+}
+
+/// Dữ liệu của một lần đánh giá.
+pub enum EvalData<'a> {
+    File(&'a Path),
+    SampleDatabase(&'a SampleDatabase),
 }
 
 #[derive(Debug, Serialize)]
@@ -93,33 +109,48 @@ pub fn load_lessons(path: &Path) -> Result<Vec<EvalLesson>, AppError> {
         .map_err(|e| AppError::Internal(format!("parse {}: {e}", path.display())))
 }
 
-/// Chạy cả bộ: tạo workspace tạm, nạp file mẫu, chờ hồ sơ ngữ nghĩa, hỏi từng câu rồi xóa workspace tạm. lessons rỗng
-/// là một lượt như trước; có bài thì hai lượt (đầu file).
+/// Chạy cả bộ: tạo workspace tạm, nạp dữ liệu mẫu (file hay database mẫu), chờ hồ sơ ngữ nghĩa, hỏi từng câu rồi xóa
+/// workspace tạm. lessons rỗng là một lượt như trước; có bài thì hai lượt (đầu file).
 pub async fn run_eval(
     state: &AppState,
-    data: &Path,
+    data: EvalData<'_>,
     cases: &[EvalCase],
     lessons: &[EvalLesson],
 ) -> Result<EvalReport, AppError> {
-    let (member, dataset_id) = prepare(state, data).await?;
-    let outcome = run_rounds(state, &member, &dataset_id, cases, lessons).await;
+    let (member, datasets) = match data {
+        EvalData::File(path) => {
+            let (member, id) = prepare(state, path).await?;
+            let dataset = state
+                .store
+                .get_dataset(
+                    &member.workspace,
+                    parse_uuid(&id).map_err(AppError::Internal)?,
+                )
+                .await?
+                .ok_or_else(|| AppError::Internal("eval dataset vanished".to_string()))?;
+            (member, vec![dataset])
+        }
+        EvalData::SampleDatabase(db) => prepare_database(state, db).await?,
+    };
+    let outcome = run_rounds(state, &member, &datasets, cases, lessons).await;
     let _ = workspaces::delete(state, &member).await;
     outcome
 }
 
+/// Một hay hai lượt trên các dataset của workspace tạm (một với file, mọi bảng đã chụp với database mẫu).
 async fn run_rounds(
     state: &AppState,
     member: &Member,
-    dataset_id: &str,
+    datasets: &[Dataset],
     cases: &[EvalCase],
     lessons: &[EvalLesson],
 ) -> Result<EvalReport, AppError> {
-    let without = run_cases(state, member, dataset_id, cases).await?;
+    let without = run_cases(state, member, datasets, cases).await?;
     if lessons.is_empty() {
         return Ok(build_report(without, None));
     }
-    add_lessons(state, member, dataset_id, lessons).await?;
-    let with = run_cases(state, member, dataset_id, cases).await?;
+    add_lessons(state, member, datasets, lessons).await?;
+    let with = run_cases(state, member, datasets, cases).await?;
     let changed = with
         .iter()
         .zip(&without)
@@ -151,22 +182,30 @@ fn build_accuracy(passed: usize, total: usize) -> f64 {
     passed as f64 / total.max(1) as f64
 }
 
-/// Tạo rồi bật từng bài, như admin làm ở màn Bài học; người chạy eval là admin của workspace tạm.
+/// Tạo rồi bật từng bài, như admin làm ở màn Bài học; người chạy eval là admin của workspace tạm. Bài không áp cho cả
+/// workspace thì gắn vào từng dataset đang đánh giá: với database mẫu là mỗi bảng đã chụp một bản, vì câu nào cũng có
+/// thể hỏi trên bảng nào.
 async fn add_lessons(
     state: &AppState,
     member: &Member,
-    dataset_id: &str,
+    datasets: &[Dataset],
     lessons: &[EvalLesson],
 ) -> Result<(), AppError> {
-    let dataset = Some(parse_uuid(dataset_id).map_err(AppError::Internal)?);
     for lesson in lessons {
-        let request = LessonRequest {
-            text: lesson.text.clone(),
-            dataset_id: if lesson.workspace { None } else { dataset },
-            error_id: None,
+        let targets: Vec<Option<uuid::Uuid>> = if lesson.workspace {
+            vec![None]
+        } else {
+            datasets.iter().map(|d| Some(d.id)).collect()
         };
-        let created = service::lessons::create_lesson(state, member, request).await?;
-        service::lessons::set_enabled(state, member, &created.id.to_string(), true).await?;
+        for dataset_id in targets {
+            let request = LessonRequest {
+                text: lesson.text.clone(),
+                dataset_id,
+                error_id: None,
+            };
+            let created = service::lessons::create_lesson(state, member, request).await?;
+            service::lessons::set_enabled(state, member, &created.id.to_string(), true).await?;
+        }
     }
     Ok(())
 }
@@ -181,45 +220,94 @@ pub(crate) async fn prepare(state: &AppState, data: &Path) -> Result<(Member, St
     let member = auth::member_of(&state.store, user, &membership.slug).await?;
 
     let result = upload_local_file(state, &member, data, SAMPLE_NAME).await?;
+    wait_semantic(state, &member).await?;
+    Ok((member, result.dataset.id.to_string()))
+}
 
-    // Hồ sơ ngữ nghĩa chạy nền; hỏi khi chưa xong thì ngữ cảnh thiếu bí danh và câu gợi ý.
-    let dataset_id = result.dataset.id.to_string();
+/// Như prepare, nhưng dữ liệu là database mẫu chụp qua đúng hàm của thiết lập lần đầu. Trả mọi dataset đã chụp.
+async fn prepare_database(
+    state: &AppState,
+    db: &SampleDatabase,
+) -> Result<(Member, Vec<Dataset>), AppError> {
+    let email = format!("eval-{}@example.com", uuid::Uuid::new_v4());
+    let user = state.store.create_user(&email, "Eval", "unused").await?;
+    let membership = workspaces::create(state, &user, "Eval").await?;
+    let member = auth::member_of(&state.store, user, &membership.slug).await?;
+    let seeded = match seed_database(state, &member, db).await {
+        Ok(seeded) => seeded,
+        Err(e) => {
+            let _ = workspaces::delete(state, &member).await;
+            return Err(e);
+        }
+    };
+    if seeded.is_none() {
+        return Err(AppError::Internal(
+            "eval workspace already has the sample source".to_string(),
+        ));
+    }
+    // Lỗi sau khi đã tạo workspace tạm thì xóa nó luôn, như khi chụp lỗi ở trên: run_eval chỉ xóa khi bước này xong.
+    let ready = match wait_semantic(state, &member).await {
+        Ok(()) => state.store.list_datasets(&member.workspace).await,
+        Err(e) => Err(e),
+    };
+    match ready {
+        Ok(datasets) => Ok((member, datasets)),
+        Err(e) => {
+            let _ = workspaces::delete(state, &member).await;
+            Err(e)
+        }
+    }
+}
+
+/// Hồ sơ ngữ nghĩa chạy nền; hỏi khi chưa xong thì ngữ cảnh thiếu bí danh và câu gợi ý. Chờ mọi dataset của workspace.
+async fn wait_semantic(state: &AppState, member: &Member) -> Result<(), AppError> {
     for _ in 0..120 {
-        let dataset = state
-            .store
-            .get_dataset(&member.workspace, result.dataset.id)
-            .await?
-            .ok_or_else(|| AppError::Internal("eval dataset vanished".to_string()))?;
-        if dataset.current_profile_status.as_deref() == Some("semantic") {
-            return Ok((member, dataset_id));
+        let datasets = state.store.list_datasets(&member.workspace).await?;
+        if datasets
+            .iter()
+            .all(|d| d.current_profile_status.as_deref() == Some("semantic"))
+        {
+            return Ok(());
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
     Err(AppError::Internal(
-        "hồ sơ ngữ nghĩa của dataset mẫu chưa xong sau 120 giây".to_string(),
+        "hồ sơ ngữ nghĩa của dữ liệu mẫu chưa xong sau 120 giây".to_string(),
     ))
 }
 
 async fn run_cases(
     state: &AppState,
     member: &Member,
-    dataset_id: &str,
+    datasets: &[Dataset],
     cases: &[EvalCase],
 ) -> Result<Vec<CaseOutcome>, AppError> {
     let mut outcomes = Vec::new();
     for case in cases {
-        outcomes.push(run_case(state, member, dataset_id, case).await);
+        outcomes.push(run_case(state, member, datasets, case).await);
     }
     Ok(outcomes)
+}
+
+/// Dataset để hỏi: theo trường dataset của ca, hay dataset duy nhất khi dữ liệu là một file.
+fn pick_dataset<'a>(datasets: &'a [Dataset], case: &EvalCase) -> Result<&'a Dataset, String> {
+    match &case.dataset {
+        Some(table) => datasets
+            .iter()
+            .find(|d| &d.logical_table == table)
+            .ok_or_else(|| format!("không có dataset với bảng {table}")),
+        None if datasets.len() == 1 => Ok(&datasets[0]),
+        None => Err("ca thiếu trường dataset trong khi có nhiều dataset".to_string()),
+    }
 }
 
 async fn run_case(
     state: &AppState,
     member: &Member,
-    dataset_id: &str,
+    datasets: &[Dataset],
     case: &EvalCase,
 ) -> CaseOutcome {
-    match run_case_inner(state, member, dataset_id, case).await {
+    match run_case_inner(state, member, datasets, case).await {
         Ok(detail) => CaseOutcome {
             id: case.id.clone(),
             question: case.question.clone(),
@@ -238,13 +326,14 @@ async fn run_case(
 async fn run_case_inner(
     state: &AppState,
     member: &Member,
-    dataset_id: &str,
+    datasets: &[Dataset],
     case: &EvalCase,
 ) -> Result<String, String> {
-    let expected = expected_rows(state, member, dataset_id, case).await?;
+    let dataset_id = pick_dataset(datasets, case)?.id.to_string();
+    let expected = expected_rows(state, member, datasets, case).await?;
     // Mỗi câu của bộ đánh giá là một câu độc lập, không có hội thoại trước.
     let history = AskHistory::default();
-    let response = ask(state, member, dataset_id, &case.question, &[], &history)
+    let response = ask(state, member, &dataset_id, &case.question, &[], &history)
         .await
         .map_err(|e| format!("lỗi hệ thống khi hỏi: {e:?}"))?;
     if response.status != AskStatus::Answered {
@@ -265,54 +354,27 @@ async fn run_case_inner(
 }
 
 /// Chạy các câu SQL đúng viết tay qua guard và DuckDB, lấy câu đầu chạy được. Cả expected lẫn câu mô hình sinh đều
-/// qua cùng một guard và cùng một engine nên cách so không thiên vị cách viết SQL.
+/// qua cùng một guard và cùng một engine nên cách so không thiên vị cách viết SQL. SQL đúng được đọc mọi dataset của
+/// workspace tạm (với database mẫu là mọi bảng đã chụp), bản hiện tại của từng cái.
 async fn expected_rows(
     state: &AppState,
     member: &Member,
-    dataset_id: &str,
+    datasets: &[Dataset],
     case: &EvalCase,
 ) -> Result<Vec<Vec<Option<CellValue>>>, String> {
-    let id = parse_uuid(dataset_id)?;
-    let dataset = state
-        .store
-        .get_dataset(&member.workspace, id)
-        .await
-        .map_err(|e| format!("{e:?}"))?
-        .ok_or("không đọc được dataset")?;
-    let version = state
-        .store
-        .get_current_version(&member.workspace, id)
-        .await
-        .map_err(|e| format!("{e:?}"))?
-        .ok_or("dataset chưa có phiên bản")?;
-    let columns = state
-        .store
-        .list_columns(&member.workspace, version.id)
-        .await
-        .map_err(|e| format!("{e:?}"))?
-        .iter()
-        .map(|c| c.name.clone())
-        .collect();
-    let table = AllowedTable {
-        name: dataset.logical_table,
-        columns,
-        parquet_dir: state.config.data_dir.join(
-            version
-                .parquet_path
-                .ok_or("phiên bản không có file parquet")?,
-        ),
-        row_filters: Vec::new(),
-    };
+    let mut tables = Vec::new();
+    for dataset in datasets {
+        tables.push(build_allowed_table(state, member, dataset).await?);
+    }
     let mut last_error = String::new();
     for sql in &case.expected_sql {
-        let guarded =
-            match build_guarded_sql(sql, std::slice::from_ref(&table), state.config.ask_max_rows) {
-                Ok(g) => g,
-                Err(e) => {
-                    last_error = format!("expected_sql không qua được guard: {e:?}");
-                    continue;
-                }
-            };
+        let guarded = match build_guarded_sql(sql, &tables, state.config.ask_max_rows) {
+            Ok(g) => g,
+            Err(e) => {
+                last_error = format!("expected_sql không qua được guard: {e:?}");
+                continue;
+            }
+        };
         let runnable = guarded.runnable;
         let timeout = state.config.query_timeout;
         let output = tokio::task::spawn_blocking(move || run_query(&runnable, 100_000, timeout))
@@ -324,6 +386,38 @@ async fn expected_rows(
         }
     }
     Err(format!("không expected_sql nào chạy được: {last_error}"))
+}
+
+/// Bảng guard cho phép của một dataset: tên bảng logic, cột và thư mục Parquet của phiên bản hiện tại.
+async fn build_allowed_table(
+    state: &AppState,
+    member: &Member,
+    dataset: &Dataset,
+) -> Result<AllowedTable, String> {
+    let version = state
+        .store
+        .get_current_version(&member.workspace, dataset.id)
+        .await
+        .map_err(|e| format!("{e:?}"))?
+        .ok_or("dataset chưa có phiên bản")?;
+    let columns = state
+        .store
+        .list_columns(&member.workspace, version.id)
+        .await
+        .map_err(|e| format!("{e:?}"))?
+        .iter()
+        .map(|c| c.name.clone())
+        .collect();
+    Ok(AllowedTable {
+        name: dataset.logical_table.clone(),
+        columns,
+        parquet_dir: state.config.data_dir.join(
+            version
+                .parquet_path
+                .ok_or("phiên bản không có file parquet")?,
+        ),
+        row_filters: Vec::new(),
+    })
 }
 
 fn parse_uuid(text: &str) -> Result<uuid::Uuid, String> {

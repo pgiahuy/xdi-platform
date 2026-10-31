@@ -9,8 +9,12 @@ với Postgres; lệnh COPY ... TO STDOUT (FORMAT csv) để Postgres tự ghi m
 với kiểu từng cột lấy từ Postgres (pg_types.rs), không đoán như với file CSV nạp tay.
 
 Kết nối luôn chỉ đọc: phiên đặt default_transaction_read_only, kèm statement_timeout. Vẫn nên cấp cho xdi một tài
-khoản chỉ có quyền SELECT (docs/INSTALL.md). Bản này chưa bật TLS (sqlx biên dịch không kèm bộ TLS), nên sslmode chỉ
-nhận disable hoặc prefer. */
+khoản chỉ có quyền SELECT (docs/INSTALL.md).
+
+TLS (#230) qua rustls của sqlx, nghĩa sslmode như libpq: disable không TLS; prefer thử TLS nếu máy chủ nhận, không kiểm
+chứng chỉ; require bắt buộc TLS, không kiểm chứng chỉ (chống nghe lén, không chống giả máy chủ); verify-full bắt buộc
+TLS, chứng chỉ phải do CA tin cậy cấp và đúng tên máy. CA tin cậy là CA của hệ thống, cộng CA người quản trị dán vào
+(ssl_root_cert, dạng PEM) khi máy chủ dùng CA riêng của tổ chức. */
 
 use std::path::Path;
 use std::time::Duration;
@@ -35,6 +39,9 @@ pub struct ConnectInfo {
     pub user: String,
     pub password: String,
     pub sslmode: String,
+    /// Chứng chỉ CA dạng PEM để kiểm máy chủ với verify-full. Nguồn thêm trước khi có TLS không có trường này.
+    #[serde(default)]
+    pub ssl_root_cert: Option<String>,
 }
 
 // Một bảng hay view đọc được.
@@ -58,14 +65,16 @@ impl SourceTable {
     }
 }
 
-pub const SSL_MODES: [&str; 2] = ["disable", "prefer"];
+pub const SSL_MODES: [&str; 4] = ["disable", "prefer", "require", "verify-full"];
 
 pub async fn connect(conn: &ConnectInfo, timeout: Duration) -> Result<PgConnection, AppError> {
     let ssl_mode = match conn.sslmode.as_str() {
         "disable" => PgSslMode::Disable,
+        "require" => PgSslMode::Require,
+        "verify-full" => PgSslMode::VerifyFull,
         _ => PgSslMode::Prefer,
     };
-    let options = PgConnectOptions::new()
+    let mut options = PgConnectOptions::new()
         .host(&conn.host)
         .port(conn.port)
         .database(&conn.database)
@@ -80,6 +89,10 @@ pub async fn connect(conn: &ConnectInfo, timeout: Duration) -> Result<PgConnecti
         ])
         // Câu SQL của lần chụp không ghi vào log của xdi: chúng chỉ có tên bảng, nhưng log vẫn nên gọn.
         .disable_statement_logging();
+    // CA dán vào được thêm vào cạnh CA của hệ thống, không thay chúng.
+    if let Some(pem) = &conn.ssl_root_cert {
+        options = options.ssl_root_cert_from_pem(pem.as_bytes().to_vec());
+    }
     let connecting = PgConnection::connect_with(&options);
     match tokio::time::timeout(timeout, connecting).await {
         Ok(Ok(c)) => Ok(c),
@@ -223,14 +236,47 @@ fn connect_error(conn: &ConnectInfo, e: &sqlx::Error) -> AppError {
         Some(code) => AppError::BadRequest(format!(
             "Postgres từ chối kết nối (mã {code}): kiểm quyền CONNECT của tài khoản trên database này"
         )),
+        None if is_tls_error(e) => tls_error(conn),
         None => unreachable(conn),
     }
+}
+
+/// Lỗi thuộc bước TLS. sqlx báo máy chủ không bật TLS bằng Error::Tls, còn chứng chỉ không qua kiểm (CA lạ, sai tên
+/// máy) thì rustls báo trong lúc bắt tay, tới đây dưới dạng Error::Io bọc một rustls::Error.
+fn is_tls_error(e: &sqlx::Error) -> bool {
+    match e {
+        sqlx::Error::Tls(_) => true,
+        sqlx::Error::Io(io) => io
+            .get_ref()
+            .is_some_and(|inner| inner.downcast_ref::<rustls::Error>().is_some()),
+        _ => false,
+    }
+}
+
+/// Lỗi TLS: máy chủ không bật TLS (với require, verify-full), chứng chỉ không qua kiểm (verify-full), hay bắt tay TLS lỗi.
+/// Với prefer: sqlx thử TLS khi máy chủ nhận TLS, và khác libpq, bắt tay lỗi thì không thử lại kết nối thường; thường do
+/// máy chủ chỉ có TLS cũ (1.0, 1.1) hay chứng chỉ quá yếu, nên lời báo không khuyên chọn lại prefer.
+pub(super) fn tls_error(conn: &ConnectInfo) -> AppError {
+    if conn.sslmode == "prefer" {
+        return AppError::BadRequest(format!(
+            "Máy chủ {}:{} nhận TLS nhưng bắt tay TLS lỗi (sslmode prefer không quay về kết nối thường): máy chủ có thể \
+             chỉ hỗ trợ TLS 1.0, 1.1 hay dùng chứng chỉ quá yếu. Nâng cấu hình TLS của máy chủ (TLS 1.2 trở lên), hoặc \
+             chọn disable nếu mạng giữa hai máy là mạng tin cậy",
+            conn.host, conn.port
+        ));
+    }
+    AppError::BadRequest(format!(
+        "Không lập được kết nối TLS tới {}:{} (sslmode {}): máy chủ phải bật TLS; với verify-full, chứng chỉ của máy chủ \
+         phải do một CA tin cậy cấp (CA của hệ thống hoặc CA dán vào ô chứng chỉ CA) và ghi đúng tên máy {}. Máy chủ \
+         không bật TLS thì chọn prefer hoặc disable",
+        conn.host, conn.port, conn.sslmode, conn.host
+    ))
 }
 
 fn unreachable(conn: &ConnectInfo) -> AppError {
     AppError::BadRequest(format!(
         "Không kết nối được tới {}:{}: kiểm tên máy chủ, cổng, tường lửa, và máy chủ có nhận kết nối từ backend xdi \
-         không (listen_addresses, pg_hba.conf). Máy chủ chỉ nhận TLS thì bản này chưa hỗ trợ",
+         không (listen_addresses, pg_hba.conf). Máy chủ chỉ nhận TLS thì chọn sslmode require hoặc verify-full",
         conn.host, conn.port
     ))
 }

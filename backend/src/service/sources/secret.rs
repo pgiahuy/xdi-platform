@@ -23,8 +23,9 @@ impl SecretKey {
     pub fn from_base64(raw: &str) -> Result<Self, AppError> {
         if raw.trim().is_empty() {
             return Err(AppError::Unavailable(
-                "Tính năng nối database đang tắt: đặt SOURCE_SECRET_KEY (32 byte dạng base64, tạo bằng \
-                 openssl rand -base64 32) rồi khởi động lại backend"
+                "Tính năng nối database đang tắt vì không có khóa mã hóa: backend không đọc hay ghi được file \
+                 source_secret.key trong DATA_DIR (xem log lúc khởi động), hoặc đặt SOURCE_SECRET_KEY (32 byte dạng \
+                 base64, tạo bằng openssl rand -base64 32) rồi khởi động lại backend"
                     .to_string(),
             ));
         }

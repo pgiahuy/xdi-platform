@@ -4947,12 +4947,19 @@
             "description": "Defaults to 5432.",
             "minimum": 0
           },
+          "ssl_root_cert": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "PEM CA certificate(s) trusted for `verify-full`, besides the system CAs. Only with `verify-full`."
+          },
           "sslmode": {
             "type": [
               "string",
               "null"
             ],
-            "description": "`disable` or `prefer` (default). TLS-only servers are not supported yet."
+            "description": "`disable`, `prefer` (default), `require` (TLS, certificate not checked) or `verify-full` (TLS, certificate\nsigned by a trusted CA and matching the host name)."
           },
           "user": {
             "type": "string"
@@ -7216,12 +7223,17 @@
           "database",
           "user",
           "sslmode",
+          "custom_ca",
           "created_at"
         ],
         "properties": {
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "custom_ca": {
+            "type": "boolean",
+            "description": "True when the source was added with its own CA certificate."
           },
           "database": {
             "type": "string"

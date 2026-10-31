@@ -24,7 +24,14 @@ Câu trả lời của task sql và repair là object {terms, assumptions, sql} 
 terms ghi cách hiểu từng cụm chữ ("châu Âu" là Market = Europe) để luồng hỏi có dữ liệu thử phần kiểm cách hiểu. Câu
 trả lời của task why là form câu "tại sao" (service/ask/why_prompt.rs); lần sửa form cũng là task why nên mock trả lại
 đúng form đó. Mỗi câu sql và why có một câu task classify (service/ask/classify.rs): plain với câu sql, cause với câu
-why, để bước phân loại của câu mẫu đi đúng đường mà không cần luật từ khóa. */
+why, để bước phân loại của câu mẫu đi đúng đường mà không cần luật từ khóa.
+
+File thứ hai, mock_answers_database.json, viết cho các bảng chụp từ database mẫu (data/postgres-demo, bảng logic như
+order_items, students): hồ sơ của từng bảng kèm câu gợi ý, và câu SQL của các câu trong eval/sales_joins.json,
+eval/edu.json (đúng SQL đúng của bộ đánh giá, nhiều câu nối bảng qua quan hệ). Thêm hồ sơ và một câu cho
+student_daily_clicks: bảng này không nằm trong data/samples/sample_database.json (1,8 triệu dòng, quá SOURCE_MAX_ROWS
+mặc định), chụp tay thì câu đó vẫn trả lời được. Câu hỏi không được trùng giữa hai file: mock không đọc prompt nên
+không biết đang hỏi trên dataset nào. */
 
 use std::collections::HashMap;
 
@@ -35,6 +42,7 @@ use super::{LlmProvider, LlmRequest, LlmTask};
 use crate::error::AppError;
 
 const ANSWERS_JSON: &str = include_str!("mock_answers.json");
+const DATABASE_ANSWERS_JSON: &str = include_str!("mock_answers_database.json");
 
 /// Một mục của mock_answers.json.
 #[derive(Deserialize)]
@@ -54,7 +62,8 @@ impl Mock {
     pub fn new() -> Self {
         // File nhúng lúc biên dịch và test answers_file_is_valid đọc đúng file này, nên file hỏng thì CI đỏ trước khi
         // tới được máy chủ.
-        let answers = parse_answers(ANSWERS_JSON).expect("mock_answers.json is invalid");
+        let answers = parse_answers(&[ANSWERS_JSON, DATABASE_ANSWERS_JSON])
+            .expect("mock_answers.json or mock_answers_database.json is invalid");
         Self { answers }
     }
 }
@@ -76,10 +85,15 @@ impl LlmProvider for Mock {
     }
 }
 
-/// Đọc danh sách câu mẫu. Hai câu trùng nhau sau chuẩn hóa là lỗi: câu sau sẽ lặng lẽ đè câu trước.
-fn parse_answers(json: &str) -> Result<HashMap<(LlmTask, String), String>, String> {
-    let entries: Vec<Entry> =
-        serde_json::from_str(json).map_err(|e| format!("invalid JSON: {e}"))?;
+/// Đọc danh sách câu mẫu của mọi file. Hai câu trùng nhau sau chuẩn hóa (kể cả ở hai file khác nhau) là lỗi: câu sau
+/// sẽ lặng lẽ đè câu trước.
+fn parse_answers(files: &[&str]) -> Result<HashMap<(LlmTask, String), String>, String> {
+    let mut entries: Vec<Entry> = Vec::new();
+    for json in files {
+        let more: Vec<Entry> =
+            serde_json::from_str(json).map_err(|e| format!("invalid JSON: {e}"))?;
+        entries.extend(more);
+    }
     let mut answers = HashMap::new();
     for entry in entries {
         // Mô hình thật luôn trả văn bản, nên object cũng trả dạng chuỗi JSON để người gọi xử lý như nhau.
@@ -130,7 +144,7 @@ mod tests {
 
     #[test]
     fn answers_file_is_valid() {
-        let answers = parse_answers(ANSWERS_JSON).unwrap();
+        let answers = parse_answers(&[ANSWERS_JSON]).unwrap();
         let count = |wanted: LlmTask| answers.keys().filter(|(task, _)| *task == wanted).count();
         assert_eq!(count(LlmTask::Sql), 16);
         assert_eq!(count(LlmTask::Repair), 3);
@@ -148,7 +162,7 @@ mod tests {
             {"task": "sql", "question": "Doanh thu theo tháng", "answer": "SELECT 1"},
             {"task": "sql", "question": "doanh thu theo thang?", "answer": "SELECT 2"}
         ]"#;
-        let err = parse_answers(json).unwrap_err();
+        let err = parse_answers(&[json]).unwrap_err();
         assert!(err.contains("duplicate"), "{err}");
     }
 
@@ -169,6 +183,56 @@ mod tests {
     /// Các mục của file, chưa chuẩn hóa, để test so với đúng câu viết trong file.
     fn file_entries() -> Vec<Entry> {
         serde_json::from_str(ANSWERS_JSON).unwrap()
+    }
+
+    fn database_entries() -> Vec<Entry> {
+        serde_json::from_str(DATABASE_ANSWERS_JSON).unwrap()
+    }
+
+    /// Hai file cùng đọc được, không câu nào trùng giữa hai file; mỗi bảng chụp từ database mẫu có hồ sơ.
+    #[test]
+    fn database_answers_file_is_valid() {
+        let answers = parse_answers(&[ANSWERS_JSON, DATABASE_ANSWERS_JSON]).unwrap();
+        let only_database = parse_answers(&[DATABASE_ANSWERS_JSON]).unwrap();
+        let only_csv = parse_answers(&[ANSWERS_JSON]).unwrap();
+        assert_eq!(answers.len(), only_database.len() + only_csv.len());
+        for table in ["order_items", "orders", "students", "student_assessments"] {
+            let profile = &answers[&(LlmTask::Profile, table.to_string())];
+            let profile: serde_json::Value = serde_json::from_str(profile).unwrap();
+            assert!(
+                !profile["suggested_questions"]
+                    .as_array()
+                    .unwrap()
+                    .is_empty(),
+                "{table}"
+            );
+        }
+    }
+
+    /// Mỗi câu SQL trên database có câu phân loại plain, và mỗi câu gợi ý trong hồ sơ là một câu mock trả lời được.
+    #[test]
+    fn database_suggestions_are_answerable() {
+        let entries = database_entries();
+        let has = |task: LlmTask, question: &str| {
+            entries
+                .iter()
+                .any(|e| e.task == task && e.question == question)
+        };
+        for entry in &entries {
+            match entry.task {
+                LlmTask::Sql => assert!(
+                    has(LlmTask::Classify, &entry.question),
+                    "{}",
+                    entry.question
+                ),
+                LlmTask::Profile => {
+                    for q in entry.answer["suggested_questions"].as_array().unwrap() {
+                        assert!(has(LlmTask::Sql, q.as_str().unwrap()), "{q}");
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     /// Mọi tên cột trong dấu nháy kép của các câu SQL, và cột trong terms, phải có trong hồ sơ dataco: gõ sai tên cột

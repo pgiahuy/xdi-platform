@@ -28,7 +28,7 @@ use crate::engine::guard::build_prompt_rules;
 use crate::engine::prompts::{self, fill};
 use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileRole, PromptExample};
 use crate::service::ask::choices::COLUMN_CHOICE_PREFIX;
-use crate::service::ask::context::{is_always_sent, AskContext, ColumnProfile};
+use crate::service::ask::context::{is_related, AskContext, ColumnProfile};
 use crate::service::ask::contract::ChosenOption;
 use crate::service::ask::group_prompt::{GroupPrompt, JoinLine};
 use crate::service::ask::lessons::build_lessons_section;
@@ -69,22 +69,29 @@ pub struct PromptInput<'a> {
 
 /// Mức chi tiết của danh sách cột; prompt quá dài thì hạ dần theo thứ tự khai báo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) enum Detail {
+pub enum Detail {
     /// Mọi cột, mọi giá trị ngữ cảnh có.
     Full,
     /// Bỏ danh sách giá trị chỉ là mẫu (values_complete = false); cột ít giá trị vẫn đủ danh sách để ánh xạ chữ.
     CompleteValuesOnly,
-    /// Như trên, và chỉ giữ cột khớp câu hỏi cùng cột thời gian (câu có kỳ nào cũng cần cột thời gian).
-    MatchedColumns,
+    /// Như trên, và chỉ cột liên quan (is_related: khớp câu hỏi, lượt phân loại chọn, thời gian, khóa nối bảng, chỉ
+    /// số) còn danh sách giá trị. Mọi cột vẫn đủ metadata: hạ mức chỉ bỏ giá trị, không bỏ cột (#230).
+    RelatedValuesOnly,
 }
 
 /// Prompt sinh SQL cho câu thường.
 pub fn build_sql_prompt(input: &PromptInput) -> String {
+    build_sql_prompt_detail(input).0
+}
+
+/// Như build_sql_prompt, kèm mức chi tiết build_within_limit đã chọn: ask/mod.rs cần biết danh sách giá trị nào thật sự
+/// nằm trong prompt (values_in_prompt) để quyết định có gửi lại hay không (ask/value_retry.rs).
+pub fn build_sql_prompt_detail(input: &PromptInput) -> (String, Detail) {
     let mut tables = vec![input.table];
     if let Some(group) = input.group {
         tables.extend(group.tables.iter().map(|t| t.table.as_str()));
     }
-    build_within_limit(|detail| {
+    build_within_limit_detail(|detail| {
         join_sections(vec![
             build_sql_rules(&tables),
             build_prompt_rules(&tables),
@@ -104,22 +111,28 @@ pub fn build_sql_prompt(input: &PromptInput) -> String {
 /// Dựng prompt ở mức chi tiết cao nhất còn nằm trong PROMPT_MAX_CHARS. Hạ hết mức vẫn dài thì gửi bản ngắn nhất và ghi
 /// log: cắt tiếp là bỏ luật hay câu hỏi, còn tệ hơn để mô hình báo lỗi.
 pub(super) fn build_within_limit(build: impl Fn(Detail) -> String) -> String {
+    build_within_limit_detail(build).0
+}
+
+/// Như build_within_limit, kèm mức chi tiết của prompt trả về.
+pub(super) fn build_within_limit_detail(build: impl Fn(Detail) -> String) -> (String, Detail) {
     let mut prompt = String::new();
-    for detail in [
+    let levels = [
         Detail::Full,
         Detail::CompleteValuesOnly,
-        Detail::MatchedColumns,
-    ] {
+        Detail::RelatedValuesOnly,
+    ];
+    for detail in levels {
         prompt = build(detail);
         if prompt.chars().count() <= PROMPT_MAX_CHARS {
-            return prompt;
+            return (prompt, detail);
         }
     }
     tracing::warn!(
         chars = prompt.chars().count(),
-        "prompt is over the limit even with matched columns only"
+        "prompt is over the limit even with values of related columns only; sending it anyway"
     );
-    prompt
+    (prompt, Detail::RelatedValuesOnly)
 }
 
 pub(super) fn join_sections(sections: Vec<String>) -> String {
@@ -240,12 +253,18 @@ pub(super) fn build_columns_section(context: &AskContext, detail: Detail) -> Str
     build_table_block("Columns:", &context.columns, detail)
 }
 
-/// Khối cột của một bảng. Mức MatchedColumns giữ cột is_always_sent: cột khớp, cột thời gian và cột khóa nối bảng.
+/// Khối cột của một bảng: mọi cột, không bỏ cột nào (#230). Cột gọn (brief, ask/context.rs apply_metadata_cap) chỉ
+/// có tên, kiểu, vai trò.
 fn build_table_block(title: &str, columns: &[ColumnProfile], detail: Detail) -> String {
     let lines: Vec<String> = columns
         .iter()
-        .filter(|c| detail < Detail::MatchedColumns || is_always_sent(c))
-        .map(|c| build_column_line(c, detail))
+        .map(|c| {
+            if c.brief {
+                build_compact_line(c)
+            } else {
+                build_column_line(c, detail)
+            }
+        })
         .collect();
     if lines.is_empty() {
         return String::new();
@@ -253,9 +272,9 @@ fn build_table_block(title: &str, columns: &[ColumnProfile], detail: Detail) -> 
     format!("{title}\n{}", lines.join("\n"))
 }
 
-/// Một cột: tên, kiểu, vai trò, định dạng ngày nếu là ngày dạng chữ, cách gộp nếu là avg, mô tả, bí danh, rồi giá trị
-/// ở dòng sau.
-fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
+/// Cột ở dạng gọn, một dòng: tên, kiểu, vai trò, định dạng ngày nếu có (thiếu nó thì SQL đọc sai cột ngày). Không
+/// giá trị nào, kể cả với cột nhạy cảm.
+fn build_compact_line(column: &ColumnProfile) -> String {
     let mut line = format!(
         "- {} ({}, {}",
         quote_ident(&column.name),
@@ -265,11 +284,33 @@ fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
     if let Some(format) = &column.time_format {
         line.push_str(&format!(", date format {format}"));
     }
-    // Chỉ cột avg có thêm chữ: sum là cách mô hình làm sẵn, ghi cho mọi cột chỉ làm prompt dài thêm. Cột mô tả từng
-    // dòng (tín chỉ, tuổi, số ngày) cộng lại ra số vô nghĩa (#185).
-    if column.role == ProfileRole::Measure.as_str() && column.aggregation == ColumnAggregation::Avg
-    {
-        line.push_str(", one value per row: aggregate it with AVG, never SUM");
+    line.push(')');
+    line
+}
+
+/// Metadata đủ của một cột, một dòng: tên, kiểu, vai trò, định dạng ngày, đơn vị, cách gộp của cột số đo, mô tả, bí
+/// danh. Chung cho prompt SQL (kèm giá trị ở build_column_line) và prompt phân loại (ask/classify.rs, không giá trị).
+pub(super) fn build_column_metadata(column: &ColumnProfile) -> String {
+    let mut line = format!(
+        "- {} ({}, {}",
+        quote_ident(&column.name),
+        column.data_type,
+        column.role
+    );
+    if let Some(format) = &column.time_format {
+        line.push_str(&format!(", date format {format}"));
+    }
+    if let Some(unit) = &column.unit {
+        line.push_str(&format!(", unit {unit}"));
+    }
+    // Cột mô tả từng dòng (tín chỉ, tuổi, số ngày) cộng lại ra số vô nghĩa (#185), nên cột avg có câu nhấn mạnh.
+    if column.role == ProfileRole::Measure.as_str() {
+        match column.aggregation {
+            ColumnAggregation::Avg => {
+                line.push_str(", one value per row: aggregate it with AVG, never SUM")
+            }
+            ColumnAggregation::Sum => line.push_str(", aggregate with SUM"),
+        }
     }
     line.push(')');
     if let Some(description) = column.description.as_deref().map(str::trim) {
@@ -281,11 +322,13 @@ fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
     if !column.aliases.is_empty() {
         line.push_str(&format!(". Also called: {}", column.aliases.join(", ")));
     }
-    // Cột nhạy cảm không kèm giá trị nào. #28 đã lọc; kiểm lại ở đây vì đây là chỗ cuối trước khi chữ rời máy chủ.
-    let show_values = !column.is_sensitive
-        && !column.values.is_empty()
-        && (column.values_complete || detail == Detail::Full);
-    if show_values {
+    line
+}
+
+/// Một cột đủ metadata, rồi danh sách giá trị ở dòng sau nếu có và mức chi tiết cho phép.
+fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
+    let mut line = build_column_metadata(column);
+    if values_in_prompt(column, detail) {
         let kind = if column.values_complete {
             "All values"
         } else {
@@ -295,6 +338,16 @@ fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
         line.push_str(&format!("\n  {kind}: {}", values.join(", ")));
     }
     line
+}
+
+/// Danh sách giá trị của cột có nằm trong prompt ở mức chi tiết này không. Cột nhạy cảm không kèm giá trị nào: #28 đã
+/// lọc, kiểm lại ở đây vì đây là chỗ cuối trước khi chữ rời máy chủ. Cột gọn (brief) chỉ có tên, kiểu, vai trò.
+pub fn values_in_prompt(column: &ColumnProfile, detail: Detail) -> bool {
+    !column.is_sensitive
+        && !column.brief
+        && !column.values.is_empty()
+        && (column.values_complete || detail == Detail::Full)
+        && (detail < Detail::RelatedValuesOnly || is_related(column))
 }
 
 /// Giá trị viết như chuỗi SQL ('O''Brien'): mô hình chép nguyên vào SQL được, và dấu phẩy trong giá trị không lẫn với

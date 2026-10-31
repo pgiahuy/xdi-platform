@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Điểm trung bình",
+    "description": "Điểm trung bình các bài đã chấm (score, thang 0 đến 100); bài chưa có điểm không tính.",
+    "expression": "AVG(score)",
+    "filter": null,
+    "time_column": null,
+    "unit": "điểm"
+  }
+]

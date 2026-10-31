@@ -1,6 +1,7 @@
 You write one DuckDB SQL query that answers a question about {{tables}}. Reply with one JSON object only, in the required format.
 Rules:
 - Query only {{tables}} and the columns listed below. Put every column name in double quotes, exactly as listed.
+- Every column of these tables is listed. A column listed with only its type and role, without a description or values, is a real column too: use it when the question needs it.
 - Write one SELECT statement in DuckDB syntax. Never change data.
 - A column listed with a date format stores dates as text: read it with strptime("column", 'format').
 - When the question asks for a metric listed below, compute it with exactly its expression and its filter. A metric marked UNCONFIRMED is a draft nobody has approved: use it only when no confirmed metric fits, and then add an assumption of kind "metric" about it.

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::engine::excel_worker::ExcelWorker;
+use crate::sample_database::{build_sample_database, SampleDatabase};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -61,10 +62,13 @@ pub struct Config {
     pub insight_text: bool,
     /// Thư mục chứa file mẫu (SAMPLES_DIR): data/samples của repo, compose gắn vào /samples.
     pub samples_dir: PathBuf,
+    /// Database mẫu mà thiết lập lần đầu thêm làm nguồn và chụp bảng (SAMPLE_DATABASE_URL, service/samples.rs).
+    /// None: nạp dataco.csv như trước. Compose trỏ vào dịch vụ demo-db (data/postgres-demo, profile demo).
+    pub sample_database: Option<SampleDatabase>,
     /// Cách chạy bộ đọc Excel: chính binary này với tham số excel-worker (không phải biến môi trường).
     pub excel_worker: ExcelWorker,
-    /// Khóa mã hóa thông tin kết nối của nguồn database (SOURCE_SECRET_KEY, 32 byte dạng base64). Rỗng thì tính năng
-    /// nối database tắt; service/sources/secret.rs kiểm độ dài khóa.
+    /// Khóa mã hóa thông tin kết nối của nguồn database (SOURCE_SECRET_KEY, 32 byte dạng base64). Biến rỗng thì main.rs
+    /// đặt khóa sinh sẵn trong DATA_DIR (service/sources/key_file.rs); service/sources/secret.rs kiểm độ dài khóa.
     pub source_secret_key: Secret,
     /// Máy chủ database được phép thêm làm nguồn (SOURCE_ALLOWED_HOSTS, cách nhau bằng dấu phẩy). Rỗng thì không thêm
     /// được nguồn nào: backend không bị dùng để dò máy trong mạng nội bộ.
@@ -138,7 +142,20 @@ impl Config {
                 1_000_000,
             )),
             source_timeout: timeout_secs("SOURCE_TIMEOUT_SECS", 300),
+            sample_database: sample_database(&var_or("SAMPLE_DATABASE_URL", "")),
         }
+    }
+
+    /// Máy chủ được thêm làm nguồn: có trong SOURCE_ALLOWED_HOSTS (mọi cổng), hoặc đúng máy và cổng của
+    /// SAMPLE_DATABASE_URL. Người cài đã chọn database mẫu, bắt thêm nó vào SOURCE_ALLOWED_HOSTS thì quên một biến là
+    /// thiết lập lần đầu không chụp được. Chỉ cho đúng cổng đó: make dev đặt database mẫu ở 127.0.0.1:5440, cho cả máy
+    /// 127.0.0.1 thì admin chụp được chính Postgres của ứng dụng (cổng 5433).
+    pub fn source_host_allowed(&self, host: &str, port: u16) -> bool {
+        let sample = self
+            .sample_database
+            .as_ref()
+            .is_some_and(|s| s.host == host && s.port == port);
+        sample || self.source_allowed_hosts.iter().any(|h| h == host)
     }
 
     /// Lệnh đánh giá (`eval`, `eval-classify`, main.rs) gọi Gemini bằng khóa riêng `EVAL_GEMINI_API_KEY` khi có, để
@@ -192,13 +209,28 @@ impl Config {
     }
 }
 
-/// Mặc định của OLLAMA_NUM_CTX. Prompt dài nhất (PROMPT_MAX_CHARS, 24 000 ký tự) khoảng 7 200 đến 8 000 token theo
-/// tokenizer của qwen2.5-coder, cộng prompt sửa và câu trả lời thì vượt 8192; 12 288 còn dư khoảng 3 000 token. Cách đo
-/// ở docs/INSTALL.md, mục 1.
+/// Mặc định của OLLAMA_NUM_CTX. Prompt ở trần PROMPT_MAX_CHARS (24 000 ký tự) khoảng 7 200 đến 8 000 token theo tokenizer
+/// của qwen2.5-coder, cộng prompt sửa và câu trả lời thì vượt 8192; 12 288 còn dư khoảng 3 000 token. Từ #230 prompt có
+/// thể dài hơn trần đó: mọi cột luôn có metadata, tới 60 000 ký tự metadata (COLUMN_METADATA_MAX_CHARS) trước khi rút
+/// gọn, cộng danh sách giá trị và phần luật thì cỡ 85 000 ký tự, ước chừng 25 000 token; schema vài trăm cột cần đặt
+/// OLLAMA_NUM_CTX=32768. Ollama backend (engine/llm/ollama.rs) cảnh báo khi một prompt ước lượng vượt giá trị đã đặt.
+/// Cách đo ở docs/INSTALL.md, mục 1.
 const OLLAMA_NUM_CTX_DEFAULT: u32 = 12_288;
 
 /// Mật khẩu mẫu trong docker-compose.yml và .env.example.
 const SAMPLE_DB_PASSWORD: &str = "xdi";
+
+/// SAMPLE_DATABASE_URL sai dạng thì cảnh báo và bỏ qua (thiết lập lần đầu nạp dataco.csv), không làm backend chết lúc
+/// khởi động.
+fn sample_database(raw: &str) -> Option<SampleDatabase> {
+    match build_sample_database(raw) {
+        Ok(db) => db,
+        Err(why) => {
+            tracing::warn!(%why, "invalid SAMPLE_DATABASE_URL, the first-run setup loads dataco.csv instead");
+            None
+        }
+    }
+}
 
 /// Mật khẩu trong DATABASE_URL dạng postgres://user:mat-khau@host/db, nếu có. Dạng khác (không có mật khẩu, hoặc
 /// chuỗi key=value) trả None.
@@ -343,6 +375,19 @@ fn worker_binary() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_sample_host_and_port_are_allowed_without_listing() {
+        let mut config = Config::from_env();
+        config.sample_database =
+            build_sample_database("postgres://analyst:x@127.0.0.1:5440/company_demo").unwrap();
+        config.source_allowed_hosts = vec!["db.example.com".to_string()];
+        assert!(config.source_host_allowed("127.0.0.1", 5440));
+        // Cùng máy, cổng khác (Postgres của ứng dụng ở 5433): không được.
+        assert!(!config.source_host_allowed("127.0.0.1", 5433));
+        assert!(config.source_host_allowed("db.example.com", 6543));
+        assert!(!config.source_host_allowed("10.0.0.5", 5432));
+    }
 
     #[test]
     fn eval_key_replaces_the_app_key_only_when_set() {
