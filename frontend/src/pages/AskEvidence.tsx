@@ -4,7 +4,7 @@ backend/src/service/ask/contract.rs), gọi useDrill để lấy dòng nguồn c
 components/ask/EvidencePane.tsx. Tab đang mở, chỗ vừa bấm và trang dòng nguồn do AskPage giữ (evidenceView.ts), vì ô
 của bảng kết quả nằm ngoài pane cũng mở tab Dòng nguồn.
 Tab Dòng nguồn gọi route drill (backend/src/service/drill/mod.rs) với khóa của chỗ vừa bấm: breakdown cho dòng phân rã,
-cell cho ô số đo; lỗi thì hiện lời báo của backend; ở chế độ dữ liệu mẫu thì hiện vài dòng mẫu. */
+cell cho ô số đo; lỗi thì hiện lời báo của backend. */
 
 import type { AskResponse } from '@/api/ask'
 import { drillPageSize, useDrill, type DrillRequest, type DrillVariables } from '@/api/drill'
@@ -58,7 +58,6 @@ export function AskEvidence({ ws, answer, pending, view }: Props) {
       ? {
           datasetId: variables.datasetId,
           request: { query_id: response.query_id, ...buildDrillKey(target), offset, limit: drillPageSize },
-          fromSamples: variables.fromSamples,
         }
       : null
   const drill = useDrill(ws, drillVariables)
@@ -70,7 +69,6 @@ export function AskEvidence({ ws, answer, pending, view }: Props) {
     }
     if (drill.error) return { state: 'error', target, message: drill.error.message }
     if (!drill.data) return { state: 'loading', target }
-    const sample = import.meta.env.DEV && variables.fromSamples === true
     // result.total_rows của drill chỉ đếm dòng của trang này; tổng thật ở total_rows ngoài, nên bảng ghi "N trên M".
     const total = drill.data.total_rows
     const page = buildLeadFirst(buildResultView(drill.data.result), buildLeadNames(target, response))
@@ -81,7 +79,6 @@ export function AskEvidence({ ws, answer, pending, view }: Props) {
       sql: drill.data.sql,
       result,
       page: { offset, limit: drillPageSize, total },
-      sample,
     }
   })()
 
@@ -112,10 +109,13 @@ function buildDrillKey(target: DrillTarget): Pick<DrillRequest, 'cell' | 'breakd
 /** Lời nhắc khi chưa bấm gì, theo những chỗ bấm được của câu trả lời; null khi không có chỗ nào. */
 function buildRowsHint(hasBreakdown: boolean, hasCells: boolean): string | null {
   if (hasBreakdown && hasCells) {
-    return 'Bấm một số trong bảng kết quả, hoặc số của một kỳ trong tab Phân rã, để xem dòng nguồn đứng sau số đó.'
+    return (
+      'Bấm vào một con số trong bảng kết quả, hoặc con số của một kỳ ở tab Phân rã, để xem những dòng dữ liệu tạo ' +
+      'ra con số đó.'
+    )
   }
-  if (hasBreakdown) return 'Bấm số của một kỳ trong tab Phân rã để xem dòng nguồn của nhóm đó.'
-  if (hasCells) return 'Bấm một số trong bảng kết quả để xem dòng nguồn đứng sau số đó.'
+  if (hasBreakdown) return 'Bấm vào con số của một kỳ ở tab Phân rã để xem những dòng dữ liệu tạo ra con số đó.'
+  if (hasCells) return 'Bấm vào một con số trong bảng kết quả để xem những dòng dữ liệu tạo ra con số đó.'
   return null
 }
 

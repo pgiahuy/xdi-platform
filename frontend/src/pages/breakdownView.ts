@@ -64,7 +64,7 @@ function buildBreakdownReason(response: AskResponse): string {
   if (response.status === 'answered') {
     // Câu "tại sao" không dựng được phân rã thì backend gửi cảnh báo kèm lý do; không có cảnh báo là câu thường.
     const unavailable = response.warnings.find((warning) => warning.code === 'explanation_unavailable')
-    return unavailable?.message ?? 'Câu này không phải câu hỏi "tại sao", nên không có phân rã.'
+    return unavailable?.message ?? 'Câu hỏi này không có phần phân rã.'
   }
   if (response.status === 'needs_choice') return 'Chưa có phân rã: cần chọn cách hiểu câu hỏi trước.'
   return 'Không có phân rã: câu SQL không chạy ra kết quả.'

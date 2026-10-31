@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/OverviewPanel.tsx - khung "Tổng quan dữ liệu" của một dataset: tải tổng quan (api/overview.ts), báo đang tải hay
-lỗi, rồi vẽ DataOverview. Trang hỏi (AskOverview.tsx) và trang Dữ liệu (DatasetOverviewSection.tsx) cùng dùng, mỗi
-trang truyền onPick riêng. Chỉ tải khi khung được mở: trang không gọi route tổng quan cho dataset không ai xem. */
+lỗi, rồi vẽ DataOverview. Trang Tổng quan dữ liệu (DatasetOverviewSection.tsx) dùng, truyền onPick mở trang cuộc trò
+chuyện với câu hỏi điền sẵn. Chỉ tải khi khung được mở: trang không gọi route tổng quan cho dataset không ai
+xem. */
 
 import { useMemo } from 'react'
 import { useDatasetOverview } from '@/api/overview'

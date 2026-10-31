@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/EvidenceBreakdown.tsx - tab Phân rã của pane bằng chứng: mỗi chiều một bảng đóng góp theo đúng thứ
 tự backend gửi (chiều giải thích tốt nhất trước, nhóm đóng góp lớn trước; bảng của một chiều ở BreakdownDimension.tsx),
-rồi phần lượng và giá nếu có. Đầu tab có ba dòng nói chung mỗi cột hệ thống tính thêm cho biết gì (ReadingGuide), viết
-bằng lời thường cho người dùng nghiệp vụ: không ai nói thì họ không đọc được cột "Đóng góp". Lời giải thích và thanh
+rồi phần lượng và giá nếu có. Đầu tab có hướng dẫn nói chung mỗi cột hệ thống tính thêm cho biết gì (ReadingGuide), viết
+bằng lời thường cho người dùng nghiệp vụ: không ai nói thì họ không đọc được cột "Đóng góp". Hướng dẫn mặc định thu
+gọn, chỉ còn tiêu đề, để bảng số lên đầu; ai cần thì bấm tiêu đề để mở. Lời giải thích và thanh
 đóng góp đã ở thẻ trả lời (WhyOverview) ngay bên cạnh nên không lặp lại; chỉ chênh lệch được nhắc lại ở dòng Tổng của
 mỗi bảng, để thấy cột đóng góp cộng lại đúng bằng nó.
 Số là chuỗi chữ số của backend, chỉ nhóm nghìn trên chuỗi (formatDecimal), không qua Number() nên không làm tròn. */
 
-import { Info } from 'lucide-react'
+import { useId } from 'react'
+import { ChevronDown, Info } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 import { BreakdownDimension } from './BreakdownDimension'
 import { ContributionCell, type SliceTotals } from './BreakdownRows'
 import { formatDecimal } from './cellFormat'
 import { directionWord } from './changeFormat'
 import type { BreakdownView, DrillTarget, VolumePriceView } from './evidenceTypes'
+import { useSectionOpen } from './sectionOpen'
 
 type Props = {
   breakdown: BreakdownView
@@ -43,22 +47,36 @@ export function EvidenceBreakdown({ breakdown, onDrill }: Props) {
 /** Thẻ xanh dương nói ý nghĩa chung của ba cột hệ thống tính thêm, viết cho người không làm tài chính: không chèn tên hay
  * số của câu hỏi, chỉ chữ chiều đổi theo phép so (tăng, giảm giữa hai kỳ; cao hơn, thấp hơn giữa hai nhóm). Màu xanh
  * dương (token --info ở index.css) để người dùng nhận ra đây là thông tin bổ sung, khác cảnh báo hổ phách. Dòng %
- * Thay đổi chỉ có khi ít nhất một bảng có cột đó (độ đo cộng được, xem BreakdownDimension.tsx). */
+ * Thay đổi chỉ có khi ít nhất một bảng có cột đó (độ đo cộng được, xem BreakdownDimension.tsx). Mặc định thu gọn: bấm
+ * cả hàng tiêu đề thì phần thân mới hiện, mũi tên ở mép phải xoay theo. */
 function ReadingGuide({ breakdown }: { breakdown: BreakdownView }) {
+  const headingId = useId()
+  const bodyId = useId()
+  const [open, toggle] = useSectionOpen(false)
   const up = directionWord('up', breakdown.comparison)
   const down = directionWord('down', breakdown.comparison)
   const additive = breakdown.dimensions.some((dimension) => dimension.mixEffect === null)
   return (
     <aside
-      aria-labelledby="breakdown-guide-heading"
-      className="flex gap-2.5 rounded-[10px] border border-l-[3px] border-info-border border-l-info bg-info-soft px-3.5 py-3 text-xs text-foreground"
+      aria-labelledby={headingId}
+      className="rounded-[10px] border border-l-[3px] border-info-border border-l-info bg-info-soft text-xs text-foreground"
     >
-      {/* Icon cạnh tiêu đề chỉ giúp nhận ra loại thẻ; tiêu đề đã nói đủ nên trình đọc màn hình bỏ qua icon. */}
-      <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-info-text" />
-      <div className="flex flex-col gap-1.5">
-        <p id="breakdown-guide-heading" className="font-semibold text-info-text">
-          Cách đọc các cột tính thêm
-        </p>
+      {/* Cả hàng tiêu đề là nút mở, mũi tên ở mép phải như các khung thu gọn khác; icon chỉ giúp nhận ra loại thẻ nên
+      trình đọc màn hình bỏ qua. */}
+      <h3 id={headingId}>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={toggle}
+          className="flex w-full items-center gap-2.5 rounded-[10px] px-3.5 py-2.5 text-left font-semibold text-info-text outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Info aria-hidden className="size-4 shrink-0" />
+          <span className="flex-1">Cách đọc các cột tính thêm</span>
+          <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
+        </button>
+      </h3>
+      <div id={bodyId} hidden={!open} className="flex flex-col gap-1.5 px-3.5 pb-3 pl-10">
         <ul className="flex flex-col gap-1">
           <li>
             <span className="font-semibold">Đóng góp</span>: phần chênh lệch đến từ nhóm này. Số đỏ là nhóm làm kết

@@ -26,7 +26,7 @@ export function SavedTurnBody({ status, understood, onAskAgain, disabled }: Prop
     <div className="flex flex-col gap-3 text-sm">
       {understood.length > 0 && (
         <div className="flex flex-col gap-1">
-          <p className="text-xs font-semibold tracking-wider text-label uppercase">Đã hiểu là</p>
+          <p className="text-xs font-semibold tracking-wider text-label uppercase">Hệ thống đã hiểu là</p>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
             {understood.map((line, index) =>
               line.label ? (

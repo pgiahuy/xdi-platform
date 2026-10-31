@@ -35,9 +35,9 @@ mô hình mặc định `mock` trả lời các câu mẫu trên dataset này. H
 ## Trạng thái
 
 Đã có: tài khoản, workspace, vai `admin` và `member`; nạp CSV, Parquet, Excel thành phiên bản; hồ sơ cột và câu gợi ý,
-gồm câu hỏi tìm nguyên nhân; hỏi theo cuộc trò chuyện, SQL qua guard, bảng, biểu đồ, thẻ "Đã hiểu là"; câu hỏi tìm
-nguyên nhân có phân rã và lời giải thích bằng lời thường; minh chứng gồm SQL, phân rã, các bước và dòng nguồn của các ô
-số đo; mô hình `mock`, Gemini, Ollama.
+gồm câu hỏi tìm nguyên nhân; hỏi theo cuộc trò chuyện, SQL qua guard, bảng, biểu đồ, thẻ "Hệ thống đã hiểu là"; câu hỏi
+tìm nguyên nhân có phân rã và lời giải thích bằng lời thường; minh chứng gồm SQL, phân rã, các bước và dòng nguồn của
+các ô số đo; mô hình `mock`, Gemini, Ollama.
 
 Chưa có: gán vai dữ liệu cho thành viên, chế độ demo, màn xem lịch sử câu hỏi, màn sửa hồ sơ cột và chỉ số. Chi tiết
 ở bảng Trạng thái của [Kiến trúc](ARCHITECTURE.md#trạng-thái).

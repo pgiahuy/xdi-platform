@@ -218,9 +218,9 @@ row_filters:  "region" IN ('South')
   - gặp chỗ đọc dữ liệu bước 3 không nhận ra: hàm ở chỗ bảng, tên kèm schema, tên không phải bảng hay bảng tạm, dạng
     khác bảng. Bước 2 đã từ chối các dạng này; bước 3 vẫn chặn, để bước 2 sót một dạng cũng không thành chỗ đọc dữ
     liệu không qua lọc.
-- `GuardedSql.row_filters` liệt kê điều kiện đã thêm, in đúng như trong `shown`, mỗi điều kiện một lần, để thẻ "Đã hiểu
-  là" ([#35](https://github.com/pgiahuy/xdi-platform/issues/35)) gắn nhãn điều kiện do phân quyền. Không có chính sách
-  thì danh sách rỗng, `shown` và `runnable` như khi chưa có bước này.
+- `GuardedSql.row_filters` liệt kê điều kiện đã thêm, in đúng như trong `shown`, mỗi điều kiện một lần, để thẻ "Hệ thống
+  đã hiểu là" ([#35](https://github.com/pgiahuy/xdi-platform/issues/35)) gắn nhãn điều kiện do phân quyền. Không có
+  chính sách thì danh sách rỗng, `shown` và `runnable` như khi chưa có bước này.
 
 ## Bước 4: giới hạn số dòng
 

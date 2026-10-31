@@ -6,7 +6,9 @@ nên quản trị hệ thống chưa thuộc workspace nào vẫn vào được 
 Một khung cho cả hai nhóm trang: đi từ workspace sang trang quản trị và ngược lại thì AppShell không bị gỡ rồi dựng lại,
 focus bàn phím ở lại mục vừa bấm trên thanh bên. Hai khung riêng thì mỗi lần chuyển focus rơi về đầu trang.
 Workspace nằm trong đường dẫn, không lưu trong phiên (#42): mỗi tab trình duyệt làm việc ở workspace riêng.
-Tạo workspace từ menu đổi workspace: tạo xong thì đóng hộp và mở trang đầu của workspace mới. */
+Tạo workspace từ menu đổi workspace: tạo xong thì đóng hộp và mở trang đầu của workspace mới.
+Menu "Lịch sử trò chuyện" trên thanh bên (SidebarConversations.tsx) đứng đầu danh sách điều hướng và nói về workspace
+của thanh bên; dataset và cuộc đang mở lấy từ đường dẫn của trang hỏi (askNav.ts). */
 
 import { useEffect, useState } from 'react'
 import { Link, matchPath, Outlet, useLocation, useMatches, useNavigate, useParams } from 'react-router'
@@ -18,9 +20,11 @@ import { AppShell } from '@/components/shell/AppShell'
 import type { NavItem, WorkspaceOption } from '@/components/shell/types'
 import { Button } from '@/components/ui/button'
 import { signOutTo } from './authNav'
+import { useAskSelection } from './askNav'
 import { accountRoute, adminNav } from './globalNav'
 import { RouterLink } from './RouterLink'
 import { SessionStatus } from './SessionStatus'
+import { SidebarConversations } from './SidebarConversations'
 import { SignedInScreen } from './SignedInScreen'
 import { useStoredFlag } from './storedFlag'
 import { accountPath, workspaceHref, workspaceNav } from './workspaceNav'
@@ -42,6 +46,7 @@ export function AppLayout() {
   // Cập nhật ngay lúc render khi đường dẫn đổi workspace (cách React khuyên cho state suy từ props), không qua effect.
   const [lastWorkspace, setLastWorkspace] = useState<string | undefined>(ws)
   if (ws !== undefined && ws !== lastWorkspace) setLastWorkspace(ws)
+  const askSelection = useAskSelection(ws)
 
   // Thông báo đăng xuất lỗi thuộc về lúc bấm; chuyển trang thì bỏ, không để nó nằm lại mãi dưới thanh trên.
   const resetLogout = logout.reset
@@ -121,6 +126,19 @@ export function AppLayout() {
       }))
     : []
 
+  // Dataset và cuộc của trang hỏi chỉ dùng cho menu khi trang hỏi đó thuộc đúng workspace của thanh bên.
+  const asked = navWorkspace && askSelection.ws === navWorkspace.slug ? askSelection : undefined
+  const conversationMenu = navWorkspace && {
+    render: (close: () => void) => (
+      <SidebarConversations
+        ws={navWorkspace.slug}
+        datasetId={asked?.datasetId ?? null}
+        activeId={asked?.conversationId ?? null}
+        onDone={close}
+      />
+    ),
+  }
+
   // Đổi workspace thì giữ mục đang xem (Dữ liệu sang Dữ liệu), nhưng bỏ phần sau đó: id dataset của workspace này
   // không có ở workspace kia. Từ trang ngoài workspace thì về trang đầu của workspace được chọn.
   const toOption = (m: Membership): WorkspaceOption => ({
@@ -158,6 +176,7 @@ export function AppLayout() {
       }}
       sidebarCollapsed={sidebarCollapsed}
       onSidebarCollapsedChange={setSidebarCollapsed}
+      conversationMenu={conversationMenu}
       link={RouterLink}
     >
       <Outlet />

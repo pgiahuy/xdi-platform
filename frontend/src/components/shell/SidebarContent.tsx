@@ -1,17 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/shell/SidebarContent.tsx - nội dung thanh bên: hàng thương hiệu kèm nút thu gọn ở góc phải, bộ chọn
 workspace, mục điều hướng, chân có tài khoản và phiên bản. AppShell dùng cùng nội dung này cho thanh bên cố định của màn rộng và cho ngăn
-kéo của màn hẹp. compact chỉ dùng cho thanh bên cố định: dải icon, chữ chuyển vào aria-label và title. */
+kéo của màn hẹp. compact chỉ dùng cho thanh bên cố định: dải icon, chữ chuyển vào aria-label và title.
+Trang truyền conversationMenu thì nút "Lịch sử trò chuyện" (ConversationFlyout.tsx) đứng đầu danh sách điều hướng. */
 
 import type { ReactNode } from 'react'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { ConversationFlyout } from './ConversationFlyout'
 import { ServerInfo } from './ServerInfo'
 import { SidebarNav } from './SidebarNav'
 import { UserMenu } from './UserMenu'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
-import type { LinkComponent, NavItem, ServerInfo as ServerInfoData, SignedInUser, WorkspaceOption } from './types'
+import type {
+  ConversationMenu,
+  LinkComponent,
+  NavItem,
+  ServerInfo as ServerInfoData,
+  SignedInUser,
+  WorkspaceOption,
+} from './types'
 
 type Props = {
   navItems: NavItem[]
@@ -30,11 +39,15 @@ type Props = {
   compact?: boolean
   /** Nút thu gọn hay mở rộng ở góc trên phải thanh bên; không có thì không có nút. */
   onToggleCompact?: () => void
+  /** Menu lịch sử trò chuyện; không có thì thanh bên không có nút đó (người dùng chưa thuộc workspace nào). */
+  conversationMenu?: ConversationMenu
+  /** Nội dung này nằm trong ngăn kéo của màn hẹp. */
+  drawer?: boolean
 }
 
 export function SidebarContent(props: Props) {
   const { navItems, currentWorkspace, workspaces, serverInfo, link, onNavigate, onCreateWorkspace, closeButton } = props
-  const { compact = false, onToggleCompact } = props
+  const { compact = false, onToggleCompact, conversationMenu, drawer = false } = props
   // Nhãn đổi theo trạng thái nên không thêm aria-expanded: biến thể ghost tô nền khi aria-expanded, nút sẽ sáng bừng
   // trên nền mực của thanh bên.
   const toggleLabel = compact ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên'
@@ -74,7 +87,22 @@ export function SidebarContent(props: Props) {
         {closeButton}
       </div>
       <div className={cn('flex-1 overflow-y-auto py-2', compact ? 'px-2' : 'px-3')}>
-        <SidebarNav items={navItems} link={link} onNavigate={onNavigate} compact={compact} />
+        <SidebarNav
+          items={navItems}
+          link={link}
+          onNavigate={onNavigate}
+          compact={compact}
+          leading={
+            conversationMenu && (
+              <ConversationFlyout
+                render={conversationMenu.render}
+                compact={compact}
+                drawer={drawer}
+                onNavigate={onNavigate}
+              />
+            )
+          }
+        />
       </div>
       <div className={cn('border-t border-sidebar-border py-3', compact ? 'px-2' : 'px-3')}>
         <UserMenu

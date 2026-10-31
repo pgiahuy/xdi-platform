@@ -6,7 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
-- Khung "Tổng quan dữ liệu" ở trang hỏi và trang Dữ liệu: số dòng, khoảng thời gian, các cột theo nhóm kèm nhãn tiếng Việt, biểu đồ dựng sẵn và chỉ số; bấm một cột hay biểu đồ để điền câu hỏi.
+- Trang "Tổng quan dữ liệu": số dòng, khoảng thời gian, các cột theo nhóm kèm nhãn tiếng Việt, biểu đồ dựng sẵn và chỉ số; bấm một cột hay biểu đồ để điền câu hỏi.
 - Màn **Chỉ số** của mỗi dataset (nút Chỉ số ở trang Dữ liệu): admin thêm, sửa, xóa chỉ số bằng cách chọn phép tính và cột hoặc viết SQL; công thức được chạy thử trước khi lưu, sai thì báo ngay dưới ô sai; câu hỏi sau dùng đúng công thức đó (#185).
 - Cột số đo có cách gộp mặc định, tổng hay trung bình: mô hình đề xuất lúc nạp, admin đổi ở màn Chỉ số; câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng (#185).
 - Postgres mẫu nhiều bảng có khóa chính, khóa ngoại (DataCo và OULAD) để thử kết nối cơ sở dữ liệu công ty: `data/postgres-demo/`.
@@ -15,6 +15,10 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Changed
 
+- Câu hỏi không có số nào để trả lời chỉ hiện câu trả lời và thẻ "Hệ thống đã hiểu là", không còn hộp cảnh báo kỹ thuật, bảng trống hay dòng "câu viết theo khuôn".
+- Thanh bên bỏ mục "Hỏi dữ liệu": vào workspace là mở trang **Cuộc trò chuyện**, chưa hỏi gì thì có một câu mời hỏi ngắn; nút **Lịch sử trò chuyện** đứng đầu thanh bên. Trang Cuộc trò chuyện bỏ nút "Tổng quan dữ liệu" cạnh ô chọn dataset, tổng quan chỉ còn ở trang riêng; bỏ công tắc "Dữ liệu mẫu" của chế độ dev.
+- Danh sách cuộc trò chuyện rời trang hỏi, sang nút **Lịch sử trò chuyện** trên thanh bên: một khung nổi đè lên trang, liệt kê cuộc trò chuyện trên mọi dataset (mỗi cuộc ghi ngày giờ và dataset của nó), hiện tối đa 8 cuộc một lúc (nhiều hơn thì cuộn), có nút dấu cộng mở cuộc mới, đóng khi chọn, bấm ra ngoài hoặc nhấn Esc. "Tổng quan dữ liệu" thành mục riêng trên thanh bên, chọn dataset ở đầu trang; nút Tổng quan ở trang Dữ liệu mở trang này thay cho khung dưới danh sách.
+- Thẻ "Đã hiểu là" đổi tên thành "Hệ thống đã hiểu là", ở câu trả lời, lượt hỏi đã lưu và màn Chỉ số.
 - Dòng "Đo" của thẻ "Đã hiểu là" ghi cách tính bằng lời khi chỉ số không có mô tả, ví dụ "tổng cột Order Item Total" (#185).
 - Mô hình nhận ra câu hỏi tìm nguyên nhân thay cho so từ khóa, kể cả cách hỏi như "Doanh thu giảm do gì?"; câu đếm theo cột "lý do" vẫn là câu thường. Mô hình lỗi thì dùng luật từ khóa như trước; tab Các bước có thêm bước Phân loại câu hỏi.
 - Câu hỏi tìm nguyên nhân có lời tóm tắt do code viết: câu trả lời chính rồi lý do chính (số dòng, lượng và giá, cơ cấu), nhóm khác thường hay "không có nơi nào đặc biệt", và cột lời tóm tắt bỏ qua vì chỉ là tên khác của hai nhóm đang so (như hình thức thanh toán khi so trạng thái đơn) hay trùng cột khác; tên cột kèm nghĩa tiếng Việt.
