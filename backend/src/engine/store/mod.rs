@@ -28,6 +28,9 @@ mod users;
 mod datasets;
 #[cfg(test)]
 mod delete_history_tests;
+mod domains;
+#[cfg(test)]
+mod domains_tests;
 mod metric_edits;
 mod metrics;
 mod queries;
@@ -54,6 +57,7 @@ pub use datasets::{
     Dataset, DatasetVersion, NewVersion, PendingVersion, ProfileStatus, SemanticCandidate,
     SourceKind,
 };
+pub use domains::{DomainConceptRecord, DomainPackRecord, NewDomainConcept};
 pub use feedback::{ExampleRow, NewFeedback, StoredFeedback};
 pub use members::{ChangeOutcome, MemberChange, MemberRow, WorkspaceOverview};
 #[allow(unused_imports)]
