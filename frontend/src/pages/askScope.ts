@@ -22,6 +22,14 @@ export function resolveAskScope(catalog: CatalogDataset[], datasetParam: string 
   return { dataset: catalog.find((d) => d.kind === 'database') ?? catalog[0], table: undefined }
 }
 
+/** Bảng mở sẵn ở trang Tổng quan khi đường dẫn chưa ghi bảng: bảng giữ nhiều khóa ngoại nhất (thường là bảng sự kiện,
+ * như dòng đơn hàng), bằng nhau thì bảng nhiều dòng hơn; giống cách backend chọn bảng bắt đầu khi câu hỏi không gợi ý
+ * bảng nào (service/ask/scope.rs). */
+export function pickMainTable(dataset: CatalogDataset): CatalogTable | undefined {
+  const keys = (t: CatalogTable) => dataset.relations.filter((r) => r.from_dataset_id === t.id).length
+  return [...dataset.tables].sort((a, b) => keys(b) - keys(a) || (b.row_count ?? 0) - (a.row_count ?? 0))[0]
+}
+
 export function buildScopeOptions(catalog: CatalogDataset[]): ScopeDatasetOption[] {
   return catalog.map((d) => ({
     id: d.id,

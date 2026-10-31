@@ -5,7 +5,7 @@ thì xem tổng quan của bảng đó (DatasetOverviewSection.tsx, khung tổng
 có khung tổng quan.
 Dataset và bảng đang xem nằm trong đường dẫn (?dataset=...&table=..., askScope.ts), nên nút Tổng quan của một bảng ở
 trang Dữ liệu mở thẳng đúng bảng và tải lại trang vẫn giữ; link cũ ghi id bảng vào ?dataset= vẫn mở đúng bảng. Chưa
-ghi bảng thì xem bảng đầu tiên của dataset. */
+ghi bảng thì xem bảng chính của dataset (pickMainTable). */
 
 import { Link, useParams, useSearchParams } from "react-router";
 import { useCatalog } from "@/api/catalog";
@@ -13,7 +13,7 @@ import { DatasetScopePicker } from "@/components/ask/DatasetScopePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { TableIndex } from "@/components/overview/TableIndex";
 import { Button } from "@/components/ui/button";
-import { buildScopeOptions, resolveAskScope } from "./askScope";
+import { buildScopeOptions, pickMainTable, resolveAskScope } from "./askScope";
 import { DatasetOverviewSection } from "./DatasetOverviewSection";
 import { workspaceHref } from "./workspaceNav";
 
@@ -26,7 +26,7 @@ export function OverviewPage() {
     params.get("dataset"),
     params.get("table"),
   );
-  const table = pinned ?? dataset?.tables[0];
+  const table = pinned ?? (dataset && pickMainTable(dataset));
 
   if (datasets.error && !datasets.data) {
     return (

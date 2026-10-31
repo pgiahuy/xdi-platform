@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/datasets/SourcePanel.tsx - một nguồn database đã kết nối: thử kết nối lại, chọn bảng, chọn bảng chụp kèm
-(phần relations, thường là RelatedTablePicker), đặt tên, chụp bảng thành dataset, xóa nguồn, rồi kết quả chụp của từng
-bảng (dataset mới, phiên bản mới hay không đổi). Danh sách bảng và kết quả do trang truyền vào
+(phần relations, thường là RelatedTablePicker), đặt tên, chụp bảng vào dataset của database (#257), xóa nguồn, rồi kết
+quả chụp của từng bảng (bảng mới, phiên bản mới hay không đổi). Danh sách bảng và kết quả do trang truyền vào
 (pages/DatabaseSources.tsx). */
 
 import { useId, type ReactNode } from 'react'
@@ -56,7 +56,7 @@ export function SourcePanel(props: Props) {
             </Button>
           }
           title="Xóa nguồn này?"
-          description="Thông tin kết nối bị xóa. Nguồn còn dataset chụp từ nó thì phải xóa các dataset đó trước."
+          description="Thông tin kết nối bị xóa. Database còn bảng đã chụp thì phải xóa các bảng đó trước."
           confirmLabel="Xóa nguồn"
           onConfirm={props.onDelete}
         />
@@ -90,14 +90,14 @@ export function SourcePanel(props: Props) {
           {props.relations}
           <FormField
             id={`${id}-name`}
-            label="Tên dataset"
+            label="Tên bảng"
             value={name}
             onChange={(event) => props.onNameChange(event.target.value)}
-            hint="Bỏ trống thì lấy tên bảng."
+            hint="Bỏ trống thì lấy tên bảng trong database."
           />
           <div>
             <Button type="submit" disabled={busy || table === ''}>
-              {busy ? 'Đang chụp...' : 'Chụp bảng thành dataset'}
+              {busy ? 'Đang chụp...' : 'Chụp bảng'}
             </Button>
           </div>
         </form>
@@ -131,5 +131,5 @@ function SnapshotResult({ tables, relationCount }: { tables: SnapshotTableResult
 function tableResultText(t: SnapshotTableResult): string {
   if (!t.created) return `không đổi, giữ phiên bản ${t.version}`
   const rows = t.rowCount === null ? '' : `, ${numberFormat.format(t.rowCount)} dòng`
-  return t.version === 1 ? `dataset mới${rows}` : `phiên bản ${t.version}${rows}`
+  return t.version === 1 ? `bảng mới${rows}` : `phiên bản ${t.version}${rows}`
 }
