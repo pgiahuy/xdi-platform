@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/QuestionForm.tsx - ô hỏi ở đáy khung trò chuyện: gõ câu hỏi, bấm Hỏi. Ô chọn dataset nằm ở đầu trang
-(DatasetPicker). Trang đặt ô này dính đáy cột chính, nên giữ thấp: nhãn "Câu hỏi" chỉ cho trình đọc màn hình (chữ gợi
+(DatasetScopePicker). Trang đặt ô này dính đáy cột chính, nên giữ thấp: nhãn "Câu hỏi" chỉ cho trình đọc màn hình (chữ gợi
 ý trong ô đã nói ô để làm gì), nút Hỏi đứng cạnh ô chữ ở mọi cỡ màn.
 Enter gửi, Shift+Enter xuống dòng, như ô chat quen thuộc. Bỏ qua Enter khi bộ gõ đang ghép chữ (isComposing): gõ tiếng
 Việt bằng bộ gõ kiểu IBus, Enter lúc đó là chốt chữ, gửi luôn thì câu hỏi bị cắt giữa chừng. */

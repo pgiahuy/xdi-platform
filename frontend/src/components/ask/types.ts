@@ -3,9 +3,20 @@
 mục 3); kiểu nào trùng hình dạng với hợp đồng ask (ví dụ ChoiceView với Choice) thì trang truyền thẳng dữ liệu của
 response vào, không phải chép. */
 
-export type DatasetOption = {
+/** Một bảng trong ô chọn dataset. */
+export type ScopeTableOption = {
   id: string
   name: string
+  /** Schema trong database nguồn; null với file. */
+  schema: string | null
+}
+
+/** Một dataset trong ô chọn: database (mở ra chọn được một bảng) hay file (#257). */
+export type ScopeDatasetOption = {
+  id: string
+  name: string
+  kind: 'database' | 'file'
+  tables: ScopeTableOption[]
 }
 
 /** Hồ sơ của phiên bản hiện hành: profiling khi chưa xong lớp ngữ nghĩa (chưa có câu gợi ý, mô tả cột), failed khi lập

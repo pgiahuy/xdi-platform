@@ -10,7 +10,7 @@ báo tiến trình hay kết quả cho người dùng. */
 
 import { useEffect, useRef, useState, type Ref } from 'react'
 import { isAborted } from '@/api/client'
-import { useExcelSheets, useUploadDataset, type Dataset } from '@/api/datasets'
+import { useExcelSheets, useUploadDataset } from '@/api/datasets'
 import { groupSheets, defaultSelection, type SheetGroup } from '@/components/datasets/sheetGroups'
 import { SheetPicker } from '@/components/datasets/SheetPicker'
 import type { UploadEntry, UploadStatus } from '@/components/datasets/types'
@@ -25,11 +25,12 @@ import {
   singleExcel,
   type PlannedRequest,
   type SheetsState,
+  type UploadTarget,
 } from './datasetUploadPlan'
 
 type Props = {
   ws: string
-  target?: Dataset
+  target?: UploadTarget
   /** Bỏ dataset đang nhận phiên bản mới. Có id thì chỉ bỏ khi dataset đang chọn vẫn là dataset đó. */
   onClearTarget: (id?: string) => void
   headingRef?: Ref<HTMLHeadingElement>

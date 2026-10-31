@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres), luồng chính của trang
 (#230, nạp file là lựa chọn phụ bên dưới): nút mở form thêm nguồn, workspace chưa có nguồn nào thì form mở sẵn,
-rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chọn bảng chụp kèm, chụp thành dataset. DatasetsPage chỉ hiện khung
+rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chọn bảng chụp kèm, chụp vào dataset của database (#257). DatasetsPage chỉ hiện khung
 này cho admin; backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel,
 RelatedTablePicker). Cách chọn sẵn, mở thêm một bước và giới hạn số bảng ở relatedTablesView.ts. */
 
@@ -85,8 +85,8 @@ export function DatabaseSources({ ws }: { ws: string }) {
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        Chụp bảng Postgres của tổ chức thành dataset, kèm các bảng liên quan theo khóa ngoại (mỗi bảng một dataset, hỏi
-        được qua nhiều bảng); mỗi lần chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
+        Mỗi database kết nối là một dataset; chụp bảng Postgres của tổ chức vào dataset đó, kèm các bảng liên quan theo
+        khóa ngoại, để câu hỏi nối được nhiều bảng. Mỗi lần chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
       </p>
       {formOpen && (
         <ConnectForm

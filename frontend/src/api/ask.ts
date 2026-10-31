@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-/* api/ask.ts - hỏi dữ liệu: POST /workspaces/{ws}/datasets/{id}/ask (backend/src/api/query.rs), kiểu response ở
-backend/src/service/ask/contract.rs. Câu sau của cùng cuộc trò chuyện gửi kèm conversation_id để mô hình đọc nó như câu
+/* api/ask.ts - hỏi dữ liệu trên một dataset (#257): POST /workspaces/{ws}/catalog/{id}/ask (backend/src/api/catalog.rs),
+kiểu response ở backend/src/service/ask/contract.rs. table_id ghim bảng bắt đầu; vắng thì backend tự chọn, và
+AskResponse.table_id ghi bảng đã bắt đầu, nên truy dòng nguồn (api/drill.ts) dùng id bảng đó. Câu sau của cùng cuộc trò chuyện gửi kèm conversation_id để mô hình đọc nó như câu
 tiếp nối (backend/src/service/conversation/). Quy tắc gửi lựa chọn ở docs/ARCHITECTURE.md mục 8: backend không giữ trạng thái
 giữa hai lần hỏi, nên hỏi lại luôn gửi lại câu hỏi kèm choices của response gần nhất, thay hoặc thêm mục vừa chọn. */
 
 import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query'
+import { catalogPath } from './catalog'
 import { apiPost } from './client'
-import { conversationsKey } from './conversations'
+import { catalogConversationsKey } from './conversations'
 import type { components } from './schema'
 
 type Schemas = components['schemas']
 export type AskResponse = Schemas['AskResponse']
-export type AskRequest = Schemas['AskRequest']
+export type DatasetAskRequest = Schemas['DatasetAskRequest']
 export type ChosenOption = Schemas['ChosenOption']
 export type Choice = Schemas['Choice']
 export type Understanding = Schemas['Understanding']
@@ -20,7 +22,10 @@ export type ChartSuggestion = Schemas['ChartSuggestion']
 export type Insight = Schemas['Insight']
 
 export type AskVariables = {
-  datasetId: string
+  /** Dataset hỏi trên đó (DatasetSummary.id của api/catalog.ts). */
+  catalogId: string
+  /** Bảng ghim làm bảng bắt đầu; vắng thì backend chọn theo câu hỏi. */
+  tableId?: string
   question: string
   choices: ChosenOption[]
   /** Cuộc trò chuyện đang hỏi tiếp (AskResponse.conversation_id của lượt trước); vắng thì backend mở cuộc mới. */
@@ -29,8 +34,8 @@ export type AskVariables = {
   answered?: string[]
 }
 
-function askPath(ws: string, datasetId: string): string {
-  return `/workspaces/${encodeURIComponent(ws)}/datasets/${encodeURIComponent(datasetId)}/ask`
+function askPath(ws: string, catalogId: string): string {
+  return `${catalogPath(ws, catalogId)}/ask`
 }
 
 function askKey(ws: string) {
@@ -44,13 +49,18 @@ export function useAsk(ws: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationKey: askKey(ws),
-    mutationFn: ({ datasetId, question, choices, conversationId }: AskVariables) => {
-      const body: AskRequest = { question, choices, conversation_id: conversationId ?? null }
-      return apiPost<AskResponse>(askPath(ws, datasetId), body)
+    mutationFn: ({ catalogId, tableId, question, choices, conversationId }: AskVariables) => {
+      const body: DatasetAskRequest = {
+        question,
+        choices,
+        conversation_id: conversationId ?? null,
+        table_id: tableId ?? null,
+      }
+      return apiPost<AskResponse>(askPath(ws, catalogId), body)
     },
     retry: false,
-    onSuccess: (_response, { datasetId }) => {
-      void queryClient.invalidateQueries({ queryKey: conversationsKey(ws, datasetId) })
+    onSuccess: (_response, { catalogId }) => {
+      void queryClient.invalidateQueries({ queryKey: catalogConversationsKey(ws, catalogId) })
     },
   })
 }

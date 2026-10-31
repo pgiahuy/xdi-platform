@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/askNav.ts - nối menu "Lịch sử trò chuyện" trên thanh bên với trang hỏi qua đường dẫn. Trang hỏi (AskPage.tsx)
-giữ dataset và cuộc đang mở trong đường dẫn (?dataset=...&c=...); file này dựng và đọc đúng hai tham số đó, nên đổi tên
-tham số thì sửa cả AskPage.tsx.
+giữ dataset, bảng ghim và cuộc đang mở trong đường dẫn (?dataset=...&table=...&c=...); file này dựng và đọc các tham số
+đó, nên đổi tên tham số thì sửa cả AskPage.tsx và askScope.ts.
 Menu mở một cuộc bằng cách chuyển tới đường dẫn của cuộc đó kèm conversationMenuState trong state của lần chuyển trang.
 AskPage thấy dấu đó thì dựng lại trang hỏi để đọc dataset và cuộc từ đường dẫn, như khi tải lại trang; các lần trang
 hỏi tự ghi đường dẫn không kèm dấu nên không bị dựng lại. */
@@ -10,9 +10,11 @@ import { useState } from 'react'
 import { matchPath, useLocation, useSearchParams } from 'react-router'
 import { workspaceHref, workspaceRoute } from './workspaceNav'
 
-/** Trang hỏi trên một dataset, mở cuộc conversationId; null là cuộc mới. */
-export function askHref(ws: string, datasetId: string, conversationId: string | null): string {
+/** Trang hỏi trên một dataset (database hay file, #257), mở cuộc conversationId (null là cuộc mới); tableId ghim bảng
+ * bắt đầu. */
+export function askHref(ws: string, datasetId: string, conversationId: string | null, tableId?: string): string {
   const params = new URLSearchParams({ dataset: datasetId })
+  if (tableId) params.set('table', tableId)
   if (conversationId) params.set('c', conversationId)
   return `${workspaceHref(ws, '')}?${params.toString()}`
 }

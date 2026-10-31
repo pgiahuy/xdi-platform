@@ -65,13 +65,14 @@ const taskLabels: Record<ModelTask, string> = {
 }
 
 export function AskEvidence({ ws, answer, pending, view }: Props) {
-  const { response, variables } = answer
+  const { response } = answer
   const { target, offset } = view
 
   const drillVariables: DrillVariables | null =
     target && response.query_id
       ? {
-          datasetId: variables.datasetId,
+          // Hỏi trên dataset thì bảng bắt đầu do backend chọn; dòng nguồn truy trên đúng bảng đó (#257).
+          datasetId: response.table_id,
           request: { query_id: response.query_id, ...buildDrillKey(target), offset, limit: drillPageSize },
         }
       : null
