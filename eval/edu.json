@@ -1,0 +1,65 @@
+[
+  {
+    "id": "e01",
+    "dataset": "students",
+    "question": "Tỷ lệ bỏ học theo môn học",
+    "expected_sql": [
+      "SELECT code_module, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM students GROUP BY code_module ORDER BY withdrawn_rate DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e02",
+    "dataset": "students",
+    "question": "Số sinh viên theo kết quả cuối khóa",
+    "expected_sql": [
+      "SELECT final_result, COUNT(*) AS students FROM students GROUP BY final_result ORDER BY students DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e03",
+    "dataset": "student_assessments",
+    "question": "Điểm trung bình theo loại bài đánh giá",
+    "expected_sql": [
+      "SELECT a.assessment_type, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment GROUP BY a.assessment_type ORDER BY avg_score DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e04",
+    "dataset": "student_assessments",
+    "question": "Điểm trung bình theo kết quả cuối khóa của sinh viên",
+    "expected_sql": [
+      "SELECT s.final_result, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student GROUP BY s.final_result ORDER BY avg_score DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e05",
+    "dataset": "student_assessments",
+    "question": "Điểm trung bình bài TMA theo nhóm imd_band",
+    "expected_sql": [
+      "SELECT s.imd_band, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student WHERE a.assessment_type = 'TMA' GROUP BY s.imd_band ORDER BY s.imd_band"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e06",
+    "dataset": "students",
+    "question": "Tỷ lệ bỏ học theo môn và kỳ kèm độ dài học phần",
+    "expected_sql": [
+      "SELECT s.code_module, s.code_presentation, c.module_presentation_length, AVG(CASE WHEN s.final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM students s JOIN courses c ON s.code_module = c.code_module AND s.code_presentation = c.code_presentation GROUP BY s.code_module, s.code_presentation, c.module_presentation_length ORDER BY withdrawn_rate DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e08",
+    "dataset": "students",
+    "question": "Số sinh viên theo nhóm tuổi và giới tính",
+    "expected_sql": [
+      "SELECT age_band, gender, COUNT(*) AS students FROM students GROUP BY age_band, gender ORDER BY age_band, gender"
+    ],
+    "ordered": false
+  }
+]

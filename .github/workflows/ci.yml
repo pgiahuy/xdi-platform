@@ -85,6 +85,7 @@ jobs:
           workspaces: backend
       - if: steps.work.outputs.run == 'true'
         run: make check-fast
+      # CI không có database mẫu (data/postgres-demo), nên make eval chỉ chạy bộ câu trên file DataCo.
       - if: steps.work.outputs.run == 'true'
         run: make eval
 

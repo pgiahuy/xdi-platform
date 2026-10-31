@@ -52,9 +52,14 @@ Kết nối:
 | `demo` | `demo` | Chủ cơ sở dữ liệu, `load.sh` dùng |
 
 Chuỗi kết nối cho ứng dụng chạy trên máy (`make dev`): `postgres://analyst:analyst@127.0.0.1:5440/company_demo`.
-Backend chạy trong Docker không tới được cổng chỉ mở trên `127.0.0.1` của máy; nối container backend vào mạng của
-container này (`docker network connect xdi-demo-db_default <tên container backend>`) rồi dùng
-`postgres://analyst:analyst@xdi-demo-db:5432/company_demo`.
+Backend chạy bằng `docker-compose.yml` ở gốc repo: compose gốc có cùng dịch vụ `demo-db` (khai `extends` từ file này) trong
+profile `demo`, chung mạng với backend. Nạp xong ở đây thì gỡ container của bản chạy riêng, volume giữ nguyên
+(`docker compose -f data/postgres-demo/docker-compose.yml rm -sf demo-db`), rồi ở gốc repo chạy
+`docker compose --profile demo up -d`; backend dùng `postgres://analyst:analyst@demo-db:5432/company_demo`
+(`SAMPLE_DATABASE_URL` mặc định của compose). Hai cách dùng chung volume `xdi-demo-db_demo-db-data` và cùng tên
+container `xdi-demo-db`, nên không phải nạp lại, và Docker không cho hai bản chạy cùng lúc trên một volume (hai Postgres
+trên một thư mục dữ liệu làm hỏng dữ liệu). Nạp lại bằng `load.sh` thì gỡ container ở gốc repo trước
+(`docker compose rm -sf demo-db`). Compose gốc in cảnh báo volume có sẵn không do project này tạo: bình thường.
 
 Xem bảng trên trình duyệt khi trình diễn: Adminer (image `adminer:5.4.1`), chỉ chạy khi bật profile `adminer`.
 

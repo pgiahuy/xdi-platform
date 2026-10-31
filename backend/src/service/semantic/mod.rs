@@ -55,7 +55,7 @@ pub(crate) const ALIASES_MAX: usize = 8;
 pub(crate) const QUESTIONS_MAX: usize = 5;
 pub(crate) const QUESTION_MAX_CHARS: usize = 200;
 
-// Trần phần giá trị trong prompt chia bằng chính hàm của ngữ cảnh hỏi (context::build_column_values): một cột có
+// Trần phần giá trị trong prompt chia bằng hàm context::build_column_values của ask/context.rs: một cột có
 // không quá 50 giá trị thì gửi hết, nhiều hơn thì 20 giá trị nhiều dòng nhất; tổng quá 400 thì hạ một trần chung cho
 // mọi cột; giá trị dài quá STRING_MAX_BYTES byte không gửi. Không có trần này thì bảng khảo sát
 // vài trăm cột, mỗi cột 200 giá trị dài tới 1000 byte, thổi prompt lên hàng chục MB: tốn token, vượt cửa sổ ngữ
@@ -393,7 +393,7 @@ fn build_values_part(columns: &[ProfileColumn], values: &[ColumnValue]) -> Strin
                 (!list.is_empty()).then_some((c, list))
             })
             .collect();
-        // Chia trần như ngữ cảnh hỏi (#28), cùng một hàm: đủ khi tới COLUMN_VALUES_ALL_MAX, COLUMN_VALUES_SOME khi
+        // Chia trần bằng context::build_column_values: đủ khi tới COLUMN_VALUES_ALL_MAX, COLUMN_VALUES_SOME khi
         // nhiều hơn; tổng vượt CONTEXT_VALUES_MAX thì hạ một trần chung cho mọi cột, không bỏ hẳn cột đứng sau.
         let counts: Vec<usize> = printable.iter().map(|(_, list)| list.len()).collect();
         let caps = context::build_column_values(&counts);

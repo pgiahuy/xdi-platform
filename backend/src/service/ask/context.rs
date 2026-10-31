@@ -17,9 +17,16 @@ Các bước:
   thì bỏ qua ("doanh thu" khớp rồi thì không tìm "doanh" nữa). Một cột: dùng cột đó. Nhiều cột: điểm cao nhất hơn cột
   sau từ CLOSE_SCORE trở lên thì chọn nó và ghi lại để hiện giả định; gần nhau hơn thì câu hỏi mơ hồ, trừ khi người hỏi
   đã chọn. Giá trị không sinh mơ hồ: cùng một chữ có ở hai cột thì mô hình chọn theo ngữ cảnh của câu.
-- Dataset tới FULL_SCHEMA_MAX_COLUMNS cột thì gửi cả schema; nhiều hơn thì cột khớp một cụm, cột có gợi ý giá trị và
-  cột thời gian.
-- Danh sách giá trị của từng cột chiều được gửi (build_column_values), và gợi ý khớp chính xác (build_value_hints). */
+- Mọi cột của mọi bảng câu hỏi đọc luôn được gửi đủ metadata (tên, kiểu, vai trò, bí danh, mô tả, đơn vị, cách gộp)
+  cho cả lượt phân loại lẫn lượt viết SQL (#230): mô hình phải biết mọi cột có thật, kể cả cột câu hỏi không gọi đúng
+  tên. Chỉ khi tổng metadata vượt COLUMN_METADATA_MAX_CHARS (cỡ 600 cột) thì cột ngoài nhóm liên quan (is_related)
+  mới rút về dòng gọn (brief: tên, kiểu, vai trò). Cột liên quan: cột khớp một cụm hay có gợi ý giá trị, cột lượt
+  phân loại chọn (picked), cột thời gian, cột khóa nối bảng, cột dùng trong công thức chỉ số. Khớp cụm vẫn dùng cho
+  gợi ý giá trị, câu hỏi lại và để chọn cột liên quan, không dùng để bỏ cột.
+- Danh sách giá trị của cột chiều chỉ đi vào lượt viết SQL, không vào lượt phân loại (apply_group_values): tổng giá trị
+  của mọi cột chiều không nhạy cảm tới ASK_VALUES_ALL_MAX thì gửi đủ mọi cột; vượt thì chỉ cột liên quan nhận đủ giá
+  trị, tới RELATED_COLUMN_VALUES_MAX mỗi cột. Gợi ý khớp chính xác (build_value_hints) tìm trên danh sách đầy đủ, nên
+  cột có giá trị khớp câu hỏi luôn là cột liên quan. Cột nhạy cảm không bao giờ có giá trị. */
 
 use std::collections::{HashMap, HashSet};
 
@@ -27,7 +34,7 @@ use uuid::Uuid;
 
 use crate::auth::WorkspaceId;
 use crate::engine::store::{
-    ColumnAggregation, DatasetVersion, ProfileColumn, ProfileRole, ProfileStatus,
+    ColumnAggregation, DatasetVersion, MetricDefinition, ProfileColumn, ProfileRole, ProfileStatus,
 };
 use crate::service::ask::contract::ChosenOption;
 use crate::service::ask::matching::{
@@ -37,9 +44,10 @@ use crate::service::ask::phrases::{build_phrases, Phrase};
 use crate::service::ask::values::{load_value_index, ColumnValues, ValueEntry, ValueIndex};
 use crate::{error::AppError, state::AppState};
 
-/// Dataset tới ngần này cột thì gửi cả schema: DataCo có 53 cột, gửi hết vẫn gọn, và mô hình thấy cả những cột câu
-/// hỏi không gọi đúng tên. Nhiều hơn thì chỉ gửi cột khớp một cụm, cộng cột thời gian.
-pub const FULL_SCHEMA_MAX_COLUMNS: usize = 60;
+/// Trần tổng độ dài metadata cột (tính bằng metadata_chars, mọi bảng của câu hỏi) trước khi rút cột ngoài nhóm liên
+/// quan về dòng gọn: cỡ 600 cột, mỗi cột khoảng 100 ký tự tên, mô tả và bí danh. DataCo 53 cột chưa tới 6 000 ký tự,
+/// nên schema thường không bao giờ chạm trần; trần chỉ để một schema hàng nghìn cột không làm prompt quá lớn.
+pub const COLUMN_METADATA_MAX_CHARS: usize = 60_000;
 
 /// Hai cột có điểm chênh dưới ngần này là gần nhau: câu hỏi mơ hồ. Chênh từ đây trở lên thì chọn cột điểm cao.
 pub const CLOSE_SCORE: f32 = 0.1;
@@ -52,10 +60,18 @@ pub const COLUMN_VALUES_ALL_MAX: usize = 50;
 /// cách viết giá trị (ngôn ngữ, hoa thường, viết tắt). DataCo: Order Country có 164 nước.
 pub const COLUMN_VALUES_SOME: usize = 20;
 
-/// Tổng số giá trị (không tính bí danh) gửi trong một ngữ cảnh. Vượt thì hạ một trần chung cho mọi cột tới khi tổng
-/// vừa: cột nhiều giá trị bị cắt trước, cột ít giá trị (thường là cột người dùng hay nhắc tên giá trị: thị trường,
-/// phân khúc) giữ đủ. Số đo trên DataCo thật ở chú thích của build_column_values.
+/// Trần tổng giá trị của build_column_values (prompt hồ sơ ngữ nghĩa, service/semantic/mod.rs). Vượt thì hạ một trần
+/// chung cho mọi cột tới khi tổng vừa. Ngữ cảnh hỏi dùng ASK_VALUES_ALL_MAX, không dùng trần này.
 pub const CONTEXT_VALUES_MAX: usize = 400;
+
+/// Ngữ cảnh hỏi: tổng giá trị (không tính bí danh) của mọi cột chiều không nhạy cảm của mọi bảng tới ngần này thì gửi đủ
+/// danh sách của mọi cột (#230), để mô hình ánh xạ được cách gọi của người dùng sang đúng giá trị ở cả cột câu hỏi
+/// không gọi tên. Trên mức này chỉ cột liên quan có danh sách. 1000 giá trị cỡ 10 000 đến 20 000 ký tự.
+pub const ASK_VALUES_ALL_MAX: usize = 1000;
+
+/// Khi tổng vượt ASK_VALUES_ALL_MAX, mỗi cột liên quan nhận tới ngần này giá trị nhiều dòng nhất; cũng là số giá trị tối
+/// đa hồ sơ lưu cho một cột (service/profile.rs), nên thường là đủ danh sách.
+pub const RELATED_COLUMN_VALUES_MAX: usize = 200;
 
 /// Một cột như prompt cần.
 #[derive(Debug, Clone, PartialEq)]
@@ -74,16 +90,24 @@ pub struct ColumnProfile {
     pub values: Vec<ValueEntry>,
     /// values là mọi giá trị của cột: mô hình chỉ được dùng giá trị trong danh sách. false thì danh sách chỉ là mẫu.
     pub values_complete: bool,
-    /// Có cụm của câu hỏi khớp tên, bí danh, mô tả, hoặc có gợi ý giá trị của cột. Prompt quá dài thì bỏ cột không khớp
-    /// trước (#29).
+    /// Có cụm của câu hỏi khớp tên, bí danh, mô tả, hoặc có gợi ý giá trị của cột. Prompt quá dài thì cột không liên quan
+    /// mất danh sách giá trị trước (#29, #230).
     pub matched: bool,
     /// Đơn vị của cột số đo (ColumnUnit::as_str), cho luật biểu đồ (ARCHITECTURE mục 6); None khi chưa biết.
     pub unit: Option<String>,
     /// Cách gộp mặc định của cột số đo (#185); prompt dặn mô hình dùng AVG với cột avg.
     pub aggregation: ColumnAggregation,
-    /// Cột nằm trong một quan hệ khóa ngoại tới bảng khác của câu hỏi (#213). Luôn gửi, kể cả khi chỉ gửi cột khớp:
-    /// thiếu cột khóa thì mô hình không viết được JOIN.
+    /// Cột nằm trong một quan hệ khóa ngoại tới bảng khác của câu hỏi (#213). Luôn đủ chi tiết: mô hình cần cột khóa
+    /// để viết JOIN.
     pub join_key: bool,
+    /// Cột có trong biểu thức, điều kiện lọc hay cột thời gian của một chỉ số của bảng (apply_metric_columns). Luôn đủ
+    /// chi tiết: mô hình tính chỉ số bằng đúng công thức đó.
+    pub metric_column: bool,
+    /// Lượt phân loại (ask/classify.rs) nói câu hỏi cần cột này.
+    pub picked: bool,
+    /// Chỉ in dạng gọn: tên, kiểu, vai trò, định dạng ngày; không bí danh, mô tả, đơn vị, cách gộp hay giá trị. Đặt khi
+    /// tổng metadata vượt COLUMN_METADATA_MAX_CHARS và cột không liên quan (apply_metadata_cap, #230).
+    pub brief: bool,
 }
 
 /// Một cụm của câu hỏi bằng chính xác một giá trị hay bí danh ("southern europe" là Order Region = Southern Europe).
@@ -150,11 +174,11 @@ pub async fn build_ask_context(
     question: &str,
     choices: &[ChosenOption],
 ) -> Result<AskContext, AppError> {
-    build_ask_context_with_keys(state, ws, version, question, choices, &[]).await
+    build_ask_context_with_keys(state, ws, version, question, choices, &[], &[]).await
 }
 
 /// Như build_ask_context, và đánh dấu join_key cho các cột tên trong join_keys (cột khóa của quan hệ tới bảng liên
-/// quan, #213).
+/// quan, #213), metric_column cho cột dùng trong chỉ số của dataset.
 pub async fn build_ask_context_with_keys(
     state: &AppState,
     ws: &WorkspaceId,
@@ -162,6 +186,7 @@ pub async fn build_ask_context_with_keys(
     question: &str,
     choices: &[ChosenOption],
     join_keys: &[String],
+    metrics: &[MetricDefinition],
 ) -> Result<AskContext, AppError> {
     check_profile_ready(version)?;
     let columns = state.store.list_columns(ws, version.id).await?;
@@ -172,6 +197,7 @@ pub async fn build_ask_context_with_keys(
     let index = load_value_index(state, ws, version).await?;
     let mut profiles = build_profiles(columns);
     apply_join_keys(&mut profiles, join_keys);
+    apply_metric_columns(&mut profiles, metrics);
     Ok(build_context(
         &build_phrases(question),
         profiles,
@@ -185,6 +211,34 @@ pub(crate) fn apply_join_keys(columns: &mut [ColumnProfile], join_keys: &[String
     for column in columns {
         column.join_key = join_keys.contains(&column.name);
     }
+}
+
+/// Đánh dấu metric_column cho cột được nhắc trong biểu thức, điều kiện lọc hay cột thời gian của một chỉ số.
+pub(crate) fn apply_metric_columns(columns: &mut [ColumnProfile], metrics: &[MetricDefinition]) {
+    for column in columns {
+        column.metric_column = metrics.iter().any(|m| {
+            m.time_column.as_deref() == Some(column.name.as_str())
+                || mentions_column(&m.expression, &column.name)
+                || m.filter
+                    .as_deref()
+                    .is_some_and(|f| mentions_column(f, &column.name))
+        });
+    }
+}
+
+/// Biểu thức SQL nhắc tới cột: tên trong nháy kép ("Order Item Total"), hoặc tên trơn đứng riêng như một từ (item_total,
+/// không tính item_total_2). Đọc thô bằng chữ, không phân tích SQL: nhận nhầm một cột thì cột đó chỉ được in đủ chi
+/// tiết hơn, không sai gì.
+fn mentions_column(sql: &str, name: &str) -> bool {
+    if sql.contains(&format!("\"{name}\"")) {
+        return true;
+    }
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    sql.match_indices(name).any(|(at, _)| {
+        let before = sql[..at].chars().next_back();
+        let after = sql[at + name.len()..].chars().next();
+        !before.is_some_and(is_word) && !after.is_some_and(is_word)
+    })
 }
 
 pub(crate) fn check_profile_ready(version: &DatasetVersion) -> Result<(), AppError> {
@@ -222,6 +276,9 @@ pub(crate) fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> 
             // Chữ lạ (không thể có, vì CHECK của 0010_column_aggregation.sql) coi như mặc định sum.
             aggregation: ColumnAggregation::parse(&c.aggregation).unwrap_or(ColumnAggregation::Sum),
             join_key: false,
+            metric_column: false,
+            picked: false,
+            brief: false,
         })
         .collect()
 }
@@ -301,52 +358,77 @@ pub fn build_context(
         &mut matched,
     );
 
-    let mut sent = build_sent_columns(columns, &matched);
+    let mut sent = build_matched_columns(columns, &matched);
     apply_group_values(&mut [(&mut sent, index)]);
     context.columns = sent;
     context
 }
 
-/// Cột gửi cho prompt, giữ thứ tự cột. Tới FULL_SCHEMA_MAX_COLUMNS cột, hoặc không cụm nào khớp cột nào, thì gửi cả
-/// schema: lọc khi không có gì để lọc theo sẽ chỉ còn cột thời gian, mô hình không viết được SQL nào.
-fn build_sent_columns(
+/// Mọi cột, giữ thứ tự cột, đánh dấu cột khớp câu hỏi. Không bỏ cột nào (#230).
+fn build_matched_columns(
     mut columns: Vec<ColumnProfile>,
     matched: &HashSet<usize>,
 ) -> Vec<ColumnProfile> {
-    let send_all = columns.len() <= FULL_SCHEMA_MAX_COLUMNS || matched.is_empty();
     for (i, column) in columns.iter_mut().enumerate() {
         column.matched = matched.contains(&i);
     }
     columns
-        .into_iter()
-        .filter(|c| send_all || is_always_sent(c))
-        .collect()
 }
 
-/// Cột vẫn gửi khi chỉ gửi cột khớp: cột khớp câu hỏi, cột thời gian (câu có kỳ nào cũng cần) và cột khóa nối bảng.
-pub(crate) fn is_always_sent(column: &ColumnProfile) -> bool {
-    column.matched || column.role == ProfileRole::Time.as_str() || column.join_key
+/// Cột liên quan tới câu hỏi: khớp câu hỏi hay có gợi ý giá trị, lượt phân loại chọn, cột thời gian (câu có kỳ nào cũng
+/// cần), cột khóa nối bảng, cột dùng trong công thức chỉ số. Không bao giờ rút về dòng gọn.
+pub(crate) fn is_related(column: &ColumnProfile) -> bool {
+    column.matched
+        || column.picked
+        || column.role == ProfileRole::Time.as_str()
+        || column.join_key
+        || column.metric_column
 }
 
-/// Trần FULL_SCHEMA_MAX_COLUMNS tính trên tổng cột của mọi bảng một câu hỏi đọc (#213): mỗi bảng đã qua
-/// build_sent_columns riêng, nhưng sáu bảng ba mươi cột vẫn là 180 cột. Vượt trần thì mọi bảng chỉ giữ cột
-/// is_always_sent, trừ khi không cột nào của cả nhóm khớp câu hỏi (cùng lý do như build_sent_columns).
-pub fn apply_group_column_cap(tables: &mut [&mut Vec<ColumnProfile>]) {
-    let total: usize = tables.iter().map(|columns| columns.len()).sum();
-    let any_matched = tables
+/// Độ dài metadata của một cột như prompt in ra (tên, kiểu, vai trò, mô tả, bí danh, đơn vị), để so với
+/// COLUMN_METADATA_MAX_CHARS. Đếm thô, không tính chữ khuôn của dòng.
+pub fn metadata_chars(column: &ColumnProfile) -> usize {
+    let text = |t: &str| t.chars().count();
+    text(&column.name)
+        + text(&column.data_type)
+        + text(&column.role)
+        + column.description.as_deref().map_or(0, text)
+        + column.aliases.iter().map(|a| text(a) + 2).sum::<usize>()
+        + column.unit.as_deref().map_or(0, text)
+}
+
+/// Đánh dấu brief cho mọi bảng của một câu hỏi (bảng đang chọn và các bảng liên quan, #213): tổng metadata vượt
+/// COLUMN_METADATA_MAX_CHARS thì cột không liên quan rút về dòng gọn, không thì không cột nào gọn. Gọi lại sau khi
+/// lượt phân loại chọn thêm cột thì tính lại từ đầu.
+pub fn apply_metadata_cap(tables: &mut [&mut Vec<ColumnProfile>]) {
+    let total: usize = tables
         .iter()
-        .any(|columns| columns.iter().any(|c| c.matched));
-    if total <= FULL_SCHEMA_MAX_COLUMNS || !any_matched {
-        return;
-    }
+        .flat_map(|columns| columns.iter())
+        .map(metadata_chars)
+        .sum();
+    let over = total > COLUMN_METADATA_MAX_CHARS;
     for columns in tables.iter_mut() {
-        columns.retain(is_always_sent);
+        for column in columns.iter_mut() {
+            column.brief = over && !is_related(column);
+        }
     }
 }
 
-/// Số giá trị gửi cho mỗi cột, theo thứ tự của counts (số giá trị có của từng cột): đủ khi tới COLUMN_VALUES_ALL_MAX,
-/// COLUMN_VALUES_SOME khi nhiều hơn; tổng vượt CONTEXT_VALUES_MAX thì hạ một trần chung cho mọi cột, từ số lớn nhất
-/// xuống, tới khi tổng vừa.
+/// Đánh dấu picked cho cột lượt phân loại chọn (cặp bảng, cột; bảng là bảng logic). Gọi lại thì tính lại từ đầu.
+pub fn apply_picked_columns(
+    table: &str,
+    columns: &mut [ColumnProfile],
+    picked: &[(String, String)],
+) {
+    for column in columns {
+        column.picked = picked.iter().any(|(t, c)| t == table && *c == column.name);
+    }
+}
+
+/// Số giá trị gửi cho mỗi cột trong prompt hồ sơ ngữ nghĩa (service/semantic/mod.rs), theo thứ tự của counts (số giá
+/// trị có của từng cột): đủ khi tới COLUMN_VALUES_ALL_MAX, COLUMN_VALUES_SOME khi nhiều hơn; tổng vượt
+/// CONTEXT_VALUES_MAX thì hạ một trần chung cho mọi cột, từ số lớn nhất xuống, tới khi tổng vừa. Trước #230 ngữ cảnh
+/// hỏi cũng chia giá trị bằng hàm này; số đo dưới đây là của lúc đó.
 ///
 /// Đã đo trên DataCo thật (DataCoSupplyChainDataset.csv, 180 519 dòng, 53 cột), bằng test measure_dataco_values ở
 /// ask/context_tests.rs: file đi qua đúng đường nạp (materialize, rồi lập hồ sơ của service/profile.rs), Customer Email
@@ -375,10 +457,13 @@ pub fn build_column_values(counts: &[usize]) -> Vec<usize> {
     wanted.into_iter().map(|w| w.min(cap)).collect()
 }
 
-/// Gắn danh sách giá trị vào các cột chiều không nhạy cảm sẽ gửi, theo build_column_values. Mỗi phần tử của tables là
-/// cột của một bảng cùng chỉ mục giá trị của phiên bản bảng đó; mọi bảng của một câu hỏi chung một trần
-/// CONTEXT_VALUES_MAX (#213), nên thêm bảng liên quan không làm prompt dài gấp mấy lần. Gọi lại trên cột đã có giá trị
-/// thì giá trị được tính lại từ đầu.
+/// Gắn danh sách giá trị vào các cột chiều không nhạy cảm, không gọn (brief), cho lượt viết SQL. Mỗi phần tử của tables
+/// là cột của một bảng cùng chỉ mục giá trị của phiên bản bảng đó; mọi bảng của một câu hỏi chung một trần (#213):
+/// - tổng giá trị của mọi cột đó tới ASK_VALUES_ALL_MAX: mọi cột nhận đủ danh sách;
+/// - vượt: chỉ cột liên quan (is_related, gồm cột lượt phân loại chọn) nhận tới RELATED_COLUMN_VALUES_MAX giá trị, cột
+///   khác không có danh sách (values_complete = false, nên luật filter_value_not_found không kết luận trên chúng).
+///
+/// Gọi lại trên cột đã có giá trị thì giá trị được tính lại từ đầu.
 pub fn apply_group_values(tables: &mut [(&mut Vec<ColumnProfile>, &ValueIndex)]) {
     // (bảng, cột, giá trị của cột) của mọi cột có danh sách giá trị.
     let mut found: Vec<(usize, usize, &ColumnValues)> = Vec::new();
@@ -388,7 +473,9 @@ pub fn apply_group_values(tables: &mut [(&mut Vec<ColumnProfile>, &ValueIndex)])
         for (i, column) in columns.iter_mut().enumerate() {
             column.values = Vec::new();
             column.values_complete = false;
-            if column.role != ProfileRole::Dimension.as_str() || column.is_sensitive {
+            // Cột gọn không có danh sách giá trị.
+            if column.role != ProfileRole::Dimension.as_str() || column.is_sensitive || column.brief
+            {
                 continue;
             }
             match index.columns.iter().find(|v| v.column_id == column.id) {
@@ -398,11 +485,19 @@ pub fn apply_group_values(tables: &mut [(&mut Vec<ColumnProfile>, &ValueIndex)])
             }
         }
     }
-    let counts: Vec<usize> = found.iter().map(|(_, _, v)| v.values.len()).collect();
-    for ((t, i, values), sent) in found.into_iter().zip(build_column_values(&counts)) {
+    let total: usize = found.iter().map(|(_, _, v)| v.values.len()).sum();
+    let send_all = total <= ASK_VALUES_ALL_MAX;
+    for (t, i, values) in found {
         let column = &mut tables[t].0[i];
+        let sent = if send_all {
+            values.values.len()
+        } else if is_related(column) {
+            values.values.len().min(RELATED_COLUMN_VALUES_MAX)
+        } else {
+            0
+        };
         column.values = values.values[..sent].to_vec();
-        column.values_complete = sent == values.values.len() && !values.dropped;
+        column.values_complete = sent > 0 && sent == values.values.len() && !values.dropped;
     }
 }
 

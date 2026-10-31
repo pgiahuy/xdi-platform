@@ -1,0 +1,1018 @@
+[
+  {
+    "task": "sql",
+    "question": "Doanh thu theo phân khúc khách hàng",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT c.segment, SUM(oi.item_total) AS revenue FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN customers c ON o.customer_id = c.customer_id GROUP BY c.segment ORDER BY revenue DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Top 5 danh mục có doanh thu cao nhất",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT cat.category_name, SUM(oi.item_total) AS revenue FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id GROUP BY cat.category_name ORDER BY revenue DESC LIMIT 5"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số đơn hàng theo phân khúc khách hàng",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT c.segment, COUNT(*) AS orders FROM orders o JOIN customers c ON o.customer_id = c.customer_id GROUP BY c.segment ORDER BY orders DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Giá trị trung bình mỗi đơn theo thị trường",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT o.market, SUM(t.order_total) / COUNT(*) AS avg_order_value FROM (SELECT order_id, SUM(item_total) AS order_total FROM order_items GROUP BY order_id) t JOIN orders o ON t.order_id = o.order_id GROUP BY o.market ORDER BY avg_order_value DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số khách hàng có đơn bị hủy theo quốc gia của khách hàng",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT c.country, COUNT(DISTINCT c.customer_id) AS customers FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE o.order_status = 'CANCELED' GROUP BY c.country ORDER BY customers DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Tỷ lệ đơn có nguy cơ giao trễ theo phân khúc khách hàng",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT c.segment, AVG(CASE WHEN o.late_delivery_risk THEN 1.0 ELSE 0.0 END) AS late_rate FROM orders o JOIN customers c ON o.customer_id = c.customer_id GROUP BY c.segment ORDER BY late_rate DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số lượng bán theo danh mục ở thị trường Europe",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT cat.category_name, SUM(oi.quantity) AS quantity FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id WHERE o.market = 'Europe' GROUP BY cat.category_name ORDER BY quantity DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Lợi nhuận theo phương thức vận chuyển và phân khúc khách hàng",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT o.shipping_mode, c.segment, SUM(oi.profit) AS profit FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN customers c ON o.customer_id = c.customer_id GROUP BY o.shipping_mode, c.segment ORDER BY o.shipping_mode, c.segment"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số sản phẩm theo bộ phận",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT d.department_name, COUNT(*) AS products FROM products p JOIN categories cat ON p.category_id = cat.category_id JOIN departments d ON cat.department_id = d.department_id GROUP BY d.department_name ORDER BY products DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số ngày giao hàng thực tế trung bình của đơn có sản phẩm thuộc danh mục Cleats",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT AVG(o.days_for_shipping_real) AS avg_days FROM orders o WHERE o.order_id IN (SELECT oi.order_id FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id WHERE cat.category_name = 'Cleats')"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Tỷ lệ bỏ học theo môn học",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT code_module, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM students GROUP BY code_module ORDER BY withdrawn_rate DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số sinh viên theo kết quả cuối khóa",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT final_result, COUNT(*) AS students FROM students GROUP BY final_result ORDER BY students DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Điểm trung bình theo loại bài đánh giá",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT a.assessment_type, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment GROUP BY a.assessment_type ORDER BY avg_score DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Điểm trung bình theo kết quả cuối khóa của sinh viên",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT s.final_result, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student GROUP BY s.final_result ORDER BY avg_score DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Điểm trung bình bài TMA theo nhóm imd_band",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT s.imd_band, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student WHERE a.assessment_type = 'TMA' GROUP BY s.imd_band ORDER BY s.imd_band"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Tỷ lệ bỏ học theo môn và kỳ kèm độ dài học phần",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT s.code_module, s.code_presentation, c.module_presentation_length, AVG(CASE WHEN s.final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM students s JOIN courses c ON s.code_module = c.code_module AND s.code_presentation = c.code_presentation GROUP BY s.code_module, s.code_presentation, c.module_presentation_length ORDER BY withdrawn_rate DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Lượt bấm trung bình mỗi sinh viên theo kết quả cuối khóa",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT s.final_result, AVG(t.clicks) AS avg_clicks FROM (SELECT code_module, code_presentation, id_student, SUM(sum_click) AS clicks FROM student_daily_clicks GROUP BY code_module, code_presentation, id_student) t JOIN students s ON t.code_module = s.code_module AND t.code_presentation = s.code_presentation AND t.id_student = s.id_student GROUP BY s.final_result ORDER BY avg_clicks DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số sinh viên theo nhóm tuổi và giới tính",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT age_band, gender, COUNT(*) AS students FROM students GROUP BY age_band, gender ORDER BY age_band, gender"
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo phân khúc khách hàng",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Top 5 danh mục có doanh thu cao nhất",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số đơn hàng theo phân khúc khách hàng",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Giá trị trung bình mỗi đơn theo thị trường",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số khách hàng có đơn bị hủy theo quốc gia của khách hàng",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Tỷ lệ đơn có nguy cơ giao trễ theo phân khúc khách hàng",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số lượng bán theo danh mục ở thị trường Europe",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Lợi nhuận theo phương thức vận chuyển và phân khúc khách hàng",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số sản phẩm theo bộ phận",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số ngày giao hàng thực tế trung bình của đơn có sản phẩm thuộc danh mục Cleats",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Tỷ lệ bỏ học theo môn học",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số sinh viên theo kết quả cuối khóa",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Điểm trung bình theo loại bài đánh giá",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Điểm trung bình theo kết quả cuối khóa của sinh viên",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Điểm trung bình bài TMA theo nhóm imd_band",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Tỷ lệ bỏ học theo môn và kỳ kèm độ dài học phần",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Lượt bấm trung bình mỗi sinh viên theo kết quả cuối khóa",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số sinh viên theo nhóm tuổi và giới tính",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "profile",
+    "question": "departments",
+    "answer": {
+      "columns": [
+        {
+          "name": "department_id",
+          "description": "Mã phòng ban (Department Id)"
+        },
+        {
+          "name": "department_name",
+          "description": "Tên phòng ban, ví dụ Fitness, Apparel (Department Name)",
+          "aliases": [
+            "bộ phận",
+            "phòng ban"
+          ]
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": []
+    }
+  },
+  {
+    "task": "profile",
+    "question": "categories",
+    "answer": {
+      "columns": [
+        {
+          "name": "category_id",
+          "description": "Mã danh mục (Category Id, trùng Product Category Id)"
+        },
+        {
+          "name": "category_name",
+          "description": "Tên danh mục, ví dụ Cleats, Fishing (Category Name)",
+          "aliases": [
+            "danh mục",
+            "tên danh mục"
+          ]
+        },
+        {
+          "name": "department_id",
+          "description": "Phòng ban chứa danh mục, khóa ngoại tới sales.departments"
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": []
+    }
+  },
+  {
+    "task": "profile",
+    "question": "products",
+    "answer": {
+      "columns": [
+        {
+          "name": "product_id",
+          "description": "Mã sản phẩm (Product Card Id, trùng Order Item Cardprod Id)"
+        },
+        {
+          "name": "product_name",
+          "description": "Tên sản phẩm (Product Name)",
+          "aliases": [
+            "tên sản phẩm"
+          ]
+        },
+        {
+          "name": "category_id",
+          "description": "Danh mục của sản phẩm, khóa ngoại tới sales.categories"
+        },
+        {
+          "name": "price",
+          "description": "Giá niêm yết của sản phẩm, đô la Mỹ (Product Price)",
+          "aliases": [
+            "giá niêm yết"
+          ]
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": [
+        "Số sản phẩm theo bộ phận"
+      ]
+    }
+  },
+  {
+    "task": "profile",
+    "question": "customers",
+    "answer": {
+      "columns": [
+        {
+          "name": "customer_id",
+          "description": "Mã khách hàng (Customer Id, trùng Order Customer Id)"
+        },
+        {
+          "name": "first_name",
+          "description": "Tên (Customer Fname)"
+        },
+        {
+          "name": "last_name",
+          "description": "Họ (Customer Lname). Nguồn để trống ở 8 dòng"
+        },
+        {
+          "name": "segment",
+          "description": "Phân khúc khách: Consumer (cá nhân), Corporate (doanh nghiệp), Home Office (văn phòng tại nhà)",
+          "aliases": [
+            "phân khúc khách hàng"
+          ]
+        },
+        {
+          "name": "street",
+          "description": "Địa chỉ đường phố của khách. Trống ở 3 khách bị lệch cột trong nguồn (xem sql/sales_load.sql)"
+        },
+        {
+          "name": "city",
+          "description": "Thành phố nơi khách ở"
+        },
+        {
+          "name": "state",
+          "description": "Bang nơi khách ở, mã hai chữ, ví dụ CA, PR",
+          "aliases": [
+            "bang của khách hàng"
+          ]
+        },
+        {
+          "name": "country",
+          "description": "Nước nơi khách ở, như trong nguồn: EE. UU. (Hoa Kỳ) hoặc Puerto Rico",
+          "aliases": [
+            "quốc gia của khách hàng"
+          ]
+        },
+        {
+          "name": "zipcode",
+          "description": "Mã bưu chính, như trong nguồn (số 0 ở đầu đã mất, ví dụ 725 là 00725). Không trống ở khách nào sau khi dời 3 khách bị lệch cột"
+        },
+        {
+          "name": "latitude",
+          "description": "Vĩ độ. Mô tả của DataCo gọi là vị trí cửa hàng, nhưng trong dữ liệu mỗi khách chỉ có một giá trị"
+        },
+        {
+          "name": "longitude",
+          "description": "Kinh độ, cùng ghi chú với latitude"
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [
+        "first_name",
+        "last_name",
+        "street"
+      ],
+      "suggested_questions": [
+        "Số khách hàng có đơn bị hủy theo quốc gia của khách hàng"
+      ]
+    }
+  },
+  {
+    "task": "profile",
+    "question": "orders",
+    "answer": {
+      "columns": [
+        {
+          "name": "order_id",
+          "description": "Mã đơn hàng (Order Id)"
+        },
+        {
+          "name": "customer_id",
+          "description": "Khách đặt đơn, khóa ngoại tới sales.customers"
+        },
+        {
+          "name": "order_date",
+          "description": "Thời điểm đặt hàng (order date (DateOrders))",
+          "aliases": [
+            "ngày đặt hàng"
+          ]
+        },
+        {
+          "name": "shipping_date",
+          "description": "Thời điểm giao hàng (shipping date (DateOrders))"
+        },
+        {
+          "name": "payment_type",
+          "description": "Hình thức thanh toán: DEBIT, TRANSFER, CASH, PAYMENT (cột Type trong nguồn)"
+        },
+        {
+          "name": "order_status",
+          "description": "Trạng thái đơn, ví dụ COMPLETE, PENDING, CANCELED, SUSPECTED_FRAUD",
+          "aliases": [
+            "trạng thái đơn"
+          ]
+        },
+        {
+          "name": "delivery_status",
+          "description": "Tình trạng giao: Advance shipping (sớm), Shipping on time (đúng hạn), Late delivery (trễ), Shipping canceled (hủy)",
+          "aliases": [
+            "trạng thái giao hàng"
+          ]
+        },
+        {
+          "name": "late_delivery_risk",
+          "description": "Giao trễ hay không: true đúng với các đơn có delivery_status = Late delivery (Late_delivery_risk = 1). Đơn hủy (Shipping canceled) luôn là false, kể cả khi số ngày giao thực tế vượt lịch",
+          "aliases": [
+            "nguy cơ giao trễ",
+            "giao trễ"
+          ]
+        },
+        {
+          "name": "days_for_shipping_real",
+          "description": "Số ngày giao thực tế",
+          "aliases": [
+            "số ngày giao thực tế"
+          ]
+        },
+        {
+          "name": "days_for_shipment_scheduled",
+          "description": "Số ngày giao theo lịch"
+        },
+        {
+          "name": "shipping_mode",
+          "description": "Cách giao: Standard Class, Second Class, First Class, Same Day",
+          "aliases": [
+            "phương thức vận chuyển",
+            "cách giao"
+          ]
+        },
+        {
+          "name": "market",
+          "description": "Thị trường nơi giao hàng: Africa, Europe, LATAM, Pacific Asia, USCA",
+          "aliases": [
+            "thị trường"
+          ]
+        },
+        {
+          "name": "order_region",
+          "description": "Vùng nơi giao hàng, ví dụ Southeast Asia, Western Europe",
+          "aliases": [
+            "khu vực"
+          ]
+        },
+        {
+          "name": "order_country",
+          "description": "Nước nơi giao hàng, tên tiếng Tây Ban Nha như trong nguồn"
+        },
+        {
+          "name": "order_state",
+          "description": "Bang hoặc tỉnh nơi giao hàng"
+        },
+        {
+          "name": "order_city",
+          "description": "Thành phố nơi giao hàng"
+        },
+        {
+          "name": "order_zipcode",
+          "description": "Mã bưu chính nơi giao hàng. Nguồn chỉ có ở một phần đơn tại Hoa Kỳ, còn lại trống"
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": [
+        "Số đơn hàng theo phân khúc khách hàng",
+        "Tỷ lệ đơn có nguy cơ giao trễ theo phân khúc khách hàng"
+      ]
+    }
+  },
+  {
+    "task": "profile",
+    "question": "order_items",
+    "answer": {
+      "columns": [
+        {
+          "name": "order_item_id",
+          "description": "Mã dòng hàng (Order Item Id)"
+        },
+        {
+          "name": "order_id",
+          "description": "Đơn chứa dòng hàng, khóa ngoại tới sales.orders"
+        },
+        {
+          "name": "product_id",
+          "description": "Sản phẩm bán, khóa ngoại tới sales.products"
+        },
+        {
+          "name": "quantity",
+          "description": "Số lượng (Order Item Quantity)",
+          "aliases": [
+            "số lượng bán"
+          ]
+        },
+        {
+          "name": "unit_price",
+          "description": "Đơn giá lúc bán, đô la Mỹ (Order Item Product Price). Trong dữ liệu luôn bằng sales.products.price"
+        },
+        {
+          "name": "sales",
+          "description": "Doanh số trước giảm giá, bằng đơn giá nhân số lượng (Sales)",
+          "aliases": [
+            "doanh số trước giảm giá"
+          ]
+        },
+        {
+          "name": "discount",
+          "description": "Số tiền giảm giá (Order Item Discount)",
+          "aliases": [
+            "giảm giá"
+          ]
+        },
+        {
+          "name": "discount_rate",
+          "description": "Tỷ lệ giảm giá, từ 0 đến 1 (Order Item Discount Rate)"
+        },
+        {
+          "name": "item_total",
+          "description": "Thành tiền sau giảm giá (Order Item Total; cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng)",
+          "aliases": [
+            "doanh thu",
+            "thành tiền"
+          ]
+        },
+        {
+          "name": "profit",
+          "description": "Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order; cột Benefit per order có cùng giá trị ở mọi dòng). Tên nguồn nói \"per order\" nhưng giá trị đổi theo từng dòng hàng",
+          "aliases": [
+            "lợi nhuận"
+          ]
+        },
+        {
+          "name": "profit_ratio",
+          "description": "Tỷ suất lợi nhuận, bằng profit chia item_total (Order Item Profit Ratio)"
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": [
+        "Doanh thu theo phân khúc khách hàng",
+        "Top 5 danh mục có doanh thu cao nhất",
+        "Giá trị trung bình mỗi đơn theo thị trường",
+        "Số lượng bán theo danh mục ở thị trường Europe",
+        "Lợi nhuận theo phương thức vận chuyển và phân khúc khách hàng"
+      ]
+    }
+  },
+  {
+    "task": "profile",
+    "question": "courses",
+    "answer": {
+      "columns": [
+        {
+          "name": "code_module",
+          "description": "Mã môn học, ví dụ AAA",
+          "aliases": [
+            "môn học"
+          ]
+        },
+        {
+          "name": "code_presentation",
+          "description": "Mã kỳ mở môn: năm và chữ B (bắt đầu tháng 2) hoặc J (bắt đầu tháng 10), ví dụ 2013J"
+        },
+        {
+          "name": "presentation_year",
+          "description": "Năm bắt đầu kỳ, tách từ code_presentation"
+        },
+        {
+          "name": "presentation_start_month",
+          "description": "Tháng bắt đầu kỳ: 2 với chữ B, 10 với chữ J, tách từ code_presentation"
+        },
+        {
+          "name": "module_presentation_length",
+          "description": "Độ dài học phần, tính bằng ngày",
+          "aliases": [
+            "độ dài học phần"
+          ]
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": []
+    }
+  },
+  {
+    "task": "profile",
+    "question": "students",
+    "answer": {
+      "columns": [
+        {
+          "name": "code_module",
+          "description": "Mã môn học, cùng edu.courses",
+          "aliases": [
+            "môn học"
+          ]
+        },
+        {
+          "name": "code_presentation",
+          "description": "Mã kỳ, cùng edu.courses",
+          "aliases": [
+            "kỳ học"
+          ]
+        },
+        {
+          "name": "id_student",
+          "description": "Mã sinh viên (đã ẩn danh). Một sinh viên có thể có nhiều dòng nếu học nhiều học phần"
+        },
+        {
+          "name": "gender",
+          "description": "Giới tính: M nam, F nữ",
+          "aliases": [
+            "giới tính"
+          ]
+        },
+        {
+          "name": "region",
+          "description": "Vùng địa lý nơi sinh viên sống khi học"
+        },
+        {
+          "name": "highest_education",
+          "description": "Trình độ học vấn cao nhất khi vào học phần",
+          "aliases": [
+            "trình độ học vấn"
+          ]
+        },
+        {
+          "name": "imd_band",
+          "description": "Nhóm chỉ số thiếu thốn (Index of Multiple Deprivation) của nơi ở, theo khoảng phần trăm; 0-10% là thiếu thốn nhất. Rỗng khi nguồn ghi \"?\"",
+          "aliases": [
+            "nhóm imd",
+            "mức thiếu thốn"
+          ]
+        },
+        {
+          "name": "age_band",
+          "description": "Nhóm tuổi: 0-35, 35-55, 55<=",
+          "aliases": [
+            "nhóm tuổi"
+          ]
+        },
+        {
+          "name": "num_of_prev_attempts",
+          "description": "Số lần đã học môn này trước đó"
+        },
+        {
+          "name": "studied_credits",
+          "description": "Tổng số tín chỉ sinh viên đang học trong kỳ"
+        },
+        {
+          "name": "disability",
+          "description": "Sinh viên có khai báo khuyết tật hay không"
+        },
+        {
+          "name": "final_result",
+          "description": "Kết quả cuối học phần: Distinction (giỏi), Pass (đạt), Fail (trượt), Withdrawn (bỏ học)",
+          "aliases": [
+            "kết quả cuối khóa",
+            "kết quả học tập"
+          ]
+        }
+      ],
+      "values": [
+        {
+          "column": "final_result",
+          "value": "Withdrawn",
+          "aliases": [
+            "bỏ học"
+          ]
+        },
+        {
+          "column": "final_result",
+          "value": "Fail",
+          "aliases": [
+            "trượt"
+          ]
+        },
+        {
+          "column": "final_result",
+          "value": "Pass",
+          "aliases": [
+            "đạt"
+          ]
+        },
+        {
+          "column": "final_result",
+          "value": "Distinction",
+          "aliases": [
+            "giỏi"
+          ]
+        }
+      ],
+      "sensitive_columns": [],
+      "suggested_questions": [
+        "Tỷ lệ bỏ học theo môn học",
+        "Số sinh viên theo kết quả cuối khóa",
+        "Tỷ lệ bỏ học theo môn và kỳ kèm độ dài học phần",
+        "Số sinh viên theo nhóm tuổi và giới tính"
+      ]
+    }
+  },
+  {
+    "task": "profile",
+    "question": "registrations",
+    "answer": {
+      "columns": [
+        {
+          "name": "code_module",
+          "description": "Mã môn học"
+        },
+        {
+          "name": "code_presentation",
+          "description": "Mã kỳ"
+        },
+        {
+          "name": "id_student",
+          "description": "Mã sinh viên"
+        },
+        {
+          "name": "date_registration",
+          "description": "Ngày đăng ký, tính bằng số ngày so với ngày bắt đầu học phần (âm là đăng ký trước). Rỗng khi nguồn ghi \"?\"",
+          "aliases": [
+            "ngày đăng ký"
+          ]
+        },
+        {
+          "name": "date_unregistration",
+          "description": "Ngày hủy đăng ký, cùng cách tính. Rỗng nếu sinh viên không hủy",
+          "aliases": [
+            "ngày hủy đăng ký"
+          ]
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": []
+    }
+  },
+  {
+    "task": "profile",
+    "question": "assessments",
+    "answer": {
+      "columns": [
+        {
+          "name": "id_assessment",
+          "description": "Mã bài đánh giá"
+        },
+        {
+          "name": "code_module",
+          "description": "Mã môn học"
+        },
+        {
+          "name": "code_presentation",
+          "description": "Mã kỳ"
+        },
+        {
+          "name": "assessment_type",
+          "description": "Loại bài: TMA (bài tập giảng viên chấm), CMA (bài máy chấm), Exam (thi cuối kỳ)",
+          "aliases": [
+            "loại bài đánh giá"
+          ]
+        },
+        {
+          "name": "date",
+          "description": "Hạn nộp, tính bằng số ngày từ ngày bắt đầu học phần. Rỗng khi nguồn ghi \"?\" (bài thi chưa có ngày, theo mô tả OULAD là cuối học phần)"
+        },
+        {
+          "name": "weight",
+          "description": "Trọng số của bài, phần trăm. Trong một học phần, các bài không phải thi cộng lại 100 (môn GGG: 0) và bài thi cộng lại 100 (môn CCC có hai bài thi, cộng lại 200)",
+          "aliases": [
+            "trọng số"
+          ]
+        }
+      ],
+      "values": [
+        {
+          "column": "assessment_type",
+          "value": "Exam",
+          "aliases": [
+            "thi cuối kỳ"
+          ]
+        }
+      ],
+      "sensitive_columns": [],
+      "suggested_questions": []
+    }
+  },
+  {
+    "task": "profile",
+    "question": "student_assessments",
+    "answer": {
+      "columns": [
+        {
+          "name": "id_assessment",
+          "description": "Mã bài đánh giá, khóa ngoại tới edu.assessments"
+        },
+        {
+          "name": "id_student",
+          "description": "Mã sinh viên"
+        },
+        {
+          "name": "code_module",
+          "description": "Mã môn của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students"
+        },
+        {
+          "name": "code_presentation",
+          "description": "Mã kỳ của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students"
+        },
+        {
+          "name": "date_submitted",
+          "description": "Ngày nộp, tính bằng số ngày từ ngày bắt đầu học phần",
+          "aliases": [
+            "ngày nộp"
+          ]
+        },
+        {
+          "name": "is_banked",
+          "description": "Điểm chuyển từ lần học trước (true) hay làm trong lần này (false)"
+        },
+        {
+          "name": "score",
+          "description": "Điểm từ 0 đến 100; dưới 40 là trượt bài. Rỗng khi nguồn ghi \"?\"",
+          "aliases": [
+            "điểm"
+          ]
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": [
+        "Điểm trung bình theo loại bài đánh giá",
+        "Điểm trung bình theo kết quả cuối khóa của sinh viên",
+        "Điểm trung bình bài TMA theo nhóm imd_band"
+      ]
+    }
+  },
+  {
+    "task": "profile",
+    "question": "vle_materials",
+    "answer": {
+      "columns": [
+        {
+          "name": "id_site",
+          "description": "Mã tài liệu"
+        },
+        {
+          "name": "code_module",
+          "description": "Mã môn học"
+        },
+        {
+          "name": "code_presentation",
+          "description": "Mã kỳ"
+        },
+        {
+          "name": "activity_type",
+          "description": "Loại hoạt động, ví dụ resource (tài liệu), forumng (diễn đàn), quiz (trắc nghiệm), oucontent (nội dung bài học)",
+          "aliases": [
+            "loại hoạt động"
+          ]
+        },
+        {
+          "name": "week_from",
+          "description": "Tuần dự kiến bắt đầu dùng tài liệu. Rỗng khi nguồn ghi \"?\""
+        },
+        {
+          "name": "week_to",
+          "description": "Tuần dự kiến thôi dùng tài liệu. Rỗng khi nguồn ghi \"?\""
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": []
+    }
+  },
+  {
+    "task": "profile",
+    "question": "student_daily_clicks",
+    "answer": {
+      "columns": [
+        {
+          "name": "code_module",
+          "description": "Mã môn học"
+        },
+        {
+          "name": "code_presentation",
+          "description": "Mã kỳ"
+        },
+        {
+          "name": "id_student",
+          "description": "Mã sinh viên"
+        },
+        {
+          "name": "date",
+          "description": "Ngày, tính bằng số ngày từ ngày bắt đầu học phần (âm là trước khi bắt đầu)"
+        },
+        {
+          "name": "sum_click",
+          "description": "Tổng số lần bấm trong ngày, cộng trên mọi tài liệu",
+          "aliases": [
+            "lượt bấm",
+            "số lần bấm"
+          ]
+        },
+        {
+          "name": "num_sites",
+          "description": "Số tài liệu khác nhau sinh viên mở trong ngày",
+          "aliases": [
+            "số tài liệu đã mở"
+          ]
+        }
+      ],
+      "values": [],
+      "sensitive_columns": [],
+      "suggested_questions": [
+        "Lượt bấm trung bình mỗi sinh viên theo kết quả cuối khóa"
+      ]
+    }
+  }
+]

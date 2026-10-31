@@ -10,9 +10,9 @@ use axum::http::StatusCode;
 use serde_json::{json, Value};
 
 use super::ask_related_tests::{ask, give_north_role, tables_read};
-use super::ask_tests::sql_reply;
+use super::ask_tests::{recording, sql_reply};
 use super::source_relations_tests::{add_source, dataset_id, snapshot};
-use super::sources_tests::{start, Setup, KEY, SHOP};
+use super::sources_tests::{start, start_with_llm, Setup, KEY, SHOP};
 use crate::api::test_support::call;
 
 /// Điều kiện guard thêm vào chỗ đọc orders của Minh.
@@ -162,5 +162,28 @@ async fn drill_and_overview_on_orders_respect_the_filter() {
     let body = overview(&s, &s.lan, &orders).await;
     assert_eq!(body["summary"]["restricted"], false, "{body}");
     assert_eq!(body["summary"]["row_count"], 3, "{body}");
+    s.finish().await;
+}
+
+/// Người bị lọc dòng theo vai dữ liệu không nhận danh sách giá trị hay gợi ý giá trị trong prompt (#230): danh sách lấy
+/// từ hồ sơ của cả cột, có giá trị của dòng người đó không được xem. Admin hỏi cùng câu thì có danh sách.
+#[tokio::test]
+async fn row_filtered_member_gets_no_value_lists_in_the_prompt() {
+    let (llm, prompts) = recording(&[sql_reply(ORDERS_BY_STATUS), sql_reply(ORDERS_BY_STATUS)]);
+    let Some(s) = start_with_llm(Some(KEY), llm, None).await else {
+        return;
+    };
+    let result = snapshot_shop(&s).await;
+    let orders = dataset_id(&result, "orders");
+    let question = "Số đơn theo status";
+    rows(&ask(&s, &s.lan, &orders, question).await);
+    rows(&ask(&s, &s.minh, &orders, question).await);
+    let prompts = prompts.lock().unwrap().clone();
+    assert_eq!(prompts.len(), 2);
+    assert!(prompts[0].contains("All values:"), "{}", prompts[0]);
+    for marker in ["All values:", "Some values:", "equal a value"] {
+        assert!(!prompts[1].contains(marker), "{marker}: {}", prompts[1]);
+    }
+    assert!(prompts[1].contains("\"status\""), "metadata stays");
     s.finish().await;
 }

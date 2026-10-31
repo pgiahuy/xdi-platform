@@ -141,6 +141,7 @@ async fn run_cases(
             table: &dataset.logical_table,
             question: &case.question,
             columns: &context.columns,
+            related: &[],
             earlier: &case.earlier,
         };
         let classified = classify(state.llm.as_ref(), &input, timeout).await;

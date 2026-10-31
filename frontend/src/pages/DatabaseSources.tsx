@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres): nút mở form thêm nguồn,
+/* pages/DatabaseSources.tsx - khung "Kết nối database" của trang Dữ liệu (#165, chỉ Postgres), luồng chính của trang
+(#230, nạp file là lựa chọn phụ bên dưới): nút mở form thêm nguồn, workspace chưa có nguồn nào thì form mở sẵn,
 rồi với mỗi nguồn đã có: thử kết nối, chọn bảng, chọn bảng chụp kèm, chụp thành dataset. DatasetsPage chỉ hiện khung
 này cho admin; backend vẫn trả 403 cho member. Nối hook (src/api/sources.ts) với component (ConnectForm, SourcePanel,
 RelatedTablePicker). Cách chọn sẵn, mở thêm một bước và giới hạn số bảng ở relatedTablesView.ts. */
@@ -24,20 +25,41 @@ import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 import { buildRelatedView, MAX_SNAPSHOT_TABLES, type RelationChoice } from './relatedTablesView'
 
-// Khớp SSL_MODES của backend (service/sources/postgres.rs): bản này chưa hỗ trợ máy chủ chỉ nhận TLS.
-const SSL_MODES = ['prefer', 'disable']
-const EMPTY: ConnectValues = { host: '', port: '5432', database: '', user: '', password: '', sslmode: 'prefer' }
+// Khớp SSL_MODES của backend (service/sources/postgres.rs), nghĩa như sslmode của libpq.
+const SSL_MODES = [
+  { value: 'prefer', label: 'Dùng TLS nếu máy chủ nhận, không kiểm chứng chỉ.' },
+  { value: 'require', label: 'Bắt buộc TLS, không kiểm chứng chỉ: chống nghe lén, không chống giả máy chủ.' },
+  { value: 'verify-full', label: 'Bắt buộc TLS, chứng chỉ phải do CA tin cậy cấp và đúng tên máy chủ.' },
+  { value: 'disable', label: 'Không dùng TLS. Chỉ dùng trong mạng tin cậy.' },
+]
+const EMPTY: ConnectValues = {
+  host: '',
+  port: '5432',
+  database: '',
+  user: '',
+  password: '',
+  sslmode: 'prefer',
+  sslRootCert: '',
+}
 
 export function DatabaseSources({ ws }: { ws: string }) {
   const sources = useSources(ws)
   const create = useCreateSource(ws)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState<boolean>()
   const [values, setValues] = useState(EMPTY)
+  // Chưa bấm gì thì form mở khi workspace chưa có nguồn: đó là việc đầu tiên admin cần làm ở trang này.
+  const formOpen = open ?? sources.data?.length === 0
 
   const submit = () => {
     const port = Number(values.port)
+    const { sslRootCert, ...connection } = values
     create.mutate(
-      { ...values, port: Number.isInteger(port) && port > 0 ? port : null },
+      {
+        ...connection,
+        port: Number.isInteger(port) && port > 0 ? port : null,
+        // Backend chỉ nhận chứng chỉ CA với verify-full; đổi sang mode khác thì không gửi phần đã dán.
+        ssl_root_cert: values.sslmode === 'verify-full' && sslRootCert.trim() !== '' ? sslRootCert : null,
+      },
       {
         onSuccess: () => {
           setValues(EMPTY)
@@ -54,19 +76,19 @@ export function DatabaseSources({ ws }: { ws: string }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="database-sources-heading" className="text-[15px] font-semibold tracking-tight">
-          Database
+          Kết nối database
         </h2>
-        {!open && (
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-            Kết nối database
+        {!formOpen && (
+          <Button size="sm" onClick={() => setOpen(true)}>
+            Thêm database
           </Button>
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        Chụp bảng Postgres thành dataset, có thể kèm các bảng liên quan theo khóa ngoại (mỗi bảng một dataset); mỗi lần
-        chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
+        Chụp bảng Postgres của tổ chức thành dataset, kèm các bảng liên quan theo khóa ngoại (mỗi bảng một dataset, hỏi
+        được qua nhiều bảng); mỗi lần chụp là một phiên bản, chụp lại khi dữ liệu bên đó đổi.
       </p>
-      {open && (
+      {formOpen && (
         <ConnectForm
           values={values}
           onChange={setValues}

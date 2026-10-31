@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/datasets/ConnectForm.tsx - form thêm nguồn Postgres: máy chủ, cổng, database, tài khoản, mật khẩu, sslmode.
+/* components/datasets/ConnectForm.tsx - form thêm nguồn Postgres: máy chủ, cổng, database, tài khoản, mật khẩu, sslmode,
+và chứng chỉ CA (chỉ hiện với verify-full, cho máy chủ dùng CA riêng của tổ chức).
 Trang giữ giá trị và gọi backend (pages/DatabaseSources.tsx); backend thử kết nối trước khi lưu, lỗi hiện ở error.
 Mật khẩu chỉ gửi đi một lần, backend lưu dạng mã hóa và không trả lại. */
 
@@ -8,6 +9,7 @@ import { FormField } from '@/components/forms/FormField'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 
 export type ConnectValues = {
   host: string
@@ -16,12 +18,15 @@ export type ConnectValues = {
   user: string
   password: string
   sslmode: string
+  /** Chứng chỉ CA dạng PEM; chỉ gửi khi sslmode là verify-full. */
+  sslRootCert: string
 }
 
 type Props = {
   values: ConnectValues
   onChange: (values: ConnectValues) => void
-  sslModes: string[]
+  /** Giá trị và lời giải thích ngắn của từng sslmode. */
+  sslModes: { value: string; label: string }[]
   busy: boolean
   error?: string
   onSubmit: () => void
@@ -76,17 +81,37 @@ export function ConnectForm({ values, onChange, sslModes, busy, error, onSubmit,
         <Label htmlFor={`${id}-ssl`}>sslmode</Label>
         <select
           id={`${id}-ssl`}
-          className="h-9 w-40 rounded-md border bg-background px-2 text-sm"
+          className="h-9 w-48 rounded-md border bg-background px-2 text-sm"
           value={values.sslmode}
           onChange={set('sslmode')}
         >
           {sslModes.map((mode) => (
-            <option key={mode} value={mode}>
-              {mode}
+            <option key={mode.value} value={mode.value}>
+              {mode.value}
             </option>
           ))}
         </select>
+        <p className="text-xs text-muted-foreground">
+          {sslModes.find((mode) => mode.value === values.sslmode)?.label}
+        </p>
       </div>
+      {values.sslmode === 'verify-full' && (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`${id}-ca`}>Chứng chỉ CA (không bắt buộc)</Label>
+          <Textarea
+            id={`${id}-ca`}
+            aria-describedby={`${id}-ca-hint`}
+            className="font-mono text-xs"
+            rows={4}
+            placeholder="-----BEGIN CERTIFICATE-----"
+            value={values.sslRootCert}
+            onChange={set('sslRootCert')}
+          />
+          <p id={`${id}-ca-hint`} className="text-xs text-muted-foreground">
+            Để trống thì tin các CA của hệ thống. Máy chủ dùng CA riêng của tổ chức thì dán nội dung file PEM của CA.
+          </p>
+        </div>
+      )}
       {error && <FormMessage kind="error">{error}</FormMessage>}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={busy}>

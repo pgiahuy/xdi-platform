@@ -5,15 +5,12 @@ bước và số bảng, và prompt SQL nhiều bảng của ask/prompt.rs (kh�
 
 use uuid::Uuid;
 
-use crate::engine::store::{ColumnAggregation, DatasetRelation, MetricDefinition, ValueRow};
-use crate::service::ask::context::{
-    apply_group_column_cap, apply_group_values, AskContext, ColumnProfile, CONTEXT_VALUES_MAX,
-    FULL_SCHEMA_MAX_COLUMNS,
-};
+use crate::engine::store::{ColumnAggregation, DatasetRelation, MetricDefinition};
+use crate::service::ask::context::{apply_metadata_cap, AskContext, ColumnProfile};
 use crate::service::ask::group_prompt::{GroupPrompt, JoinLine, TableContext};
 use crate::service::ask::prompt::{build_sql_prompt, PromptInput, PROMPT_MAX_CHARS};
 use crate::service::ask::related::{build_group_ids, MAX_GROUP_TABLES};
-use crate::service::ask::values::{ValueEntry, ValueIndex};
+use crate::service::ask::values::ValueEntry;
 use crate::service::prompt_fixtures::check_fixture;
 
 /// Id cố định theo số, để lời báo của assert đọc được.
@@ -120,6 +117,9 @@ fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
         unit: None,
         aggregation: ColumnAggregation::Sum,
         join_key: false,
+        metric_column: false,
+        picked: false,
+        brief: false,
     }
 }
 
@@ -289,9 +289,10 @@ fn join_lines_cover_one_to_one_and_composite_keys() {
     ));
 }
 
-/// Prompt dài phải hạ xuống mức chỉ gửi cột khớp: cột khóa vẫn còn ở mọi bảng, cột không khớp không khóa thì mất.
+/// Prompt dài quá PROMPT_MAX_CHARS: không cột nào mất hay bị rút gọn ở bảng nào, cột không khớp vẫn đủ mô tả (#230);
+/// hạ mức chỉ bỏ danh sách giá trị.
 #[test]
-fn matched_columns_keep_the_join_keys() {
+fn long_prompts_keep_every_column_of_every_table() {
     let mut context = sales_context();
     let mut group = sales_group();
     let long = "y".repeat(4_000);
@@ -303,8 +304,13 @@ fn matched_columns_keep_the_join_keys() {
         }
     }
     let prompt = build_sql_prompt(&group_input(SEGMENT_QUESTION, &context, &[], &group));
-    assert!(!prompt.contains("- \"quantity\""), "unmatched column stays");
-    assert!(!prompt.contains("- \"city\""), "unmatched column stays");
+    for unmatched in ["quantity", "city"] {
+        let line = prompt
+            .lines()
+            .find(|l| l.starts_with(&format!("- \"{unmatched}\"")))
+            .unwrap_or_else(|| panic!("{unmatched} is gone"));
+        assert!(line.contains("yyy"), "{line}");
+    }
     for kept in [
         "order_id",
         "customer_id",
@@ -390,54 +396,42 @@ fn six_tables_fit_in_the_prompt_limit() {
 
 // Trần chung của ngữ cảnh
 
-/// Tổng cột vượt 60: mọi bảng chỉ giữ cột khớp, cột thời gian và cột khóa. Không vượt thì giữ hết.
+/// Trần metadata tính chung cho mọi bảng (#230): dưới trần không cột nào gọn, kể cả 400 cột; vượt trần thì mọi cột vẫn
+/// còn, chỉ cột không liên quan thành gọn. Gọi lại khi tổng dưới trần thì cột gọn trở lại đủ metadata.
 #[test]
-fn column_cap_counts_every_table() {
+fn metadata_cap_counts_every_table() {
     let build = |table: &str, n: usize| -> Vec<ColumnProfile> {
         (0..n)
-            .map(|i| column(&format!("{table}_{i}"), "INTEGER", "measure"))
+            .map(|i| {
+                let mut c = column(&format!("{table}_{i}"), "INTEGER", "measure");
+                c.description = Some("x".repeat(60));
+                c
+            })
             .collect()
     };
-    let mut items = build("items", 30);
+    let brief = |columns: &[ColumnProfile]| columns.iter().filter(|c| c.brief).count();
+    let mut items = build("items", 200);
     items[0].matched = true;
-    let mut orders = build("orders", 25);
+    let mut orders = build("orders", 200);
     orders[0].join_key = true;
     orders[1].role = "time".to_string();
-    let mut small = build("small", 3);
-    apply_group_column_cap(&mut [&mut items, &mut small]);
-    assert_eq!((items.len(), small.len()), (30, 3));
+    orders[2].metric_column = true;
+    orders[3].picked = true;
+    apply_metadata_cap(&mut [&mut items, &mut orders]);
+    assert_eq!((brief(&items), brief(&orders)), (0, 0));
 
-    let mut customers = build("customers", FULL_SCHEMA_MAX_COLUMNS - 50);
-    apply_group_column_cap(&mut [&mut items, &mut orders, &mut customers]);
-    assert_eq!((items.len(), orders.len(), customers.len()), (1, 2, 0));
-}
+    let mut customers = build("customers", 600);
+    apply_metadata_cap(&mut [&mut items, &mut orders, &mut customers]);
+    assert_eq!(
+        (items.len(), orders.len(), customers.len()),
+        (200, 200, 600)
+    );
+    assert_eq!(
+        (brief(&items), brief(&orders), brief(&customers)),
+        (199, 196, 600)
+    );
+    assert!((0..4).all(|i| !orders[i].brief) && !items[0].brief);
 
-/// Hai bảng, mỗi bảng mười cột chiều 40 giá trị (800 giá trị, mỗi bảng riêng đã 400): tổng gửi không vượt
-/// CONTEXT_VALUES_MAX, và cột của cả hai bảng đều có giá trị.
-#[test]
-fn value_budget_is_shared_by_the_tables() {
-    let table = |name: &str| {
-        let mut columns = Vec::new();
-        let mut rows = Vec::new();
-        for c in 0..10 {
-            let column = column(&format!("{name}_{c}"), "VARCHAR", "dimension");
-            rows.extend((0..40).map(|i| ValueRow {
-                column_id: column.id,
-                column_name: column.name.clone(),
-                value: format!("{name} {c} {i}"),
-                aliases: Vec::new(),
-            }));
-            columns.push(column);
-        }
-        (columns, ValueIndex::build(&rows))
-    };
-    let (mut first, first_index) = table("segment");
-    let (mut second, second_index) = table("city");
-    apply_group_values(&mut [(&mut first, &first_index), (&mut second, &second_index)]);
-    let count = |columns: &[ColumnProfile]| columns.iter().map(|c| c.values.len()).sum::<usize>();
-    assert!(count(&first) + count(&second) <= CONTEXT_VALUES_MAX);
-    assert_eq!(count(&first), count(&second));
-    assert!(first
-        .iter()
-        .all(|c| !c.values.is_empty() && !c.values_complete));
+    apply_metadata_cap(&mut [&mut items, &mut orders]);
+    assert_eq!((brief(&items), brief(&orders)), (0, 0));
 }

@@ -1248,7 +1248,12 @@ export interface components {
              * @description Defaults to 5432.
              */
             port?: number | null;
-            /** @description `disable` or `prefer` (default). TLS-only servers are not supported yet. */
+            /** @description PEM CA certificate(s) trusted for `verify-full`, besides the system CAs. Only with `verify-full`. */
+            ssl_root_cert?: string | null;
+            /**
+             * @description `disable`, `prefer` (default), `require` (TLS, certificate not checked) or `verify-full` (TLS, certificate
+             *     signed by a trusted CA and matching the host name).
+             */
             sslmode?: string | null;
             user: string;
         };
@@ -2123,6 +2128,8 @@ export interface components {
         SourceResponse: {
             /** Format: date-time */
             created_at: string;
+            /** @description True when the source was added with its own CA certificate. */
+            custom_ca: boolean;
             database: string;
             host: string;
             /** Format: uuid */

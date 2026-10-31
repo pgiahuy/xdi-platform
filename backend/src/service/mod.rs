@@ -30,6 +30,7 @@ pub mod profile;
 #[cfg(test)]
 pub(crate) mod prompt_fixtures;
 pub mod samples;
+pub mod samples_db;
 #[cfg(test)]
 mod samples_tests;
 pub mod semantic;

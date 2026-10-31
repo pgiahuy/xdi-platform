@@ -11,15 +11,20 @@ BACKUP_DIR ?= $(HOME)/xdi-backups
 # file. Đường dẫn tương đối trong CARGO_TARGET_DIR được cargo tính từ thư mục chạy lệnh, ở đây là backend/.
 CARGO_TARGET := $(if $(filter /%,$(CARGO_TARGET_DIR)),$(CARGO_TARGET_DIR),backend/$(or $(CARGO_TARGET_DIR),target))
 BACKEND_BIN := $(CARGO_TARGET)/release/xdi-backend
+# Database mẫu (data/postgres-demo, container xdi-demo-db), mở trên 127.0.0.1 cho backend chạy ngoài Docker (make dev,
+# make eval). Không chạy thì make dev nạp dataco.csv, make eval bỏ qua bộ câu trên database. SOURCE_SECRET_KEY không
+# đặt thì backend tự sinh khóa trong DATA_DIR.
+DEMO_DB_PORT ?= 5440
+SAMPLE_DATABASE_URL ?= postgres://analyst:analyst@127.0.0.1:$(DEMO_DB_PORT)/company_demo
 
 .PHONY: help dev dev-frontend build test check check-fast check-frontend up down logs backup restore openapi licenses hooks install uninstall release-artifacts clean eval eval-lessons eval-classify
 
 help: ## In danh sách target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
-dev: ## Postgres trong Docker, backend chạy local với cargo run
-	$(COMPOSE) up -d postgres
-	cd backend && cargo run
+dev: ## Postgres trong Docker, backend chạy local với cargo run (database mẫu nếu đang chạy, xem data/postgres-demo)
+	$(COMPOSE) up -d --wait postgres
+	cd backend && SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" cargo run
 
 dev-frontend: ## Giao diện chạy dev ở cổng 5173; /api chuyển sang backend
 	cd frontend && npm install && npm run dev
@@ -92,12 +97,20 @@ restore: ## Khôi phục, THAY dữ liệu hiện có: make restore FROM=~/xdi-b
 		sh -c 'find /data -mindepth 1 -delete && tar xzf - -C /data && chown -R 10001 /data' < "$(FROM)/data.tgz"
 	$(COMPOSE) up -d
 
-eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco.csv, thoát mã 1 khi accuracy dưới eval/baseline.json
+eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco.csv, rồi trên database mẫu nếu container xdi-demo-db đang chạy (#230); thoát mã 1 khi accuracy dưới eval/baseline.json
 	@# Database riêng xdi_eval để không rác vào db dev; lệnh createdb bỏ qua lỗi khi compose chưa chạy (CI đặt sẵn DATABASE_URL).
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
 	cd backend && cargo build -q
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
 	  $(CARGO_TARGET)/debug/xdi-backend eval --data data/samples/dataco.csv --cases eval/dataco.json --baseline eval/baseline.json
+	@# Bộ câu trên database mẫu: chỉ khi container xdi-demo-db đang chạy (data/postgres-demo, nạp bằng load.sh). CI không
+	@# có database này nên bỏ qua. Chụp bảng như thiết lập lần đầu, kết quả ghi eval/result-database.json.
+	@if [ -n "$$(docker ps -q --filter name=^xdi-demo-db$$ --filter status=running 2>/dev/null)" ]; then \
+	  DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=mock DATA_DIR=backend/target/eval-data \
+	  SAMPLES_DIR=data/samples SAMPLE_DATABASE_URL="$(SAMPLE_DATABASE_URL)" \
+	  $(CARGO_TARGET)/debug/xdi-backend eval --sample-database --cases eval/sales_joins.json --cases eval/edu.json \
+	  --baseline eval/baseline.json --out eval/result-database.json; \
+	else echo "xdi-demo-db is not running: skipping the evaluation on the sample database (data/postgres-demo/README.md)"; fi
 
 eval-lessons: ## Bộ đánh giá hai lượt, không và có bài học trong eval/lessons.json (#228); mock luôn như nhau, LLM_PROVIDER=gemini để đo thật
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
