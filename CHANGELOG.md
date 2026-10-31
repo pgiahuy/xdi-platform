@@ -10,6 +10,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Màn **Chỉ số** của mỗi dataset (nút Chỉ số ở trang Dữ liệu): admin thêm, sửa, xóa chỉ số bằng cách chọn phép tính và cột hoặc viết SQL; công thức được chạy thử trước khi lưu, sai thì báo ngay dưới ô sai; câu hỏi sau dùng đúng công thức đó (#185).
 - Cột số đo có cách gộp mặc định, tổng hay trung bình: mô hình đề xuất lúc nạp, admin đổi ở màn Chỉ số; câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng (#185).
 - Postgres mẫu nhiều bảng có khóa chính, khóa ngoại (DataCo và OULAD) để thử kết nối cơ sở dữ liệu công ty: `data/postgres-demo/`.
+- Postgres mẫu có thêm nguyên nhân cài sẵn ở dữ liệu học tập (bỏ học kỳ 2014J), sơ đồ ER và tài liệu bảng sinh bằng tbls, Adminer để xem bảng khi trình diễn (#203).
 - Nguồn Postgres (#165): admin kết nối một database Postgres ở trang Dữ liệu, chụp một bảng thành dataset và chụp lại thành phiên bản mới.
 - Chụp bảng Postgres kèm các bảng liên quan theo khóa ngoại, theo cả hai chiều và tới hai bước (tối đa 10 bảng): mỗi bảng một dataset, quan hệ giữa chúng được ghi lại; danh sách dataset ghi các dataset liên quan.
 - Hỏi trên bảng chụp từ database thì mô hình nối được các bảng liên quan bằng `JOIN`; khung Minh chứng ghi các bảng đã đọc (#213).

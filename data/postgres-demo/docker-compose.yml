@@ -34,5 +34,21 @@ services:
       timeout: 3s
       retries: 10
 
+  # Giao diện web để xem bảng khi trình diễn. Chỉ chạy khi bật profile: docker compose --profile adminer up -d.
+  # load.sh chỉ gọi dịch vụ demo-db nên không kéo Adminer lên. Đăng nhập bằng analyst (chỉ đọc), xem README.md.
+  adminer:
+    image: adminer:5.4.1
+    container_name: xdi-demo-adminer
+    profiles: ["adminer"]
+    environment:
+      # Điền sẵn ô "Server" bằng tên dịch vụ Postgres trong mạng của compose này.
+      ADMINER_DEFAULT_SERVER: demo-db
+    ports:
+      # Chỉ mở trên localhost, như cổng Postgres.
+      - "127.0.0.1:${DEMO_ADMINER_PORT:-8090}:8080"
+    depends_on:
+      demo-db:
+        condition: service_healthy
+
 volumes:
   demo-db-data:

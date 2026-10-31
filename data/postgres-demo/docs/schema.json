@@ -1,0 +1,1403 @@
+{
+  "name": "company_demo",
+  "desc": "Cơ sở dữ liệu mẫu nhiều bảng dựng từ OULAD (schema edu) và DataCo (schema sales). Cách dựng ở data/postgres-demo/README.md.",
+  "tables": [
+    {
+      "name": "edu.courses",
+      "type": "BASE TABLE",
+      "comment": "Học phần: một môn mở trong một kỳ. Mỗi dòng một cặp (môn, kỳ)",
+      "columns": [
+        {
+          "name": "code_module",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã môn học, ví dụ AAA"
+        },
+        {
+          "name": "code_presentation",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã kỳ mở môn: năm và chữ B (bắt đầu tháng 2) hoặc J (bắt đầu tháng 10), ví dụ 2013J"
+        },
+        {
+          "name": "presentation_year",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Năm bắt đầu kỳ, tách từ code_presentation"
+        },
+        {
+          "name": "presentation_start_month",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Tháng bắt đầu kỳ: 2 với chữ B, 10 với chữ J, tách từ code_presentation"
+        },
+        {
+          "name": "module_presentation_length",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Độ dài học phần, tính bằng ngày"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "courses_pkey",
+          "def": "CREATE UNIQUE INDEX courses_pkey ON edu.courses USING btree (code_module, code_presentation)",
+          "table": "edu.courses",
+          "columns": [
+            "code_module",
+            "code_presentation"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "courses_presentation_start_month_check",
+          "type": "CHECK",
+          "def": "CHECK ((presentation_start_month = ANY (ARRAY[2, 10])))",
+          "table": "edu.courses",
+          "referenced_table": "",
+          "columns": [
+            "presentation_start_month"
+          ]
+        },
+        {
+          "name": "courses_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (code_module, code_presentation)",
+          "table": "edu.courses",
+          "referenced_table": "",
+          "columns": [
+            "code_module",
+            "code_presentation"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edu.students",
+      "type": "BASE TABLE",
+      "comment": "Sinh viên trong một học phần (từ studentInfo.csv). Mỗi dòng một sinh viên học một môn trong một kỳ",
+      "columns": [
+        {
+          "name": "code_module",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã môn học, cùng edu.courses"
+        },
+        {
+          "name": "code_presentation",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã kỳ, cùng edu.courses"
+        },
+        {
+          "name": "id_student",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã sinh viên (đã ẩn danh). Một sinh viên có thể có nhiều dòng nếu học nhiều học phần"
+        },
+        {
+          "name": "gender",
+          "type": "text",
+          "nullable": false,
+          "comment": "Giới tính: M nam, F nữ"
+        },
+        {
+          "name": "region",
+          "type": "text",
+          "nullable": false,
+          "comment": "Vùng địa lý nơi sinh viên sống khi học"
+        },
+        {
+          "name": "highest_education",
+          "type": "text",
+          "nullable": false,
+          "comment": "Trình độ học vấn cao nhất khi vào học phần"
+        },
+        {
+          "name": "imd_band",
+          "type": "text",
+          "nullable": true,
+          "comment": "Nhóm chỉ số thiếu thốn (Index of Multiple Deprivation) của nơi ở, theo khoảng phần trăm; 0-10% là thiếu thốn nhất. Rỗng khi nguồn ghi \"?\""
+        },
+        {
+          "name": "age_band",
+          "type": "text",
+          "nullable": false,
+          "comment": "Nhóm tuổi: 0-35, 35-55, 55\u003c="
+        },
+        {
+          "name": "num_of_prev_attempts",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Số lần đã học môn này trước đó"
+        },
+        {
+          "name": "studied_credits",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Tổng số tín chỉ sinh viên đang học trong kỳ"
+        },
+        {
+          "name": "disability",
+          "type": "boolean",
+          "nullable": false,
+          "comment": "Sinh viên có khai báo khuyết tật hay không"
+        },
+        {
+          "name": "final_result",
+          "type": "text",
+          "nullable": false,
+          "comment": "Kết quả cuối học phần: Distinction (giỏi), Pass (đạt), Fail (trượt), Withdrawn (bỏ học)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "students_pkey",
+          "def": "CREATE UNIQUE INDEX students_pkey ON edu.students USING btree (code_module, code_presentation, id_student)",
+          "table": "edu.students",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "students_final_result_check",
+          "type": "CHECK",
+          "def": "CHECK ((final_result = ANY (ARRAY['Distinction'::text, 'Pass'::text, 'Fail'::text, 'Withdrawn'::text])))",
+          "table": "edu.students",
+          "referenced_table": "",
+          "columns": [
+            "final_result"
+          ]
+        },
+        {
+          "name": "students_gender_check",
+          "type": "CHECK",
+          "def": "CHECK ((gender = ANY (ARRAY['M'::text, 'F'::text])))",
+          "table": "edu.students",
+          "referenced_table": "",
+          "columns": [
+            "gender"
+          ]
+        },
+        {
+          "name": "students_code_module_code_presentation_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (code_module, code_presentation) REFERENCES edu.courses(code_module, code_presentation)",
+          "table": "edu.students",
+          "referenced_table": "edu.courses",
+          "columns": [
+            "code_module",
+            "code_presentation"
+          ],
+          "referenced_columns": [
+            "code_module",
+            "code_presentation"
+          ]
+        },
+        {
+          "name": "students_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (code_module, code_presentation, id_student)",
+          "table": "edu.students",
+          "referenced_table": "",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edu.registrations",
+      "type": "BASE TABLE",
+      "comment": "Ngày đăng ký và ngày hủy đăng ký học phần của sinh viên (từ studentRegistration.csv). Mỗi dòng ứng với đúng một dòng edu.students",
+      "columns": [
+        {
+          "name": "code_module",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã môn học"
+        },
+        {
+          "name": "code_presentation",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã kỳ"
+        },
+        {
+          "name": "id_student",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã sinh viên"
+        },
+        {
+          "name": "date_registration",
+          "type": "integer",
+          "nullable": true,
+          "comment": "Ngày đăng ký, tính bằng số ngày so với ngày bắt đầu học phần (âm là đăng ký trước). Rỗng khi nguồn ghi \"?\""
+        },
+        {
+          "name": "date_unregistration",
+          "type": "integer",
+          "nullable": true,
+          "comment": "Ngày hủy đăng ký, cùng cách tính. Rỗng nếu sinh viên không hủy"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "registrations_pkey",
+          "def": "CREATE UNIQUE INDEX registrations_pkey ON edu.registrations USING btree (code_module, code_presentation, id_student)",
+          "table": "edu.registrations",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "registrations_code_module_code_presentation_id_student_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (code_module, code_presentation, id_student) REFERENCES edu.students(code_module, code_presentation, id_student)",
+          "table": "edu.registrations",
+          "referenced_table": "edu.students",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ],
+          "referenced_columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ]
+        },
+        {
+          "name": "registrations_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (code_module, code_presentation, id_student)",
+          "table": "edu.registrations",
+          "referenced_table": "",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edu.assessments",
+      "type": "BASE TABLE",
+      "comment": "Bài đánh giá của một học phần: bài tập chấm bởi giảng viên, bài trắc nghiệm máy chấm, bài thi cuối kỳ",
+      "columns": [
+        {
+          "name": "id_assessment",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã bài đánh giá"
+        },
+        {
+          "name": "code_module",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã môn học"
+        },
+        {
+          "name": "code_presentation",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã kỳ"
+        },
+        {
+          "name": "assessment_type",
+          "type": "text",
+          "nullable": false,
+          "comment": "Loại bài: TMA (bài tập giảng viên chấm), CMA (bài máy chấm), Exam (thi cuối kỳ)"
+        },
+        {
+          "name": "date",
+          "type": "integer",
+          "nullable": true,
+          "comment": "Hạn nộp, tính bằng số ngày từ ngày bắt đầu học phần. Rỗng khi nguồn ghi \"?\" (bài thi chưa có ngày, theo mô tả OULAD là cuối học phần)"
+        },
+        {
+          "name": "weight",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Trọng số của bài, phần trăm. Trong một học phần, các bài không phải thi cộng lại 100 (môn GGG: 0) và bài thi cộng lại 100 (môn CCC có hai bài thi, cộng lại 200)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "assessments_pkey",
+          "def": "CREATE UNIQUE INDEX assessments_pkey ON edu.assessments USING btree (id_assessment)",
+          "table": "edu.assessments",
+          "columns": [
+            "id_assessment"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "assessments_assessment_type_check",
+          "type": "CHECK",
+          "def": "CHECK ((assessment_type = ANY (ARRAY['TMA'::text, 'CMA'::text, 'Exam'::text])))",
+          "table": "edu.assessments",
+          "referenced_table": "",
+          "columns": [
+            "assessment_type"
+          ]
+        },
+        {
+          "name": "assessments_code_module_code_presentation_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (code_module, code_presentation) REFERENCES edu.courses(code_module, code_presentation)",
+          "table": "edu.assessments",
+          "referenced_table": "edu.courses",
+          "columns": [
+            "code_module",
+            "code_presentation"
+          ],
+          "referenced_columns": [
+            "code_module",
+            "code_presentation"
+          ]
+        },
+        {
+          "name": "assessments_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id_assessment)",
+          "table": "edu.assessments",
+          "referenced_table": "",
+          "columns": [
+            "id_assessment"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edu.student_assessments",
+      "type": "BASE TABLE",
+      "comment": "Điểm từng bài đánh giá của sinh viên (từ studentAssessment.csv). Mỗi dòng một sinh viên nộp một bài",
+      "columns": [
+        {
+          "name": "id_assessment",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã bài đánh giá, khóa ngoại tới edu.assessments"
+        },
+        {
+          "name": "id_student",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã sinh viên"
+        },
+        {
+          "name": "code_module",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã môn của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students"
+        },
+        {
+          "name": "code_presentation",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã kỳ của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students"
+        },
+        {
+          "name": "date_submitted",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Ngày nộp, tính bằng số ngày từ ngày bắt đầu học phần"
+        },
+        {
+          "name": "is_banked",
+          "type": "boolean",
+          "nullable": false,
+          "comment": "Điểm chuyển từ lần học trước (true) hay làm trong lần này (false)"
+        },
+        {
+          "name": "score",
+          "type": "numeric",
+          "nullable": true,
+          "comment": "Điểm từ 0 đến 100; dưới 40 là trượt bài. Rỗng khi nguồn ghi \"?\""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "student_assessments_pkey",
+          "def": "CREATE UNIQUE INDEX student_assessments_pkey ON edu.student_assessments USING btree (id_assessment, id_student)",
+          "table": "edu.student_assessments",
+          "columns": [
+            "id_assessment",
+            "id_student"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "student_assessments_score_check",
+          "type": "CHECK",
+          "def": "CHECK (((score \u003e= (0)::numeric) AND (score \u003c= (100)::numeric)))",
+          "table": "edu.student_assessments",
+          "referenced_table": "",
+          "columns": [
+            "score"
+          ]
+        },
+        {
+          "name": "student_assessments_code_module_code_presentation_id_stude_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (code_module, code_presentation, id_student) REFERENCES edu.students(code_module, code_presentation, id_student)",
+          "table": "edu.student_assessments",
+          "referenced_table": "edu.students",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ],
+          "referenced_columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ]
+        },
+        {
+          "name": "student_assessments_id_assessment_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (id_assessment) REFERENCES edu.assessments(id_assessment)",
+          "table": "edu.student_assessments",
+          "referenced_table": "edu.assessments",
+          "columns": [
+            "id_assessment"
+          ],
+          "referenced_columns": [
+            "id_assessment"
+          ]
+        },
+        {
+          "name": "student_assessments_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id_assessment, id_student)",
+          "table": "edu.student_assessments",
+          "referenced_table": "",
+          "columns": [
+            "id_assessment",
+            "id_student"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edu.vle_materials",
+      "type": "BASE TABLE",
+      "comment": "Tài liệu và hoạt động trên hệ thống học trực tuyến (VLE) của một học phần (từ vle.csv)",
+      "columns": [
+        {
+          "name": "id_site",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã tài liệu"
+        },
+        {
+          "name": "code_module",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã môn học"
+        },
+        {
+          "name": "code_presentation",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã kỳ"
+        },
+        {
+          "name": "activity_type",
+          "type": "text",
+          "nullable": false,
+          "comment": "Loại hoạt động, ví dụ resource (tài liệu), forumng (diễn đàn), quiz (trắc nghiệm), oucontent (nội dung bài học)"
+        },
+        {
+          "name": "week_from",
+          "type": "integer",
+          "nullable": true,
+          "comment": "Tuần dự kiến bắt đầu dùng tài liệu. Rỗng khi nguồn ghi \"?\""
+        },
+        {
+          "name": "week_to",
+          "type": "integer",
+          "nullable": true,
+          "comment": "Tuần dự kiến thôi dùng tài liệu. Rỗng khi nguồn ghi \"?\""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "vle_materials_pkey",
+          "def": "CREATE UNIQUE INDEX vle_materials_pkey ON edu.vle_materials USING btree (id_site)",
+          "table": "edu.vle_materials",
+          "columns": [
+            "id_site"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "vle_materials_code_module_code_presentation_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (code_module, code_presentation) REFERENCES edu.courses(code_module, code_presentation)",
+          "table": "edu.vle_materials",
+          "referenced_table": "edu.courses",
+          "columns": [
+            "code_module",
+            "code_presentation"
+          ],
+          "referenced_columns": [
+            "code_module",
+            "code_presentation"
+          ]
+        },
+        {
+          "name": "vle_materials_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id_site)",
+          "table": "edu.vle_materials",
+          "referenced_table": "",
+          "columns": [
+            "id_site"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edu.student_daily_clicks",
+      "type": "BASE TABLE",
+      "comment": "Số lần bấm trên hệ thống học trực tuyến của sinh viên theo ngày, gộp từ studentVle.csv. Mỗi dòng một sinh viên trong một học phần trong một ngày có hoạt động",
+      "columns": [
+        {
+          "name": "code_module",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã môn học"
+        },
+        {
+          "name": "code_presentation",
+          "type": "text",
+          "nullable": false,
+          "comment": "Mã kỳ"
+        },
+        {
+          "name": "id_student",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã sinh viên"
+        },
+        {
+          "name": "date",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Ngày, tính bằng số ngày từ ngày bắt đầu học phần (âm là trước khi bắt đầu)"
+        },
+        {
+          "name": "sum_click",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Tổng số lần bấm trong ngày, cộng trên mọi tài liệu"
+        },
+        {
+          "name": "num_sites",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Số tài liệu khác nhau sinh viên mở trong ngày"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "student_daily_clicks_pkey",
+          "def": "CREATE UNIQUE INDEX student_daily_clicks_pkey ON edu.student_daily_clicks USING btree (code_module, code_presentation, id_student, date)",
+          "table": "edu.student_daily_clicks",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student",
+            "date"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "student_daily_clicks_code_module_code_presentation_id_stud_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (code_module, code_presentation, id_student) REFERENCES edu.students(code_module, code_presentation, id_student)",
+          "table": "edu.student_daily_clicks",
+          "referenced_table": "edu.students",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ],
+          "referenced_columns": [
+            "code_module",
+            "code_presentation",
+            "id_student"
+          ]
+        },
+        {
+          "name": "student_daily_clicks_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (code_module, code_presentation, id_student, date)",
+          "table": "edu.student_daily_clicks",
+          "referenced_table": "",
+          "columns": [
+            "code_module",
+            "code_presentation",
+            "id_student",
+            "date"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.departments",
+      "type": "BASE TABLE",
+      "comment": "Phòng ban (nhóm hàng lớn) của cửa hàng",
+      "columns": [
+        {
+          "name": "department_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã phòng ban (Department Id)"
+        },
+        {
+          "name": "department_name",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tên phòng ban, ví dụ Fitness, Apparel (Department Name)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "departments_pkey",
+          "def": "CREATE UNIQUE INDEX departments_pkey ON sales.departments USING btree (department_id)",
+          "table": "sales.departments",
+          "columns": [
+            "department_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "departments_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (department_id)",
+          "table": "sales.departments",
+          "referenced_table": "",
+          "columns": [
+            "department_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.categories",
+      "type": "BASE TABLE",
+      "comment": "Danh mục sản phẩm; mỗi danh mục thuộc một phòng ban",
+      "columns": [
+        {
+          "name": "category_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã danh mục (Category Id, trùng Product Category Id)"
+        },
+        {
+          "name": "category_name",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tên danh mục, ví dụ Cleats, Fishing (Category Name)"
+        },
+        {
+          "name": "department_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Phòng ban chứa danh mục, khóa ngoại tới sales.departments"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "categories_pkey",
+          "def": "CREATE UNIQUE INDEX categories_pkey ON sales.categories USING btree (category_id)",
+          "table": "sales.categories",
+          "columns": [
+            "category_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "categories_department_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (department_id) REFERENCES sales.departments(department_id)",
+          "table": "sales.categories",
+          "referenced_table": "sales.departments",
+          "columns": [
+            "department_id"
+          ],
+          "referenced_columns": [
+            "department_id"
+          ]
+        },
+        {
+          "name": "categories_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (category_id)",
+          "table": "sales.categories",
+          "referenced_table": "",
+          "columns": [
+            "category_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.products",
+      "type": "BASE TABLE",
+      "comment": "Sản phẩm; mỗi sản phẩm thuộc một danh mục",
+      "columns": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã sản phẩm (Product Card Id, trùng Order Item Cardprod Id)"
+        },
+        {
+          "name": "product_name",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tên sản phẩm (Product Name)"
+        },
+        {
+          "name": "category_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Danh mục của sản phẩm, khóa ngoại tới sales.categories"
+        },
+        {
+          "name": "price",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Giá niêm yết của sản phẩm, đô la Mỹ (Product Price)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "products_pkey",
+          "def": "CREATE UNIQUE INDEX products_pkey ON sales.products USING btree (product_id)",
+          "table": "sales.products",
+          "columns": [
+            "product_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "products_category_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (category_id) REFERENCES sales.categories(category_id)",
+          "table": "sales.products",
+          "referenced_table": "sales.categories",
+          "columns": [
+            "category_id"
+          ],
+          "referenced_columns": [
+            "category_id"
+          ]
+        },
+        {
+          "name": "products_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (product_id)",
+          "table": "sales.products",
+          "referenced_table": "",
+          "columns": [
+            "product_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.customers",
+      "type": "BASE TABLE",
+      "comment": "Khách hàng. Email và mật khẩu trong nguồn đã bị che (cùng một giá trị XXXXXXXXX) nên không đưa vào",
+      "columns": [
+        {
+          "name": "customer_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã khách hàng (Customer Id, trùng Order Customer Id)"
+        },
+        {
+          "name": "first_name",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tên (Customer Fname)"
+        },
+        {
+          "name": "last_name",
+          "type": "text",
+          "nullable": true,
+          "comment": "Họ (Customer Lname). Nguồn để trống ở 8 dòng"
+        },
+        {
+          "name": "segment",
+          "type": "text",
+          "nullable": false,
+          "comment": "Phân khúc khách: Consumer (cá nhân), Corporate (doanh nghiệp), Home Office (văn phòng tại nhà)"
+        },
+        {
+          "name": "street",
+          "type": "text",
+          "nullable": true,
+          "comment": "Địa chỉ đường phố của khách. Trống ở 3 khách bị lệch cột trong nguồn (xem sql/sales_load.sql)"
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "nullable": false,
+          "comment": "Thành phố nơi khách ở"
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "nullable": false,
+          "comment": "Bang nơi khách ở, mã hai chữ, ví dụ CA, PR"
+        },
+        {
+          "name": "country",
+          "type": "text",
+          "nullable": false,
+          "comment": "Nước nơi khách ở, như trong nguồn: EE. UU. (Hoa Kỳ) hoặc Puerto Rico"
+        },
+        {
+          "name": "zipcode",
+          "type": "text",
+          "nullable": true,
+          "comment": "Mã bưu chính, như trong nguồn (số 0 ở đầu đã mất, ví dụ 725 là 00725). Không trống ở khách nào sau khi dời 3 khách bị lệch cột"
+        },
+        {
+          "name": "latitude",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Vĩ độ. Mô tả của DataCo gọi là vị trí cửa hàng, nhưng trong dữ liệu mỗi khách chỉ có một giá trị"
+        },
+        {
+          "name": "longitude",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Kinh độ, cùng ghi chú với latitude"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "customers_pkey",
+          "def": "CREATE UNIQUE INDEX customers_pkey ON sales.customers USING btree (customer_id)",
+          "table": "sales.customers",
+          "columns": [
+            "customer_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "customers_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (customer_id)",
+          "table": "sales.customers",
+          "referenced_table": "",
+          "columns": [
+            "customer_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.orders",
+      "type": "BASE TABLE",
+      "comment": "Đơn hàng: ai đặt, khi nào, giao đi đâu, giao thế nào. Một đơn có một hoặc nhiều dòng hàng",
+      "columns": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã đơn hàng (Order Id)"
+        },
+        {
+          "name": "customer_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Khách đặt đơn, khóa ngoại tới sales.customers"
+        },
+        {
+          "name": "order_date",
+          "type": "timestamp without time zone",
+          "nullable": false,
+          "comment": "Thời điểm đặt hàng (order date (DateOrders))"
+        },
+        {
+          "name": "shipping_date",
+          "type": "timestamp without time zone",
+          "nullable": false,
+          "comment": "Thời điểm giao hàng (shipping date (DateOrders))"
+        },
+        {
+          "name": "payment_type",
+          "type": "text",
+          "nullable": false,
+          "comment": "Hình thức thanh toán: DEBIT, TRANSFER, CASH, PAYMENT (cột Type trong nguồn)"
+        },
+        {
+          "name": "order_status",
+          "type": "text",
+          "nullable": false,
+          "comment": "Trạng thái đơn, ví dụ COMPLETE, PENDING, CANCELED, SUSPECTED_FRAUD"
+        },
+        {
+          "name": "delivery_status",
+          "type": "text",
+          "nullable": false,
+          "comment": "Tình trạng giao: Advance shipping (sớm), Shipping on time (đúng hạn), Late delivery (trễ), Shipping canceled (hủy)"
+        },
+        {
+          "name": "late_delivery_risk",
+          "type": "boolean",
+          "nullable": false,
+          "comment": "Giao trễ hay không: true đúng với các đơn có delivery_status = Late delivery (Late_delivery_risk = 1). Đơn hủy (Shipping canceled) luôn là false, kể cả khi số ngày giao thực tế vượt lịch"
+        },
+        {
+          "name": "days_for_shipping_real",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Số ngày giao thực tế"
+        },
+        {
+          "name": "days_for_shipment_scheduled",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Số ngày giao theo lịch"
+        },
+        {
+          "name": "shipping_mode",
+          "type": "text",
+          "nullable": false,
+          "comment": "Cách giao: Standard Class, Second Class, First Class, Same Day"
+        },
+        {
+          "name": "market",
+          "type": "text",
+          "nullable": false,
+          "comment": "Thị trường nơi giao hàng: Africa, Europe, LATAM, Pacific Asia, USCA"
+        },
+        {
+          "name": "order_region",
+          "type": "text",
+          "nullable": false,
+          "comment": "Vùng nơi giao hàng, ví dụ Southeast Asia, Western Europe"
+        },
+        {
+          "name": "order_country",
+          "type": "text",
+          "nullable": false,
+          "comment": "Nước nơi giao hàng, tên tiếng Tây Ban Nha như trong nguồn"
+        },
+        {
+          "name": "order_state",
+          "type": "text",
+          "nullable": false,
+          "comment": "Bang hoặc tỉnh nơi giao hàng"
+        },
+        {
+          "name": "order_city",
+          "type": "text",
+          "nullable": false,
+          "comment": "Thành phố nơi giao hàng"
+        },
+        {
+          "name": "order_zipcode",
+          "type": "text",
+          "nullable": true,
+          "comment": "Mã bưu chính nơi giao hàng. Nguồn chỉ có ở một phần đơn tại Hoa Kỳ, còn lại trống"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "orders_pkey",
+          "def": "CREATE UNIQUE INDEX orders_pkey ON sales.orders USING btree (order_id)",
+          "table": "sales.orders",
+          "columns": [
+            "order_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "orders_customer_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (customer_id) REFERENCES sales.customers(customer_id)",
+          "table": "sales.orders",
+          "referenced_table": "sales.customers",
+          "columns": [
+            "customer_id"
+          ],
+          "referenced_columns": [
+            "customer_id"
+          ]
+        },
+        {
+          "name": "orders_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (order_id)",
+          "table": "sales.orders",
+          "referenced_table": "",
+          "columns": [
+            "order_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sales.order_items",
+      "type": "BASE TABLE",
+      "comment": "Dòng hàng (bảng sự kiện): một sản phẩm trong một đơn, kèm số lượng, tiền, giảm giá, lợi nhuận. Mỗi dòng của file DataCo là một dòng ở đây",
+      "columns": [
+        {
+          "name": "order_item_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Mã dòng hàng (Order Item Id)"
+        },
+        {
+          "name": "order_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Đơn chứa dòng hàng, khóa ngoại tới sales.orders"
+        },
+        {
+          "name": "product_id",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Sản phẩm bán, khóa ngoại tới sales.products"
+        },
+        {
+          "name": "quantity",
+          "type": "integer",
+          "nullable": false,
+          "comment": "Số lượng (Order Item Quantity)"
+        },
+        {
+          "name": "unit_price",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Đơn giá lúc bán, đô la Mỹ (Order Item Product Price). Trong dữ liệu luôn bằng sales.products.price"
+        },
+        {
+          "name": "sales",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Doanh số trước giảm giá, bằng đơn giá nhân số lượng (Sales)"
+        },
+        {
+          "name": "discount",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Số tiền giảm giá (Order Item Discount)"
+        },
+        {
+          "name": "discount_rate",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Tỷ lệ giảm giá, từ 0 đến 1 (Order Item Discount Rate)"
+        },
+        {
+          "name": "item_total",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Thành tiền sau giảm giá (Order Item Total; cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng)"
+        },
+        {
+          "name": "profit",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order; cột Benefit per order có cùng giá trị ở mọi dòng). Tên nguồn nói \"per order\" nhưng giá trị đổi theo từng dòng hàng"
+        },
+        {
+          "name": "profit_ratio",
+          "type": "numeric",
+          "nullable": false,
+          "comment": "Tỷ suất lợi nhuận, bằng profit chia item_total (Order Item Profit Ratio)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "order_items_pkey",
+          "def": "CREATE UNIQUE INDEX order_items_pkey ON sales.order_items USING btree (order_item_id)",
+          "table": "sales.order_items",
+          "columns": [
+            "order_item_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "order_items_product_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (product_id) REFERENCES sales.products(product_id)",
+          "table": "sales.order_items",
+          "referenced_table": "sales.products",
+          "columns": [
+            "product_id"
+          ],
+          "referenced_columns": [
+            "product_id"
+          ]
+        },
+        {
+          "name": "order_items_order_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (order_id) REFERENCES sales.orders(order_id)",
+          "table": "sales.order_items",
+          "referenced_table": "sales.orders",
+          "columns": [
+            "order_id"
+          ],
+          "referenced_columns": [
+            "order_id"
+          ]
+        },
+        {
+          "name": "order_items_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (order_item_id)",
+          "table": "sales.order_items",
+          "referenced_table": "",
+          "columns": [
+            "order_item_id"
+          ]
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "table": "edu.students",
+      "columns": [
+        "code_module",
+        "code_presentation"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "edu.courses",
+      "parent_columns": [
+        "code_module",
+        "code_presentation"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (code_module, code_presentation) REFERENCES edu.courses(code_module, code_presentation)"
+    },
+    {
+      "table": "edu.registrations",
+      "columns": [
+        "code_module",
+        "code_presentation",
+        "id_student"
+      ],
+      "cardinality": "zero_or_one",
+      "parent_table": "edu.students",
+      "parent_columns": [
+        "code_module",
+        "code_presentation",
+        "id_student"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (code_module, code_presentation, id_student) REFERENCES edu.students(code_module, code_presentation, id_student)"
+    },
+    {
+      "table": "edu.assessments",
+      "columns": [
+        "code_module",
+        "code_presentation"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "edu.courses",
+      "parent_columns": [
+        "code_module",
+        "code_presentation"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (code_module, code_presentation) REFERENCES edu.courses(code_module, code_presentation)"
+    },
+    {
+      "table": "edu.student_assessments",
+      "columns": [
+        "code_module",
+        "code_presentation",
+        "id_student"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "edu.students",
+      "parent_columns": [
+        "code_module",
+        "code_presentation",
+        "id_student"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (code_module, code_presentation, id_student) REFERENCES edu.students(code_module, code_presentation, id_student)"
+    },
+    {
+      "table": "edu.student_assessments",
+      "columns": [
+        "id_assessment"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "edu.assessments",
+      "parent_columns": [
+        "id_assessment"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (id_assessment) REFERENCES edu.assessments(id_assessment)"
+    },
+    {
+      "table": "edu.vle_materials",
+      "columns": [
+        "code_module",
+        "code_presentation"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "edu.courses",
+      "parent_columns": [
+        "code_module",
+        "code_presentation"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (code_module, code_presentation) REFERENCES edu.courses(code_module, code_presentation)"
+    },
+    {
+      "table": "edu.student_daily_clicks",
+      "columns": [
+        "code_module",
+        "code_presentation",
+        "id_student"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "edu.students",
+      "parent_columns": [
+        "code_module",
+        "code_presentation",
+        "id_student"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (code_module, code_presentation, id_student) REFERENCES edu.students(code_module, code_presentation, id_student)"
+    },
+    {
+      "table": "sales.categories",
+      "columns": [
+        "department_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.departments",
+      "parent_columns": [
+        "department_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (department_id) REFERENCES sales.departments(department_id)"
+    },
+    {
+      "table": "sales.products",
+      "columns": [
+        "category_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.categories",
+      "parent_columns": [
+        "category_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (category_id) REFERENCES sales.categories(category_id)"
+    },
+    {
+      "table": "sales.orders",
+      "columns": [
+        "customer_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.customers",
+      "parent_columns": [
+        "customer_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (customer_id) REFERENCES sales.customers(customer_id)"
+    },
+    {
+      "table": "sales.order_items",
+      "columns": [
+        "product_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.products",
+      "parent_columns": [
+        "product_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (product_id) REFERENCES sales.products(product_id)"
+    },
+    {
+      "table": "sales.order_items",
+      "columns": [
+        "order_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "sales.orders",
+      "parent_columns": [
+        "order_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (order_id) REFERENCES sales.orders(order_id)"
+    }
+  ],
+  "driver": {
+    "name": "postgres",
+    "database_version": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "meta": {
+      "current_schema": "public",
+      "search_paths": [
+        "analyst",
+        "public"
+      ],
+      "dict": {
+        "Functions": "Stored procedures and functions"
+      }
+    }
+  },
+  "viewpoints": [
+    {
+      "id": "edu",
+      "name": "edu",
+      "desc": "Dữ liệu học tập OULAD. Bảng sự kiện student_assessments và student_daily_clicks nối về students và courses.",
+      "tables": [
+        "edu.*"
+      ]
+    },
+    {
+      "id": "sales",
+      "name": "sales",
+      "desc": "Dữ liệu bán hàng DataCo. Bảng sự kiện order_items nối về orders, customers, products, categories, departments.",
+      "tables": [
+        "sales.*"
+      ]
+    }
+  ]
+}

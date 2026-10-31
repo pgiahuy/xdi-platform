@@ -1,4 +1,4 @@
--- sql/plant_demo_cause.sql - cố ý cài MỘT nguyên nhân biết trước vào dữ liệu bán hàng, để thử câu hỏi tìm nguyên
+-- sql/plant_demo_cause_sales.sql - cố ý cài MỘT nguyên nhân biết trước vào dữ liệu bán hàng, để thử câu hỏi tìm nguyên
 -- nhân với đáp án đã biết. Đây là dữ liệu sửa tay, không phải dữ liệu DataCo gốc.
 --
 -- load.sh chạy file này sau khi đã đổ dữ liệu thật (sql/sales_load.sql), trong cùng giao dịch. Bỏ qua bằng
