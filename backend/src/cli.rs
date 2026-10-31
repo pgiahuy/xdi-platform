@@ -7,6 +7,7 @@ Ai chạy được binary trên máy chủ (và đọc được DATABASE_URL) l�
 use crate::config::Config;
 use crate::engine::llm;
 use crate::error::AppError;
+use crate::service::eval_pace::{build_paced_state, Pace};
 use crate::service::llm_stats::{build_question_stat, build_report, TokenPrice};
 use crate::service::{eval, eval_classify, eval_judge, users};
 use crate::state::AppState;
@@ -19,11 +20,15 @@ const USAGE: &str = "usage:
   xdi-backend ask-examples                    print sample ask responses (JSON) to stdout, without a database
   xdi-backend eval (--data <csv> | --sample-database) --cases <json> [--cases <json>...]
                   [--baseline <json>] [--out <json>] [--lessons <json>]
+                  [--pause-ms <ms>] [--quota-wait-ms <ms>]
                                               run the sample question evaluation on a file or on the
                                               snapshot of every SAMPLE_DATABASE_URL entry; write the report to --out
                                               (default eval/result.json); exit 1 when accuracy drops
                                               below the baseline, 2 on infrastructure errors; with
-                                              --lessons, run once without and once with those lessons
+                                              --lessons, run once without and once with those lessons;
+                                              --pause-ms spaces every model call, --quota-wait-ms (default
+                                              60000) is the wait before calling again when every key is
+                                              out of quota
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
                                               exit 2 on infrastructure errors
@@ -82,6 +87,8 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
 /// lý do, dòng accuracy cuối, ghi báo cáo ra --out. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ
 /// tầng (thiếu file, JSON hỏng, không nạp được dữ liệu) thoát mã 2. Có --lessons thì chạy hai lượt, không và có bài học
 /// (#228), in thêm tỷ lệ đúng của lượt không bài học và các câu đổi kết quả; baseline so với lượt có bài học.
+/// --pause-ms, --quota-wait-ms (#202): mọi lần gọi mô hình của lượt chạy đi qua service/eval_pace.rs; in số lần gọi dự
+/// kiến trước khi chạy, số lần gọi thật và số lần chờ hết hạn mức sau khi chạy.
 async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut data = None;
     let mut sample_database = false;
@@ -89,6 +96,8 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut baseline = None;
     let mut out = "eval/result.json".to_string();
     let mut lessons_path = None;
+    let mut pause_ms = "0".to_string();
+    let mut quota_wait_ms = "60000".to_string();
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         if flag == "--sample-database" {
@@ -106,12 +115,24 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             "--baseline" => baseline = Some(value.clone()),
             "--out" => out = value.clone(),
             "--lessons" => lessons_path = Some(value.clone()),
+            "--pause-ms" => pause_ms = value.clone(),
+            "--quota-wait-ms" => quota_wait_ms = value.clone(),
             _ => {
                 eprintln!("{USAGE}");
                 return 2;
             }
         }
     }
+    let (Ok(pause_ms), Ok(quota_wait_ms)) = (pause_ms.parse::<u64>(), quota_wait_ms.parse::<u64>())
+    else {
+        eprintln!("{USAGE}");
+        return 2;
+    };
+    let pace = Pace {
+        pause: std::time::Duration::from_millis(pause_ms),
+        quota_wait: std::time::Duration::from_millis(quota_wait_ms),
+        quota_retries: QUOTA_RETRIES,
+    };
     let databases = &state.config.sample_databases;
     let source = match (&data, sample_database) {
         (Some(path), false) => eval::EvalData::File(std::path::Path::new(path)),
@@ -147,7 +168,9 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             return 2;
         }
     };
-    let report = match eval::run_eval(state, source, &cases, &lessons).await {
+    print_call_estimate(cases.len(), pace);
+    let (paced, stats) = build_paced_state(state, pace);
+    let report = match eval::run_eval(&paced, source, &cases, &lessons).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("eval: {e:?}");
@@ -181,6 +204,11 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             }
         );
     }
+    println!(
+        "model calls: {} (waited {} times for quota)",
+        stats.calls(),
+        stats.quota_waits()
+    );
     if let Err(e) = std::fs::write(
         &out,
         serde_json::to_string_pretty(&report).expect("report serializes"),
@@ -211,6 +239,27 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         }
     }
     0
+}
+
+/// Số lần gọi lại tối đa khi mọi khóa hết hạn mức: hạn mức theo phút hồi sau một lần chờ; hết hạn mức theo ngày thì
+/// gọi lại mãi cũng không được, nên dừng sau vài lần.
+const QUOTA_RETRIES: u32 = 3;
+
+/// Số lần gọi của câu hỏi đo ở docs/PERFORMANCE.md: câu thường khoảng 3, câu "vì sao" khoảng 4. Lập hồ sơ ngữ nghĩa
+/// thêm 3 lần mỗi bảng, chưa tính ở đây vì số bảng chỉ biết sau khi nạp hay chụp.
+const CALLS_PER_QUESTION: (usize, usize) = (2, 4);
+
+/// In trước số lần gọi dự kiến và thời gian tối thiểu, để biết hạn mức theo ngày có đủ không trước khi chạy.
+fn print_call_estimate(cases: usize, pace: Pace) {
+    let (low, high) = (cases * CALLS_PER_QUESTION.0, cases * CALLS_PER_QUESTION.1);
+    let minutes = |calls: usize| pace.pause.as_secs_f64() * calls as f64 / 60.0;
+    println!(
+        "estimate: {low} to {high} model calls for {cases} questions, plus 3 per table while profiling; \
+         at least {:.0} to {:.0} minutes with --pause-ms {}",
+        minutes(low),
+        minutes(high),
+        pace.pause.as_millis()
+    );
 }
 
 /// Lệnh llm-stats (#184): đọc lịch sử câu hỏi từ --since (mặc định mọi câu) rồi in báo cáo của

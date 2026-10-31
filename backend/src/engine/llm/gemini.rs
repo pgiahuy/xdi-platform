@@ -19,6 +19,10 @@ use crate::{config::Secret, error::AppError};
 /// Địa chỉ gốc của Gemini API. Test thay bằng địa chỉ server giả.
 pub const API_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 
+/// Lời báo khi mọi khóa đều hết hạn mức (429). Công khai để bộ đánh giá (service/eval_pace.rs) nhận ra đúng lỗi này mà
+/// chờ rồi gọi lại, thay vì tính câu hỏi là trượt.
+pub const QUOTA_MESSAGE: &str = "Đã hết hạn mức gọi Gemini của khóa này. Chờ một lúc rồi thử lại, hoặc xem hạn mức trong Google AI Studio";
+
 pub struct Gemini {
     /// Địa chỉ đầy đủ của generateContent cho mô hình đã chọn.
     endpoint: String,
@@ -99,7 +103,7 @@ impl Gemini {
                 "Gemini không có mô hình {}: kiểm tra GEMINI_MODEL",
                 self.model
             ),
-            429 => "Đã hết hạn mức gọi Gemini của khóa này. Chờ một lúc rồi thử lại, hoặc xem hạn mức trong Google AI Studio".to_string(),
+            429 => QUOTA_MESSAGE.to_string(),
             500..=599 => format!(
                 "Gemini đang lỗi hoặc quá tải (mã {}). Thử lại sau",
                 status.as_u16()
