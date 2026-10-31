@@ -10,11 +10,13 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Màn **Chỉ số** của mỗi dataset (nút Chỉ số ở trang Dữ liệu): admin thêm, sửa, xóa chỉ số bằng cách chọn phép tính và cột hoặc viết SQL; công thức được chạy thử trước khi lưu, sai thì báo ngay dưới ô sai; câu hỏi sau dùng đúng công thức đó (#185).
 - Cột số đo có cách gộp mặc định, tổng hay trung bình: mô hình đề xuất lúc nạp, admin đổi ở màn Chỉ số; câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng (#185).
 - Postgres mẫu nhiều bảng có khóa chính, khóa ngoại (DataCo và OULAD) để thử kết nối cơ sở dữ liệu công ty: `data/postgres-demo/`.
+- Postgres mẫu có thêm nguyên nhân cài sẵn ở dữ liệu học tập (bỏ học kỳ 2014J), sơ đồ ER và tài liệu bảng sinh bằng tbls, Adminer để xem bảng khi trình diễn (#203).
 - Nguồn Postgres (#165): admin kết nối một database Postgres ở trang Dữ liệu, chụp một bảng thành dataset và chụp lại thành phiên bản mới.
 - Chụp bảng Postgres kèm các bảng liên quan theo khóa ngoại, theo cả hai chiều và tới hai bước (tối đa 10 bảng): mỗi bảng một dataset, quan hệ giữa chúng được ghi lại; danh sách dataset ghi các dataset liên quan.
 - Hỏi trên bảng chụp từ database thì mô hình nối được các bảng liên quan bằng `JOIN`; khung Minh chứng ghi các bảng đã đọc (#213).
 - Câu SQL cộng hay lấy trung bình cột của bảng phía một sau khi nối bảng phía nhiều không chạy mà được sửa một lần, tránh số bị cộng lặp (#214).
 - Bộ lọc dòng theo vai dữ liệu lan theo khóa ngoại: lọc khách hàng theo vùng thì đơn hàng và dòng hàng của khách vùng khác cũng bị ẩn, cả khi hỏi riêng bảng đơn hàng (#215).
+- Mọi câu trả lời có phần giải thích kết quả nói lên điều gì, chọn theo hình dạng kết quả: so với kỳ trước, kỳ đổi mạnh nhất kèm phân rã, tỷ trọng và mức tập trung của các nhóm, hay chỉ số dòng; chênh lệch nhỏ hay ít dòng thì ghi không có thay đổi đáng kể. Trên bảng chụp từ database, phân rã xét cả cột của bảng liên quan (#227).
 - Hai nút **Tốt** và **Chưa đạt** dưới mỗi câu trả lời (Chưa đạt kèm lý do và ghi chú); màn **Câu mẫu** cho admin duyệt câu Tốt thành ví dụ trong prompt của câu hỏi sau có từ chung, và xuất câu đã duyệt thành ca ứng viên cho bộ đánh giá (#212).
 
 ### Changed
@@ -32,6 +34,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Tab SQL của pane Minh chứng gọn hơn: bỏ ba câu chú thích dưới bản sau guard (câu giải thích vạch đánh dấu, "Thêm LIMIT 100000", lời nhắc về phân quyền dữ liệu). Dòng guard thêm vẫn có vạch đánh dấu; chi tiết bước guard vẫn ở tab Các bước.
 - Câu hỏi tìm nguyên nhân: lời giải thích nói "giảm chủ yếu do" thay cho "nhờ", cột kỳ của bảng kết quả và biểu đồ tên "Tháng", "Quý", "Năm".
 - Bảng kết quả: cột thời gian mà mọi ô đều là nửa đêm chỉ hiện ngày, không kèm " 00:00:00".
+- Xóa dataset thì xóa luôn lịch sử câu hỏi của nó, kể cả các lượt trò chuyện; khi cập nhật, lịch sử còn sót từ các lần xóa dataset trước bị xóa (#187).
 
 ### Fixed
 

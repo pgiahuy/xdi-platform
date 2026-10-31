@@ -123,6 +123,11 @@ Code: `backend/src/service/sources/`, `backend/src/api/sources.rs`.
   đã biên dịch; image Docker không có thư mục home cho user chạy backend, và máy cài có thể không ra được Internet.
 - Xóa nguồn chỉ được khi không còn dataset nào chụp từ nó; xóa dataset không xóa nguồn.
 
+Database mẫu để thử: Postgres nhiều bảng dựng từ DataCo và OULAD, chạy trên máy bằng Docker
+([data/postgres-demo](https://github.com/pgiahuy/xdi-platform/tree/main/data/postgres-demo)). Sơ đồ ER và mô tả từng
+bảng, cột (sinh bằng tbls):
+[data/postgres-demo/docs](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/docs/README.md).
+
 ### Chụp nhiều bảng liên quan
 
 Database của tổ chức thường tách dữ liệu ra nhiều bảng: `order_items` (mỗi dòng một dòng hàng) trỏ tới `orders`,

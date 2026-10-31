@@ -1117,7 +1117,7 @@
         "tags": [
           "datasets"
         ],
-        "summary": "Delete a dataset with all its versions and files (admin only)",
+        "summary": "Delete a dataset with all its versions, files and question history (admin only)",
         "operationId": "deleteDataset",
         "parameters": [
           {
@@ -1232,6 +1232,7 @@
                       "clarifications": [],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
+                      "insight": null,
                       "message": "Không chạy được câu SQL, kể cả sau khi mô hình sửa một lần: Could not parse string \"1/31/2018 22:56\" according to format specifier \"%d/%m/%Y %H:%M\". Thử hỏi lại, nói rõ cột ngày cần dùng.",
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b04",
@@ -1322,6 +1323,7 @@
                       ],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
+                      "insight": null,
                       "message": "Câu hỏi hiểu được theo nhiều cách. Chọn một cách rồi hỏi lại.",
                       "model": "gemini-2.5-flash",
                       "query_id": null,
@@ -1354,6 +1356,7 @@
                       "clarifications": [],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
+                      "insight": null,
                       "message": "Hệ thống chưa viết được câu truy vấn hợp lệ cho câu hỏi này, kể cả sau khi tự sửa một lần. Thử hỏi lại theo cách khác, ví dụ tách thành các câu hỏi nhỏ hơn.",
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b03",
@@ -1436,6 +1439,23 @@
                       "clarifications": [],
                       "conversation_id": "7d4a2e91-3b6c-4f10-a5d8-6e2c1b0f9a01",
                       "explanation": null,
+                      "insight": {
+                        "kind": "groups",
+                        "notable": true,
+                        "points": [
+                          {
+                            "lead": "Mức tập trung",
+                            "text": "4 trên 5 nhóm chiếm từ 80% tổng trở lên."
+                          },
+                          {
+                            "lead": "Thấp hẳn mức trung bình",
+                            "text": "Africa (2.340.560,12); trung bình mỗi nhóm 7.331.570,41."
+                          }
+                        ],
+                        "summary": "Europe đứng đầu với 10.845.230,42, chiếm 29,6% tổng doanh thu. Mức tập trung: 4 trên 5 nhóm chiếm từ 80% tổng trở lên. Thấp hẳn mức trung bình: Africa (2.340.560,12); trung bình mỗi nhóm 7.331.570,41.",
+                        "summary_by_model": false,
+                        "title": "Europe đứng đầu với 10.845.230,42, chiếm 29,6% tổng doanh thu."
+                      },
                       "message": null,
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b01",
@@ -1516,6 +1536,18 @@
                         {
                           "detail": null,
                           "duration_ms": 910,
+                          "name": "narrate",
+                          "ok": true
+                        },
+                        {
+                          "detail": null,
+                          "duration_ms": 0,
+                          "name": "explain",
+                          "ok": true
+                        },
+                        {
+                          "detail": "INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết",
+                          "duration_ms": 0,
                           "name": "narrate",
                           "ok": true
                         },
@@ -1757,6 +1789,7 @@
                           "volume_label": "Số đơn"
                         }
                       },
+                      "insight": null,
                       "message": null,
                       "model": "gemini-2.5-flash",
                       "query_id": "5b2f0c1e-7a4d-4e8b-9c61-0d3e2f1a4b02",
@@ -3682,6 +3715,7 @@
           "chart",
           "warnings",
           "explanation",
+          "insight",
           "answer_text",
           "answer_text_by_model",
           "clarifications",
@@ -3734,7 +3768,19 @@
           "explanation": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/Explanation"
+                "$ref": "#/components/schemas/Explanation",
+                "description": "Breakdown of a \"why\" question; for other answered questions, the automatic breakdown behind `insight` when it\nhas one (the change of a single number against the period before, or the period of a time series that changed\nmost). Null otherwise."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insight": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Insight",
+                "description": "What the result says, for an `answered` question that is not a \"why\" question and has at least one row with a\nvalue: chosen by the shape of the result, every number computed by the backend. Null otherwise; a \"why\" question\nhas `explanation.summary`."
               },
               {
                 "type": "null"
@@ -4893,7 +4939,7 @@
       },
       "Explanation": {
         "type": "object",
-        "description": "Breakdown of a change between two slices (two periods or two groups); null in `AskResponse` unless an answered\n\"why\" question has one. Numbers are exact strings of decimal digits.",
+        "description": "Breakdown of a change between two slices (two periods or two groups); see `AskResponse.explanation` for when it is\nset. Numbers are exact strings of decimal digits.",
         "required": [
           "measure",
           "measure_kind",
@@ -5126,6 +5172,75 @@
           "status": {
             "type": "string",
             "description": "Always `ok` when the server answers."
+          }
+        }
+      },
+      "Insight": {
+        "type": "object",
+        "description": "Explanation of a plain answer, chosen by the shape of the result.",
+        "required": [
+          "kind",
+          "title",
+          "points",
+          "summary",
+          "summary_by_model",
+          "notable"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/InsightKind"
+          },
+          "notable": {
+            "type": "boolean",
+            "description": "False when the numbers show nothing notable: a change below the threshold, too few rows to conclude, groups of\nabout the same size, or a plain list of rows."
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InsightPoint"
+            },
+            "description": "Points under the main finding, written by the backend (Vietnamese)."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Plain-language text for the end user (Vietnamese): the language model's wording of `title` and `points` when it\npassed the checks, otherwise `title` and `points` joined."
+          },
+          "summary_by_model": {
+            "type": "boolean",
+            "description": "True when `summary` was written by the language model; false when it is the backend's text (the model failed,\ntimed out, wrote a number or a direction that is not in the points, used a causal word, or `INSIGHT_TEXT=false`)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Main finding, one sentence written by the backend (Vietnamese)."
+          }
+        }
+      },
+      "InsightKind": {
+        "type": "string",
+        "description": "- `single_value`: one number; compared with the period before when the question names a period.\n- `time_series`: one measure over periods; overall direction and the period that changed most against the one\n  before, broken down by dimension in `AskResponse.explanation`.\n- `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the\n  total, groups far from the mean.\n- `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the\n  first two.\n- `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.",
+        "enum": [
+          "single_value",
+          "time_series",
+          "groups",
+          "top_n",
+          "rows"
+        ]
+      },
+      "InsightPoint": {
+        "type": "object",
+        "description": "One point of an insight: a short lead (shown in bold) and the sentence after it.",
+        "required": [
+          "lead",
+          "text"
+        ],
+        "properties": {
+          "lead": {
+            "type": "string",
+            "description": "Lead of the point (Vietnamese), for example the words for \"concentration\"."
+          },
+          "text": {
+            "type": "string",
+            "description": "Rest of the point (Vietnamese)."
           }
         }
       },

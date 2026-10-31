@@ -353,7 +353,7 @@ export interface paths {
         get: operations["getDataset"];
         put?: never;
         post?: never;
-        /** Delete a dataset with all its versions and files (admin only) */
+        /** Delete a dataset with all its versions, files and question history (admin only) */
         delete: operations["deleteDataset"];
         options?: never;
         head?: never;
@@ -821,6 +821,7 @@ export interface components {
              */
             conversation_id: string;
             explanation: components["schemas"]["Explanation"] | null;
+            insight: components["schemas"]["Insight"] | null;
             /**
              * @description Text for the end user (Vietnamese): the reason for `rejected` and `failed`, the prompt for `needs_choice`;
              *     null for `answered`.
@@ -1310,8 +1311,8 @@ export interface components {
             examples: components["schemas"]["ExampleCandidate"][];
         };
         /**
-         * @description Breakdown of a change between two slices (two periods or two groups); null in `AskResponse` unless an answered
-         *     "why" question has one. Numbers are exact strings of decimal digits.
+         * @description Breakdown of a change between two slices (two periods or two groups); see `AskResponse.explanation` for when it is
+         *     set. Numbers are exact strings of decimal digits.
          */
         Explanation: {
             /** @description Slice compared against. */
@@ -1403,6 +1404,48 @@ export interface components {
         HealthResponse: {
             /** @description Always `ok` when the server answers. */
             status: string;
+        };
+        /** @description Explanation of a plain answer, chosen by the shape of the result. */
+        Insight: {
+            kind: components["schemas"]["InsightKind"];
+            /**
+             * @description False when the numbers show nothing notable: a change below the threshold, too few rows to conclude, groups of
+             *     about the same size, or a plain list of rows.
+             */
+            notable: boolean;
+            /** @description Points under the main finding, written by the backend (Vietnamese). */
+            points: components["schemas"]["InsightPoint"][];
+            /**
+             * @description Plain-language text for the end user (Vietnamese): the language model's wording of `title` and `points` when it
+             *     passed the checks, otherwise `title` and `points` joined.
+             */
+            summary: string;
+            /**
+             * @description True when `summary` was written by the language model; false when it is the backend's text (the model failed,
+             *     timed out, wrote a number or a direction that is not in the points, used a causal word, or `INSIGHT_TEXT=false`).
+             */
+            summary_by_model: boolean;
+            /** @description Main finding, one sentence written by the backend (Vietnamese). */
+            title: string;
+        };
+        /**
+         * @description - `single_value`: one number; compared with the period before when the question names a period.
+         *     - `time_series`: one measure over periods; overall direction and the period that changed most against the one
+         *       before, broken down by dimension in `AskResponse.explanation`.
+         *     - `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the
+         *       total, groups far from the mean.
+         *     - `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the
+         *       first two.
+         *     - `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.
+         * @enum {string}
+         */
+        InsightKind: "single_value" | "time_series" | "groups" | "top_n" | "rows";
+        /** @description One point of an insight: a short lead (shown in bold) and the sentence after it. */
+        InsightPoint: {
+            /** @description Lead of the point (Vietnamese), for example the words for "concentration". */
+            lead: string;
+            /** @description Rest of the point (Vietnamese). */
+            text: string;
         };
         /** @description Multipart form for listing the sheets of an Excel file. The file is not stored. */
         ListSheetsRequest: {

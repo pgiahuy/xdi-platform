@@ -26,6 +26,8 @@ mod users;
 // Chưa có code gọi nên tạm cho phép "chưa dùng" ở đúng ba module này; gỡ khi có người gọi để clippy bắt lại.
 #[allow(dead_code)]
 mod datasets;
+#[cfg(test)]
+mod delete_history_tests;
 mod metric_edits;
 mod metrics;
 mod queries;

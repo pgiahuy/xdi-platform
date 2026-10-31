@@ -17,6 +17,7 @@ export type Choice = Schemas['Choice']
 export type Understanding = Schemas['Understanding']
 export type ResultTable = Schemas['ResultTable']
 export type ChartSuggestion = Schemas['ChartSuggestion']
+export type Insight = Schemas['Insight']
 
 export type AskVariables = {
   datasetId: string

@@ -57,6 +57,7 @@ services:
       ASK_MAX_ROWS: ${ASK_MAX_ROWS:-100000}
       SEED_SAMPLE: ${SEED_SAMPLE:-true}
       ANSWER_TEXT: ${ANSWER_TEXT:-true}
+      INSIGHT_TEXT: ${INSIGHT_TEXT:-true}
       # Nguồn database (docs/DATA.md): khóa trống thì tính năng tắt, danh sách máy chủ trống thì không thêm được nguồn.
       SOURCE_SECRET_KEY: ${SOURCE_SECRET_KEY:-}
       SOURCE_ALLOWED_HOSTS: ${SOURCE_ALLOWED_HOSTS:-}

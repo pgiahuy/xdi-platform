@@ -103,7 +103,7 @@ export function useExcelSheets(ws: string) {
   })
 }
 
-/** Xóa hẳn một dataset cùng mọi phiên bản và file của nó (chỉ admin); không khôi phục được. */
+/** Xóa hẳn một dataset cùng mọi phiên bản, file và lịch sử câu hỏi của nó (chỉ admin); không khôi phục được. */
 export function useDeleteDataset(ws: string) {
   const queryClient = useQueryClient()
   return useMutation({
