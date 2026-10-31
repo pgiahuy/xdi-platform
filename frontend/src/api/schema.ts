@@ -993,6 +993,149 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reports of the caller
+         * @description Last changed first, without items.
+         */
+        get: operations["listReports"];
+        put?: never;
+        /**
+         * Create an empty report
+         * @description Add answers with addReportItem. Every member can create reports; only the creator reads them.
+         */
+        post: operations["createReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/reports/automatic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build an automatic report for one dataset
+         * @description The backend builds a fixed set of analyses with its own SQL (no SQL from the language model): the main measure over time with the strongest change and its breakdown, then the measure by two dimensions with the top groups, concentration and groups far from the average. Every query goes through the guard with the caller's row filters. The language model only rewords the computed facts, with the same two checks as an answer; `report.model_calls` counts its calls. One JSON response, no streaming.
+         */
+        post: operations["createAutomaticReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open a report with every item rendered again
+         * @description Result rows are not stored: the stored SQL of every item runs again through the guard with the caller's access, on the data versions the question read. An item whose SQL cannot run again has `error` and is still listed.
+         */
+        get: operations["getReport"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a report
+         * @description The questions of its items stay in the history.
+         */
+        delete: operations["deleteReport"];
+        options?: never;
+        head?: never;
+        /** Change the title or the intro of a report */
+        patch: operations["updateReport"];
+        trace?: never;
+    };
+    "/workspaces/{ws}/reports/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add an answered question of the caller at the end of a report */
+        post: operations["addReportItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/reports/{id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an item from a report
+         * @description The question stays in the history.
+         */
+        delete: operations["removeReportItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/reports/{id}/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the order of the items */
+        put: operations["reorderReportItems"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspaces/{ws}/reports/{id}/xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a report as an Excel file
+         * @description Built from the same rendering as getReport. Sheets: a summary (one row per item with its answer and checks), one sheet per item with its result table and breakdown, and `Cách tính` (for every item: measure, filters, grouping, period, SQL that ran, tables and versions, time asked).
+         */
+        get: operations["exportReportXlsx"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/sources": {
         parameters: {
             query?: never;
@@ -1117,6 +1260,13 @@ export interface components {
             email: string;
             /** @description `admin` or `member`. */
             role: string;
+        };
+        AddReportItemRequest: {
+            /**
+             * Format: uuid
+             * @description `AskResponse.query_id` (or `TurnItem.query_id`) of an answered question the caller asked.
+             */
+            query_id: string;
         };
         /**
          * @description Verdict of the two checks on a text written by the language model: `match` (agrees with the computed numbers),
@@ -1273,6 +1423,19 @@ export interface components {
         AssignAdminRequest: {
             /** @description Email of an active account; it becomes `admin` of the workspace. */
             email: string;
+        };
+        AutoReportRequest: {
+            /**
+             * Format: uuid
+             * @description Dataset to analyse (`DatasetSummary.id`).
+             */
+            dataset_id: string;
+        };
+        /** @description The automatic report just built, and the sections that could not be built. */
+        AutoReportResponse: {
+            report: components["schemas"]["ReportSummary"];
+            /** @description One Vietnamese sentence per planned section left out, with the reason. */
+            skipped: string[];
         };
         /** @description One group of a breakdown table in one slice. */
         BreakdownKey: {
@@ -1480,6 +1643,10 @@ export interface components {
         ConversationResponse: {
             conversation: components["schemas"]["ConversationItem"];
             turns: components["schemas"]["TurnItem"][];
+        };
+        CreateReportRequest: {
+            intro?: string;
+            title: string;
         };
         CreateSourceRequest: {
             database: string;
@@ -2451,6 +2618,13 @@ export interface components {
             /** @description Text for the end user (Vietnamese). */
             message: string;
         };
+        /**
+         * @description Outcome of the number check (the backend compares every number and direction of the model's text with the computed
+         *     facts): `passed` (the shown text is the model's and passed), `replaced` (the model's text failed and the shown text
+         *     was written by the backend), `not_needed` (the backend wrote the text from the numbers, no model text to check).
+         * @enum {string}
+         */
+        NumberCheck: "passed" | "replaced" | "not_needed";
         OverviewChart: {
             chart: components["schemas"]["ChartSuggestion"];
             /** @description Column of the profile the chart is about: the dimension for `rows_by_value`, the time column otherwise. */
@@ -2620,6 +2794,134 @@ export interface components {
             /** @description Tables pointing to the chosen table (their foreign keys). */
             one_to_many: components["schemas"]["RelatedTable"][];
             table: string;
+        };
+        /** @description Every item id of the report, in the new order. */
+        ReorderReportRequest: {
+            item_ids: string[];
+        };
+        /**
+         * @description The breakdown kept with an item: the change between two periods or two groups and the groups of its first dimension
+         *     that made most of it. Numbers are decimal strings as in `Explanation`.
+         */
+        ReportBreakdown: {
+            base_label: string;
+            base_value: string;
+            change: string;
+            compare_label: string;
+            compare_value: string;
+            /** @description Label of the dimension the groups belong to. */
+            dimension: string;
+            groups: components["schemas"]["ReportBreakdownGroup"][];
+            measure: string;
+        };
+        ReportBreakdownGroup: {
+            base_value: string;
+            compare_value: string;
+            contribution: string;
+            /** @description Group value as text; empty for a missing value. */
+            name: string;
+            /** @description Share of the total change, decimal string; null when the change is zero. */
+            share_of_change: string | null;
+        };
+        /**
+         * @description Facts the backend computed from the numbers of the item when it was rendered (no language model): the main finding
+         *     and its points, Vietnamese.
+         */
+        ReportFacts: {
+            points: string[];
+            title: string;
+        };
+        /**
+         * @description One item of a report, rendered again: the stored question and answer, and the result of running its stored SQL
+         *     again through the guard with the caller's access, on the data versions the question read.
+         */
+        ReportItem: {
+            answer: components["schemas"]["SavedAnswer"] | null;
+            /** Format: date-time */
+            asked_at: string;
+            breakdown: components["schemas"]["ReportBreakdown"] | null;
+            chart: components["schemas"]["ChartSuggestion"] | null;
+            /** @description Vietnamese message when the stored SQL could not run again; the other result fields are then null. */
+            error: string | null;
+            facts: components["schemas"]["ReportFacts"] | null;
+            /** Format: uuid */
+            id: string;
+            meaning_check: components["schemas"]["AnswerVerdict"] | null;
+            /**
+             * @description Vietnamese notes on how this rendering differs from when the question was asked (row count, newer table
+             *     version, fewer visible rows).
+             */
+            notes: string[];
+            number_check: components["schemas"]["NumberCheck"] | null;
+            /** Format: uuid */
+            query_id: string;
+            question: string;
+            question_type: components["schemas"]["QuestionType"];
+            result: components["schemas"]["ResultTable"] | null;
+            /** @description SQL that ran now, after the guard. */
+            sql: string | null;
+            /** @description Tables and versions the question read, the starting table first. */
+            tables: components["schemas"]["ReportTableVersion"][];
+            understanding: components["schemas"]["Understanding"] | null;
+        };
+        /**
+         * @description `manual`: answers the user added one by one; `automatic`: built by the backend for one dataset.
+         * @enum {string}
+         */
+        ReportKind: "manual" | "automatic";
+        /** @description Reports of the caller, last changed first. */
+        ReportListResponse: {
+            reports: components["schemas"]["ReportSummary"][];
+        };
+        /** @description A report with every item rendered again from the stored questions. */
+        ReportResponse: {
+            items: components["schemas"]["ReportItem"][];
+            /**
+             * Format: date-time
+             * @description When the items were run again; numbers of every item are as of this time, on the stored data versions.
+             */
+            rendered_at: string;
+            report: components["schemas"]["ReportSummary"];
+        };
+        /** @description One report of the caller, without its items. */
+        ReportSummary: {
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: uuid
+             * @description Dataset of an automatic report (`DatasetSummary.id`); null for a manual report.
+             */
+            dataset_id: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description Opening paragraph written by the owner (Vietnamese); empty when none. */
+            intro: string;
+            /** Format: int32 */
+            item_count: number;
+            kind: components["schemas"]["ReportKind"];
+            /**
+             * Format: int32
+             * @description Language model calls made while building an automatic report; null for a manual report.
+             */
+            model_calls: number | null;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description Table and data version an item read. */
+        ReportTableVersion: {
+            /**
+             * Format: date-time
+             * @description When this version was snapshotted or uploaded.
+             */
+            captured_at: string;
+            /** @description False when the table has a newer version: the item still reads this one. */
+            is_current: boolean;
+            name: string;
+            /** Format: uuid */
+            table_id: string;
+            /** Format: int32 */
+            version: number;
         };
         ResetPasswordResponse: {
             /** @description Shown once to hand to the user; not stored anywhere in plain text. */
@@ -2977,6 +3279,11 @@ export interface components {
             label: string;
             /** @description Fragment of `sql_guarded` this item comes from. */
             sql: string;
+        };
+        /** @description Fields left out keep their value. */
+        UpdateReportRequest: {
+            intro?: string | null;
+            title?: string | null;
         };
         /** @description Multipart form for uploading a dataset. Total size is limited by MAX_UPLOAD_MB (413 above it). */
         UploadDatasetRequest: {
@@ -5858,6 +6165,440 @@ export interface operations {
                 };
             };
             /** @description 401; 404 not a member, or no such answer of the caller */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listReports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportListResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReportRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportSummary"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 empty title, title over 200 or intro over 5000 characters; 401; 404 not a member */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createAutomaticReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoReportRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutoReportResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 the dataset has no measure, or no section could be built; 401; 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Report id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportResponse"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member, or no such report of the caller */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Report id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member, or no such report of the caller */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    updateReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Report id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateReportRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportSummary"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 empty or long title, long intro; 401; 404 not a member, or no such report of the caller */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    addReportItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Report id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddReportItemRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportSummary"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 the question was not answered, is already in the report, or the report has 30 items; 401; 404 not a member, no such report of the caller or no such question of the caller */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    removeReportItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Report id (UUID) */
+                id: string;
+                /** @description Item id (`ReportItem.id`, UUID) */
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member, no such report of the caller or no such item */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reorderReportItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Report id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Order saved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 the list is not exactly every item of the report; 401; 404 not a member, or no such report of the caller */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    exportReportXlsx: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Report id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The workbook */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": unknown;
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 401; 404 not a member, or no such report of the caller */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

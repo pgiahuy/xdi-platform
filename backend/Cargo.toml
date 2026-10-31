@@ -53,11 +53,12 @@ base64 = "0.22"
 # Đọc luồng COPY ... TO STDOUT khi chụp bảng Postgres (service/sources/postgres.rs), và join_all chờ nhiều future cùng
 # lúc mà giữ thứ tự (câu từng chiều của phân rã, service/explain/breakdown.rs; join_all cần feature alloc).
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+# Ghi file Excel của báo cáo (service/report/xlsx.rs); test cũng dùng nó để dựng file xlsx mẫu.
+rust_xlsxwriter = "0.101"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
-rust_xlsxwriter = "0.101"
 # Đưa log của reqwest và hyper (crate log) vào bộ đệm của test kiểm khóa API không lọt vào log.
 tracing-log = "0.2"
 

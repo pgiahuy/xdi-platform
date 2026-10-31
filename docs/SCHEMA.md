@@ -1,12 +1,12 @@
 # Schema Postgres của ứng dụng
 
 Trang này nói từng bảng trong Postgres của xdi-platform dùng để làm gì, cột nào quan trọng, ai ghi và lúc nào, kèm ví
-dụ vài dòng. Schema hiện có 22 bảng, dựng bởi các migration `0001_init.sql` tới `0020_data_roles.sql` trong
+dụ vài dòng. Schema hiện có 24 bảng, dựng bởi các migration `0001_init.sql` tới `0021_reports.sql` (không có 0019) trong
 [`backend/migrations/`](https://github.com/pgiahuy/xdi-platform/tree/main/backend/migrations); backend tự chạy migration
 lúc khởi động.
 
 Postgres chỉ giữ dữ liệu của ứng dụng: tài khoản, workspace, mô tả của dataset và bảng, hồ sơ cột, chỉ số, lịch sử câu
-hỏi, nhật ký lỗi, bài học. Dữ liệu để phân tích (các dòng của file nạp lên hay của bảng chụp từ database) nằm ở file
+hỏi, nhật ký lỗi, bài học, báo cáo. Dữ liệu để phân tích (các dòng của file nạp lên hay của bảng chụp từ database) nằm ở file
 Parquet trong `DATA_DIR`, DuckDB đọc trực tiếp ([ARCHITECTURE.md](ARCHITECTURE.md), mục 4). Database của tổ chức mà
 admin kết nối chỉ được đọc (lúc kết nối, chọn bảng và chụp), xdi-platform không ghi gì vào đó.
 
@@ -24,8 +24,8 @@ băm mật khẩu, mã phiên hay thông tin kết nối thật.
 - Khóa chính là `uuid` sinh bằng `gen_random_uuid()`, trừ `memberships`, `member_data_roles`, `settings`, `sessions`
   và `source_metadata_tables` dùng khóa tự nhiên.
 - Xóa một workspace thì mọi dòng của nó mất theo (`ON DELETE CASCADE`). Xóa một bảng dữ liệu (dòng `datasets`) thì mất
-  phiên bản, hồ sơ cột, quan hệ, chỉ số, luật lọc dòng, lịch sử câu hỏi, cuộc trò chuyện và bài học của bảng đó; nhật
-  ký lỗi còn lại, chỉ đặt null `dataset_id`.
+  phiên bản, hồ sơ cột, quan hệ, chỉ số, luật lọc dòng, lịch sử câu hỏi, cuộc trò chuyện, bài học và mục báo cáo của
+  bảng đó; nhật ký lỗi còn lại, chỉ đặt null `dataset_id`.
 - Bảng `_sqlx_migrations` là sổ sách của sqlx (migration nào đã chạy, checksum), không thuộc dữ liệu ứng dụng và không
   có trong sơ đồ.
 
@@ -431,6 +431,47 @@ Ai ghi: chỉ admin, ở màn Bài học (viết tay, hay từ một dòng của
 |---|---|---|---|---|
 | `6734…` (order_items) | Doanh thu là tổng item_total (sau giảm giá), không phải sales | true | null | 2026-10-31 10:20 |
 
+## Báo cáo
+
+### reports
+
+Một báo cáo của một người: tự gom từ các câu trả lời (`manual`) hay do hệ thống tạo cho một dataset (`automatic`). Như
+cuộc trò chuyện, chỉ người tạo đọc và sửa được.
+
+| Cột | Ý nghĩa |
+|---|---|
+| `created_by` | Người tạo; xóa tài khoản thì báo cáo mất theo |
+| `title`, `intro` | Tiêu đề và đoạn mở đầu người tạo sửa được |
+| `kind` | `manual` hay `automatic`; `automatic` bắt buộc có `source_id` |
+| `source_id` | Dataset của báo cáo tự động; xóa dataset thì báo cáo đó mất theo |
+| `model_calls` | Số lần gọi mô hình khi tạo báo cáo tự động; null với báo cáo tự gom |
+
+Ai ghi: người dùng ở trang Báo cáo (tạo, sửa tiêu đề và mở đầu, xóa), nút Thêm vào báo cáo ở trang hỏi (thêm mục, hay
+tạo báo cáo mới đặt tên theo câu hỏi); backend khi tạo báo cáo tự động.
+
+| id | created_by | title | kind | source_id | model_calls |
+|---|---|---|---|---|---|
+| `c3b4…` | `4b1e…` | Doanh thu bán hàng theo khách hàng và thị trường | manual | null | null |
+| `d8c1…` | `4b1e…` | Báo cáo tự động: sales_demo | automatic | `0085…` (sales_demo) | 6 |
+
+### report_items
+
+Một mục của báo cáo: trỏ tới một dòng `queries` đã trả lời. Không lưu bảng kết quả: mở báo cáo hay xuất Excel thì backend
+chạy lại câu SQL đã lưu của câu đó qua guard, với quyền xem của người mở, trên đúng phiên bản câu hỏi đã đọc.
+
+| Cột | Ý nghĩa |
+|---|---|
+| `report_id`, `query_id` | Báo cáo và câu hỏi; một câu chỉ có một lần trong một báo cáo |
+| `position` | Thứ tự trong báo cáo, nhỏ trước |
+
+Ai ghi: người tạo báo cáo (thêm, bỏ, đổi thứ tự); backend khi tạo báo cáo tự động, mỗi phần của nó là một dòng `queries`
+không thuộc cuộc trò chuyện nào. Xóa câu hỏi (khi xóa dataset hay phiên bản) thì mục mất theo.
+
+| report_id | query_id | position |
+|---|---|---|
+| `c3b4…` | `42eb…` (Doanh thu theo phân khúc khách hàng) | 0 |
+| `c3b4…` | `5a10…` (Top 5 danh mục có doanh thu cao nhất) | 1 |
+
 ## Điểm hay hiểu nhầm
 
 - **`sources` là dataset, `datasets` là bảng.** Từ #266, một dataset là một database đã kết nối hay một file; bảng nằm
@@ -449,6 +490,8 @@ Ai ghi: chỉ admin, ở màn Bài học (viết tay, hay từ một dòng của
   `metrics.dataset_id` là bảng mà công thức đọc cột.
 - **Vai trong workspace và vai dữ liệu là hai thứ.** `memberships.role` quyết định được làm gì; `data_roles` cùng
   `member_data_roles` và `rls_policies` quyết định thấy dòng nào. Admin mang vai dữ liệu vẫn không bị lọc.
+- **Báo cáo không lưu số liệu.** `report_items` chỉ trỏ tới câu hỏi; số của mỗi mục tính lại mỗi lần mở, nên người có
+  vai dữ liệu hẹp hơn lúc hỏi thấy số theo quyền hiện tại. Lời trả lời đã lưu (`queries.answer`) khi đó không hiện.
 - **Dữ liệu phân tích không nằm trong Postgres.** Các dòng dữ liệu là file Parquet dưới `DATA_DIR`
   (`dataset_versions.parquet_path`). Postgres chỉ có hồ sơ: số dòng, min, max, danh sách giá trị của cột phân loại.
 

@@ -18,7 +18,7 @@ mod columns;
 pub mod contract;
 mod missing;
 mod query;
-mod sql;
+pub(crate) mod sql;
 #[cfg(test)]
 mod tests;
 mod time;
