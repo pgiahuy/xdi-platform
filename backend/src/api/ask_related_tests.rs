@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/ask_related_tests.rs - hỏi trên dataset chụp từ database cùng các bảng liên quan (#213), qua route thật, trên
 Postgres thật: chụp schema shop của api/source_relations_tests.rs (mỗi bảng một dataset, kèm quan hệ), rồi mô hình giả
-trả câu SQL có JOIN. Kiểm bảng đã đọc trong response và queries.read_versions, bộ lọc dòng trên từng bảng, câu "truy
-dòng nguồn" từ chối câu nhiều bảng. Bộ lọc lan theo khóa ngoại (#215) ở api/row_filter_fk_tests.rs. Không có
+trả câu SQL có JOIN. Kiểm bảng đã đọc trong response và queries.read_versions, bộ lọc dòng trên từng bảng, truy dòng
+nguồn của câu nối bảng qua route (dòng của order_items, tổng khớp ô). Bộ lọc lan theo khóa ngoại (#215) ở api/row_filter_fk_tests.rs. Không có
 DATABASE_URL thì bỏ qua. */
 
 use axum::http::StatusCode;
@@ -59,8 +59,8 @@ const QTY_BY_REGION: &str = "SELECT c.region_code, SUM(oi.qty) AS qty FROM order
 const CUSTOMERS_BY_REGION: &str = "SELECT r.name, COUNT(*) AS customers FROM customers c \
      JOIN regions r ON c.region_code = r.code GROUP BY r.name ORDER BY r.name";
 
-/// Hỏi trên order_items: câu JOIN tới orders và customers chạy, response và lịch sử ghi đủ ba bảng; truy dòng nguồn từ
-/// chối câu nhiều bảng với lời rõ ràng. Minh bị lọc trên customers và regions: câu JOIN hai bảng đó chỉ thấy dòng North.
+/// Hỏi trên order_items: câu JOIN tới orders và customers chạy, response và lịch sử ghi đủ ba bảng; truy dòng nguồn trả
+/// dòng của order_items kèm cột region_code của khách, tổng qty của các dòng bằng ô. Minh bị lọc trên customers và regions: câu JOIN hai bảng đó chỉ thấy dòng North.
 #[tokio::test]
 async fn join_question_reads_related_tables_with_their_row_filters() {
     let replies = [sql_reply(QTY_BY_REGION), sql_reply(CUSTOMERS_BY_REGION)];
@@ -95,8 +95,12 @@ async fn join_question_reads_related_tables_with_their_row_filters() {
     let drill = json!({"query_id": query_id, "cell": [{"column": "region_code", "value": "N"}]});
     let url = format!("{SHOP}/datasets/{items}/drill");
     let (status, _, body) = call(&s.app, "POST", &url, Some(&s.lan), Some(drill)).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    assert!(body.to_string().contains("câu đọc nhiều bảng"), "{body}");
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["source_table"], "order_items", "{body}");
+    assert_eq!(body["joined_columns"], json!(["region_code"]), "{body}");
+    assert_eq!(body["measures"][0]["rule"], "sum", "{body}");
+    assert_eq!(body["measures"][0]["value"], "5", "{body}");
+    assert_eq!(body["measures"][0]["row_column"], "qty", "{body}");
 
     let customers = dataset_id(&result, "customers");
     let regions = dataset_id(&result, "regions");

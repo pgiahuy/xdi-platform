@@ -1,54 +1,81 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/drill/sql.rs - dựng câu SQL truy dòng nguồn của một ô (#34) từ câu đã chạy (queries.sql_guarded): giữ nguyên
-chỗ đọc bảng và WHERE của câu, thêm một điều kiện `(<biểu thức nhóm>) = <giá trị ô>` cho mỗi cột khóa của dòng được
-bấm, bỏ GROUP BY, ORDER BY, LIMIT, lấy mọi cột. Ra hai câu: một trang dòng (LIMIT, OFFSET) và một câu COUNT(*) đếm
-tổng. Cột khóa tìm theo tên cột DuckDB trả cho câu gốc (build_names_sql), vì đó là tên giao diện gửi lại.
-service/drill/mod.rs đưa các câu qua guard với quyền của người đang bấm rồi chạy. Test ở drill/tests.rs.
+FROM (kể cả JOIN theo khóa ngoại và hộp lọc) và WHERE của câu, thêm một điều kiện `(<biểu thức nhóm>) = <giá trị ô>`
+cho mỗi cột khóa của dòng được bấm, bỏ GROUP BY, ORDER BY, LIMIT. Ra hai câu: một trang dòng (LIMIT, OFFSET) và một câu
+đếm tổng kèm các độ đo tính lại trên mọi dòng (drill/measures.rs). Cột khóa tìm theo tên cột DuckDB trả cho câu gốc
+(build_names_sql), vì đó là tên giao diện gửi lại. service/drill/mod.rs đưa các câu qua guard với quyền của người
+đang bấm rồi chạy. Test ở drill/tests.rs và drill/join_tests.rs.
+
+Cột của trang: câu đọc một chỗ thì `*` như trước; câu nối bảng thì `<bảng sự kiện>.*` (drill/sources.rs chọn bảng),
+rồi cột khóa và cột lọc thuộc bảng nối khác, đặt tên theo cột kết quả hay "bảng.cột". Sau cùng là cột từng dòng của
+mỗi độ đo SUM, tên theo cột kết quả, để các dòng cộng ra đúng con số.
 
 Dòng phân rã của câu "tại sao" dùng cùng cách trên câu của chiều được bấm (DimensionBreakdown.sql, nhóm theo cột chiều),
 cộng điều kiện của lát cắt được bấm (ExplanationSlice.filter): câu chiều đọc cả hai lát cắt, mỗi độ đo lọc một lát
-bằng CASE WHEN, nên thiếu điều kiện lát cắt thì trang ra dòng của cả hai kỳ.
+bằng CASE WHEN, nên thiếu điều kiện lát cắt thì trang ra dòng của cả hai kỳ. Phân rã theo cột của bảng liên quan
+(#227) đọc một câu con `LEFT JOIN` ở FROM; câu con đó giữ dòng của bảng chính nên truy được như một bảng.
 
 Đọc câu bằng QueryShape (engine/sql_shape.rs) như thẻ "Đã hiểu là", nên hai chỗ hiểu cột khóa và vế lọc giống nhau.
-Câu dạng chưa truy được thì báo rõ lý do (400) thay vì trả dòng có thể sai: phép tập hợp, nhiều bảng hay bảng tạm,
-HAVING, hàm cửa sổ, ROLLUP, `*`, khóa nhóm không có trong SELECT.
+Câu dạng chưa truy được thì báo rõ lý do (400) thay vì trả dòng có thể sai: phép tập hợp, HAVING, hàm cửa sổ, ROLLUP,
+`*`, khóa nhóm không có trong SELECT, câu con hay bảng tạm gộp nhóm (drill/sources.rs).
 
 Vì sao dựng từ sql_guarded chứ không từ sql_generated: đó là câu đã ra con số người dùng thấy, kể cả hộp lọc phân quyền
 của người đã hỏi. Giữ hộp đó là đúng nghĩa (dòng nguồn của ô chỉ gồm dòng người hỏi được thấy); guard thêm hộp của
 người đang bấm ra ngoài, nên người bấm không bao giờ thấy quá phần của mình.
 
-Độ đo có điều kiện riêng (`SUM(CASE WHEN ...)`, `COUNT(*) FILTER (WHERE ...)`) thì trả mọi dòng của nhóm: tổng các dòng
-trả về chỉ bằng giá trị ô với độ đo cộng không điều kiện. Không ORDER BY: DuckDB giữ thứ tự đọc
-(preserve_insertion_order mặc định bật), nên hai trang liền nhau không trùng dòng mà không phải sắp xếp cả nhóm. */
+Không ORDER BY: DuckDB giữ thứ tự đọc (preserve_insertion_order mặc định bật), nên hai trang liền nhau không trùng dòng
+mà không phải sắp xếp cả nhóm. */
 
 use std::collections::HashSet;
-use std::ops::ControlFlow;
 
 use sqlparser::ast::{
     BinaryOperator, Expr, GroupByExpr, LimitClause, Offset, OffsetRows, Query, Select, SelectItem,
-    SetExpr, Statement, Value, Visit, Visitor,
+    SetExpr, Statement, Value,
 };
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
 
+use crate::engine::guard::{AllowedTable, JoinLink};
 use crate::engine::sql_shape::{build_query_shape, QueryShape};
 use crate::error::AppError;
 use crate::service::ask::contract::{build_unique_names, CellValue};
+use crate::service::drill::columns::{build_page_columns, PageColumns};
 use crate::service::drill::contract::DrillKey;
+use crate::service::drill::measures::{build_measures, PlanMeasure};
+use crate::service::drill::sources::{build_sources, has_window, Source};
 
 /// Câu đã chạy, đã kiểm là truy được dòng nguồn.
 pub struct DrillPlan {
     shape: QueryShape,
     query: Query,
+    sources: Vec<Source>,
+    measures: Vec<PlanMeasure>,
 }
 
-/// Hai câu chưa qua guard, in từ cây.
+/// Những gì build_sql cần ngoài câu đã chạy.
+pub struct PageRequest<'a> {
+    /// Tên cột DuckDB trả cho câu gốc (chạy build_names_sql), theo thứ tự.
+    pub names: &'a [String],
+    pub keys: &'a [DrillKey],
+    /// Điều kiện lát cắt của dòng phân rã, do code dựng và lưu cùng câu hỏi (không bao giờ từ request).
+    pub slice_filter: Option<&'a str>,
+    /// Chỉ báo độ đo có tên cột kết quả này (độ đo của lát cắt được bấm); None là mọi độ đo.
+    pub only_measure: Option<&'a str>,
+    pub offset: u64,
+    pub limit: u32,
+    /// Hồ sơ bảng và quan hệ, để biết cột thuộc bảng nào khi câu nối bảng.
+    pub tables: &'a [AllowedTable],
+    pub links: &'a [JoinLink],
+}
+
+/// Hai câu chưa qua guard, in từ cây, cùng cách đọc cột của trang.
 #[derive(Debug)]
 pub struct DrillSql {
-    /// Một trang dòng nguồn, mọi cột.
+    /// Một trang dòng nguồn.
     pub page: String,
-    /// Một dòng một cột: số dòng nguồn của ô.
+    /// Một dòng: count(*) rồi mỗi độ đo trong `columns.measures` một cột.
     pub count: String,
+    pub columns: PageColumns,
 }
 
 /// Err là BadRequest với lời cho người dùng khi câu chưa truy được; Internal khi sql_guarded không đọc được (câu đó do
@@ -61,7 +88,14 @@ pub fn build_drill_plan(sql_guarded: &str) -> Result<DrillPlan, AppError> {
         return Err(unsupported("câu có dạng lồng ngoặc chưa đọc được"));
     };
     check_select(select)?;
-    Ok(DrillPlan { shape, query })
+    let sources = build_sources(&query, select)?;
+    let measures = build_measures(&shape);
+    Ok(DrillPlan {
+        shape,
+        query,
+        sources,
+        measures,
+    })
 }
 
 impl DrillPlan {
@@ -77,59 +111,76 @@ impl DrillPlan {
         query.to_string()
     }
 
-    /// names: tên cột DuckDB trả cho câu gốc (chạy build_names_sql), theo thứ tự. slice_filter: điều kiện lát cắt
-    /// của dòng phân rã, do code dựng và lưu cùng câu hỏi (không bao giờ từ request). Err là BadRequest khi khóa gửi
-    /// lên không khớp các cột nhóm của câu.
-    pub fn build_sql(
-        &self,
-        names: &[String],
-        keys: &[DrillKey],
-        slice_filter: Option<&str>,
-        offset: u64,
-        limit: u32,
-    ) -> Result<DrillSql, AppError> {
-        if names.len() != self.shape.outputs.len() {
+    /// Err là BadRequest khi khóa gửi lên không khớp các cột nhóm của câu.
+    pub fn build_sql(&self, request: &PageRequest<'_>) -> Result<DrillSql, AppError> {
+        if request.names.len() != self.shape.outputs.len() {
             return Err(AppError::Internal(format!(
                 "drill: {} result columns, {} in the select list",
-                names.len(),
+                request.names.len(),
                 self.shape.outputs.len()
             )));
         }
-        let mut conditions = build_key_conditions(&self.shape, names, keys)?;
-        if let Some(filter) = slice_filter {
+        // Tên như ResultTable.columns: cùng hàm làm tên duy nhất trên tên DuckDB trả.
+        let names = build_unique_names(request.names);
+        let mut conditions = build_key_conditions(&self.shape, &names, request.keys)?;
+        if let Some(filter) = request.slice_filter {
             // Bọc ngoặc như điều kiện khóa: lát cắt là `a >= x AND a < y`, hay `"cột" = 'giá trị'`.
             conditions.push(Expr::Nested(Box::new(parse_expr(filter)?)));
         }
         let SetExpr::Select(select) = self.query.body.as_ref() else {
             return Err(unsupported("câu có dạng lồng ngoặc chưa đọc được"));
         };
-        let mut page = build_source_query(&self.query, select, conditions.clone(), "SELECT *")?;
+        let measures: Vec<&PlanMeasure> = self
+            .measures
+            .iter()
+            .filter(|m| {
+                request
+                    .only_measure
+                    .is_none_or(|only| names[m.output] == only)
+            })
+            .collect();
+        let columns = build_page_columns(
+            &self.shape,
+            select,
+            &self.sources,
+            &names,
+            &measures,
+            (request.tables, request.links),
+        )?;
+        let mut page = build_source_query(
+            &self.query,
+            select,
+            conditions.clone(),
+            columns.items.clone(),
+        );
         page.limit_clause = Some(LimitClause::LimitOffset {
-            limit: Some(Expr::value(Value::Number(limit.to_string(), false))),
+            limit: Some(Expr::value(Value::Number(request.limit.to_string(), false))),
             offset: Some(Offset {
-                value: Expr::value(Value::Number(offset.to_string(), false)),
+                value: Expr::value(Value::Number(request.offset.to_string(), false)),
                 rows: OffsetRows::None,
             }),
             limit_by: Vec::new(),
         });
-        let count = build_source_query(&self.query, select, conditions, "SELECT count(*)")?;
+        let mut totals = build_projection("SELECT count(*)")?;
+        totals.extend(
+            measures
+                .iter()
+                .map(|m| SelectItem::UnnamedExpr(m.aggregate.clone())),
+        );
+        let count = build_source_query(&self.query, select, conditions, totals);
         Ok(DrillSql {
             page: page.to_string(),
             count: count.to_string(),
+            columns: columns.info,
         })
     }
 }
 
-/// Những gì QueryShape đã đọc được: một câu SELECT trên một bảng, có độ đo, không HAVING.
+/// Những gì QueryShape đã đọc được: một câu SELECT, có độ đo, không HAVING. Phần FROM do drill/sources.rs kiểm.
 fn check_shape(shape: &QueryShape) -> Result<(), AppError> {
     if shape.set_operation {
         return Err(unsupported(
             "câu ghép nhiều câu SELECT (UNION, EXCEPT, INTERSECT)",
-        ));
-    }
-    if shape.table.is_none() {
-        return Err(unsupported(
-            "câu đọc nhiều bảng, bảng tạm (WITH) hay câu con ở FROM",
         ));
     }
     // Lọc nhóm sau khi tổng hợp: điều kiện của HAVING không áp được lên từng dòng nguồn.
@@ -169,28 +220,10 @@ fn check_select(select: &Select) -> Result<(), AppError> {
         return Err(unsupported("câu nhóm theo ROLLUP, CUBE hay GROUPING SETS"));
     }
     // Hàm cửa sổ tính trên cả kết quả, không trên từng nhóm, nên ô của nó không ứng với một nhóm dòng nguồn.
-    let windowed = select.qualify.is_some()
-        || select
-            .projection
-            .iter()
-            .any(|item| item.visit(&mut WindowFinder).is_break());
-    if windowed {
+    if has_window(select) {
         return Err(unsupported("câu dùng hàm cửa sổ (OVER)"));
     }
     Ok(())
-}
-
-struct WindowFinder;
-
-impl Visitor for WindowFinder {
-    type Break = ();
-
-    fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
-        match expr {
-            Expr::Function(function) if function.over.is_some() => ControlFlow::Break(()),
-            _ => ControlFlow::Continue(()),
-        }
-    }
 }
 
 /// Một điều kiện cho mỗi cột khóa. Khóa phải đủ đúng các cột khóa của câu: thiếu một cột thì trang ra dòng của nhiều
@@ -200,9 +233,8 @@ fn build_key_conditions(
     names: &[String],
     keys: &[DrillKey],
 ) -> Result<Vec<Expr>, AppError> {
-    // Tên như ResultTable.columns: cùng hàm làm tên duy nhất trên tên DuckDB trả. Câu không có `*` (check_shape) nên
-    // cột thứ i của kết quả là mục thứ i của SELECT.
-    let names = build_unique_names(names);
+    // names đã là tên duy nhất như ResultTable.columns. Câu không có `*` (check_shape) nên cột thứ i của kết quả là
+    // mục thứ i của SELECT.
     let key_outputs: Vec<usize> = shape.group_by.iter().filter_map(|k| k.output).collect();
     let mut seen = HashSet::new();
     let mut conditions = Vec::new();
@@ -256,17 +288,17 @@ fn build_key_condition(expr: &Expr, value: Option<&CellValue>) -> Expr {
     }
 }
 
-/// Câu đọc dòng nguồn: giữ FROM (cả bí danh và hộp lọc) và WHERE của câu gốc, thêm điều kiện khóa, cột lấy từ
-/// projection_sql. Mọi phần khác của SELECT về rỗng.
+/// Câu đọc dòng nguồn: giữ WITH, FROM (cả JOIN, bí danh và hộp lọc) và WHERE của câu gốc, thêm điều kiện khóa, cột
+/// là projection. Mọi phần khác của SELECT về rỗng.
 fn build_source_query(
     original: &Query,
     select: &Select,
     conditions: Vec<Expr>,
-    projection_sql: &str,
-) -> Result<Query, AppError> {
+    projection: Vec<SelectItem>,
+) -> Query {
     let mut query = original.clone();
     let mut source = select.clone();
-    source.projection = build_projection(projection_sql)?;
+    source.projection = projection;
     source.distinct = None;
     source.group_by = GroupByExpr::Expressions(Vec::new(), Vec::new());
     source.having = None;
@@ -276,7 +308,7 @@ fn build_source_query(
     query.body = Box::new(SetExpr::Select(Box::new(source)));
     query.order_by = None;
     query.limit_clause = None;
-    Ok(query)
+    query
 }
 
 fn build_where(original: Option<Expr>, conditions: Vec<Expr>) -> Option<Expr> {
@@ -300,7 +332,7 @@ fn build_where(original: Option<Expr>, conditions: Vec<Expr>) -> Option<Expr> {
 
 /// Danh sách cột lấy từ một câu mẫu viết sẵn, như guard dựng hộp lọc: dựng tay nút gọi hàm count(*) của sqlparser
 /// dài và dễ sai hơn.
-fn build_projection(template: &str) -> Result<Vec<SelectItem>, AppError> {
+pub(super) fn build_projection(template: &str) -> Result<Vec<SelectItem>, AppError> {
     let query = parse_query(template)?;
     match *query.body {
         SetExpr::Select(select) => Ok(select.projection),

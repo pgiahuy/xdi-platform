@@ -662,6 +662,22 @@ fn rejects_five_levels() {
     }
 }
 
+/// Hộp `SELECT * FROM bảng WHERE ...` (dạng hộp lọc của guard) không tính tầng của chính nó, câu con trong WHERE của
+/// hộp vẫn tính; hộp bọc câu con khác thì tính như mọi câu con.
+#[test]
+fn table_box_level_is_not_counted() {
+    let boxed = format!(
+        "SELECT v FROM (SELECT region AS v FROM (SELECT * FROM sales WHERE region IN ({})) b) t",
+        "SELECT region FROM sales WHERE customer_id IN (SELECT customer_id FROM customers)"
+    );
+    assert_accepted(&boxed);
+    let reason = assert_oversized(&format!(
+        "SELECT v FROM (SELECT * FROM ({}) w) t",
+        nested(4)
+    ));
+    assert!(reason.contains("6 tầng"), "{reason}");
+}
+
 /// Bảng tạm cùng tên trong một WITH lồng chỉ che bảng tạm ngoài trong câu đó: số tầng của bảng tạm ngoài giữ nguyên.
 /// Câu dưới thật sự 5 tầng (c1, c2, c3, c4, câu chính); nếu bảng tạm c2 bên trong r2 ghi đè số tầng của c2 ngoài thì
 /// câu đếm ra 4 và lọt.

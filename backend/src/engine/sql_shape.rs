@@ -249,6 +249,23 @@ impl Visitor for AggregateFinder {
     }
 }
 
+/// Tên bảng của một chỗ đọc: bảng trơn, hay hộp `(SELECT * FROM x WHERE ...)` (hộp lọc của guard). Truy dòng nguồn
+/// (service/drill/sources.rs) và luật số cột của guard (guard/width.rs) dùng để biết hộp ra đúng các cột của bảng nào.
+pub fn read_box_table(factor: &TableFactor) -> Option<String> {
+    read_table_box(factor, &mut Vec::new())
+}
+
+/// Câu là đúng một hộp lọc trên bảng trơn: `SELECT * FROM <bảng> [WHERE ...]`, không gì khác. Luật số tầng của guard
+/// (guard/depth.rs) không tính tầng của hộp như vậy.
+pub fn is_table_box(query: &Query) -> bool {
+    table_box_select(query).is_some_and(|select| {
+        matches!(
+            &select.from[0].relation,
+            TableFactor::Table { args: None, .. }
+        )
+    })
+}
+
 /// Tên bảng sau các hộp `(SELECT * FROM x WHERE ...)` lồng nhau; vế lọc của các hộp vào filters, hộp trong trước. None
 /// khi gặp thứ khác hộp: câu con có cột riêng, GROUP BY, JOIN, hàm sinh bảng.
 fn read_table_box(factor: &TableFactor, filters: &mut Vec<ShapeFilter>) -> Option<String> {

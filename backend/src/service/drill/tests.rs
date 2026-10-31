@@ -93,6 +93,7 @@ impl Orders {
             sql_guarded,
             keys,
             slice_filter: None,
+            only_measure: None,
             offset: page.0,
             limit: page.1,
             tables: &tables,
@@ -392,8 +393,9 @@ async fn unsupported_questions_are_refused() {
             "ROLLUP",
         ),
         (
-            "WITH t AS (SELECT * FROM orders) SELECT \"Market\", count(*) FROM t GROUP BY \"Market\"",
-            "bảng tạm",
+            "WITH t AS (SELECT \"Market\", count(*) AS n FROM orders GROUP BY \"Market\")
+             SELECT \"Market\", sum(n) FROM t GROUP BY \"Market\"",
+            "bảng tạm (WITH) t gộp nhóm",
         ),
         ("SELECT \"Market\", \"Order Id\" FROM orders", "không có độ đo"),
     ];
