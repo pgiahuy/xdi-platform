@@ -84,6 +84,12 @@ pub const SUMMARY: PromptFile = PromptFile {
     text: include_str!("../../prompts/summary.txt"),
 };
 
+/// Khối bài học đã duyệt (#228), chung cho prompt SQL, prompt form và hai prompt viết lời (service/ask/lessons.rs).
+pub const LESSONS: PromptFile = PromptFile {
+    name: "lessons.txt",
+    text: include_str!("../../prompts/lessons.txt"),
+};
+
 /// Prompt lời của phần giải thích câu thường (service/insight/narrate.rs, #227).
 pub const INSIGHT: PromptFile = PromptFile {
     name: "insight.txt",

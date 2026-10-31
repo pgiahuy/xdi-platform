@@ -25,7 +25,10 @@ pub async fn run_plain(
     let prompt = build_sql_prompt(&input.prompt);
     let started = Instant::now();
     let reply = complete(llm, input, LlmTask::Sql, &prompt).await?;
-    let examples_used = build_examples_detail(&pick_examples(&input.prompt, false));
+    let examples_used = build_examples_detail(
+        &pick_examples(&input.prompt, false),
+        input.prompt.lessons.len(),
+    );
     steps.push(build_step(
         StepName::Llm,
         started,
@@ -66,6 +69,7 @@ fn build_plain_outcome(
         limit_kept: run.limit_kept,
         row_filters: run.row_filters,
         steps,
+        failures: run.failures,
         ..build_empty(run.status)
     };
     if let Some(unanswerable) = &run.unanswerable {

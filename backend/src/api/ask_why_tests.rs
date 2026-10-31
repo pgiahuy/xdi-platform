@@ -178,6 +178,13 @@ async fn wrong_form_twice_answers_as_a_plain_question() {
     )
     .await;
     assert_eq!(recorded, 1);
+    // Hai lần form sai, hai dòng nhật ký lỗi kèm form mô hình điền (#228).
+    let logged = fetch_count(
+        &asking.db.store,
+        "SELECT count(*) FROM error_log WHERE step = 'why_form' AND model_output LIKE '%Profit%'",
+    )
+    .await;
+    assert_eq!(logged, 2);
 
     let body = json!({"query_id": response["query_id"],
                       "breakdown": {"slice": "base", "column": "Market", "value": "Europe"}});

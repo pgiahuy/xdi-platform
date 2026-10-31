@@ -32,12 +32,16 @@ pub mod contract;
 pub mod examples;
 #[cfg(test)]
 mod examples_tests;
+pub mod failures;
 pub mod fanout;
 mod fanout_grain;
 #[cfg(test)]
 mod fanout_tests;
 pub mod filter_values;
 pub mod group_prompt;
+pub mod lessons;
+#[cfg(test)]
+mod lessons_tests;
 pub mod magnitude;
 pub mod matching;
 pub mod narrate;
@@ -88,6 +92,7 @@ use crate::service::ask::contract::{
 };
 use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::group_prompt::build_group_prompt;
+use crate::service::ask::lessons::pick_lessons;
 use crate::service::ask::plain_insight::{build_stored_breakdown, run_insight};
 use crate::service::ask::prompt::{
     build_examples_detail, build_sql_prompt, pick_examples, PromptInput,
@@ -106,12 +111,16 @@ use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::why::{ask_why, build_narrate_timeout, WhyAsk};
 use crate::service::explain::form::QuestionKind;
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
+use crate::service::lessons::{record_failures, FailedQuestion};
 use crate::{error::AppError, state::AppState};
 
 /// Số câu mẫu đã duyệt gần nhất đọc từ lịch sử; prompt chỉ lấy tối đa EXAMPLES_MAX câu có từ trùng câu hỏi trong số này
 /// (ask/prompt.rs). Đọc ít quá thì câu liên quan mà cũ không bao giờ được chọn; nhiều quá thì mỗi câu hỏi đọc Postgres
 /// lâu hơn.
 const EXAMPLE_POOL: i64 = 50;
+
+/// Số bài học đã bật đọc mỗi câu hỏi; prompt chỉ lấy tối đa LESSONS_MAX bài liên quan trong số này (ask/lessons.rs).
+const LESSON_POOL: i64 = 50;
 
 /// Cùng lời với đường dự phòng của câu "tại sao" (explain/plain.rs), để hai đường báo một kiểu.
 const CLARIFY_WITHOUT_OPTIONS: &str =
@@ -156,6 +165,10 @@ pub async fn ask(
         .store
         .list_approved_examples(ws, dataset.id, EXAMPLE_POOL)
         .await?;
+    let active_lessons = state
+        .store
+        .list_active_lessons(ws, dataset.id, LESSON_POOL)
+        .await?;
     let detail = build_ambiguity_detail(&context);
     let mut steps = vec![build_step(
         StepName::Context,
@@ -178,6 +191,7 @@ pub async fn ask(
 
     // Sau bước hỏi lại: câu còn mơ hồ thì không cần đọc giá trị của các bảng liên quan.
     let group_prompt = build_group_prompt(state, member, &group, question, &mut context).await?;
+    let lessons = pick_lessons(question, &context.columns, &active_lessons);
     let input = PromptInput {
         table: &dataset.logical_table,
         question,
@@ -188,6 +202,7 @@ pub async fn ask(
         choices,
         history: &history.section,
         group: group_prompt.as_ref(),
+        lessons: &lessons,
     };
     let tables = &group.allowed;
     // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
@@ -232,7 +247,7 @@ pub async fn ask(
         json_schema: Some(build_sql_reply_schema()),
     };
     let reply = state.llm.complete(&request).await?;
-    let examples_used = build_examples_detail(&pick_examples(&input, false));
+    let examples_used = build_examples_detail(&pick_examples(&input, false), input.lessons.len());
     steps.push(build_step(
         StepName::Llm,
         started,
@@ -308,10 +323,13 @@ pub async fn ask(
     };
     let view = build_answer_view(&ran, &context.columns, &metrics, &assumptions);
     let (understanding, chart) = apply_answer_view(view, outcome.result.as_mut());
-    let answer = build_answer_text(state, question, understanding.as_ref(), &outcome).await;
+    let answer =
+        build_answer_text(state, question, understanding.as_ref(), &outcome, &lessons).await;
+    let mut failures = std::mem::take(&mut outcome.failures);
     let (answer_text, answer_text_by_model) = match answer {
         Some(answer) => {
             steps.push(answer.step);
+            failures.extend(answer.failure);
             (Some(answer.text), Some(answer.by_model))
         }
         None => (None, None),
@@ -352,6 +370,12 @@ pub async fn ask(
     };
     let target = (&dataset, &version);
     let query_id = record_query(state, member, target, question, recorded, &mut steps).await?;
+    let asked = FailedQuestion {
+        dataset_id: dataset.id,
+        question,
+        query_id: Some(query_id),
+    };
+    record_failures(state, member, &asked, &failures).await;
     Ok(AskResponse {
         message: outcome.message,
         query_id: Some(query_id),
@@ -378,6 +402,7 @@ async fn build_answer_text(
     question: &str,
     understanding: Option<&Understanding>,
     outcome: &RunOutcome,
+    lessons: &[String],
 ) -> Option<SummaryOutcome> {
     let result = outcome.result.as_ref()?;
     if outcome.status != AskStatus::Answered {
@@ -394,6 +419,7 @@ async fn build_answer_text(
         &input,
         state.config.answer_text,
         timeout,
+        lessons,
     )
     .await
 }

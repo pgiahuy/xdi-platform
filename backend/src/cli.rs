@@ -14,9 +14,10 @@ const USAGE: &str = "usage:
   xdi-backend list-admins                     list system administrators
   xdi-backend openapi                         print the OpenAPI spec (JSON) to stdout, without a database
   xdi-backend ask-examples                    print sample ask responses (JSON) to stdout, without a database
-  xdi-backend eval --data <csv> --cases <json> [--baseline <json>]
+  xdi-backend eval --data <csv> --cases <json> [--baseline <json>] [--lessons <json>]
                                               run the sample question evaluation; exit 1 when accuracy drops
-                                              below the baseline, 2 on infrastructure errors
+                                              below the baseline, 2 on infrastructure errors; with --lessons,
+                                              run once without and once with those lessons enabled
   xdi-backend eval-classify --data <csv> --cases <json> [--pause-ms <ms>]
                                               compare the keyword rule and the model on question kinds;
                                               exit 2 on infrastructure errors";
@@ -65,17 +66,20 @@ pub async fn run(state: &AppState, args: &[String]) -> i32 {
 
 /// Lệnh eval (#37): chạy bộ câu đánh giá trên một file dữ liệu mẫu. In từng câu sai kèm lý do, dòng accuracy cuối,
 /// ghi eval/result.json. Có --baseline thì accuracy thấp hơn baseline thì thoát mã 1; lỗi hạ tầng (thiếu file, JSON
-/// hỏng, không nạp được dữ liệu) thoát mã 2.
+/// hỏng, không nạp được dữ liệu) thoát mã 2. Có --lessons thì chạy hai lượt, không và có bài học (#228), in thêm tỷ lệ
+/// đúng của lượt không bài học và các câu đổi kết quả; baseline so với lượt có bài học.
 async fn run_eval(state: &AppState, args: &[String]) -> i32 {
     let mut data = None;
     let mut cases = None;
     let mut baseline = None;
+    let mut lessons_path = None;
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         match flag.as_str() {
             "--data" => data = it.next(),
             "--cases" => cases = it.next(),
             "--baseline" => baseline = it.next(),
+            "--lessons" => lessons_path = it.next(),
             _ => {
                 eprintln!("{USAGE}");
                 return 2;
@@ -93,7 +97,15 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
             return 2;
         }
     };
-    let report = match eval::run_eval(state, std::path::Path::new(data), &cases).await {
+    let lessons = match lessons_path.map(|p| eval::load_lessons(std::path::Path::new(p))) {
+        None => Vec::new(),
+        Some(Ok(lessons)) => lessons,
+        Some(Err(e)) => {
+            eprintln!("eval: {e:?}");
+            return 2;
+        }
+    };
+    let report = match eval::run_eval(state, std::path::Path::new(data), &cases, &lessons).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("eval: {e:?}");
@@ -113,6 +125,20 @@ async fn run_eval(state: &AppState, args: &[String]) -> i32 {
         report.total,
         report.accuracy * 100.0
     );
+    if let Some(comparison) = &report.lessons {
+        println!(
+            "lessons: {}; without lessons {}/{} ({:.1}%); cases that changed: {}",
+            comparison.lessons,
+            comparison.passed_without,
+            report.total,
+            comparison.accuracy_without * 100.0,
+            if comparison.changed.is_empty() {
+                "none".to_string()
+            } else {
+                comparison.changed.join(", ")
+            }
+        );
+    }
     if let Err(e) = std::fs::write(
         "eval/result.json",
         serde_json::to_string_pretty(&report).expect("report serializes"),
