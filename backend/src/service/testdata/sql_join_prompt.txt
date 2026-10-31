@@ -46,6 +46,7 @@ Rules for reading several tables:
 - When a query reads more than one table, write every column with its table name or alias, for example orders."order_id" or o."order_id".
 - "many A rows per B row" means one row of B matches many rows of A. Before SUM or AVG of a column of B over a join with A, aggregate A first in a subquery or WITH table with one row per join key, then join; otherwise every value of B is counted once per matching row of A. Count rows of B with COUNT(DISTINCT key).
 - Read only the tables the question needs.
+- Two tables that no chain of the relationships above connects cannot be joined. If the question needs both, reply with unanswerable and say in the reason that the two tables have no relationship in the database.
 
 Metrics defined by the organization:
 - "doanh thu" (table order_items): SUM("item_total")

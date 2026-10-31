@@ -5,3 +5,4 @@ Luật khi đọc nhiều bảng:
 - Câu đọc hơn một bảng thì viết mọi cột kèm tên bảng hay bí danh, ví dụ orders."order_id" hoặc o."order_id".
 - "many A rows per B row" nghĩa là một dòng của B khớp nhiều dòng của A. Trước khi SUM hay AVG một cột của B qua phép nối với A, gộp A trước trong câu con hay bảng WITH, mỗi khóa nối một dòng, rồi mới nối; không thì mỗi giá trị của B bị cộng một lần cho mỗi dòng khớp của A. Đếm dòng của B bằng COUNT(DISTINCT khóa).
 - Chỉ đọc các bảng câu hỏi cần.
+- Hai bảng không nối được qua chuỗi quan hệ nào ở trên thì không nối được. Câu hỏi cần cả hai thì trả lời bằng unanswerable và nói trong lý do rằng hai bảng không có quan hệ trong database.

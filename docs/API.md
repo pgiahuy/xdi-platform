@@ -130,9 +130,10 @@ Code: `backend/src/service/catalog/` (hợp đồng ở `contract.rs`), `backend
   `description`, `description_source`, `is_sensitive`, `aliases`). Bảng xếp theo `source_table` rồi theo tên, để giao
   diện nhóm theo schema. Database đã kết nối mà chưa chụp bảng nào có `tables` rỗng.
 - Hỏi trên dataset nhận `question`, `choices`, `conversation_id` như route hỏi của bảng, thêm `table_id`. Không có
-  `table_id` thì backend chọn bảng bắt đầu (`backend/src/service/ask/scope.rs`): bảng có nhiều cụm từ của câu hỏi trùng
-  tên bảng, tên cột hay bí danh cột nhất; bằng nhau thì bảng của cuộc đang tiếp; rồi bảng giữ nhiều khóa ngoại nhất;
-  rồi bảng nhiều dòng hơn. Từ bảng đó câu hỏi đọc thêm các bảng nối với nó như trước (mục Hỏi dữ liệu). `table_id`
+  `table_id` thì backend chọn bảng bắt đầu (`backend/src/service/ask/scope.rs`): bảng giữ cột số đo câu hỏi nhắc
+  tới; rồi bảng có nhiều cụm từ của câu hỏi trùng tên bảng, tên cột hay bí danh cột nhất; rồi trùng mô tả; rồi bảng của
+  cuộc đang tiếp; rồi bảng giữ nhiều khóa ngoại nhất; rồi bảng nhiều dòng hơn. Câu hỏi đọc được mọi bảng đã chụp của
+  dataset (#249, [ARCHITECTURE.md](ARCHITECTURE.md) mục 6). `table_id`
   không thuộc dataset trả 404. Response là `AskResponse` như route hỏi của bảng; `AskResponse.table_id` là bảng đã bắt
   đầu, dùng cho truy dòng nguồn. Cuộc trò chuyện nằm trên bảng bắt đầu của câu đầu (`ConversationItem.table_id`) và
   tiếp được từ bất kỳ bảng nào của cùng dataset.
