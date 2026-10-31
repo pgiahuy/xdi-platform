@@ -324,7 +324,7 @@ pub fn build_equals(column: &str, value: &str) -> Expr {
     build_binary(build_ident(column), BinaryOperator::Eq, build_string(value))
 }
 
-fn build_timestamp(date: chrono::NaiveDate) -> Expr {
+pub(super) fn build_timestamp(date: chrono::NaiveDate) -> Expr {
     Expr::TypedString(TypedString {
         data_type: DataType::Timestamp(None, TimezoneInfo::None),
         value: Value::SingleQuotedString(date.format("%Y-%m-%d").to_string()).with_empty_span(),
@@ -332,7 +332,7 @@ fn build_timestamp(date: chrono::NaiveDate) -> Expr {
     })
 }
 
-fn build_binary(left: Expr, op: BinaryOperator, right: Expr) -> Expr {
+pub(super) fn build_binary(left: Expr, op: BinaryOperator, right: Expr) -> Expr {
     Expr::BinaryOp {
         left: Box::new(left),
         op,

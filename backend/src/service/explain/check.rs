@@ -7,7 +7,7 @@ Mỗi chỗ sai thành một FieldError chỉ đúng trường và nói cách s�
 Code không đoán thay mô hình: cột lạ, vai trò sai, giá trị không có trong danh sách đều là lỗi, kể cả khi chỉ khác hoa
 thường, vì giá trị là điều kiện lọc trên dữ liệu thật và khác một chữ là khác dòng.
 
-Phần độ đo (chỉ số, cột với sum, count) ở explain/measure.rs. */
+Phần độ đo (chỉ số, cột với sum, count) ở explain/measure.rs, phần bộ lọc ở explain/filter.rs. */
 
 use std::collections::HashMap;
 
@@ -15,12 +15,13 @@ use sqlparser::ast::Expr;
 
 use crate::engine::store::{MetricDefinition, ProfileColumn, ProfileRole};
 use crate::service::ask::values::ValueIndex;
+use crate::service::explain::filter::{build_single_value_columns, check_filters};
 use crate::service::explain::form::{FieldError, WhyForm};
 use crate::service::explain::group_base::GroupBase;
 use crate::service::explain::measure::{check_measure, find_metric, parse_expr, PlanMeasure};
 use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::source::{PlanSource, RelatedTables};
-use crate::service::explain::sql::{build_equals, build_time_expr};
+use crate::service::explain::sql::build_time_expr;
 
 /// Chiều có tới ngần này giá trị khác nhau mới phân rã (#39): nhiều hơn thì bảng đóng góp dài mà mỗi nhóm nhỏ.
 pub const DIMENSION_MAX_VALUES: i64 = 50;
@@ -334,44 +335,9 @@ fn build_profile_date(text: Option<&str>) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").ok()
 }
 
-fn check_filters(form: &WhyForm, profile: &WhyProfile, errors: &mut Vec<FieldError>) -> Vec<Expr> {
-    let mut filters = Vec::new();
-    let slice_column = form.groups.as_ref().map(|g| g.column.as_str());
-    for (i, filter) in form.filters.iter().enumerate() {
-        let field = format!("filters[{i}]");
-        if filter.op != "=" {
-            errors.push(FieldError::new(
-                format!("{field}.op"),
-                "only \"=\" is supported",
-            ));
-            continue;
-        }
-        let column_field = format!("{field}.column");
-        let Some(column) = find_column(profile, &filter.column, &column_field, errors) else {
-            continue;
-        };
-        if column.role != ProfileRole::Dimension.as_str() {
-            errors.push(wrong_role(column, &column_field, "dimension"));
-            continue;
-        }
-        if slice_column == Some(column.name.as_str()) {
-            errors.push(FieldError::new(
-                column_field,
-                "this column already holds the two groups; remove the filter",
-            ));
-            continue;
-        }
-        let value_field = format!("{field}.value");
-        if let Some(value) = check_value(profile, column, &filter.value, &value_field, errors) {
-            filters.push(build_equals(&column.name, &value));
-        }
-    }
-    filters
-}
-
 /// Giá trị phải có nguyên văn trong column_values của cột. Cột chiều nhạy cảm, hay giá trị chưa tải được, không có
 /// danh sách để đối chiếu nên cũng là lỗi: lọc theo giá trị không kiểm được thì không đi đường form.
-fn check_value(
+pub(super) fn check_value(
     profile: &WhyProfile,
     column: &ProfileColumn,
     value: &str,
@@ -419,7 +385,8 @@ fn check_value(
 /// rồi phần chấm điểm xếp các chiều còn lại. Cắt sớm hơn theo thứ tự cột ở đây thì cột đứng sau trong file không bao giờ
 /// được xét, dù giải thích tốt hơn.
 fn build_dimensions(form: &WhyForm, profile: &WhyProfile, slices: &PlanSlices) -> Vec<String> {
-    let mut excluded: Vec<&str> = form.filters.iter().map(|f| f.column.as_str()).collect();
+    let single = build_single_value_columns(form);
+    let mut excluded: Vec<&str> = single.iter().map(String::as_str).collect();
     if let PlanSlices::Groups { column, .. } = slices {
         excluded.push(column);
     }
@@ -496,7 +463,7 @@ pub(super) fn find_column<'a>(
     found
 }
 
-fn wrong_role(column: &ProfileColumn, field: &str, wanted: &str) -> FieldError {
+pub(super) fn wrong_role(column: &ProfileColumn, field: &str, wanted: &str) -> FieldError {
     // Cột kỳ học dạng chữ ("2013J", "2014J") có vai trò chiều: mô hình hay đặt nó vào "time", sửa lần hai thì bỏ "time"
     // mà quên "groups", form sai hai lần và câu rơi về câu thường. Chỉ luôn đường sửa đúng trong lời báo lỗi.
     let hint = if field.starts_with("time") && column.role == "dimension" {

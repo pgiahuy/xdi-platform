@@ -17,6 +17,7 @@ use crate::service::ask::prompt::{
     build_unanswerable_rule, build_within_limit, join_sections, pick_examples, PromptInput,
 };
 use crate::service::ask::reply::{build_terms_schema, build_unanswerable_schema};
+use crate::service::explain::filter::FILTER_OPS;
 
 /// Prompt cho câu "tại sao". Ví dụ là câu mẫu "tại sao" đã duyệt (#212) kèm form của nó, không phải câu SQL.
 pub fn build_why_prompt(input: &PromptInput) -> String {
@@ -80,10 +81,19 @@ pub fn build_why_form_schema() -> serde_json::Value {
                     "type": "object",
                     "properties": {
                         "column": text("A column from the list"),
-                        "op": { "type": "string", "enum": ["="] },
-                        "value": text("A value from the value list of the column, written exactly as listed")
+                        "op": { "type": "string", "enum": FILTER_OPS },
+                        "value": text(
+                            "For =, >, >=, <, <=: a value from the value list of the column written exactly as \
+                             listed, a number, or a date such as 2017, 2017-Q3, 2017-05 or 2017-05-31"
+                        ),
+                        "values": {
+                            "type": "array",
+                            "description": "For in: two or more values; for between: the low end and the high end, \
+                                            both included",
+                            "items": { "type": "string" }
+                        }
                     },
-                    "required": ["column", "op", "value"]
+                    "required": ["column", "op"]
                 }
             },
             "groups": {

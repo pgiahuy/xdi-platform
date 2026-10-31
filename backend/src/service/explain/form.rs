@@ -103,9 +103,15 @@ pub struct FormTime {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FormFilter {
     pub column: String,
-    /// Chỉ nhận "="; schema đã giới hạn, kiểm lại vì mô hình không bị ép (mock, Ollama cũ) có thể ghi khác.
+    /// Một phép của FILTER_OPS (explain/filter.rs); schema đã giới hạn, kiểm lại vì mô hình không bị ép (mock, Ollama
+    /// cũ) có thể ghi khác.
     pub op: String,
+    /// Giá trị của "=", ">", ">=", "<", "<=".
+    #[serde(default)]
     pub value: String,
+    /// Các giá trị của "in", hay hai đầu của "between" (#244).
+    #[serde(default)]
+    pub values: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

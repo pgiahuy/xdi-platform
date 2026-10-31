@@ -822,7 +822,7 @@ fn replies_are_read_like_sql_replies() {
     for reply in [
         "SELECT 1",
         "{\"metric\": ",
-        "{\"time\": {\"column\": \"x\", \"grain\": \"week\"}}",
+        "{\"time\": {\"column\": \"x\", \"grain\": \"hour\"}}",
     ] {
         let error = build_form_from_reply(reply).unwrap_err();
         assert_eq!(error.field, "form", "{reply}");

@@ -67,3 +67,43 @@ async fn one_group_is_compared_with_the_rest() {
         ["Market: Pacific Asia so với các thị trường còn lại"]
     );
 }
+
+/// Bộ lọc "in" và ">" đi qua guard, chạy trên DuckDB: chỉ còn dòng Europe, LATAM trên 1.000.000; Market vẫn là chiều
+/// phân rã vì còn hai nhóm.
+#[tokio::test]
+async fn extended_filters_reach_every_query() {
+    let data = Dataco::new();
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Item Total", "agg": "sum"},
+        "time": {"column": DATE, "grain": "quarter"},
+        "compare": "2017-Q3",
+        "filters": [
+            {"column": "Market", "op": "in", "values": ["Europe", "LATAM"]},
+            {"column": "Order Item Total", "op": ">", "value": "1000000"}
+        ]
+    });
+    let llm = ScriptedLlm::new(vec![form]);
+    let question = "Vì sao doanh thu các đơn trên 1 triệu ở Europe và LATAM quý 3/2017 giảm?";
+    let outcome = data.ask(&llm, question, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let explanation = outcome.explanation.as_ref().unwrap();
+    assert_eq!(explanation.base.value, "4880200.15");
+    assert_eq!(explanation.compare.value, "4150100.50");
+    let market = explanation
+        .dimensions
+        .iter()
+        .find(|d| d.column == "Market")
+        .unwrap();
+    assert_eq!(market.groups.len(), 2);
+    assert!(
+        market.sql.contains("\"Market\" IN ('Europe', 'LATAM')"),
+        "{}",
+        market.sql
+    );
+    let view = view(&outcome, &data.metrics);
+    let sql = outcome.sql_guarded.as_deref().unwrap();
+    for item in items(&view.understanding) {
+        assert!(sql.contains(&item.sql), "{} not in {sql}", item.sql);
+    }
+}

@@ -30,6 +30,7 @@ pub(crate) mod claims_tests;
 pub mod dimension_pick;
 #[cfg(test)]
 mod dimension_pick_tests;
+pub mod filter;
 pub mod form;
 #[cfg(test)]
 mod frames_run_tests;

@@ -47,6 +47,7 @@ use crate::service::explain::check::{
     apply_related, build_chosen_base, build_why_check, PlanSlices, WhyPlan, WhyProfile,
 };
 use crate::service::explain::choices::{build_why_assumptions, BASE_CHOICE_ID};
+use crate::service::explain::filter::build_single_value_columns;
 use crate::service::explain::form::{
     build_form_from_reply, build_why_repair_prompt, FieldError, ReadForm,
 };
@@ -252,7 +253,7 @@ async fn run_round(
         Err(errors) => return Ok(Round::Invalid(errors)),
     };
     // Form chỉ nêu cột của bảng đang hỏi; cột của bảng liên quan chỉ vào phân rã, như cột chiều của bảng đó.
-    let filtered: Vec<String> = read.form.filters.iter().map(|f| f.column.clone()).collect();
+    let filtered = build_single_value_columns(&read.form);
     apply_related(&mut plan, input.related, &filtered);
     run_plan(llm, input, read, &plan, latest.as_ref(), steps).await
 }

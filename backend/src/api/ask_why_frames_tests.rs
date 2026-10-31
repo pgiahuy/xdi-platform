@@ -87,3 +87,32 @@ async fn one_group_against_the_rest_is_answered_and_drilled() {
     assert_eq!(status, StatusCode::OK, "{page}");
     assert_eq!(source_rows(&page), (50.0, vec!["Europe".to_string()]));
 }
+
+/// Bộ lọc `in` qua route: USCA bị loại khỏi mọi câu, Market vẫn là chiều phân rã, và truy dòng nguồn của nhóm LATAM
+/// chỉ ra dòng LATAM của quý 3.
+#[tokio::test]
+async fn in_filter_is_answered_and_drilled() {
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Item Total", "agg": "sum"},
+        "time": {"column": "order date (DateOrders)", "grain": "quarter"},
+        "compare": "2017-Q3",
+        "filters": [{"column": "Market", "op": "in", "values": ["Europe", "LATAM"]}]
+    });
+    let Some(asking) = start_on(Some(scripted(&[form])), CSV, |_| {}).await else {
+        return;
+    };
+    let question = "Vì sao doanh thu quý 3/2017 ở Europe và LATAM giảm?";
+    let (status, response) = asking.ask(question, json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], "answered", "{response}");
+    let explanation = &response["explanation"];
+    assert_eq!(explanation["base"]["value"], "300.50");
+    assert_eq!(explanation["compare"]["value"], "200.25");
+    let query_id = response["query_id"].clone();
+    let latam = json!({"query_id": query_id,
+                       "breakdown": {"slice": "compare", "column": "Market", "value": "LATAM"}});
+    let (status, page) = drill(&asking, latam).await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    assert_eq!(source_rows(&page), (120.25, vec!["LATAM".to_string()]));
+}
