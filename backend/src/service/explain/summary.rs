@@ -8,10 +8,11 @@ hình (explain/narrate_prompt.rs) không nhận các câu này, chỉ nhận s�
 
 Các ý, theo thứ tự:
 - "Lý do chính": độ đo tỷ lệ thì phần do cơ cấu hay phần do hiệu suất; độ đo tổng có lượng (như số đơn) thì phần nào
-  lớn hơn trong hai phần của explain/split.rs: do lượng hay do giá trị trung bình mỗi đơn vị. Không có lượng thì không
-  có ý này: số dòng dữ liệu không mang nghĩa kinh doanh nên không dùng làm lý do.
-- "Khác thường theo <cột>": các nhóm lệch hẳn mức chung hay chỉ có ở một bên, nhóm chiếm nhiều chênh lệch trước; phần
-  của chênh lệch chỉ nêu khi không quá 100%.
+  lớn hơn trong hai phần của explain/split.rs: do lượng (kèm số lượng và trung bình mỗi đơn vị của hai bên) hay do giá
+  trị trung bình mỗi đơn vị. Độ đo đếm không có ý này (split.rs không tách). Không có lượng thì cũng không có ý này: số
+  dòng dữ liệu không mang nghĩa kinh doanh nên không dùng làm lý do.
+- "Khác thường theo <cột>": các nhóm lệch hẳn mức chung, chỉ có ở một bên hay đổi dấu, nhóm chiếm nhiều chênh lệch
+  trước; phần của chênh lệch chỉ nêu khi không quá 100%.
 - "Không nhóm nào khác thường": không chiều nào có nhóm khác thường; nhóm chênh nhiều nhất chỉ vì là nhóm lớn nhất khi
   đúng là nhóm lớn nhất.
 - "Nhóm góp nhiều nhất": khi không so được nhóm với mức chung (lát gốc không dương, chênh lệch gần 0), nêu nhóm có
@@ -184,12 +185,17 @@ fn build_reason(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     let numbers = &split.numbers;
     let volume_bigger = parse(&numbers.volume_effect)?.abs() >= parse(&numbers.price_effect)?.abs();
     let (base, compare) = (&e.base.label, &e.compare.label);
+    // Quy mô là lý do chính thì nói cả mức trung bình mỗi đơn vị của hai bên, để người đọc thấy hai mức đó gần nhau
+    // hay không: "COMPLETE có 597, CANCELED có 19; lợi nhuận trên mỗi đơn hàng 26,26 và 37,06".
     let lead_text = if volume_bigger {
         format!(
-            "chủ yếu do {} ({base} có {}, {compare} có {})",
+            "chủ yếu do {} ({base} có {}, {compare} có {}; {} {} và {})",
             lower_first(&split.volume_label),
             build_number_text_with(&numbers.base_volume, digits),
-            build_number_text_with(&numbers.compare_volume, digits)
+            build_number_text_with(&numbers.compare_volume, digits),
+            lower_first(&split.price_label),
+            build_number_text_with(&numbers.base_price, digits),
+            build_number_text_with(&numbers.compare_price, digits)
         )
     } else {
         format!(
@@ -249,6 +255,13 @@ fn build_outlier_item(e: &Explanation, group: &GroupContribution, notes: &GroupN
         (GroupPresence::Gone, Comparison::Groups) => {
             format!("{name} chỉ có ở {} ({amount})", e.base.label)
         }
+        (GroupPresence::Both, _) if notes.sign_flip => format!(
+            "{name} đổi dấu, từ {} ở {} sang {} ở {} ({amount})",
+            build_number_text_with(&group.base_value, digits),
+            e.base.label,
+            build_number_text_with(&group.compare_value, digits),
+            e.compare.label
+        ),
         (GroupPresence::Both, _) => match (&notes.percent_change, &e.percent_change) {
             (Some(own), Some(whole)) => format!(
                 "{name} {} trong khi mức chung {}",

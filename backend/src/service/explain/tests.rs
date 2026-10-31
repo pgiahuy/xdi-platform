@@ -5,7 +5,7 @@ why (ask/examples.rs) phải tính lại ra đúng từ các hàm này. */
 
 use rust_decimal::Decimal;
 
-use crate::service::ask::contract::{CellValue, DimensionBreakdown, ValueKind};
+use crate::service::ask::contract::{CellValue, DimensionBreakdown, GroupContribution, ValueKind};
 use crate::service::ask::examples::build_why_example;
 use crate::service::explain::*;
 
@@ -36,6 +36,7 @@ fn ranked(
             groups: build_group_contributions(groups).expect("contributions"),
             mix_effect: None,
             rate_effect: None,
+            has_outliers: false,
         },
         score: build_dimension_score(groups, d(totals.0), d(totals.1), mode).expect("score"),
     }
@@ -160,8 +161,22 @@ fn why_example_matches_the_code() {
             })
             .collect();
         let rebuilt = build_group_contributions(&groups).expect("contributions");
-        let expected = serde_json::to_value(&dimension.groups).expect("serialize example");
-        assert_eq!(serde_json::to_value(&rebuilt).expect("serialize"), expected);
+        // Chỉ so số và thứ tự; ghi chú của nhóm (% tác động...) annotate.rs điền sau, có test riêng.
+        let numbers = |groups: &[GroupContribution]| -> Vec<[String; 4]> {
+            groups
+                .iter()
+                .map(|g| {
+                    let value = g.value.as_ref().map(build_value_text).unwrap_or_default();
+                    [
+                        value,
+                        g.base_value.clone(),
+                        g.compare_value.clone(),
+                        g.contribution.clone(),
+                    ]
+                })
+                .collect()
+        };
+        assert_eq!(numbers(&rebuilt), numbers(&dimension.groups));
         all_groups.push((dimension.column.clone(), groups));
     }
     let only_groups: Vec<Vec<GroupValues>> = all_groups.iter().map(|(_, g)| g.clone()).collect();
