@@ -8,4 +8,6 @@ data
 # Riêng gói khái niệm ngành vẫn vào context: backend/build.rs nhúng chúng vào binary (Dockerfile chép data/domains/).
 !data/domains
 release
+# Extension DuckDB tải cho make dev (40 MB); image tự tải ở stage riêng của backend/Dockerfile.
+duckdb-extensions
 .env

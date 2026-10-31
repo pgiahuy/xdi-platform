@@ -3,8 +3,8 @@
 
 Cách đọc: chụp bảng thành phiên bản Parquet như nạp file, không truy vấn thẳng database ngoài lúc hỏi. Nhờ vậy hồ sơ
 cột, bằng chứng, dòng nguồn và câu hỏi cũ vẫn tái lập được trên đúng bản đã chụp; "Chụp lại" tạo phiên bản mới. Chép
-bảng ở postgres.rs (lý do không dùng extension của DuckDB ghi ở đó), mã hóa ở secret.rs, rồi đi tiếp service/ingest.rs
-như một file CSV.
+bảng ở postgres.rs (COPY ra CSV) hoặc direct.rs (DuckDB đọc thẳng ra Parquet, SOURCE_SNAPSHOT_MODE), mã hóa ở
+secret.rs, rồi đi tiếp service/ingest.rs như một file nạp.
 
 Một lần chụp lấy một bảng cùng các bảng nối với nó theo khóa ngoại (relations.rs tìm, snapshot.rs chụp): mỗi bảng thành
 một dataset riêng, khóa ngoại giữa chúng ghi thành quan hệ giữa các dataset. Không nối thành bảng phẳng, nên không có
@@ -16,6 +16,7 @@ Bảo vệ:
 - Thông tin kết nối mã hóa bằng SOURCE_SECRET_KEY trước khi lưu; mật khẩu không bao giờ có trong response, log hay
   prompt. Cột _source_file ghi postgres://máy/database/schema.bảng, không có tài khoản hay mật khẩu. */
 
+mod direct;
 mod key_file;
 mod pg_types;
 mod postgres;
@@ -23,6 +24,8 @@ mod relations;
 mod secret;
 mod snapshot;
 
+#[cfg(test)]
+mod direct_tests;
 #[cfg(test)]
 mod tests;
 

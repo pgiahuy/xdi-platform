@@ -60,6 +60,7 @@ async fn receive(
         files: Vec::new(),
         sheets: Vec::new(),
         database_source: None,
+        format: None,
     };
     let limit = state.config.max_upload_bytes;
     let mut received: u64 = 0;

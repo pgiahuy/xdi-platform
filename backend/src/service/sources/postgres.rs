@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/sources/postgres.rs - đọc một database Postgres bên ngoài: thử kết nối, liệt kê bảng, chép một bảng ra file
-CSV. service/sources/mod.rs gọi các hàm ở đây, rồi đưa file CSV vào đường nạp sẵn có (service/ingest.rs).
+/* service/sources/postgres.rs - đọc một database Postgres bên ngoài bằng sqlx: thử kết nối, liệt kê bảng, đếm dòng,
+chép một bảng ra file CSV. service/sources/mod.rs gọi các hàm ở đây, rồi đưa file vào đường nạp sẵn có
+(service/ingest.rs).
 
-Vì sao không dùng extension postgres của DuckDB: INSTALL postgres tải extension từ extensions.duckdb.org lúc chạy,
-đúng bản DuckDB đã biên dịch kèm. Image Docker chạy bằng user không có thư mục home (nơi DuckDB lưu extension) và máy
-cài đặt có thể không ra được Internet, nên tính năng sẽ hỏng tùy nơi cài. sqlx đã có trong dự án, nói chuyện trực tiếp
-với Postgres; lệnh COPY ... TO STDOUT (FORMAT csv) để Postgres tự ghi mọi kiểu cột thành chữ. DuckDB đọc lại file đó
-với kiểu từng cột lấy từ Postgres (pg_types.rs), không đoán như với file CSV nạp tay.
+Chép dữ liệu có hai cách, chọn bằng SOURCE_SNAPSHOT_MODE (snapshot.rs). copy: lệnh COPY ... TO STDOUT (FORMAT csv) ở
+đây để Postgres tự ghi mọi kiểu cột thành chữ, DuckDB đọc lại file đó với kiểu từng cột lấy từ Postgres (pg_types.rs),
+không đoán như với file CSV nạp tay. direct (direct.rs): DuckDB đọc thẳng Postgres bằng extension postgres và ghi
+Parquet một bước. Trước #246 dự án tránh extension này vì INSTALL postgres tải nó từ extensions.duckdb.org lúc chạy:
+image chạy bằng user không có thư mục home, máy cài có thể không ra Internet. Nay file extension đúng bản DuckDB được
+đóng sẵn lúc build và nạp bằng đường dẫn cục bộ; không nạp được thì quay về COPY. Danh sách bảng, đếm dòng, kiểu cột
+và khóa ngoại luôn đọc bằng sqlx ở đây, cách nào cũng vậy.
 
 Kết nối luôn chỉ đọc: phiên đặt default_transaction_read_only, kèm statement_timeout. Vẫn nên cấp cho xdi một tài
 khoản chỉ có quyền SELECT (docs/INSTALL.md).
@@ -27,6 +30,7 @@ use sqlx::{ConnectOptions, Connection, Executor};
 use tokio::io::AsyncWriteExt;
 
 use super::pg_types;
+use crate::engine::analytics::FileFormat;
 use crate::error::AppError;
 
 /// Thông tin kết nối đầy đủ, kể cả mật khẩu. Chỉ tồn tại trong bộ nhớ lúc kết nối và dưới dạng đã mã hóa trong
@@ -121,11 +125,11 @@ pub async fn list_tables(c: &mut PgConnection) -> Result<Vec<SourceTable>, AppEr
 
 /// Định danh SQL trong ngoặc kép, nhân đôi ngoặc kép bên trong. Tên bảng còn được đối chiếu với list_tables trước
 /// khi tới đây, nên không có tên nào người dùng gõ tự do đi thẳng vào câu SQL.
-fn quote_ident(name: &str) -> String {
+pub(super) fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-fn qualified(table: &SourceTable) -> String {
+pub(super) fn qualified(table: &SourceTable) -> String {
     format!(
         "{}.{}",
         quote_ident(&table.schema),
@@ -156,10 +160,17 @@ pub async fn count_rows(c: &mut PgConnection, table: &SourceTable) -> Result<i64
         .map_err(|e| query_error(&e))
 }
 
-/// File CSV vừa chép: SHA-256 của nội dung và kiểu DuckDB của từng cột (pg_types.rs).
-pub struct CsvCopy {
+/// File vừa chép một bảng: SHA-256 của nội dung, kiểu DuckDB của từng cột (pg_types.rs) và định dạng file (CSV của
+/// COPY ở đây, Parquet của DuckDB ở direct.rs).
+pub struct TableCopy {
     pub sha256: String,
     pub column_types: Vec<(String, String)>,
+    pub format: FileFormat,
+}
+
+/// Câu SELECT chép cả bảng; pg_types::column_types đọc kiểu cột từ đúng câu này.
+pub(super) fn select_all(table: &SourceTable) -> String {
+    format!("SELECT * FROM {}", qualified(table))
 }
 
 /// Chép bảng ra file CSV có dòng tiêu đề. SHA-256 của nội dung tính trong lúc ghi. Quá max_bytes thì dừng và báo
@@ -170,8 +181,8 @@ pub async fn copy_to_csv(
     max_rows: u64,
     max_bytes: u64,
     out_path: &Path,
-) -> Result<CsvCopy, AppError> {
-    let select = format!("SELECT * FROM {}", qualified(table));
+) -> Result<TableCopy, AppError> {
+    let select = select_all(table);
     // Kiểu cột đọc từ chính câu SELECT được chép, nên khớp đúng cột và thứ tự cột của file CSV.
     let column_types = pg_types::column_types(c, &select).await?;
     let sql = format!("COPY ({select} LIMIT {max_rows}) TO STDOUT WITH (FORMAT csv, HEADER true)");
@@ -207,9 +218,10 @@ pub async fn copy_to_csv(
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
-    Ok(CsvCopy {
+    Ok(TableCopy {
         sha256,
         column_types,
+        format: FileFormat::DatabaseCsv,
     })
 }
 

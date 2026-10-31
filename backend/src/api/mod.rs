@@ -60,6 +60,8 @@ mod row_filter_fk_tests;
 mod security_headers;
 #[cfg(test)]
 mod source_relations_tests;
+#[cfg(test)]
+mod source_snapshot_tests;
 mod sources;
 #[cfg(test)]
 mod sources_tests;
