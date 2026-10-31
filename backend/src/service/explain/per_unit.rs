@@ -22,14 +22,19 @@ use crate::service::explain::{lower_first, upper_first};
 
 /// Từ mở đầu phần "mỗi đơn vị" của một tên, viết thường. "từng" không có ở đây: "đã từng mua" không phải "mỗi".
 const PER_WORDS: &[&str] = &["mỗi", "per"];
-/// Từ nối đứng ngay trước phần "mỗi đơn vị", bỏ theo: "lợi nhuận trên mỗi đơn hàng" thành "lợi nhuận".
-const LINK_WORDS: &[&str] = &["trên", "của", "cho", "theo"];
+/// Từ nối đứng ngay trước phần "mỗi đơn vị", bỏ theo: "lợi nhuận trên mỗi đơn hàng" thành "lợi nhuận". "từ" có ở đây vì
+/// mô tả Gemini viết cho DataCo là "Khoản lợi nhuận thu được từ mỗi đơn hàng".
+const LINK_WORDS: &[&str] = &["trên", "của", "cho", "theo", "từ", "trong", "ở", "tại"];
 /// Chữ đầu nhãn của một tổng, như nhãn dựng sẵn "Tổng <cột>".
 const TOTAL_WORD: &str = "Tổng";
 
 /// Phần trước "mỗi đơn vị" của một tên: "Lợi nhuận trên mỗi đơn hàng" thành "Lợi nhuận", "Benefit per order" thành
 /// "Benefit", "profit_per_order" thành "profit". None khi tên không có phần đó, hay khi bỏ đi thì không còn gì.
 pub fn strip_per_unit(name: &str) -> Option<&str> {
+    // Chỉ đọc vế đầu, trước dấu câu hay ngoặc đầu tiên: mô tả "Lợi nhuận của dòng hàng (Order Profit Per Order; ...)"
+    // nói về dòng hàng, chữ "Per" trong ngoặc là tên nguồn chứ không phải nghĩa của cột; cắt ở đó thì nhãn hỏng ngoặc.
+    let head = name.find([',', ';', '(', '.', ':']).unwrap_or(name.len());
+    let name = name[..head].trim_end();
     let words = build_word_spans(name);
     let is_word = |index: usize, list: &[&str]| {
         let (start, end) = words[index];
