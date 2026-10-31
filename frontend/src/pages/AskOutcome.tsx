@@ -17,7 +17,6 @@ import {
 import { AnswerText } from '@/components/ask/AnswerText'
 import { AskWarnings } from '@/components/ask/AskWarnings'
 import { ClarificationForm } from '@/components/ask/ClarificationForm'
-import { SampleBadge } from '@/components/ask/SampleModeSwitch'
 import { ResultTable } from '@/components/ask/ResultTable'
 import type { DrillTarget } from '@/components/ask/evidenceTypes'
 import type { UnderstandingView } from '@/components/ask/types'
@@ -62,11 +61,15 @@ const fallbackMessage = {
 
 export function AskOutcome(props: Props) {
   const { answer, pending, latest, onCellDrill, onChangeAssumption, onAnswerClarifications } = props
-  const { response, variables } = answer
+  const { response } = answer
+  // Không có số nào thì câu trả lời đã nói đủ; cảnh báo kết quả rỗng hay cột toàn ô trống chỉ lặp lại ý đó bằng lời kỹ
+  // thuật, nên không hiện.
+  const warnings = hasNoData(response)
+    ? response.warnings.filter((warning) => warning.code !== 'empty_result' && warning.code !== 'all_null')
+    : response.warnings
   return (
     <div aria-busy={pending} className={cn('flex min-w-0 flex-col gap-5', pending && 'pointer-events-none opacity-60')}>
-      {import.meta.env.DEV && variables.fromSamples && <SampleBadge />}
-      <AskWarnings messages={response.warnings.map((warning) => warning.message)} />
+      <AskWarnings messages={warnings.map((warning) => warning.message)} />
       <OutcomeBody
         answer={answer}
         pending={pending}
@@ -127,6 +130,24 @@ type AnsweredProps = {
 // cuối cùng thẻ "Đã hiểu là": người hỏi cần con số trước, cách hệ thống hiểu câu hỏi là phần để kiểm lại. Bảng phân rã
 // đủ mọi chiều và SQL đứng sau từng con số thuộc pane minh chứng (#52).
 function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumption }: AnsweredProps) {
+  const understanding = response.understanding && (
+    <UnderstandingCard
+      understanding={buildUnderstandingView(response.understanding)}
+      onChangeAssumption={onChangeAssumption}
+      disabled={pending}
+      defaultOpen={latest}
+    />
+  )
+  // Không có số nào: chỉ câu trả lời và thẻ "Hệ thống đã hiểu là" (để thấy đã hỏi kỳ, nhóm nào), không bảng trống hay
+  // biểu đồ rỗng. Backend cũ không gửi câu trả lời cho kết quả 0 dòng nên có câu dự phòng.
+  if (hasNoData(response)) {
+    return (
+      <>
+        <p className="text-[15px] leading-relaxed">{response.answer_text ?? noDataText}</p>
+        {understanding}
+      </>
+    )
+  }
   const result = response.result && buildResultView(response.result)
   const chart = result && response.chart && buildChartView(response.chart, result)
   const breakdown = buildBreakdown(response).data
@@ -158,16 +179,18 @@ function AnsweredBody({ response, pending, latest, onCellDrill, onChangeAssumpti
           collapsible
         />
       )}
-      {response.understanding && (
-        <UnderstandingCard
-          understanding={buildUnderstandingView(response.understanding)}
-          onChangeAssumption={onChangeAssumption}
-          disabled={pending}
-          defaultOpen={latest}
-        />
-      )}
+      {understanding}
     </>
   )
+}
+
+const noDataText = 'Không có dữ liệu để trả lời câu hỏi này.'
+
+/** Câu thường đã trả lời mà kết quả không có số nào: không dòng nào, hay mọi ô đều trống (tổng trên tập rỗng). */
+function hasNoData(response: AskResponse): boolean {
+  const result = response.result
+  if (response.status !== 'answered' || response.explanation || !result) return false
+  return result.rows.every((row) => row.every((cell) => cell === null))
 }
 
 function buildUnderstandingView(understanding: Understanding): UnderstandingView {

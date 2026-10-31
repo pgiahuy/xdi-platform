@@ -8,7 +8,7 @@ Tiêu đề trang là h1 trên thanh trên; nội dung trang bắt đầu từ h
 Màn rộng thu gọn được thanh bên thành dải icon (nút ở chân thanh bên); trang giữ trạng thái và nhớ qua các lần tải
 trang. Ngăn kéo của màn hẹp luôn là thanh bên đầy đủ.
 Hộp tạo workspace đặt ở đây, một lần, ngoài thanh bên: mở từ ngăn kéo thì ngăn kéo đóng lại trước, và hộp không bị gỡ
-theo ngăn kéo. */
+theo ngăn kéo. Menu lịch sử trò chuyện (conversationMenu) đi thẳng vào nội dung thanh bên, ở cả hai chỗ. */
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { MenuIcon, XIcon } from 'lucide-react'
@@ -19,7 +19,14 @@ import { SidebarContent } from './SidebarContent'
 import { UserMenu } from './UserMenu'
 import { roleLabel } from './labels'
 import { CreateWorkspaceDialog } from './CreateWorkspaceDialog'
-import type { LinkComponent, NavItem, ServerInfo as ServerInfoData, SignedInUser, WorkspaceOption } from './types'
+import type {
+  ConversationMenu,
+  LinkComponent,
+  NavItem,
+  ServerInfo as ServerInfoData,
+  SignedInUser,
+  WorkspaceOption,
+} from './types'
 
 // Mốc lg của Tailwind, cùng mốc với các lớp lg: bên dưới. Đổi mốc thì đổi cả hai.
 const WIDE_LAYOUT_QUERY = '(min-width: 1024px)'
@@ -43,6 +50,8 @@ type Props = {
   /** Thanh bên màn rộng đang thu gọn thành dải icon. */
   sidebarCollapsed?: boolean
   onSidebarCollapsedChange?: (collapsed: boolean) => void
+  /** Menu lịch sử trò chuyện trên thanh bên; không có thì thanh bên không có nút đó. */
+  conversationMenu?: ConversationMenu
   link: LinkComponent
   children: ReactNode
 }
@@ -122,6 +131,7 @@ export function AppShell(props: Props) {
               <SheetDescription className="sr-only">Đổi workspace và chọn trang</SheetDescription>
               <SidebarContent
                 {...props}
+                drawer
                 onNavigate={closeDrawer}
                 onCreateWorkspace={openCreateWorkspace}
                 closeButton={

@@ -3,8 +3,8 @@
 (DatabaseSources.tsx) cho admin.
 Vai lấy từ /auth/me (đã có trong bộ đệm, AppLayout vừa đọc). Ẩn khung nạp với member chỉ để giao diện gọn;
 quyền thật nằm ở backend, member gọi thẳng API vẫn nhận 403.
-Hồ sơ cột, chỉ số và biểu đồ dựng sẵn của từng dataset ở khung tổng quan (DatasetOverviewSection.tsx, #198), mở bằng
-nút Tổng quan của dòng dataset. */
+Hồ sơ cột, chỉ số và biểu đồ dựng sẵn của từng dataset ở trang Tổng quan dữ liệu (OverviewPage.tsx, #198); nút Tổng
+quan của dòng dataset mở trang đó với đúng dataset. */
 
 import { useRef, useState } from 'react'
 import { useParams } from 'react-router'
@@ -17,9 +17,9 @@ import { EmptyState } from '@/components/EmptyState'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
 import { DatabaseSources } from './DatabaseSources'
-import { DatasetOverviewSection } from './DatasetOverviewSection'
 import { DatasetUpload } from './DatasetUpload'
 import { RouterLink } from './RouterLink'
+import { overviewHref } from './workspaceNav'
 
 export function DatasetsPage() {
   const { ws = '' } = useParams()
@@ -35,8 +35,6 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
   const snapshot = useSnapshot(ws)
   const [listError, setListError] = useState<string>()
   const [target, setTarget] = useState<Dataset>()
-  const [overviewId, setOverviewId] = useState<string>()
-  const overviewDataset = datasets.data?.find((d) => d.id === overviewId)
   const uploadHeading = useRef<HTMLHeadingElement>(null)
 
   const isAdmin = me.data?.workspaces.find((m) => m.slug === ws)?.role === 'admin'
@@ -87,11 +85,11 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
           Dataset của workspace
         </h2>
         <ListBody
+          ws={ws}
           datasets={datasets.data}
           error={datasets.error}
           onRetry={() => datasets.refetch()}
           isAdmin={isAdmin}
-          onOverview={(row) => setOverviewId(row.id)}
           onAddVersion={addVersion}
           onSnapshotAgain={snapshotAgain}
           snapshotPending={snapshot.isPending}
@@ -100,19 +98,22 @@ function WorkspaceDatasets({ ws }: { ws: string }) {
         />
         {listError && <FormMessage kind="error">{listError}</FormMessage>}
       </section>
-      {overviewDataset && (
-        <DatasetOverviewSection ws={ws} dataset={overviewDataset} onClose={() => setOverviewId(undefined)} />
-      )}
     </div>
   )
 }
 
+/** Hai dataset có thể nối nhau theo nhiều khóa ngoại (hai chiều, hai cột); danh sách chỉ ghi mỗi dataset một lần. */
+function relatedDatasets(dataset: Dataset): { id: string; name: string }[] {
+  const byId = new Map(dataset.relations.map((r) => [r.dataset_id, { id: r.dataset_id, name: r.name }]))
+  return [...byId.values()]
+}
+
 type ListBodyProps = {
+  ws: string
   datasets: Dataset[] | undefined
   error: Error | null
   onRetry: () => void
   isAdmin: boolean
-  onOverview: (row: DatasetRow) => void
   onAddVersion: (row: DatasetRow) => void
   onSnapshotAgain: (row: DatasetRow) => void
   snapshotPending: boolean
@@ -121,7 +122,7 @@ type ListBodyProps = {
 }
 
 function ListBody(props: ListBodyProps) {
-  const { datasets, error, onRetry, isAdmin, onOverview, onAddVersion, onSnapshotAgain, snapshotPending } = props
+  const { ws, datasets, error, onRetry, isAdmin, onAddVersion, onSnapshotAgain, snapshotPending } = props
   const { onDelete, deletePending } = props
   if (error && !datasets) {
     return (
@@ -155,11 +156,12 @@ function ListBody(props: ListBodyProps) {
     tableName: d.logical_table,
     createdAt: d.created_at,
     snapshot: d.source_table ? { table: d.source_table, at: d.current_version_at } : undefined,
+    related: relatedDatasets(d),
   }))
   return (
     <DatasetList
       datasets={rows}
-      onOverview={onOverview}
+      overviewHref={(row) => overviewHref(ws, row.id)}
       onAddVersion={isAdmin ? onAddVersion : undefined}
       onSnapshotAgain={isAdmin ? onSnapshotAgain : undefined}
       snapshotPending={snapshotPending}

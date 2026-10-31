@@ -3,7 +3,7 @@
 kê bảng và bảng liên quan theo khóa ngoại, chụp một nhóm bảng thành dataset (mỗi bảng một dataset), xóa. Chỉ admin gọi
 được; member nhận 403. Mật khẩu chỉ đi một chiều lúc thêm nguồn, backend không bao giờ trả lại. */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost } from './client'
 import type { components } from './schema'
 
@@ -61,16 +61,18 @@ export function useSourceTables(ws: string, sourceId: string | undefined) {
   })
 }
 
-/** Bảng liên quan quanh bảng đang chọn, đọc lại từ database ngoài mỗi lần chọn bảng như danh sách bảng. Backend
- * nhận POST (thân là tên bảng) nhưng không đổi gì, nên dùng useQuery. */
-export function useSourceRelations(ws: string, sourceId: string, table: string) {
-  return useQuery({
-    queryKey: [...sourcesKey(ws), sourceId, 'relations', table],
-    queryFn: () =>
-      apiPost<RelationsResponse>(`${sourcesPath(ws)}/${encodeURIComponent(sourceId)}/relations`, { table }),
-    enabled: table !== '',
-    staleTime: 0,
-    retry: false,
+/** Bảng liên quan quanh từng bảng trong `tables` (bảng bắt đầu và các bảng người dùng mở thêm một bước), mỗi bảng một
+ * lần gọi, đọc lại từ database ngoài như danh sách bảng. Backend nhận POST (thân là tên bảng) nhưng không đổi gì, nên
+ * dùng query. Kết quả theo đúng thứ tự của `tables`. */
+export function useSourceRelations(ws: string, sourceId: string, tables: string[]) {
+  return useQueries({
+    queries: tables.map((table) => ({
+      queryKey: [...sourcesKey(ws), sourceId, 'relations', table],
+      queryFn: () =>
+        apiPost<RelationsResponse>(`${sourcesPath(ws)}/${encodeURIComponent(sourceId)}/relations`, { table }),
+      staleTime: 0,
+      retry: false,
+    })),
   })
 }
 

@@ -493,7 +493,7 @@ làm mất dòng này.
 viết sẵn cho dataset DataCo (mục 7, bước 1). Đổi sang `gemini` hoặc `ollama` rồi khởi động lại backend; lúc khởi động,
 backend lập hồ sơ cho các dataset còn thiếu, không phải nạp lại file.
 
-**Lỗi khi dùng Gemini.** Lời báo hiện dưới ô câu hỏi trên trang **Hỏi dữ liệu**. Log của backend có thêm dòng
+**Lỗi khi dùng Gemini.** Lời báo hiện dưới ô câu hỏi trên trang **Cuộc trò chuyện**. Log của backend có thêm dòng
 `gemini returned an error` kèm mã HTTP (`status`), mã của Google (`gemini_status`) và lời gốc của Google. Lỗi lúc lập
 hồ sơ dataset sau khi nạp thì không hiện trên giao diện, chỉ có trong log; sửa xong và khởi động lại backend thì backend
 lập lại hồ sơ. Đổi `.env` rồi chạy `docker compose up -d` là đủ để backend nhận giá trị mới.
@@ -560,7 +560,7 @@ Lần đầu mở giao diện, màn **Thiết lập lần đầu** hiện ra. L�
 `docker compose logs backend | grep setup_code`, build từ nguồn thì tìm dòng có `setup_code=` trong terminal đang chạy
 `make dev`. Điền **Mã thiết lập**, **Email quản trị**, **Mật khẩu** và **Nhập lại mật khẩu** (8 đến 128 ký tự); **Tên
 hiển thị** và **Tên workspace đầu tiên** không bắt buộc (để trống thì workspace tên là "Workspace đầu tiên"). Bấm **Tạo
-tài khoản quản trị**: giao diện đăng nhập luôn và mở trang **Hỏi dữ liệu** của workspace vừa tạo, đã có dataset mẫu
+tài khoản quản trị**: giao diện đăng nhập luôn và mở trang **Cuộc trò chuyện** của workspace vừa tạo, đã có dataset mẫu
 `DataCo` (bước 1) trừ khi `SEED_SAMPLE=false`. Chi tiết về mã thiết lập ở mục 1, Tạo tài khoản quản trị.
 
 Workspace thứ hai trở đi: mở ô chọn workspace ở đầu thanh bên, chọn **Tạo workspace** ở cuối danh sách, nhập tên.
@@ -590,13 +590,15 @@ phân rã của câu "tại sao") vẫn ở lại trong database, chỉ mất kh
 Chụp một bảng Postgres (chỉ `admin`, cần `SOURCE_SECRET_KEY` và `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình): khung
 **Database** của trang **Dữ liệu**, bấm **Kết nối database**, nhập máy chủ, cổng, database, tài khoản và mật khẩu, chọn
 bảng hay view rồi bấm **Chụp bảng thành dataset**. Bảng có khóa ngoại thì khung hiện các bảng liên quan để chụp kèm,
-mỗi bảng thành một dataset riêng. Dataset chụp từ database có nút **Chụp lại**, chụp lại cả các dataset liên quan, thay
-cho **Nạp phiên bản mới**. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
+tách hai nhóm: bảng nó trỏ tới (nhiều-một, chọn sẵn) và bảng trỏ tới nó (một-nhiều); **Xem bảng nối với ...** dưới một
+bảng đã chọn mở thêm một bước. Mỗi bảng thành một dataset riêng, tối đa 10 bảng một lần chụp. Dòng của dataset ghi
+**Liên quan:** các dataset nối với nó. Dataset chụp từ database có nút **Chụp lại**, chụp lại cả các dataset liên quan,
+thay cho **Nạp phiên bản mới**. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
 
 ### Bước 4. Chờ hồ sơ dữ liệu
 
 Phần cấu trúc của hồ sơ (kiểu và vai trò từng cột) xong ngay trong lần nạp. Phần do mô hình viết (mô tả cột, bí danh,
-câu gợi ý) chạy nền sau đó, mỗi lúc một dataset. Trong lúc chờ, trang **Hỏi dữ liệu** ghi dưới ô **Dataset**:
+câu gợi ý) chạy nền sau đó, mỗi lúc một dataset. Trong lúc chờ, trang **Cuộc trò chuyện** ghi dưới ô **Dataset**:
 "Đang lập hồ sơ dataset: câu gợi ý và mô tả cột sẽ có sau ít phút." Trang tự kiểm lại trong vài phút đầu; xong thì
 hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi được ngay cả khi hồ sơ chưa xong.
 
@@ -626,29 +628,32 @@ và cách gộp của từng cột số đo; mọi thành viên xem được, ch
 
 ### Bước 5. Hỏi
 
-Trang **Hỏi dữ liệu** là một khung trò chuyện: ô **Dataset** ở đầu khung (dính khi cuộn) chọn sẵn dataset tạo gần nhất,
+Trang **Cuộc trò chuyện** là một khung trò chuyện: ô **Dataset** ở đầu khung (dính khi cuộn) chọn sẵn dataset tạo gần nhất,
 đổi được (đổi dataset là bắt đầu cuộc mới); ô hỏi dính đáy màn. Gõ câu hỏi rồi bấm **Hỏi** (Enter để hỏi, Shift+Enter để
 xuống dòng), hoặc bấm một câu gợi ý khi cuộc còn trống để hỏi ngay. Câu gợi ý đặt câu khó lên trước, gồm hai câu "vì
 sao". Với `mock` trên DataCo, gõ "Doanh thu theo thị trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở châu Âu"
 trong cùng cuộc.
 
-Mỗi lượt là câu hỏi (căn phải) và câu trả lời (căn trái). Cột trái (màn hẹp: nút **Các cuộc trò chuyện**) liệt kê các cuộc
-đã hỏi trên dataset, mới trước, kèm nút **Cuộc trò chuyện mới**; bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó. Nút
-ở đầu cột ẩn cột này cho khung trò chuyện rộng ra, nút **Hiện danh sách cuộc trò chuyện** hiện lại. Nút ở góc trên
-phải thanh bên thu thanh bên thành dải icon. Lượt cũ
-chỉ hiện câu hỏi và tóm tắt phần đã hiểu, vì bảng kết quả không được lưu; bấm **Hỏi lại** để chạy lại câu đó. Đường dẫn
+Mỗi lượt là câu hỏi (căn phải) và câu trả lời (căn trái). Nút **Lịch sử trò chuyện** đứng đầu thanh bên (thanh bên không có
+mục riêng cho trang **Cuộc trò chuyện**: vào workspace là mở trang này, chưa hỏi gì thì có câu mời hỏi; màn hẹp: trong
+menu mở từ nút ở góc trái thanh trên), mở một khung nổi đè lên trang: mọi cuộc bạn đã hỏi trên mọi dataset của
+workspace, mới trước, mỗi cuộc ghi tiêu đề, ngày giờ bắt đầu và dataset của cuộc; tối đa 8 cuộc một lúc, nhiều hơn thì
+cuộn. Bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó, trên đúng dataset của nó; nút dấu cộng (**Cuộc trò chuyện mới**)
+ở đầu khung mở cuộc mới trên dataset đang chọn ở trang **Cuộc trò chuyện** (chưa chọn thì dataset tạo gần nhất). Khung đóng khi chọn, khi bấm ra ngoài hoặc nhấn Esc; đang chờ
+câu trả lời thì các nút trong khung tạm tắt. Nút ở góc trên phải thanh bên thu thanh bên thành dải icon. Lượt cũ chỉ
+hiện câu hỏi và tóm tắt phần đã hiểu, vì bảng kết quả không được lưu; bấm **Hỏi lại** để chạy lại câu đó. Đường dẫn
 của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cuộc.
 
 Câu có cụm khớp nhiều cột thì backend hỏi lại trước khi viết SQL: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
 SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
 
-Chưa biết dataset có gì thì bấm **Tổng quan dữ liệu** cạnh ô **Dataset** (trang **Dữ liệu**: nút **Tổng quan** ở dòng
-của dataset). Khung ghi số dòng và khoảng thời gian có dữ liệu, các cột xếp theo nhóm **Số đo**, **Chia nhóm theo**,
+Chưa biết dataset có gì thì mở mục **Tổng quan dữ liệu** trên thanh bên rồi chọn dataset ở ô **Dataset** đầu trang (nút
+**Tổng quan** ở dòng của dataset trên trang **Dữ liệu** mở trang này trên đúng dataset đó). Khung ghi số dòng và khoảng thời gian có dữ liệu, các cột xếp theo nhóm **Số đo**, **Chia nhóm theo**,
 **Thời gian**, **Mã**, **Chữ khác** (tên cột, nhãn tiếng Việt trong ngoặc, mô tả, % ô trống, số giá trị khác nhau, các
 giá trị nhiều dòng nhất), biểu đồ dựng sẵn (độ đo chính và số dòng theo tháng hay theo ngày, số dòng theo giá trị của
 từng cột chia nhóm) và các chỉ số đã định nghĩa. Bấm một cột, một giá trị, một chỉ số hay tiêu đề một biểu đồ thì câu
-hỏi được điền vào ô hỏi, ví dụ bấm `Market` trên DataCo thì "Doanh thu theo Market"; sửa câu rồi bấm **Hỏi**. Từ trang
-**Dữ liệu**, bấm như vậy mở trang hỏi trên đúng dataset đó. Khung không gọi mô hình. Hồ sơ đang lập thì khung ghi phần
+hỏi được điền vào ô hỏi của trang **Cuộc trò chuyện** trên đúng dataset đó, ví dụ bấm `Market` trên DataCo thì "Doanh
+thu theo Market"; sửa câu rồi bấm **Hỏi**. Khung không gọi mô hình. Hồ sơ đang lập thì khung ghi phần
 nào chưa có; người có vai dữ liệu chỉ xem một phần dòng thì không thấy số ô trống, số giá trị khác nhau và số dòng theo
 giá trị, vì các số đó tính trên mọi dòng.
 
@@ -659,10 +664,11 @@ lời giải thích, xem dưới). Tiếp theo là biểu đồ khi kết quả 
 đồ cột khi cột nhóm duy nhất là một chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên DataCo ra biểu đồ cột);
 các dạng khác chỉ có bảng. Bảng **Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì `Hiện 1.000 trên <tổng> dòng.`),
 phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân). **Tải CSV** tải các dòng giao diện đã
-nhận, tối đa 1000 dòng, giữ giá trị gốc. Cuối thẻ là khung **Đã hiểu là**: cách hệ thống hiểu câu hỏi, đọc từ câu SQL đã
-chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời gian** (dòng nào không có
-thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Bấm tiêu đề **Kết quả** hay **Đã hiểu
-là** để thu gọn hoặc mở phần đó; khung **Đã hiểu là** mở sẵn ở lượt mới nhất, thu gọn ở các lượt trước.
+nhận, tối đa 1000 dòng, giữ giá trị gốc. Cuối thẻ là khung **Hệ thống đã hiểu là**: cách hệ thống hiểu câu hỏi, đọc từ
+câu SQL đã chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời gian** (dòng nào
+không có thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Bấm tiêu đề **Kết quả** hay **Hệ
+thống đã hiểu là** để thu gọn hoặc mở phần đó; khung **Hệ thống đã hiểu là** mở sẵn ở lượt mới nhất, thu gọn ở các lượt
+trước.
 
 Pane **Minh chứng** nằm bên phải trên màn rộng, dưới khung trò chuyện trên màn hẹp, và hiện minh chứng của lượt đang
 chọn (mặc định lượt mới nhất); nút **Minh chứng** ở cuối mỗi câu trả lời chọn lượt đó. Nút **Thu gọn** ẩn pane, chỉ
@@ -674,7 +680,7 @@ còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**)
 - **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã: mỗi chiều một bảng giá trị
   hai kỳ (hay hai nhóm) và phần chênh lệch của từng nhóm kèm câu SQL đã chạy, và bảng **Lượng và giá** khi tách được.
   Chiều nhiều nhóm chỉ hiện 8 nhóm đóng góp lớn nhất và một dòng **Còn lại**, bấm **Xem tất cả** để mở hết. Câu thường
-  thì tab này ghi `Câu này không phải câu hỏi "tại sao", nên không có phân rã.`
+  thì tab này ghi `Câu hỏi này không có phần phân rã.`
 - **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm một ô số đo của bảng **Kết quả**, hay số của
   một kỳ hay một nhóm trong bảng phân rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
 - **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Phân loại câu hỏi, Mô hình
@@ -702,8 +708,8 @@ thu tháng 5 năm 2017 tăng", và "Tại sao doanh thu quý 3 năm 2017 giảm"
 
 Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") vẫn có phân rã: backend chọn kỳ gần nhất có dữ liệu (theo tháng
 nếu câu không nói tháng, quý hay năm) và so với kỳ liền trước. Kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó
-(dữ liệu dừng giữa kỳ) thì lùi một kỳ. Thẻ **Đã hiểu là** ghi giả định này, ví dụ "Kỳ gần nhất có dữ liệu: Quý 4/2017
-so với Quý 3/2017", kèm nút cho các kỳ gần nhất có dữ liệu; bấm một nút để hỏi lại với kỳ đó.
+(dữ liệu dừng giữa kỳ) thì lùi một kỳ. Thẻ **Hệ thống đã hiểu là** ghi giả định này, ví dụ "Kỳ gần nhất có dữ liệu: Quý
+4/2017 so với Quý 3/2017", kèm nút cho các kỳ gần nhất có dữ liệu; bấm một nút để hỏi lại với kỳ đó.
 
 Câu hỏi cần thông tin dataset không có (ví dụ "Tại sao khách hàng không hài lòng?" khi không có cột đánh giá, hay hỏi
 dự báo) thì không có bảng số: kết quả báo dữ liệu không có thông tin này, nói lý do và gợi ý các cột gần nhất để hỏi.

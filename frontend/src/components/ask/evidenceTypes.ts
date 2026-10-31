@@ -131,7 +131,7 @@ export type RowsView =
   | { state: 'idle'; hint: string }
   | { state: 'loading'; target: DrillTarget }
   | { state: 'error'; target: DrillTarget; message: string }
-  | { state: 'ready'; target: DrillTarget; sql: string; result: ResultView; page: RowsPage; sample: boolean }
+  | { state: 'ready'; target: DrillTarget; sql: string; result: ResultView; page: RowsPage }
 
 export type StepView = {
   /** Nhãn tiếng Việt do giao diện đặt cho tên bước. */

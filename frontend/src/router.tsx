@@ -3,9 +3,9 @@
 trong khung chung AppLayout; thêm trang trong workspace là thêm một route con ở đây và một dòng ở pages/workspaceNav.ts.
 Trang quản trị hệ thống và trang tài khoản ngoài workspace cũng hiện trong AppLayout nhưng không cần workspace, đường
 dẫn ở pages/globalNav.ts. Màn đăng nhập và thiết lập nằm ngoài khung, đường dẫn ở pages/authNav.ts.
-Đăng nhập, thiết lập, tài khoản, thành viên, các trang quản trị và trang Dữ liệu tải riêng khi mở (lazy): ít khi
-cần so với hỏi, hoặc kéo theo phần nạp file, nên không đóng vào gói chính. Mọi route nằm dưới một route gốc có
-errorElement, để lỗi ở bất kỳ trang nào cũng hiện câu tiếng Việt. */
+Đăng nhập, thiết lập, tài khoản, thành viên, các trang quản trị, trang Tổng quan dữ liệu và trang Dữ liệu tải riêng khi
+mở (lazy): ít khi cần so với hỏi, hoặc kéo theo phần nạp file, nên không đóng vào gói chính. Mọi route nằm dưới một
+route gốc có errorElement, để lỗi ở bất kỳ trang nào cũng hiện câu tiếng Việt. */
 
 import { createBrowserRouter } from 'react-router'
 import { StatusScreen } from '@/components/StatusScreen'
@@ -16,7 +16,7 @@ import { accountRoute, adminAccountsRoute, adminWorkspacesRoute } from '@/pages/
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { RootPage } from '@/pages/RootPage'
 import { RouteErrorPage } from '@/pages/RouteErrorPage'
-import { accountPath, membersPath, workspaceRoute } from '@/pages/workspaceNav'
+import { accountPath, membersPath, overviewPath, workspaceRoute } from '@/pages/workspaceNav'
 import { WorkspaceNotFoundPage } from '@/pages/WorkspaceNotFoundPage'
 
 async function loadAccountPage() {
@@ -46,7 +46,12 @@ export const router = createBrowserRouter([
           {
             path: workspaceRoute,
             children: [
-              { index: true, element: <AskPage /> },
+              // Trang hỏi không có mục trên thanh bên (workspaceNav.ts), nên tiêu đề đặt ở đây.
+              { index: true, element: <AskPage />, handle: { title: 'Cuộc trò chuyện' } },
+              {
+                path: overviewPath,
+                lazy: async () => ({ Component: (await import('@/pages/OverviewPage')).OverviewPage }),
+              },
               // Trang Dữ liệu kéo theo phần nạp file và chọn sheet Excel: tải riêng khi mở, như các màn đăng nhập.
               {
                 path: 'datasets',

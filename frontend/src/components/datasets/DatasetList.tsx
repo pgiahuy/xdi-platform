@@ -2,9 +2,10 @@
 /* components/datasets/DatasetList.tsx - danh sách dataset của workspace, mới tạo đứng đầu (backend sắp theo ngày tạo).
 Mỗi dataset một dòng xuống hàng được, không dùng bảng: màn 320px không đủ chỗ cho ba cột.
 onAddVersion, onSnapshotAgain và onDelete chỉ truyền vào khi người xem là admin; member không thấy các nút đó. Dataset
-chụp từ database ghi bảng nguồn, lần chụp gần nhất, và có nút "Chụp lại" thay cho nạp phiên bản mới. onOverview mở khung
-tổng quan dữ liệu của dataset (#198), cho mọi vai. Link Chỉ số (màn chỉ số của dataset) hiện với mọi người khi trang
-truyền metricsHref. */
+chụp từ database ghi bảng nguồn, lần chụp gần nhất, các dataset liên quan theo khóa ngoại, và có nút "Chụp lại" thay
+cho nạp phiên bản mới; xóa dataset có liên quan thì hộp xác nhận báo quan hệ bị xóa theo. Link Tổng quan (trang Tổng
+quan dữ liệu mở sẵn dataset đó, #198) và link Chỉ số (màn chỉ số của dataset) hiện với mọi người khi trang truyền
+overviewHref, metricsHref. */
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import type { LinkComponent } from '@/components/shell/types'
@@ -13,7 +14,8 @@ import type { DatasetRow } from './types'
 
 type Props = {
   datasets: DatasetRow[]
-  onOverview?: (dataset: DatasetRow) => void
+  /** Đường dẫn tới trang Tổng quan dữ liệu của dataset; mở bằng component link như metricsHref. */
+  overviewHref?: (dataset: DatasetRow) => string
   onAddVersion?: (dataset: DatasetRow) => void
   onSnapshotAgain?: (dataset: DatasetRow) => void
   snapshotPending?: boolean
@@ -24,11 +26,23 @@ type Props = {
   link?: LinkComponent
 }
 
+/** Dataset có liên quan thì nói rõ quan hệ mất theo, còn các dataset kia vẫn giữ. */
+function deleteText(dataset: DatasetRow): string {
+  const base = 'Dataset, mọi phiên bản và file của nó bị xóa.'
+  const count = dataset.related.length
+  const links =
+    count > 0
+      ? ` ${count} dataset khác đang nối với dataset này (${dataset.related.map((r) => r.name).join(', ')}): quan hệ` +
+        ' với chúng bị xóa theo, các dataset đó vẫn giữ nguyên.'
+      : ''
+  return `${base}${links} Không hoàn tác được.`
+}
+
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
 export function DatasetList(props: Props) {
-  const { datasets, onOverview, onAddVersion, onSnapshotAgain, snapshotPending, onDelete, deletePending } = props
-  const { metricsHref, link: Link } = props
+  const { datasets, onAddVersion, onSnapshotAgain, snapshotPending, onDelete, deletePending } = props
+  const { overviewHref, metricsHref, link: Link } = props
   return (
     <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {datasets.map((dataset) => (
@@ -53,16 +67,20 @@ export function DatasetList(props: Props) {
                 )}
               </p>
             )}
+            {dataset.related.length > 0 && (
+              <p className="text-xs break-words text-muted-foreground">
+                Liên quan: {dataset.related.map((r) => r.name).join(', ')}
+              </p>
+            )}
           </div>
-          {onOverview && (
-            <Button
-              variant="outline"
-              size="sm"
+          {overviewHref && Link && (
+            <Link
+              href={overviewHref(dataset)}
               aria-label={`Tổng quan dữ liệu của ${dataset.name}`}
-              onClick={() => onOverview(dataset)}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
               Tổng quan
-            </Button>
+            </Link>
           )}
           {metricsHref && Link && (
             <Link
@@ -109,7 +127,7 @@ export function DatasetList(props: Props) {
                 </Button>
               }
               title={`Xóa ${dataset.name}?`}
-              description="Dataset, mọi phiên bản và file của nó bị xóa. Không hoàn tác được."
+              description={deleteText(dataset)}
               confirmLabel="Xóa dataset"
               onConfirm={() => onDelete(dataset)}
             />

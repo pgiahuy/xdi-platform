@@ -3,7 +3,7 @@
 Component không dùng router (AGENTS.md mục 3), nên trang truyền vào sẵn đường dẫn đã tính và một component Link
 bọc router. Đổi router sau này chỉ cần đổi component Link đó, không sửa khung. */
 
-import type { ComponentProps, ComponentType } from 'react'
+import type { ComponentProps, ComponentType, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 
 /** Link do trang cung cấp: nhận mọi thuộc tính của thẻ a, đường dẫn đặt ở href. */
@@ -17,6 +17,13 @@ export type NavItem = {
   icon?: LucideIcon
   /** Nhóm của mục; đổi nhóm thì thanh bên vẽ một nhãn nhóm phía trên. */
   section?: string
+}
+
+/** Menu "Lịch sử trò chuyện" trên thanh bên (ConversationFlyout.tsx). Nội dung gọi API nên trang dựng nó; khung chỉ
+ * lo nút và khung nổi. */
+export type ConversationMenu = {
+  /** Nội dung khung nổi. close đóng khung, và cả ngăn kéo trên màn hẹp; trang gọi sau khi người dùng chọn một mục. */
+  render: (close: () => void) => ReactNode
 }
 
 /** Một workspace trong danh sách đổi workspace. href đã trỏ sẵn tới đúng mục đang xem của workspace đó. */

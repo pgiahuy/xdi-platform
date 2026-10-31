@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/drill.ts - truy dòng nguồn: POST /workspaces/{ws}/datasets/{id}/drill (backend/src/api/query.rs), hợp đồng ở
 backend/src/service/drill/contract.rs. Request gửi query_id cùng khóa của chỗ được bấm, không bao giờ gửi SQL. Backend
-truy được ô của bảng kết quả (cell) và dòng phân rã của câu "tại sao" (breakdown, lát cắt đọc từ queries.explanation).
-Ở chế độ dev có thể trả vài dòng mẫu (drillSamples.ts) thay vì gọi backend, như askSamples.ts. */
+truy được ô của bảng kết quả (cell) và dòng phân rã của câu "tại sao" (breakdown, lát cắt đọc từ queries.explanation). */
 
 import { useQuery } from '@tanstack/react-query'
 import { apiPost } from './client'
-import { drillFromSamples } from './drillSamples'
 import type { components } from './schema'
 
 type Schemas = components['schemas']
@@ -18,8 +16,6 @@ export type DrillResponse = Schemas['DrillResponse']
 export type DrillVariables = {
   datasetId: string
   request: DrillRequest
-  /** Chỉ ở chế độ dev: trả dòng mẫu, không gọi backend. */
-  fromSamples?: boolean
 }
 
 // Cỡ một trang dòng nguồn xin từ backend, bằng cỡ trang của ResultTable: mỗi trang backend vừa một trang bảng, nên tab
@@ -37,8 +33,7 @@ export function useDrill(ws: string, variables: DrillVariables | null) {
     queryKey: ['workspaces', ws, 'drill', variables],
     queryFn: () => {
       // enabled bảo đảm variables có giá trị khi hàm này chạy.
-      const { datasetId, request, fromSamples } = variables as DrillVariables
-      if (import.meta.env.DEV && fromSamples) return drillFromSamples(request)
+      const { datasetId, request } = variables as DrillVariables
       return apiPost<DrillResponse>(drillPath(ws, datasetId), request)
     },
     enabled: variables !== null,

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/ConversationList.tsx - danh sách cuộc trò chuyện cũ của người dùng trên dataset đang chọn (#164):
-nút "Cuộc trò chuyện mới", rồi mỗi cuộc một dòng với tiêu đề (câu hỏi đầu, backend đã rút gọn) và thời gian bắt đầu;
-cuộc đang mở có nền nhấn và aria-current. Chữ nhỏ, tiêu đề cắt ở hai dòng (đủ chữ ở title) để cột hẹp mà vẫn thấy
-nhiều cuộc. Trang đặt danh sách ở cột trái trên màn rộng và trong ngăn kéo trên màn hẹp,
-nên ở đây không quyết định chỗ đặt. */
+/* components/ask/ConversationList.tsx - danh sách cuộc trò chuyện cũ của người dùng trên mọi dataset của workspace (#164),
+nội dung khung nổi "Lịch sử trò chuyện" của thanh bên (components/shell/ConversationFlyout.tsx). Đầu khung là tiêu đề
+và nút dấu cộng mở cuộc mới; dưới là mỗi cuộc một dòng: tiêu đề (câu hỏi đầu, backend đã rút gọn), rồi dataset của cuộc
+ngang hàng với thời gian bắt đầu ở mép phải, vì mỗi cuộc hỏi trên dataset riêng; cuộc đang mở có nền nhấn và aria-current.
+Mỗi dòng cao đúng h-12 (3rem), tiêu đề một dòng (cắt bớt, đủ chữ ở title), nên khung danh sách cao tối đa 24rem
+(max-h-96) hiện vừa 8 cuộc; nhiều hơn thì chỉ danh sách cuộn, đầu khung đứng yên. Đổi chiều cao dòng thì đổi cả
+max-h. Màn thấp thì khung nổi giới hạn chiều cao, danh sách co lại (min-h-0) và hiện ít dòng hơn. */
 
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +14,7 @@ import { cn } from '@/lib/utils'
 export type ConversationEntry = {
   id: string
   title: string
+  datasetName: string
   createdAt: string
 }
 
@@ -19,32 +22,44 @@ type Props = {
   conversations: ConversationEntry[]
   activeId: string | null
   loading: boolean
-  /** Lời báo khi tải danh sách lỗi; null khi không lỗi. */
+  /** Lời báo khi tải lỗi; null khi không lỗi. */
   error: string | null
+  /** Lời hiện khi tải xong mà không có cuộc nào. */
+  emptyText: string
   onOpen: (id: string) => void
-  onNew: () => void
+  /** Không có thì không có nút mở cuộc mới (chưa có dataset để hỏi). */
+  onNew?: () => void
   disabled: boolean
 }
 
 const dateFormat = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
-export function ConversationList({ conversations, activeId, loading, error, onOpen, onNew, disabled }: Props) {
+export function ConversationList(props: Props) {
+  const { conversations, activeId, loading, error, emptyText, onOpen, onNew, disabled } = props
   return (
-    <nav aria-label="Các cuộc trò chuyện" className="flex min-h-0 flex-col gap-3">
-      <Button variant="outline" size="sm" onClick={onNew} disabled={disabled} className="w-full justify-start">
-        <Plus aria-hidden />
-        Cuộc trò chuyện mới
-      </Button>
-      <p className="text-xs font-semibold tracking-wider text-label uppercase">Đã hỏi</p>
-      {loading && <p className="text-sm text-muted-foreground">Đang tải...</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+    <nav aria-label="Các cuộc trò chuyện" className="flex min-h-0 flex-col gap-2">
+      <div className="flex items-center gap-2 border-b border-border pb-2 pl-1">
+        <h2 className="min-w-0 flex-1 text-sm font-semibold">Lịch sử trò chuyện</h2>
+        {onNew && (
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Cuộc trò chuyện mới"
+            title="Cuộc trò chuyện mới"
+            onClick={onNew}
+            disabled={disabled}
+          >
+            <Plus aria-hidden />
+          </Button>
+        )}
+      </div>
+      {loading && <p className="px-1 text-sm text-muted-foreground">Đang tải...</p>}
+      {error && <p className="px-1 text-sm text-destructive">{error}</p>}
       {!loading && !error && conversations.length === 0 && (
-        <p className="text-sm text-muted-foreground">Chưa có cuộc trò chuyện nào trên dataset này.</p>
+        <p className="px-1 text-sm text-muted-foreground">{emptyText}</p>
       )}
       {conversations.length > 0 && (
-        // Chỉ danh sách cuộn, nút "Cuộc trò chuyện mới" và nhãn ở trên đứng yên: danh sách dài thì vẫn tạo cuộc mới được
-        // mà không phải cuộn ngược lên. Trong ngăn kéo của màn hẹp không có giới hạn chiều cao nên ngăn kéo cuộn cả khối.
-        <ul className="-mr-1 flex min-h-0 flex-col gap-1 overflow-y-auto pr-1">
+        <ul className="scrollbar-subtle -mr-1 flex max-h-96 min-h-0 flex-col overflow-y-auto pr-1">
           {conversations.map((item) => {
             const active = item.id === activeId
             return (
@@ -55,15 +70,22 @@ export function ConversationList({ conversations, activeId, loading, error, onOp
                   onClick={() => onOpen(item.id)}
                   disabled={disabled}
                   className={cn(
-                    'flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-[13px] leading-snug outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60',
-                    active && 'bg-secondary font-medium text-secondary-foreground',
+                    // Viền focus vẽ vào trong: vùng cuộn cắt mất viền vẽ ra ngoài ở dòng đầu và dòng cuối.
+                    // Rê chuột và cuộc đang mở dùng màu nhãn pha nhạt, đậm hơn nền muted gần trùng nền trắng của khung.
+                    'flex h-12 w-full flex-col justify-center gap-0.5 rounded-md px-2 text-left text-[13px] leading-snug transition-colors outline-none hover:bg-label/15 hover:text-label focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:opacity-60',
+                    active && 'bg-label/20 font-medium text-label',
                   )}
                 >
-                  <span className="line-clamp-2 wrap-break-word" title={item.title}>
+                  {/* Hàng trên: tiêu đề; hàng dưới: dataset của cuộc và ngày giờ ngang hàng, ngày giờ sát mép phải. Mỗi
+                  cuộc chỉ trên một dataset (đổi dataset ở trang cuộc trò chuyện là mở cuộc mới). */}
+                  <span className="truncate" title={item.title}>
                     {item.title}
                   </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {dateFormat.format(new Date(item.createdAt))}
+                  <span className="flex items-baseline gap-2 text-[11px] font-normal text-muted-foreground">
+                    <span className="min-w-0 flex-1 truncate" title={item.datasetName}>
+                      {item.datasetName}
+                    </span>
+                    <span className="shrink-0">{dateFormat.format(new Date(item.createdAt))}</span>
                   </span>
                 </button>
               </li>

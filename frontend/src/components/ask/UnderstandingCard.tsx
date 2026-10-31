@@ -49,7 +49,7 @@ export function UnderstandingCard({ understanding: u, onChangeAssumption, disabl
         className="text-xs font-semibold tracking-wider text-label uppercase"
       >
         <CircleCheck aria-hidden className="size-4" />
-        Đã hiểu là
+        Hệ thống đã hiểu là
       </SectionHeading>
       <div id={bodyId} hidden={!open} className="flex flex-col gap-3">
         <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
