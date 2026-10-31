@@ -8,9 +8,14 @@ Vì sao nhờ mô hình thay cho so từ khóa: tiếng Việt có nhiều cách
 (build_question_kind của explain/form.rs) vẫn giữ làm đường dự phòng: mô hình lỗi, quá giờ hay trả JSON không đọc được
 thì dùng luật đó, câu hỏi vẫn chạy, và bước classify có ok = false kèm lý do.
 
-Prompt chỉ có câu hỏi, tên cột kèm bí danh và mô tả (để mô hình nhận ra "lý do" là tên cột), và câu hỏi của các lượt
-trước trong cuộc trò chuyện. Không có giá trị nào của cột, không có dòng dữ liệu (docs/PRIVACY.md). Chữ của prompt ở
-backend/prompts/classify_question.txt. Test ở ask/classify_tests.rs. */
+Prompt có câu hỏi, metadata đủ của mọi cột của mọi bảng câu hỏi đọc (tên, kiểu, vai trò, đơn vị, cách gộp, mô tả, bí
+danh, như prompt SQL, #230; để mô hình nhận ra "lý do" là tên cột), và câu hỏi của các lượt trước trong cuộc trò
+chuyện. Không có giá trị nào của cột, không có dòng dữ liệu (docs/PRIVACY.md). Không bỏ cột nào khi prompt dài: chỉ khi
+tổng metadata vượt trần (ask/context.rs apply_metadata_cap) thì cột không liên quan rút về dòng gọn. Chữ của prompt ở
+backend/prompts/classify_question.txt. Test ở ask/classify_tests.rs.
+
+Mô hình trả thêm `columns`: các cột câu hỏi cần, dạng bảng.cột. Tên không có thật thì bỏ qua. ask/mod.rs dùng chúng để
+chọn cột được gửi đủ danh sách giá trị ở lượt viết SQL. Mô hình lỗi hay rơi về luật từ khóa thì columns rỗng. */
 
 use std::time::{Duration, Instant};
 
@@ -20,10 +25,10 @@ use serde_json::json;
 use crate::config::Config;
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
-use crate::engine::store::ProfileRole;
 use crate::service::ask::context::ColumnProfile;
 use crate::service::ask::contract::{AskStep, StepName};
-use crate::service::ask::prompt::{build_within_limit, Detail};
+use crate::service::ask::group_prompt::TableContext;
+use crate::service::ask::prompt::{build_column_metadata, PROMPT_MAX_CHARS};
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::run::build_duration_text;
 use crate::service::ask::why::build_narrate_timeout;
@@ -37,8 +42,10 @@ pub struct ClassifyInput<'a> {
     /// Bảng logic của dataset, như trong prompt SQL.
     pub table: &'a str,
     pub question: &'a str,
-    /// Cột của ngữ cảnh (ask/context.rs). Chỉ đọc tên, bí danh và mô tả; danh sách giá trị không vào prompt.
+    /// Cột của ngữ cảnh (ask/context.rs) của bảng đang chọn. Chỉ đọc metadata; danh sách giá trị không vào prompt.
     pub columns: &'a [ColumnProfile],
+    /// Các bảng liên quan câu hỏi đọc được (ask/group_prompt.rs, #213); rỗng khi câu chỉ đọc bảng đang chọn.
+    pub related: &'a [TableContext],
     /// Câu hỏi của các lượt trước, cũ trước; rỗng khi câu mở đầu cuộc trò chuyện.
     pub earlier: &'a [String],
 }
@@ -48,6 +55,8 @@ pub struct Classified {
     pub kind: QuestionKind,
     /// true khi mô hình chọn; false khi dùng luật từ khóa.
     pub by_model: bool,
+    /// Cột mô hình nói câu hỏi cần, cặp (bảng logic, tên cột), đều có thật; rỗng khi dùng luật từ khóa.
+    pub columns: Vec<(String, String)>,
     pub step: AskStep,
 }
 
@@ -56,6 +65,9 @@ pub struct Classified {
 struct ClassifyReply {
     kind: ReplyKind,
     reason: String,
+    /// Mock và mô hình không theo schema có thể bỏ trường này.
+    #[serde(default)]
+    columns: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -107,10 +119,16 @@ pub async fn classify(
                 .chars()
                 .take(MAX_REASON_CHARS)
                 .collect();
-            let detail = format!("{}: {reason}", build_kind_text(kind));
+            let columns = build_reply_columns(input, &parsed.columns);
+            let mut detail = format!("{}: {reason}", build_kind_text(kind));
+            if !columns.is_empty() {
+                let names: Vec<String> = columns.iter().map(|(t, c)| format!("{t}.{c}")).collect();
+                detail.push_str(&format!(" Cột cần: {}.", names.join(", ")));
+            }
             Classified {
                 kind,
                 by_model: true,
+                columns,
                 step: build_step(started, true, detail),
             }
         }
@@ -133,22 +151,14 @@ pub fn build_classify_timeout(config: &Config) -> Duration {
     config.classify_timeout.min(build_narrate_timeout(config))
 }
 
-/// Prompt phân loại: luật ở backend/prompts/classify_question.txt, rồi danh sách cột, câu hỏi trước và câu hỏi. Cùng
-/// trần PROMPT_MAX_CHARS với prompt SQL (build_within_limit): dài hơn thì chỉ giữ cột khớp câu hỏi và cột thời gian.
-/// Prompt này không có danh sách giá trị nên ngắn hơn prompt SQL nhiều, ít khi chạm trần.
+/// Prompt phân loại: luật ở backend/prompts/classify_question.txt, rồi metadata cột của từng bảng, câu hỏi trước và câu
+/// hỏi. Không hạ mức chi tiết theo PROMPT_MAX_CHARS như prompt SQL: prompt này không có giá trị nào để bỏ, và bỏ cột
+/// là điều #230 không cho; vượt trần thì chỉ ghi log.
 pub fn build_classify_prompt(input: &ClassifyInput<'_>) -> String {
-    build_within_limit(|detail| build_prompt_text(input, detail))
-}
-
-fn build_prompt_text(input: &ClassifyInput<'_>, detail: Detail) -> String {
-    let columns: Vec<String> = input
-        .columns
-        .iter()
-        .filter(|c| {
-            detail < Detail::MatchedColumns || c.matched || c.role == ProfileRole::Time.as_str()
-        })
-        .map(build_column_line)
-        .collect();
+    let mut blocks = vec![build_table_lines(input.table, input.columns)];
+    for table in input.related {
+        blocks.push(build_table_lines(&table.table, &table.columns));
+    }
     let earlier = if input.earlier.is_empty() {
         "(none)".to_string()
     } else {
@@ -159,31 +169,76 @@ fn build_prompt_text(input: &ClassifyInput<'_>, detail: Detail) -> String {
             .collect();
         lines.join("\n")
     };
-    fill(
+    let prompt = fill(
         &prompts::CLASSIFY_QUESTION,
         &[
             ("table", input.table),
             ("max_reason_chars", &MAX_REASON_CHARS.to_string()),
-            ("columns", &columns.join("\n")),
+            ("columns", &blocks.join("\n\n")),
             ("earlier", &earlier),
             ("question", input.question.trim()),
         ],
-    )
+    );
+    if prompt.chars().count() > PROMPT_MAX_CHARS {
+        tracing::warn!(
+            chars = prompt.chars().count(),
+            "classify prompt is over the limit; sending it anyway"
+        );
+    }
+    prompt
 }
 
-/// Một dòng cột: tên trong nháy kép như prompt SQL, bí danh, mô tả. Không có vai trò hay giá trị: mô hình chỉ cần biết
-/// tên nào là tên cột.
-fn build_column_line(column: &ColumnProfile) -> String {
-    let mut line = format!("- \"{}\"", column.name);
-    if !column.aliases.is_empty() {
-        line.push_str(&format!(" (aliases: {})", column.aliases.join(", ")));
-    }
-    if let Some(description) = column.description.as_deref().map(str::trim) {
-        if !description.is_empty() {
-            line.push_str(&format!(": {description}"));
+/// Khối cột của một bảng: dòng tên bảng, rồi mỗi cột một dòng metadata như prompt SQL (không giá trị). Cột gọn chỉ
+/// có tên, kiểu, vai trò.
+fn build_table_lines(table: &str, columns: &[ColumnProfile]) -> String {
+    let mut lines = vec![format!("Table {table}:")];
+    for column in columns {
+        if column.brief {
+            lines.push(format!(
+                "- \"{}\" ({}, {})",
+                column.name, column.data_type, column.role
+            ));
+        } else {
+            lines.push(build_column_metadata(column));
         }
     }
-    line
+    lines.join("\n")
+}
+
+/// Cột mô hình trả, chỉ giữ cột có thật: "bảng.cột" với bảng là một bảng của câu hỏi, hay tên cột trơn của bảng đang
+/// chọn. Nháy kép quanh tên được bỏ. Mỗi cột một lần, giữ thứ tự mô hình viết.
+fn build_reply_columns(input: &ClassifyInput<'_>, names: &[String]) -> Vec<(String, String)> {
+    let mut tables: Vec<(&str, &[ColumnProfile])> = vec![(input.table, input.columns)];
+    tables.extend(
+        input
+            .related
+            .iter()
+            .map(|t| (t.table.as_str(), t.columns.as_slice())),
+    );
+    let exists = |table: &str, column: &str| {
+        tables
+            .iter()
+            .any(|(t, columns)| *t == table && columns.iter().any(|c| c.name == column))
+    };
+    let unquote = |text: &str| text.trim().trim_matches('"').to_string();
+    let mut found: Vec<(String, String)> = Vec::new();
+    for name in names {
+        let name = name.trim();
+        let qualified = name.split_once('.').and_then(|(t, c)| {
+            let (t, c) = (unquote(t), unquote(c));
+            exists(&t, &c).then_some((t, c))
+        });
+        let plain = || {
+            let c = unquote(name);
+            exists(input.table, &c).then(|| (input.table.to_string(), c))
+        };
+        if let Some(pair) = qualified.or_else(plain) {
+            if !found.contains(&pair) {
+                found.push(pair);
+            }
+        }
+    }
+    found
 }
 
 /// JSON Schema của câu trả lời, gửi kèm request (LlmRequest::json_schema).
@@ -199,6 +254,11 @@ pub fn build_classify_schema() -> serde_json::Value {
             "reason": {
                 "type": "string",
                 "description": "One short Vietnamese sentence saying why"
+            },
+            "columns": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Columns the question needs, each as table.column with names exactly as listed; empty when unsure"
             }
         },
         "required": ["kind", "reason"]
@@ -228,6 +288,7 @@ fn fallback(question: &str, started: Instant, why: &str) -> Classified {
     Classified {
         kind,
         by_model: false,
+        columns: Vec::new(),
         step: build_step(started, false, detail),
     }
 }

@@ -48,6 +48,7 @@ fn profile(name: &str, role: &str, aliases: &[&str]) -> ColumnProfile {
         aggregation: crate::engine::store::ColumnAggregation::Sum,
         join_key: false,
         metric_column: false,
+        picked: false,
         brief: false,
     }
 }
@@ -187,10 +188,10 @@ fn column_names_compare_accents_when_both_sides_have_them() {
     assert_eq!(context.picks[0].column, "khu_vuc");
 }
 
-/// Bảng hơn 60 cột (#230): mọi cột vẫn có trong ngữ cảnh; chỉ cột khớp, cột có gợi ý giá trị và cột thời gian đủ chi
-/// tiết, cột khác gọn (brief) và không có danh sách giá trị.
+/// Bảng 76 cột (#230): mọi cột vẫn có trong ngữ cảnh và không cột nào gọn (chưa tới trần metadata); khớp cụm chỉ chọn
+/// cột liên quan. Cột trong công thức chỉ số và cột lượt phân loại chọn cũng là cột liên quan.
 #[test]
-fn wide_tables_keep_every_column_and_detail_only_matched_ones() {
+fn wide_tables_keep_every_column_and_mark_related_ones() {
     let mut columns: Vec<ColumnProfile> = (0..70)
         .map(|i| profile(&format!("Metric {i}"), "measure", &[]))
         .collect();
@@ -205,85 +206,50 @@ fn wide_tables_keep_every_column_and_detail_only_matched_ones() {
         ("Order Region", "Southern Europe", &[]),
         ("Customer Segment", "Home Office", &[]),
     ]);
-
-    let context = build_context(
+    let metric = MetricDefinition {
+        name: "Doanh số".to_string(),
+        description: String::new(),
+        expression: "SUM(\"Metric 7\")".to_string(),
+        filter: None,
+        time_column: None,
+        unit: None,
+        confirmed: true,
+    };
+    let mut with_metric = columns.clone();
+    apply_metric_columns(&mut with_metric, &[metric]);
+    let mut context = build_context(
         &build_phrases("Doanh thu theo danh mục ở châu Âu, từng segment"),
-        columns.clone(),
+        with_metric,
         &values,
         &[],
     );
     assert_eq!(names(&context), names_of(&columns));
+    assert!(context.columns.iter().all(|c| !c.brief));
+    apply_picked_columns(
+        "dataco",
+        &mut context.columns,
+        &[("dataco".to_string(), "Metric 3".to_string())],
+    );
     // Category Name: bí danh "danh mục". Market: gợi ý giá trị "châu âu". Customer Segment: "segment" là một từ của
     // tên. Category Id chỉ chứa "danh mục" trong bí danh dài hơn, mà "danh mục" đã khớp đúng Category Name.
-    let detailed: Vec<&str> = context
+    let related: Vec<&str> = context
         .columns
         .iter()
-        .filter(|c| !c.brief)
+        .filter(|c| is_related(c))
         .map(|c| c.name.as_str())
         .collect();
     assert_eq!(
-        detailed,
+        related,
         [
+            "Metric 3",
+            "Metric 7",
             "order date (DateOrders)",
             "Category Name",
             "Market",
             "Customer Segment"
         ]
     );
-    assert!(context
-        .columns
-        .iter()
-        .all(|c| c.brief != (c.matched || c.role == "time")));
     assert_eq!(hints(&context), [("Market", "Europe")]);
-    assert_eq!(column_values(&context, "Market"), ["Europe"]);
-    assert!(
-        column_values(&context, "Order Region").is_empty(),
-        "brief columns have no values"
-    );
-
-    // Cột dùng trong công thức chỉ số cũng đủ chi tiết.
-    let mut with_metric = columns.clone();
-    let metric = MetricDefinition {
-        name: "Doanh số".to_string(),
-        description: String::new(),
-        expression: "SUM(\"Metric 7\")".to_string(),
-        filter: Some("\"Order Region\" <> 'Southern Europe'".to_string()),
-        time_column: None,
-        unit: None,
-        confirmed: true,
-    };
-    apply_metric_columns(&mut with_metric, &[metric]);
-    let context = build_context(
-        &build_phrases("Doanh thu theo danh mục ở châu Âu"),
-        with_metric,
-        &values,
-        &[],
-    );
-    for name in ["Metric 7", "Order Region"] {
-        assert!(
-            !context
-                .columns
-                .iter()
-                .find(|c| c.name == name)
-                .unwrap()
-                .brief,
-            "{name}"
-        );
-    }
-    assert_eq!(column_values(&context, "Order Region"), ["Southern Europe"]);
-    assert!(
-        context
-            .columns
-            .iter()
-            .find(|c| c.name == "Metric 17")
-            .unwrap()
-            .brief
-    );
-
-    // Không cụm nào khớp: không cột nào gọn, thay vì chỉ cột thời gian đủ chi tiết.
-    let none = build_context(&build_phrases("xin chào"), columns.clone(), &values, &[]);
-    assert_eq!(none.columns.len(), columns.len());
-    assert!(none.columns.iter().all(|c| !c.brief));
 }
 
 fn names_of(columns: &[ColumnProfile]) -> Vec<&str> {

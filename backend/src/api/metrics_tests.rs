@@ -353,9 +353,9 @@ async fn saved_metric_and_avg_column_reach_the_sql_prompt() {
         ),
         "{prompt}"
     );
-    // Cột sum giữ dòng như trước.
+    // Cột sum ghi cách gộp mặc định (#230).
     assert!(
-        prompt.contains("- \"Order Item Total\" (DOUBLE, measure)"),
+        prompt.contains("- \"Order Item Total\" (DOUBLE, measure, aggregate with SUM)"),
         "{prompt}"
     );
 }

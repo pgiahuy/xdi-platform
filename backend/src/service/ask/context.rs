@@ -17,11 +17,12 @@ Các bước:
   thì bỏ qua ("doanh thu" khớp rồi thì không tìm "doanh" nữa). Một cột: dùng cột đó. Nhiều cột: điểm cao nhất hơn cột
   sau từ CLOSE_SCORE trở lên thì chọn nó và ghi lại để hiện giả định; gần nhau hơn thì câu hỏi mơ hồ, trừ khi người hỏi
   đã chọn. Giá trị không sinh mơ hồ: cùng một chữ có ở hai cột thì mô hình chọn theo ngữ cảnh của câu.
-- Mọi cột của mọi bảng câu hỏi đọc luôn được gửi, ít nhất ở dạng gọn (tên, kiểu, vai trò, bí danh): mô hình phải biết
-  mọi cột có thật, kể cả cột câu hỏi không gọi đúng tên (#230). Tới FULL_SCHEMA_MAX_COLUMNS cột thì cột nào cũng đủ chi
-  tiết. Nhiều hơn thì chia hai tầng: cột tầng hai (is_detailed: cột khớp một cụm hay có gợi ý giá trị, cột thời gian,
-  cột khóa nối bảng, cột dùng trong công thức chỉ số) có thêm mô tả, cách gộp và danh sách giá trị; cột còn lại để gọn
-  (brief). Khớp cụm vẫn dùng cho gợi ý giá trị, câu hỏi lại và để chọn cột tầng hai, không còn dùng để bỏ cột.
+- Mọi cột của mọi bảng câu hỏi đọc luôn được gửi đủ metadata (tên, kiểu, vai trò, bí danh, mô tả, đơn vị, cách gộp)
+  cho cả lượt phân loại lẫn lượt viết SQL (#230): mô hình phải biết mọi cột có thật, kể cả cột câu hỏi không gọi đúng
+  tên. Chỉ khi tổng metadata vượt COLUMN_METADATA_MAX_CHARS (cỡ 600 cột) thì cột ngoài nhóm liên quan (is_related)
+  mới rút về dòng gọn (brief: tên, kiểu, vai trò). Cột liên quan: cột khớp một cụm hay có gợi ý giá trị, cột lượt
+  phân loại chọn (picked), cột thời gian, cột khóa nối bảng, cột dùng trong công thức chỉ số. Khớp cụm vẫn dùng cho
+  gợi ý giá trị, câu hỏi lại và để chọn cột liên quan, không dùng để bỏ cột.
 - Danh sách giá trị của từng cột chiều được gửi (build_column_values), và gợi ý khớp chính xác (build_value_hints). */
 
 use std::collections::{HashMap, HashSet};
@@ -40,9 +41,10 @@ use crate::service::ask::phrases::{build_phrases, Phrase};
 use crate::service::ask::values::{load_value_index, ColumnValues, ValueEntry, ValueIndex};
 use crate::{error::AppError, state::AppState};
 
-/// Câu hỏi đọc tới ngần này cột (cộng mọi bảng) thì cột nào cũng đủ chi tiết: DataCo có 53 cột, gửi đủ vẫn gọn. Nhiều
-/// hơn thì cột không thuộc tầng hai chỉ in dạng gọn, không bị bỏ.
-pub const FULL_SCHEMA_MAX_COLUMNS: usize = 60;
+/// Trần tổng độ dài metadata cột (tính bằng metadata_chars, mọi bảng của câu hỏi) trước khi rút cột ngoài nhóm liên
+/// quan về dòng gọn: cỡ 600 cột, mỗi cột khoảng 100 ký tự tên, mô tả và bí danh. DataCo 53 cột chưa tới 6 000 ký tự,
+/// nên schema thường không bao giờ chạm trần; trần chỉ để một schema hàng nghìn cột không làm prompt quá lớn.
+pub const COLUMN_METADATA_MAX_CHARS: usize = 60_000;
 
 /// Hai cột có điểm chênh dưới ngần này là gần nhau: câu hỏi mơ hồ. Chênh từ đây trở lên thì chọn cột điểm cao.
 pub const CLOSE_SCORE: f32 = 0.1;
@@ -77,8 +79,8 @@ pub struct ColumnProfile {
     pub values: Vec<ValueEntry>,
     /// values là mọi giá trị của cột: mô hình chỉ được dùng giá trị trong danh sách. false thì danh sách chỉ là mẫu.
     pub values_complete: bool,
-    /// Có cụm của câu hỏi khớp tên, bí danh, mô tả, hoặc có gợi ý giá trị của cột. Prompt quá dài thì cột không khớp in
-    /// gọn trước (#29, #230).
+    /// Có cụm của câu hỏi khớp tên, bí danh, mô tả, hoặc có gợi ý giá trị của cột. Prompt quá dài thì cột không liên quan
+    /// mất danh sách giá trị trước (#29, #230).
     pub matched: bool,
     /// Đơn vị của cột số đo (ColumnUnit::as_str), cho luật biểu đồ (ARCHITECTURE mục 6); None khi chưa biết.
     pub unit: Option<String>,
@@ -90,8 +92,10 @@ pub struct ColumnProfile {
     /// Cột có trong biểu thức, điều kiện lọc hay cột thời gian của một chỉ số của bảng (apply_metric_columns). Luôn đủ
     /// chi tiết: mô hình tính chỉ số bằng đúng công thức đó.
     pub metric_column: bool,
-    /// Chỉ in dạng gọn: tên, kiểu, vai trò, định dạng ngày, bí danh; không mô tả, cách gộp hay danh sách giá trị. Đặt
-    /// khi câu hỏi đọc hơn FULL_SCHEMA_MAX_COLUMNS cột và cột không thuộc tầng hai (#230).
+    /// Lượt phân loại (ask/classify.rs) nói câu hỏi cần cột này.
+    pub picked: bool,
+    /// Chỉ in dạng gọn: tên, kiểu, vai trò, định dạng ngày; không bí danh, mô tả, đơn vị, cách gộp hay giá trị. Đặt khi
+    /// tổng metadata vượt COLUMN_METADATA_MAX_CHARS và cột không liên quan (apply_metadata_cap, #230).
     pub brief: bool,
 }
 
@@ -262,6 +266,7 @@ pub(crate) fn build_profiles(columns: Vec<ProfileColumn>) -> Vec<ColumnProfile> 
             aggregation: ColumnAggregation::parse(&c.aggregation).unwrap_or(ColumnAggregation::Sum),
             join_key: false,
             metric_column: false,
+            picked: false,
             brief: false,
         })
         .collect()
@@ -342,51 +347,70 @@ pub fn build_context(
         &mut matched,
     );
 
-    let mut sent = build_column_tiers(columns, &matched);
+    let mut sent = build_matched_columns(columns, &matched);
     apply_group_values(&mut [(&mut sent, index)]);
     context.columns = sent;
     context
 }
 
-/// Mọi cột, giữ thứ tự cột, đã đánh dấu matched và brief. Tới FULL_SCHEMA_MAX_COLUMNS cột, hoặc không cụm nào khớp cột
-/// nào, thì không cột nào gọn: chia tầng khi không có gì để chọn theo thì chỉ cột thời gian còn mô tả và giá trị.
-fn build_column_tiers(
+/// Mọi cột, giữ thứ tự cột, đánh dấu cột khớp câu hỏi. Không bỏ cột nào (#230).
+fn build_matched_columns(
     mut columns: Vec<ColumnProfile>,
     matched: &HashSet<usize>,
 ) -> Vec<ColumnProfile> {
     for (i, column) in columns.iter_mut().enumerate() {
         column.matched = matched.contains(&i);
     }
-    let tiered = columns.len() > FULL_SCHEMA_MAX_COLUMNS && !matched.is_empty();
-    for column in columns.iter_mut() {
-        column.brief = tiered && !is_detailed(column);
-    }
     columns
 }
 
-/// Cột tầng hai, luôn đủ chi tiết: cột khớp câu hỏi, cột thời gian (câu có kỳ nào cũng cần), cột khóa nối bảng, cột
-/// dùng trong công thức chỉ số.
-pub(crate) fn is_detailed(column: &ColumnProfile) -> bool {
+/// Cột liên quan tới câu hỏi: khớp câu hỏi hay có gợi ý giá trị, lượt phân loại chọn, cột thời gian (câu có kỳ nào cũng
+/// cần), cột khóa nối bảng, cột dùng trong công thức chỉ số. Không bao giờ rút về dòng gọn.
+pub(crate) fn is_related(column: &ColumnProfile) -> bool {
     column.matched
+        || column.picked
         || column.role == ProfileRole::Time.as_str()
         || column.join_key
         || column.metric_column
 }
 
-/// Trần FULL_SCHEMA_MAX_COLUMNS tính trên tổng cột của mọi bảng một câu hỏi đọc (#213): mỗi bảng đã qua
-/// build_column_tiers riêng, nhưng sáu bảng ba mươi cột vẫn là 180 cột. Vượt trần thì cột không thuộc tầng hai của mọi
-/// bảng thành gọn, trừ khi không cột nào của cả nhóm khớp câu hỏi (cùng lý do như build_column_tiers). Không bỏ cột
-/// nào (#230).
-pub fn apply_group_column_tiers(tables: &mut [&mut Vec<ColumnProfile>]) {
-    let total: usize = tables.iter().map(|columns| columns.len()).sum();
-    let any_matched = tables
+/// Độ dài metadata của một cột như prompt in ra (tên, kiểu, vai trò, mô tả, bí danh, đơn vị), để so với
+/// COLUMN_METADATA_MAX_CHARS. Đếm thô, không tính chữ khuôn của dòng.
+pub fn metadata_chars(column: &ColumnProfile) -> usize {
+    let text = |t: &str| t.chars().count();
+    text(&column.name)
+        + text(&column.data_type)
+        + text(&column.role)
+        + column.description.as_deref().map_or(0, text)
+        + column.aliases.iter().map(|a| text(a) + 2).sum::<usize>()
+        + column.unit.as_deref().map_or(0, text)
+}
+
+/// Đánh dấu brief cho mọi bảng của một câu hỏi (bảng đang chọn và các bảng liên quan, #213): tổng metadata vượt
+/// COLUMN_METADATA_MAX_CHARS thì cột không liên quan rút về dòng gọn, không thì không cột nào gọn. Gọi lại sau khi
+/// lượt phân loại chọn thêm cột thì tính lại từ đầu.
+pub fn apply_metadata_cap(tables: &mut [&mut Vec<ColumnProfile>]) {
+    let total: usize = tables
         .iter()
-        .any(|columns| columns.iter().any(|c| c.matched));
-    let tiered = total > FULL_SCHEMA_MAX_COLUMNS && any_matched;
+        .flat_map(|columns| columns.iter())
+        .map(metadata_chars)
+        .sum();
+    let over = total > COLUMN_METADATA_MAX_CHARS;
     for columns in tables.iter_mut() {
         for column in columns.iter_mut() {
-            column.brief = tiered && !is_detailed(column);
+            column.brief = over && !is_related(column);
         }
+    }
+}
+
+/// Đánh dấu picked cho cột lượt phân loại chọn (cặp bảng, cột; bảng là bảng logic). Gọi lại thì tính lại từ đầu.
+pub fn apply_picked_columns(
+    table: &str,
+    columns: &mut [ColumnProfile],
+    picked: &[(String, String)],
+) {
+    for column in columns {
+        column.picked = picked.iter().any(|(t, c)| t == table && *c == column.name);
     }
 }
 

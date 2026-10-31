@@ -16,6 +16,7 @@ use crate::service::ask::classify::{
 };
 use crate::service::ask::context::ColumnProfile;
 use crate::service::ask::contract::StepName;
+use crate::service::ask::group_prompt::TableContext;
 use crate::service::ask::prompt::PROMPT_MAX_CHARS;
 use crate::service::ask::values::ValueEntry;
 use crate::service::explain::form::QuestionKind;
@@ -40,6 +41,7 @@ fn column(name: &str, aliases: &[&str], description: Option<&str>) -> ColumnProf
         aggregation: crate::engine::store::ColumnAggregation::Sum,
         join_key: false,
         metric_column: false,
+        picked: false,
         brief: false,
     }
 }
@@ -103,6 +105,7 @@ async fn run(llm: &dyn LlmProvider, question: &str) -> (QuestionKind, bool, bool
         table: "dataco",
         question,
         columns: &columns,
+        related: &[],
         earlier: &[],
     };
     let classified = classify(llm, &input, TIMEOUT).await;
@@ -124,6 +127,7 @@ fn classify_prompt_matches_the_fixture() {
         table: "dataco",
         question: "Còn tháng 6 thì sao?",
         columns: &columns,
+        related: &[],
         earlier: &earlier,
     };
     check_fixture("classify_prompt.txt", &build_classify_prompt(&input));
@@ -136,11 +140,14 @@ fn prompt_has_column_names_and_aliases_but_no_values() {
         table: "dataco",
         question: "Số đơn theo lý do hủy",
         columns: &columns,
+        related: &[],
         earlier: &[],
     };
     let prompt = build_classify_prompt(&input);
     assert!(
-        prompt.contains("\"Cancel Reason\" (aliases: lý do hủy)"),
+        prompt.contains(
+            "- \"Cancel Reason\" (VARCHAR, dimension): Lý do khách hủy đơn. Also called: lý do hủy"
+        ),
         "{prompt}"
     );
     assert!(!prompt.contains("Europe"), "{prompt}");
@@ -217,6 +224,7 @@ async fn timeout_falls_back_to_keywords() {
         table: "dataco",
         question: "Vì sao lợi nhuận giảm",
         columns: &columns,
+        related: &[],
         earlier: &[],
     };
     let classified = classify(&SlowLlm, &input, Duration::from_millis(10)).await;
@@ -244,29 +252,84 @@ fn classify_timeout_is_its_own_short_limit() {
     assert_eq!(build_classify_timeout(&config), Duration::from_secs(10));
 }
 
-/// Bảng rất nhiều cột: prompt vượt PROMPT_MAX_CHARS thì chỉ còn cột khớp câu hỏi và cột thời gian, như prompt SQL.
+/// Bảng 400 cột (#230): không cột nào bị bỏ hay bị rút gọn khi chưa tới trần metadata; prompt dài hơn PROMPT_MAX_CHARS
+/// vẫn gửi nguyên. Cột của bảng liên quan cũng có, dưới tên bảng của nó.
 #[test]
-fn long_prompt_keeps_only_matched_and_time_columns() {
-    let mut columns: Vec<ColumnProfile> = (0..400)
+fn long_prompt_keeps_every_column_with_its_metadata() {
+    let columns: Vec<ColumnProfile> = (0..400)
         .map(|i| {
             column(
                 &format!("Column {i}"),
-                &[],
+                &["tên khác"],
                 Some("Mô tả khá dài để danh sách cột vượt trần ký tự của prompt"),
             )
         })
         .collect();
-    columns[7].matched = true;
-    columns[9].role = "time".to_string();
+    let related = [TableContext {
+        table: "orders".to_string(),
+        columns: vec![column("market", &[], Some("Thị trường"))],
+        metrics: Vec::new(),
+    }];
     let input = ClassifyInput {
         table: "wide",
         question: "Doanh thu theo Column 7",
         columns: &columns,
+        related: &related,
         earlier: &[],
     };
     let prompt = build_classify_prompt(&input);
-    assert!(prompt.chars().count() <= PROMPT_MAX_CHARS);
-    assert!(prompt.contains("\"Column 7\""), "{prompt}");
-    assert!(prompt.contains("\"Column 9\""), "{prompt}");
-    assert!(!prompt.contains("\"Column 8\""), "{prompt}");
+    assert!(prompt.chars().count() > PROMPT_MAX_CHARS);
+    for i in [0, 8, 399] {
+        assert!(prompt.contains(&format!(
+            "- \"Column {i}\" (VARCHAR, dimension): Mô tả khá dài để danh sách cột vượt trần ký tự của prompt. \
+             Also called: tên khác"
+        )));
+    }
+    assert!(prompt.contains("Table wide:\n"));
+    assert!(prompt.contains("Table orders:\n- \"market\" (VARCHAR, dimension): Thị trường"));
+}
+
+/// Cột mô hình trả: "bảng.cột" của mọi bảng, tên trơn của bảng đang chọn, nháy kép được bỏ; tên không có thật bỏ qua,
+/// mỗi cột một lần. Ghi vào chi tiết của bước.
+#[tokio::test]
+async fn reply_columns_keep_only_real_columns() {
+    let reply = r#"{"kind": "plain", "reason": "Hỏi số đơn.", "columns": ["dataco.Market", "\"Cancel Reason\"",
+        "orders.\"market\"", "dataco.No Such Column", "nowhere.Market", "Market"]}"#;
+    let columns = columns();
+    let related = [TableContext {
+        table: "orders".to_string(),
+        columns: vec![column("market", &[], None)],
+        metrics: Vec::new(),
+    }];
+    let input = ClassifyInput {
+        table: "dataco",
+        question: "Số đơn theo lý do hủy",
+        columns: &columns,
+        related: &related,
+        earlier: &[],
+    };
+    let llm = StubLlm(Ok(Box::leak(reply.to_string().into_boxed_str())));
+    let classified = classify(&llm, &input, TIMEOUT).await;
+    let pairs: Vec<(&str, &str)> = classified
+        .columns
+        .iter()
+        .map(|(t, c)| (t.as_str(), c.as_str()))
+        .collect();
+    assert_eq!(
+        pairs,
+        [
+            ("dataco", "Market"),
+            ("dataco", "Cancel Reason"),
+            ("orders", "market")
+        ]
+    );
+    let detail = classified.step.detail.unwrap_or_default();
+    assert!(
+        detail.contains("Cột cần: dataco.Market, dataco.Cancel Reason, orders.market."),
+        "{detail}"
+    );
+
+    // Mô hình lỗi: luật từ khóa, không có cột nào.
+    let classified = classify(&StubLlm(Err("down")), &input, TIMEOUT).await;
+    assert!(!classified.by_model && classified.columns.is_empty());
 }

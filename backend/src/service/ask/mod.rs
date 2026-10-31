@@ -87,7 +87,9 @@ use crate::service::ask::contract::{
     WarningCode,
 };
 use crate::service::ask::fanout::build_join_links;
-use crate::service::ask::group_prompt::build_group_prompt;
+use crate::service::ask::group_prompt::{
+    apply_question_columns, build_group_prompt, load_question_tables,
+};
 use crate::service::ask::plain_insight::{build_stored_breakdown, run_insight};
 use crate::service::ask::prompt::{
     build_examples_detail, build_sql_prompt, pick_examples, PromptInput,
@@ -178,8 +180,29 @@ pub async fn ask(
         });
     }
 
-    // Sau bước hỏi lại: câu còn mơ hồ thì không cần đọc giá trị của các bảng liên quan.
-    let group_prompt = build_group_prompt(state, member, &group, question, &mut context).await?;
+    // Sau bước hỏi lại: câu còn mơ hồ thì không cần đọc các bảng liên quan. Lượt phân loại nhận metadata cột của mọi
+    // bảng; cột nó chọn quyết định cột nào được gửi đủ danh sách giá trị ở lượt viết SQL (ask/context.rs).
+    let mut question_tables = load_question_tables(state, member, &group, question).await?;
+    let table = dataset.logical_table.as_str();
+    apply_question_columns(&mut context, table, &mut question_tables, &[]);
+    // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
+    let classify_input = ClassifyInput {
+        table,
+        question,
+        columns: &context.columns,
+        related: &question_tables.related,
+        earlier: &history.questions,
+    };
+    let timeout = build_classify_timeout(&state.config);
+    let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
+    steps.push(classified.step);
+    apply_question_columns(
+        &mut context,
+        table,
+        &mut question_tables,
+        &classified.columns,
+    );
+    let group_prompt = build_group_prompt(&group, question_tables);
     let input = PromptInput {
         table: &dataset.logical_table,
         question,
@@ -192,16 +215,6 @@ pub async fn ask(
         group: group_prompt.as_ref(),
     };
     let tables = &group.allowed;
-    // Phân loại sau bước hỏi lại: câu còn mơ hồ thì chưa cần biết loại, và không tốn một lần gọi mô hình.
-    let classify_input = ClassifyInput {
-        table: &dataset.logical_table,
-        question,
-        columns: &context.columns,
-        earlier: &history.questions,
-    };
-    let timeout = build_classify_timeout(&state.config);
-    let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
-    steps.push(classified.step);
     // Quan hệ giữa các bảng của câu hỏi, để chặn câu cộng lặp khi nối bảng một-nhiều (ask/fanout.rs) và để phân rã
     // nối bảng liên quan theo đúng chiều nhiều-một (explain/source.rs).
     let links = build_join_links(&group);

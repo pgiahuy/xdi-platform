@@ -19,8 +19,8 @@ Columns:
 - "Customer Lname" (VARCHAR, dimension)
   All values: 'Smith', 'O''Brien'
 - "Customer Email" (VARCHAR, dimension)
-- "Order Item Total" (DOUBLE, measure): Doanh thu sau giảm giá của dòng đơn hàng. Also called: doanh thu
-- "Sales" (DOUBLE, measure): Doanh số trước giảm giá. Also called: doanh thu gộp
+- "Order Item Total" (DOUBLE, measure, aggregate with SUM): Doanh thu sau giảm giá của dòng đơn hàng. Also called: doanh thu
+- "Sales" (DOUBLE, measure, aggregate with SUM): Doanh số trước giảm giá. Also called: doanh thu gộp
 - "order date (DateOrders)" (VARCHAR, time, date format %m/%d/%Y %H:%M): Ngày giờ đặt hàng
 - "Order Id" (BIGINT, key)
 

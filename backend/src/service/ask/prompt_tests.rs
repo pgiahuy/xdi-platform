@@ -46,6 +46,7 @@ fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
         aggregation: crate::engine::store::ColumnAggregation::Sum,
         join_key: false,
         metric_column: false,
+        picked: false,
         brief: false,
     }
 }
@@ -435,10 +436,9 @@ fn domain_terms_are_included_when_the_dataset_has_a_package() {
     assert!(prompt.contains("they explain words only"));
 }
 
-/// Vượt trần thì bỏ giá trị mẫu trước, rồi cột không khớp câu hỏi chỉ còn dạng gọn (không mô tả); cột khớp và cột thời
-/// gian luôn đủ chi tiết, không cột nào mất (#230).
+/// Vượt trần thì bỏ giá trị mẫu trước, rồi giá trị của cột không liên quan; không cột nào mất hay mất mô tả (#230).
 #[test]
-fn long_prompts_drop_sample_values_then_shorten_unmatched_columns() {
+fn long_prompts_drop_values_but_keep_every_column() {
     let mut context = dataco_context();
     let long_value = "x".repeat(200);
     let city = &mut context.columns[2];
@@ -460,77 +460,63 @@ fn long_prompts_drop_sample_values_then_shorten_unmatched_columns() {
         "the column itself stays"
     );
 
-    // Cột không khớp, mô tả rất dài: chỉ cột khớp và cột thời gian còn mô tả, cột khác còn tên và bí danh.
-    for (i, column) in context.columns.iter_mut().enumerate() {
-        if !column.matched && column.role != "time" {
-            column.description = Some(format!("{i} {}", "y".repeat(5_000)));
-        }
-    }
+    // Danh sách đủ nhưng dài của một cột không liên quan: bị bỏ ở mức thứ ba, danh sách của cột khớp vẫn còn.
+    let mode = &mut context.columns[1];
+    mode.values = (0..150)
+        .map(|i| ValueEntry {
+            value: format!("{long_value}{i}"),
+            aliases: Vec::new(),
+        })
+        .collect();
+    mode.values_complete = true;
     let prompt = build_sql_prompt(&input(QUESTION, &context, &[], &[], &[]));
     assert!(prompt.chars().count() <= PROMPT_MAX_CHARS);
-    assert!(prompt.contains("- \"Market\""));
-    assert!(prompt.contains("- \"Order Item Total\""));
-    assert!(prompt.contains("- \"order date (DateOrders)\""));
-    assert!(
-        prompt.contains("- \"Sales\" (DOUBLE, measure). Also called: doanh thu gộp\n"),
-        "{prompt}"
-    );
-    assert!(
-        !prompt.contains("yyyyy"),
-        "long descriptions of unmatched columns go"
-    );
+    assert!(!prompt.contains(&long_value));
+    assert!(prompt.contains("All values: 'Europe'"));
+    assert!(prompt.contains("- \"Shipping Mode\" (VARCHAR, dimension)"));
+    assert!(prompt
+        .contains("- \"Sales\" (DOUBLE, measure, aggregate with SUM): Doanh số trước giảm giá"));
     assert!(prompt.ends_with("Question: Doanh thu theo thị trường"));
 }
 
-/// Bảng 70 cột (#230): cột gọn vẫn có tên, kiểu, vai trò, bí danh trong prompt, không mô tả hay giá trị; cột đủ chi tiết
-/// có mô tả và giá trị; cột nhạy cảm không bao giờ kèm giá trị, kể cả khi là cột đủ chi tiết.
+/// Mọi cột có metadata đủ (#230): đơn vị, cách gộp, mô tả, bí danh của cả cột không khớp câu hỏi. Cột gọn (schema rất
+/// lớn) chỉ có tên, kiểu, vai trò, không giá trị; cột nhạy cảm không bao giờ kèm giá trị.
 #[test]
-fn wide_tables_list_every_column_and_values_only_for_detailed_ones() {
+fn every_column_has_full_metadata_unless_the_schema_is_huge() {
     let mut context = dataco_context();
-    for i in 0..62 {
-        let mut extra = column(&format!("Extra {i}"), "DOUBLE", "measure");
-        extra.description = Some(format!("Mô tả cột phụ {i}"));
-        extra.brief = true;
-        context.columns.push(extra);
-    }
+    let mut days = column("Days for shipping (real)", "INTEGER", "measure");
+    days.unit = Some("duration".to_string());
+    days.aggregation = crate::engine::store::ColumnAggregation::Avg;
+    days.description = Some("Số ngày giao thực tế".to_string());
+    context.columns.push(days);
     let mut region = column("Order Region", "VARCHAR", "dimension");
     region.aliases = vec!["khu vực".to_string()];
     region.description = Some("Vùng giao hàng".to_string());
-    // Lớp ngữ cảnh không gắn giá trị cho cột gọn; ở đây cố ý còn để kiểm lớp in của prompt.
     region.values = values(&[("Southern Europe", &[])]);
     region.values_complete = true;
-    region.brief = true;
-    context.columns.push(region);
-    let email = context
-        .columns
-        .iter_mut()
-        .find(|c| c.name == "Customer Email")
-        .unwrap();
-    email.matched = true;
-    assert!(context.columns.len() > crate::service::ask::context::FULL_SCHEMA_MAX_COLUMNS);
-
+    context.columns.push(region.clone());
     let prompt = build_sql_prompt(&input(QUESTION, &context, &[], &[], &[]));
-    assert!(
-        prompt.contains("- \"Extra 61\" (DOUBLE, measure)\n"),
-        "{prompt}"
-    );
-    assert!(prompt.contains("- \"Order Region\" (VARCHAR, dimension). Also called: khu vực\n"));
-    assert!(!prompt.contains("Mô tả cột phụ") && !prompt.contains("Vùng giao hàng"));
-    assert!(
-        !prompt.contains("Southern Europe"),
-        "brief columns carry no values"
-    );
-    assert!(
-        prompt.contains("All values: 'Europe'"),
-        "detailed columns keep their values"
-    );
-    assert!(prompt.contains("Thị trường nơi giao đơn hàng"));
-    assert!(prompt.contains("- \"Customer Email\""));
+    assert!(prompt.contains(
+        "- \"Days for shipping (real)\" (INTEGER, measure, unit duration, one value per row: aggregate it with AVG, \
+         never SUM): Số ngày giao thực tế"
+    ));
+    assert!(prompt
+        .contains("- \"Order Region\" (VARCHAR, dimension): Vùng giao hàng. Also called: khu vực"));
+    assert!(prompt.contains("All values: 'Southern Europe'"));
     assert!(
         !prompt.contains("lan@example.com"),
         "sensitive values never leave"
     );
-    assert!(prompt.contains("Every column of these tables is listed."));
+
+    region.brief = true;
+    context.columns.pop();
+    context.columns.push(region);
+    let prompt = build_sql_prompt(&input(QUESTION, &context, &[], &[], &[]));
+    assert!(
+        prompt.contains("- \"Order Region\" (VARCHAR, dimension)\n"),
+        "{prompt}"
+    );
+    assert!(!prompt.contains("Vùng giao hàng") && !prompt.contains("Southern Europe"));
 }
 
 // Prompt form câu "tại sao"
