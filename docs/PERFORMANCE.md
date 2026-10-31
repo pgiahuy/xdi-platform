@@ -3,17 +3,18 @@
 Đo ngày 31/10/2026 với Gemini `gemini-3.5-flash-lite`, trên database mẫu đầy đủ (`data/postgres-demo`). Kết quả
 chính:
 
-- Một câu hỏi thường mất khoảng 4,5 giây, gồm 3 lượt gọi mô hình chạy nối tiếp (phân loại, viết SQL, viết lời giải
-  thích). Câu "vì sao" mất 3,7 đến 4,5 giây với 2 đến 3 lượt gọi. Gần hết thời gian là chờ mô hình: phần còn lại
-  (đọc hồ sơ, guard, chạy SQL trên DuckDB, phân rã, ghi lịch sử) khoảng 100 đến 130 ms (hiệu hai trung vị).
-- Theo giá trả phí của mô hình này, một câu tốn khoảng 0,002 đến 0,003 USD. Gói miễn phí không tính tiền nhưng giới
-  hạn số lượt gọi.
+- Một câu hỏi thường mất khoảng 4 đến 4,5 giây, gồm 3 lượt gọi mô hình chạy nối tiếp (phân loại, viết SQL, viết lời
+  giải thích), thêm một lượt khi SQL phải sửa. Câu "vì sao" trên code hiện tại (có cổng chấm của #240) gồm 4 lượt
+  (phân loại, điền form, viết lời, chấm lời) và mất khoảng 5,7 giây. Gần hết thời gian là chờ mô hình: phần còn lại
+  (đọc hồ sơ, guard, chạy SQL trên DuckDB, phân rã, ghi lịch sử) khoảng 60 đến 130 ms (hiệu hai trung vị).
+- Theo giá trả phí của mô hình này, một câu thường tốn khoảng 0,003 USD, một câu "vì sao" khoảng 0,005 USD. Gói miễn
+  phí không tính tiền nhưng giới hạn số lượt gọi.
 - Lập hồ sơ cột sau khi chụp bảng: nhóm `orders` và `order_items` dùng được sau 8,5 giây thay vì 14,1 giây. Bảng
   `students` không nhanh hơn (5,1 giây trước, 5,5 giây sau) và tốn token ra gấp khoảng 2,4 lần.
 
 Số liệu dưới đây là trung vị của ít lần đo (ghi rõ ở từng bảng), trên một máy, trong một buổi. Thời gian trả lời của
-Gemini thay đổi theo tải: trong cùng buổi đo, có lúc mỗi lượt gọi mất 7 đến 10 giây và có lượt bị trả lỗi 503 (mô hình
-quá tải); các lần đo đó đã bỏ và đo lại.
+Gemini thay đổi theo tải: trong cùng buổi đo, có một lượt đo mà mỗi lượt gọi mất 7 đến 10 giây và có lượt bị trả lỗi
+503 (mô hình quá tải); lượt đó đã bỏ và đo lại. Lượt đo trên code cuối của nhánh giữ nguyên cả lỗi, ghi ở mục Câu hỏi.
 
 ## Cách đo
 
@@ -51,6 +52,18 @@ Một câu thường của bản sau bị từ chối ("Số đơn theo trạng 
 chụp bảng nên khác giữa hai bản, prompt viết SQL vì thế cũng khác. Chênh lệch thời gian giữa hai bản ở bảng trên nằm
 trong độ dao động của Gemini, không do code: hai bản gọi mô hình giống nhau cho câu hỏi. Phần code đổi cho câu hỏi là
 các câu SQL từng chiều của phân rã chạy cùng lúc; bước `explain` của câu "vì sao" giảm từ 71 ms xuống 49 ms (trung vị).
+
+Đo thêm một lượt trên code cuối của nhánh (commit `59948bf`, đã gộp #240), bản sau, mỗi câu một lần:
+
+| Loại câu | Số câu | Tổng thời gian | Chờ mô hình | Lượt gọi | Token vào | Token ra | Chi phí mỗi câu |
+|---|---|---|---|---|---|---|---|
+| Câu thường | 4 | 3,87 s | 3,81 s | 3,25 | 7 272 | 519 | 0,0035 USD |
+| Câu "vì sao" | 3 | 5,66 s | 5,56 s | 4,0 | 7 958 | 1 011 | 0,0049 USD |
+
+Câu thứ năm ("Tỷ lệ giao trễ theo phương thức vận chuyển") lỗi 502 sau 61 giây: lượt viết SQL chờ hết
+`GEMINI_TIMEOUT_SECS` (60 giây) mà Gemini không trả lời, lần hỏi lại trả 503. Cùng lượt đo, phần cột của hồ sơ
+`orders` mất 57 giây cho một lượt gọi thường mất 2 đến 4 giây. Thời gian trung vị vì thế không nói hết: thỉnh thoảng
+một lượt gọi chậm gấp chục lần.
 
 Theo loại việc, bản trước (16 câu, bản sau tương tự):
 
