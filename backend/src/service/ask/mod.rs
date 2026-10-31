@@ -149,9 +149,11 @@ pub async fn ask(
     let picked = build_allowed_table(state, member, &dataset, &version, &columns).await?;
     let group = load_group(state, member, (&dataset, &version, &columns), picked).await?;
     let join_keys = group.join_keys(dataset.id);
-    let mut context =
-        build_ask_context_with_keys(state, ws, &version, question, choices, &join_keys).await?;
+    // Chỉ số đọc trước ngữ cảnh: cột trong công thức chỉ số luôn được gửi đủ chi tiết (ask/context.rs).
     let metrics = state.store.list_metrics(ws, dataset.id).await?;
+    let mut context =
+        build_ask_context_with_keys(state, ws, &version, question, choices, &join_keys, &metrics)
+            .await?;
     let examples = state
         .store
         .list_approved_examples(ws, dataset.id, EXAMPLE_POOL)

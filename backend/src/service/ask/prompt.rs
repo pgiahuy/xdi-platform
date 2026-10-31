@@ -27,7 +27,7 @@ use crate::engine::guard::build_prompt_rules;
 use crate::engine::prompts::{self, fill};
 use crate::engine::store::{ColumnAggregation, MetricDefinition, ProfileRole, PromptExample};
 use crate::service::ask::choices::COLUMN_CHOICE_PREFIX;
-use crate::service::ask::context::{is_always_sent, AskContext, ColumnProfile};
+use crate::service::ask::context::{is_detailed, AskContext, ColumnProfile};
 use crate::service::ask::contract::ChosenOption;
 use crate::service::ask::group_prompt::{GroupPrompt, JoinLine};
 use crate::service::ask::phrases::build_phrases;
@@ -70,7 +70,8 @@ pub(super) enum Detail {
     Full,
     /// Bỏ danh sách giá trị chỉ là mẫu (values_complete = false); cột ít giá trị vẫn đủ danh sách để ánh xạ chữ.
     CompleteValuesOnly,
-    /// Như trên, và chỉ giữ cột khớp câu hỏi cùng cột thời gian (câu có kỳ nào cũng cần cột thời gian).
+    /// Như trên, và chỉ cột tầng hai (is_detailed: khớp câu hỏi, thời gian, khóa nối bảng, chỉ số) còn mô tả và giá
+    /// trị; cột khác vẫn có mặt ở dạng gọn (#230).
     MatchedColumns,
 }
 
@@ -112,7 +113,7 @@ pub(super) fn build_within_limit(build: impl Fn(Detail) -> String) -> String {
     }
     tracing::warn!(
         chars = prompt.chars().count(),
-        "prompt is over the limit even with matched columns only"
+        "prompt is over the limit even with unmatched columns in compact form"
     );
     prompt
 }
@@ -235,12 +236,19 @@ pub(super) fn build_columns_section(context: &AskContext, detail: Detail) -> Str
     build_table_block("Columns:", &context.columns, detail)
 }
 
-/// Khối cột của một bảng. Mức MatchedColumns giữ cột is_always_sent: cột khớp, cột thời gian và cột khóa nối bảng.
+/// Khối cột của một bảng: mọi cột, không bỏ cột nào (#230). Cột gọn (brief, đặt ở ask/context.rs khi câu hỏi đọc
+/// nhiều cột) và, ở mức MatchedColumns, mọi cột ngoài tầng hai chỉ in dạng gọn.
 fn build_table_block(title: &str, columns: &[ColumnProfile], detail: Detail) -> String {
     let lines: Vec<String> = columns
         .iter()
-        .filter(|c| detail < Detail::MatchedColumns || is_always_sent(c))
-        .map(|c| build_column_line(c, detail))
+        .map(|c| {
+            let compact = c.brief || (detail >= Detail::MatchedColumns && !is_detailed(c));
+            if compact {
+                build_compact_line(c)
+            } else {
+                build_column_line(c, detail)
+            }
+        })
         .collect();
     if lines.is_empty() {
         return String::new();
@@ -248,8 +256,27 @@ fn build_table_block(title: &str, columns: &[ColumnProfile], detail: Detail) -> 
     format!("{title}\n{}", lines.join("\n"))
 }
 
-/// Một cột: tên, kiểu, vai trò, định dạng ngày nếu là ngày dạng chữ, cách gộp nếu là avg, mô tả, bí danh, rồi giá trị
-/// ở dòng sau.
+/// Cột ở dạng gọn, một dòng: tên, kiểu, vai trò, định dạng ngày nếu có, bí danh. Không mô tả, không cách gộp, không giá
+/// trị nào (kể cả với cột nhạy cảm): đủ để mô hình biết cột có thật và gọi đúng tên.
+fn build_compact_line(column: &ColumnProfile) -> String {
+    let mut line = format!(
+        "- {} ({}, {}",
+        quote_ident(&column.name),
+        column.data_type,
+        column.role
+    );
+    if let Some(format) = &column.time_format {
+        line.push_str(&format!(", date format {format}"));
+    }
+    line.push(')');
+    if !column.aliases.is_empty() {
+        line.push_str(&format!(". Also called: {}", column.aliases.join(", ")));
+    }
+    line
+}
+
+/// Một cột đủ chi tiết: tên, kiểu, vai trò, định dạng ngày nếu là ngày dạng chữ, cách gộp nếu là avg, mô tả, bí danh,
+/// rồi giá trị ở dòng sau.
 fn build_column_line(column: &ColumnProfile, detail: Detail) -> String {
     let mut line = format!(
         "- {} ({}, {}",

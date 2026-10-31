@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/group_prompt.rs - ngữ cảnh của các bảng liên quan cho prompt SQL (#213): với mỗi bảng của nhóm
 (ask/related.rs) ngoài bảng đang chọn, dựng cột gửi mô hình bằng chính build_context của ask/context.rs (cột khớp câu
-hỏi, danh sách giá trị), đánh dấu cột khóa nối bảng, đọc chỉ số; rồi áp trần 60 cột và 400 giá trị chung cho mọi bảng,
-kể cả bảng đang chọn. ask/prompt.rs in GroupPrompt thành một khối cột mỗi bảng và danh sách quan hệ. */
+hỏi, danh sách giá trị), đánh dấu cột khóa nối bảng và cột của chỉ số; rồi chia tầng cột theo trần 60 cột (cột ngoài
+tầng hai in gọn, không bỏ cột nào, #230) và áp trần 400 giá trị chung cho mọi bảng, kể cả bảng đang chọn. ask/prompt.rs in GroupPrompt thành một khối cột mỗi bảng và danh sách quan hệ. */
 
 use crate::auth::Member;
 use crate::engine::store::MetricDefinition;
 use crate::service::ask::context::{
-    apply_group_column_cap, apply_group_values, apply_join_keys, build_context, build_profiles,
-    AskContext, ColumnProfile,
+    apply_group_column_tiers, apply_group_values, apply_join_keys, apply_metric_columns,
+    build_context, build_profiles, AskContext, ColumnProfile,
 };
 use crate::service::ask::phrases::build_phrases;
 use crate::service::ask::related::TableGroup;
@@ -42,7 +42,7 @@ pub struct GroupPrompt {
 }
 
 /// Ngữ cảnh của các bảng liên quan cho prompt SQL; None khi nhóm chỉ có bảng đang chọn. Sửa cả context của bảng đang
-/// chọn: trần cột (60) và trần giá trị (400) tính chung cho mọi bảng.
+/// chọn: tầng cột (trần 60) và trần giá trị (400) tính chung cho mọi bảng.
 pub async fn build_group_prompt(
     state: &AppState,
     member: &Member,
@@ -59,22 +59,24 @@ pub async fn build_group_prompt(
     let mut indexes = vec![load_value_index(state, ws, &group.tables[0].version).await?];
     for t in &group.tables[1..] {
         let index = load_value_index(state, ws, &t.version).await?;
+        let metrics = state.store.list_metrics(ws, t.dataset.id).await?;
         let mut profiles = build_profiles(t.columns.clone());
         apply_join_keys(&mut profiles, &group.join_keys(t.dataset.id));
+        apply_metric_columns(&mut profiles, &metrics);
         // Không truyền lựa chọn của người hỏi: hỏi lại và giả định cột chỉ xét bảng đang chọn, vì tên cột ở đó không
         // kèm tên bảng.
         let table_context = build_context(&phrases, profiles, &index, &[]);
         tables.push(TableContext {
             table: t.dataset.logical_table.clone(),
             columns: table_context.columns,
-            metrics: state.store.list_metrics(ws, t.dataset.id).await?,
+            metrics,
         });
         indexes.push(index);
     }
     let mut lists: Vec<&mut Vec<ColumnProfile>> = std::iter::once(&mut context.columns)
         .chain(tables.iter_mut().map(|t| &mut t.columns))
         .collect();
-    apply_group_column_cap(&mut lists);
+    apply_group_column_tiers(&mut lists);
     let mut with_values: Vec<_> = lists
         .into_iter()
         .zip(indexes.iter().map(|index| index.as_ref()))

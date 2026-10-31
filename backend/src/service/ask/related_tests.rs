@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::engine::store::{ColumnAggregation, DatasetRelation, MetricDefinition, ValueRow};
 use crate::service::ask::context::{
-    apply_group_column_cap, apply_group_values, AskContext, ColumnProfile, CONTEXT_VALUES_MAX,
+    apply_group_column_tiers, apply_group_values, AskContext, ColumnProfile, CONTEXT_VALUES_MAX,
     FULL_SCHEMA_MAX_COLUMNS,
 };
 use crate::service::ask::group_prompt::{GroupPrompt, JoinLine, TableContext};
@@ -120,6 +120,8 @@ fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
         unit: None,
         aggregation: ColumnAggregation::Sum,
         join_key: false,
+        metric_column: false,
+        brief: false,
     }
 }
 
@@ -288,7 +290,8 @@ fn join_lines_cover_one_to_one_and_composite_keys() {
     ));
 }
 
-/// Prompt dài phải hạ xuống mức chỉ gửi cột khớp: cột khóa vẫn còn ở mọi bảng, cột không khớp không khóa thì mất.
+/// Prompt dài phải hạ xuống mức chỉ cột khớp đủ chi tiết: cột khóa vẫn đủ chi tiết ở mọi bảng, cột không khớp không
+/// khóa còn dạng gọn, không mô tả (#230).
 #[test]
 fn matched_columns_keep_the_join_keys() {
     let mut context = sales_context();
@@ -302,8 +305,13 @@ fn matched_columns_keep_the_join_keys() {
         }
     }
     let prompt = build_sql_prompt(&group_input(SEGMENT_QUESTION, &context, &[], &group));
-    assert!(!prompt.contains("- \"quantity\""), "unmatched column stays");
-    assert!(!prompt.contains("- \"city\""), "unmatched column stays");
+    for compact in ["quantity", "city"] {
+        let line = prompt
+            .lines()
+            .find(|l| l.starts_with(&format!("- \"{compact}\"")))
+            .unwrap_or_else(|| panic!("{compact} is gone"));
+        assert!(!line.contains("yyy"), "{line}");
+    }
     for kept in [
         "order_id",
         "customer_id",
@@ -389,9 +397,10 @@ fn six_tables_fit_in_the_prompt_limit() {
 
 // Trần chung của ngữ cảnh
 
-/// Tổng cột vượt 60: mọi bảng chỉ giữ cột khớp, cột thời gian và cột khóa. Không vượt thì giữ hết.
+/// Tổng cột vượt 60: mọi cột vẫn còn, nhưng chỉ cột khớp, cột thời gian, cột khóa và cột của chỉ số đủ chi tiết, cột
+/// khác thành gọn. Không vượt thì không cột nào gọn (#230).
 #[test]
-fn column_cap_counts_every_table() {
+fn column_tiers_count_every_table() {
     let build = |table: &str, n: usize| -> Vec<ColumnProfile> {
         (0..n)
             .map(|i| column(&format!("{table}_{i}"), "INTEGER", "measure"))
@@ -402,13 +411,24 @@ fn column_cap_counts_every_table() {
     let mut orders = build("orders", 25);
     orders[0].join_key = true;
     orders[1].role = "time".to_string();
+    orders[2].metric_column = true;
     let mut small = build("small", 3);
-    apply_group_column_cap(&mut [&mut items, &mut small]);
-    assert_eq!((items.len(), small.len()), (30, 3));
+    let brief = |columns: &[ColumnProfile]| columns.iter().filter(|c| c.brief).count();
+    apply_group_column_tiers(&mut [&mut items, &mut small]);
+    assert_eq!((brief(&items), brief(&small)), (0, 0));
 
     let mut customers = build("customers", FULL_SCHEMA_MAX_COLUMNS - 50);
-    apply_group_column_cap(&mut [&mut items, &mut orders, &mut customers]);
-    assert_eq!((items.len(), orders.len(), customers.len()), (1, 2, 0));
+    apply_group_column_tiers(&mut [&mut items, &mut orders, &mut customers]);
+    assert_eq!((items.len(), orders.len(), customers.len()), (30, 25, 10));
+    assert_eq!(
+        (brief(&items), brief(&orders), brief(&customers)),
+        (29, 22, 10)
+    );
+    assert!(!items[0].brief && !orders[0].brief && !orders[1].brief && !orders[2].brief);
+
+    // Bỏ bớt một bảng, tổng dưới trần: cột đã gọn ở lần trước trở lại đủ chi tiết.
+    apply_group_column_tiers(&mut [&mut items, &mut small]);
+    assert_eq!((brief(&items), brief(&small)), (0, 0));
 }
 
 /// Hai bảng, mỗi bảng mười cột chiều 40 giá trị (800 giá trị, mỗi bảng riêng đã 400): tổng gửi không vượt

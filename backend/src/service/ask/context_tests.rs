@@ -13,8 +13,8 @@ use uuid::Uuid;
 use crate::auth::WorkspaceId;
 use crate::engine::store::test_support::{drop_workspace, exec, store, temp_workspace};
 use crate::engine::store::{
-    DatasetVersion, NewColumn, NewColumnValue, NewVersion, ProfileRole, ProfileStatus, SourceKind,
-    Store, ValueRow,
+    DatasetVersion, MetricDefinition, NewColumn, NewColumnValue, NewVersion, ProfileRole,
+    ProfileStatus, SourceKind, Store, ValueRow,
 };
 use crate::error::AppError;
 use crate::service::ask::context::*;
@@ -47,6 +47,8 @@ fn profile(name: &str, role: &str, aliases: &[&str]) -> ColumnProfile {
         unit: None,
         aggregation: crate::engine::store::ColumnAggregation::Sum,
         join_key: false,
+        metric_column: false,
+        brief: false,
     }
 }
 
@@ -185,8 +187,10 @@ fn column_names_compare_accents_when_both_sides_have_them() {
     assert_eq!(context.picks[0].column, "khu_vuc");
 }
 
+/// Bảng hơn 60 cột (#230): mọi cột vẫn có trong ngữ cảnh; chỉ cột khớp, cột có gợi ý giá trị và cột thời gian đủ chi
+/// tiết, cột khác gọn (brief) và không có danh sách giá trị.
 #[test]
-fn wide_tables_keep_matched_hinted_and_time_columns_only() {
+fn wide_tables_keep_every_column_and_detail_only_matched_ones() {
     let mut columns: Vec<ColumnProfile> = (0..70)
         .map(|i| profile(&format!("Metric {i}"), "measure", &[]))
         .collect();
@@ -208,10 +212,17 @@ fn wide_tables_keep_matched_hinted_and_time_columns_only() {
         &values,
         &[],
     );
+    assert_eq!(names(&context), names_of(&columns));
     // Category Name: bí danh "danh mục". Market: gợi ý giá trị "châu âu". Customer Segment: "segment" là một từ của
     // tên. Category Id chỉ chứa "danh mục" trong bí danh dài hơn, mà "danh mục" đã khớp đúng Category Name.
+    let detailed: Vec<&str> = context
+        .columns
+        .iter()
+        .filter(|c| !c.brief)
+        .map(|c| c.name.as_str())
+        .collect();
     assert_eq!(
-        names(&context),
+        detailed,
         [
             "order date (DateOrders)",
             "Category Name",
@@ -222,13 +233,61 @@ fn wide_tables_keep_matched_hinted_and_time_columns_only() {
     assert!(context
         .columns
         .iter()
-        .all(|c| c.matched || c.role == "time"));
+        .all(|c| c.brief != (c.matched || c.role == "time")));
     assert_eq!(hints(&context), [("Market", "Europe")]);
     assert_eq!(column_values(&context, "Market"), ["Europe"]);
+    assert!(
+        column_values(&context, "Order Region").is_empty(),
+        "brief columns have no values"
+    );
 
-    // Không cụm nào khớp: gửi cả schema thay vì chỉ cột thời gian.
+    // Cột dùng trong công thức chỉ số cũng đủ chi tiết.
+    let mut with_metric = columns.clone();
+    let metric = MetricDefinition {
+        name: "Doanh số".to_string(),
+        description: String::new(),
+        expression: "SUM(\"Metric 7\")".to_string(),
+        filter: Some("\"Order Region\" <> 'Southern Europe'".to_string()),
+        time_column: None,
+        unit: None,
+        confirmed: true,
+    };
+    apply_metric_columns(&mut with_metric, &[metric]);
+    let context = build_context(
+        &build_phrases("Doanh thu theo danh mục ở châu Âu"),
+        with_metric,
+        &values,
+        &[],
+    );
+    for name in ["Metric 7", "Order Region"] {
+        assert!(
+            !context
+                .columns
+                .iter()
+                .find(|c| c.name == name)
+                .unwrap()
+                .brief,
+            "{name}"
+        );
+    }
+    assert_eq!(column_values(&context, "Order Region"), ["Southern Europe"]);
+    assert!(
+        context
+            .columns
+            .iter()
+            .find(|c| c.name == "Metric 17")
+            .unwrap()
+            .brief
+    );
+
+    // Không cụm nào khớp: không cột nào gọn, thay vì chỉ cột thời gian đủ chi tiết.
     let none = build_context(&build_phrases("xin chào"), columns.clone(), &values, &[]);
     assert_eq!(none.columns.len(), columns.len());
+    assert!(none.columns.iter().all(|c| !c.brief));
+}
+
+fn names_of(columns: &[ColumnProfile]) -> Vec<&str> {
+    columns.iter().map(|c| c.name.as_str()).collect()
 }
 
 #[test]

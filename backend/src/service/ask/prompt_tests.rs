@@ -45,6 +45,8 @@ fn column(name: &str, data_type: &str, role: &str) -> ColumnProfile {
         unit: None,
         aggregation: crate::engine::store::ColumnAggregation::Sum,
         join_key: false,
+        metric_column: false,
+        brief: false,
     }
 }
 
@@ -433,9 +435,10 @@ fn domain_terms_are_included_when_the_dataset_has_a_package() {
     assert!(prompt.contains("they explain words only"));
 }
 
-/// Vượt trần thì bỏ giá trị mẫu trước, rồi cột không khớp câu hỏi; cột khớp và cột thời gian luôn còn.
+/// Vượt trần thì bỏ giá trị mẫu trước, rồi cột không khớp câu hỏi chỉ còn dạng gọn (không mô tả); cột khớp và cột thời
+/// gian luôn đủ chi tiết, không cột nào mất (#230).
 #[test]
-fn long_prompts_drop_sample_values_then_unmatched_columns() {
+fn long_prompts_drop_sample_values_then_shorten_unmatched_columns() {
     let mut context = dataco_context();
     let long_value = "x".repeat(200);
     let city = &mut context.columns[2];
@@ -457,7 +460,7 @@ fn long_prompts_drop_sample_values_then_unmatched_columns() {
         "the column itself stays"
     );
 
-    // Cột không khớp, mô tả rất dài: chỉ còn cột khớp và cột thời gian.
+    // Cột không khớp, mô tả rất dài: chỉ cột khớp và cột thời gian còn mô tả, cột khác còn tên và bí danh.
     for (i, column) in context.columns.iter_mut().enumerate() {
         if !column.matched && column.role != "time" {
             column.description = Some(format!("{i} {}", "y".repeat(5_000)));
@@ -468,8 +471,66 @@ fn long_prompts_drop_sample_values_then_unmatched_columns() {
     assert!(prompt.contains("- \"Market\""));
     assert!(prompt.contains("- \"Order Item Total\""));
     assert!(prompt.contains("- \"order date (DateOrders)\""));
-    assert!(!prompt.contains("- \"Sales\""), "{prompt}");
+    assert!(
+        prompt.contains("- \"Sales\" (DOUBLE, measure). Also called: doanh thu gộp\n"),
+        "{prompt}"
+    );
+    assert!(
+        !prompt.contains("yyyyy"),
+        "long descriptions of unmatched columns go"
+    );
     assert!(prompt.ends_with("Question: Doanh thu theo thị trường"));
+}
+
+/// Bảng 70 cột (#230): cột gọn vẫn có tên, kiểu, vai trò, bí danh trong prompt, không mô tả hay giá trị; cột đủ chi tiết
+/// có mô tả và giá trị; cột nhạy cảm không bao giờ kèm giá trị, kể cả khi là cột đủ chi tiết.
+#[test]
+fn wide_tables_list_every_column_and_values_only_for_detailed_ones() {
+    let mut context = dataco_context();
+    for i in 0..62 {
+        let mut extra = column(&format!("Extra {i}"), "DOUBLE", "measure");
+        extra.description = Some(format!("Mô tả cột phụ {i}"));
+        extra.brief = true;
+        context.columns.push(extra);
+    }
+    let mut region = column("Order Region", "VARCHAR", "dimension");
+    region.aliases = vec!["khu vực".to_string()];
+    region.description = Some("Vùng giao hàng".to_string());
+    // Lớp ngữ cảnh không gắn giá trị cho cột gọn; ở đây cố ý còn để kiểm lớp in của prompt.
+    region.values = values(&[("Southern Europe", &[])]);
+    region.values_complete = true;
+    region.brief = true;
+    context.columns.push(region);
+    let email = context
+        .columns
+        .iter_mut()
+        .find(|c| c.name == "Customer Email")
+        .unwrap();
+    email.matched = true;
+    assert!(context.columns.len() > crate::service::ask::context::FULL_SCHEMA_MAX_COLUMNS);
+
+    let prompt = build_sql_prompt(&input(QUESTION, &context, &[], &[], &[]));
+    assert!(
+        prompt.contains("- \"Extra 61\" (DOUBLE, measure)\n"),
+        "{prompt}"
+    );
+    assert!(prompt.contains("- \"Order Region\" (VARCHAR, dimension). Also called: khu vực\n"));
+    assert!(!prompt.contains("Mô tả cột phụ") && !prompt.contains("Vùng giao hàng"));
+    assert!(
+        !prompt.contains("Southern Europe"),
+        "brief columns carry no values"
+    );
+    assert!(
+        prompt.contains("All values: 'Europe'"),
+        "detailed columns keep their values"
+    );
+    assert!(prompt.contains("Thị trường nơi giao đơn hàng"));
+    assert!(prompt.contains("- \"Customer Email\""));
+    assert!(
+        !prompt.contains("lan@example.com"),
+        "sensitive values never leave"
+    );
+    assert!(prompt.contains("Every column of these tables is listed."));
 }
 
 // Prompt form câu "tại sao"

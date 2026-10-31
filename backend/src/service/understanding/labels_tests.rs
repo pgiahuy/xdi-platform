@@ -25,6 +25,8 @@ fn column(name: &str, description: &str) -> ColumnProfile {
         unit: None,
         aggregation: crate::engine::store::ColumnAggregation::Sum,
         join_key: false,
+        metric_column: false,
+        brief: false,
     }
 }
 
