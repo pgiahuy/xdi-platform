@@ -128,6 +128,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đ�
 | `DB_MAX_CONNECTIONS` | `10` | Số kết nối Postgres tối đa của backend |
 | `DB_ACQUIRE_TIMEOUT_SECS` | `5` | Số giây một request chờ lấy kết nối Postgres khi mọi kết nối đang bận; quá thì request nhận lỗi thay vì treo |
 | `LLM_PROVIDER` | `mock` | `mock` không gọi ra ngoài; `gemini` cần `GEMINI_API_KEY`; `ollama` cần máy chạy Ollama ở `OLLAMA_URL` |
+| `EVAL_GEMINI_API_KEY` | không đặt | Khóa Gemini riêng cho các lệnh đánh giá (`xdi-backend eval`, `eval-classify`), thường của một tài khoản Google khác, để chạy cả bộ câu không ăn vào hạn mức lượt gọi của `GEMINI_API_KEY`. Không đặt thì lệnh đánh giá dùng `GEMINI_API_KEY`; server không bao giờ đọc biến này |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini khi `LLM_PROVIDER=gemini` |
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
 | `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB; quá thì câu bị dừng, trừ phần DuckDB tính trước khi chạy ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |

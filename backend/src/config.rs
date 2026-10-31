@@ -140,6 +140,19 @@ impl Config {
         }
     }
 
+    /// Lệnh đánh giá (`eval`, `eval-classify`, main.rs) gọi Gemini bằng khóa riêng `EVAL_GEMINI_API_KEY` khi có, để
+    /// chạy cả bộ câu không ăn vào hạn mức lượt gọi của khóa mà ứng dụng đang dùng. Khóa riêng rỗng hay không đặt thì
+    /// giữ `GEMINI_API_KEY`. Trả về true khi đã đổi khóa.
+    pub fn apply_eval_gemini_key(&mut self, eval_key: Option<String>) -> bool {
+        match eval_key.filter(|key| !key.trim().is_empty()) {
+            Some(key) => {
+                self.gemini_api_key = Secret::new(key.trim());
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Cookie phiên có cờ Secure khi người dùng vào qua HTTPS: trình duyệt không bao giờ gửi cookie đó qua HTTP thường,
     /// nên người nghe lén mạng không lấy được phiên. Không bật khi chạy http://localhost, vì trình duyệt sẽ bỏ cookie
     /// Secure trên trang HTTP và không đăng nhập được.
@@ -329,6 +342,17 @@ fn worker_binary() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn eval_key_replaces_the_app_key_only_when_set() {
+        let mut config = Config::from_env();
+        config.gemini_api_key = Secret::new("app-key");
+        assert!(!config.apply_eval_gemini_key(None));
+        assert!(!config.apply_eval_gemini_key(Some("  ".to_string())));
+        assert_eq!(config.gemini_api_key.expose(), "app-key");
+        assert!(config.apply_eval_gemini_key(Some(" eval-key ".to_string())));
+        assert_eq!(config.gemini_api_key.expose(), "eval-key");
+    }
 
     #[test]
     fn host_list_parsing() {
