@@ -18,12 +18,13 @@ use crate::service::ask::values::ValueIndex;
 use crate::service::explain::filter::{build_single_value_columns, check_filters};
 use crate::service::explain::form::{CompareWith, FieldError, FormAgg, WhyForm};
 use crate::service::explain::group_base::{check_rest_measure, GroupBase};
+use crate::service::explain::joined::JoinedColumns;
 use crate::service::explain::measure::{
     check_measure, find_metric, parse_expr, Additive, PlanMeasure,
 };
 use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::source::{PlanSource, RelatedTables};
-use crate::service::explain::sql::build_time_expr;
+use crate::service::explain::sql::{build_ident, build_time_expr};
 use crate::service::explain::unusual::check_find;
 
 /// Chiều có tới ngần này giá trị khác nhau mới phân rã (#39): nhiều hơn thì bảng đóng góp dài mà mỗi nhóm nhỏ.
@@ -47,6 +48,25 @@ pub struct WhyProfile<'a> {
     pub metrics: &'a [MetricDefinition],
     /// Số dòng của phiên bản; để biết cột key có lặp lại không (lượng của #40).
     pub row_count: Option<i64>,
+    /// Cột của bảng nối nhiều-một vào bảng này, tên "bảng.cột" (explain/joined.rs): dùng được cho kỳ, nhóm và bộ lọc,
+    /// không cho độ đo. Rỗng với dataset nạp từ file.
+    pub joined: &'a JoinedColumns,
+}
+
+impl WhyProfile<'_> {
+    /// Cột là cột của bảng liên quan (tên "bảng.cột"), không phải của bảng bắt đầu.
+    pub fn is_joined(&self, name: &str) -> bool {
+        !self.columns.iter().any(|c| c.name == name)
+            && self.joined.profile.iter().any(|c| c.name == name)
+    }
+
+    /// Hồ sơ của một cột theo tên: cột của bảng bắt đầu trước, rồi cột của bảng liên quan.
+    pub fn find(&self, name: &str) -> Option<&ProfileColumn> {
+        self.columns
+            .iter()
+            .chain(&self.joined.profile)
+            .find(|c| c.name == name)
+    }
 }
 
 /// Form đã kiểm, đủ để dựng SQL.
@@ -112,9 +132,10 @@ pub fn build_why_check(
     let mut filters = check_filters(form, profile, &mut errors);
     check_find(form, profile, &mut errors);
     check_rest_measure(form, &mut errors);
-    let (Some(measure), Some(slices)) = (measure, slices) else {
+    let (Some(mut measure), Some(slices)) = (measure, slices) else {
         return Err(errors);
     };
+    apply_rest_distinct(&mut measure, &slices);
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -141,6 +162,32 @@ pub fn build_why_check(
         filters,
         source: PlanSource::default(),
     })
+}
+
+/// Đếm phân biệt so với các nhóm còn lại ("vì sao AAA ít sinh viên"): một sinh viên học nhiều môn chỉ được đếm một lần
+/// trong phần còn lại gộp lại, nên tổng đó chia số nhóm không ra trung bình mỗi nhóm, và so một môn với cả phần còn lại
+/// thì môn nào cũng "thấp hơn 97%". Đếm cặp (nhóm, giá trị) thay cho giá trị: mỗi nhóm đếm riêng các giá trị của nó, cộng
+/// lại là tổng các số đếm của từng nhóm, chia số nhóm ra trung bình mỗi nhóm (explain/rest_average.rs). Nhóm đang so chỉ
+/// có một nhóm nên số đếm của nó không đổi. Giá trị rỗng vẫn không được đếm, như COUNT(DISTINCT x).
+fn apply_rest_distinct(measure: &mut PlanMeasure, slices: &PlanSlices) {
+    let PlanSlices::Groups {
+        column,
+        base: GroupBase::Rest,
+        ..
+    } = slices
+    else {
+        return;
+    };
+    let Additive::CountDistinct { value } = &measure.additive else {
+        return;
+    };
+    let pair = format!(
+        "CASE WHEN {value} IS NOT NULL THEN ({}, {value}) END",
+        build_ident(column)
+    );
+    if let Ok(pair) = parse_expr(&pair) {
+        measure.additive = Additive::CountDistinct { value: pair };
+    }
 }
 
 /// Thêm chiều của bảng liên quan (explain/source.rs) sau chiều của bảng chính, đến khi đủ DIMENSION_CANDIDATES_MAX.
@@ -201,9 +248,8 @@ fn check_slices(
                 // Kỳ là giá trị của một cột chiều (kỳ học "2014J"): mô hình hay đặt vào time. Với hai nhóm, kỳ đó là một
                 // bộ lọc; lời chỉ đúng bộ lọc cần thêm, nếu không vòng sửa lại đổi groups và câu rơi về câu thường.
                 if let Some(column) = profile
-                    .columns
-                    .iter()
-                    .find(|c| c.name == time.column && c.role == ProfileRole::Dimension.as_str())
+                    .find(&time.column)
+                    .filter(|c| c.role == ProfileRole::Dimension.as_str())
                 {
                     errors.push(FieldError::new(
                         "time.column",
@@ -339,7 +385,7 @@ fn check_period_in_data(
     field: &str,
     errors: &mut Vec<FieldError>,
 ) -> Option<()> {
-    let column = profile.columns.iter().find(|c| c.name == time.column)?;
+    let column = profile.find(&time.column)?;
     let (Some(min), Some(max)) = (
         build_profile_date(column.min_value.as_deref()),
         build_profile_date(column.max_value.as_deref()),
@@ -381,6 +427,7 @@ pub(super) fn check_value(
         .values
         .columns
         .iter()
+        .chain(&profile.joined.values)
         .find(|v| v.column_id == column.id);
     let Some(listed) = listed else {
         errors.push(FieldError::new(
@@ -473,6 +520,7 @@ pub(crate) fn build_labels(profile: &WhyProfile) -> HashMap<String, String> {
     profile
         .columns
         .iter()
+        .chain(&profile.joined.profile)
         .filter_map(|c| {
             let alias = c.aliases.iter().map(|a| a.trim()).find(|a| !a.is_empty())?;
             (alias.to_lowercase() != c.name.to_lowercase())
@@ -487,12 +535,12 @@ pub(super) fn find_column<'a>(
     field: &str,
     errors: &mut Vec<FieldError>,
 ) -> Option<&'a ProfileColumn> {
-    let found = profile.columns.iter().find(|c| c.name == name);
+    let found = profile.find(name);
     if found.is_none() {
         errors.push(FieldError::new(
             field,
             format!(
-                "\"{name}\" is not a column of {}; use a column name exactly as listed",
+                "\"{name}\" is not a column of {} or of its joined tables; use a column name exactly as listed",
                 profile.table
             ),
         ));

@@ -296,6 +296,12 @@ pub(super) fn build_columns_section(context: &AskContext, detail: Detail) -> Str
     build_table_block("Columns:", &context.columns, detail)
 }
 
+/// Cột của bảng nối nhiều-một vào bảng bắt đầu cho prompt form câu hỏi nguyên nhân (explain/joined.rs); chuỗi rỗng khi
+/// không có cột nào. Luật dùng các cột này nằm ở backend/prompts/why_form.txt.
+pub(super) fn build_joined_section(columns: &[ColumnProfile], detail: Detail) -> String {
+    build_table_block("Joined columns:", columns, detail)
+}
+
 /// Khối cột của một bảng: mọi cột, không bỏ cột nào (#230). Cột gọn (brief, ask/context.rs apply_metadata_cap) chỉ
 /// có tên, kiểu, vai trò.
 fn build_table_block(title: &str, columns: &[ColumnProfile], detail: Detail) -> String {

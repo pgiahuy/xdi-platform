@@ -250,8 +250,13 @@ vòng sửa, sửa vẫn cộng lặp thì bị từ chối. Câu không trả l
 thì lời báo nói hai bảng không có quan hệ. Response trả các bảng đã đọc (`tables_read`), lịch sử ghi phiên bản của
 chúng (`queries.read_versions`).
 
-**Câu hỏi nguyên nhân.** Form chỉ nêu cột của bảng bắt đầu; phân rã xét thêm cột chiều của bảng nối nhiều-một, tới hai
-bước (`BREAKDOWN_MAX_HOPS`, `service/explain/source.rs`).
+**Câu hỏi nguyên nhân.** Bảng bắt đầu phải giữ độ đo: khi backend tự chọn bảng (không ghim), câu hỏi nguyên nhân chạy
+lại từ bảng của các cột lượt phân loại nêu, bảng mà từ đó đi tới mọi bảng khác của các cột đó theo khóa ngoại
+(`service/ask/why_table.rs`). Độ đo là cột của bảng bắt đầu; kỳ, nhóm và bộ lọc dùng được cột của bảng nối nhiều-một, tên
+`bảng.cột` (`service/explain/joined.rs`). Phân rã xét thêm cột chiều của các bảng đó, tới hai bước (`BREAKDOWN_MAX_HOPS`,
+`service/explain/source.rs`). Sau khi kiểm form với hồ sơ cột, code kiểm form với chữ của câu hỏi
+(`service/explain/question_match.rs`): câu nêu hai nhóm thì so đúng hai nhóm đó, nêu một nhóm thì so với trung bình các
+nhóm còn lại; độ đo không phải cột lượt phân loại nêu thì nhờ mô hình sửa một lần.
 
 **Câu mẫu và bài học.** Tối đa 3 câu mẫu admin đã duyệt có từ khóa trùng với câu hỏi, và tối đa 3 bài học đã bật, vào
 prompt.

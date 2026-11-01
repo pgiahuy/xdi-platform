@@ -5,9 +5,9 @@
 (ask/view.rs), ghi lịch sử kèm form và Explanation, rồi dựng AskResponse. Trạng thái và lỗi theo cùng quy tắc với câu
 thường (đầu file ask/mod.rs); test qua route ở api/ask_why_tests.rs.
 
-Dataset chụp từ database: form chỉ nêu cột của bảng đang hỏi, còn phân rã xét thêm cột của các bảng nối nhiều-một vào
-nó (explain/source.rs, #227). tables_read và queries.read_versions ghi bảng đang hỏi cộng các bảng mà một chiều của phân
-rã đã đọc.
+Dataset chụp từ database: độ đo của form là cột của bảng đang hỏi; kỳ, nhóm và bộ lọc dùng được cả cột của các bảng
+nối nhiều-một vào nó (explain/joined.rs), phân rã cũng xét thêm cột của các bảng đó (explain/source.rs, #227).
+tables_read và queries.read_versions ghi bảng đang hỏi cộng các bảng mà một chiều của phân rã đã đọc.
 
 queries.explanation lưu object {"form": <form mô hình điền>, "explanation": <Explanation>}. drill/mod.rs đọc điều kiện lát
 cắt và câu SQL từng chiều trong "explanation" để truy dòng nguồn của một dòng phân rã; "form" giữ lại để xem câu hỏi
@@ -24,6 +24,7 @@ use crate::service::ask::checks::build_empty_warning;
 use crate::service::ask::contract::{AskResponse, AskStatus, AskStep, Explanation, TableRead};
 use crate::service::ask::data_range::build_data_range;
 use crate::service::ask::fanout::JoinLink;
+use crate::service::ask::group_prompt::TableContext;
 use crate::service::ask::prompt::PromptInput;
 use crate::service::ask::related::TableGroup;
 use crate::service::ask::response_choices::{
@@ -32,6 +33,7 @@ use crate::service::ask::response_choices::{
 use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::{build_base_response, build_value_warnings, record_query, Recorded};
+use crate::service::explain::joined::{build_joined_columns, JoinedColumns, JoinedTable};
 use crate::service::explain::run::{run_why, WhyInput, WhyOutcome};
 use crate::service::explain::source::{build_tables_used, RelatedTables};
 use crate::service::lessons::{record_failures, FailedQuestion};
@@ -53,6 +55,9 @@ pub(super) struct WhyAsk<'a> {
     pub links: &'a [JoinLink],
     /// Bảng liên quan nối nhiều-một vào bảng đang hỏi, cho phân rã (#227).
     pub related: &'a RelatedTables,
+    /// Cột ngữ cảnh của các bảng liên quan đã gửi chi tiết (ask/group_prompt.rs), có danh sách giá trị: prompt form
+    /// in các cột của bảng trong related để form dùng cho kỳ, nhóm và bộ lọc (explain/joined.rs).
+    pub prompt_tables: &'a [TableContext],
     /// Các bước đã chạy (context).
     pub steps: Vec<AskStep>,
 }
@@ -71,6 +76,7 @@ pub(super) async fn ask_why(
         group,
         links,
         related,
+        prompt_tables,
         mut steps,
     } = ask;
     // Các trường của prompt là tham chiếu; chép ra trước khi prompt chuyển vào WhyInput để dùng tiếp sau run_why.
@@ -81,6 +87,7 @@ pub(super) async fn ask_why(
         prompt.choices,
     );
     let values = load_value_index(state, &member.workspace, version).await?;
+    let joined = load_joined_columns(state, member, group, related, prompt_tables).await?;
     let input = WhyInput {
         prompt,
         columns,
@@ -93,6 +100,7 @@ pub(super) async fn ask_why(
         jobs: &state.query_jobs,
         narrate_timeout: build_narrate_timeout(&state.config),
         related,
+        joined: &joined,
     };
     let mut outcome = run_why(state.llm.as_ref(), input).await?;
     steps.append(&mut outcome.steps);
@@ -140,7 +148,10 @@ pub(super) async fn ask_why(
         row_filters: &outcome.row_filters,
         plan: outcome.plan.as_ref(),
     };
-    let view = build_answer_view(&ran, &context.columns, metrics, &outcome.assumptions);
+    // Thẻ "Cách tính" gọi cột bằng mô tả của nó, kể cả cột của bảng liên quan mà kỳ, nhóm hay bộ lọc dùng.
+    let mut view_columns = context.columns.clone();
+    view_columns.extend(joined.prompt.iter().cloned());
+    let view = build_answer_view(&ran, &view_columns, metrics, &outcome.assumptions);
     let (understanding, chart) = apply_answer_view(view, outcome.result.as_mut());
 
     let tables_read = build_why_tables_read(group, &dataset.logical_table, &outcome);
@@ -185,6 +196,47 @@ pub(super) async fn ask_why(
         steps,
         ..build_base_response(state, version, question, outcome.status)
     })
+}
+
+/// Cột của các bảng liên quan mà form dùng được (explain/joined.rs), kèm danh sách giá trị của từng bảng để kiểm giá trị
+/// nhóm và giá trị lọc.
+async fn load_joined_columns(
+    state: &AppState,
+    member: &Member,
+    group: &TableGroup,
+    related: &RelatedTables,
+    prompt_tables: &[TableContext],
+) -> Result<JoinedColumns, AppError> {
+    // Chỉ mục giá trị đọc trước (async), rồi mới mượn vào JoinedTable: vòng dưới không giữ tham chiếu qua một .await.
+    let mut indexes = Vec::new();
+    for join in &related.source.joins {
+        let Some(table) = group
+            .tables
+            .iter()
+            .find(|t| t.dataset.logical_table == join.table)
+        else {
+            continue;
+        };
+        let index = load_value_index(state, &member.workspace, &table.version).await?;
+        indexes.push((table, index));
+    }
+    let tables: Vec<JoinedTable> = indexes
+        .iter()
+        .map(|(table, index)| JoinedTable {
+            table: &table.dataset.logical_table,
+            columns: &table.columns,
+            prompt: prompt_tables
+                .iter()
+                .find(|p| p.table == table.dataset.logical_table)
+                .map_or(&[][..], |p| p.columns.as_slice()),
+            values: &index.columns,
+        })
+        .collect();
+    Ok(build_joined_columns(
+        related,
+        &group.tables[0].columns,
+        &tables,
+    ))
 }
 
 /// Bảng câu "tại sao" đã đọc: bảng đang hỏi, cộng bảng liên quan mà một chiều của phân rã đã đọc (explain/source.rs).

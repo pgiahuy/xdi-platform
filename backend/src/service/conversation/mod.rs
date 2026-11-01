@@ -22,7 +22,7 @@ use crate::engine::store::{
 };
 use crate::service::ask::contract::{AskResponse, AskStatus, ChosenOption};
 use crate::service::ask::scope::pick_start_table;
-use crate::service::ask::AskHistory;
+use crate::service::ask::{AskHistory, StartTable};
 use crate::service::conversation::carryover::{apply_carryover, find_previous};
 use crate::service::conversation::contract::{
     ConversationItem, ConversationListResponse, ConversationResponse, SavedAnswer, TurnItem,
@@ -56,7 +56,16 @@ pub async fn ask(
         Some(id) => Some(load_owned(state, member, &[dataset], id).await?),
         None => None,
     };
-    ask_on_table(state, member, dataset, question, choices, existing).await
+    ask_on_table(
+        state,
+        member,
+        dataset,
+        question,
+        choices,
+        existing,
+        StartTable::Given,
+    )
+    .await
 }
 
 /// Hỏi trên cả một dataset (#257): `tables` là mọi bảng của dataset. Bảng bắt đầu là `pinned` nếu người hỏi ghim (phải
@@ -75,6 +84,10 @@ pub async fn ask_in_dataset(
         Some(id) => Some(load_owned(state, member, &ids, id).await?),
         None => None,
     };
+    let chosen_by = match dataset.pinned {
+        Some(_) => StartTable::Given,
+        None => StartTable::Picked,
+    };
     let start = match dataset.pinned {
         Some(id) if ids.contains(&id) => Some(id),
         Some(_) => return Err(AppError::NotFound("Dataset không có bảng này".to_string())),
@@ -91,7 +104,7 @@ pub async fn ask_in_dataset(
             "Dataset chưa có bảng nào; chụp bảng hay nạp file trước khi hỏi".to_string(),
         ));
     };
-    ask_on_table(state, member, start, question, choices, existing).await
+    ask_on_table(state, member, start, question, choices, existing, chosen_by).await
 }
 
 /// Mọi bảng của một dataset và phần pick_start_table cần, do service/catalog/ đọc.
@@ -112,6 +125,7 @@ async fn ask_on_table(
     question: &str,
     choices: &[ChosenOption],
     existing: Option<Conversation>,
+    start: StartTable,
 ) -> Result<AskResponse, AppError> {
     let ws = &member.workspace;
     let dataset_id = dataset.to_string();
@@ -128,8 +142,16 @@ async fn ask_on_table(
         section: build_history_section(&turns),
         questions: turns.iter().map(|turn| turn.question.clone()).collect(),
     };
-    let mut response =
-        crate::service::ask::ask(state, member, &dataset_id, question, choices, &history).await?;
+    let mut response = crate::service::ask::ask(
+        state,
+        member,
+        &dataset_id,
+        question,
+        choices,
+        &history,
+        start,
+    )
+    .await?;
 
     let conversation = match existing {
         Some(conversation) => conversation.id,

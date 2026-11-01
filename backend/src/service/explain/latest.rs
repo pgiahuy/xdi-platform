@@ -11,9 +11,11 @@ use crate::engine::store::{ProfileColumn, ProfileRole};
 use crate::error::AppError;
 use crate::service::ask::contract::{CellValue, Choice, ChoiceOption};
 use crate::service::explain::breakdown::{run_code_query, CodeQuery, QueryEnv};
+use crate::service::explain::check::WhyProfile;
 use crate::service::explain::form::{FormTime, ReadForm, WhyForm};
 use crate::service::explain::period::{Grain, Period};
-use crate::service::explain::sql::{build_equals, build_ident, build_string, build_time_expr};
+use crate::service::explain::source::{build_from_sql, PlanSource};
+use crate::service::explain::sql::{build_equals, build_string, build_time_expr};
 
 /// Id lựa chọn kỳ cần giải thích, cùng dạng why:<trường> với BASE_CHOICE_ID. Phương án là kỳ viết như trong form
 /// ("2017-Q4"), để lần hỏi sau đọc lại bằng Period::parse.
@@ -69,7 +71,7 @@ pub fn build_latest_time(form: &WhyForm, columns: &[ProfileColumn]) -> Option<Fo
 /// Đếm dòng theo kỳ trên cột thời gian, áp các bộ lọc "=" của form để "Tại sao doanh thu Europe giảm" chọn kỳ có
 /// dòng Europe. Lấy thêm một kỳ so với LATEST_OPTIONS để kỳ cũ nhất trong phương án vẫn so được số dòng với kỳ trước.
 pub fn build_period_rows_sql(
-    table: &str,
+    from: &str,
     column: &ProfileColumn,
     grain: Grain,
     form: &WhyForm,
@@ -85,8 +87,7 @@ pub fn build_period_rows_sql(
     let unit = build_string(grain.as_str());
     Some(format!(
         "SELECT strftime(date_trunc({unit}, {time}), '%Y-%m-%d') AS period_start, COUNT(*) AS row_count \
-         FROM {} WHERE {} GROUP BY 1 ORDER BY 1 DESC LIMIT {}",
-        build_ident(table),
+         FROM {from} WHERE {} GROUP BY 1 ORDER BY 1 DESC LIMIT {}",
         conditions.join(" AND "),
         LATEST_OPTIONS + 1
     ))
@@ -109,18 +110,22 @@ pub fn build_latest_compare(rows: &[PeriodRows]) -> Option<Period> {
 /// như cũ, vòng sửa của mô hình vẫn còn).
 pub async fn find_latest(
     env: &QueryEnv<'_>,
-    table: &str,
-    columns: &[ProfileColumn],
+    profile: &WhyProfile<'_>,
+    source: &PlanSource,
     form: &WhyForm,
     chosen: Option<&str>,
 ) -> Result<Option<LatestPeriod>, AppError> {
-    let Some(time) = build_latest_time(form, columns) else {
+    let Some(time) = build_latest_time(form, profile.columns) else {
         return Ok(None);
     };
-    let Some(column) = columns.iter().find(|c| c.name == time.column) else {
+    let Some(column) = profile.find(&time.column) else {
         return Ok(None);
     };
-    let Some(sql) = build_period_rows_sql(table, column, time.grain, form) else {
+    // Cột thời gian hay cột lọc ở bảng liên quan (explain/joined.rs): đếm trên câu con nối bảng của chúng.
+    let mut names = vec![time.column.as_str()];
+    names.extend(form.filters.iter().map(|f| f.column.as_str()));
+    let from = build_from_sql(profile.table, source, &names);
+    let Some(sql) = build_period_rows_sql(&from, column, time.grain, form) else {
         return Ok(None);
     };
     let rows = match run_code_query(env, &sql, None).await? {

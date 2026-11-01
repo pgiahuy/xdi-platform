@@ -38,13 +38,16 @@ mod frames_run_tests;
 #[cfg(test)]
 mod frames_tests;
 pub mod group_base;
+pub mod joined;
 pub mod judge;
 #[cfg(test)]
 mod judge_tests;
+#[cfg(test)]
+mod late_run_tests;
 pub mod latest;
 pub mod measure;
 mod measure_column;
-mod narrate_prompt;
+pub(crate) mod narrate_prompt;
 pub mod number;
 #[cfg(test)]
 mod number_tests;
@@ -54,6 +57,9 @@ mod per_unit_tests;
 pub mod period;
 pub mod plain;
 pub mod premise;
+pub mod question_match;
+#[cfg(test)]
+mod question_match_tests;
 pub mod ratio;
 pub mod ratio_breakdown;
 #[cfg(test)]
@@ -89,10 +95,9 @@ use rust_decimal::{Decimal, RoundingStrategy};
 use crate::service::ask::contract::{
     CellValue, Comparison, DimensionBreakdown, Explanation, GroupContribution, MeasureKind,
 };
-use crate::service::explain::number::{build_change_parts, MAX_FRACTION_DIGITS};
-// Chỉ bước kiểm số cũ dùng, mà bước đó giờ chỉ test gọi (giữ câu khuôn đúng số).
-#[cfg(test)]
-use crate::service::explain::number::build_number_text_with;
+use crate::service::explain::number::{
+    build_change_parts, build_number_text_with, MAX_FRACTION_DIGITS,
+};
 
 // Hai ngưỡng của Adtributor (Bhagwan và cộng sự, NSDI 2014), giữ đúng như bài: một chiều "giải thích được" chênh lệch
 // khi vài nhóm của nó cộng lại đủ 67% chênh lệch, và chỉ tính nhóm góp từ 10% trở lên, để nhóm nhỏ không làm chiều đó
@@ -499,6 +504,54 @@ pub fn build_direction_text(text: &str, digits: u32, comparison: Comparison) -> 
     }
 }
 
+/// Số chữ số lẻ của phần trăm và điểm phần trăm: tỷ lệ có RATE_SCALE (4) chữ số lẻ, nhân 100 còn đúng 2, nên viết
+/// thành phần trăm không làm tròn gì. Một chữ số lẻ thì tỷ lệ nhỏ như 0,0014 lên 0,0016 thành "không đổi".
+const PERCENT_DIGITS: u32 = ratio::RATE_SCALE - 2;
+
+/// Giá trị của độ đo tỷ lệ dòng viết thành phần trăm: "0.5495" thành "54,95%" (BreakdownNotes::fraction). Chuỗi không
+/// đọc được thì giữ nguyên.
+pub(crate) fn build_share_text(text: &str) -> String {
+    match text.parse::<Decimal>() {
+        Ok(value) => format!(
+            "{}%",
+            build_number_text_with(&(value * Decimal::ONE_HUNDRED).to_string(), PERCENT_DIGITS)
+        ),
+        Err(_) => text.to_string(),
+    }
+}
+
+/// Chênh lệch của độ đo tỷ lệ dòng viết thành điểm phần trăm kèm chữ chiều: "0.1024" thành "tăng 10,24 điểm phần
+/// trăm", "thấp hơn 3,10 điểm phần trăm" giữa hai nhóm; 0 thành "không đổi" hay "bằng".
+pub(crate) fn build_points_text(text: &str, comparison: Comparison) -> String {
+    let Ok(value) = text.parse::<Decimal>() else {
+        return text.to_string();
+    };
+    match build_points_amount(text) {
+        None => build_direction_word("không đổi", comparison).to_string(),
+        Some(amount) => {
+            let word = if value < Decimal::ZERO {
+                "giảm"
+            } else {
+                "tăng"
+            };
+            format!("{} {amount}", build_direction_word(word, comparison))
+        }
+    }
+}
+
+/// Độ lớn không dấu của một chênh lệch tỷ lệ dòng, bằng điểm phần trăm: "-0.1024" thành "10,24 điểm phần trăm". None khi
+/// chuỗi không đọc được hay chênh lệch bằng 0.
+pub(crate) fn build_points_amount(text: &str) -> Option<String> {
+    let value = text.parse::<Decimal>().ok()?;
+    let points = value.abs() * Decimal::ONE_HUNDRED;
+    (!points.is_zero()).then(|| {
+        format!(
+            "{} điểm phần trăm",
+            build_number_text_with(&points.to_string(), PERCENT_DIGITS)
+        )
+    })
+}
+
 /// Mọi chuỗi số được phép xuất hiện trong lời diễn giải: các số của bảng phân rã viết kiểu Việt Nam như prompt gửi
 /// (build_number_text) và trị tuyệt đối của chúng (để "giảm 1.283.400,00" nhận khi change là "-1283400.00"), cộng
 /// số trong nhãn, tên cột và tên độ đo (để "quý 3/2017" nhận "3" và "2017" từ nhãn lát cắt). Số trong câu hỏi không
@@ -559,6 +612,9 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
             allow_number(&mut allowed, text, digits);
         }
     }
+    if explanation.notes.fraction {
+        allow_fraction_numbers(&mut allowed, explanation);
+    }
     allow_text(&mut allowed, &explanation.measure);
     allow_text(&mut allowed, &explanation.base.label);
     allow_text(&mut allowed, &explanation.compare.label);
@@ -570,6 +626,33 @@ pub fn build_allowed_numbers(explanation: &Explanation) -> HashSet<String> {
         allow_text(&mut allowed, &split.price_label);
     }
     allowed
+}
+
+// Độ đo tỷ lệ dòng: câu khuôn viết giá trị thành phần trăm ("54,95%", lưu "%54,95" như allow_percent) và chênh lệch
+// thành điểm phần trăm ("10,24 điểm phần trăm").
+#[cfg(test)]
+fn allow_fraction_numbers(allowed: &mut HashSet<String>, e: &Explanation) {
+    let mut values = vec![&e.base.value, &e.compare.value];
+    let mut changes = vec![&e.change];
+    for dimension in &e.dimensions {
+        changes.extend(dimension.mix_effect.iter().chain(&dimension.rate_effect));
+        for group in &dimension.groups {
+            values.extend([&group.base_value, &group.compare_value]);
+            changes.push(&group.contribution);
+            changes.extend(group.mix_effect.iter().chain(&group.rate_effect));
+        }
+    }
+    for value in values {
+        allowed.insert(format!(
+            "%{}",
+            build_share_text(value).trim_end_matches('%')
+        ));
+    }
+    for change in changes {
+        if let Some(points) = build_points_amount(change) {
+            allowed.insert(points.trim_end_matches(" điểm phần trăm").to_string());
+        }
+    }
 }
 
 /// Số chữ số lẻ khi viết số của bảng thành chữ: tỷ lệ giữ đủ RATE_SCALE chữ số, độ đo khác hai chữ số như bảng kết
