@@ -4,13 +4,15 @@ bước một dòng có thời gian, đạt hay lỗi, chi tiết. Bước có g
 và lời, còn số do code tính. Bước phân loại và bước viết lời thay nhãn "có mô hình" bằng cờ màu: loại câu
 (Quantitative, Causal) và kết luận hai cổng kiểm (#201: match, warning, mismatch); mô hình chấm không đúng tuyệt
 đối, nên người đọc cần thấy nó đã kết luận gì. Một bước có thể lặp lại (run trước và sau repair), nên khóa theo vị trí.
-Vẽ như dòng thời gian: mỗi bước một chấm tròn có dấu tick màu tăng (token --increase, xanh ngọc; đỏ khi lỗi) nối bằng vạch dọc. Dưới dòng thời gian
+Vẽ như dòng thời gian: mỗi bước một chấm tròn có dấu tick màu tăng (token --increase, xanh ngọc; đỏ khi lỗi) nối bằng vạch dọc.
+Bước viết lời mà lời của mô hình không dùng được (trượt hai cổng, mô hình lỗi hay quá giờ) không phải lỗi: câu trả lời vẫn
+có, bằng câu của hệ thống, nên chấm màu hổ phách kèm chữ "Đã dùng câu của hệ thống" thay cho chữ "lỗi" màu đỏ. Dưới dòng thời gian
 là các lần gọi mô hình của câu (#184): loại việc, thời gian, số token, để thấy thời gian chờ nằm ở mô hình hay ở
 backend. */
 
 import { CircleAlert, CircleCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ModelCallView, StepFlag, StepView } from './evidenceTypes'
+import type { ModelCallView, StepFlag, StepState, StepView } from './evidenceTypes'
 
 type Props = {
   steps: StepView[]
@@ -29,6 +31,25 @@ const flags: Record<StepFlag, { text: string; className: string }> = {
   mismatch: { text: 'mismatch', className: 'border-destructive/30 bg-destructive/10 text-destructive' },
 }
 
+// Màu chấm tròn, màu tên bước và chữ trạng thái của một bước. Bước đạt chỉ cần dấu tick màu tăng; chữ "đạt" vẫn có cho
+// trình đọc màn hình (sr-only). Bước lỗi và bước dùng câu của hệ thống giữ chữ hiện ra, để người mù màu phân biệt được
+// với bước đạt.
+const states: Record<StepState, { dot: string; name: string; status: string; text: string }> = {
+  ok: { dot: 'border-increase/40 bg-increase/10 text-increase', name: '', status: 'sr-only', text: 'đạt' },
+  fallback: {
+    dot: 'border-highlight-border bg-highlight-soft text-highlight-text',
+    name: '',
+    status: 'text-xs text-highlight-text',
+    text: 'Đã dùng câu của hệ thống',
+  },
+  error: {
+    dot: 'border-destructive/30 bg-destructive/10 text-destructive',
+    name: 'text-destructive',
+    status: 'text-xs text-destructive',
+    text: 'lỗi',
+  },
+}
+
 export function EvidenceSteps({ steps, calls }: Props) {
   return (
     <div className="flex flex-col gap-2">
@@ -41,43 +62,37 @@ export function EvidenceSteps({ steps, calls }: Props) {
 function StepList({ steps }: { steps: StepView[] }) {
   return (
     <ol className="flex flex-col">
-      {steps.map((step, index) => (
-        <li
-          key={index}
-          className="relative flex gap-2.5 pb-3.5 before:absolute before:top-6 before:bottom-0.5 before:left-[11px] before:w-0.5 before:bg-label-border last:before:hidden"
-        >
-          <span
-            aria-hidden
-            className={cn(
-              'flex size-6 shrink-0 items-center justify-center rounded-full border',
-              step.ok ? 'border-increase/40 bg-increase/10 text-increase' : 'border-destructive/30 bg-destructive/10 text-destructive',
-            )}
+      {steps.map((step, index) => {
+        const state = states[step.state]
+        return (
+          <li
+            key={index}
+            className="relative flex gap-2.5 pb-3.5 before:absolute before:top-6 before:bottom-0.5 before:left-[11px] before:w-0.5 before:bg-label-border last:before:hidden"
           >
-            {step.ok ? <CircleCheck className="size-3.5" /> : <CircleAlert className="size-3.5" />}
-          </span>
-          <div className="flex min-w-0 flex-col gap-0.5 pt-0.5">
-            <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
-              <span className={cn('font-medium', !step.ok && 'text-destructive')}>{step.label}</span>
-              <span className="text-xs text-muted-foreground tabular-nums">{msFormat.format(step.durationMs)} ms</span>
-              {/* Bước đạt chỉ cần dấu tick màu tăng; chữ "đạt" vẫn có cho trình đọc màn hình. Bước lỗi giữ chữ hiện ra, để
-              người mù màu phân biệt được với bước đạt. */}
-              {step.ok ? (
-                <span className="sr-only">đạt</span>
-              ) : (
-                <span className="text-xs text-destructive">lỗi</span>
-              )}
-              {step.flag ? (
-                <span className={cn('rounded border px-1.5 text-xs font-medium', flags[step.flag].className)}>
-                  {flags[step.flag].text}
-                </span>
-              ) : (
-                step.byModel && <span className="rounded border px-1 text-xs text-muted-foreground">có mô hình</span>
-              )}
-            </p>
-            {step.detail && <p className="text-xs break-words text-muted-foreground">{step.detail}</p>}
-          </div>
-        </li>
-      ))}
+            <span
+              aria-hidden
+              className={cn('flex size-6 shrink-0 items-center justify-center rounded-full border', state.dot)}
+            >
+              {step.state === 'ok' ? <CircleCheck className="size-3.5" /> : <CircleAlert className="size-3.5" />}
+            </span>
+            <div className="flex min-w-0 flex-col gap-0.5 pt-0.5">
+              <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                <span className={cn('font-medium', state.name)}>{step.label}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">{msFormat.format(step.durationMs)} ms</span>
+                <span className={state.status}>{state.text}</span>
+                {step.flag ? (
+                  <span className={cn('rounded border px-1.5 text-xs font-medium', flags[step.flag].className)}>
+                    {flags[step.flag].text}
+                  </span>
+                ) : (
+                  step.byModel && <span className="rounded border px-1 text-xs text-muted-foreground">có mô hình</span>
+                )}
+              </p>
+              {step.detail && <p className="text-xs break-words text-muted-foreground">{step.detail}</p>}
+            </div>
+          </li>
+        )
+      })}
     </ol>
   )
 }

@@ -18,12 +18,12 @@ use crate::service::ask::contract::{
 };
 use crate::service::explain::annotate::{DropReason, GroupNotes, GroupPresence};
 use crate::service::explain::number::{build_change_parts, build_number_text_with};
+use crate::service::explain::sent_groups::{build_sent_dimensions, build_sent_share};
 use crate::service::explain::split::build_split;
 use crate::service::explain::summary::AGAINST_MIN_SHARE;
 use crate::service::explain::{
     build_direction_word, build_fraction_digits, build_points_amount, build_share_text,
     build_value_text, comparison_name, same_direction, MAX_SUMMARY_CHARS, NARRATE_DIMENSIONS,
-    NARRATE_GROUPS,
 };
 
 /// Số ý "Nguyên nhân chính" tối đa mô hình được viết; nhiều hơn thì câu trả lời trượt kiểm (ask/narrate.rs).
@@ -68,7 +68,8 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          in \"claims\". The \"amount\" of a change is then in percentage points (\"điểm phần trăm\").\n\
          - \"must_name\", in a column: a group that alone made at least half of the change. Every \"must_name\" is a \
          main cause: name each one in \"reasons\" with a cause claim, even when two columns have one.\n\
-         - \"dropped\": columns left out because they only rename the two sides or repeat another column.\n\
+         - \"dropped\": columns left out because they only rename the two sides, only regroup the values of the \
+         compared column or repeat another column.\n\
          \n\
          Reply with one JSON object:\n\
          - \"headline\": one sentence with the measure, the two sides with their values and the change, and its \
@@ -91,9 +92,11 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          Rules:\n\
          - Say only what the JSON says. Never add a cause, a reason, a comparison or a conclusion that the JSON \
          does not give, and never give advice. A column in \"dropped\" is not a cause.\n\
-         - For a group with \"presence\" \"gone\", write that it has no value of the measure on the compared \
-         side, naming that side by its label; for \"new\", that it has a value only on the compared side. State it as a \
-         fact about the data, never as a business cause.\n\
+         - For a group with \"presence\" \"gone\", write in one plain sentence that the group has none of the \
+         measure in the compared side, naming that side by its label (\"không còn <measure> nào ở <compare label>\"); \
+         for \"new\", that it has the measure only in the compared side (\"chỉ có <measure> ở <compare label>\"). \
+         Never write \"không có giá trị\" or \"trên\" a side. State it as a fact about the data, never as a business \
+         cause.\n\
          - Plain everyday Vietnamese for a business reader who is not an analyst, the way a colleague would say it. \
          Call the measure, the count and the value per unit by the names in the JSON (\"measure\", \"volume_label\", \
          \"price_label\"), in lower case inside a sentence. Never write a column name of the JSON in \"headline\" or \
@@ -118,9 +121,9 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
     )
 }
 
-/// Dữ liệu gửi mô hình: chỉ số và cờ, không câu chữ do code viết. Chỉ gửi NARRATE_DIMENSIONS chiều đầu, mỗi chiều
-/// NARRATE_GROUPS nhóm đầu: các nhóm đã xếp theo phần chênh lệch giảm dần nên các nhóm đầu là phần đáng kể; gửi cả bảng
-/// thì prompt dài mà phần đuôi gần như không đổi. Cổng 1 xét nguyên nhân chính trong đúng số nhóm này.
+/// Dữ liệu gửi mô hình: chỉ số và cờ, không câu chữ do code viết. Chỉ gửi các nhóm của build_sent_dimensions
+/// (explain/sent_groups.rs): gửi cả bảng thì prompt dài mà phần đuôi gần như không đổi. Cổng 1 xét nguyên nhân chính
+/// trong đúng số nhóm này, và mô hình chấm nhận số của cùng các nhóm đó.
 fn build_facts_json(e: &Explanation) -> serde_json::Value {
     let digits = build_fraction_digits(e);
     let comparison = e.comparison;
@@ -131,25 +134,19 @@ fn build_facts_json(e: &Explanation) -> serde_json::Value {
         text.as_deref()
             .map(|t| build_change_json(t, 1, comparison, false))
     };
-    let dimensions: Vec<serde_json::Value> = e
-        .notes
-        .dimensions
-        .iter()
-        .filter_map(|notes| Some((e.dimensions.get(notes.index)?, notes)))
-        .take(NARRATE_DIMENSIONS)
-        .map(|(dimension, notes)| {
-            let groups: Vec<serde_json::Value> = dimension
+    let dimensions: Vec<serde_json::Value> = build_sent_dimensions(e)
+        .into_iter()
+        .map(|sent| {
+            let dimension = sent.dimension;
+            let groups: Vec<serde_json::Value> = sent
                 .groups
                 .iter()
-                .zip(&notes.groups)
-                .take(NARRATE_GROUPS)
-                .filter(|(group, _)| !is_negligible(e, group))
                 .map(|(group, group_notes)| build_group_json(e, group, group_notes))
                 .collect();
             let mut json = serde_json::json!({
                 "column": dimension.column,
                 "label": dimension.label,
-                "has_outliers": notes.has_outliers,
+                "has_outliers": sent.has_outliers,
                 "groups": groups,
             });
             if let Some((_, group)) = strong.iter().find(|(d, _)| d.column == dimension.column) {
@@ -191,6 +188,7 @@ fn build_facts_json(e: &Explanation) -> serde_json::Value {
             let reason = match d.reason {
                 DropReason::SeparatesSlices => "renames_the_two_sides",
                 DropReason::Duplicates => "repeats_another_column",
+                DropReason::FollowsSlices => "follows_the_compared_column",
             };
             serde_json::json!({ "column": d.column, "label": d.label, "reason": reason })
         })
@@ -249,16 +247,7 @@ fn build_group_json(
 ) -> serde_json::Value {
     let digits = build_fraction_digits(e);
     let comparison = e.comparison;
-    // Phần của chênh lệch chỉ gửi khi cùng chiều và không quá 100%: phần âm hay quá 100% (các nhóm bù trừ nhau) người
-    // đọc không hiểu được, mô hình nói bằng số tiền thay vào.
-    let share = notes
-        .share_of_change
-        .as_deref()
-        .filter(|s| {
-            s.parse::<Decimal>()
-                .is_ok_and(|v| v > Decimal::ZERO && v <= Decimal::ONE_HUNDRED)
-        })
-        .map(|s| build_number_text_with(s, 1));
+    let share = build_sent_share(notes);
     let presence = match notes.presence {
         GroupPresence::Both => "both",
         GroupPresence::New => "new",

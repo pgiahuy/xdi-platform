@@ -109,6 +109,28 @@ fn a_dimension_that_splits_the_two_groups_is_dropped() {
     assert_eq!(dropped.compare_only, ["TRANSFER"]);
 }
 
+/// So hai kỳ (Năm 2015 với Năm 2016) theo cột năm của dữ liệu: năm đi theo kỳ, mỗi nhóm chỉ ở một kỳ, nên cột bị bỏ như
+/// chiều tách hẳn hai lát cắt. Luật "đi theo hai nhóm" của dimension_pick.rs chỉ chạy khi so hai nhóm, không cần ở đây.
+#[test]
+fn a_year_column_is_dropped_between_two_years() {
+    let dimensions = [
+        dimension(
+            "order_year",
+            ValueKind::Number,
+            &[("2015", "13133", "0"), ("2016", "0", "8690")],
+        ),
+        dimension(
+            "market",
+            ValueKind::Text,
+            &[("Europe", "8315", "1274"), ("Pacific Asia", "4818", "7416")],
+        ),
+    ];
+    let annotated = annotate(&dimensions, totals("13133", "8690"));
+    assert_eq!(columns(&annotated, &dimensions), ["market"]);
+    assert_eq!(annotated.dropped[0].column, "order_year");
+    assert_eq!(annotated.dropped[0].reason, DropReason::SeparatesSlices);
+}
+
 /// So hai kỳ: vài bang chỉ có đơn ở kỳ sau là nguyên nhân thật, nên chiều được giữ và các bang đó là "mới", khác
 /// thường khi chiếm từ 1% chênh lệch.
 #[test]

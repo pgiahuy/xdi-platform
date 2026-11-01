@@ -726,7 +726,7 @@ pub struct DroppedDimension {
     #[schema(required)]
     pub label: Option<String>,
     pub reason: DropReason,
-    /// Column with the same groups, for `duplicates`.
+    /// Column with the same groups, for `duplicates`; the compared column, for `follows_slices`.
     #[schema(required)]
     pub duplicate_of: Option<String>,
     /// For `separates_slices`: values found only in the base slice, as text.
@@ -738,11 +738,14 @@ pub struct DroppedDimension {
 /// - `separates_slices`: every value of the column is found in one slice only, so the column only renames the two
 ///   slices.
 /// - `duplicates`: the column splits the rows into exactly the groups of another column (`duplicate_of`).
+/// - `follows_slices`: each value of the compared column (`duplicate_of`) has exactly one value of this column, so the
+///   column only regroups the slices; set when one group is compared with the other groups.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DropReason {
     SeparatesSlices,
     Duplicates,
+    FollowsSlices,
 }
 
 // value cùng column của DimensionBreakdown là khóa nhóm, để bấm một dòng thì truy được dòng nguồn (#34, #52).

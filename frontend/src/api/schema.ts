@@ -2082,9 +2082,11 @@ export interface components {
          * @description - `separates_slices`: every value of the column is found in one slice only, so the column only renames the two
          *       slices.
          *     - `duplicates`: the column splits the rows into exactly the groups of another column (`duplicate_of`).
+         *     - `follows_slices`: each value of the compared column (`duplicate_of`) has exactly one value of this column, so the
+         *       column only regroups the slices; set when one group is compared with the other groups.
          * @enum {string}
          */
-        DropReason: "separates_slices" | "duplicates";
+        DropReason: "separates_slices" | "duplicates" | "follows_slices";
         /** @description One dimension left out, and why. */
         DroppedDimension: {
             /** @description For `separates_slices`: values found only in the base slice, as text. */
@@ -2092,7 +2094,7 @@ export interface components {
             column: string;
             /** @description For `separates_slices`: values found only in the compared slice, as text. */
             compare_only: string[];
-            /** @description Column with the same groups, for `duplicates`. */
+            /** @description Column with the same groups, for `duplicates`; the compared column, for `follows_slices`. */
             duplicate_of: string | null;
             /** @description Vietnamese name of the column from the column profile; null when the profile has none. */
             label: string | null;

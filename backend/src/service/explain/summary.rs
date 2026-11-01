@@ -484,6 +484,15 @@ fn build_dropped(e: &Explanation) -> Option<SummaryPoint> {
             separated.join("; ")
         ));
     }
+    let follows: Vec<&DroppedDimension> = e
+        .notes
+        .dropped
+        .iter()
+        .filter(|d| d.reason == DropReason::FollowsSlices)
+        .collect();
+    if !follows.is_empty() {
+        sentences.push(build_follows_text(e, &follows));
+    }
     for dropped in e
         .notes
         .dropped
@@ -513,6 +522,31 @@ fn build_dropped(e: &Explanation) -> Option<SummaryPoint> {
         format!("Bỏ qua {}", join_words(&columns)),
         sentences.join(" "),
     ))
+}
+
+// "Mỗi mã kỳ chỉ có một năm và một tháng bắt đầu, nên các cột này chỉ chia lại các mã kỳ đang so." Mọi cột như vậy đi
+// theo cùng cột đang so (dimension_pick.rs). Cột đang so gọi bằng nghĩa tiếng Việt khi có.
+fn build_follows_text(e: &Explanation, follows: &[&DroppedDimension]) -> String {
+    let compared = match follows[0].duplicate_of.as_deref() {
+        Some(column) if e.slice_column.as_deref() == Some(column) => {
+            build_column_text(column, e.slice_column_label.as_deref())
+        }
+        Some(column) => column.to_string(),
+        None => "nhóm".to_string(),
+    };
+    let names: Vec<String> = follows
+        .iter()
+        .map(|d| format!("một {}", build_column_text(&d.column, d.label.as_deref())))
+        .collect();
+    let which = if follows.len() == 1 {
+        "cột này"
+    } else {
+        "các cột này"
+    };
+    format!(
+        "Mỗi {compared} chỉ có {}, nên {which} chỉ chia lại các {compared} đang so.",
+        join_words(&names)
+    )
 }
 
 // "theo hình thức thanh toán, COMPLETE chỉ có DEBIT, CANCELED chỉ có TRANSFER".

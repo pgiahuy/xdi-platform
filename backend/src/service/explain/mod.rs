@@ -32,6 +32,8 @@ pub mod dimension_pick;
 mod dimension_pick_tests;
 pub mod filter;
 mod filter_bound;
+#[cfg(test)]
+mod follows_slices_tests;
 pub mod form;
 #[cfg(test)]
 mod frames_run_tests;
@@ -68,6 +70,9 @@ pub mod rest_average;
 pub mod run;
 #[cfg(test)]
 pub(crate) mod run_tests;
+pub(crate) mod sent_groups;
+#[cfg(test)]
+mod sent_groups_tests;
 pub mod significance;
 pub mod source;
 #[cfg(test)]

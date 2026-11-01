@@ -4,10 +4,10 @@
 - "volume_label", "price_label": the names of the count and of the average value per unit used by the volume and price keys below; empty when there are none.
 - "scale_main": true when the count of one side is at least twice the count of the other and the count makes the larger part of the change. The main point is then that the change comes mainly from the difference in count: an explanation that does not say so, or says the change comes mainly from something else, misses its main point and is wrong.
 - "percent": true when the measure is a share of rows. The claims keep the plain values (0,5495) while the text writes them as percents (54,95%) and changes as percentage points (0,1024 as 10,24 điểm phần trăm); read these as the same numbers.
-- "claims": the claims. Each claim is about one number or one group.
+- "claims": the claims. Each claim is about one number or one group. They also give every number of each group the explanation may name, whether or not the explanation uses it.
   - "column", "group": which group the claim is about; "group" is a value of the column "column". Both empty: the claim is about all the data being compared. Only "column": the claim is about that whole column.
   - "value": the number, with its sign. Numbers are written the Vietnamese way: a dot between groups of thousands and a comma before the decimals, so 1.234.567,89 is about 1,23 million.
-  - "amount": the same number as a plain number with a decimal point; use it to judge sizes and rounding. For a change, negative means a decrease (for groups: the compared side is lower than the base side) and positive means an increase (higher). Empty for cause and against.
+  - "amount": the same number as a plain number with a decimal point; use it to judge sizes and rounding. For a change, negative means a decrease (for groups: the compared side is lower than the base side) and positive means an increase (higher). Empty for cause, against, new and gone.
   - "field": what the claim is.
     base_value, compare_value: the value on the base side and on the compared side.
     change: the compared side minus the base side.
@@ -22,5 +22,5 @@
     mix_effect, rate_effect: when the measure is a ratio, the part of the change made by the mix of groups changing, and by the ratio inside each group changing.
     cause: this group is a main cause of the change.
     against: this group went against the change and took back part of it.
-    new: this group has a value only on the compared side (no number).
-    gone: this group has a value only on the base side, none on the compared side (no number).
+    new: this group has a value only on the compared side (no number). "has_value_in" names the side where it has a value, "no_value_in" the side where it has none.
+    gone: this group has a value only on the base side, none on the compared side (no number). "has_value_in" and "no_value_in" name the two sides as for new.

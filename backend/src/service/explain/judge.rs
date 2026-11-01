@@ -5,8 +5,10 @@ code không đọc được nghĩa câu: lời gán số của nhóm này cho nh
 định nào đứng sau. Việc gọi mô hình và quá giờ ở ask/judge.rs. Hàm thuần, test ở explain/judge_tests.rs.
 
 Mô hình chấm nhận lời sẽ trả cho người dùng và JudgeFacts: tên độ đo, kiểu so sánh và tên hai bên do code lấy từ bảng
-phân rã, cùng các khẳng định đã qua cổng 1. Nó không nhận phần còn lại của bảng, câu hỏi hay prompt của lần viết lời:
-khẳng định đã khớp bảng ở cổng 1, nên lời đúng với khẳng định là đúng với bảng. */
+phân rã, các khẳng định đã qua cổng 1, và mọi số của các nhóm mô hình viết đã nhận (explain/sent_groups.rs, dạng khẳng
+định do code thêm): số nào mô hình viết được nói thì mô hình chấm cũng thấy. Nó không nhận phần còn lại của bảng, câu hỏi
+hay prompt của lần viết lời. Khẳng định về nhóm chỉ có ở một bên (new, gone) có thêm tên bên có số và bên không có
+(build_judge_json), để mô hình chấm không phải tự suy "bên gốc" là bên nào. */
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -15,6 +17,7 @@ use crate::engine::prompts::{self, fill};
 use crate::service::ask::contract::Explanation;
 use crate::service::explain::claims::Claim;
 use crate::service::explain::comparison_name;
+use crate::service::explain::sent_groups::build_group_claims;
 use crate::service::explain::split::build_split;
 
 /// Kết luận của mô hình chấm. Mỗi phần tử của danh sách là một chỗ, câu tiếng Việt do mô hình chấm viết.
@@ -58,7 +61,8 @@ struct JudgeReply {
     problems: Vec<String>,
 }
 
-/// JudgeFacts của một bảng phân rã: các tên lấy từ bảng do code tính, khẳng định là của lời vừa qua cổng 1.
+/// JudgeFacts của một bảng phân rã: các tên lấy từ bảng do code tính; khẳng định là của lời vừa qua cổng 1, rồi tới số
+/// của các nhóm mô hình viết đã nhận mà lời chưa khai (build_group_claims).
 pub fn build_judge_facts(explanation: &Explanation, claims: &[Claim]) -> JudgeFacts {
     let split = build_split(explanation);
     let split = split.as_ref();
@@ -71,7 +75,11 @@ pub fn build_judge_facts(explanation: &Explanation, claims: &[Claim]) -> JudgeFa
         price_label: split.map(|s| s.price_label.clone()).unwrap_or_default(),
         scale_main: split.is_some_and(|s| s.scale_main),
         percent: explanation.notes.fraction,
-        claims: claims.to_vec(),
+        claims: claims
+            .iter()
+            .cloned()
+            .chain(build_group_claims(explanation, claims))
+            .collect(),
     }
 }
 
@@ -98,6 +106,9 @@ pub fn build_judge_prompt_with(
 /// JudgeFacts dạng JSON gửi mô hình chấm. Mỗi khẳng định có số được thêm "amount": cùng số đó viết kiểu máy (dấu chấm
 /// thập phân). Thử với Gemini: chỉ có số kiểu Việt Nam thì mô hình chấm đọc "181.592,21" thành khoảng 181 triệu rồi chê
 /// câu "tăng khoảng 182 nghìn" là sai; luật về cách viết số trong prompt không đủ.
+/// Khẳng định new, gone có thêm "has_value_in" và "no_value_in": tên bên có số và bên không có. Thử với Gemini: chỉ có
+/// "gone" thì mô hình chấm chê câu đúng "năm 2013 không có sinh viên nào ở 2014J" (2014J là bên được so) là viết ngược
+/// bên, và chê "LATAM không có đơn nào ở Năm 2016" là ngược năm.
 pub fn build_judge_json(facts: &JudgeFacts) -> String {
     let mut json = serde_json::to_value(facts).expect("serialize judge facts");
     if let Some(claims) = json["claims"].as_array_mut() {
@@ -105,6 +116,15 @@ pub fn build_judge_json(facts: &JudgeFacts) -> String {
             let amount = claim["value"].as_str().and_then(parse_vietnamese_number);
             if let Some(amount) = amount {
                 claim["amount"] = json!(amount);
+            }
+            let sides = match claim["field"].as_str() {
+                Some("new") => Some((&facts.compare, &facts.base)),
+                Some("gone") => Some((&facts.base, &facts.compare)),
+                _ => None,
+            };
+            if let Some((has, none)) = sides {
+                claim["has_value_in"] = json!(has);
+                claim["no_value_in"] = json!(none);
             }
         }
     }

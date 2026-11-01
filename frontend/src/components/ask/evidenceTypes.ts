@@ -63,8 +63,9 @@ export type DimensionView = {
 export type DroppedView = {
   column: string
   label: string | null
-  /** separates: mọi giá trị chỉ có ở một bên (tên khác của hai bên đang so); duplicates: chia y hệt cột duplicateOf. */
-  reason: 'separates_slices' | 'duplicates'
+  /** separates: mọi giá trị chỉ có ở một bên (tên khác của hai bên đang so); duplicates: chia y hệt cột duplicateOf;
+   * follows: mỗi giá trị của cột đang so (duplicateOf) chỉ có một giá trị của cột này. */
+  reason: 'separates_slices' | 'duplicates' | 'follows_slices'
   duplicateOf: string | null
   baseOnly: string[]
   compareOnly: string[]
@@ -182,11 +183,15 @@ export type RowsView =
   | { state: 'error'; target: DrillTarget; message: string }
   | { state: 'ready'; target: DrillTarget; sql: string; result: ResultView; page: RowsPage; source: RowsSource }
 
+/** ok: bước đạt; fallback: bước viết lời không dùng được lời của mô hình nên câu trả lời dùng câu của hệ thống (câu hỏi
+ * vẫn có trả lời, không phải lỗi); error: bước lỗi. */
+export type StepState = 'ok' | 'fallback' | 'error'
+
 export type StepView = {
   /** Nhãn tiếng Việt do giao diện đặt cho tên bước. */
   label: string
   durationMs: number
-  ok: boolean
+  state: StepState
   detail: string | null
   /** Bước có gọi mô hình ngôn ngữ. */
   byModel: boolean
