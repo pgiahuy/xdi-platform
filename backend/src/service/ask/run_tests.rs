@@ -84,21 +84,21 @@ impl Drop for Dataset {
 }
 
 /// Mô hình giả: trả lần lượt các câu viết sẵn và ghi lại các request nhận được.
-struct ScriptedLlm {
+pub(super) struct ScriptedLlm {
     replies: Mutex<VecDeque<Result<String, AppError>>>,
     /// Loại việc, prompt, và request có gửi JSON Schema không.
     requests: Mutex<Vec<(LlmTask, String, bool)>>,
 }
 
 impl ScriptedLlm {
-    fn new(replies: Vec<Result<String, AppError>>) -> Self {
+    pub(super) fn new(replies: Vec<Result<String, AppError>>) -> Self {
         ScriptedLlm {
             replies: Mutex::new(replies.into()),
             requests: Mutex::new(Vec::new()),
         }
     }
 
-    fn prompts(&self) -> Vec<String> {
+    pub(super) fn prompts(&self) -> Vec<String> {
         let requests = self.requests.lock().unwrap();
         requests
             .iter()
@@ -167,7 +167,7 @@ async fn try_run_reply(
 }
 
 /// Câu trả lời của mô hình dạng JSON (ask/reply.rs) với câu SQL cho sẵn, chưa có cách hiểu nào.
-fn reply(sql: &str) -> String {
+pub(super) fn reply(sql: &str) -> String {
     serde_json::json!({"terms": [], "assumptions": [], "sql": sql}).to_string()
 }
 
@@ -990,13 +990,45 @@ async fn repair_prompt_hides_values_of_sensitive_columns() {
     assert!(!prompts[0].contains("@example.com"), "{}", prompts[0]);
     assert!(prompts[0].contains(HIDDEN_VALUE), "{}", prompts[0]);
 
+    // Lời báo đổi sang ngày, giờ, số thập phân và của strptime đặt ô trong nháy kép ('invalid date field format:
+    // "lan@example.com"'): cũng bị ẩn.
+    for sql in [
+        "SELECT CAST(email AS DATE) AS d FROM customers",
+        "SELECT CAST(email AS DECIMAL(10,2)) AS d FROM customers",
+        "SELECT strptime(email, '%Y-%m-%d') AS d FROM customers",
+    ] {
+        let llm = ScriptedLlm::new(vec![Ok(reply(
+            "SELECT SUM(amount) AS total FROM customers",
+        ))]);
+        let outcome = run(&llm, &data, sql, Duration::from_secs(30)).await;
+        assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+        let prompts = llm.prompts();
+        assert!(!prompts[0].contains("@example.com"), "{}", prompts[0]);
+        assert!(prompts[0].contains(HIDDEN_VALUE), "{}", prompts[0]);
+    }
+
     let error = "Conversion Error: Could not convert string '1/31/2018 22:56' to DATE";
     let dates = "SELECT strptime(ship_date, '%d/%m/%Y') FROM sales";
-    assert_eq!(build_model_error(error, dates, &data.sensitive), error);
+    assert_eq!(
+        build_model_error(error, dates, &data.sensitive, &data.tables),
+        error
+    );
     let quoted = "Conversion Error: Could not convert string 'abc' near '%d'";
     let by_email = "SELECT strptime(\"Email\", '%d') FROM sales";
     assert_eq!(
-        build_model_error(quoted, by_email, &data.sensitive),
+        build_model_error(quoted, by_email, &data.sensitive, &data.tables),
         format!("Conversion Error: Could not convert string '{HIDDEN_VALUE}' near '%d'")
+    );
+    // Nháy kép: ô bị ẩn, định dạng có trong câu và tên cột của hồ sơ thì giữ, để mô hình vẫn sửa được.
+    let parse = "Invalid Input Error: Could not parse string \"lan@example.com\" according to format specifier \"%Y\"";
+    assert_eq!(
+        build_model_error(parse, "SELECT strptime(email, '%Y') FROM customers", &data.sensitive, &data.tables),
+        format!("Invalid Input Error: Could not parse string \"{HIDDEN_VALUE}\" according to format specifier \"%Y\"")
+    );
+    let binder = "Binder Error: Referenced column \"emial\" not found in FROM clause!\nCandidate bindings: \"customers.amount\", \"email\"";
+    let typo = "SELECT emial, email FROM customers";
+    assert_eq!(
+        build_model_error(binder, typo, &data.sensitive, &data.tables),
+        binder
     );
 }

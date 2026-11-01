@@ -3,8 +3,8 @@
 Một gói khái niệm ngành (domain package) mô tả các khái niệm kinh doanh chung của mọi doanh nghiệp cùng ngành: doanh
 thu, số đơn, tỷ lệ giao trễ... Mục tiêu là giúp mô hình ngôn ngữ hiểu thuật ngữ trong câu hỏi.
 
-Trạng thái: gói, màn quản trị và phần chèn vào prompt đã có, nhưng chưa có cách gắn gói cho dataset (lúc nạp hay qua
-API), nên hiện chưa prompt nào có phần này ngoài test. Đề xuất chỉ số và kiểm hợp lý theo gói chưa có code dùng.
+Trạng thái: gói, màn quản trị, chọn gói cho từng dataset và phần chèn vào prompt đã có. Thiết lập lần đầu gắn sẵn gói
+cho dataset mẫu. Đề xuất chỉ số và kiểm hợp lý theo gói chưa có code dùng.
 
 Ba tầng tách riêng:
 
@@ -28,6 +28,17 @@ Trên màn **Khái niệm ngành**, mọi thành viên xem các gói; admin thê
 phân rã, cách tính, và tắt hay bật khái niệm. Backend kiểm trước khi lưu: chữ không rỗng, không trùng trong gói, tối đa
 ba cách tính, không có ký tự làm hỏng dòng của khái niệm trong prompt (`backend/src/service/domains/check.rs`). API ở
 [API.md](API.md#khái-niệm-ngành).
+
+## Gói của một dataset
+
+Mỗi dataset dùng tối đa một gói, lưu ở cột `sources.domain` (khóa của gói, null là không dùng gói); mọi bảng của
+dataset đọc cùng gói đó. Đầu màn **Khái niệm ngành** có danh sách dataset kèm gói đang dùng: admin chọn gói hay
+"Không dùng gói" trong ô chọn của từng dataset, member chỉ xem. API: `PUT .../catalog/{id}/domain`
+([API.md](API.md#khái-niệm-ngành)). Dataset mới nạp hay mới kết nối chưa có gói cho tới khi admin chọn.
+
+Thiết lập lần đầu gắn gói cho dataset mẫu theo `data/samples/domains.json` (khóa là tên dataset, giá trị là khóa gói):
+`sales_demo` và `DataCo` dùng `retail`, `edu_demo` dùng `education`. Bản cài đã thiết lập trước khi có file này thì
+dataset mẫu chưa có gói; admin chọn trên màn **Khái niệm ngành**.
 
 Prompt viết SQL và prompt form của câu hỏi nguyên nhân chèn tên gói và `name`, `synonyms`, `description` của từng khái
 niệm đang bật khi `sources.domain` có giá trị (`build_domain_section` trong `backend/src/service/ask/prompt.rs`). Bảng

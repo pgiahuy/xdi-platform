@@ -50,6 +50,7 @@ pub mod report;
 pub mod sample_questions;
 pub mod samples;
 pub mod samples_db;
+pub mod samples_domains;
 #[cfg(test)]
 mod samples_tests;
 pub mod semantic;

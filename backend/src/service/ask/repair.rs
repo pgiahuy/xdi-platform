@@ -35,8 +35,8 @@ pub fn build_repair_prompt(prompt: &str, sql: Option<&str>, error: &str) -> Stri
 /// dòng thứ hai trở đi (DuckDB ghi tên cột gần đúng, vị trí lỗi trong chuỗi ngày ở đó): mô hình cần để sửa đúng. Bảng
 /// cha của điều kiện lan theo khóa ngoại (#215) cũng được đọc trong bản runnable, nên đường dẫn của chúng cũng bị thay.
 // Lời báo có thể chép một giá trị của dòng dữ liệu ("Could not convert string 'x' to INT32"); giá trị của cột nhạy cảm
-// được ẩn trước khi gửi mô hình (build_model_error). Khi #31 tiêm điều kiện phân quyền, cần thêm test: câu chạy lỗi
-// không đưa vào lời báo giá trị của dòng mà người hỏi không được thấy.
+// được ẩn trước khi gửi mô hình (build_model_error). Người bị lọc dòng: ô trong lời báo là của dòng họ được thấy, vì
+// DuckDB tính biểu thức của câu sau điều kiện lọc của guard; ask/repair_row_filter_tests.rs giữ điều đó khi nâng DuckDB.
 pub fn build_safe_error(message: &str, tables: &[AllowedTable]) -> String {
     let mut text = without_sql_echo(message).to_string();
     let parents = build_parent_tables(tables);
@@ -56,31 +56,65 @@ pub const HIDDEN_VALUE: &str = "<hidden value>";
 
 /// Lời báo gửi mô hình ở vòng sửa. DuckDB có thể chép một ô của dữ liệu vào lời báo ("Could not convert string
 /// 'an@example.com' to INT32"). Câu đã chạy đọc cột đánh dấu nhạy cảm (sensitive là tên các cột đó) thì mọi chuỗi trong
-/// nháy đơn của lời báo mà câu SQL không có sẵn bị thay bằng HIDDEN_VALUE: chuỗi có trong câu là chữ mô hình đã viết.
-/// Câu không đọc cột nhạy cảm thì giữ nguyên, vì mô hình cần ô mẫu để sửa cách đọc ngày ("1/31/2018 22:56").
-pub fn build_model_error(error: &str, sql: &str, sensitive: &[String]) -> String {
+/// nháy đơn hay nháy kép của lời báo bị thay bằng HIDDEN_VALUE, trừ chuỗi có sẵn trong câu SQL (chữ mô hình đã viết) và
+/// tên bảng, tên cột của tables (mô hình đã có trong prompt). Câu không đọc cột nhạy cảm thì giữ nguyên, vì mô hình cần
+/// ô mẫu để sửa cách đọc ngày ("1/31/2018 22:56").
+pub fn build_model_error(
+    error: &str,
+    sql: &str,
+    sensitive: &[String],
+    tables: &[AllowedTable],
+) -> String {
     if !reads_any_column(sql, sensitive) {
         return error.to_string();
     }
     let mut text = String::new();
+    let mut hidden: Vec<&str> = Vec::new();
     let mut rest = error;
-    while let Some(open) = rest.find('\'') {
+    // DuckDB đặt ô trong nháy đơn hay nháy kép tùy loại lỗi: đổi sang số là 'x', đổi sang ngày, giờ, số thập phân và
+    // strptime là "x" (invalid date field format: "an@example.com"). Chỉ xét nháy đơn thì ô của ba loại sau lọt tới
+    // mô hình. Hai loại nháy đều là một byte ASCII nên cắt chuỗi ở open + 1 không rơi vào giữa một ký tự UTF-8.
+    while let Some(open) = rest.find(['\'', '"']) {
+        let quote = &rest[open..=open];
         let after = &rest[open + 1..];
-        let Some(close) = after.find('\'') else {
+        let Some(close) = after.find(quote) else {
             break;
         };
         let value = &after[..close];
         text.push_str(&rest[..=open]);
-        if value.is_empty() || sql.contains(value) {
+        if value.is_empty() || sql.contains(value) || is_known_name(value, tables) {
             text.push_str(value);
         } else {
             text.push_str(HIDDEN_VALUE);
+            hidden.push(value);
         }
-        text.push('\'');
+        text.push_str(quote);
         rest = &after[close + 1..];
     }
     text.push_str(rest);
-    text
+    // strptime chép lại ô ở dòng riêng, không nháy, trên dấu ^ chỉ chỗ lỗi; dòng đó cũng thay.
+    let lines: Vec<&str> = text
+        .lines()
+        .map(|line| {
+            if hidden.contains(&line) {
+                HIDDEN_VALUE
+            } else {
+                line
+            }
+        })
+        .collect();
+    lines.join("\n")
+}
+
+// Tên bảng hay tên cột của các bảng được phép, kể cả dạng bang.cot của lời báo Binder Error ("Candidate bindings:
+// "customers.amount""): giữ để mô hình sửa đúng tên cột. So không phân biệt hoa thường như DuckDB.
+fn is_known_name(value: &str, tables: &[AllowedTable]) -> bool {
+    value.split('.').all(|part| {
+        tables.iter().any(|table| {
+            table.name.eq_ignore_ascii_case(part)
+                || table.columns.iter().any(|c| c.eq_ignore_ascii_case(part))
+        })
+    })
 }
 
 // Câu có nhắc một cột trong names (so không phân biệt hoa thường). Câu không đọc được thì so theo chữ: thà ẩn thừa.

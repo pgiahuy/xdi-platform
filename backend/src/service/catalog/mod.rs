@@ -3,6 +3,8 @@
 (contract.rs). api/catalog.rs gọi các hàm ở đây. Dựng từ ba phần đã có: dòng sources (engine/store/catalog.rs), bảng
 và phiên bản hiện hành (service/ingest.rs, list_datasets), quan hệ giữa các bảng (engine/store/relations.rs).
 
+Gói ngành của dataset (sources.domain) admin chọn qua set_domain, ghi ở service/domains/assign.rs.
+
 Việc trên một dataset đi qua phần đã có cho bảng: chụp lại cả dataset ở service/sources/ (mọi bảng trong một giao
 dịch), hỏi trên dataset ở service/conversation/ (chọn bảng bắt đầu ở service/ask/scope.rs).
 
@@ -22,6 +24,7 @@ use crate::service::ask::contract::{AskResponse, ChosenOption};
 use crate::service::catalog::contract::{DatasetKind, DatasetSummary, DatasetTable, TableColumn};
 use crate::service::conversation::contract::ConversationListResponse;
 use crate::service::conversation::{self, DatasetScope};
+use crate::service::domains::assign::assign;
 use crate::service::ingest;
 use crate::service::sources::{self, MetadataOnlyTable, SnapshotResponse};
 use crate::{error::AppError, state::AppState};
@@ -85,6 +88,20 @@ pub async fn snapshot(
         ));
     }
     sources::snapshot_dataset(state, member, source.id).await
+}
+
+/// Gắn gói ngành cho dataset, hay bỏ gói khi `domain` là None (chỉ admin, service/domains/assign.rs). Trả dataset
+/// sau khi lưu, để giao diện thấy ngay gói mới.
+pub async fn set_domain(
+    state: &AppState,
+    member: &Member,
+    id: &str,
+    domain: Option<&str>,
+) -> Result<DatasetSummary, AppError> {
+    member.require_admin()?;
+    let source = load_source(state, member, id).await?;
+    assign(state, member, source.id, domain).await?;
+    detail(state, member, id).await
 }
 
 /// Hỏi trên cả dataset, hay bắt đầu từ bảng `table_id` của nó.

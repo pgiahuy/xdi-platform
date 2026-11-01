@@ -166,7 +166,8 @@ async fn run_rounds(
                     (Some(answer), reason, None)
                 }
                 Attempt::RunFailed { shown, error } => {
-                    let error = build_model_error(&error, &answer.sql, input.sensitive);
+                    let error =
+                        build_model_error(&error, &answer.sql, input.sensitive, input.tables);
                     (Some(answer), error, Some(shown))
                 }
                 other => return Ok(build_outcome(other, answer, steps)),

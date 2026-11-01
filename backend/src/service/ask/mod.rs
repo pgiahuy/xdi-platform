@@ -63,6 +63,8 @@ pub mod related;
 #[cfg(test)]
 mod related_tests;
 pub mod repair;
+#[cfg(test)]
+mod repair_row_filter_tests;
 pub mod reply;
 mod response_choices;
 pub mod result;

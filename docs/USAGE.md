@@ -255,4 +255,5 @@ Dưới mỗi câu trả lời có hai nút **Tốt** và **Chưa đạt** (kèm
   và xuất được thành file theo khuôn của bộ đánh giá.
 - **Bài học**: đọc nhật ký lỗi, viết bài học tay hay từ một dòng nhật ký; bài học bật lên thì vào prompt.
 
-Mục **Khái niệm ngành** chứa khái niệm chung của một ngành (ví dụ giáo dục): [DOMAINS.md](DOMAINS.md).
+Mục **Khái niệm ngành** chứa khái niệm chung của một ngành (ví dụ giáo dục); đầu màn này admin chọn gói cho từng
+dataset: [DOMAINS.md](DOMAINS.md).
