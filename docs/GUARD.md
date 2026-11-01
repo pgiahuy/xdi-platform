@@ -208,6 +208,11 @@ row_filters:  "region" IN ('South')
 - `allowed_values` rỗng thành `WHERE false`. Ô trống (NULL) ở cột lọc bị ẩn, vì NULL không khớp `IN`. Giá trị so dạng
   chuỗi: khác hoa thường thì không khớp.
 - Điều kiện dựng trên cây cú pháp, không ghép chuỗi: giá trị `South') OR ('1' = '1` chỉ là một chuỗi để so.
+- Câu chạy lỗi không chép ô của dòng bị lọc vào lời báo: `EXPLAIN` cho thấy DuckDB đặt bộ lọc có `CAST` của câu ngoài
+  trên điều kiện lọc, kể cả khi điều kiện được đẩy xuống `READ_PARQUET` hay là nửa nối theo khóa ngoại. Đây là
+  cách bộ tối ưu của DuckDB làm, không phải guard bảo đảm; `service/ask/repair_row_filter_tests.rs` chạy 17 dạng câu
+  (`WHERE`, `JOIN ... ON`, câu con, `EXISTS`, `ORDER BY ... LIMIT`, `UNION`, cửa sổ) với 4 dạng điều kiện để bắt khi
+  nâng DuckDB.
 - Chặn cả câu (`GuardError::Internal`, không vào vòng sửa) khi cột của chính sách không có trong bảng (không chặn thì
   DuckDB lấy cột cùng tên của bảng ở câu ngoài và mọi dòng lọt ra), hay khi gặp chỗ đọc dữ liệu bước 3 không nhận ra.
 - `GuardedSql.row_filters` liệt kê điều kiện đã thêm, in đúng như trong `shown`, để thẻ Cách tính gắn nhãn "Lọc theo

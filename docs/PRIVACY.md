@@ -142,8 +142,11 @@ lượt trước.
 
 - Sửa SQL (một lần): prompt của lần hỏi, câu SQL vừa viết, lời báo lỗi của DuckDB hay lý do guard từ chối. Lời của
   DuckDB có thể chép một giá trị của dữ liệu (ví dụ một chuỗi ngày không đọc được). Câu đọc cột nhạy cảm thì mọi chuỗi
-  trong nháy đơn của lời báo mà câu SQL không có sẵn được thay bằng `<hidden value>`. Đường dẫn file được thay bằng tên
-  bảng.
+  trong nháy đơn hay nháy kép của lời báo, trừ chuỗi có sẵn trong câu SQL và tên bảng, tên cột, được thay bằng
+  `<hidden value>`, cả dòng `strptime` chép lại giá trị đó. Đường dẫn file được thay bằng tên bảng. Với người bị lọc dòng,
+  giá trị trong lời báo là của dòng họ được thấy: DuckDB tính biểu thức của câu sau điều kiện lọc của guard. Đó là cách
+  DuckDB xếp bộ lọc, đã kiểm trên bản DuckDB đang dùng với 17 dạng câu và 4 dạng điều kiện lọc
+  (`service/ask/repair_row_filter_tests.rs`, `api/ask_row_filter_error_tests.rs`); nâng DuckDB thì các test này kiểm lại.
 - Sửa form (một lần): prompt form, form vừa điền, lỗi từng trường; lỗi có thể kèm tối đa 20 giá trị của một cột phân
   loại và ngày đầu, ngày cuối của cột thời gian.
 - Gửi lại kèm bảng (một lần): SQL đọc bảng chỉ có trong danh sách gọn thì prompt SQL được dựng lại kèm chi tiết bảng đó.
