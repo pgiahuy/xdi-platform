@@ -4,6 +4,10 @@
 # Chrome không giao diện:
 #   google-chrome --headless=new --hide-scrollbars --force-device-scale-factor=2 --window-size=1600,1110 \
 #     --virtual-time-budget=10000 --screenshot=docs/images/luong-cau-hoi.png docs/images/src/luong-cau-hoi.html
+# Kiểm chữ không tràn khỏi khối: chạy thêm
+#   google-chrome --headless=new --virtual-time-budget=10000 --dump-dom docs/images/src/luong-cau-hoi.html | grep -A20 'id="overflow"'
+# Mỗi khối chữ gắn data-box (khung chứa nó); đoạn script cuối trang đo bằng getBBox và ghi khối nào tràn vào
+# <pre id="overflow">, rỗng là không tràn. Khối pre ẩn nên không có trong ảnh.
 # Sửa chữ ở đây khi luồng trong code đổi (docs/ARCHITECTURE.md mục luồng một câu hỏi).
 import json
 import os
@@ -18,10 +22,12 @@ REQ, RET, NUM = "#33454c", "#2f7a73", "#d98a1e"
 out = []
 
 
-def text(x, y, lines, size=13, weight=400, fill=MUTED, anchor="middle", lh=None):
+def text(x, y, lines, size=13, weight=400, fill=MUTED, anchor="middle", lh=None, box=None):
     lh = lh or size * 1.4
     spans = "".join(f'<tspan x="{x}" dy="{0 if i == 0 else lh}">{escape(l)}</tspan>' for i, l in enumerate(lines))
-    out.append(f'<text x="{x}" y="{y}" font-size="{size}" font-weight="{weight}" fill="{fill}" text-anchor="{anchor}">{spans}</text>')
+    # box: (x, y, w, h) của khung chứa chữ, để script cuối trang kiểm chữ không tràn ra ngoài (chừa 8 px mỗi bên).
+    data = f' data-box="{box[0]},{box[1]},{box[2]},{box[3]}"' if box else ""
+    out.append(f'<text x="{x}" y="{y}" font-size="{size}" font-weight="{weight}" fill="{fill}" text-anchor="{anchor}"{data}>{spans}</text>')
 
 
 def logo(name, x, y, size):
@@ -36,8 +42,8 @@ def rect(x, y, w, h, fill, stroke, dashed=False, rx=14):
 def module(x, y, w, h, title, lines):
     rect(x, y, w, h, "#ffffff", "#e3a54a")
     top = y + h / 2 - len(lines) * 9 + 2
-    text(x + w / 2, top, [title], size=15, weight=700, fill=INK)
-    text(x + w / 2, top + 21, lines, size=12.5, lh=17)
+    text(x + w / 2, top, [title], size=15, weight=700, fill=INK, box=(x, y, w, h))
+    text(x + w / 2, top + 21, lines, size=12.5, lh=17, box=(x, y, w, h))
 
 
 def arrow(points, color=REQ, dashed=False, width=2):
@@ -71,9 +77,10 @@ text(103, 458, ["Người dùng"], size=15, weight=700, fill=INK)
 
 rect(210, 160, 150, 590, "#e6f7fb", "#9ad7e6")
 logo("react", 255, 380, 60)
-text(285, 476, ["Giao diện"], size=15, weight=700, fill=INK)
-text(285, 497, ["React, Vite"], size=12.5)
-text(285, 560, ["bảng, biểu đồ,", "lời giải thích,", "Minh chứng:", "SQL, các bước,", "phân rã,", "dòng nguồn"], size=12, lh=16)
+UI = (210, 160, 150, 590)
+text(285, 476, ["Giao diện"], size=15, weight=700, fill=INK, box=UI)
+text(285, 497, ["React, Vite"], size=12.5, box=UI)
+text(285, 560, ["bảng, biểu đồ,", "lời giải thích,", "Cách tính,", "Minh chứng:", "SQL, các bước,", "phân rã,", "dòng nguồn"], size=12, lh=16, box=UI)
 
 # ---- hàng trên
 TY, TH = 165, 100
@@ -81,36 +88,38 @@ cols = {"api": (408, 160), "ctx": (600, 220), "sql": (860, 220), "guard": (1120,
 module(*cols["api"], TY, TH, "API", ["Axum: đăng nhập,", "quyền workspace"]) if False else None
 x, w = cols["api"]; module(x, TY, w, TH, "API", ["Axum: đăng nhập,", "quyền workspace"])
 x, w = cols["ctx"]; module(x, TY, w, TH, "Dựng ngữ cảnh", ["bảng của dataset, metadata", "cột, chỉ số, câu mẫu, bài học"])
-x, w = cols["sql"]; module(x, TY, w, TH, "Hiểu câu hỏi", ["phân loại; viết SQL; câu \"vì sao\":", "chọn khuôn, điền form"])
-x, w = cols["guard"]; module(x, TY, w, TH, "Guard SQL", ["một SELECT; JOIN theo khóa", "ngoại; lọc dòng theo vai; LIMIT"])
+x, w = cols["sql"]; module(x, TY, w, TH, "Hiểu câu hỏi", ["phân loại câu hỏi; câu số liệu:", "viết SQL; câu nguyên nhân:", "điền form"])
+x, w = cols["guard"]; module(x, TY, w, TH, "Guard SQL", ["một SELECT; nối theo khóa", "ngoại; lọc dòng theo vai;", "giới hạn số dòng"])
 
 # ---- giữa: Postgres, mô hình, DuckDB, database công ty
 MY, MH = 360, 190
 
 
-def external(x, w, fill, stroke, logos, title, lines):
+def external(x, w, fill, stroke, logos, title, lines, tx=88):
     rect(x, MY, w, MH, fill, stroke)
     lx = x + 18
     for name, size, dy in logos:
         logo(name, lx, MY + dy, size)
-    text(x + 88, MY + 62, [title], size=16, weight=700, fill=INK, anchor="start")
-    text(x + 88, MY + 86, lines, size=12.5, anchor="start", lh=17)
+    # tx: chữ bắt đầu sau logo; logo nhỏ thì chữ bắt đầu sớm hơn để dòng dài không tràn khung.
+    text(x + tx, MY + 62, [title], size=16, weight=700, fill=INK, anchor="start", box=(x, MY, w, MH))
+    text(x + tx, MY + 86, lines, size=12.5, anchor="start", lh=17, box=(x, MY, w, MH))
 
 
 external(600, 220, "#e8f0fb", "#a9c1e8", [("postgres", 56, 40)], "Postgres", ["dataset, bảng,", "quan hệ, hồ sơ cột,", "chỉ số, câu mẫu,", "bài học, lịch sử,", "nhật ký lỗi"])
-external(860, 220, "#fdf3e6", "#e9b97a", [("gemini", 40, 34), ("ollama", 40, 100)], "Mô hình", ["Gemini, Ollama, mock;", "nhận metadata cột,", "giá trị cột phân loại,", "các ý do code tính;", "không nhận dòng dữ liệu"])
+external(860, 220, "#fdf3e6", "#e9b97a", [("gemini", 40, 34), ("ollama", 40, 100)], "Mô hình", ["Gemini, Ollama, mock;", "nhận metadata cột,", "giá trị phân loại,", "các ý code đã tính;", "không nhận dòng", "dữ liệu gốc"], tx=70)
 external(1120, 220, "#fdf9e1", "#e2cf6a", [("duckdb", 52, 40)], "DuckDB nhúng", ["chạy SQL đã qua", "guard trên Parquet;", "số do DuckDB và", "code tính"])
 
 rect(1390, MY, 186, MH, "#ffffff", "#9aa9ad", dashed=True)
-text(1483, MY + 34, ["Trước khi hỏi"], size=12.5, weight=700, fill=NUM)
-text(1483, MY + 62, ["Database công ty"], size=15, weight=700, fill=INK)
-text(1483, MY + 86, ["Postgres, phiên chỉ đọc;", "DuckDB đọc thẳng, ghi", "Parquet; đọc khóa ngoại,", "COMMENT ON; SQL của AI", "không chạy trên đây"], size=12.5, lh=17)
+CO = (1390, MY, 186, MH)
+text(1483, MY + 34, ["Trước khi hỏi"], size=12.5, weight=700, fill=NUM, box=CO)
+text(1483, MY + 62, ["Database công ty"], size=15, weight=700, fill=INK, box=CO)
+text(1483, MY + 86, ["Postgres, tài khoản", "chỉ đọc; chụp bảng", "thành Parquet, đọc", "khóa ngoại, COMMENT;", "câu hỏi không chạy", "trên database này"], size=12.5, lh=17, box=CO)
 arrow([(1390, MY + MH / 2), (1342, MY + MH / 2)], color="#9aa9ad", dashed=True)
 
 # ---- hàng dưới
 BY, BH = 640, 100
-module(1120, BY, 220, BH, "Kết quả và giải thích", ["bảng, biểu đồ, \"Đã hiểu là\", cảnh", "báo; phân rã (SQL qua guard)"])
-module(860, BY, 220, BH, "Viết lời, kiểm hai cổng", ["cổng 1: code so từng số;", "cổng 2: mô hình khác chấm nghĩa"])
+module(1120, BY, 220, BH, "Kết quả và giải thích", ["bảng, biểu đồ, Cách tính,", "cảnh báo; phân rã", "(SQL do code dựng, qua guard)"])
+module(860, BY, 220, BH, "Viết lời và kiểm", ["kiểm số: code so từng số;", "kiểm nghĩa: một lần gọi", "mô hình riêng chấm nghĩa"])
 module(600, BY, 220, BH, "Ghi lại", ["câu hỏi, SQL, các bước;", "lỗi vào nhật ký lỗi"])
 
 # ---- đường chính
@@ -155,12 +164,12 @@ steps = [
     "API chuyển câu hỏi cho bước dựng ngữ cảnh.",
     "Chọn bảng và các bảng nối theo khóa ngoại; đọc metadata cột, giá trị, chỉ số, câu mẫu, bài học.",
     "Một cụm khớp nhiều cột thì chọn cột hợp nhất, ghi các cột còn lại thành giả định đổi được.",
-    "Mô hình phân loại, nêu cột cần, viết SQL; câu \"vì sao\": chọn khuôn, điền form, code dựng SQL.",
+    "Mô hình phân loại, nêu cột cần; câu số liệu: viết SQL; câu nguyên nhân: điền form, code dựng SQL.",
     "Guard: một SELECT, bảng, cột, hàm được phép, JOIN đúng khóa ngoại, lọc dòng theo vai, LIMIT.",
     "Chặn cộng lặp; DuckDB chạy trên Parquet; bị từ chối, lỗi hay lọc sai giá trị thì mô hình viết lại một lần.",
     "Bảng kết quả, cảnh báo; code tính phần giải thích, phân rã bằng SQL do code dựng (cũng qua guard).",
     "Các ý do code tính (không có dòng dữ liệu) đi tới bước viết lời.",
-    "Mô hình viết lời; code so từng số, mô hình khác chấm nghĩa; sai thì dùng câu của code.",
+    "Mô hình viết lời; kiểm số (code so từng số), kiểm nghĩa (mô hình chấm); trượt thì dùng câu của code.",
     "Câu trả lời đã kiểm đi tới bước ghi lại.",
     "Ghi câu hỏi, SQL, các bước vào lịch sử; lỗi của mô hình vào nhật ký lỗi.",
     "Backend trả một gói JSON cho giao diện.",
@@ -174,7 +183,7 @@ for i, s in enumerate(steps):
     x = 52 + col * 774
     y = LY + 30 + r * 24.5
     num(x, y - 4, i + 1, color=RET if i == 15 else NUM)
-    text(x + 24, y + 1, [s], size=13, fill=INK, anchor="start")
+    text(x + 24, y + 1, [s], size=13, fill=INK, anchor="start", box=(x - 16, LY, 774, 222))
 
 svg = "\n".join(o for o in out if o)
 html = f"""<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>xdi-platform: luồng một câu hỏi</title>
@@ -183,5 +192,18 @@ html = f"""<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>xdi
 <svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Luồng một câu hỏi qua xdi-platform" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="Be Vietnam Pro, system-ui, sans-serif">
 <defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="context-stroke"/></marker></defs>
 {svg}
-</svg></body></html>"""
+</svg><pre id="overflow" hidden></pre>
+<script>
+document.fonts.ready.then(() => {{
+  const bad = [];
+  for (const t of document.querySelectorAll("text[data-box]")) {{
+    const [x, y, w, h] = t.dataset.box.split(",").map(Number);
+    const b = t.getBBox();
+    if (b.x < x + 8 || b.x + b.width > x + w - 8 || b.y < y + 4 || b.y + b.height > y + h - 4) {{
+      bad.push(t.textContent.slice(0, 60) + " | " + [b.x, b.y, b.width, b.height].map(Math.round).join(","));
+    }}
+  }}
+  document.getElementById("overflow").textContent = bad.join("\\n");
+}});
+</script></body></html>"""
 open(os.path.join(HERE, "luong-cau-hoi.html"), "w").write(html)
