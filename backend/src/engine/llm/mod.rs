@@ -120,7 +120,10 @@ pub fn from_config(config: &Config) -> Arc<dyn LlmProvider> {
                     config.gemini_api_key.clone(),
                     config.gemini_backup_api_key.clone(),
                 ],
-                config.gemini_model.clone(),
+                vec![
+                    config.gemini_model.clone(),
+                    config.gemini_fallback_model.clone(),
+                ],
                 config.gemini_timeout,
             ))
         }
