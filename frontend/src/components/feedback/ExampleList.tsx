@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/feedback/ExampleList.tsx - danh sách câu trả lời được đánh giá "Tốt" để admin duyệt làm câu mẫu (#212).
-Mỗi thẻ có câu hỏi, dataset, SQL mô hình viết, dòng tóm tắt "Đã hiểu là", số dòng kết quả lúc hỏi (kết quả không lưu),
+Mỗi thẻ có câu hỏi, dataset, SQL mô hình viết, dòng tóm tắt "Cách tính", số dòng kết quả lúc hỏi (kết quả không lưu),
 ai đánh giá và ai đã duyệt. Bấm "Duyệt làm câu mẫu" thì câu vào prompt làm ví dụ ở các câu hỏi sau có từ chung. Chỉ
 nhận dữ liệu qua props (pages/ExamplesPage.tsx). */
 
@@ -43,7 +43,7 @@ export function ExampleList({ items, pendingId, onApprove, onWithdraw }: Props) 
               <p className="text-xs text-muted-foreground">
                 {[
                   item.datasetName ?? 'Dataset đã xóa',
-                  item.why ? 'câu hỏi tìm nguyên nhân' : null,
+                  item.why ? 'câu hỏi nguyên nhân' : null,
                   item.rowCount === null ? null : `${item.rowCount} dòng kết quả`,
                   `đánh giá Tốt bởi ${item.ratedBy ?? 'tài khoản đã xóa'}, ${dateFormat.format(new Date(item.ratedAt))}`,
                 ]
@@ -63,7 +63,7 @@ export function ExampleList({ items, pendingId, onApprove, onWithdraw }: Props) 
           </div>
           {item.understood && (
             <p className="text-sm">
-              <span className="font-semibold text-label">Đã hiểu là: </span>
+              <span className="font-semibold text-label">Cách tính: </span>
               {item.understood}
             </p>
           )}

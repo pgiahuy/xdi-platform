@@ -5,7 +5,7 @@ người đang xem, rồi chạy trên đúng các phiên bản câu hỏi đã 
 (service/drill/): người xem bị lọc dòng theo vai dữ liệu chỉ thấy dòng của vai đó, và nạp phiên bản mới sau khi hỏi
 không làm số của báo cáo đổi theo.
 
-Thẻ "Cách tính" và biểu đồ dựng bằng code từ câu vừa chạy (ask/view.rs), các ý "Căn cứ" do code tính lại từ bảng vừa
+Thẻ "Cách tính" và biểu đồ dựng bằng code từ câu vừa chạy (ask/view.rs), các ý "Minh chứng" do code tính lại từ bảng vừa
 chạy (service/insight/ với narrate = false: không gọi mô hình). Lời trả lời của lúc hỏi giữ nguyên, kèm kết quả kiểm số
 và kiểm nghĩa đã lưu; khi điều kiện lọc dòng của người xem bây giờ không có trong câu đã chạy lúc hỏi (vai dữ liệu đổi
 sau đó), lời và phân rã đã lưu có thể nói tới dòng người xem không còn được thấy, nên không hiện. */

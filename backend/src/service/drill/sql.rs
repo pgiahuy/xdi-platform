@@ -15,7 +15,7 @@ cộng điều kiện của lát cắt được bấm (ExplanationSlice.filter):
 bằng CASE WHEN, nên thiếu điều kiện lát cắt thì trang ra dòng của cả hai kỳ. Phân rã theo cột của bảng liên quan
 (#227) đọc một câu con `LEFT JOIN` ở FROM; câu con đó giữ dòng của bảng chính nên truy được như một bảng.
 
-Đọc câu bằng QueryShape (engine/sql_shape.rs) như thẻ "Đã hiểu là", nên hai chỗ hiểu cột khóa và vế lọc giống nhau.
+Đọc câu bằng QueryShape (engine/sql_shape.rs) như thẻ "Cách tính", nên hai chỗ hiểu cột khóa và vế lọc giống nhau.
 Câu dạng chưa truy được thì báo rõ lý do (400) thay vì trả dòng có thể sai: phép tập hợp, HAVING, hàm cửa sổ, ROLLUP,
 `*`, khóa nhóm không có trong SELECT, câu con hay bảng tạm gộp nhóm (drill/sources.rs).
 

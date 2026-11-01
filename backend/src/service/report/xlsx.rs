@@ -246,7 +246,7 @@ fn write_method(
         "SQL đã chạy",
         "Bảng và phiên bản",
         "Hỏi lúc",
-        "Căn cứ do hệ thống tính",
+        "Minh chứng do hệ thống tính",
     ];
     write_header(sheet, 0, &header, bold)?;
     for (index, item) in report.items.iter().enumerate() {

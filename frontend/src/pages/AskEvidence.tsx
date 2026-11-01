@@ -46,7 +46,7 @@ const stepLabels: Record<StepName, string> = {
   run: 'Chạy SQL',
   repair: 'Mô hình sửa SQL',
   explain: 'Tính phân rã',
-  narrate: 'Mô hình viết lời, qua hai cổng kiểm',
+  narrate: 'Mô hình viết lời, qua kiểm số và kiểm nghĩa',
   record: 'Lưu vào lịch sử',
 }
 const modelSteps: StepName[] = ['classify', 'llm', 'repair', 'narrate']
@@ -59,7 +59,7 @@ const taskLabels: Record<ModelTask, string> = {
   repair: 'Sửa SQL',
   profile: 'Lập hồ sơ cột',
   narrate: 'Viết lời phân rã',
-  why: 'Điền form câu hỏi tìm nguyên nhân',
+  why: 'Điền form câu hỏi nguyên nhân',
   insight: 'Viết lời giải thích',
   classify: 'Phân loại câu hỏi',
   judge: 'Chấm lời giải thích',

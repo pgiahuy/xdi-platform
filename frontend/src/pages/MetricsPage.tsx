@@ -155,8 +155,8 @@ function DatasetMetrics({ ws, datasetId }: { ws: string; datasetId: string }) {
             Cách gộp của cột số đo
           </h3>
           <p className="text-sm text-muted-foreground">
-            Cột mô tả từng dòng (tuổi, điểm, số ngày) cộng lại thì vô nghĩa: đặt Trung bình để câu hỏi và câu vì sao
-            dùng trung bình mỗi dòng.
+            Cột mô tả từng dòng (tuổi, điểm, số ngày) cộng lại thì vô nghĩa: đặt Trung bình để câu hỏi số liệu và câu
+            hỏi nguyên nhân dùng trung bình mỗi dòng.
           </p>
           <AggregationList
             columns={measures}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/conversation/carryover.rs - đánh dấu mục của thẻ "Đã hiểu là" lấy từ lượt trước (#164). Câu tiếp nối ("còn
+/* service/conversation/carryover.rs - đánh dấu mục của thẻ "Cách tính" lấy từ lượt trước (#164). Câu tiếp nối ("còn
 năm 2017 thì sao?") giữ nhóm và độ đo của lượt trước; thẻ ghi "từ câu trước" cạnh các mục đó để người hỏi biết phần
 nào mình không nói mà hệ thống vẫn áp. conversation/mod.rs gọi sau khi hỏi xong, trước khi lưu phần đã hiểu của lượt.
 

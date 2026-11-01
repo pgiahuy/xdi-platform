@@ -554,7 +554,7 @@ fn apply_choice(
         .find_map(|c| columns.iter().position(|column| column.name == c.option_id));
     // Nhiều cột khớp, kể cả bằng điểm nhau, thì không hỏi lại: dùng cột đầu danh sách ứng viên (điểm cao nhất, bằng điểm
     // thì cột đứng trước trong bảng, ask/matching.rs), trả lời ngay, các cột còn lại thành giả định đổi được trên thẻ
-    // "Hệ thống đã hiểu là" (build_pick_choices ở ask/response_choices.rs). Hỏi trước rồi mới trả lời bắt người hỏi chọn
+    // "Cách tính" (build_pick_choices ở ask/response_choices.rs). Hỏi trước rồi mới trả lời bắt người hỏi chọn
     // cả khi cách hiểu mặc định đã đúng.
     let (column, chosen_by_user) = match user_pick {
         // Người hỏi đã chọn một ứng viên (kể cả khi chỉ có một): ghi là lựa chọn của họ, để #33 không báo

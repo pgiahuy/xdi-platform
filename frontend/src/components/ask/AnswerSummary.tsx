@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/AnswerSummary.tsx - phần giải thích theo hình dạng kết quả của câu thường (insight, #227); insight của
 câu hỏi tìm nguyên nhân hiện ở WhyInsight.tsx. Có lời của mô hình (khi summary_by_model) thì lời đó đứng đầu: mô hình
-chỉ diễn đạt lại các ý code đã tính, và lời đã qua hai cổng kiểm của backend (#201). Ngay dưới là mục "Căn cứ": câu
+chỉ diễn đạt lại các ý code đã tính, và lời đã qua hai cổng kiểm của backend (#201). Ngay dưới là mục "Minh chứng": câu
 chính (summary_title) và các ý ngắn (summary_points) do code viết, để người đọc đối chiếu lời của mô hình với số đã
 tính. Không có lời của mô hình (mô hình lỗi, lời trượt hai cổng ở mọi lần viết, hay INSIGHT_TEXT=false) thì câu chính
 và các ý đứng đầu, không kèm dòng ghi chú (tab Các bước ghi lời của mô hình có được dùng không). */
@@ -24,7 +24,7 @@ export function AnswerSummary({ title, points, modelSummary }: Props) {
             {modelSummary}
           </p>
           <div className="flex flex-col gap-1">
-            <h4 className="text-xs font-semibold tracking-wider text-label uppercase">Căn cứ</h4>
+            <h4 className="text-xs font-semibold tracking-wider text-label uppercase">Minh chứng</h4>
             <Facts title={title} points={points} />
           </div>
         </>

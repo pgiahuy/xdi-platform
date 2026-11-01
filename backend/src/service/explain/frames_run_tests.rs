@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/frames_run_tests.rs - test trọn đường câu "tại sao" (explain/run.rs) cho các khuôn thêm ở #244, trên
 file Parquet tạm kiểu DataCo của explain/run_tests.rs: form của mô hình giả, kiểm form, SQL qua guard, chạy trên DuckDB,
-phân rã, câu khuôn (mô hình giả hết câu ở bước viết lời) và thẻ "Đã hiểu là".
+phân rã, câu khuôn (mô hình giả hết câu ở bước viết lời) và thẻ "Cách tính".
 
 Số của quý 3/2017 (COMPARE_CELLS của run_tests.rs): Pacific Asia 1.960.120,00; các thị trường còn lại cộng lại
 6.158.980,00. */

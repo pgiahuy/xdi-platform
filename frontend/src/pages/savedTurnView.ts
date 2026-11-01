@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/* pages/savedTurnView.ts - dựng các dòng "Đã hiểu là" của một lượt đã lưu từ TurnItem.understood. Backend viết chuỗi
+/* pages/savedTurnView.ts - dựng các dòng "Cách tính" của một lượt đã lưu từ TurnItem.understood. Backend viết chuỗi
 này cho prompt của mô hình (build_understood_text trong backend/src/service/conversation/history.rs): các phần
 "measures: ...; filters: ...; grouped by: ...; period: ..." nối bằng "; ", tên phần tiếng Anh. Hiện nguyên chuỗi thì
-người dùng đọc tên phần tiếng Anh, nên tách theo đúng bốn tên phần đó và thay bằng nhãn của thẻ "Đã hiểu là". Chuỗi
+người dùng đọc tên phần tiếng Anh, nên tách theo đúng bốn tên phần đó và thay bằng nhãn của thẻ "Cách tính". Chuỗi
 không mở đầu bằng một tên phần đã biết (backend đổi cách viết) thì trả một dòng không nhãn với nguyên chuỗi, không bỏ
 mất nội dung. */
 

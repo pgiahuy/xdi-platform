@@ -200,7 +200,7 @@ pub async fn delete(state: &AppState, member: &Member, id: Uuid) -> Result<(), A
     get_row(state, member, id).await?;
     if !state.store.delete_source(&member.workspace, id).await? {
         return Err(AppError::BadRequest(
-            "Nguồn còn dataset chụp từ nó: xóa các dataset đó trước rồi xóa nguồn".to_string(),
+            "Nguồn còn bảng chụp từ nó: xóa các bảng đó trước rồi xóa nguồn".to_string(),
         ));
     }
     Ok(())

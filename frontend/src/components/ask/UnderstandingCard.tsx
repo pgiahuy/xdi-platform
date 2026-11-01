@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* components/ask/UnderstandingCard.tsx - thẻ "Đã hiểu là": câu hỏi được hiểu thành đo gì, lọc gì, nhóm theo gì, sắp
+/* components/ask/UnderstandingCard.tsx - thẻ "Cách tính": câu hỏi được hiểu thành đo gì, lọc gì, nhóm theo gì, sắp
 xếp, giới hạn, khoảng thời gian, và các giả định đổi được. Nhãn do backend viết từ câu SQL đã chạy (#35), nên thẻ luôn
 khớp với kết quả bên dưới; đoạn SQL của từng mục để pane bằng chứng (#52) hiện. Mục trống thì không hiện dòng. Mục lấy
 từ lượt trước của cuộc trò chuyện (#164) có nhãn chữ "từ câu trước", không chỉ đổi màu, để đọc được cả khi không phân
@@ -49,7 +49,7 @@ export function UnderstandingCard({ understanding: u, onChangeAssumption, disabl
         className="text-xs font-semibold tracking-wider text-label uppercase"
       >
         <CircleCheck aria-hidden className="size-4" />
-        Hệ thống đã hiểu là
+        Cách tính
       </SectionHeading>
       <div id={bodyId} hidden={!open} className="flex flex-col gap-3">
         <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">

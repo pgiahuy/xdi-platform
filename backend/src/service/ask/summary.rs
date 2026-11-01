@@ -41,7 +41,7 @@ const TEMPLATE_ROW_COLUMNS: usize = 5;
 pub const NO_DATA_ANSWER: &str =
     "Không có dữ liệu khớp với câu hỏi, nên chưa có con số để trả lời.";
 
-/// Đầu vào của build_answer: thẻ "Đã hiểu là", bảng kết quả đã có vai trò cột và phần giải thích nếu có.
+/// Đầu vào của build_answer: thẻ "Cách tính", bảng kết quả đã có vai trò cột và phần giải thích nếu có.
 pub struct SummaryInput<'a> {
     pub understanding: Option<&'a Understanding>,
     pub result: &'a ResultTable,
@@ -100,7 +100,7 @@ pub fn build_answer(input: &SummaryInput<'_>) -> Option<SummaryOutcome> {
 }
 
 /// Câu khuôn của danh sách dòng không gộp: "Có 37 dòng khớp điều kiện: <lọc>." Điều kiện là nhãn khoảng thời gian và
-/// bộ lọc của thẻ "Đã hiểu là"; limit_reached (bảng chạm trần số dòng) thì nói "ít nhất".
+/// bộ lọc của thẻ "Cách tính"; limit_reached (bảng chạm trần số dòng) thì nói "ít nhất".
 pub fn build_rows_answer(result: &ResultTable, understanding: Option<&Understanding>) -> String {
     let count = build_row_count(result);
     let filters: Vec<String> = understanding
@@ -128,10 +128,10 @@ pub fn build_rows_answer(result: &ResultTable, understanding: Option<&Understand
 /// - còn lại: "Kết quả có N dòng, xem bảng bên dưới."
 ///
 /// Số từ một triệu trở lên có dạng rút gọn đứng trước số đủ; tên độ đo bỏ tên cột trong ngoặc, tên cột đã có ở thẻ
-/// "Đã hiểu là".
+/// "Cách tính".
 pub fn build_template_answer(input: &SummaryInput<'_>) -> String {
     let result = input.result;
-    // Tên độ đo: bí danh tiếng Việt câu SQL đặt cho cột, không thì nhãn của thẻ "Đã hiểu là" khi thẻ có đúng một độ đo.
+    // Tên độ đo: bí danh tiếng Việt câu SQL đặt cho cột, không thì nhãn của thẻ "Cách tính" khi thẻ có đúng một độ đo.
     // None khi chỉ còn tên cột trong dữ liệu (giữ nguyên chữ hoa, chữ thường của nó).
     let measure_label = |column: &str| -> Option<String> {
         let item = input

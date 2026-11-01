@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/ask/choices.rs - đổi cách hiểu mô hình ghi trong câu trả lời (ask/reply.rs) thành lựa chọn của hợp đồng hỏi
 (Choice): giả định đã chọn sẵn và câu hỏi lại. Endpoint hỏi (#33) gọi các hàm ở đây sau khi đọc câu trả lời, đưa giả
-định vào thẻ "Đã hiểu là" (#35) và câu hỏi lại vào clarifications.
+định vào thẻ "Cách tính" (#35) và câu hỏi lại vào clarifications.
 
 Id do code dựng, không lấy của mô hình: loại lựa chọn cộng cụm chữ đã bỏ dấu, cùng cách với id lựa chọn cột của #28
 (build_column_choice_id), nên cùng câu hỏi trên cùng phiên bản luôn ra cùng id dù mô hình chọn khác đi. Id lựa chọn chỉ

@@ -251,7 +251,7 @@ async fn answers_a_question_and_records_it() {
     assert!(classify["detail"]
         .as_str()
         .unwrap()
-        .starts_with("Câu hỏi thường: "));
+        .starts_with("Câu hỏi số liệu: "));
     // Mock không có lời viết sẵn cho task insight nên đoạn trả lời là câu khuôn, không gọi mạng. Tên độ đo ở giữa câu
     // là mô tả cột khi hồ sơ do mock viết (chạy nền sau khi nạp) đã ghi xong, không thì tên cột; chỉ so hai đầu câu.
     let answer = response["answer_text"].as_str().unwrap();

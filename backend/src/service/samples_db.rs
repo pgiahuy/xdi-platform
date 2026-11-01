@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/samples_db.rs - dataset mẫu chụp từ một database mẫu (một chuỗi của SAMPLE_DATABASE_URL, compose trỏ vào
 sales_demo và edu_demo của dịch vụ demo-db trong data/postgres-demo): thêm database đó làm nguồn Postgres của workspace
-đầu tiên, rồi chụp mọi bảng tài khoản của nó đọc được, mỗi bảng một
-dataset kèm quan hệ khóa ngoại, đúng như admin kết nối database ở trang Dữ liệu mà không bỏ tick bảng nào
+đầu tiên, rồi chụp mọi bảng tài khoản của nó đọc được thành các bảng
+của một dataset, kèm quan hệ khóa ngoại, đúng như admin kết nối database ở trang Dữ liệu mà không bỏ tick bảng nào
 (service/sources/, #247). Bảng nào có <SAMPLES_DIR>/<tên bảng>.metrics.json thì ghi thêm chỉ số mẫu.
 
 service/samples.rs gọi seed_database cho từng database mẫu; lỗi ở đây thì bên đó ghi log, và khi không database nào

@@ -3,7 +3,7 @@
 Gọi engine và auth; không bao giờ gọi ngược lên api.
 
 Bốn luồng nghiệp vụ lớn nằm trong thư mục riêng: ask/ (hỏi đáp), explain/ (toán câu "tại sao",
-ask/why.rs gọi run_why của nó), drill/ (truy dòng nguồn), understanding/ (thẻ "Đã hiểu là"),
+ask/why.rs gọi run_why của nó), drill/ (truy dòng nguồn), understanding/ (thẻ "Cách tính"),
 semantic/ (hồ sơ ngữ nghĩa). File lẻ còn lại là tài khoản, workspace, nạp dữ liệu, dataset mẫu, hồ sơ cấu trúc. */
 
 pub mod accounts;

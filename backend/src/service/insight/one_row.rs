@@ -154,7 +154,7 @@ fn build_cells_title(
     format!("{}.", upper_first(&said.join(", ")))
 }
 
-/// Tên tiếng Việt của một cột kết quả: số đo lấy nhãn của thẻ "Đã hiểu là"; cột trơn không đặt bí danh lấy bí danh
+/// Tên tiếng Việt của một cột kết quả: số đo lấy nhãn của thẻ "Cách tính"; cột trơn không đặt bí danh lấy bí danh
 /// đầu của hồ sơ cột; còn lại là tên cột kết quả (bí danh câu SQL đặt).
 fn build_cell_label(input: &InsightInput<'_>, shape: &QueryShape, i: usize) -> String {
     let result = input.result;

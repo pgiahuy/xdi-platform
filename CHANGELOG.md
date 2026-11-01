@@ -26,6 +26,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Changed
 
+- Chữ trên giao diện theo một bộ từ: "câu hỏi nguyên nhân", "câu hỏi số liệu", "Cách tính", "Minh chứng", "kiểm số" và "kiểm nghĩa".
 - Dataset là một database hay một file, bảng nằm bên trong; API `/catalog` hỏi và chụp lại theo dataset, route cũ theo bảng còn nhưng đánh dấu deprecated (#257).
 - Chụp bảng mặc định để DuckDB đọc thẳng Postgres bằng extension đóng gói sẵn; `SOURCE_SNAPSHOT_MODE=copy` là đường dự phòng (#246).
 - Không còn trần số dòng mặc định khi chụp bảng; `.env` cũ có `SOURCE_MAX_ROWS=1000000` thì xóa dòng đó (#278).
@@ -35,6 +36,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Fixed
 
+- Docker Compose truyền `GEMINI_BACKUP_API_KEY` tới backend; trước đây khóa dự phòng trong `.env` không có tác dụng.
 - Điều kiện lọc có câu con hay "hoặc" đọc thành lời thay cho nguyên câu SQL; câu nối bảng gọi số đo bằng mô tả tiếng Việt của bảng nối; kết quả toàn ô trống nói rõ không có dữ liệu khớp (#201).
 
 ## [0.2.0] - 2026-10-27

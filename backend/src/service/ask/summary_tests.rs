@@ -150,7 +150,7 @@ fn one_short_row_of_a_list_uses_the_insight_text() {
 }
 
 /// Câu SQL đặt bí danh tiếng Việt cho cột tính ra thì câu khuôn gọi độ đo bằng bí danh đó, không bằng nhãn dựng từ công
-/// thức; bí danh tiếng Anh thì giữ nhãn của thẻ "Hệ thống đã hiểu là".
+/// thức; bí danh tiếng Anh thì giữ nhãn của thẻ "Cách tính".
 #[test]
 fn template_names_the_measure_by_its_vietnamese_alias() {
     let mut result = sales();
