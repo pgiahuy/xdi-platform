@@ -60,6 +60,16 @@ pub(super) fn scripted(replies: &[Value]) -> Arc<dyn LlmProvider> {
     })
 }
 
+/// Như scripted, và bước phân loại nhận nguyên câu trả lời classify (kind, reason, columns).
+pub(super) fn scripted_with_classify(classify: Value, replies: &[Value]) -> Arc<dyn LlmProvider> {
+    let replies = replies.iter().map(Value::to_string).collect();
+    Arc::new(ScriptedLlm {
+        replies: Mutex::new(replies),
+        classify: Some(classify.to_string()),
+        fail_when_empty: false,
+    })
+}
+
 /// Như scripted, và bước phân loại nhận kind ("plain" hay "cause").
 pub(super) fn scripted_with_kind(kind: &str, replies: &[Value]) -> Arc<dyn LlmProvider> {
     let replies = replies.iter().map(Value::to_string).collect();

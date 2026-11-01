@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/explain/rest_average.rs - một nhóm so với trung bình các nhóm còn lại (#201, việc 7). Câu "vì sao Europe có
 doanh thu cao nhất" so Europe với tổng của mọi thị trường khác gộp lại thì Europe luôn "thấp hơn", ngược câu hỏi. Với độ
-đo cộng được (tổng, đếm), lát gốc "các nhóm còn lại" vì vậy là trung bình mỗi nhóm còn lại: tổng, số dòng và lượng của
+đo cộng được (tổng, đếm, đếm phân biệt), lát gốc "các nhóm còn lại" vì vậy là trung bình mỗi nhóm còn lại: tổng, số dòng và lượng của
 lát gốc chia cho số nhóm còn lại (k, câu tổng hai lát cắt đếm, explain/sql.rs). Độ đo tỷ lệ và trung bình không chia:
 tỷ lệ của phần còn lại gộp lại vốn đã là mức chung của các nhóm đó.
 
@@ -18,8 +18,9 @@ use crate::service::explain::measure::Additive;
 /// Số chữ số thập phân tối thiểu của số đã chia: trung bình của một số đếm thường lẻ (3,5 đơn mỗi nhóm).
 const MIN_SCALE: u32 = 2;
 
-/// Lát gốc là các nhóm còn lại và độ đo là tổng hay đếm dòng: so với trung bình mỗi nhóm còn lại. Đếm không trùng thì
-/// không: một giá trị (khách hàng) có thể thuộc nhiều nhóm, nên tổng chia số nhóm không phải trung bình mỗi nhóm.
+/// Lát gốc là các nhóm còn lại và độ đo là tổng, đếm dòng hay đếm phân biệt: so với trung bình mỗi nhóm còn lại. Đếm
+/// phân biệt đếm cặp (nhóm, giá trị) khi so với phần còn lại (apply_rest_distinct của explain/check.rs), nên tổng các nhóm
+/// còn lại chia số nhóm cũng là trung bình mỗi nhóm.
 pub fn averages_rest(plan: &WhyPlan) -> bool {
     let rest = matches!(
         &plan.slices,
@@ -30,7 +31,7 @@ pub fn averages_rest(plan: &WhyPlan) -> bool {
     );
     let additive = matches!(
         plan.measure.additive,
-        Additive::Sum { .. } | Additive::Count { .. }
+        Additive::Sum { .. } | Additive::Count { .. } | Additive::CountDistinct { .. }
     );
     rest && additive && plan.measure.denominator.is_none()
 }

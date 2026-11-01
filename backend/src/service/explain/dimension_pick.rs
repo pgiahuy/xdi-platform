@@ -7,7 +7,7 @@ Trước đây chỉ 8 cột đầu tiên theo thứ tự cột trong file đư�
 Department Name) và cờ 0/1 chiếm chỗ, còn Market, Order Region, Order Status, Shipping Mode nằm sau trong file nên không
 có bảng khi so hai phân khúc. Giờ mọi ứng viên đều chạy; chiều qua ba luật dưới đây không bị cắt theo số bảng, chỉ xếp theo điểm.
 
-Ba luật bỏ, không đọc tên cột:
+Ba luật bỏ, không đọc tên cột (cộng luật restates_measure cho độ đo tỷ lệ, ratio_breakdown.rs gọi):
 - Ít hơn hai nhóm: một nhóm gánh cả chênh lệch, bảng không giải thích gì (cột chỉ một giá trị, hay cột trùng với cột
   đang lọc bằng một giá trị).
 - Một phía, chỉ khi so hai nhóm: không nhóm nào có dòng ở cả hai lát cắt. Bảng như vậy chỉ chia lại chính hai bên đang
@@ -160,6 +160,26 @@ pub(super) fn build_useless_reason(
         !numbers[presence.base].is_zero() && !numbers[presence.compare].is_zero()
     });
     (!both_sides).then_some("no group has rows in both slices")
+}
+
+/// Chiều chỉ nói lại độ đo tỷ lệ: ở cả hai lát cắt, mỗi nhóm hoặc không có dòng nào được đếm ở tử số, hoặc mọi dòng của
+/// nhóm đều được đếm. "Tỷ lệ giao trễ" theo "tình trạng giao": nhóm Late delivery trễ 100%, các nhóm khác 0%, nên nhóm
+/// đó gánh trọn chênh lệch mà không giải thích gì; trước đây chiều này đứng thứ hai và đẩy thị trường ra khỏi lời giải
+/// thích. Bỏ, không nhắc trong lời (như chiều ít hơn hai nhóm). rows là câu từng chiều của độ đo tỷ lệ: tử base, tử
+/// compare, mẫu base, mẫu compare (explain/sql.rs).
+pub(super) fn restates_measure(rows: &DimensionRows, column: &str) -> bool {
+    let all_or_nothing =
+        |numerator: Decimal, denominator: Decimal| numerator.is_zero() || numerator == denominator;
+    let restates = rows.groups.len() >= 2
+        && rows.groups.iter().all(|(_, numbers)| {
+            numbers.len() >= 4
+                && all_or_nothing(numbers[0], numbers[2])
+                && all_or_nothing(numbers[1], numbers[3])
+        });
+    if restates {
+        tracing::info!(%column, "dimension dropped from the breakdown: it only restates the measure");
+    }
+    restates
 }
 
 /// Cùng số nhóm và cùng bộ số của các nhóm, không kể giá trị nhóm và thứ tự: điều kiện cần để hai chiều chia y hệt nhau.

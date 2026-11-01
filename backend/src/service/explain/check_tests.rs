@@ -154,6 +154,7 @@ impl Fixture {
             values: &self.values,
             metrics: &self.metrics,
             row_count: Some(20_000),
+            joined: &crate::service::explain::joined::NO_JOINED,
         }
     }
 

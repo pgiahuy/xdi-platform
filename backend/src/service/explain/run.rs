@@ -38,7 +38,7 @@ use crate::service::ask::reply::{build_sql_reply_schema, ChoiceKind, Clarify, Te
 use crate::service::ask::run::build_step;
 use crate::service::ask::unanswerable::build_unanswerable_message;
 use crate::service::ask::values::ValueIndex;
-use crate::service::ask::why_prompt::{build_why_form_schema, build_why_prompt};
+use crate::service::ask::why_prompt::{build_why_form_schema, build_why_prompt_with};
 use crate::service::explain::breakdown::{
     build_breakdown, read_slice_totals, run_code_query, Breakdown, CodeQuery, QueryEnv,
     SliceTotals, ASK_STOP_HINT,
@@ -51,11 +51,13 @@ use crate::service::explain::filter::build_single_value_columns;
 use crate::service::explain::form::{
     build_form_from_reply, build_why_repair_prompt, FieldError, ReadForm,
 };
+use crate::service::explain::joined::JoinedColumns;
 use crate::service::explain::latest::{apply_latest, find_latest, LatestPeriod, COMPARE_CHOICE_ID};
 use crate::service::explain::plain::run_plain;
 use crate::service::explain::premise::{
     build_asked_direction, build_premise_labels, build_premise_warning,
 };
+use crate::service::explain::question_match::{check_measure_columns, check_named_groups};
 use crate::service::explain::source::RelatedTables;
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
 use crate::service::explain::summary::apply_summary_parts;
@@ -85,6 +87,8 @@ pub struct WhyInput<'a> {
     /// Bảng liên quan nối nhiều-một vào bảng đang hỏi (explain/source.rs): phân rã xét thêm cột của chúng. Rỗng với
     /// dataset nạp từ file; tables khi đó chỉ có bảng đang hỏi.
     pub related: &'a RelatedTables,
+    /// Cột của các bảng trong related mà form dùng được cho kỳ, nhóm và bộ lọc (explain/joined.rs).
+    pub joined: &'a JoinedColumns,
 }
 
 /// Phần của AskResponse do đường câu "tại sao" quyết định, cùng nghĩa các trường như RunOutcome.
@@ -142,7 +146,7 @@ async fn run_why_rounds(
     failures: &mut Vec<StepFailure>,
 ) -> Result<WhyOutcome, AppError> {
     let mut steps = Vec::new();
-    let prompt = build_why_prompt(&input.prompt);
+    let prompt = build_why_prompt_with(&input.prompt, &input.joined.prompt);
     let started = Instant::now();
     let reply = complete(llm, &input, LlmTask::Why, &prompt).await?;
     let examples_used = build_examples_detail(
@@ -155,7 +159,7 @@ async fn run_why_rounds(
         true,
         examples_used.as_deref(),
     ));
-    let errors = match run_round(llm, &input, &reply, &mut steps).await? {
+    let errors = match run_round(llm, &input, &reply, true, &mut steps).await? {
         Round::Done(outcome) => return Ok(*outcome),
         Round::Invalid(errors) => errors,
     };
@@ -166,7 +170,7 @@ async fn run_why_rounds(
     let reply = complete(llm, &input, LlmTask::Why, &repair_prompt).await?;
     let detail = "Mô hình sửa form theo lỗi của từng trường";
     steps.push(build_step(StepName::Repair, started, true, Some(detail)));
-    match run_round(llm, &input, &reply, &mut steps).await? {
+    match run_round(llm, &input, &reply, false, &mut steps).await? {
         Round::Done(outcome) => Ok(*outcome),
         Round::Invalid(errors) => {
             log_errors(
@@ -216,11 +220,13 @@ fn log_errors(errors: &[FieldError], message: &str) {
     tracing::warn!(errors = ?fields, "{message}");
 }
 
-/// Đọc, kiểm, chạy một câu trả lời form. Invalid khi form sai hoặc một lát cắt không có dòng nào.
+/// Đọc, kiểm, chạy một câu trả lời form. Invalid khi form sai hoặc một lát cắt không có dòng nào. first là lượt form
+/// đầu: luật độ đo theo cột lượt phân loại nêu chỉ chạy ở lượt này (explain/question_match.rs).
 async fn run_round(
     llm: &dyn LlmProvider,
     input: &WhyInput<'_>,
     reply: &str,
+    first: bool,
     steps: &mut Vec<AskStep>,
 ) -> Result<Round, AppError> {
     let mut read = match build_form_from_reply(reply) {
@@ -239,13 +245,14 @@ async fn run_round(
         values: input.values,
         metrics: input.prompt.metrics,
         row_count: input.row_count,
+        joined: input.joined,
     };
     // Câu không nêu kỳ: code chọn kỳ gần nhất có dữ liệu và ghi vào form trước khi kiểm (explain/latest.rs).
     let chosen_compare = find_chosen(input, COMPARE_CHOICE_ID);
     let latest = find_latest(
         &build_env(input),
-        input.prompt.table,
-        input.columns,
+        &profile,
+        &input.related.source,
         &read.form,
         chosen_compare,
     )
@@ -253,13 +260,31 @@ async fn run_round(
     if let Some(latest) = &latest {
         apply_latest(&mut read, latest);
     }
+    // Form khớp hồ sơ cột vẫn có thể trả lời câu khác: nhóm câu hỏi nêu tên, độ đo câu hỏi hỏi (question_match.rs).
+    let mut matched = check_named_groups(input.prompt.question, &read.form, &profile);
+    if first {
+        matched.extend(check_measure_columns(
+            &read.form,
+            &input.prompt.context.columns,
+        ));
+    }
     let mut plan = match build_why_check(&read.form, &profile, find_base_choice(input)) {
-        Ok(plan) => plan,
-        Err(errors) => return Ok(Round::Invalid(errors)),
+        Ok(plan) if matched.is_empty() => plan,
+        Ok(_) => return Ok(Round::Invalid(matched)),
+        Err(mut errors) => {
+            errors.extend(matched);
+            return Ok(Round::Invalid(errors));
+        }
     };
-    // Form chỉ nêu cột của bảng đang hỏi; cột của bảng liên quan chỉ vào phân rã, như cột chiều của bảng đó.
-    let filtered = build_single_value_columns(&read.form);
-    apply_related(&mut plan, input.related, &filtered);
+    // Cột của bảng liên quan vào phân rã như cột chiều của bảng đang hỏi; cột form đã dùng làm nhóm hay lọc một giá trị
+    // thì không.
+    let mut excluded = build_single_value_columns(&read.form);
+    // Cột nhóm đang so ở bảng liên quan cũng không là chiều phân rã: chia theo nó chỉ ra lại hai nhóm đang so.
+    if let PlanSlices::Groups { column, .. } = &plan.slices {
+        excluded.push(column.clone());
+    }
+    apply_related(&mut plan, input.related, &excluded);
+    apply_joined_always(&mut plan, &read.form);
     // Câu tìm kỳ hay nhóm bất thường: code tìm rồi sửa plan; kỳ gần nhất của latest khi đó chỉ là chỗ giữ để kiểm form.
     let started = Instant::now();
     let direction = build_asked_direction(input.prompt.question);
@@ -276,6 +301,20 @@ async fn run_round(
         }
     };
     run_plan(llm, input, read, &plan, latest.as_ref(), steps).await
+}
+
+/// Cột của bảng liên quan mà kỳ, nhóm hay bộ lọc của form dùng: mọi câu SQL của câu hỏi đều cần chúng, kể cả câu tổng
+/// hai lát cắt, nên phần FROM luôn nối bảng của chúng (explain/source.rs, PlanSource::always).
+fn apply_joined_always(plan: &mut WhyPlan, form: &crate::service::explain::form::WhyForm) {
+    let mut used: Vec<String> = form.filters.iter().map(|f| f.column.clone()).collect();
+    used.extend(form.time.iter().map(|t| t.column.clone()));
+    used.extend(form.groups.iter().map(|g| g.column.clone()));
+    for name in used {
+        let joined = plan.source.columns.iter().any(|c| c.name == name);
+        if joined && !plan.source.always.contains(&name) {
+            plan.source.always.push(name);
+        }
+    }
 }
 
 /// Ghi kỳ và bộ lọc code đã tìm vào form lưu cùng câu hỏi, để form trong lịch sử khớp câu đã chạy.

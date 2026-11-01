@@ -21,7 +21,7 @@ use crate::service::explain::breakdown::{
 };
 use crate::service::explain::check::{PlanSlices, WhyPlan};
 use crate::service::explain::dimension_pick::{
-    build_useless_reason, has_same_numbers, pick_dimensions, prefers, Presence,
+    build_useless_reason, has_same_numbers, pick_dimensions, prefers, restates_measure, Presence,
 };
 use crate::service::explain::group_base::GroupBase;
 use crate::service::explain::measure::{Additive, PlanMeasure};
@@ -286,4 +286,44 @@ fn text_column_is_preferred_over_a_code() {
     assert!(prefers(ValueKind::Text, ValueKind::Number));
     assert!(!prefers(ValueKind::Number, ValueKind::Text));
     assert!(!prefers(ValueKind::Text, ValueKind::Text));
+}
+
+fn ratio_rows(groups: &[(&str, [i64; 4])]) -> DimensionRows {
+    DimensionRows {
+        shown: String::new(),
+        kind: ValueKind::Text,
+        groups: groups
+            .iter()
+            .map(|(value, numbers)| {
+                (
+                    Some(crate::service::ask::contract::CellValue::String(
+                        value.to_string(),
+                    )),
+                    numbers.iter().map(|n| Decimal::from(*n)).collect(),
+                )
+            })
+            .collect(),
+    }
+}
+
+/// "Tỷ lệ giao trễ" theo "tình trạng giao": nhóm Late delivery trễ trọn, các nhóm khác không trễ dòng nào, ở cả hai kỳ.
+/// Chiều đó chỉ nói lại độ đo nên bị bỏ; một nhóm trễ một phần thì giữ.
+#[test]
+fn a_dimension_that_restates_the_measure_is_dropped() {
+    let status = ratio_rows(&[
+        ("Late delivery", [976, 1122, 976, 1122]),
+        ("Shipping on time", [0, 0, 330, 290]),
+        ("Advance shipping", [0, 0, 410, 270]),
+    ]);
+    assert!(restates_measure(&status, "delivery_status"));
+    let mode = ratio_rows(&[
+        ("Standard Class", [410, 560, 1035, 1038]),
+        ("First Class", [270, 238, 279, 248]),
+    ]);
+    assert!(!restates_measure(&mode, "shipping_mode"));
+    // Một nhóm thì không phải chiều để so (luật ít hơn hai nhóm lo phần đó).
+    assert!(!restates_measure(
+        &ratio_rows(&[("Late delivery", [5, 6, 5, 6])]),
+        "delivery_status"
+    ));
 }

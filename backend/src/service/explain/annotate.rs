@@ -50,6 +50,10 @@ pub struct BreakdownNotes {
     pub dimensions: Vec<DimensionNotes>,
     /// Chiều lời tóm tắt bỏ qua, kèm lý do.
     pub dropped: Vec<DroppedDimension>,
+    /// Độ đo là tỷ lệ dòng (số dòng được đếm trên số dòng, mọi giá trị từ 0 tới 1, explain/ratio_breakdown.rs): lời viết
+    /// giá trị thành phần trăm và chênh lệch thành điểm phần trăm ("tăng 10,24 điểm phần trăm, từ 54,95% lên 65,19%"),
+    /// không viết "0,1024". Bảng phân rã trả qua API vẫn giữ số gốc.
+    pub fraction: bool,
 }
 
 /// Ghi chú của một chiều: `index` trỏ vào Explanation.dimensions, `groups` thẳng hàng với các nhóm của chiều đó.
@@ -152,9 +156,11 @@ pub fn annotate_dimensions(
     }
     // sort_by_key ổn định: trong mỗi phần, chiều giữ thứ tự xếp hạng.
     kept.sort_by_key(|d| !d.has_outliers);
+    // Tỷ lệ dòng hay không do ratio_breakdown.rs đặt sau, khi đã biết độ đo.
     BreakdownNotes {
         dimensions: kept,
         dropped,
+        fraction: false,
     }
 }
 
