@@ -9,11 +9,11 @@ Các bộ câu đo chất lượng câu trả lời, phân loại câu hỏi và
 | File | Số ca | Dùng cho |
 |---|---|---|
 | `dataco.json` | 14 | `make eval` trên `data/samples/dataco.csv`; CI chạy bộ này |
-| `sales_joins.json` | 10 | `make eval` trên `sales_demo` khi database mẫu đang chạy, phần lớn câu nối bảng |
-| `edu.json` | 7 | `make eval` trên `edu_demo` khi database mẫu đang chạy |
+| `sales_joins.json` | 16 | `make eval` trên `sales_demo` khi database mẫu đang chạy, phần lớn câu nối bảng |
+| `edu.json` | 13 | `make eval` trên `edu_demo` khi database mẫu đang chạy |
 | `oulad_db.json` | 57 | Chạy tay trên `edu_demo`: 11 loại câu, gồm câu hỏi nguyên nhân, câu không dấu, câu phải từ chối, câu tiếp nối |
-| `classify.json` | 48 | `make eval-classify`: 25 câu hỏi số liệu, 23 câu hỏi nguyên nhân |
-| `judge.json` | 72 | `make eval-judge`: lời giải thích có nhãn, 34 lời đúng, 38 lời sai |
+| `classify.json` | 50 | `make eval-classify`: 25 câu hỏi số liệu, 25 câu hỏi nguyên nhân |
+| `judge.json` | 80 | `make eval-judge`: lời giải thích có nhãn, 40 lời đúng, 40 lời sai |
 | `lessons.json` | 2 bài học | `make eval-lessons`: chạy `dataco.json` hai lượt, không và có bài học |
 | `baseline.json` | | Tỷ lệ đúng tối thiểu của `make eval` (mock phải đúng 100%) |
 

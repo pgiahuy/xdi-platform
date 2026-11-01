@@ -91,6 +91,60 @@
   },
   {
     "task": "sql",
+    "question": "Doanh thu theo phòng ban",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT d.department_name, SUM(oi.item_total) AS revenue FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id JOIN departments d ON cat.department_id = d.department_id GROUP BY d.department_name ORDER BY revenue DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Doanh thu theo danh mục và phân khúc khách hàng",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT cat.category_name, c.segment, SUM(oi.item_total) AS revenue FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id JOIN orders o ON oi.order_id = o.order_id JOIN customers c ON o.customer_id = c.customer_id GROUP BY cat.category_name, c.segment ORDER BY cat.category_name, c.segment"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Top 10 sản phẩm có lợi nhuận cao nhất",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT p.product_name, SUM(oi.profit) AS profit FROM order_items oi JOIN products p ON oi.product_id = p.product_id GROUP BY p.product_name ORDER BY profit DESC LIMIT 10"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số khách hàng đã mua hàng theo phòng ban",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT d.department_name, COUNT(DISTINCT o.customer_id) AS customers FROM orders o JOIN order_items oi ON oi.order_id = o.order_id JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id JOIN departments d ON cat.department_id = d.department_id GROUP BY d.department_name ORDER BY customers DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Doanh thu theo tháng năm 2017",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT EXTRACT(MONTH FROM o.order_date) AS month, SUM(oi.item_total) AS revenue FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE EXTRACT(YEAR FROM o.order_date) = 2017 GROUP BY EXTRACT(MONTH FROM o.order_date) ORDER BY month"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Lợi nhuận theo phòng ban ở thị trường LATAM",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT d.department_name, SUM(oi.profit) AS profit FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id JOIN departments d ON cat.department_id = d.department_id WHERE o.market = 'LATAM' GROUP BY d.department_name ORDER BY profit DESC"
+    }
+  },
+  {
+    "task": "sql",
     "question": "Tỷ lệ bỏ học theo môn học",
     "answer": {
       "terms": [],
@@ -159,6 +213,60 @@
       "terms": [],
       "assumptions": [],
       "sql": "SELECT age_band, gender, COUNT(*) AS students FROM students GROUP BY age_band, gender ORDER BY age_band, gender"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Tỷ lệ rút học theo vùng",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT region, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM students GROUP BY region ORDER BY withdrawn_rate DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số sinh viên theo môn và năm bắt đầu học phần",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT s.code_module, c.presentation_year, COUNT(*) AS students FROM students s JOIN courses c ON s.code_module = c.code_module AND s.code_presentation = c.code_presentation GROUP BY s.code_module, c.presentation_year ORDER BY s.code_module, c.presentation_year"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Điểm trung bình theo môn và loại bài đánh giá",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT a.code_module, a.assessment_type, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment GROUP BY a.code_module, a.assessment_type ORDER BY a.code_module, a.assessment_type"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Điểm trung bình bài thi Exam theo giới tính",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT s.gender, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student WHERE a.assessment_type = 'Exam' GROUP BY s.gender ORDER BY s.gender"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số sinh viên hủy đăng ký theo vùng",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT s.region, COUNT(*) AS students FROM registrations r JOIN students s ON r.code_module = s.code_module AND r.code_presentation = s.code_presentation AND r.id_student = s.id_student WHERE r.date_unregistration IS NOT NULL GROUP BY s.region ORDER BY students DESC"
+    }
+  },
+  {
+    "task": "sql",
+    "question": "Số tài liệu học trực tuyến theo loại hoạt động và năm bắt đầu học phần",
+    "answer": {
+      "terms": [],
+      "assumptions": [],
+      "sql": "SELECT v.activity_type, c.presentation_year, COUNT(*) AS materials FROM vle_materials v JOIN courses c ON v.code_module = c.code_module AND v.code_presentation = c.code_presentation GROUP BY v.activity_type, c.presentation_year ORDER BY v.activity_type, c.presentation_year"
     }
   },
   {
@@ -243,6 +351,54 @@
   },
   {
     "task": "classify",
+    "question": "Doanh thu theo phòng ban",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo danh mục và phân khúc khách hàng",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Top 10 sản phẩm có lợi nhuận cao nhất",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số khách hàng đã mua hàng theo phòng ban",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Doanh thu theo tháng năm 2017",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Lợi nhuận theo phòng ban ở thị trường LATAM",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
     "question": "Tỷ lệ bỏ học theo môn học",
     "answer": {
       "kind": "plain",
@@ -300,6 +456,54 @@
   {
     "task": "classify",
     "question": "Số sinh viên theo nhóm tuổi và giới tính",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Tỷ lệ rút học theo vùng",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số sinh viên theo môn và năm bắt đầu học phần",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Điểm trung bình theo môn và loại bài đánh giá",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Điểm trung bình bài thi Exam theo giới tính",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số sinh viên hủy đăng ký theo vùng",
+    "answer": {
+      "kind": "plain",
+      "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
+    }
+  },
+  {
+    "task": "classify",
+    "question": "Số tài liệu học trực tuyến theo loại hoạt động và năm bắt đầu học phần",
     "answer": {
       "kind": "plain",
       "reason": "Câu hỏi hỏi con số theo nhóm, không hỏi nguyên nhân."
