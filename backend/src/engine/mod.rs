@@ -6,6 +6,7 @@ Chỉ service gọi vào đây; csv_encoding (đổi CSV không phải UTF-8 san
 pub mod analytics;
 mod csv_encoding;
 pub mod domains;
+pub mod duckdb_limits;
 pub mod excel;
 pub mod excel_worker;
 pub mod guard;

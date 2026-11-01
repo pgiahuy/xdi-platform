@@ -7,6 +7,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::engine::duckdb_limits::DuckdbLimits;
 use crate::engine::excel_worker::ExcelWorker;
 use crate::sample_database::{build_sample_database, split_sample_urls, SampleDatabase};
 
@@ -98,6 +99,9 @@ pub struct Config {
     /// File extension postgres của DuckDB, đúng bản DuckDB của binary (SOURCE_POSTGRES_EXTENSION). Chỉ dùng với
     /// SOURCE_SNAPSHOT_MODE=direct; thiếu file thì chụp bằng COPY.
     pub source_postgres_extension: PathBuf,
+    /// Trần bộ nhớ của mỗi kết nối DuckDB khi nạp, lập hồ sơ cột và chụp bảng, MiB (DUCKDB_MEMORY_LIMIT_MB,
+    /// engine/duckdb_limits.rs). Không áp cho câu hỏi: engine/query.rs có trần riêng.
+    pub duckdb_memory_limit_mb: u32,
 }
 
 /// Cách chép dữ liệu một bảng nguồn ra file khi chụp.
@@ -199,7 +203,17 @@ impl Config {
                 DEFAULT_POSTGRES_EXTENSION,
             )),
             sample_databases: sample_databases(&var_or("SAMPLE_DATABASE_URL", "")),
+            duckdb_memory_limit_mb: positive_number(
+                "DUCKDB_MEMORY_LIMIT_MB",
+                env::var("DUCKDB_MEMORY_LIMIT_MB").ok().as_deref(),
+                DEFAULT_DUCKDB_MEMORY_LIMIT_MB,
+            ),
         }
+    }
+
+    /// Trần của kết nối DuckDB khi nạp và lập hồ sơ cột; thư mục tạm nằm dưới DATA_DIR.
+    pub fn duckdb_limits(&self) -> DuckdbLimits {
+        DuckdbLimits::new(self.duckdb_memory_limit_mb, &self.data_dir)
     }
 
     /// Máy chủ được thêm làm nguồn: có trong SOURCE_ALLOWED_HOSTS (mọi cổng), hoặc đúng máy và cổng của
@@ -415,10 +429,13 @@ fn snapshot_mode(raw: Option<&str>) -> SnapshotMode {
 
 /// Trần mặc định của chụp bảng, đặt từ số đo ở docs/PERFORMANCE.md (mục Chụp bảng lớn, scripts/bench-snapshot.sh): bảng
 /// 1,8 GB (60 cột) chép trong khoảng 20 giây, nên 4096 MB cả lần còn xa 300 giây kể cả khi đọc chậm hơn vài lần (đĩa
-/// nguồn chưa có trong cache). Trần một bảng giữ bộ nhớ đỉnh lúc nạp ở mức đã đo (3,6 GiB với bảng 1,8 GB).
+/// nguồn chưa có trong cache). Bộ nhớ lúc nạp bảng lớn do DUCKDB_MEMORY_LIMIT_MB giữ, không do trần này.
 const DEFAULT_SOURCE_TABLE_MAX_MB: u32 = 2048;
 const DEFAULT_SOURCE_SNAPSHOT_MAX_MB: u32 = 4096;
 const DEFAULT_SOURCE_TIMEOUT_SECS: u32 = 300;
+
+/// Trần mặc định của mỗi kết nối DuckDB nạp dữ liệu, đặt từ số đo ở docs/PERFORMANCE.md (mục Chụp bảng lớn).
+const DEFAULT_DUCKDB_MEMORY_LIMIT_MB: u32 = 1024;
 
 /// direct nhanh hơn và tốn ít đĩa tạm hơn copy trên database mẫu (docs/PERFORMANCE.md, #246); copy vẫn là đường dự phòng
 /// khi extension không nạp được.

@@ -37,6 +37,7 @@ use super::libpq::{build_conninfo, ConnFiles};
 use super::postgres::{qualified, quote_ident, ConnectInfo, SourceTable, TableCopy};
 use crate::config::Config;
 use crate::engine::analytics::FileFormat;
+use crate::engine::duckdb_limits;
 use crate::error::AppError;
 
 /// Tên database Postgres trong DuckDB sau ATTACH.
@@ -72,17 +73,17 @@ pub async fn copy_tables(
     // files giữ passfile và CA tới cuối hàm; ra khỏi hàm (kể cả khi lỗi hay bị hủy vì quá thời gian) thì bị xóa.
     let files = ConnFiles::write(&config.data_dir, info)?;
     let conninfo = build_conninfo(info, config.source_timeout, &files);
-    let conn = Connection::open_in_memory()
-        .map_err(|e| DirectError::Failed(AppError::Internal(format!("open duckdb: {e}"))))?;
+    // Cùng trần bộ nhớ như bước nạp ngay sau đó (engine/duckdb_limits.rs).
+    let duck = duckdb_limits::open_limited(&config.duckdb_limits()).map_err(DirectError::Failed)?;
     let mut interrupt = InterruptOnDrop {
-        handle: conn.interrupt_handle(),
+        handle: duck.conn.interrupt_handle(),
         armed: true,
     };
     let max_rows = config.source_max_rows;
     let max_bytes = config.source_table_max_bytes;
-    // DuckDB đồng bộ và tốn CPU: chạy ngoài luồng async, như engine/analytics.rs. conn chuyển hẳn vào luồng đó.
+    // DuckDB đồng bộ và tốn CPU: chạy ngoài luồng async, như engine/analytics.rs. duck chuyển hẳn vào luồng đó.
     let task = tokio::task::spawn_blocking(move || {
-        run(&conn, &extension, &conninfo, &tables, max_rows)?;
+        run(&duck.conn, &extension, &conninfo, &tables, max_rows)?;
         tables
             .iter()
             .map(|t| build_table_copy(t, max_bytes))

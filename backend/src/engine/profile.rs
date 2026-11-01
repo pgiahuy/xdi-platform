@@ -14,6 +14,7 @@ use std::path::Path;
 use duckdb::Connection;
 
 use super::analytics::{self, sql_string, Column};
+use super::duckdb_limits::{self, DuckdbLimits};
 use crate::error::AppError;
 
 /// Định dạng strptime thử cho cột VARCHAR (xem find_time_formats). Lúc đọc CSV (cả sheet Excel, vốn được đổi sang CSV)
@@ -81,16 +82,18 @@ pub fn build_column_stats(
     parquet_dir: &Path,
     values_max: i64,
     previous_formats: &HashMap<String, String>,
+    limits: &DuckdbLimits,
 ) -> Result<Vec<ColumnStats>, AppError> {
-    let conn = analytics::open()?;
+    let duck = duckdb_limits::open_limited(limits)?;
+    let conn = &duck.conn;
     let table = analytics::parquet_glob(parquet_dir)?;
     conn.execute_batch(&format!("CREATE VIEW {VIEW} AS SELECT * FROM {table}"))
         .map_err(|e| AppError::Internal(format!("create profile view: {e}")))?;
-    let columns = analytics::describe(&conn, VIEW)
+    let columns = analytics::describe(conn, VIEW)
         .map_err(|e| AppError::Internal(format!("describe parquet for profile: {e}")))?;
     columns
         .iter()
-        .map(|column| build_one(&conn, column, values_max, previous_formats))
+        .map(|column| build_one(conn, column, values_max, previous_formats))
         .collect()
 }
 
@@ -216,6 +219,7 @@ mod tests {
 
     use super::*;
     use crate::engine::analytics::{materialize, FileFormat, InputFile};
+    use crate::engine::duckdb_limits::test_limits;
 
     /// Nạp một file CSV vào thư mục tạm rồi đo; thư mục xóa trước khi trả kết quả.
     fn stats_of(csv: &str, values_max: i64) -> Vec<ColumnStats> {
@@ -239,8 +243,8 @@ mod tests {
             format: FileFormat::Csv,
             column_types: Vec::new(),
         };
-        let result =
-            materialize(&[file], &out).and_then(|_| build_column_stats(&out, values_max, previous));
+        let result = materialize(&[file], &out, &test_limits())
+            .and_then(|_| build_column_stats(&out, values_max, previous, &test_limits()));
         std::fs::remove_dir_all(&dir).unwrap();
         result.unwrap()
     }
@@ -339,7 +343,7 @@ mod tests {
             sql_string(file.to_str().unwrap())
         ))
         .unwrap();
-        let result = build_column_stats(&dir, 200, &HashMap::new());
+        let result = build_column_stats(&dir, 200, &HashMap::new(), &test_limits());
         std::fs::remove_dir_all(&dir).unwrap();
         let stats = result.unwrap();
         assert_eq!(stats.len(), 5);

@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use duckdb::Connection;
 
 use super::csv_encoding::{self, Utf8Copy};
+use super::duckdb_limits::{self, DuckdbLimits};
 use crate::error::AppError;
 
 /// Cột thêm vào mỗi dòng, ghi tên file gốc của dòng đó. Truy dòng nguồn dùng cột này để chỉ ra dòng đến từ file nào.
@@ -92,11 +93,16 @@ pub struct Materialized {
 /// Đổi các file sang Parquet trong out_dir (thư mục phải có sẵn và trống), kiểm các file có cùng tên cột.
 /// Lỗi do dữ liệu người dùng (file hỏng, lệch cột, kiểu không gộp được) trả BadRequest kèm tên file; lỗi khác là Internal.
 /// Lỗi giữa chừng thì out_dir có thể còn file Parquet dở; người gọi xóa cả thư mục.
-pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, AppError> {
+pub fn materialize(
+    files: &[InputFile],
+    out_dir: &Path,
+    limits: &DuckdbLimits,
+) -> Result<Materialized, AppError> {
     if files.is_empty() {
         return Err(AppError::BadRequest("Chưa có file nào".to_string()));
     }
-    let conn = open()?;
+    let duck = duckdb_limits::open_limited(limits)?;
+    let conn = &duck.conn;
 
     // Đọc cột của từng file trước khi ghi gì: lệch cột thì từ chối cả bộ, không để lại nửa chừng.
     let mut readers = Vec::with_capacity(files.len());
@@ -109,7 +115,7 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
         if size == 0 {
             return Err(AppError::BadRequest(format!("File {} rỗng", file.name)));
         }
-        let (reader, columns, utf8_copy) = open_reader(&conn, file)?;
+        let (reader, columns, utf8_copy) = open_reader(conn, file)?;
         let names: BTreeSet<String> = columns.iter().map(|c| c.name.clone()).collect();
         if names.iter().any(|n| n.eq_ignore_ascii_case(SOURCE_COLUMN)) {
             return Err(AppError::BadRequest(format!(
@@ -131,7 +137,7 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
     for (i, (file, (reader, utf8_copy))) in files.iter().zip(readers).enumerate() {
         let target = out_dir.join(format!("part-{:04}.parquet", i + 1));
         let target_text = path_text(&target)?;
-        match copy_to_parquet(&conn, file, &reader, &target_text) {
+        match copy_to_parquet(conn, file, &reader, &target_text) {
             Ok(()) => {}
             // Bước đọc cột chỉ xem phần đầu file. Byte không phải UTF-8 nằm sâu trong file CSV thì tới đây mới lộ ra;
             // đổi cả file sang UTF-8 rồi đọc lại. Bản UTF-8 bị xóa khi ra khỏi nhánh này.
@@ -139,7 +145,7 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
                 let _ = std::fs::remove_file(&target);
                 let copy = csv_encoding::build_utf8_copy(&file.path, &file.name)?;
                 let converted = csv_reader(copy.path())?;
-                copy_to_parquet(&conn, file, &converted, &target_text)
+                copy_to_parquet(conn, file, &converted, &target_text)
                     .map_err(|e| user_file_error(&file.label(), "đổi sang Parquet", e))?;
             }
             Err(e) => return Err(user_file_error(&file.label(), "đổi sang Parquet", e)),
@@ -150,7 +156,7 @@ pub fn materialize(files: &[InputFile], out_dir: &Path) -> Result<Materialized, 
     // Đọc lại cả thư mục như bảng gộp: DuckDB gộp theo tên cột và nâng kiểu (BIGINT với DOUBLE thành DOUBLE). Kiểu
     // không gộp được (số với ngày) thì báo ở đây.
     let all = parquet_glob(out_dir)?;
-    let columns = describe(&conn, &all).map_err(|e| {
+    let columns = describe(conn, &all).map_err(|e| {
         tracing::info!(error = %e, "union of parquet parts failed");
         AppError::BadRequest(
             "Các file có cùng tên cột nhưng kiểu dữ liệu không gộp được (ví dụ một file là số, file khác là ngày)"
@@ -178,7 +184,8 @@ pub fn parquet_glob(dir: &Path) -> Result<String, AppError> {
 }
 
 /// Kết nối DuckDB trong bộ nhớ. Tắt tự cài và tự nạp extension: Parquet đã biên dịch sẵn vào binary, nên không có lý do
-/// gì để DuckDB tải code từ Internet lúc chạy (máy chủ không có mạng cũng chạy được). Hồ sơ cột (profile.rs) dùng chung.
+/// gì để DuckDB tải code từ Internet lúc chạy (máy chủ không có mạng cũng chạy được). Kết nối có trần bộ nhớ
+/// (duckdb_limits.rs) và kết nối của câu hỏi (query.rs) mở từ đây.
 pub(super) fn open() -> Result<Connection, AppError> {
     let conn = Connection::open_in_memory()
         .map_err(|e| AppError::Internal(format!("open duckdb: {e}")))?;
@@ -365,6 +372,7 @@ fn path_text(path: &Path) -> Result<String, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::duckdb_limits::test_limits;
 
     /// Thư mục tạm cho một test, tự xóa khi ra khỏi phạm vi kể cả khi test thất bại giữa chừng.
     struct TempDir(PathBuf);
@@ -453,7 +461,7 @@ mod tests {
             ("ok", "BOOLEAN"),
         ];
         let file = database_csv(&tmp, &csv, &types);
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(result.row_count, 25_004);
         let found: Vec<(&str, &str)> = result
             .columns
@@ -488,7 +496,7 @@ mod tests {
     fn database_snapshot_keeps_the_comma_delimiter() {
         let tmp = TempDir::new();
         let file = database_csv(&tmp, "label\na|b|1\na|b|2\n", &[("label", "VARCHAR")]);
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         let names: Vec<&str> = result.columns.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names, ["label", SOURCE_COLUMN]);
         let labels = query_strings(&tmp.out(), "label FROM {t} ORDER BY 1");
@@ -499,7 +507,7 @@ mod tests {
     fn single_csv_becomes_parquet_with_source_column() {
         let tmp = TempDir::new();
         let file = tmp.csv("orders.csv", b"region,amount\nSouth,10\nNorth,20\n");
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(result.row_count, 2);
         let names: Vec<&str> = result.columns.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names, ["region", "amount", SOURCE_COLUMN]);
@@ -516,7 +524,7 @@ mod tests {
             tmp.csv("thang2.csv", b"amount,region\n30,South\n"),
             tmp.csv("thang3.csv", b"region,amount\nEast,40\nWest,50\nSouth,60\n"),
         ];
-        let result = materialize(&files, &tmp.out()).unwrap();
+        let result = materialize(&files, &tmp.out(), &test_limits()).unwrap();
         assert_eq!(result.row_count, 6);
         let per_file = query_strings(
             &tmp.out(),
@@ -537,7 +545,7 @@ mod tests {
             tmp.csv("thang1.csv", b"region,amount\nSouth,10\n"),
             tmp.csv("thang3.csv", b"region,qty\nSouth,1\n"),
         ];
-        let err = materialize(&files, &tmp.out()).unwrap_err();
+        let err = materialize(&files, &tmp.out(), &test_limits()).unwrap_err();
         let AppError::BadRequest(msg) = err else {
             panic!("expected BadRequest, got {err:?}")
         };
@@ -558,7 +566,7 @@ mod tests {
         let tmp = TempDir::new();
         // "Café" với é là byte 0xE9 của latin-1, không hợp lệ trong UTF-8.
         let file = tmp.csv("legacy.csv", b"name,amount\nCaf\xe9,5\n");
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(result.row_count, 1);
         assert_eq!(query_strings(&tmp.out(), "name FROM {t}"), ["Café"]);
     }
@@ -572,7 +580,7 @@ mod tests {
             "legacy.csv",
             b"city,amount\nCox\x92s Bazar,1\n\x8aiauliai,2\n\x8eilina,3\n",
         );
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(result.row_count, 3);
         assert_eq!(
             query_strings(&tmp.out(), "city FROM {t} ORDER BY amount"),
@@ -591,7 +599,7 @@ mod tests {
             "vn.csv",
             b"city,amount\nH\xc3\xa0 N\xe1\xbb\x99i,1\nCox\x92s,2\n",
         );
-        let err = materialize(&[file], &tmp.out()).unwrap_err();
+        let err = materialize(&[file], &tmp.out(), &test_limits()).unwrap_err();
         assert!(
             matches!(&err, AppError::BadRequest(m) if m.contains("vn.csv") && m.contains("dòng 3")),
             "{err:?}"
@@ -603,7 +611,7 @@ mod tests {
         }
         bytes.extend_from_slice(b"Cox\x92s,5\n");
         let file = tmp.csv("big.csv", &bytes);
-        let err = materialize(&[file], &tmp.out()).unwrap_err();
+        let err = materialize(&[file], &tmp.out(), &test_limits()).unwrap_err();
         assert!(
             matches!(&err, AppError::BadRequest(m) if m.contains("big.csv") && m.contains("dòng 30003")),
             "{err:?}"
@@ -626,7 +634,7 @@ mod tests {
     fn utf8_csv_is_read_without_conversion() {
         let tmp = TempDir::new();
         let file = tmp.csv("utf8.csv", "city,amount\nŠiauliai,1\nHà Nội,2\n".as_bytes());
-        materialize(&[file], &tmp.out()).unwrap();
+        materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(
             query_strings(&tmp.out(), "city FROM {t} ORDER BY amount"),
             ["Šiauliai", "Hà Nội"]
@@ -651,7 +659,7 @@ mod tests {
             format: FileFormat::Parquet,
             column_types: Vec::new(),
         };
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(result.row_count, 1);
     }
 
@@ -662,7 +670,7 @@ mod tests {
             tmp.csv("a.csv", b"amount\n10\n"),
             tmp.csv("b.csv", b"amount\n2.5\n"),
         ];
-        let result = materialize(&files, &tmp.out()).unwrap();
+        let result = materialize(&files, &tmp.out(), &test_limits()).unwrap();
         let amount = result.columns.iter().find(|c| c.name == "amount").unwrap();
         assert_eq!(amount.data_type, "DOUBLE");
         assert_eq!(
@@ -676,22 +684,22 @@ mod tests {
         let tmp = TempDir::new();
         let reserved = tmp.csv("r.csv", b"_source_file,amount\nx,1\n");
         assert!(matches!(
-            materialize(&[reserved], &tmp.out()),
+            materialize(&[reserved], &tmp.out(), &test_limits()),
             Err(AppError::BadRequest(_))
         ));
         let empty = tmp.csv("empty.csv", b"");
-        let err = materialize(&[empty], &tmp.out()).unwrap_err();
+        let err = materialize(&[empty], &tmp.out(), &test_limits()).unwrap_err();
         assert!(
             matches!(&err, AppError::BadRequest(m) if m.contains("empty.csv")),
             "{err:?}"
         );
         assert!(matches!(
-            materialize(&[], &tmp.out()),
+            materialize(&[], &tmp.out(), &test_limits()),
             Err(AppError::BadRequest(_))
         ));
         let header_only = tmp.csv("header.csv", b"region,amount\n");
         assert!(matches!(
-            materialize(&[header_only], &tmp.out()),
+            materialize(&[header_only], &tmp.out(), &test_limits()),
             Err(AppError::BadRequest(_))
         ));
     }
@@ -700,7 +708,7 @@ mod tests {
     fn quotes_in_file_names_do_not_break_sql() {
         let tmp = TempDir::new();
         let file = tmp.csv("it's.csv", b"amount\n1\n");
-        materialize(&[file], &tmp.out()).unwrap();
+        materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(
             query_strings(&tmp.out(), "_source_file FROM {t}"),
             ["it's.csv"]
@@ -732,7 +740,7 @@ mod tests {
         }
         bytes.extend_from_slice(b"Caf\xe9,5\n");
         let file = tmp.csv("big.csv", &bytes);
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(result.row_count, 30_001);
         assert_eq!(
             query_strings(&tmp.out(), "name FROM {t} WHERE amount = 5"),
@@ -750,7 +758,7 @@ mod tests {
         }
         bytes.extend_from_slice(b"Cox\x92s Bazar,5\n");
         let file = tmp.csv("big.csv", &bytes);
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         assert_eq!(result.row_count, 30_001);
         assert_eq!(
             query_strings(&tmp.out(), "name FROM {t} WHERE amount = 5"),
@@ -768,7 +776,7 @@ mod tests {
         }
         bytes.extend_from_slice(b"onlyone\n");
         let file = tmp.csv("ragged.csv", &bytes);
-        let err = materialize(&[file], &tmp.out()).unwrap_err();
+        let err = materialize(&[file], &tmp.out(), &test_limits()).unwrap_err();
         assert!(
             matches!(&err, AppError::BadRequest(m) if m.contains("ragged.csv")),
             "{err:?}"
@@ -779,7 +787,7 @@ mod tests {
     fn semicolon_csv_is_split_into_columns() {
         let tmp = TempDir::new();
         let file = tmp.csv("vn.csv", b"region;amount\nSouth;10\n");
-        let result = materialize(&[file], &tmp.out()).unwrap();
+        let result = materialize(&[file], &tmp.out(), &test_limits()).unwrap();
         let names: Vec<&str> = result.columns.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names, ["region", "amount", SOURCE_COLUMN]);
     }

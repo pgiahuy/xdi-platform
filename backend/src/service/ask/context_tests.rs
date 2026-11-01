@@ -1058,11 +1058,13 @@ async fn measure_dataco_values() {
         format: FileFormat::Csv,
         column_types: Vec::new(),
     };
-    let materialized = materialize(&[input], &dir).unwrap();
+    let materialized =
+        materialize(&[input], &dir, &crate::engine::duckdb_limits::test_limits()).unwrap();
     let columns = crate::service::profile::build_profile(
         dir.clone(),
         materialized.row_count,
         Default::default(),
+        crate::engine::duckdb_limits::test_limits(),
     )
     .await
     .unwrap();

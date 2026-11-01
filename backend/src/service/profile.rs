@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::auth::WorkspaceId;
 use crate::engine::analytics::SOURCE_COLUMN;
+use crate::engine::duckdb_limits::DuckdbLimits;
 use crate::engine::profile::{self, ColumnStats, ValueCount};
 use crate::engine::store::{NewColumn, NewColumnValue, PendingVersion, ProfileRole, ProfileStatus};
 use crate::service::ask::phrases::fold;
@@ -297,9 +298,11 @@ pub async fn build_profile(
     parquet_dir: PathBuf,
     row_count: i64,
     previous_formats: HashMap<String, String>,
+    limits: DuckdbLimits,
 ) -> Result<Vec<NewColumn>, AppError> {
+    // limits chuyển hẳn vào luồng của spawn_blocking (move), như parquet_dir.
     let stats = tokio::task::spawn_blocking(move || {
-        profile::build_column_stats(&parquet_dir, DIMENSION_MAX, &previous_formats)
+        profile::build_column_stats(&parquet_dir, DIMENSION_MAX, &previous_formats, &limits)
     })
     .await
     .map_err(|e| AppError::Internal(format!("profile task: {e}")))??;
@@ -443,7 +446,7 @@ async fn profile_version(
         ))));
     }
     // Phiên bản cũ đều chưa có hồ sơ, nên không có định dạng ngày nào của phiên bản trước để giữ.
-    let columns = build_profile(dir, row_count, HashMap::new())
+    let columns = build_profile(dir, row_count, HashMap::new(), state.config.duckdb_limits())
         .await
         .map_err(Failure::Permanent)?;
     // false: đã có hồ sơ từ lúc liệt kê tới giờ; không có gì phải làm.
@@ -699,7 +702,12 @@ mod tests {
             format: FileFormat::Csv,
             column_types: Vec::new(),
         };
-        let materialized = materialize(&[input], &data.join(relative)).unwrap();
+        let materialized = materialize(
+            &[input],
+            &data.join(relative),
+            &crate::engine::duckdb_limits::test_limits(),
+        )
+        .unwrap();
 
         let src = store.create_local_source(&ws, "Test").await.unwrap();
         let ds = store

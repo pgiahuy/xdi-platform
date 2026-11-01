@@ -110,6 +110,7 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Danh sách đầy đủ,
 | `DB_ACQUIRE_TIMEOUT_SECS` | `5` | Số giây một request chờ kết nối Postgres khi mọi kết nối đang bận; quá thì request nhận lỗi |
 | `PUBLIC_URL` | trống | Địa chỉ công khai; bắt đầu bằng `https://` thì cookie đăng nhập có cờ `Secure` (mục 3) |
 | `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa của một lần nạp file |
+| `DUCKDB_MEMORY_LIMIT_MB` | `1024` | Trần bộ nhớ (MiB) của DuckDB mỗi lần nạp file, lập hồ sơ cột hay chụp bảng; chạm trần thì ghi phần dư ra `DATA_DIR/duckdb-spill/`, chậm hơn nhưng vẫn xong. Câu hỏi có trần riêng 1 GB ([PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn) |
 | `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |
 | `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; giao diện nhận 1000 dòng đầu |
 | `RUST_LOG` | `info` | Mức log |
