@@ -28,8 +28,9 @@ pub struct Config {
     /// "mock", "gemini" hoặc "ollama". Mặc định mock để chạy được không cần khóa.
     pub llm_provider: String,
     pub gemini_api_key: Secret,
-    /// Khóa Gemini dự phòng (GEMINI_BACKUP_API_KEY), dùng khi khóa chính hết hạn mức; rỗng thì không có.
-    pub gemini_backup_api_key: Secret,
+    /// Các khóa Gemini dự phòng (GEMINI_BACKUP_API_KEY, cách nhau bằng dấu phẩy), dùng lần lượt khi khóa trước hết
+    /// hạn mức; rỗng thì không có.
+    pub gemini_backup_api_keys: Vec<Secret>,
     pub gemini_model: String,
     /// Mô hình dùng khi mọi khóa hết hạn mức với gemini_model (GEMINI_FALLBACK_MODEL, mặc định gemini-3.1-flash-lite);
     /// đặt rỗng thì không có.
@@ -141,7 +142,7 @@ impl Config {
             max_upload_bytes: upload_limit_bytes(env::var("MAX_UPLOAD_MB").ok().as_deref()),
             llm_provider: var_or("LLM_PROVIDER", "mock"),
             gemini_api_key: Secret::new(var_or("GEMINI_API_KEY", "")),
-            gemini_backup_api_key: Secret::new(var_or("GEMINI_BACKUP_API_KEY", "")),
+            gemini_backup_api_keys: split_keys(&var_or("GEMINI_BACKUP_API_KEY", "")),
             gemini_model: var_or("GEMINI_MODEL", "gemini-3.5-flash-lite"),
             // Khác var_or: đặt rỗng (GEMINI_FALLBACK_MODEL=) là tắt mô hình dự phòng, không đặt mới dùng mặc định.
             gemini_fallback_model: env::var("GEMINI_FALLBACK_MODEL")
@@ -501,6 +502,16 @@ impl fmt::Debug for Secret {
 /// Biến không đặt hoặc đặt rỗng đều lấy mặc định. Compose đã tự làm vậy (dạng ${X:-mặc định}), nhưng chạy ngoài
 /// compose với biến lấy từ .env chép từ .env.example (có dòng để trống như OLLAMA_URL=) thì backend nhận chuỗi rỗng;
 /// coi rỗng là một giá trị thì OLLAMA_URL rỗng thay cho địa chỉ mặc định.
+/// Tách danh sách khóa cách nhau bằng dấu phẩy, bỏ khoảng trắng và mục rỗng.
+fn split_keys(value: &str) -> Vec<Secret> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .map(Secret::new)
+        .collect()
+}
+
 fn var_or(key: &str, default: &str) -> String {
     env::var(key)
         .ok()
@@ -528,6 +539,14 @@ fn worker_binary() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backup_keys_are_split_on_commas() {
+        let keys = split_keys(" a1 , ,b2,");
+        let keys: Vec<&str> = keys.iter().map(|k| k.expose()).collect();
+        assert_eq!(keys, vec!["a1", "b2"]);
+        assert!(split_keys("").is_empty());
+    }
 
     #[test]
     fn only_the_sample_host_and_port_are_allowed_without_listing() {

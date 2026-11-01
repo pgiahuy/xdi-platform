@@ -116,10 +116,9 @@ pub fn from_config(config: &Config) -> Arc<dyn LlmProvider> {
             }
             Arc::new(gemini::Gemini::new(
                 gemini::API_URL,
-                vec![
-                    config.gemini_api_key.clone(),
-                    config.gemini_backup_api_key.clone(),
-                ],
+                std::iter::once(config.gemini_api_key.clone())
+                    .chain(config.gemini_backup_api_keys.iter().cloned())
+                    .collect(),
                 vec![
                     config.gemini_model.clone(),
                     config.gemini_fallback_model.clone(),
