@@ -52,8 +52,10 @@ export function buildScopeProgress({ dataset, table }: AskScope): ProfileProgres
 
 const MAX_SUGGESTIONS = 6
 
-/** Câu gợi ý của bảng ghim; không ghim thì lấy lần lượt từng bảng một câu, để vài bảng đầu không chiếm hết chỗ. */
+/** Câu gợi ý của bảng ghim. Không ghim: câu chọn tay của dataset nếu có (database mẫu, DatasetSummary.suggested_questions),
+ * không thì lấy lần lượt từng bảng một câu, để vài bảng đầu không chiếm hết chỗ. */
 export function buildScopeSuggestions({ dataset, table }: AskScope): string[] {
+  if (!table && dataset && dataset.suggested_questions.length > 0) return dataset.suggested_questions
   const lists = (table ? [table] : (dataset?.tables ?? [])).map((t) => t.suggested_questions)
   const picked: string[] = []
   for (let round = 0; picked.length < MAX_SUGGESTIONS && lists.some((l) => l.length > round); round++) {

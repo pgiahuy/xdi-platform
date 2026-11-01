@@ -103,8 +103,9 @@ câu gợi ý. Hỏi được ngay cả khi hồ sơ chưa xong.
 - "Mô hình hiện tại không lập được câu gợi ý cho dataset này; vẫn hỏi được bình thường.": mô hình là `mock` mà bảng không
   có hồ sơ viết sẵn, hay mô hình thật trả lời mà không dùng được. Đổi mô hình rồi khởi động lại backend thì backend thử
   lại.
-- Mô hình lỗi lúc lập hồ sơ (khóa sai, quá tải, hết hạn mức): giao diện không báo, log ghi lỗi; backend thử lại ở lần
-  khởi động sau.
+- Mô hình lỗi lúc lập hồ sơ (khóa sai, quá tải): giao diện không báo, log ghi lỗi; backend thử lại ở lần khởi động
+  sau. Hết hạn mức theo phút của Gemini thì backend chờ rồi gọi lại ngay trong lượt đó, nên hồ sơ chậm hơn chứ không
+  thiếu.
 - "Lập hồ sơ dataset lỗi nên chưa hỏi được phiên bản này": phần cấu trúc lỗi, nạp lại file.
 
 ## 4. Hỏi

@@ -19,6 +19,7 @@ Hàm thuần, test ở explain/question_match_tests.rs. */
 
 use crate::service::ask::context::ColumnProfile;
 use crate::service::ask::phrases::fold;
+use crate::service::ask::values::ValueEntry;
 use crate::service::explain::check::WhyProfile;
 use crate::service::explain::form::{FieldError, WhyForm};
 
@@ -102,10 +103,17 @@ fn find_named_values(question: &str, column: &str, profile: &WhyProfile) -> Vec<
     let Some(listed) = listed else {
         return Vec::new();
     };
+    find_named_entries(question, &listed.values)
+}
+
+/// Giá trị trong entries (so cả giá trị lẫn bí danh, theo từ trọn vẹn sau khi bỏ dấu) có trong câu hỏi, theo thứ tự
+/// xuất hiện. Giá trị nằm trọn trong một giá trị dài hơn cũng được nêu thì bỏ. Lớp hồ sơ ngữ nghĩa dùng lại hàm này để
+/// kiểm câu gợi ý nguyên nhân (service/semantic/questions.rs), nên câu gợi ý được đọc nhóm đúng như đường câu hỏi.
+pub(crate) fn find_named_entries(question: &str, entries: &[ValueEntry]) -> Vec<String> {
     // Thêm dấu cách hai đầu để so theo ranh giới từ bằng một phép tìm chuỗi, như build_question_kind (explain/form.rs).
     let words = format!(" {} ", fold(question));
     let mut hits: Vec<(usize, String, String)> = Vec::new();
-    for entry in &listed.values {
+    for entry in entries {
         let texts = std::iter::once(&entry.value).chain(&entry.aliases);
         let first = texts
             .filter_map(|text| {

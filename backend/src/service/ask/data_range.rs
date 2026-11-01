@@ -45,7 +45,7 @@ pub fn build_data_range(columns: &[ProfileColumn], sql: Option<&str>) -> Option<
 }
 
 // "2015-01-01 00:00:00" hay "2015-01-01" thành ngày; chuỗi khác dạng thì None.
-fn read_date(text: &str) -> Option<NaiveDate> {
+pub(crate) fn read_date(text: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(text.get(..10)?, "%Y-%m-%d").ok()
 }
 

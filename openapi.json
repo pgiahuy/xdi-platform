@@ -7095,6 +7095,7 @@
           "tables",
           "relations",
           "metadata_only",
+          "suggested_questions",
           "updated_at",
           "created_at"
         ],
@@ -7135,6 +7136,13 @@
               "$ref": "#/components/schemas/DatasetRelation"
             },
             "description": "Foreign-key relations between tables of this dataset, copied from the source database. Empty for a file."
+          },
+          "suggested_questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Questions picked by hand for this dataset (the sample databases set in SAMPLE_DATABASE_URL); empty otherwise.\nThe ask page shows them instead of the tables' `suggested_questions` while no table is pinned."
           },
           "tables": {
             "type": "array",

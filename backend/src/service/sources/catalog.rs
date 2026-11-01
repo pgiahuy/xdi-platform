@@ -5,6 +5,7 @@
 - build_table_list: danh sách bảng của GET /sources/{id}/tables, kèm khóa ngoại vào, ra giữa các bảng đọc được và cờ
   "bảng khác đang trỏ tới", để giao diện cảnh báo khi admin bỏ tick một bảng danh mục.
 - read_metadata_columns: cột, kiểu, khóa chính, mô tả của một bảng không chép dữ liệu (plan.rs quyết bảng nào).
+- read_key_columns: cột khóa chính và cột khóa ngoại của một bảng đã chép, cho vai trò key (service/column_roles.rs).
 
 Chỉ đọc catalog, không đọc dòng dữ liệu nào. Số dòng ước lượng là thống kê của Postgres (lần ANALYZE gần nhất), có thể
 lệch số thật; dung lượng là số thật của file. Lúc chụp chỉ đếm dòng thật khi admin đặt SOURCE_MAX_ROWS
@@ -22,6 +23,7 @@ use super::postgres::{query_error, SourceTable};
 use super::relations::ForeignKey;
 use crate::engine::store::MetadataColumn;
 use crate::error::AppError;
+use crate::service::column_roles::SourceKeys;
 
 /// Thống kê của một bảng đọc từ pg_class.
 #[derive(Debug, Clone, Default)]
@@ -249,4 +251,40 @@ pub async fn read_metadata_columns(
             },
         )
         .collect())
+}
+
+/// Cột khóa chính (theo thứ tự của khóa) và cột thuộc khóa ngoại của một bảng, từ pg_constraint. Chỉ đọc catalog.
+pub async fn read_key_columns(
+    c: &mut PgConnection,
+    table: &SourceTable,
+) -> Result<SourceKeys, AppError> {
+    // contype là kiểu "char" của Postgres, đổi sang text để sqlx đọc thành String. Vị trí trong khóa (k.ord) giữ thứ tự
+    // cột của khóa chính nhiều cột.
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT a.attname::text, p.contype::text
+         FROM pg_constraint p
+         JOIN pg_class c ON c.oid = p.conrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN LATERAL unnest(p.conkey) WITH ORDINALITY AS k(attnum, ord)
+         JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
+         WHERE n.nspname = $1 AND c.relname = $2 AND p.contype IN ('p', 'f')
+         ORDER BY p.contype, p.conname, k.ord",
+    )
+    .bind(&table.schema)
+    .bind(&table.name)
+    .fetch_all(&mut *c)
+    .await
+    .map_err(|e| query_error(&e))?;
+    let mut keys = SourceKeys::default();
+    for (column, kind) in rows {
+        let list = if kind == "p" {
+            &mut keys.primary_key
+        } else {
+            &mut keys.foreign_key_columns
+        };
+        if !list.contains(&column) {
+            list.push(column);
+        }
+    }
+    Ok(keys)
 }

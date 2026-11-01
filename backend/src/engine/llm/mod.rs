@@ -18,6 +18,9 @@ pub mod meter;
 pub(crate) mod mock;
 mod ollama;
 
+pub use gemini::{is_quota_error, quota_retry_after};
+// Test của bộ đánh giá dựng lỗi hết hạn mức bằng đúng lời báo này.
+#[cfg(test)]
 pub use gemini::QUOTA_MESSAGE as GEMINI_QUOTA_MESSAGE;
 
 use std::sync::Arc;

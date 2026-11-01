@@ -25,6 +25,8 @@ chỉ đề xuất đánh dấu thêm (chỉ chiều bật). Ghi hồ sơ xuốn
 (apply_semantic_profile). Test ở service/semantic/tests.rs. */
 
 mod parts;
+pub mod questions;
+pub mod quota;
 pub mod schema;
 #[cfg(test)]
 mod tests;
@@ -46,6 +48,7 @@ use crate::service::ask::values::STRING_MAX_BYTES;
 use crate::service::profile::{is_integer_type, DIMENSION_MAX};
 pub use crate::service::semantic::parts::ProfilePart;
 use crate::service::semantic::parts::{ask_profile_parts, PartInput};
+use crate::service::semantic::questions::{build_checked_questions, QuestionCheck};
 use crate::{error::AppError, state::AppState};
 
 // Các giới hạn khi kiểm câu trả lời của mô hình (đếm theo ký tự, không phải byte). Mô tả và bí danh vào prompt của
@@ -282,7 +285,7 @@ async fn profile_version(
         values: &values,
     };
     let text = ask_profile_parts(state, &input).await?;
-    let answer = build_profile_answer(&text, &columns, &values).map_err(|reasons| {
+    let mut answer = build_profile_answer(&text, &columns, &values).map_err(|reasons| {
         // Vài lý do bỏ đầu tiên (tên trường, vị trí, lý do; không có giá trị dữ liệu) để biết mô hình trả sai chỗ
         // nào mà không phải bật log câu trả lời đầy đủ.
         tracing::warn!(version_id = %version_id, reasons = ?reasons,
@@ -291,6 +294,18 @@ async fn profile_version(
             "semantic profile answer has no valid item".to_string(),
         ))
     })?;
+    // Câu gợi ý không tách được hai kỳ, hai nhóm hay đếm thứ bảng không ghi thì bỏ trước khi lưu (questions.rs).
+    let mut table_texts = vec![dataset.name.as_str(), dataset.logical_table.as_str()];
+    table_texts.extend(table_description.as_deref());
+    let check = QuestionCheck {
+        table_texts,
+        columns: &columns,
+        values: &values,
+        column_updates: &answer.columns,
+        value_updates: &answer.values,
+    };
+    answer.suggested_questions =
+        build_checked_questions(std::mem::take(&mut answer.suggested_questions), &check);
     let written = state
         .store
         .apply_semantic_profile(

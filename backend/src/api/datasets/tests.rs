@@ -399,7 +399,8 @@ const DATACO_CSV: &[u8] = b"Type,Market,Order Id,Product Image,Order Item Total\
     DEBIT,Europe,2,img/1.jpg,150.25\n";
 
 /// Nạp xong, hồ sơ ngữ nghĩa chạy nền tới xong: dataset tên DataCo (bảng logic dataco) nhận hồ sơ mock — mô tả,
-/// bí danh, vai trò sửa, 5 câu gợi ý, current_profile_status thành semantic. Xóa dòng spawn trong ingest thì test
+/// bí danh, vai trò sửa, 4 câu gợi ý (mock viết 5; file không có cột ngày nên câu nguyên nhân theo tháng bị bỏ,
+/// service/semantic/questions.rs), current_profile_status thành semantic. Xóa dòng spawn trong ingest thì test
 /// này đỏ.
 #[tokio::test]
 async fn upload_spawns_the_semantic_profile() {
@@ -433,7 +434,7 @@ async fn upload_spawns_the_semantic_profile() {
     assert_eq!(detail["current_profile_status"], "semantic", "{detail}");
     assert_eq!(
         detail["suggested_questions"].as_array().map(Vec::len),
-        Some(5),
+        Some(4),
         "{detail}"
     );
     assert_eq!(detail["semantic_unavailable"], false, "{detail}");

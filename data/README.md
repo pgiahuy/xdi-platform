@@ -10,6 +10,7 @@ thêm một file JSON.
 | `dataco.csv` (1500 dòng lấy ngẫu nhiên) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0 | Dataset mẫu của workspace đầu tiên khi không chụp được database mẫu, bộ đánh giá câu hỏi mẫu (`make eval`), thử nhanh với mock |
 | `dataco.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Chỉ số mẫu của dataset DataCo (bảng `metrics`) |
 | `order_items.metrics.json`, `student_assessments.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Chỉ số mẫu của hai bảng thiết lập lần đầu chụp từ database mẫu ([postgres-demo](postgres-demo/README.md)) |
+| `suggested_questions.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Câu gợi ý chọn tay của `sales_demo` và `edu_demo` trên trang hỏi ([docs/DATA.md](../docs/DATA.md#dataset-mẫu)) |
 
 ## Dữ liệu mẫu lúc thiết lập lần đầu
 

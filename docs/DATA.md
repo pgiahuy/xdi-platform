@@ -291,12 +291,14 @@ trị một dòng `column_values` kèm số dòng. Cột có giá trị dài qu�
 giữ định dạng của cột cùng tên ở phiên bản hiện hành nếu còn đọc được, không thì theo ngày/tháng (backend ghi log). SQL
 dùng `strptime("cột", '<time_format>')`.
 
-**Vai trò cột**: thử từng luật theo thứ tự, luật đầu khớp thắng; luật chỉ nhìn kiểu và số đo, không nhìn tên cột.
+**Vai trò cột**: thử từng luật theo thứ tự, luật đầu khớp thắng. Luật nhìn kiểu và số đo; tên cột chỉ được đọc ở luật 1
+và luật 2b.
 
 | Thứ tự | Điều kiện | Vai trò |
 |---|---|---|
 | 1 | Cột toàn ô trống, hoặc là `_source_file` | `ignore` |
 | 2 | Kiểu `DATE`, `TIMESTAMP`, `TIMESTAMP WITH TIME ZONE`, hoặc cột chữ có `time_format` | `time` |
+| 2b | Số nguyên có tên là mốc thời gian đếm bằng số (xem dưới bảng) | `dimension` khi có tối đa 200 giá trị khác nhau, còn lại `text` |
 | 3 | Bảng hơn 2 dòng; số nguyên, không ô trống, mỗi dòng một giá trị khác nhau | `key` |
 | 4 | Bảng hơn 2 dòng; số có tối đa 2 giá trị khác nhau, như cột cờ 0/1 | `dimension` |
 | 5 | Số còn lại | `measure` |
@@ -306,6 +308,22 @@ dùng `strptime("cột", '<time_format>')`.
 Trên DataCo: `Market`, `Order Country` (164 nước) là `dimension`, `Order City` (3597 thành phố) là `text`,
 `Order Item Id` là `key`, hai cột `... (DateOrders)` là `time`. Số nguyên lặp lại như `Order Id` ra `measure` theo
 luật; lớp ngữ nghĩa sửa được một số ca như vậy.
+
+**Mốc thời gian dạng số** (luật 2b, `backend/src/service/column_roles.rs`): cột số nguyên mà tên (bỏ dấu, tách từ như cột
+nhạy cảm) có một từ `date`, `day`, `week`, `month`, `year`, `ngày`, `tuần`, `tháng`, và không có từ chỉ một lượng (`số`,
+`count`, `num`, `number`, `length`, `duration`, `total`, `tổng`). Ví dụ `edu_demo`: `student_daily_clicks.date` (số
+ngày tính từ đầu học phần, 295 giá trị) là `text`, `vle_materials.week_from` (30 giá trị) là `dimension`,
+`registrations.date_registration` là `text`. Cộng các cột này ra số vô nghĩa, và chúng không phải kỳ: câu hỏi nguyên
+nhân chỉ lấy kỳ từ cột `time`. Vẫn nhóm theo, lọc theo số và lấy trung bình được (đường câu hỏi nguyên nhân nhận trung
+bình trên mọi cột số không phải `key`). Dạng số nhiều là một lượng, lấy trung bình có nghĩa, nên giữ luật số đo:
+`days_for_shipping_real` vẫn là `measure`.
+
+**Khóa của database nguồn**: bảng chụp từ database đọc thêm khóa chính và cột khóa ngoại (`pg_constraint`) trong cùng
+giao dịch chụp, rồi đặt `key` cho cột số nguyên thuộc khóa chính hay khóa ngoại, và cho cột đứng một mình làm khóa
+chính dù kiểu gì. Cột chữ của khóa nhiều cột hay khóa ngoại (`code_module`, 7 môn) giữ vai trò theo luật, vì đó là nhóm
+người dùng hỏi theo; cột mốc thời gian trong khóa chính (`student_daily_clicks.date`) giữ luật 2b. Nhờ vậy mã như
+`order_items.product_id` hay `student_daily_clicks.id_student` là `key` ngay lúc chụp, không phải chờ lớp ngữ nghĩa. Chỉ
+áp cho phiên bản chụp mới; phiên bản đã có giữ vai trò cũ.
 
 **Cột nhạy cảm** (`is_sensitive`) được đánh dấu trong lượt lập hồ sơ cấu trúc, trước khi phiên bản dùng được: tên cột
 có một cụm như email, mật khẩu, số điện thoại, số giấy tờ, địa chỉ, họ tên (`SENSITIVE_NAME_PHRASES` ở
@@ -321,6 +339,11 @@ tả và bí danh cột, đơn vị và cách gộp của cột số đo, bí da
 chiều bật), và sửa vai trò cột trong phạm vi hẹp. Mỗi phiên bản ba prompt song song; tối đa `SEMANTIC_JOBS` phiên bản
 cùng lúc (mặc định 2). Người nạp không phải chờ và không nhận lỗi; xong thì `profile_status` là `semantic`.
 
+- Lỗi hết hạn mức của Gemini (429, mọi khóa và mô hình dự phòng đều hết): phần đó chờ rồi gọi lại trong cùng lượt, tối
+  đa 3 lần. Thời gian chờ là số giây Gemini dặn ("Please retry in 24s"), không có thì 30 giây, tối đa 60 giây. Sau một
+  lần hết hạn mức, mọi phần của mọi lượt đang chạy chờ cùng mốc đó rồi đi lần lượt, cách nhau ít nhất 5 giây, trong 2
+  phút kể từ lần hết hạn mức gần nhất (`backend/src/service/semantic/quota.rs`). Hết 3 lần vẫn lỗi thì như lỗi tạm bên
+  dưới.
 - Câu trả lời không dùng được (JSON hỏng, không mục nào hợp lệ) hay lỗi `BadRequest` của provider (nội dung bị chặn,
   `mock` không có bảng) thì đánh dấu đã thử kèm tên provider (`semantic_attempted_with`): khởi động không gọi lại với
   cùng provider, đổi `LLM_PROVIDER` thì thử lại, nạp lại đúng bộ file cũ là đường thử lại tường minh. Lỗi khác (quá
@@ -333,10 +356,18 @@ cùng lúc (mặc định 2). Người nạp không phải chờ và không nh�
   thật, mô tả tối đa 300 ký tự, tối đa 8 bí danh mỗi mục (mỗi bí danh tối đa 60 ký tự), tối đa 5 câu gợi ý (mỗi câu
   tối đa 200 ký tự). Đổi vai trò chỉ nhận cột số nguyên `measure` thành `key` hay `dimension` (khi không quá 200 giá
   trị), và cột `dimension` thành `text`.
-- Câu hỏi gợi ý: prompt xin hai câu hỏi nguyên nhân (chênh lệch giữa hai kỳ hay hai giá trị có trong danh sách, không
-  nói chiều vì mô hình không thấy số), một câu tỷ lệ, trung bình hay top N, còn lại là câu tổng hay phân rã đơn giản.
-  Câu gợi ý lưu theo phiên bản và trả ra trong danh sách dataset, chi tiết dataset, cùng `current_profile_status` và
-  `semantic_unavailable` (provider đang cấu hình đã thử mà không lập được).
+- Câu hỏi gợi ý: prompt xin hai câu hỏi nguyên nhân (chênh lệch giữa hai kỳ của cột `time` hay hai giá trị có trong
+  danh sách, không nói chiều vì mô hình không thấy số), một câu tỷ lệ, trung bình hay top N, còn lại là câu tổng hay
+  phân rã đơn giản. Số dòng gọi theo thứ một dòng của bảng ghi. Câu gợi ý lưu theo phiên bản và trả ra trong danh sách
+  dataset, chi tiết dataset, cùng `current_profile_status` và `semantic_unavailable` (provider đang cấu hình đã thử mà
+  không lập được).
+- Trước khi lưu, code kiểm từng câu gợi ý, không gọi mô hình (`backend/src/service/semantic/questions.rs`). Câu hỏi
+  nguyên nhân phải nêu đúng hai giá trị của cùng một cột `dimension` (đọc như đường câu hỏi nguyên nhân đọc nhóm câu
+  hỏi nêu tên), hoặc kỳ viết dạng "năm 2017", "tháng 11/2016", "quý 3/2017", "ngày 31/5/2017" nằm trong khoảng min, max
+  của một cột `time`: hai kỳ, hay một kỳ mà kỳ liền trước cũng có dữ liệu (đường câu hỏi nguyên nhân so với kỳ liền
+  trước). Câu đếm "số <danh từ>" mà danh từ không có trong tên, mô tả bảng, tên, mô tả, bí danh cột hay giá trị cột thì
+  bỏ; luật này chỉ chạy khi bảng có mô tả cột để đối chiếu. Câu bị bỏ ghi log kèm lý do. Ví dụ bị bỏ:
+  "Vì sao số đơn ngày 10 thay đổi so với ngày 0" trên bảng lượt bấm `student_daily_clicks`.
 
 ### Đơn vị và cách gộp
 
@@ -355,7 +386,11 @@ cùng lúc (mặc định 2). Người nạp không phải chờ và không nh�
 
 Thiết lập lần đầu tới được database mẫu (`SAMPLE_DATABASE_URL`) thì thêm mỗi database làm một dataset và chụp mọi bảng
 tài khoản `analyst` đọc được, như admin kết nối mà không bỏ tick bảng nào, cộng chỉ số mẫu của bảng có file
-`<bảng>.metrics.json` (`backend/src/service/samples_db.rs`). Một database lỗi thì giữ database còn lại. Không có
+`<bảng>.metrics.json` (`backend/src/service/samples_db.rs`). Một database lỗi thì giữ database còn lại.
+Câu gợi ý của database mẫu chọn tay, ghi trong `<SAMPLES_DIR>/suggested_questions.json` theo tên database (8 câu mỗi
+database, đã hỏi thử với Gemini): backend đọc file lúc khởi động, chỉ giữ tên là database trong `SAMPLE_DATABASE_URL`,
+và trả trong `suggested_questions` của dataset ([API](API.md#dataset-và-bảng)). Trang hỏi hiện các câu này khi chưa ghim
+bảng nào; ghim một bảng thì hiện câu gợi ý của bảng đó. Không có
 database mẫu nào chụp được thì nạp `dataco.csv` trong `SAMPLES_DIR` thành dataset `DataCo`. Tắt cả hai bằng
 `SEED_SAMPLE=false`. Chi tiết, nguồn và giấy phép: [data/README.md](../data/README.md).
 

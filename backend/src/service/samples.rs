@@ -187,6 +187,7 @@ pub async fn upload_local_file(
         database_source: None,
         format: None,
         descriptions: Default::default(),
+        keys: Default::default(),
     };
     ingest::upload(state, member, staging, upload).await
 }

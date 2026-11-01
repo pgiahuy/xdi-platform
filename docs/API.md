@@ -101,7 +101,8 @@ mọi bảng đã chụp từ nó. Phiên bản, hồ sơ cột, chỉ số, câ
 
 - `DatasetSummary`: `id` (với database, trùng id nguồn ở `.../sources/{id}`), `kind` (`database` hay `file`), `name`,
   `domain` (gói ngành), `tables`, `relations` (khóa ngoại giữa các bảng, `DatasetRelation`), `metadata_only` (bảng mới
-  có cấu trúc, chưa có dữ liệu; rỗng với file), `updated_at`, `created_at`.
+  có cấu trúc, chưa có dữ liệu; rỗng với file), `suggested_questions` (câu chọn tay của database mẫu, rỗng với dataset
+  khác; trang hỏi hiện khi chưa ghim bảng), `updated_at`, `created_at`.
 - `DatasetTable`: `id` là id bảng mà các route `/datasets/{id}/...` nhận; `logical_table` là tên trong SQL, chỉ không
   trùng trong một dataset; `schema`, `source_table` (null với file), `description`, `row_count`, phiên bản hiện hành,
   trạng thái hồ sơ, `suggested_questions` và `columns` của phiên bản hiện hành. Bảng xếp theo `source_table` rồi theo

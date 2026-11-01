@@ -26,6 +26,37 @@ pub const API_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 /// chờ rồi gọi lại, thay vì tính câu hỏi là trượt.
 pub const QUOTA_MESSAGE: &str = "Đã hết hạn mức gọi Gemini của khóa này. Chờ một lúc rồi thử lại, hoặc xem hạn mức trong Google AI Studio";
 
+/// Phần ghi thêm sau QUOTA_MESSAGE khi Gemini nói chờ bao lâu ("Please retry in 24s." với hạn mức theo phút). Lớp hồ sơ
+/// ngữ nghĩa đọc lại số giây này (quota_retry_after) để chờ đúng chừng đó rồi gọi lại; người dùng cũng biết phải chờ bao
+/// lâu.
+const RETRY_HINT: &str = ". Gemini báo thử lại sau ";
+const RETRY_HINT_UNIT: &str = " giây";
+
+/// Lỗi hết hạn mức của mọi khóa Gemini (có hay không kèm số giây phải chờ). Ollama và mock không có hạn mức.
+pub fn is_quota_error(error: &AppError) -> bool {
+    matches!(error, AppError::Upstream(message) if message.starts_with(QUOTA_MESSAGE))
+}
+
+/// Số giây Gemini dặn chờ, đọc từ lời báo hết hạn mức; None khi lỗi khác hay Gemini không nói.
+pub fn quota_retry_after(error: &AppError) -> Option<Duration> {
+    let AppError::Upstream(message) = error else {
+        return None;
+    };
+    let seconds = message
+        .strip_prefix(QUOTA_MESSAGE)?
+        .strip_prefix(RETRY_HINT)?
+        .strip_suffix(RETRY_HINT_UNIT)?;
+    seconds.parse::<u64>().ok().map(Duration::from_secs)
+}
+
+/// Lời báo hết hạn mức, kèm số giây phải chờ khi Gemini có nói.
+fn build_quota_message(detail: &ErrorDetail) -> String {
+    match detail.retry_seconds() {
+        Some(seconds) => format!("{QUOTA_MESSAGE}{RETRY_HINT}{seconds}{RETRY_HINT_UNIT}"),
+        None => QUOTA_MESSAGE.to_string(),
+    }
+}
+
 pub struct Gemini {
     /// Mô hình chính rồi mô hình dự phòng (nếu có), mỗi mô hình kèm địa chỉ đầy đủ của generateContent.
     models: Vec<ModelEndpoint>,
@@ -124,7 +155,7 @@ impl Gemini {
                 status.as_u16()
             ),
             404 => format!("Gemini không có mô hình {model}: kiểm tra GEMINI_MODEL và GEMINI_FALLBACK_MODEL"),
-            429 => QUOTA_MESSAGE.to_string(),
+            429 => build_quota_message(&detail),
             500..=599 => format!(
                 "Gemini đang lỗi hoặc quá tải (mã {}). Thử lại sau",
                 status.as_u16()
@@ -367,6 +398,26 @@ impl ErrorDetail {
             .iter()
             .any(|d| d.get("reason").and_then(|r| r.as_str()) == Some("API_KEY_INVALID"))
     }
+
+    /// Số giây phải chờ của lỗi 429, làm tròn lên: trường retryDelay ("24s") của mục RetryInfo trong details, không có
+    /// thì câu "Please retry in 24.2s." trong message. None khi không có cả hai.
+    fn retry_seconds(&self) -> Option<u64> {
+        let from_details = self
+            .details
+            .iter()
+            .find_map(|d| d.get("retryDelay").and_then(|r| r.as_str()));
+        let from_message = self.message.split_once("retry in ").map(|(_, rest)| rest);
+        let text = from_details.or(from_message)?;
+        let number: String = text
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        let seconds = number.parse::<f64>().ok()?;
+        // Số âm hay quá lớn (không phải lời dặn chờ thật) thì bỏ.
+        (0.0..=86_400.0)
+            .contains(&seconds)
+            .then(|| seconds.ceil() as u64)
+    }
 }
 
 #[cfg(test)]
@@ -586,6 +637,42 @@ mod tests {
         let (url, _) = spawn(200, BODY, Duration::ZERO).await;
         let answer = ask(&gemini(&url, KEY, Duration::from_secs(5))).await;
         assert_eq!(answer.expect("answer"), "SELECT 2");
+    }
+
+    /// Lỗi 429 theo phút có lời dặn chờ: số giây (làm tròn lên) đi vào lời báo và đọc lại được bằng quota_retry_after;
+    /// lỗi 429 không có lời dặn vẫn là lỗi hết hạn mức, không có số giây.
+    #[tokio::test]
+    async fn quota_error_keeps_the_retry_hint() {
+        let _serial = SERIAL.lock().await;
+        let cases: &[(&str, Option<u64>)] = &[
+            (
+                r#"{"error":{"code":429,"message":"You exceeded your current quota. Please retry in 23.207319658s.","status":"RESOURCE_EXHAUSTED"}}"#,
+                Some(24),
+            ),
+            (
+                r#"{"error":{"code":429,"message":"Quota exceeded.","status":"RESOURCE_EXHAUSTED","details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"41s"}]}}"#,
+                Some(41),
+            ),
+            (
+                r#"{"error":{"code":429,"message":"You exceeded your current quota.","status":"RESOURCE_EXHAUSTED"}}"#,
+                None,
+            ),
+        ];
+        for (body, seconds) in cases {
+            let (url, _) = spawn(429, *body, Duration::ZERO).await;
+            let error = ask(&gemini(&url, KEY, Duration::from_secs(5)))
+                .await
+                .unwrap_err();
+            assert!(is_quota_error(&error), "{error:?}");
+            assert_eq!(
+                quota_retry_after(&error),
+                seconds.map(Duration::from_secs),
+                "{body}"
+            );
+        }
+        assert!(!is_quota_error(&AppError::Upstream(
+            "model is down".to_string()
+        )));
     }
 
     #[tokio::test]

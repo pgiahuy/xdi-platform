@@ -34,6 +34,7 @@ use crate::engine::analytics::{self, Column, FileFormat, InputFile};
 use crate::engine::store::{
     build_related, Dataset, DatasetVersion, NewColumn, NewVersion, ProfileStatus, SourceKind,
 };
+use crate::service::column_roles::{apply_source_keys, SourceKeys};
 use crate::service::{excel, profile, semantic};
 use crate::{error::AppError, state::AppState};
 
@@ -115,6 +116,9 @@ pub struct Upload {
     pub format: Option<FileFormat>,
     /// Mô tả bảng và cột đọc từ database nguồn (COMMENT ON); rỗng với file nạp tay.
     pub descriptions: SourceDescriptions,
+    /// Khóa chính và cột khóa ngoại của bảng nguồn database; rỗng với file nạp tay. Cột khóa thành vai trò key
+    /// (service/column_roles.rs).
+    pub keys: SourceKeys,
 }
 
 /// Mô tả tổ chức đã ghi sẵn trong database nguồn (COMMENT ON TABLE, COMMENT ON COLUMN), đã làm sạch ở
@@ -304,6 +308,7 @@ pub async fn upload(
     )
     .await?;
     apply_source_descriptions(&mut columns, &upload.descriptions);
+    apply_source_keys(&mut columns, &upload.keys);
 
     // Bước 4: dataset (nếu mới) và phiên bản. Đường dẫn lưu trong database là tương đối với DATA_DIR, để đổi chỗ thư
     // mục dữ liệu không phải sửa database.
