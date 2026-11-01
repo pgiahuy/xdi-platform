@@ -44,6 +44,10 @@ pub struct JudgeFacts {
     /// trong file của bộ đo không có trường này, đọc là false.
     #[serde(default)]
     pub scale_main: bool,
+    /// Độ đo là tỷ lệ dòng (BreakdownNotes::fraction): lời viết giá trị thành phần trăm, chênh lệch thành điểm phần trăm,
+    /// còn khẳng định giữ số gốc (0,5495). Ca cũ của bộ đo không có trường này, đọc là false.
+    #[serde(default)]
+    pub percent: bool,
     pub claims: Vec<Claim>,
 }
 
@@ -66,6 +70,7 @@ pub fn build_judge_facts(explanation: &Explanation, claims: &[Claim]) -> JudgeFa
         volume_label: split.map(|s| s.volume_label.clone()).unwrap_or_default(),
         price_label: split.map(|s| s.price_label.clone()).unwrap_or_default(),
         scale_main: split.is_some_and(|s| s.scale_main),
+        percent: explanation.notes.fraction,
         claims: claims.to_vec(),
     }
 }

@@ -20,8 +20,9 @@ use crate::service::explain::annotate::{DropReason, GroupNotes, GroupPresence};
 use crate::service::explain::number::{build_change_parts, build_number_text_with};
 use crate::service::explain::split::build_split;
 use crate::service::explain::{
-    build_direction_word, build_fraction_digits, build_value_text, comparison_name, same_direction,
-    MAX_SUMMARY_CHARS, NARRATE_DIMENSIONS, NARRATE_GROUPS,
+    build_direction_word, build_fraction_digits, build_points_amount, build_share_text,
+    build_value_text, comparison_name, same_direction, MAX_SUMMARY_CHARS, NARRATE_DIMENSIONS,
+    NARRATE_GROUPS,
 };
 
 /// Số ý "Nguyên nhân chính" tối đa mô hình được viết; nhiều hơn thì câu trả lời trượt kiểm (ask/narrate.rs).
@@ -61,6 +62,11 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          side; \"outlier\" is true when the group moved far from the whole. \
          \"has_outliers\" tells that a column has such groups.\n\
          - \"main_group\": in the first column, the group with the largest part of the change going along it.\n\
+         - \"shown\", \"base_shown\", \"compare_shown\", when present: the measure is a share of rows and these are \
+         the same values written as percents; write them in \"headline\" and \"reasons\", and the plain \"value\" \
+         in \"claims\". The \"amount\" of a change is then in percentage points (\"điểm phần trăm\").\n\
+         - \"must_name\", in a column: a group that alone made at least half of the change. Every \"must_name\" is a \
+         main cause: name each one in \"reasons\" with a cause claim, even when two columns have one.\n\
          - \"dropped\": columns left out because they only rename the two sides or repeat another column.\n\
          \n\
          Reply with one JSON object:\n\
@@ -93,7 +99,8 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          \"reasons\": name a group by its value, with the column's \"label\" before it when the column has one, \
          and by its value alone when it has none. Never use the words \"đóng góp\", \"chiều\" or \"phân rã\". \"headline\" and \"reasons\" together at most {MAX_SUMMARY_CHARS} characters.\n\
          - With \"groups\", never call the two sides periods, never say \"tăng\" or \"giảm\" between them and \
-         never write \"từ ... lên\" or \"từ ... xuống\"; use the direction words given.\n\
+         never write \"từ ... lên\" or \"từ ... xuống\"; use the direction words given, and call the gap between \
+         them \"mức chênh\", never \"mức tăng\" or \"mức giảm\".\n\
          - Numbers are written the Vietnamese way: a dot between groups of thousands and a comma before the \
          decimals. Copy every number exactly as it appears, separators and decimal digits included: never round, \
          never compute a new number, never spell a number out in words. In \"headline\" and \"reasons\" write the \
@@ -115,9 +122,13 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
 fn build_facts_json(e: &Explanation) -> serde_json::Value {
     let digits = build_fraction_digits(e);
     let comparison = e.comparison;
-    let change = |text: &str| build_change_json(text, digits, comparison);
-    let percent =
-        |text: &Option<String>| text.as_deref().map(|t| build_change_json(t, 1, comparison));
+    let strong = build_strong_groups(e);
+    let fraction = e.notes.fraction;
+    let change = |text: &str| build_change_json(text, digits, comparison, fraction);
+    let percent = |text: &Option<String>| {
+        text.as_deref()
+            .map(|t| build_change_json(t, 1, comparison, false))
+    };
     let dimensions: Vec<serde_json::Value> = e
         .notes
         .dimensions
@@ -138,12 +149,16 @@ fn build_facts_json(e: &Explanation) -> serde_json::Value {
                 "has_outliers": notes.has_outliers,
                 "groups": groups,
             });
+            if let Some((_, group)) = strong.iter().find(|(d, _)| d.column == dimension.column) {
+                json["must_name"] = serde_json::json!(group.value.as_ref().map(build_value_text));
+            }
             insert_effects(
                 &mut json,
                 &dimension.mix_effect,
                 &dimension.rate_effect,
                 digits,
                 comparison,
+                fraction,
             );
             json
         })
@@ -180,8 +195,8 @@ fn build_facts_json(e: &Explanation) -> serde_json::Value {
     let mut json = serde_json::json!({
         "measure": e.measure,
         "comparison": comparison_name(comparison),
-        "base": { "label": e.base.label, "value": build_number_text_with(&e.base.value, digits) },
-        "compare": { "label": e.compare.label, "value": build_number_text_with(&e.compare.value, digits) },
+        "base": build_side_json(e, &e.base.label, &e.base.value),
+        "compare": build_side_json(e, &e.compare.label, &e.compare.value),
         "change": change(&e.change),
         "percent_change": percent(&e.percent_change),
         "split": split,
@@ -225,19 +240,35 @@ fn build_group_json(
         "value": group.value.as_ref().map(build_value_text),
         "base_value": build_number_text_with(&group.base_value, digits),
         "compare_value": build_number_text_with(&group.compare_value, digits),
-        "contribution": build_change_json(&group.contribution, digits, comparison),
+        "contribution": build_change_json(&group.contribution, digits, comparison, e.notes.fraction),
         "share_of_change": share,
-        "percent_change": notes.percent_change.as_deref().map(|p| build_change_json(p, 1, comparison)),
+        "percent_change": notes.percent_change.as_deref().map(|p| build_change_json(p, 1, comparison, false)),
         "presence": presence,
         "outlier": notes.outlier,
     });
+    if e.notes.fraction {
+        json["base_shown"] = serde_json::json!(build_share_text(&group.base_value));
+        json["compare_shown"] = serde_json::json!(build_share_text(&group.compare_value));
+    }
     insert_effects(
         &mut json,
         &group.mix_effect,
         &group.rate_effect,
         digits,
         comparison,
+        e.notes.fraction,
     );
+    json
+}
+
+/// Một bên của phép so: nhãn và giá trị; độ đo tỷ lệ dòng có thêm "shown", giá trị viết thành phần trăm cho lời.
+fn build_side_json(e: &Explanation, label: &str, value: &str) -> serde_json::Value {
+    let digits = build_fraction_digits(e);
+    let mut json =
+        serde_json::json!({ "label": label, "value": build_number_text_with(value, digits) });
+    if e.notes.fraction {
+        json["shown"] = serde_json::json!(build_share_text(value));
+    }
     json
 }
 
@@ -248,21 +279,65 @@ fn insert_effects(
     rate: &Option<String>,
     digits: u32,
     comparison: Comparison,
+    fraction: bool,
 ) {
     if let (Some(mix), Some(rate)) = (mix, rate) {
-        json["mix_effect"] = build_change_json(mix, digits, comparison);
-        json["rate_effect"] = build_change_json(rate, digits, comparison);
+        json["mix_effect"] = build_change_json(mix, digits, comparison, fraction);
+        json["rate_effect"] = build_change_json(rate, digits, comparison, fraction);
     }
 }
 
 /// Chênh lệch trong prompt: chiều và độ lớn không dấu (build_change_parts) cho lời, cùng số có dấu ("value") cho khẳng
 /// định. Gửi sẵn số có dấu vì khi chỉ có chiều và độ lớn, mô hình hay quên tự thêm dấu trừ lúc khai (thử với Gemini:
 /// trượt cổng 1 cả hai lần). Chuỗi không đọc được thì không có chiều, độ lớn giữ nguyên chữ.
-fn build_change_json(text: &str, digits: u32, comparison: Comparison) -> serde_json::Value {
-    let (direction, amount) = build_change_parts(text, digits);
+/// fraction: độ đo là tỷ lệ dòng (BreakdownNotes::fraction), độ lớn cho lời là điểm phần trăm ("10,24 điểm phần trăm"),
+/// "value" của khẳng định vẫn là số gốc.
+fn build_change_json(
+    text: &str,
+    digits: u32,
+    comparison: Comparison,
+    fraction: bool,
+) -> serde_json::Value {
+    let (direction, mut amount) = build_change_parts(text, digits);
+    if fraction {
+        if let Some(points) = build_points_amount(text) {
+            amount = points;
+        }
+    }
     let direction = direction.map(|word| build_direction_word(word, comparison));
     let value = build_number_text_with(text, digits);
     serde_json::json!({ "direction": direction, "amount": amount, "value": value })
+}
+
+/// Một nhóm một mình làm ra ngần này phần trăm chênh lệch trở lên thì là nguyên nhân phải nêu tên (build_strong_groups).
+pub(crate) const STRONG_SHARE: i64 = 50;
+
+/// Nhóm phải nêu tên trong lời: trong mỗi chiều gửi cho mô hình (NARRATE_DIMENSIONS chiều đầu), nhóm đầu bảng khác
+/// thường (lệch hẳn mức chung, explain/annotate.rs) mà một mình làm ra từ STRONG_SHARE phần trăm chênh lệch trở lên, cùng
+/// chiều chênh lệch. Nhóm không khác thường thì không bắt: nhóm lớn nhất của một tổng luôn chiếm phần lớn chênh lệch chỉ
+/// vì nó lớn (câu khuôn đã có ý "Không nhóm nào khác thường"). Câu "tỷ lệ giao trễ tháng
+/// 11/2016" có hai nhóm như vậy, Standard Class theo cách giao và Pacific Asia theo thị trường: nguyên nhân cài sẵn là tổ
+/// hợp của hai nhóm, lời chỉ nêu một thì người đọc không thấy được. Cặp (chiều, nhóm), theo thứ tự chiều.
+pub(crate) fn build_strong_groups(
+    e: &Explanation,
+) -> Vec<(&DimensionBreakdown, &GroupContribution)> {
+    let strong = Decimal::from(STRONG_SHARE);
+    e.notes
+        .dimensions
+        .iter()
+        .take(NARRATE_DIMENSIONS)
+        .filter_map(|notes| {
+            let dimension = e.dimensions.get(notes.index)?;
+            let (group, _) = dimension.groups.iter().zip(&notes.groups).find(|(_, n)| {
+                n.outlier
+                    && n.share_of_change
+                        .as_deref()
+                        .and_then(|s| s.parse::<Decimal>().ok())
+                        .is_some_and(|share| share >= strong)
+            })?;
+            Some((dimension, group))
+        })
+        .collect()
 }
 
 /// Trong chiều đầu gửi cho mô hình, nhóm có phần chênh lệch lớn nhất cùng chiều với chênh lệch chung: để mô hình không

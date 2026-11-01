@@ -19,6 +19,8 @@
   {"id": "c18", "question": "Lợi nhuận tháng 9 sụt giảm vì lý do gì?", "kind": "cause"},
   {"id": "c19", "question": "Tại sao LATAM bán được ít hơn Europe?", "kind": "cause"},
   {"id": "c20", "question": "Điều gì làm tỷ lệ giao trễ của Standard Class cao hơn First Class?", "kind": "cause"},
+  {"id": "c21", "question": "Vì đâu số đơn bị hủy tháng 7 năm 2017 tăng?", "kind": "cause"},
+  {"id": "c22", "question": "Lợi nhuận của Home Office năm 2017 đi xuống, có phải do giảm giá nhiều hơn không?", "kind": "cause"},
   {"id": "f01", "earlier": ["Vì sao doanh thu tháng 5 năm 2017 giảm?"], "question": "Còn tháng 6 thì sao?", "kind": "cause"},
   {"id": "f02", "earlier": ["Tại sao lợi nhuận quý 3 năm 2017 giảm?"], "question": "Thế ở châu Âu thì sao?", "kind": "cause"},
   {"id": "f03", "earlier": ["Doanh thu theo tháng"], "question": "Còn lợi nhuận thì sao?", "kind": "plain"},

@@ -26,7 +26,10 @@ use crate::service::explain::breakdown::{
     SliceTotals,
 };
 use crate::service::explain::check::WhyPlan;
-use crate::service::explain::dimension_pick::{pick_dimensions, Candidate, Presence};
+use crate::service::explain::dimension_pick::{
+    pick_dimensions, restates_measure, Candidate, Presence,
+};
+use crate::service::explain::measure::Additive;
 use crate::service::explain::ratio::{
     build_rate_text, build_ratio_change, build_ratio_split, RatioGroup, RatioParts,
 };
@@ -62,7 +65,11 @@ pub(super) async fn build_ratio_breakdown(
             plan.measure.label
         )));
     }
-    let candidates = run_candidates(env, plan, 4).await?;
+    let candidates: Vec<Candidate> = run_candidates(env, plan, 4)
+        .await?
+        .into_iter()
+        .filter(|c| !restates_measure(&c.rows, &c.column))
+        .collect();
     // Nhóm có dòng ở một lát cắt khi mẫu số ở đó khác 0: hai ô mẫu số là ô thứ ba và thứ tư (explain/sql.rs).
     let presence = Presence {
         base: 2,
@@ -143,6 +150,7 @@ pub(super) async fn build_ratio_breakdown(
     let mut notes = annotate_dimensions(&dimensions, &presences, slices);
     // Như nhánh cộng được (breakdown.rs): chiều dimension_pick đã bỏ vẫn có trong ý "Bỏ qua" của lời tóm tắt.
     notes.dropped.extend(picked.dropped);
+    notes.fraction = is_fraction(plan, &dimensions, [change.base_rate, change.compare_rate]);
     let (base_label, compare_label) = build_slice_labels(plan);
     Ok(Breakdown::Ready(Box::new(Explanation {
         measure: plan.measure.label.clone(),
@@ -176,4 +184,18 @@ pub(super) async fn build_ratio_breakdown(
         dropped_dimensions: notes.dropped.clone(),
         notes,
     })))
+}
+
+/// Độ đo là tỷ lệ dòng: tử và mẫu đều là số đếm dòng (tỷ lệ dòng có một giá trị, chỉ số COUNT(...) / COUNT(*)), và mọi
+/// tỷ lệ của hai lát cắt và của các nhóm nằm trong [0, 1]. Tỷ lệ khác (trung bình điểm, giá trên mỗi đơn) giữ cách viết số.
+fn is_fraction(plan: &WhyPlan, dimensions: &[DimensionBreakdown], rates: [Decimal; 2]) -> bool {
+    let counts = matches!(plan.measure.additive, Additive::Count { .. })
+        && matches!(plan.measure.denominator, Some(Additive::Count { .. }));
+    let in_unit = |rate: Decimal| rate >= Decimal::ZERO && rate <= Decimal::ONE;
+    let groups_in_unit = dimensions.iter().flat_map(|d| &d.groups).all(|g| {
+        [&g.base_value, &g.compare_value]
+            .iter()
+            .all(|v| v.parse::<Decimal>().is_ok_and(in_unit))
+    });
+    counts && rates.into_iter().all(in_unit) && groups_in_unit
 }

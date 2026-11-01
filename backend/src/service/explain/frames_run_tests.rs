@@ -315,3 +315,36 @@ async fn group_pulling_down_is_found_then_explained() {
     let sql = outcome.sql_guarded.as_deref().unwrap();
     assert!(sql.contains("\"Market\" = 'Europe'"), "{sql}");
 }
+
+/// Đếm phân biệt một nhóm so với các nhóm còn lại: so với trung bình mỗi nhóm còn lại, đếm riêng trong từng nhóm. Quý
+/// 2/2017, đơn 2 tới 7 có dòng cả ở Europe (dòng 0 đồng) lẫn ở thị trường của nó (run_tests.rs): đếm chung phần còn lại
+/// ra 5.000 đơn, đếm từng nhóm ra 5.000 + 2 + 2 + 1 = 5.005, chia 4 thị trường còn 1.251,25. Trước đây lát gốc là 5.000
+/// đơn gộp lại, nên Pacific Asia (1 đơn) "thấp hơn 99,98%".
+#[tokio::test]
+async fn distinct_count_is_averaged_over_the_other_groups() {
+    let mut data = Dataco::new();
+    data.columns[0].aliases = vec!["Thị trường".to_string()];
+    let form = json!({
+        "terms": [],
+        "measure": {"column": "Order Id", "agg": "count_distinct"},
+        "time": {"column": DATE, "grain": "quarter"},
+        "compare": "2017-Q2",
+        "groups": {"column": "Market", "compare": "Pacific Asia"},
+        "filters": []
+    });
+    let llm = ScriptedLlm::new(vec![form]);
+    let question = "Vì sao số đơn của Pacific Asia quý 2/2017 ít vậy?";
+    let outcome = data.ask(&llm, question, &[]).await;
+    assert_eq!(outcome.status, AskStatus::Answered, "{outcome:?}");
+    let explanation = outcome.explanation.as_ref().expect("a breakdown");
+    assert_eq!(explanation.base.label, "trung bình các thị trường còn lại");
+    assert_eq!(explanation.base.value, "1251.25");
+    assert_eq!(explanation.compare.value, "1");
+    assert!(
+        explanation
+            .summary_title
+            .contains("thấp hơn trung bình các thị trường còn lại"),
+        "{}",
+        explanation.summary_title
+    );
+}

@@ -17,6 +17,8 @@ Các ý, theo thứ tự:
   đúng là nhóm lớn nhất.
 - "Nhóm góp nhiều nhất": khi không so được nhóm với mức chung (lát gốc không dương, chênh lệch gần 0), nêu nhóm có
   phần chênh lệch lớn nhất cùng chiều với chênh lệch chung.
+- "Góp nhiều nhất theo <cột>": nhóm một mình làm ra từ nửa chênh lệch trở lên ở một trong hai chiều đầu mà ý khác
+  thường chưa nêu, để lời nêu đủ nguyên nhân chính ở nhiều chiều.
 - "Ngược chiều": một nhóm đi ngược chênh lệch chung và chiếm từ 5% trở lên.
 - "Bỏ qua <cột>": chiều tách hẳn hai lát cắt hay trùng chiều khác (annotate.rs).
 
@@ -34,11 +36,13 @@ use crate::service::ask::contract::{
 use crate::service::explain::annotate::{
     DimensionNotes, DropReason, DroppedDimension, GroupNotes, GroupPresence,
 };
+use crate::service::explain::narrate_prompt::build_strong_groups;
 use crate::service::explain::number::build_number_text_with;
 use crate::service::explain::split::build_split;
 use crate::service::explain::{
-    between, build_direction_text, build_direction_word, build_fraction_digits, build_value_text,
-    lower_first, truncate_text, upper_first, MAX_SUMMARY_CHARS, TEMPLATE_GROUP_CHARS,
+    between, build_direction_text, build_direction_word, build_fraction_digits, build_points_text,
+    build_share_text, build_value_text, lower_first, truncate_text, upper_first, MAX_SUMMARY_CHARS,
+    TEMPLATE_GROUP_CHARS,
 };
 
 /// Nhóm ngược chiều chiếm từ ngần này phần trăm chênh lệch (âm) trở lên mới nêu.
@@ -84,12 +88,20 @@ pub fn build_summary_parts(explanation: &Explanation) -> (String, Vec<SummaryPoi
     if change.is_some_and(|c| !c.is_zero()) {
         let kept = kept_dimensions(explanation);
         points.extend(build_reason(explanation, &kept));
+        let mut covered = Vec::new();
         match kept.iter().find(|d| d.notes.has_outliers) {
-            Some(dimension) => points.push(build_outliers(explanation, *dimension)),
+            Some(dimension) => {
+                covered = build_outlier_groups(*dimension)
+                    .iter()
+                    .map(|(g, _)| (dimension.breakdown.column.clone(), group_name(g)))
+                    .collect();
+                points.push(build_outliers(explanation, *dimension));
+            }
             None => points.extend(
                 build_even(explanation, &kept).or_else(|| build_largest(explanation, &kept)),
             ),
         }
+        points.extend(build_strong(explanation, &covered));
         points.extend(build_against(explanation, &kept));
     }
     points.extend(build_dropped(explanation));
@@ -118,13 +130,12 @@ pub fn apply_summary_parts(explanation: &mut Explanation) {
 // trước sau nên đọc "... so với ...". So hai nhóm thì nêu cột của hai nhóm bằng nghĩa của nó: "trạng thái đơn hàng
 // CANCELED".
 fn build_title(e: &Explanation) -> String {
-    let digits = build_fraction_digits(e);
     let comparison = e.comparison;
     let change = e.change.parse::<Decimal>().ok();
     let measure = &e.measure;
     let (base, compare) = (&e.base.label, &e.compare.label);
-    let base_value = build_number_text_with(&e.base.value, digits);
-    let compare_value = build_number_text_with(&e.compare.value, digits);
+    let base_value = build_value_amount(e, &e.base.value);
+    let compare_value = build_value_amount(e, &e.compare.value);
     let of = match &e.slice_column {
         Some(column) => format!(
             "{} ",
@@ -143,12 +154,12 @@ fn build_title(e: &Explanation) -> String {
             let towards = if c < Decimal::ZERO { "xuống" } else { "lên" };
             format!(
                 "{measure} {compare} {} so với {base}, từ {base_value} {towards} {compare_value}.",
-                build_direction_text(&e.change, digits, comparison)
+                build_change_amount(e, &e.change)
             )
         }
         (Some(_), Comparison::Groups) => format!(
             "{measure} của {of}{compare} {} ({compare_value} so với {base_value}).",
-            between(&build_direction_text(&e.change, digits, comparison), base)
+            between(&build_change_amount(e, &e.change), base)
         ),
         (None, _) => {
             format!("{measure} {compare} là {compare_value}, so với {base_value} ở {base}.")
@@ -176,8 +187,8 @@ fn build_reason(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
             format!(
                 "{mostly}. Theo {}, phần do cơ cấu {}, phần do tỷ lệ trong từng nhóm {}.",
                 build_column_text(&dimension.column, dimension.label.as_deref()),
-                build_direction_text(mix, digits, comparison),
-                build_direction_text(rate, digits, comparison)
+                build_change_amount(e, mix),
+                build_change_amount(e, rate)
             ),
         ));
     }
@@ -221,13 +232,20 @@ fn build_reason(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     ))
 }
 
-fn build_outliers(e: &Explanation, dimension: Dimension) -> SummaryPoint {
+// Các nhóm khác thường mà ý "Khác thường theo <cột>" nêu: tối đa LIST_MAX nhóm, nhóm chiếm nhiều chênh lệch trước.
+fn build_outlier_groups<'a>(
+    dimension: Dimension<'a>,
+) -> Vec<(&'a GroupContribution, &'a GroupNotes)> {
     let mut groups: Vec<(&GroupContribution, &GroupNotes)> =
         dimension.groups().filter(|(_, n)| n.outlier).collect();
     groups.sort_by_key(|(_, n)| std::cmp::Reverse(share_abs(n)));
-    let items: Vec<String> = groups
+    groups.truncate(LIST_MAX);
+    groups
+}
+
+fn build_outliers(e: &Explanation, dimension: Dimension) -> SummaryPoint {
+    let items: Vec<String> = build_outlier_groups(dimension)
         .iter()
-        .take(LIST_MAX)
         .map(|(g, n)| build_outlier_item(e, g, n))
         .collect();
     point(
@@ -238,10 +256,9 @@ fn build_outliers(e: &Explanation, dimension: Dimension) -> SummaryPoint {
 }
 
 fn build_outlier_item(e: &Explanation, group: &GroupContribution, notes: &GroupNotes) -> String {
-    let digits = build_fraction_digits(e);
     let comparison = e.comparison;
     let name = group_name(group);
-    let amount = build_direction_text(&group.contribution, digits, comparison);
+    let amount = build_change_amount(e, &group.contribution);
     let what = match (notes.presence, comparison) {
         (GroupPresence::New, Comparison::Periods) => {
             format!("{name} mới có ở {} ({amount})", e.compare.label)
@@ -257,9 +274,9 @@ fn build_outlier_item(e: &Explanation, group: &GroupContribution, notes: &GroupN
         }
         (GroupPresence::Both, _) if notes.sign_flip => format!(
             "{name} đổi dấu, từ {} ở {} sang {} ở {} ({amount})",
-            build_number_text_with(&group.base_value, digits),
+            build_value_amount(e, &group.base_value),
             e.base.label,
-            build_number_text_with(&group.compare_value, digits),
+            build_value_amount(e, &group.compare_value),
             e.compare.label
         ),
         (GroupPresence::Both, _) => match (&notes.percent_change, &e.percent_change) {
@@ -349,8 +366,7 @@ fn build_largest(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     let group = dimension.breakdown.groups.iter().find(|g| {
         parse(&g.contribution).is_some_and(|c| (c < Decimal::ZERO) == (change < Decimal::ZERO))
     })?;
-    let digits = build_fraction_digits(e);
-    let amount = build_direction_text(&group.contribution, digits, e.comparison);
+    let amount = build_change_amount(e, &group.contribution);
     let column = dimension.column_text();
     let text = match e.comparison {
         Comparison::Periods => format!(
@@ -372,6 +388,47 @@ fn build_largest(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     ))
 }
 
+// Nhóm một mình làm ra từ nửa chênh lệch trở lên ở một trong các chiều đầu (build_strong_groups của
+// explain/narrate_prompt.rs) mà ý khác thường chưa nêu: mỗi nhóm một ý, để lời nêu đủ các nguyên nhân chính ở nhiều
+// chiều (Standard Class theo cách giao và Pacific Asia theo thị trường). covered là cặp (cột, tên nhóm) đã nêu.
+fn build_strong(e: &Explanation, covered: &[(String, String)]) -> Vec<SummaryPoint> {
+    let mut points = Vec::new();
+    for (dimension, group) in build_strong_groups(e) {
+        let name = group_name(group);
+        if covered.contains(&(dimension.column.clone(), name.clone())) {
+            continue;
+        }
+        let column = build_column_text(&dimension.column, dimension.label.as_deref());
+        let amount = build_change_amount(e, &group.contribution);
+        let share = group
+            .share_of_change
+            .as_deref()
+            .and_then(parse)
+            .filter(|share| *share <= Decimal::ONE_HUNDRED)
+            .map(|share| {
+                format!(
+                    ", chiếm {} chênh lệch",
+                    build_percent_text(&share.to_string())
+                )
+            })
+            .unwrap_or_default();
+        let text = match e.comparison {
+            Comparison::Periods => format!("{name} {amount}{share}."),
+            Comparison::Groups => format!(
+                "ở nhóm {name}, {} {}{share}.",
+                e.compare.label,
+                between(&amount, &e.base.label)
+            ),
+        };
+        points.push(point(
+            SummaryPointKind::Largest,
+            format!("Góp nhiều nhất theo {column}"),
+            text,
+        ));
+    }
+    points
+}
+
 fn build_against(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
     let dimension = kept.first()?;
     let limit = -Decimal::from(AGAINST_MIN_SHARE);
@@ -381,7 +438,6 @@ fn build_against(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
         .filter(|(_, n)| !(dimension.notes.has_outliers && n.outlier))
         .filter(|(_, n)| share(n).is_some_and(|s| s <= limit))
         .min_by_key(|(_, n)| share(n))?;
-    let digits = build_fraction_digits(e);
     Some(point(
         SummaryPointKind::Against,
         "Ngược chiều".to_string(),
@@ -389,7 +445,7 @@ fn build_against(e: &Explanation, kept: &[Dimension]) -> Option<SummaryPoint> {
             "theo {}, {} {}.",
             dimension.column_text(),
             group_name(group),
-            build_direction_text(&group.contribution, digits, e.comparison)
+            build_change_amount(e, &group.contribution)
         ),
     ))
 }
@@ -468,6 +524,25 @@ fn build_separated_text(e: &Explanation, dropped: &DroppedDimension) -> String {
         e.compare.label,
         join_values(&dropped.compare_only)
     )
+}
+
+/// Một giá trị của độ đo trong câu khuôn: phần trăm khi độ đo là tỷ lệ dòng (BreakdownNotes::fraction), không thì số
+/// viết kiểu Việt Nam như bảng.
+fn build_value_amount(e: &Explanation, text: &str) -> String {
+    if e.notes.fraction {
+        build_share_text(text)
+    } else {
+        build_number_text_with(text, build_fraction_digits(e))
+    }
+}
+
+/// Một chênh lệch của độ đo kèm chữ chiều: điểm phần trăm khi độ đo là tỷ lệ dòng.
+fn build_change_amount(e: &Explanation, text: &str) -> String {
+    if e.notes.fraction {
+        build_points_text(text, e.comparison)
+    } else {
+        build_direction_text(text, build_fraction_digits(e), e.comparison)
+    }
 }
 
 /// Tên cột trong câu khuôn: nghĩa tiếng Việt của hồ sơ ("hình thức thanh toán"), không kèm tên cột gốc, vì câu viết cho

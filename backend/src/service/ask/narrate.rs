@@ -20,7 +20,7 @@ use rust_decimal::Decimal;
 
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::service::ask::contract::{
-    AnswerVerdict, AskStep, Explanation, StepName, SummaryPoint, SummaryPointKind,
+    AnswerVerdict, AskStep, Comparison, Explanation, StepName, SummaryPoint, SummaryPointKind,
 };
 use crate::service::ask::failures::{FailedStep, StepFailure};
 use crate::service::ask::judge::judge;
@@ -231,7 +231,10 @@ pub async fn narrate(
 /// quá dài, rồi cổng 1 (khẳng định so với bảng). Ok là insight và các khẳng định đã khớp bảng; Err là mọi lý do trượt,
 /// đưa vào prompt viết lại và vào detail của bước.
 fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<String>> {
-    let parsed = parse_narrate_reply(reply).map_err(|problem| vec![problem])?;
+    let mut parsed = parse_narrate_reply(reply).map_err(|problem| vec![problem])?;
+    for reason in &mut parsed.reasons {
+        reason.text = build_text_without_lead(&reason.lead, &reason.text);
+    }
     if parsed.headline.trim().is_empty() {
         return Err(vec!["Câu mở đầu trống".to_string()]);
     }
@@ -254,6 +257,14 @@ fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<St
             "Lời giải thích dài hơn {MAX_SUMMARY_CHARS} ký tự"
         )]);
     }
+    if explanation.comparison == Comparison::Groups {
+        if let Some(phrase) = find_change_phrase(&text) {
+            return Err(vec![format!(
+                "So hai nhóm thì không có tăng hay giảm: thay \"{phrase}\" bằng \"mức chênh\", \"cao hơn\" hay \
+                 \"thấp hơn\""
+            )]);
+        }
+    }
     build_claim_check(&parsed.claims, explanation)?;
     let points = parsed
         .reasons
@@ -272,6 +283,60 @@ fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<St
             points,
         },
         claims: parsed.claims,
+    })
+}
+
+/// Câu của một ý bỏ phần lặp lại đầu ý: mô hình hay viết "Hiệu ứng tỷ suất tăng" làm đầu ý rồi mở câu bằng đúng cụm đó,
+/// giao diện in "Hiệu ứng tỷ suất tăng: Hiệu ứng tỷ suất tăng 0,1081...". Chỉ bỏ khi đầu ý có từ hai từ; bỏ phần lặp mà câu
+/// còn trống thì giữ nguyên.
+pub(super) fn build_text_without_lead(lead: &str, text: &str) -> String {
+    let (lead, text) = (lead.trim(), text.trim());
+    let lead_chars = lead.chars().count();
+    // Đầu ý một từ ("Giảm") lặp ở đầu câu thường là chữ của câu ("Giảm giá ..."), không phải lặp đầu ý.
+    let starts_with_lead = lead.split_whitespace().count() >= 2
+        && text.chars().count() > lead_chars
+        && text
+            .chars()
+            .take(lead_chars)
+            .collect::<String>()
+            .to_lowercase()
+            == lead.to_lowercase();
+    if !starts_with_lead {
+        return text.to_string();
+    }
+    let rest: String = text.chars().skip(lead_chars).collect();
+    let rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == ':' || c == ',');
+    // Phần lặp chỉ là một phần của từ ("Giảm" trong "Giảm giá...") thì không bỏ: chữ ngay sau phải là ranh giới từ.
+    let boundary = text
+        .chars()
+        .nth(lead_chars)
+        .is_none_or(|c| !c.is_alphanumeric());
+    if rest.is_empty() || !boundary {
+        return text.to_string();
+    }
+    rest.to_string()
+}
+
+/// Cụm nói chênh lệch giữa hai nhóm như một lần tăng hay giảm ("tạo ra phần lớn mức giảm"): hai nhóm cùng lúc không có
+/// trước sau nên chênh lệch là "mức chênh". Chỉ bắt cụm danh từ, không bắt "tăng", "giảm" đứng một mình, vì tên độ đo hay
+/// tên nhóm có thể chứa chúng ("thành tiền sau giảm giá").
+pub(super) fn find_change_phrase(text: &str) -> Option<&'static str> {
+    const PHRASES: [&str; 6] = [
+        "mức tăng",
+        "mức giảm",
+        "phần tăng",
+        "phần giảm",
+        "sự tăng",
+        "sự giảm",
+    ];
+    let lower = format!(" {} ", text.to_lowercase());
+    PHRASES.into_iter().find(|phrase| {
+        lower.match_indices(phrase).any(|(at, _)| {
+            let before = lower[..at].chars().next_back();
+            let after = lower[at + phrase.len()..].chars().next();
+            before.is_some_and(|c| !c.is_alphanumeric())
+                && after.is_some_and(|c| !c.is_alphanumeric())
+        })
     })
 }
 

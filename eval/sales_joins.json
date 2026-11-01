@@ -88,5 +88,59 @@
       "SELECT AVG(o.days_for_shipping_real) AS avg_days FROM orders o WHERE o.order_id IN (SELECT oi.order_id FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id WHERE cat.category_name = 'Cleats')"
     ],
     "ordered": false
+  },
+  {
+    "id": "q11",
+    "dataset": "order_items",
+    "question": "Doanh thu theo phòng ban",
+    "expected_sql": [
+      "SELECT d.department_name, SUM(oi.item_total) AS revenue FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id JOIN departments d ON cat.department_id = d.department_id GROUP BY d.department_name ORDER BY revenue DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "q12",
+    "dataset": "order_items",
+    "question": "Doanh thu theo danh mục và phân khúc khách hàng",
+    "expected_sql": [
+      "SELECT cat.category_name, c.segment, SUM(oi.item_total) AS revenue FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id JOIN orders o ON oi.order_id = o.order_id JOIN customers c ON o.customer_id = c.customer_id GROUP BY cat.category_name, c.segment ORDER BY cat.category_name, c.segment"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "q13",
+    "dataset": "order_items",
+    "question": "Top 10 sản phẩm có lợi nhuận cao nhất",
+    "expected_sql": [
+      "SELECT p.product_name, SUM(oi.profit) AS profit FROM order_items oi JOIN products p ON oi.product_id = p.product_id GROUP BY p.product_name ORDER BY profit DESC LIMIT 10"
+    ],
+    "ordered": true
+  },
+  {
+    "id": "q14",
+    "dataset": "orders",
+    "question": "Số khách hàng đã mua hàng theo phòng ban",
+    "expected_sql": [
+      "SELECT d.department_name, COUNT(DISTINCT o.customer_id) AS customers FROM orders o JOIN order_items oi ON oi.order_id = o.order_id JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id JOIN departments d ON cat.department_id = d.department_id GROUP BY d.department_name ORDER BY customers DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "q15",
+    "dataset": "order_items",
+    "question": "Doanh thu theo tháng năm 2017",
+    "expected_sql": [
+      "SELECT EXTRACT(MONTH FROM o.order_date) AS month, SUM(oi.item_total) AS revenue FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE EXTRACT(YEAR FROM o.order_date) = 2017 GROUP BY EXTRACT(MONTH FROM o.order_date) ORDER BY month"
+    ],
+    "ordered": true
+  },
+  {
+    "id": "q16",
+    "dataset": "order_items",
+    "question": "Lợi nhuận theo phòng ban ở thị trường LATAM",
+    "expected_sql": [
+      "SELECT d.department_name, SUM(oi.profit) AS profit FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN products p ON oi.product_id = p.product_id JOIN categories cat ON p.category_id = cat.category_id JOIN departments d ON cat.department_id = d.department_id WHERE o.market = 'LATAM' GROUP BY d.department_name ORDER BY profit DESC"
+    ],
+    "ordered": false
   }
 ]

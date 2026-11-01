@@ -10,21 +10,30 @@ Chỉ số chỉ có tên và mô tả, không có công thức: mô hình ghi t
 use serde_json::json;
 
 use crate::engine::prompts::{self, fill};
+use crate::service::ask::context::ColumnProfile;
 use crate::service::ask::lessons::build_lessons_section;
 use crate::service::ask::prompt::{
     build_choices_section, build_columns_section, build_domain_section,
-    build_form_examples_section, build_hints_section, build_metrics_section,
+    build_form_examples_section, build_hints_section, build_joined_section, build_metrics_section,
     build_unanswerable_rule, build_within_limit, join_sections, pick_examples, PromptInput,
 };
 use crate::service::ask::reply::{build_terms_schema, build_unanswerable_schema};
 use crate::service::explain::filter::FILTER_OPS;
 
 /// Prompt cho câu "tại sao". Ví dụ là câu mẫu "tại sao" đã duyệt (#212) kèm form của nó, không phải câu SQL.
+#[cfg(test)]
 pub fn build_why_prompt(input: &PromptInput) -> String {
+    build_why_prompt_with(input, &[])
+}
+
+/// Như build_why_prompt, kèm cột của các bảng nối nhiều-một vào bảng bắt đầu, tên "bảng.cột" (explain/joined.rs): form
+/// dùng chúng cho kỳ, nhóm và bộ lọc.
+pub fn build_why_prompt_with(input: &PromptInput, joined: &[ColumnProfile]) -> String {
     build_within_limit(|detail| {
         join_sections(vec![
             build_why_rules(input.table),
             build_columns_section(input.context, detail),
+            build_joined_section(joined, detail),
             build_hints_section(input.context),
             build_choices_section(input.context, input.choices),
             build_metrics_section(input.metrics, false),

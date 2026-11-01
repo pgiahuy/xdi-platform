@@ -93,6 +93,7 @@ pub mod values;
 pub(crate) mod view;
 mod why;
 pub mod why_prompt;
+pub mod why_table;
 
 use std::time::Instant;
 
@@ -105,6 +106,7 @@ use crate::engine::store::{Dataset, DatasetVersion, NewQuery, ProfileColumn, Que
 use crate::engine::store::{MetricDefinition, PromptExample};
 use crate::service::ask::checks::{build_result_warnings, find_missing_values, CheckedQuery};
 use crate::service::ask::choices::{build_assumption_choices, build_clarify_choice};
+use crate::service::ask::classify::Classified;
 use crate::service::ask::classify::{build_classify_timeout, classify, ClassifyInput};
 use crate::service::ask::context::{
     build_ask_context_with_keys, build_profiles, AskContext, ColumnProfile,
@@ -140,6 +142,7 @@ use crate::service::ask::value_retry::{apply_full_values, build_resend_columns};
 use crate::service::ask::values::load_value_index;
 use crate::service::ask::view::{apply_answer_view, build_answer_view, RanQuery};
 use crate::service::ask::why::{ask_why, WhyAsk};
+use crate::service::ask::why_table::{pick_why_table, WhyTable};
 use crate::service::domains::load_for_prompt;
 use crate::service::explain::form::QuestionKind;
 use crate::service::ingest::{dataset_not_found, parse_dataset_id};
@@ -169,6 +172,16 @@ pub struct AskHistory {
     pub questions: Vec<String>,
 }
 
+/// Ai chọn bảng bắt đầu của câu hỏi.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartTable {
+    /// Người hỏi chọn: route hỏi trên một bảng, bảng ghim, bộ đánh giá. Luôn giữ bảng này.
+    Given,
+    /// Backend chọn theo chữ của câu hỏi (ask/scope.rs): câu hỏi nguyên nhân được đổi sang bảng của các cột lượt phân
+    /// loại nêu (ask/why_table.rs).
+    Picked,
+}
+
 /// Một câu hỏi, kèm danh sách lần gọi mô hình của nó (AskResponse.model_calls, #184): mọi bước bên dưới gọi mô hình
 /// qua state_for_question, nên lần gọi nào cũng được ghi, kể cả lần gọi của ask/why.rs và service/insight/.
 pub async fn ask(
@@ -178,6 +191,7 @@ pub async fn ask(
     question: &str,
     choices: &[ChosenOption],
     history: &AskHistory,
+    start: StartTable,
 ) -> Result<AskResponse, AppError> {
     let log = CallLog::new();
     let state_for_question = state.with_call_log(&log);
@@ -188,6 +202,7 @@ pub async fn ask(
         question,
         choices,
         history,
+        start,
     )
     .await;
     let calls = log.calls();
@@ -206,6 +221,17 @@ pub async fn ask(
     Ok(response)
 }
 
+/// Kết quả một lượt chạy luồng hỏi trên một bảng bắt đầu.
+enum Asked {
+    Done(Box<AskResponse>),
+    /// Câu hỏi nguyên nhân cần bắt đầu ở bảng khác (ask/why_table.rs): chạy lại từ đầu trên bảng đó, dùng lại kết quả
+    /// phân loại để không gọi mô hình thêm lần nữa.
+    Restart {
+        table: uuid::Uuid,
+        classified: Box<Classified>,
+    },
+}
+
 async fn ask_steps(
     state: &AppState,
     member: &Member,
@@ -213,7 +239,59 @@ async fn ask_steps(
     question: &str,
     choices: &[ChosenOption],
     history: &AskHistory,
+    start: StartTable,
 ) -> Result<AskResponse, AppError> {
+    // Bảng người hỏi chọn thì giữ nguyên, kể cả với câu hỏi nguyên nhân.
+    let may_restart = start == StartTable::Picked;
+    let first = ask_from_table(
+        state,
+        member,
+        dataset_id,
+        question,
+        choices,
+        history,
+        None,
+        may_restart,
+    )
+    .await?;
+    let (table, classified) = match first {
+        Asked::Done(response) => return Ok(*response),
+        Asked::Restart { table, classified } => (table, classified),
+    };
+    // Lượt thứ hai đã có kết quả phân loại nên không đổi bảng nữa: chỉ có một lần chạy lại.
+    let table = table.to_string();
+    match ask_from_table(
+        state,
+        member,
+        &table,
+        question,
+        choices,
+        history,
+        Some(*classified),
+        false,
+    )
+    .await?
+    {
+        Asked::Done(response) => Ok(*response),
+        Asked::Restart { .. } => Err(AppError::Internal(
+            "causal question asked to change its start table twice".to_string(),
+        )),
+    }
+}
+
+/// Luồng hỏi trên bảng bắt đầu dataset_id. preset là kết quả phân loại của lượt trước khi chạy lại trên bảng khác;
+/// may_restart: câu hỏi nguyên nhân được đổi bảng bắt đầu (Asked::Restart).
+#[allow(clippy::too_many_arguments)]
+async fn ask_from_table(
+    state: &AppState,
+    member: &Member,
+    dataset_id: &str,
+    question: &str,
+    choices: &[ChosenOption],
+    history: &AskHistory,
+    preset: Option<Classified>,
+    may_restart: bool,
+) -> Result<Asked, AppError> {
     if question.trim().is_empty() {
         return Err(AppError::BadRequest("Câu hỏi đang trống".to_string()));
     }
@@ -275,7 +353,20 @@ async fn ask_steps(
         others: &classify_others,
     };
     let timeout = build_classify_timeout(&state.config);
-    let classified = classify(state.llm.as_ref(), &classify_input, timeout).await;
+    let classified = match preset {
+        Some(classified) => classified,
+        None => classify(state.llm.as_ref(), &classify_input, timeout).await,
+    };
+    if classified.kind == QuestionKind::Why && may_restart {
+        if let Some(table) = pick_why_start(&database.full, &classified, dataset.id) {
+            let mut classified = classified;
+            apply_start_detail(&mut classified, &database.full, table);
+            return Ok(Asked::Restart {
+                table,
+                classified: Box::new(classified),
+            });
+        }
+    }
     steps.push(classified.step.clone());
     if !choice.all_fit {
         choice = database.build_choice(
@@ -312,8 +403,8 @@ async fn ask_steps(
     // nối bảng liên quan theo đúng chiều nhiều-một (explain/source.rs).
     let mut links = build_join_links(&group);
     if classified.kind == QuestionKind::Why {
-        // Form của câu "tại sao" chỉ nêu cột của bảng đang chọn (#213); phân rã thì xét thêm cột của các bảng nối
-        // nhiều-một vào nó (#227), nên guard nhận đủ các bảng của nhóm.
+        // Độ đo của form câu "tại sao" là cột của bảng đang chọn; kỳ, nhóm, bộ lọc và phân rã dùng được cột của các bảng
+        // nối nhiều-một vào nó (explain/joined.rs, #227), nên guard nhận đủ các bảng của nhóm.
         let related = build_group_related(&group, &links);
         let why = WhyAsk {
             dataset: &dataset,
@@ -324,11 +415,12 @@ async fn ask_steps(
             group: &group,
             links: &links,
             related: &related,
+            prompt_tables: group_prompt.as_ref().map_or(&[], |g| g.tables.as_slice()),
             steps,
         };
         let mut response = ask_why(state, member, why).await?;
         response.question_type = Some(QuestionType::Causal);
-        return Ok(response);
+        return Ok(Asked::Done(Box::new(response)));
     }
 
     // Mức chi tiết của prompt: danh sách giá trị nào thật sự đã gửi (ask/value_retry.rs).
@@ -454,7 +546,7 @@ async fn ask_steps(
     if let Some(clarify) = &outcome.clarify {
         match build_clarify_choice(clarify, &context, &metrics) {
             Some(choice) => {
-                return Ok(AskResponse {
+                return Ok(Asked::Done(Box::new(AskResponse {
                     message: outcome.message,
                     choices: used,
                     warnings,
@@ -462,7 +554,7 @@ async fn ask_steps(
                     steps,
                     question_type: Some(QuestionType::Quantitative),
                     ..build_base_response(state, &version, question, AskStatus::NeedsChoice)
-                });
+                })));
             }
             // Hỏi lại mà không cho chọn gì thì người hỏi kẹt: coi như mô hình trả lời sai, ghi lịch sử như câu lỗi.
             None => {
@@ -536,7 +628,7 @@ async fn ask_steps(
     let data_range = (outcome.status == AskStatus::Answered)
         .then(|| build_data_range(&columns, outcome.sql_guarded.as_deref()))
         .flatten();
-    Ok(AskResponse {
+    Ok(Asked::Done(Box::new(AskResponse {
         message: outcome.message,
         query_id: Some(query_id),
         choices: used,
@@ -555,7 +647,44 @@ async fn ask_steps(
         data_range,
         steps,
         ..build_base_response(state, &version, question, outcome.status)
-    })
+    })))
+}
+
+/// Bảng bắt đầu khác cho câu hỏi nguyên nhân theo các cột lượt phân loại nêu (ask/why_table.rs); None khi giữ bảng
+/// current. Chỉ xét bảng đã có hồ sơ cột.
+fn pick_why_start(
+    full: &TableGroup,
+    classified: &Classified,
+    current: uuid::Uuid,
+) -> Option<uuid::Uuid> {
+    let tables: Vec<WhyTable> = full
+        .tables
+        .iter()
+        .filter(|t| !t.columns.is_empty())
+        .map(|t| WhyTable {
+            id: t.dataset.id,
+            table: &t.dataset.logical_table,
+            columns: &t.columns,
+        })
+        .collect();
+    pick_why_table(
+        &classified.columns,
+        &tables,
+        &build_join_links(full),
+        current,
+    )
+}
+
+/// Ghi vào chi tiết bước classify là câu bắt đầu ở bảng nào và vì sao, để Minh chứng giải thích được bảng đã đổi.
+fn apply_start_detail(classified: &mut Classified, full: &TableGroup, table: uuid::Uuid) {
+    let Some(name) = full.logical_table(table) else {
+        return;
+    };
+    let note = format!("Bắt đầu từ bảng {name}, bảng của các cột này.");
+    classified.step.detail = Some(match classified.step.detail.take() {
+        Some(detail) => format!("{detail} {note}"),
+        None => note,
+    });
 }
 
 /// Phần của PromptInput không đổi giữa các lần dựng prompt của một câu hỏi (lần đầu, gửi lại kèm bảng, gửi lại kèm

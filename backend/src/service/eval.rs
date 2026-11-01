@@ -43,7 +43,7 @@ use crate::service;
 use crate::service::ask::contract::{AskResponse, AskStatus, CellValue};
 use crate::service::ask::fanout::build_links;
 use crate::service::ask::result::build_result_table;
-use crate::service::ask::{ask, AskHistory};
+use crate::service::ask::{ask, AskHistory, StartTable};
 use crate::service::conversation;
 use crate::service::conversation::history::{build_history_section, HISTORY_TURNS};
 use crate::service::eval_grade::build_eval_verdict;
@@ -485,7 +485,19 @@ async fn grade_case(
     };
     // Câu không tiếp nối hỏi qua cuộc trò chuyện mới, như người dùng hỏi câu đầu, để câu tiếp nối sau có lượt để đọc.
     let asked = match &history {
-        Some(history) => ask(state, member, &dataset_id, &case.question, &[], history).await,
+        Some(history) => {
+            let start = StartTable::Given;
+            ask(
+                state,
+                member,
+                &dataset_id,
+                &case.question,
+                &[],
+                history,
+                start,
+            )
+            .await
+        }
         None => conversation::ask(state, member, &dataset_id, &case.question, &[], None).await,
     };
     let response = match asked {
