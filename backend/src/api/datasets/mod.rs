@@ -64,6 +64,7 @@ async fn receive(
         database_source: None,
         format: None,
         descriptions: Default::default(),
+        keys: Default::default(),
     };
     let limit = state.config.max_upload_bytes;
     let mut received: u64 = 0;

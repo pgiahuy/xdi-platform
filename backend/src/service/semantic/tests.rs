@@ -854,14 +854,16 @@ async fn mock_dataco_profile_is_applied() {
     store.set_current_version(&ws, ds.id, v.id).await.unwrap();
     let ds = store.get_dataset(&ws, ds.id).await.unwrap().unwrap();
     assert_eq!(ds.current_profile_status.as_deref(), Some("semantic"));
-    assert_eq!(ds.suggested_questions.len(), 5);
+    // Mock viết 5 câu; bảng thử không có cột time, nên câu nguyên nhân theo tháng bị bỏ (semantic/questions.rs), câu
+    // so Europe với LATAM giữ.
+    assert_eq!(ds.suggested_questions.len(), 4);
     assert_eq!(
         ds.suggested_questions[0],
-        "Vì sao doanh thu tháng 5 năm 2017 tăng"
+        "Vì sao doanh thu Europe cao hơn LATAM"
     );
     // Danh sách dataset cũng có câu gợi ý của phiên bản hiện hành.
     let list = store.list_datasets(&ws).await.unwrap();
-    assert_eq!(list[0].suggested_questions.len(), 5);
+    assert_eq!(list[0].suggested_questions.len(), 4);
 
     // Lượt thứ hai: phiên bản đã semantic, store từ chối ghi, dữ liệu không đổi.
     apply_semantic_profile(&state, &ws, &ds, v.id, v.row_count)
@@ -1350,7 +1352,7 @@ async fn one_failed_part_keeps_the_others() {
     store.set_current_version(&ws, ds.id, v.id).await.unwrap();
     let ds = store.get_dataset(&ws, ds.id).await.unwrap().unwrap();
     assert_eq!(ds.current_profile_status.as_deref(), Some("semantic"));
-    assert_eq!(ds.suggested_questions.len(), 5);
+    assert_eq!(ds.suggested_questions.len(), 4);
 
     drop_workspace(&store, ws).await;
 }
@@ -1396,4 +1398,75 @@ fn database_descriptions_are_context_and_never_replaced() {
     assert_eq!(by_id(region.id).description, None);
     assert_eq!(by_id(region.id).aliases, ["khu vực"]);
     assert_eq!(by_id(amount.id).description.as_deref(), Some("Số tiền"));
+}
+
+/// Provider trả lỗi hết hạn mức (kèm lời dặn chờ 0 giây) cho hai lần gọi đầu của mỗi phần, rồi trả câu viết sẵn của mock.
+struct QuotaThenAnswer {
+    calls: std::sync::Mutex<std::collections::HashMap<String, u32>>,
+}
+
+#[async_trait::async_trait]
+impl LlmProvider for QuotaThenAnswer {
+    fn name(&self) -> String {
+        "quota-then-answer".to_string()
+    }
+
+    async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
+        let part = format!("{:?}", request.json_schema);
+        let seen = {
+            let mut calls = self.calls.lock().unwrap();
+            let n = calls.entry(part).or_insert(0);
+            *n += 1;
+            *n
+        };
+        if seen <= 2 {
+            return Err(AppError::Upstream(format!(
+                "{}. Gemini báo thử lại sau 0 giây",
+                crate::engine::llm::GEMINI_QUOTA_MESSAGE
+            )));
+        }
+        Ok(mock_profile_answer().to_string())
+    }
+}
+
+/// Lỗi hết hạn mức theo phút: mỗi phần chờ rồi gọi lại trong cùng lượt, không bị bỏ; phiên bản thành semantic ngay
+/// lượt đó thay vì giữ structure tới lần khởi động sau.
+#[tokio::test]
+async fn quota_errors_are_retried_within_the_run() {
+    let Some(store) = store().await else {
+        eprintln!("skip: DATABASE_URL not set");
+        return;
+    };
+    let ws = temp_workspace(&store).await;
+    let (ds, v) = dataco(&store, &ws).await;
+    let mut state = mock_state(store.clone());
+    let provider = Arc::new(QuotaThenAnswer {
+        calls: std::sync::Mutex::new(std::collections::HashMap::new()),
+    });
+    state.llm = provider.clone();
+    state.semantic_quota = Arc::new(quota::QuotaGate::with_timing(quota::GateTiming {
+        spacing: std::time::Duration::from_millis(10),
+        calm: std::time::Duration::from_secs(5),
+        default_wait: std::time::Duration::from_millis(10),
+        max_wait: std::time::Duration::from_millis(50),
+    }));
+    apply_semantic_profile(&state, &ws, &ds, v.id, v.row_count)
+        .await
+        .unwrap();
+    // Ba phần, mỗi phần hai lần hết hạn mức rồi một lần trả lời.
+    let calls = provider.calls.lock().unwrap().clone();
+    assert_eq!(calls.len(), 3, "{calls:?}");
+    assert!(calls.values().all(|n| *n == 3), "{calls:?}");
+
+    let columns = store.list_columns(&ws, v.id).await.unwrap();
+    let market = columns.iter().find(|c| c.name == "Market").unwrap();
+    assert!(market.description.is_some());
+    let values = store.list_column_values(&ws, &[market.id]).await.unwrap();
+    assert!(values.iter().any(|value| !value.aliases.is_empty()));
+    store.set_current_version(&ws, ds.id, v.id).await.unwrap();
+    let ds = store.get_dataset(&ws, ds.id).await.unwrap().unwrap();
+    assert_eq!(ds.current_profile_status.as_deref(), Some("semantic"));
+    assert!(!ds.suggested_questions.is_empty());
+
+    drop_workspace(&store, ws).await;
 }

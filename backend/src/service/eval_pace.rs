@@ -25,7 +25,7 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 
-use crate::engine::llm::{LlmProvider, LlmReply, LlmRequest, GEMINI_QUOTA_MESSAGE};
+use crate::engine::llm::{is_quota_error, LlmProvider, LlmReply, LlmRequest};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -115,7 +115,7 @@ impl Paced {
 
 /// Lỗi hết hạn mức của mọi khóa Gemini. Ollama và mock không có hạn mức.
 pub fn is_quota(error: &AppError) -> bool {
-    matches!(error, AppError::Upstream(message) if message == GEMINI_QUOTA_MESSAGE)
+    is_quota_error(error)
 }
 
 #[async_trait]

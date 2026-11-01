@@ -408,6 +408,7 @@ async fn ingest_table(
         database_source: Some(row.id),
         format: Some(copied.copy.format),
         descriptions: copied.descriptions,
+        keys: copied.keys,
     };
     let result = ingest::upload(state, member, copied.staging, upload).await?;
     state

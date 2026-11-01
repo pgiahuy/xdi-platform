@@ -6,7 +6,7 @@ Quy tắc gửi lựa chọn theo hợp đồng (ARCHITECTURE mục 8): đổi g
 hỏi đó kèm choices của response gần nhất (buildChoicesWith); gõ câu khác là câu mới, choices rỗng. Response gần nhất
 giữ trong state kèm request đã gửi, vì hỏi lại cần cả hai và useMutation xóa data khi bắt đầu lần gọi mới.
 Câu gợi ý lấy từ bảng ghim hay các bảng của dataset đang chọn (suggested_questions, lớp hồ sơ ngữ nghĩa viết sau khi
-nạp); danh sách dataset tự tải lại khi còn bảng đang lập hồ sơ (useCatalog, watchProfiles), nên câu gợi ý hiện ra mà không phải tải lại trang.
+nạp); chưa ghim bảng mà dataset có câu chọn tay (database mẫu) thì hiện các câu đó (askScope.ts); danh sách dataset tự tải lại khi còn bảng đang lập hồ sơ (useCatalog, watchProfiles), nên câu gợi ý hiện ra mà không phải tải lại trang.
 Chưa hỏi gì thì khung trò chuyện là một dòng nhắc bước tiếp theo (AskIdle) cùng câu gợi ý. Pane bằng chứng chỉ hiện
 khi đã có câu trả lời; mở hay thu gọn nhớ trong localStorage (storedFlag.ts) cho mọi workspace, vì đó là thói quen của
 người dùng, không phải của từng dataset.

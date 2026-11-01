@@ -9,6 +9,7 @@ semantic/ (hồ sơ ngữ nghĩa). File lẻ còn lại là tài khoản, worksp
 pub mod accounts;
 pub mod ask;
 pub mod catalog;
+pub mod column_roles;
 pub mod conversation;
 pub mod data_roles;
 pub mod domains;
@@ -46,6 +47,7 @@ pub mod profile;
 #[cfg(test)]
 pub(crate) mod prompt_fixtures;
 pub mod report;
+pub mod sample_questions;
 pub mod samples;
 pub mod samples_db;
 pub mod samples_domains;

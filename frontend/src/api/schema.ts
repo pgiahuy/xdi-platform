@@ -1896,6 +1896,11 @@ export interface components {
             /** @description Foreign-key relations between tables of this dataset, copied from the source database. Empty for a file. */
             relations: components["schemas"]["DatasetRelation"][];
             /**
+             * @description Questions picked by hand for this dataset (the sample databases set in SAMPLE_DATABASE_URL); empty otherwise.
+             *     The ask page shows them instead of the tables' `suggested_questions` while no table is pinned.
+             */
+            suggested_questions: string[];
+            /**
              * @description Tables, ordered by `source_table` (schema, then table) and then by name. A file has one table; a database
              *     connected but not snapshotted yet has none.
              */

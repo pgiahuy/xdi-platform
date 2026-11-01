@@ -1,0 +1,22 @@
+{
+  "sales_demo": [
+    "Doanh thu theo tháng năm 2017",
+    "Doanh thu theo phòng ban",
+    "Doanh thu theo danh mục và phân khúc khách hàng",
+    "Top 5 sản phẩm có doanh thu cao nhất năm 2017",
+    "Tỷ lệ giao trễ theo phương thức vận chuyển",
+    "Lợi nhuận trung bình mỗi đơn theo thị trường",
+    "Vì sao tỷ lệ giao trễ tháng 11/2016 tăng so với tháng 10/2016?",
+    "Vì sao doanh thu năm 2017 khác nhau giữa Europe và LATAM?"
+  ],
+  "edu_demo": [
+    "Số sinh viên theo môn học",
+    "Số sinh viên đăng ký theo kỳ",
+    "Tỷ lệ rút học theo vùng",
+    "Tỷ lệ đạt theo trình độ học vấn",
+    "Điểm trung bình theo loại bài đánh giá",
+    "Top 5 môn có nhiều lượt click nhất",
+    "Vì sao tỷ lệ bỏ học kỳ 2014J cao hơn kỳ 2014B?",
+    "Vì sao điểm trung bình khác nhau giữa môn AAA và GGG?"
+  ]
+}

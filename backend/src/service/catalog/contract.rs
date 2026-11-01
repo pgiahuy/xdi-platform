@@ -45,6 +45,9 @@ pub struct DatasetSummary {
     /// SOURCE_SNAPSHOT_MAX_MB total), ordered by `table`. An admin snapshots one with `POST /sources/{id}/snapshot`
     /// and `tables: [table]`. Empty for a file.
     pub metadata_only: Vec<MetadataOnlyTable>,
+    /// Questions picked by hand for this dataset (the sample databases set in SAMPLE_DATABASE_URL); empty otherwise.
+    /// The ask page shows them instead of the tables' `suggested_questions` while no table is pinned.
+    pub suggested_questions: Vec<String>,
     /// Latest `current_version_at` of its tables: the last snapshot or upload. Null while no table has data.
     #[schema(required)]
     pub updated_at: Option<DateTime<Utc>>,

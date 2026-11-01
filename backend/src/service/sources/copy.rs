@@ -10,7 +10,8 @@ Trong giao dịch đó, theo thứ tự:
 3. Chép bảng chép được ra file riêng (file quá SOURCE_TABLE_MAX_MB thì từ chối, chỉ gặp với view hay file CSV lớn
    hơn bảng): COPY ra CSV ngay trên kết nối này, hoặc với
    SOURCE_SNAPSHOT_MODE=direct thì DuckDB đọc thẳng ra Parquet trong một giao dịch REPEATABLE READ riêng của nó
-   (direct.rs). Comment bảng, cột (comments.rs) đọc bằng sqlx ở đây, cách chép nào cũng vậy.
+   (direct.rs). Comment bảng, cột (comments.rs) và khóa của bảng (catalog.rs) đọc bằng sqlx ở đây, cách chép nào cũng
+   vậy.
 4. Cột, kiểu, khóa, comment của bảng chỉ lưu metadata; mọi khóa ngoại của database (relations.rs).
 Cả bước chung một giới hạn SOURCE_TIMEOUT_SECS; quá thì bỏ cả lần chụp: file tạm (Staging) bị xóa khi future bị bỏ,
 câu DuckDB đang chạy bị ngắt (direct.rs), nên không còn gì ghi dở.
@@ -33,6 +34,7 @@ use super::postgres::{self, ConnectInfo, SourceTable, TableCopy};
 use super::relations::{self, ForeignKey};
 use crate::config::SnapshotMode;
 use crate::engine::store::MetadataColumn;
+use crate::service::column_roles::SourceKeys;
 use crate::service::ingest::{SourceDescriptions, Staging};
 use crate::{error::AppError, state::AppState};
 
@@ -63,6 +65,8 @@ pub struct CopiedTable {
     pub path: PathBuf,
     pub copy: TableCopy,
     pub descriptions: SourceDescriptions,
+    /// Khóa chính và cột khóa ngoại của bảng (catalog.rs, read_key_columns), để hồ sơ cấu trúc đặt vai trò key.
+    pub keys: SourceKeys,
     pub dataset_id: Option<Uuid>,
 }
 
@@ -113,6 +117,7 @@ pub async fn copy_group(
         // Comment đọc bằng sqlx trong giao dịch của conn, cách chép nào (COPY hay DuckDB) cũng vậy.
         for c in &mut copied {
             c.descriptions = comments::read_descriptions(&mut conn, &c.table).await?;
+            c.keys = catalog::read_key_columns(&mut conn, &c.table).await?;
             c.dataset_id = dataset_of(&c.table);
         }
         let mut skipped_tables = Vec::new();
@@ -250,6 +255,7 @@ async fn copy_tables(
             path,
             copy,
             descriptions: SourceDescriptions::default(),
+            keys: SourceKeys::default(),
             dataset_id: None,
         });
     }
@@ -288,6 +294,7 @@ async fn copy_direct(
             staging,
             copy,
             descriptions: SourceDescriptions::default(),
+            keys: SourceKeys::default(),
             dataset_id: None,
         })
         .collect())

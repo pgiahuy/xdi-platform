@@ -40,6 +40,7 @@ pub async fn list(state: &AppState, member: &Member) -> Result<Vec<DatasetSummar
     Ok(sources
         .into_iter()
         .map(|source| build_summary(source, &tables, &columns, &relations, &metadata))
+        .map(|summary| with_sample_questions(state, summary))
         .collect())
 }
 
@@ -58,9 +59,18 @@ pub async fn detail(
         .await?;
     let relations = state.store.list_relations(ws, None).await?;
     let metadata = state.store.list_metadata_tables(ws, source.id).await?;
-    Ok(build_summary(
-        source, &tables, &columns, &relations, &metadata,
-    ))
+    let summary = build_summary(source, &tables, &columns, &relations, &metadata);
+    Ok(with_sample_questions(state, summary))
+}
+
+/// Câu gợi ý chọn tay của database mẫu cùng tên (service/sample_questions.rs); dataset khác giữ danh sách rỗng.
+fn with_sample_questions(state: &AppState, mut summary: DatasetSummary) -> DatasetSummary {
+    if summary.kind == DatasetKind::Database {
+        if let Some(questions) = state.sample_questions.get(&summary.name) {
+            summary.suggested_questions = questions.clone();
+        }
+    }
+    summary
 }
 
 /// Chụp lại mọi bảng một dataset là database đang giữ, kể cả bảng chỉ có metadata (chỉ admin, #247), trong một giao
@@ -206,6 +216,7 @@ fn build_summary(
             .map(MetadataOnlyTable::from_stored)
             .collect(),
         tables,
+        suggested_questions: Vec::new(),
         updated_at,
         created_at: source.created_at,
     }

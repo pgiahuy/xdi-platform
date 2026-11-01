@@ -9,12 +9,14 @@ bằng lời, không dựa vào cách gộp phần cột ghi). Mỗi phần có 
 (schema.rs, build_part_schema). Câu trả lời của mỗi phần chỉ được lấy đúng các khóa của phần đó, rồi ghép thành một
 object và đi qua build_profile_answer như câu trả lời đầy đủ trước đây, nên bước kiểm từng mục không đổi.
 
-Một phần lỗi thì giữ các phần đã có: hồ sơ được ghi với các phần còn lại, phần lỗi bỏ trống (log cảnh báo). Cả ba lỗi
-thì là một lỗi như trước: có lỗi tạm thì cả lượt là lỗi tạm (lần khởi động sau thử lại), còn lại là lỗi vĩnh viễn. */
+Một phần gặp lỗi hết hạn mức (Gemini 429 theo phút) thì chờ rồi gọi lại phần đó, tối đa QUOTA_RETRIES lần, trong cùng
+lượt; thời gian chờ và nhịp gọi chung ở service/semantic/quota.rs. Một phần lỗi thì giữ các phần đã có: hồ sơ được ghi
+với các phần còn lại, phần lỗi bỏ trống (log cảnh báo). Cả ba lỗi thì là một lỗi như trước: có lỗi tạm thì cả lượt là
+lỗi tạm (lần khởi động sau thử lại), còn lại là lỗi vĩnh viễn. */
 
 use uuid::Uuid;
 
-use crate::engine::llm::{LlmRequest, LlmTask};
+use crate::engine::llm::{is_quota_error, quota_retry_after, LlmRequest, LlmTask};
 use crate::engine::store::{ColumnValue, Dataset, ProfileColumn};
 use crate::error::AppError;
 use crate::service::semantic::schema::build_part_schema;
@@ -111,12 +113,14 @@ async fn ask_part(state: &AppState, part: ProfilePart, input: &PartInput<'_>) ->
         json_schema: Some(build_part_schema(part)),
     };
     let started = std::time::Instant::now();
-    let text = state.llm.complete(&request).await.map_err(|e| match e {
-        // Chỉ BadRequest là vĩnh viễn: Gemini chặn prompt vì nội dung, mock không có bảng. MAX_TOKENS, SAFETY và mã
-        // 400 khác của Gemini đến dưới dạng Upstream nên là lỗi tạm, thử lại mỗi lần khởi động.
-        AppError::BadRequest(_) => SemanticFailure::Permanent(e),
-        other => SemanticFailure::Temporary(other),
-    })?;
+    let text = complete_with_quota_retry(state, part, input, &request)
+        .await
+        .map_err(|e| match e {
+            // Chỉ BadRequest là vĩnh viễn: Gemini chặn prompt vì nội dung, mock không có bảng. MAX_TOKENS, SAFETY và mã
+            // 400 khác của Gemini đến dưới dạng Upstream nên là lỗi tạm, thử lại mỗi lần khởi động.
+            AppError::BadRequest(_) => SemanticFailure::Permanent(e),
+            other => SemanticFailure::Temporary(other),
+        })?;
     let Some(serde_json::Value::Object(mut answer)) = parse_answer_json(&text) else {
         return Err(SemanticFailure::Permanent(AppError::Internal(format!(
             "semantic profile part {} is not a JSON object",
@@ -132,6 +136,33 @@ async fn ask_part(state: &AppState, part: ProfilePart, input: &PartInput<'_>) ->
         "semantic profile part done"
     );
     Ok(Some(answer))
+}
+
+/// Số lần gọi lại tối đa một phần gặp hết hạn mức. Hết hạn mức theo ngày thì chờ mấy cũng không hồi, nên có trần; lỗi
+/// cuối cùng vẫn là lỗi tạm, lần khởi động sau thử lại.
+const QUOTA_RETRIES: u32 = 3;
+
+/// Gọi mô hình cho một phần; gặp hết hạn mức thì báo QuotaGate (chờ theo số giây provider dặn) rồi gọi lại.
+async fn complete_with_quota_retry(
+    state: &AppState,
+    part: ProfilePart,
+    input: &PartInput<'_>,
+    request: &LlmRequest<'_>,
+) -> Result<String, AppError> {
+    let mut retries = 0;
+    loop {
+        state.semantic_quota.wait_turn().await;
+        match state.llm.complete(request).await {
+            Err(e) if is_quota_error(&e) && retries < QUOTA_RETRIES => {
+                retries += 1;
+                let wait = state.semantic_quota.note_quota(quota_retry_after(&e)).await;
+                tracing::warn!(version_id = %input.version_id, part = part.name(), retry = retries,
+                    wait_ms = u64::try_from(wait.as_millis()).unwrap_or(u64::MAX),
+                    "semantic profile part is out of quota, waiting before calling again");
+            }
+            result => return result,
+        }
+    }
 }
 
 /// Ghép câu trả lời của các phần. Phần lỗi ghi log rồi bỏ; Err chỉ khi không phần nào có câu trả lời.

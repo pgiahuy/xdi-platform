@@ -20,6 +20,7 @@ use crate::engine::duckdb_limits::DuckdbLimits;
 use crate::engine::profile::{self, ColumnStats, ValueCount};
 use crate::engine::store::{NewColumn, NewColumnValue, PendingVersion, ProfileRole, ProfileStatus};
 use crate::service::ask::phrases::fold;
+use crate::service::column_roles::is_time_position_name;
 use crate::{error::AppError, state::AppState};
 
 /// Cột chữ có không quá ngần này giá trị khác nhau là chiều (dimension), nhiều hơn là chữ tự do (text). Cũng là ngưỡng
@@ -38,8 +39,9 @@ const VALUE_MAX_BYTES: usize = 1000;
 /// hồ sơ cột), mà còn cách xa trần đó; lỗi báo trước khi ghi gì.
 const COLUMN_NAME_MAX_BYTES: usize = 1000;
 
-/// Vai trò của một cột theo số đo của nó, thử từng luật theo thứ tự, luật đầu tiên khớp thắng. Hàm thuần, không đọc
-/// tên cột (trừ cột hệ thống _source_file): số nguyên lặp lại như Order Id thành measure, sửa ở lớp ngữ nghĩa (#23).
+/// Vai trò của một cột theo số đo của nó, thử từng luật theo thứ tự, luật đầu tiên khớp thắng. Hàm thuần. Tên cột chỉ
+/// đọc ở hai chỗ: cột hệ thống _source_file, và cột số nguyên có tên là mốc thời gian (service/column_roles.rs). Số
+/// nguyên lặp lại như Order Id thành measure, sửa ở lớp ngữ nghĩa (#23) hay theo khóa của database nguồn.
 pub fn build_column_role(stats: &ColumnStats, row_count: i64) -> ProfileRole {
     let data_type = stats.data_type.as_str();
     // Không có giá trị nào khác null thì không dùng được vào đâu.
@@ -48,6 +50,15 @@ pub fn build_column_role(stats: &ColumnStats, row_count: i64) -> ProfileRole {
     }
     if is_time_type(data_type) || stats.time_format.is_some() {
         return ProfileRole::Time;
+    }
+    // Số ngày, số tuần tính từ một mốc (cột date của bảng lượt bấm theo ngày): cộng vô nghĩa, cũng không phải kỳ. Thành
+    // dimension khi danh sách giá trị ghi được, không thì text (cột chiều luôn có danh sách giá trị, xem dưới).
+    if is_integer_type(data_type) && is_time_position_name(&stats.name) {
+        return if stats.distinct_count <= DIMENSION_MAX && can_store_values(&stats.values) {
+            ProfileRole::Dimension
+        } else {
+            ProfileRole::Text
+        };
     }
     // Bảng một hai dòng thì cột số nào cũng mỗi dòng một giá trị và có tối đa 2 giá trị: hai luật key và cờ 0/1 dưới
     // đây không nói lên điều gì, nên số ở bảng như vậy là measure.
@@ -174,7 +185,7 @@ pub(crate) fn is_sensitive_column(name: &str, values: &[impl AsRef<str>]) -> boo
 
 /// Tên cột thành dãy từ: tách ranh giới camelCase ("CustomerName" thành "Customer Name") và ranh giới chữ - số
 /// ("Address1" thành "Address 1"), rồi fold (bỏ dấu, chữ thường, tách theo ký tự không phải chữ hay số) và tách từ.
-fn name_tokens(name: &str) -> Vec<String> {
+pub(crate) fn name_tokens(name: &str) -> Vec<String> {
     let mut spaced = String::with_capacity(name.len() + 8);
     let mut prev: Option<char> = None;
     for c in name.chars() {
@@ -546,6 +557,17 @@ mod tests {
             ProfileRole::Measure
         );
 
+        // Số ngày, số tuần tính từ một mốc: không phải độ đo, kể cả khi là khóa (mỗi dòng một giá trị).
+        assert_eq!(role(stats("date", "INTEGER", 0, 295)), ProfileRole::Text);
+        assert_eq!(
+            role(stats("week_from", "INTEGER", 10, 30)),
+            ProfileRole::Dimension
+        );
+        assert_eq!(role(stats("day", "INTEGER", 0, rows)), ProfileRole::Text);
+        assert_eq!(
+            role(stats("days_for_shipping_real", "INTEGER", 0, 7)),
+            ProfileRole::Measure
+        );
         assert_eq!(
             role(stats("Late_delivery_risk", "BIGINT", 0, 2)),
             ProfileRole::Dimension
