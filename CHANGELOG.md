@@ -40,6 +40,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Một từ khớp nhiều cột không còn bị hỏi lại: hệ thống trả lời theo cột khớp nhất, các cột khác đổi được trên thẻ; câu hỏi lại một ý có mỗi phương án là một nút (#201).
 - Giao diện: vào workspace là mở trang Cuộc trò chuyện, nút Lịch sử trò chuyện ở đầu thanh bên, các trang dùng hết bề ngang màn hình.
 - Xóa một bảng thì xóa luôn lịch sử câu hỏi trên bảng đó (#187).
+- Màn Bài học: hàng số tóm tắt (đang dùng, chờ duyệt, lỗi chưa có bài học), hai tab Bài học và Nhật ký lỗi, thẻ ghi tên từng phần, nhãn màu cho trạng thái và loại lỗi, lọc nhật ký theo loại; câu mô hình đã trả gập lại; nút Viết bài học mở hộp ngay tại chỗ, kèm câu hỏi và lỗi của dòng đó.
 
 ### Fixed
 
