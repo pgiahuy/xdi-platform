@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/ask_why_frames_tests.rs - test qua route thật cho các khuôn câu "tại sao" thêm ở #244: hỏi, kiểm hai lát cắt,
-thẻ "Đã hiểu là", rồi truy dòng nguồn của một dòng phân rã trên chính câu vừa ghi. Mô hình giả trả form viết sẵn
+thẻ "Cách tính", rồi truy dòng nguồn của một dòng phân rã trên chính câu vừa ghi. Mô hình giả trả form viết sẵn
 (ScriptedLlm của ask_tests.rs). Mỗi test dùng database và thư mục dữ liệu riêng; không có DATABASE_URL thì bỏ qua.
 
 Dữ liệu: quý 3/2017 Europe 80 (Corporate 50, Consumer 30), LATAM 120.25 (Corporate), USCA 10 (Consumer). */

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/sources/snapshot.rs - chụp bảng của nguồn Postgres: mỗi bảng thành một dataset riêng (một phiên bản Parquet
-như nạp file) trong dataset là database đó (#257), cùng các quan hệ khóa ngoại giữa chúng (engine/store/relations.rs).
+/* service/sources/snapshot.rs - chụp bảng của nguồn Postgres: mỗi bảng thành một bảng của dataset là database đó (một
+phiên bản Parquet như nạp file, #257, #266), cùng các quan hệ khóa ngoại giữa chúng (engine/store/relations.rs).
 api/sources.rs gọi `snapshot` (màn kết nối); chụp lại cả dataset (service/catalog/, POST /catalog/{id}/snapshot) và
 lịch chụp lại (schedule.rs) gọi `snapshot_dataset`. Chép bảng ở copy.rs, nạp ở service/ingest.rs.
 
@@ -42,14 +42,15 @@ pub struct SnapshotRequest {
     /// `schema.table` named `name` when it is new. Optional: without `table`, `tables` and `dataset_id`, every table
     /// and view the account can read is snapshotted.
     pub table: Option<String>,
-    /// `schema.table` names to snapshot (the ticked tables), each into its own dataset. Empty with no `table` and no
-    /// `dataset_id`: every readable table. One name snapshots that one table, for example a table kept as metadata
+    /// `schema.table` names to snapshot (the ticked tables), each stored as one table of the database dataset. Empty
+    /// with no `table` and no `dataset_id`: every readable table. One name snapshots that one table, for example a table kept as metadata
     /// only. Not allowed with `dataset_id`.
     #[serde(default)]
     pub tables: Vec<String>,
-    /// Name of the dataset of `table` when it is new; defaults to the table name. Other tables use their table name.
+    /// Name stored for `table` when it is new; defaults to the table name. Other tables use their table name.
     pub name: Option<String>,
-    /// Snapshot this dataset again, with every dataset of the same source linked to it by relations.
+    /// Snapshot this table (a `datasets.id`, the field name predates tables) again, with every table of the same source
+    /// linked to it by relations.
     pub dataset_id: Option<Uuid>,
 }
 

@@ -83,7 +83,7 @@ fn why_question_answered_as_a_plain_one_fails() {
     let (verdict, detail) =
         build_answer_verdict(&response, &case("why_groups"), &[rows_of(&response)]);
     assert_eq!(verdict, Verdict::Fail);
-    assert!(detail.contains("như câu thường"), "{detail}");
+    assert!(detail.contains("như câu hỏi số liệu"), "{detail}");
     let why = build_why_example();
     assert_eq!(
         build_answer_verdict(&why, &case("why_periods"), &[rows_of(&why)]).0,

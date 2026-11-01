@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use serde_json::{json, Value};
 
 use crate::api::test_support::{app_with, call, multipart, send_raw, CODE};
-use crate::engine::store::test_support::{exec, fetch_text, fresh_database};
+use crate::engine::store::test_support::{exec, fetch_text, fresh_database, give_data_role};
 use crate::engine::store::Store;
 
 const PASSWORD: &str = "a long password";
@@ -234,17 +234,11 @@ async fn row_filters_of_the_viewer_apply_when_the_report_is_opened() {
     assert_eq!(status, StatusCode::OK);
 
     // Sau lúc hỏi, admin gán cho Minh vai dữ liệu chỉ thấy LATAM.
-    exec(
+    give_data_role(
         &db.store,
-        "UPDATE memberships SET data_role = 'latam' WHERE user_id = (SELECT id FROM users WHERE email = 'minh@example.com')",
-    )
-    .await;
-    exec(
-        &db.store,
-        &format!(
-            "INSERT INTO rls_policies (workspace_id, dataset_id, data_role, column_name, allowed_values)
-             SELECT workspace_id, id, 'latam', 'Market', ARRAY['LATAM'] FROM datasets WHERE id = '{dataset_id}'"
-        ),
+        "minh@example.com",
+        "latam",
+        &[(&dataset_id, "Market", &["LATAM"])],
     )
     .await;
     let (status, body) = send(
@@ -409,17 +403,11 @@ async fn automatic_report_uses_the_row_filters_of_the_member() {
         ),
     )
     .await;
-    exec(
+    give_data_role(
         &db.store,
-        "UPDATE memberships SET data_role = 'latam' WHERE user_id = (SELECT id FROM users WHERE email = 'minh@example.com')",
-    )
-    .await;
-    exec(
-        &db.store,
-        &format!(
-            "INSERT INTO rls_policies (workspace_id, dataset_id, data_role, column_name, allowed_values)
-             SELECT workspace_id, id, 'latam', 'Market', ARRAY['LATAM'] FROM datasets WHERE id = '{dataset_id}'"
-        ),
+        "minh@example.com",
+        "latam",
+        &[(&dataset_id, "Market", &["LATAM"])],
     )
     .await;
     let source = fetch_text(

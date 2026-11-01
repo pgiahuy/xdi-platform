@@ -2,7 +2,7 @@
 /* service/explain/latest.rs - kỳ cần giải thích khi câu "tại sao" so hai kỳ mà không nêu kỳ nào ("Tại sao doanh thu
 giảm", #164). explain/run.rs gọi find_latest trước khi kiểm form: code đếm số dòng theo kỳ trên DuckDB, chọn kỳ gần
 nhất có đủ dữ liệu, ghi vào form (compare, time) rồi kiểm form như câu có nêu kỳ; kỳ gốc vẫn là kỳ liền trước như
-mọi câu so hai kỳ (explain/check.rs). Lựa chọn why:compare trên thẻ "Đã hiểu là" cho người hỏi đổi sang kỳ khác.
+mọi câu so hai kỳ (explain/check.rs). Lựa chọn why:compare trên thẻ "Cách tính" cho người hỏi đổi sang kỳ khác.
 
 Code chọn chứ không nhờ mô hình đoán: mô hình không thấy dữ liệu nên không biết kỳ nào có dòng, và cùng câu hỏi phải
 luôn ra cùng kỳ. Test ở explain/run_tests.rs (trọn đường) và cuối file này (quy tắc chọn kỳ). */
@@ -183,7 +183,7 @@ pub fn apply_latest(read: &mut ReadForm, latest: &LatestPeriod) {
     }
 }
 
-/// Lựa chọn kỳ cần giải thích trên thẻ "Đã hiểu là". Nhãn nói rõ đây là giả định của code ("Kỳ gần nhất có dữ
+/// Lựa chọn kỳ cần giải thích trên thẻ "Cách tính". Nhãn nói rõ đây là giả định của code ("Kỳ gần nhất có dữ
 /// liệu") khi người hỏi chưa chọn; phương án là các kỳ gần nhất có dữ liệu, cộng kỳ đang dùng nếu nó không nằm trong đó.
 pub fn build_compare_choice(latest: &LatestPeriod, base: Period) -> Choice {
     let mut options = latest.options.clone();

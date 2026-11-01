@@ -1,82 +1,64 @@
 # Cài đặt
 
+Trang này dành cho người cài và quản trị một bản xdi-platform: cài, cấu hình, đưa lên Internet, sao lưu, sửa lỗi. Cách
+dùng giao diện (kết nối database, hỏi, đọc minh chứng, báo cáo) ở [Dùng lần đầu](USAGE.md). Phần nào đã có, phần nào
+chưa: bảng Trạng thái trong [ARCHITECTURE.md](ARCHITECTURE.md#trạng-thái).
+
 Chạy nhanh trên một máy có Docker:
 
 ```bash
 git clone https://github.com/pgiahuy/xdi-platform.git && cd xdi-platform
 cp .env.example .env
-docker compose up -d --build                      # build lần đầu mất vài phút
+docker compose up -d --build                      # build lần đầu biên dịch Rust và DuckDB
 docker compose logs backend | grep setup_code     # mã để tạo tài khoản quản trị
 ```
 
-Mở http://localhost:8000, nhập mã thiết lập. Workspace đầu tiên có sẵn dataset mẫu DataCo, hỏi được ngay với mô hình
-`mock`. Muốn thử luồng database với database mẫu nhiều bảng thì nạp nó trước lần thiết lập đầu (mục 7, bước 1). Tiếp
-theo: mục 7 (Dùng lần đầu).
+Mở http://localhost:8000 và nhập mã thiết lập. Workspace đầu tiên có sẵn dataset mẫu DataCo, hỏi được ngay với mô hình
+`mock`. Muốn thử với database mẫu nhiều bảng thì nạp nó trước lần thiết lập đầu ([Dùng lần đầu](USAGE.md#1-chọn-mô-hình-và-dữ-liệu-mẫu)).
 
 | Mục | Khi nào cần |
 |---|---|
-| [1. Docker](#1-chạy-bằng-docker) | Cài, cấu hình `.env`, kết nối database hay nạp file qua API, cập nhật, gỡ |
+| [1. Chạy bằng Docker](#1-chạy-bằng-docker) | Cài, tạo tài khoản quản trị, cấu hình `.env`, mô hình ngôn ngữ, cập nhật, gỡ |
 | [2. Build từ mã nguồn](#2-build-từ-mã-nguồn) | Phát triển, hoặc chạy backend không dùng Docker |
 | [3. Đưa lên Internet](#3-đưa-lên-internet) | Máy chủ có tên miền, HTTPS bằng Caddy hoặc nginx |
 | [4. Sao lưu và khôi phục](#4-sao-lưu-và-khôi-phục) | `make backup`, `make restore` |
 | [5. Quản trị](#5-quản-trị) | Quên mật khẩu quản trị |
 | [6. Lỗi hay gặp](#6-lỗi-hay-gặp) | Build hết RAM, trùng cổng, lỗi Gemini |
-| [7. Dùng lần đầu](#7-dùng-lần-đầu) | Chọn mô hình, kết nối database hay nạp file, hỏi, đọc minh chứng, mời thành viên |
-
-Phần mềm đang phát triển; phần nào đã có xem bảng Trạng thái trong [ARCHITECTURE.md](ARCHITECTURE.md#trạng-thái).
 
 ## 1. Chạy bằng Docker
 
-Cần: Docker Engine kèm Docker Compose v2 (`docker compose version` chạy được), Git. Chưa có Docker: xem
-https://docs.docker.com/engine/install/. Trên Linux, để chạy `docker` không cần `sudo`, thêm user vào nhóm `docker`
-theo https://docs.docker.com/engine/install/linux-postinstall/ (đăng xuất rồi đăng nhập lại). Trên Windows, chạy các
-lệnh dưới đây trong WSL2.
+Cần Docker Engine kèm Docker Compose v2 (`docker compose version` chạy được) và Git. Cài Docker theo
+https://docs.docker.com/engine/install/; trên Linux, để chạy `docker` không cần `sudo` thì làm theo
+https://docs.docker.com/engine/install/linux-postinstall/. Trên Windows, chạy các lệnh trong WSL2.
 
-Máy build image cần khoảng 1 GiB RAM trống cho mỗi nhân CPU (cargo biên dịch song song trên mọi nhân) và khoảng
-6 GB đĩa trống. Máy ít RAM thì đặt `CARGO_BUILD_JOBS` trong `.env` bằng khoảng số GiB RAM còn trống, nếu không máy có
-thể đứng giữa chừng (mục 6).
-
-| Build không dùng cache, máy 16 nhân, 30 GiB RAM | Thời gian | RAM tối đa |
-|---|---|---|
-| Mặc định (mọi nhân) | 8 phút | 12,6 GiB |
-| `CARGO_BUILD_JOBS=4` | 18 phút | 4,2 GiB |
-
-Cách đo: build trong một builder buildx riêng, đọc bộ nhớ của container builder (không tính page cache). Đĩa: cache
-build 4,8 GB (`docker buildx du`), image backend 215 MB, image Postgres 640 MB (`docker images`).
+Build image cần khoảng 1 GiB RAM trống cho mỗi tiến trình biên dịch, và cargo mặc định chạy một tiến trình mỗi nhân CPU.
+Máy ít RAM thì đặt `CARGO_BUILD_JOBS` trong `.env` bằng khoảng số GiB RAM còn trống, nếu không máy có thể đứng giữa
+chừng (mục 6).
 
 ```bash
 git clone https://github.com/pgiahuy/xdi-platform.git
 cd xdi-platform
 cp .env.example .env
 docker compose up -d --build
-```
-
-Lần đầu build lâu vì phải biên dịch backend (Rust, kèm DuckDB) và giao diện. Các lần sau dùng lại cache; đổi phụ thuộc
-(`Cargo.lock`) thì biên dịch lại cả phần phụ thuộc.
-
-Kiểm tra:
-
-```bash
 docker compose ps                         # backend và postgres ở trạng thái healthy
 curl http://localhost:8000/api/health     # {"status":"ok"}
 ```
 
-Mở http://localhost:8000 để xem giao diện.
+Lần đầu build lâu vì phải biên dịch backend (Rust, kèm DuckDB) và giao diện. Các lần sau dùng lại cache; đổi phụ thuộc
+(`Cargo.lock`) thì biên dịch lại phần phụ thuộc.
 
 ### Tạo tài khoản quản trị
 
-Lần chạy đầu, khi chưa có tài khoản nào, backend in một mã thiết lập ra log. Chỉ ai đọc được log của máy chủ mới tạo
-được tài khoản quản trị, nên người ngoài không chiếm được bản cài vừa dựng.
+Khi chưa có tài khoản nào, backend in một mã thiết lập ra log. Chỉ ai đọc được log của máy chủ mới tạo được tài khoản
+quản trị, nên người ngoài không chiếm được bản cài vừa dựng.
 
 ```bash
 docker compose logs backend | grep setup_code
 ```
 
-Mở http://localhost:8000: lần đầu giao diện hiện màn **Thiết lập lần đầu**. Nhập mã thiết lập (gõ chữ thường hay thừa
-khoảng trắng vẫn nhận), email, mật khẩu từ 8 đến 128 ký tự (nhập hai lần); tên hiển thị và tên workspace
-đầu tiên không bắt buộc. Xong thì giao diện vào thẳng workspace vừa tạo.
-
-Máy chủ không có trình duyệt thì tạo bằng lệnh (thay mã, email, mật khẩu, tên workspace):
+Mở http://localhost:8000: màn **Thiết lập lần đầu** hiện ra. Nhập mã (chữ thường hay thừa khoảng trắng vẫn nhận), email
+và mật khẩu từ 8 đến 128 ký tự; tên hiển thị và tên workspace đầu tiên không bắt buộc. Máy chủ không có trình duyệt thì
+tạo bằng lệnh:
 
 ```bash
 curl http://localhost:8000/api/auth/setup \
@@ -84,21 +66,16 @@ curl http://localhost:8000/api/auth/setup \
   -d '{"setup_code":"ABCD-EFGH-JKMN","email":"ban@example.com","password":"mat khau it nhat 8 ky tu","workspace_name":"Cửa hàng"}'
 ```
 
-Tài khoản này là quản trị hệ thống (quản lý tài khoản của cả bản cài) và là `admin` của workspace đầu tiên. Mã thiết
-lập chỉ dùng được một lần. Khởi động lại backend mà vẫn chưa có tài khoản nào thì backend in mã mới.
+Tài khoản này là quản trị hệ thống (quản lý tài khoản của cả bản cài) và là `admin` của workspace đầu tiên. Mã chỉ dùng
+được một lần; khởi động lại backend khi vẫn chưa có tài khoản nào thì backend in mã mới.
 
-### Nạp dữ liệu
+### Nạp dữ liệu bằng script
 
-Luồng chính là kết nối database: mục **Dữ liệu** ở thanh bên, khung **Kết nối database**, nhập thông tin Postgres rồi
-chụp bảng cần hỏi kèm các bảng liên quan (từng bước ở mục 7, bước 3). Backend trong compose tới được máy chủ database
-theo tên máy hay IP như mọi container; máy chủ phải có trong `SOURCE_ALLOWED_HOSTS`, và bản chạy thật nên đặt `SOURCE_SECRET_KEY`
-(Cấu hình bên dưới). Dữ liệu chưa nằm trong database thì nạp file: cùng trang, nút **Nạp file CSV,
-Parquet hoặc Excel**, chọn một hoặc nhiều file rồi bấm **Nạp**. Chỉ `admin` của workspace thấy hai phần này. Tên
-dataset để trống thì lấy theo tên file hay tên bảng. API của nguồn database: [API.md](API.md), mục Nguồn database.
+Kết nối database và nạp file trên giao diện: [Dùng lần đầu](USAGE.md#2-kết-nối-database-hoặc-nạp-file). Máy chủ database
+phải có trong `SOURCE_ALLOWED_HOSTS`. API của nguồn database: [API.md](API.md), mục Nguồn database.
 
-Nạp file qua API, khi cần nạp bằng script: đăng nhập bằng lệnh để lấy cookie phiên vào `cookie.txt` (file này là chìa khóa
-phiên của bạn, xóa sau khi dùng xong), rồi nạp file. `<slug>` là slug của workspace, có trong kết quả lệnh đăng nhập,
-ví dụ `cua-hang`:
+Nạp file bằng `curl`: đăng nhập để lấy cookie phiên vào `cookie.txt` (file này là chìa khóa phiên của bạn, xóa sau khi
+dùng), rồi gửi file. `<slug>` là slug của workspace, có trong kết quả lệnh đăng nhập, ví dụ `cua-hang`.
 
 ```bash
 curl -c cookie.txt http://localhost:8000/api/auth/login \
@@ -108,12 +85,8 @@ curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets \
   -F name='Bán hàng' -F file=@thang1.csv -F file=@thang2.csv
 ```
 
-Nhận CSV (UTF-8, hoặc windows-1252 và latin-1 như file xuất từ phần mềm cũ) và Parquet, một hoặc nhiều file. File UTF-8
-có byte hỏng bị từ chối kèm số dòng: lưu lại dạng UTF-8 rồi nạp lại. Nhiều file cùng cột gộp thành một bảng. Tổng dung lượng
-một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200). Định dạng, giới hạn, phiên bản và tên cột: [Dữ liệu](DATA.md).
-
-File Excel (.xlsx) nạp từng file một. Xem tên sheet và cột, rồi chọn sheet cần nạp (lặp `-F sheet=` để gộp nhiều sheet
-cùng cột thành một bảng; file chỉ có một sheet đang hiện thì không cần chọn):
+Nhiều file CSV hay Parquet cùng cột gộp thành một bảng. File Excel (.xlsx) nạp từng file một: xem tên sheet trước, rồi
+chọn sheet (lặp `-F sheet=` để gộp nhiều sheet cùng cột):
 
 ```bash
 curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets/sheets -F file=@ban_hang.xlsx
@@ -121,189 +94,193 @@ curl -b cookie.txt http://localhost:8000/api/workspaces/<slug>/datasets \
   -F name='Bán hàng' -F sheet='Năm 2023' -F sheet='Năm 2024' -F file=@ban_hang.xlsx
 ```
 
+Định dạng nhận, mã hóa CSV, giới hạn Excel, phiên bản và tên cột: [Dữ liệu](DATA.md).
+
 ### Cấu hình
 
-Sửa `.env` rồi chạy lại `docker compose up -d`. Các biến chính (đầy đủ ở [.env.example](https://github.com/pgiahuy/xdi-platform/blob/main/.env.example)):
+Sửa `.env` rồi chạy lại `docker compose up -d`. Danh sách đầy đủ, với giá trị mặc định, ở
+[.env.example](https://github.com/pgiahuy/xdi-platform/blob/main/.env.example).
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `BACKEND_PORT` | `8000` | Cổng của giao diện và API |
-| `BACKEND_BIND` | trống (mọi địa chỉ) | Địa chỉ backend nghe trên máy host khi chạy compose; đặt `127.0.0.1` khi có Caddy trên cùng máy để cổng HTTP thường không mở ra Internet (mục 3) |
-| `POSTGRES_PORT` | `5433` | Cổng Postgres mở ra máy host (để công cụ quản trị database kết nối) |
+| `BACKEND_BIND` | trống (mọi địa chỉ) | Địa chỉ backend nghe trên máy host khi chạy compose; `127.0.0.1` khi có reverse proxy trên cùng máy (mục 3) |
+| `POSTGRES_PORT` | `5433` | Cổng Postgres của ứng dụng mở ra máy host |
 | `DB_MAX_CONNECTIONS` | `10` | Số kết nối Postgres tối đa của backend |
-| `DB_ACQUIRE_TIMEOUT_SECS` | `5` | Số giây một request chờ lấy kết nối Postgres khi mọi kết nối đang bận; quá thì request nhận lỗi thay vì treo |
-| `LLM_PROVIDER` | `mock` | `mock` không gọi ra ngoài; `gemini` cần `GEMINI_API_KEY`; `ollama` cần máy chạy Ollama ở `OLLAMA_URL` |
-| `EVAL_GEMINI_API_KEY` | không đặt | Khóa Gemini riêng cho các lệnh đánh giá (`xdi-backend eval`, `eval-classify`), thường của một tài khoản Google khác, để chạy cả bộ câu không ăn vào hạn mức lượt gọi của `GEMINI_API_KEY`. Không đặt thì lệnh đánh giá dùng `GEMINI_API_KEY`; server không bao giờ đọc biến này |
-| `GEMINI_BACKUP_API_KEY` | trống | Khóa Gemini dự phòng: khóa chính hết hạn mức (lỗi 429) thì backend gọi lại bằng khóa này ngay trong lần gọi đó; lỗi khác không đổi khóa |
-| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini khi `LLM_PROVIDER=gemini` |
-| `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa một lần nạp file |
-| `DUCKDB_MEMORY_LIMIT_MB` | `1024` | Trần bộ nhớ (MiB) DuckDB dùng cho mỗi lần nạp file, lập hồ sơ cột hay chụp bảng; chạm trần thì DuckDB ghi phần dư ra thư mục tạm dưới `DATA_DIR/duckdb-spill/`, chậm hơn nhưng vẫn xong. Hai lần nạp chạy cùng lúc thì mỗi lần một trần. Câu hỏi có trần riêng 1 GB, không theo biến này. Số đo ở [PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn |
-| `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB; quá thì câu bị dừng, trừ phần DuckDB tính trước khi chạy ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |
-| `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; chạm trần thì giao diện ghi "ít nhất N dòng". Giao diện chỉ nhận 1000 dòng đầu |
+| `DB_ACQUIRE_TIMEOUT_SECS` | `5` | Số giây một request chờ kết nối Postgres khi mọi kết nối đang bận; quá thì request nhận lỗi |
+| `PUBLIC_URL` | trống | Địa chỉ công khai; bắt đầu bằng `https://` thì cookie đăng nhập có cờ `Secure` (mục 3) |
+| `MAX_UPLOAD_MB` | `200` | Tổng dung lượng tối đa của một lần nạp file |
+| `DUCKDB_MEMORY_LIMIT_MB` | `1024` | Trần bộ nhớ (MiB) của DuckDB mỗi lần nạp file, lập hồ sơ cột hay chụp bảng; chạm trần thì ghi phần dư ra `DATA_DIR/duckdb-spill/`, chậm hơn nhưng vẫn xong. Câu hỏi có trần riêng 1 GB ([PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn) |
+| `QUERY_TIMEOUT_SECS` | `30` | Thời gian tối đa một câu SQL của câu hỏi chạy trên DuckDB ([Guard SQL](GUARD.md), mục Hạn chế đã biết) |
+| `ASK_MAX_ROWS` | `100000` | Trần số dòng guard đặt cho SQL của câu hỏi; giao diện nhận 1000 dòng đầu |
 | `RUST_LOG` | `info` | Mức log |
-| `ANSWER_TEXT` | `true` | Đoạn trả lời ngắn của câu hỏi thường dùng lời mô hình viết cho phần giải thích, khi lời đó qua bước kiểm số; không gọi mô hình thêm lần nào, không gửi dòng kết quả nào ([PRIVACY.md](PRIVACY.md)); `false` để đoạn trả lời luôn là câu khuôn |
-| `INSIGHT_TEXT` | `true` | Phần giải thích của câu hỏi thường có lời do mô hình viết lại từ các câu backend đã tính (không gửi dòng kết quả nào, [PRIVACY.md](PRIVACY.md)); `false` để chỉ dùng câu do backend viết |
-| `SEMANTIC_JOBS` | `2` | Số lượt lập hồ sơ cột bằng mô hình chạy cùng lúc sau khi nạp hay chụp bảng; mỗi lượt gửi ba prompt song song. Gói miễn phí của Gemini giới hạn số request mỗi phút: đặt cao hơn thì dễ gặp lỗi 429 khi nạp nhiều bảng liền |
-| `SEED_SAMPLE` | `true` | Thiết lập lần đầu cho workspace đầu tiên dữ liệu mẫu (mục 7, bước 1): chụp database mẫu, hay nạp DataCo từ file khi không có database mẫu; `false` để workspace trống |
-| `SAMPLE_DATABASE_URL` | compose: `postgres://analyst:analyst@demo-db:5432/sales_demo,postgres://analyst:analyst@demo-db:5432/edu_demo`; `make dev`: hai database đó ở `127.0.0.1:DEMO_DB_PORT`; chạy binary trực tiếp: trống | Các database mẫu ([data/postgres-demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/README.md)), cách nhau bằng dấu phẩy, mà thiết lập lần đầu thêm làm nguồn (mỗi database một nguồn) và chụp mọi bảng tài khoản đó đọc được. Một chuỗi như bản cũ vẫn đọc được. Không database nào tới được (compose không bật `--profile demo`, chưa nạp dữ liệu) thì backend ghi cảnh báo và nạp `data/samples/dataco.csv`; đặt rỗng (`SAMPLE_DATABASE_URL=` trong `.env`) để không thử kết nối |
-| `DEMO_DB_PORT` | `5440` | Cổng của database mẫu trên `127.0.0.1` của máy host (`data/postgres-demo/docker-compose.yml`), cho `make dev` và `make eval`. Make không đọc `.env`: đổi cổng ở `.env` thì chạy kèm cùng giá trị, ví dụ `DEMO_DB_PORT=5441 make eval` |
-| `DEMO_DB_CONTAINER`, `DEMO_DB_VOLUME` | `xdi-demo-db`, `xdi-demo-db_demo-db-data` | Tên container và volume của database mẫu khi chạy bằng `--profile demo`; mặc định trùng cách chạy riêng ở `data/postgres-demo`, nên dữ liệu đã nạp dùng được ngay. Chỉ đổi khi cần một bản thứ hai tách biệt |
-| `SOURCE_SECRET_KEY` | trống (tự sinh) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (`openssl rand -base64 32`). Để trống thì lần đầu khởi động backend tự sinh một khóa ngẫu nhiên, ghi vào `DATA_DIR/source_secret.key` (quyền 0600; compose: volume `xdidata`) và các lần sau đọc lại file đó; log ghi một dòng khi sinh, không in khóa. Mất file đó (xóa volume, `docker compose down -v`) là mất mật khẩu của mọi nguồn đã lưu: phải thêm lại nguồn. `make backup` chép cả file này, nên ai có bản sao lưu là giải mã được thông tin kết nối. Bản chạy thật nên đặt biến này và giữ khóa ngoài máy chủ. Đổi khóa thì phải thêm lại các nguồn |
-| `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; máy ngoài danh sách bị từ chối, trừ đúng máy và cổng của `SAMPLE_DATABASE_URL` (chỉ cổng đó) luôn được phép. Nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần chụp: kết nối mặc định chụp mọi bảng tài khoản đó đọc được |
-| `SOURCE_TABLE_MAX_MB` | `2048` | Trần dung lượng của một bảng khi chụp (Postgres báo, `pg_table_size`, chưa nén), xét trước khi chép; bảng lớn hơn chỉ lưu metadata (cột, kiểu, khóa, mô tả). File chép ra của view (không có dung lượng trước) cũng theo trần này |
-| `SOURCE_SNAPSHOT_MAX_MB` | `4096` | Trần tổng dung lượng (như trên) của các bảng chép dữ liệu trong một lần chụp; mọi file tạm của lần chụp cùng nằm trên đĩa tới khi nạp xong. Bảng nhỏ được lấy trước, bảng không còn chỗ chỉ lưu metadata và chụp riêng được sau ([Dữ liệu](DATA.md), mục Chụp mọi bảng đọc được) |
-| `SOURCE_TIMEOUT_SECS` | `300` | Thời gian tối đa của bước chép một lần chụp (kết nối, đọc mọi bảng); quá thì bỏ cả lần chụp, không giữ gì ghi dở. Số đo để đặt ba trần này ở [PERFORMANCE.md](PERFORMANCE.md), mục Chụp bảng lớn |
-| `SOURCE_MAX_ROWS` | trống (không trần) | Trần số dòng của một bảng, chỉ khi đặt; bảng quá trần chỉ lưu metadata. File `.env` chép từ `.env.example` trước bản này có `SOURCE_MAX_ROWS=1000000`: xóa dòng đó để bỏ trần dòng |
-| `SOURCE_RESNAPSHOT_HOURS` | trống (tắt) | Chụp lại mọi nguồn database theo lịch, mỗi N giờ, trong backend; bảng không đổi không tạo phiên bản mới. Trống hay `0` là tắt, admin bấm chụp lại. Vòng đầu chạy sau N giờ kể từ lúc backend khởi động |
-| `SOURCE_SNAPSHOT_MODE` | `direct` | Cách chép bảng khi chụp: `direct` để DuckDB đọc thẳng Postgres bằng extension `postgres` và ghi Parquet một bước, `copy` để Postgres `COPY` ra file CSV tạm rồi DuckDB đổi sang Parquet. Cùng kiểu cột, cùng dữ liệu; số đo ở [PERFORMANCE.md](PERFORMANCE.md). `direct` mà extension không nạp được (thiếu file, lệch bản DuckDB) hay libpq của extension không kết nối được thì log ghi một cảnh báo và lần chụp dùng `copy` |
-| `SOURCE_POSTGRES_EXTENSION` | `/usr/local/lib/xdi/postgres_scanner.duckdb_extension` | File extension `postgres` của DuckDB cho `direct`. Image Docker có sẵn file ở đường dẫn này; backend chỉ nạp từ file, không bao giờ tải extension lúc chạy (mục 2) |
-| `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image; máy ít RAM thì đặt nhỏ hơn (mục 6) |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | Để dành cho đăng nhập bằng Google, backend hiện chưa đọc; để trống |
+| `LLM_PROVIDER` | `mock` | `mock` (không gọi ra ngoài), `gemini` hay `ollama` (bên dưới) |
+| `GEMINI_API_KEY` | trống | Khóa Gemini, tạo trong Google AI Studio |
+| `GEMINI_BACKUP_API_KEY` | trống | Khóa dự phòng: khóa chính hết hạn mức (lỗi 429) thì backend gọi lại bằng khóa này trong cùng lần gọi |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini |
+| `GEMINI_TIMEOUT_SECS` | `60` | Thời gian chờ tối đa một lần gọi Gemini |
+| `EVAL_GEMINI_API_KEY` | trống | Khóa Gemini cho các lệnh `xdi-backend eval*`; server không đọc biến này (bên dưới) |
+| `OLLAMA_URL` | compose: `http://host.docker.internal:11434` | Địa chỉ Ollama; chạy ngoài compose thì `http://localhost:11434` |
+| `OLLAMA_MODEL` | `qwen2.5-coder:7b` | Mô hình Ollama |
+| `OLLAMA_TIMEOUT_SECS` | `300` | Thời gian chờ tối đa một lần gọi Ollama |
+| `OLLAMA_NUM_CTX` | `12288` | Cửa sổ ngữ cảnh (token) gửi Ollama trong `options.num_ctx` |
+| `CLASSIFY_TIMEOUT_SECS` | `15` | Thời gian tối đa của bước phân loại câu hỏi; quá thì dùng luật từ khóa |
+| `SEMANTIC_JOBS` | `2` | Số lượt lập hồ sơ cột bằng mô hình chạy cùng lúc; mỗi lượt gửi ba prompt song song |
+| `ANSWER_TEXT` | `true` | Đoạn trả lời ngắn của câu hỏi số liệu dùng lời giải thích đã qua kiểm; `false` thì luôn là câu khuôn |
+| `INSIGHT_TEXT` | `true` | Mô hình viết lời giải thích cho câu hỏi số liệu; `false` thì chỉ có câu do code viết |
+| `SEED_SAMPLE` | `true` | Thiết lập lần đầu cho workspace đầu tiên dữ liệu mẫu; `false` để workspace trống |
+| `SAMPLE_DATABASE_URL` | compose: `sales_demo`, `edu_demo` của `demo-db` | Các database mẫu mà thiết lập lần đầu thêm làm dataset (bên dưới) |
+| `DEMO_DB_PORT` | `5440` | Cổng database mẫu trên `127.0.0.1` của máy host, cho `make dev` và `make eval` |
+| `DEMO_DB_CONTAINER`, `DEMO_DB_VOLUME` | `xdi-demo-db`, `xdi-demo-db_demo-db-data` | Tên container và volume của database mẫu khi chạy `--profile demo` |
+| `SOURCE_SECRET_KEY` | trống (tự sinh) | Khóa mã hóa thông tin kết nối của nguồn database, 32 byte base64 (bên dưới) |
+| `SOURCE_ALLOWED_HOSTS` | trống | Máy chủ database được phép thêm làm nguồn, cách nhau bằng dấu phẩy; trống thì không thêm được nguồn nào |
+| `SOURCE_TABLE_MAX_MB` | `2048` | Trần dung lượng một bảng khi chụp (theo `pg_table_size`, chưa nén); bảng lớn hơn chỉ lưu cấu trúc |
+| `SOURCE_SNAPSHOT_MAX_MB` | `4096` | Trần tổng dung lượng các bảng chép dữ liệu trong một lần chụp; bảng nhỏ lấy trước |
+| `SOURCE_TIMEOUT_SECS` | `300` | Thời gian tối đa của bước chép một lần chụp; quá thì bỏ cả lần chụp |
+| `SOURCE_MAX_ROWS` | trống (không trần) | Trần số dòng một bảng, chỉ khi đặt; bảng quá trần chỉ lưu cấu trúc |
+| `SOURCE_RESNAPSHOT_HOURS` | trống (tắt) | Chụp lại mọi nguồn database mỗi N giờ; `0` hay trống là tắt |
+| `SOURCE_SNAPSHOT_MODE` | `direct` | `direct`: DuckDB đọc thẳng Postgres bằng extension `postgres`; `copy`: Postgres `COPY` ra CSV tạm |
+| `SOURCE_POSTGRES_EXTENSION` | `/usr/local/lib/xdi/postgres_scanner.duckdb_extension` | File extension `postgres` của DuckDB cho `direct`; image Docker có sẵn |
+| `CARGO_BUILD_JOBS` | trống (mọi nhân) | Số tiến trình biên dịch khi build image (mục 6) |
+| `COMPOSE_PROJECT_NAME` | tên thư mục | Tên project compose, cũng là tiền tố của volume và image |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | Để dành cho đăng nhập bằng Google; backend chưa đọc |
 
-Mô hình ngôn ngữ:
+**Khóa nguồn database.** `SOURCE_SECRET_KEY` để trống thì lần đầu khởi động backend sinh một khóa ngẫu nhiên, ghi vào
+`DATA_DIR/source_secret.key` (quyền 0600; compose: volume `xdidata`) và các lần sau đọc lại; log ghi một dòng khi sinh,
+không in khóa. Mất file đó (ví dụ `docker compose down -v`) là mất mật khẩu của mọi nguồn đã lưu, phải thêm lại nguồn;
+đổi khóa cũng vậy. `make backup` chép cả file khóa, nên ai có bản sao lưu là giải mã được thông tin kết nối. Bản chạy
+thật nên đặt biến này (`openssl rand -base64 32`) và giữ khóa ngoài máy chủ.
 
-- `gemini`: khóa lấy ở Google AI Studio, đặt vào `GEMINI_API_KEY`. Thiếu khóa thì backend vẫn chạy, ghi cảnh báo vào
-  log lúc khởi động, và câu hỏi nhận lỗi nhắc đặt khóa. Khóa chỉ gửi tới Google trong header, không ghi vào log.
-  Mô hình mặc định là `gemini-3.5-flash-lite` vì hạn mức miễn phí theo ngày của bản lite cao hơn nhiều so với bản
-  flash; đổi mô hình bằng `GEMINI_MODEL`. Hạn mức hiện tại của từng mô hình xem trong Google AI Studio. Lỗi hay gặp
-  với Gemini (khóa bị từ chối, không có mô hình, quá tải, hết hạn mức) và cách xử lý ở mục 6.
-- `ollama`: cần Ollama đang chạy và mô hình đã tải (`ollama pull qwen2.5-coder:7b`, đổi mô hình bằng `OLLAMA_MODEL`).
-  Chạy compose mà để trống `OLLAMA_URL` thì backend gọi `http://host.docker.internal:11434`, tức Ollama trên máy host.
-  Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới được: chạy Ollama với
-  `OLLAMA_HOST=0.0.0.0`, và chặn cổng 11434 từ bên ngoài bằng tường lửa vì Ollama không có đăng nhập.
-- Cửa sổ ngữ cảnh của Ollama: `OLLAMA_NUM_CTX` (mặc định 12288 token), gửi trong `options.num_ctx` của mỗi request.
-  Không gửi thì Ollama dùng mặc định của nó (4096 token trên máy dưới 24 GiB VRAM, theo [tài liệu
-  Ollama](https://docs.ollama.com/context-length)) và lặng lẽ bỏ phần đầu của prompt dài hơn, tức phần luật. Đếm bằng
-  tokenizer của Qwen2.5-Coder trên DataCo: prompt SQL khoảng 3 050 token, prompt dài nhất backend gửi (trần 24 000 ký
-  tự) khoảng 7 180 token, prompt ở trần mà toàn danh sách giá trị khoảng 8 000 token. Prompt SQL nay có thêm mục luật
-  của guard (khoảng 3 000 ký tự), chưa đếm lại. 12288 đủ cho prompt đó cộng phần sửa SQL và câu trả lời. Từ #230 trần
-  24 000 ký tự chỉ còn để bỏ dần danh sách giá trị: mọi cột của mọi bảng câu hỏi đọc luôn có metadata, tới 60 000 ký tự
-  metadata trước khi rút gọn, nên với schema rất rộng (vài trăm cột có mô tả) prompt cỡ 85 000 ký tự, ước chừng 25 000
-  token (ước lượng theo tỷ lệ 3,3 ký tự một token ở trên, chưa đo). Khi đó đặt `OLLAMA_NUM_CTX=32768` (bộ nhớ K/V cỡ
-  1,8 GiB với `qwen2.5-coder:7b`, tính như dưới). Backend ghi cảnh báo `prompt is likely longer than OLLAMA_NUM_CTX` khi
-  một prompt ước lượng vượt giá trị đã đặt. Mỗi token cần
-  thêm bộ nhớ K/V: với `qwen2.5-coder:7b` và bộ đệm `f16` là 56 KiB, tức khoảng 672 MiB ở 12288 token (tính từ
-  `config.json` của mô hình, chưa đo; số thật xem bằng `ollama ps`). Đặt nhỏ hơn mặc định thì backend ghi cảnh báo lúc
-  khởi động.
-- Thời gian chờ tối đa mỗi lần gọi: `GEMINI_TIMEOUT_SECS` (mặc định 60 giây), `OLLAMA_TIMEOUT_SECS` (mặc định 300 giây,
-  vì mô hình chạy bằng CPU chậm hơn nhiều).
-- Bước phân loại câu hỏi (câu thường hay câu hỏi tìm nguyên nhân) có trần riêng `CLASSIFY_TIMEOUT_SECS` (mặc định 15
-  giây, không dài hơn hai mức trên), vì nó chạy trước bước viết SQL. Quá trần thì backend dùng luật từ khóa, câu hỏi
-  chạy tiếp, bước `classify` ghi là mô hình không trả lời kịp. Với Ollama, lần gọi đầu còn nạp mô hình vào RAM nên có
-  thể quá trần; máy chậm thì tăng giá trị này.
+**Máy chủ được phép và quyền đọc.** Máy ngoài `SOURCE_ALLOWED_HOSTS` bị từ chối, để backend không bị dùng dò máy trong
+mạng nội bộ; riêng máy và cổng của `SAMPLE_DATABASE_URL` luôn được phép. Kết nối mặc định chụp mọi bảng tài khoản đọc
+được, nên cấp cho xdi một tài khoản Postgres chỉ có quyền `SELECT` trên các bảng cần hỏi.
 
-Dữ liệu nằm trong hai volume Docker: `xdi-platform_pgdata` (Postgres) và `xdi-platform_xdidata` (file Parquet). Tiền
-tố là tên project của compose: mặc định là tên thư mục chứa `docker-compose.yml`, đổi được bằng `COMPOSE_PROJECT_NAME`
-trong `.env`. Image backend cũng mang tên đó, ví dụ `xdi-platform-backend`.
+**Trần khi chụp.** Ba trần dung lượng và thời gian được xét trước khi chép, nên bảng quá trần không để lại file nào; bảng
+đó chỉ lưu cấu trúc và chụp riêng được sau khi tăng trần. Số đo dùng để đặt các trần ở [PERFORMANCE.md](PERFORMANCE.md),
+cơ chế ở [Dữ liệu](DATA.md#chụp-mọi-bảng-đọc-được). `.env` chép từ `.env.example` bản cũ có dòng `SOURCE_MAX_ROWS=1000000`:
+xóa dòng đó để bỏ trần dòng. `direct` mà extension không nạp được (thiếu file, lệch bản DuckDB) hay không kết nối được
+thì log ghi cảnh báo và lần chụp dùng `copy`.
 
-### Dừng, cập nhật, gỡ
+**Database mẫu.** `SAMPLE_DATABASE_URL` là các chuỗi kết nối cách nhau bằng dấu phẩy (dấu phẩy trong mật khẩu viết
+`%2C`). Compose mặc định trỏ vào `postgres://analyst:analyst@demo-db:5432/sales_demo` và `.../edu_demo`; `make dev` trỏ
+vào hai database đó ở `127.0.0.1:DEMO_DB_PORT`; chạy binary trực tiếp thì mặc định trống. Không database nào tới được
+(không bật `--profile demo`, chưa nạp dữ liệu) thì backend ghi cảnh báo và nạp `data/samples/dataco.csv`. Đặt
+`SAMPLE_DATABASE_URL=` (rỗng) trong `.env` để không thử kết nối. Make không đọc `.env`: đổi `DEMO_DB_PORT` thì chạy kèm
+cùng giá trị, ví dụ `DEMO_DB_PORT=5441 make eval`. Chi tiết: [data/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/data/README.md).
+
+### Mô hình ngôn ngữ
+
+Chọn trước khi nạp dữ liệu: sau mỗi lần nạp hay chụp, backend gọi mô hình đang cấu hình để lập hồ sơ (mô tả cột, bí
+danh, câu gợi ý). Đổi mô hình rồi khởi động lại thì backend lập lại hồ sơ còn thiếu.
+
+- `mock`: không cần gì, chỉ trả lời các câu mẫu viết sẵn cho DataCo và các bảng của database mẫu
+  ([Dùng lần đầu](USAGE.md#1-chọn-mô-hình-và-dữ-liệu-mẫu)).
+- `gemini`: đặt `GEMINI_API_KEY`. Thiếu khóa thì backend vẫn chạy, ghi cảnh báo lúc khởi động, câu hỏi nhận lỗi nhắc đặt
+  khóa. Khóa chỉ gửi tới Google trong header, không ghi vào log. Mặc định là bản lite vì hạn mức miễn phí theo ngày cao
+  hơn bản flash; hạn mức hiện tại xem trong Google AI Studio. `GEMINI_BACKUP_API_KEY` (thường của một tài khoản Google
+  khác) chỉ được dùng khi khóa chính trả 429; lỗi khác không đổi khóa.
+- `ollama`: cần Ollama đang chạy và mô hình đã tải (`ollama pull qwen2.5-coder:7b`). Chạy compose thì backend gọi Ollama
+  trên máy host qua `host.docker.internal`. Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới
+  được: chạy Ollama với `OLLAMA_HOST=0.0.0.0` và chặn cổng 11434 từ bên ngoài, vì Ollama không có đăng nhập.
+- `OLLAMA_NUM_CTX`: không gửi thì Ollama dùng mặc định của nó ([tài liệu Ollama](https://docs.ollama.com/context-length))
+  và lặng lẽ bỏ phần đầu của prompt dài hơn, tức phần luật. Backend ghi cảnh báo `prompt is likely longer than
+  OLLAMA_NUM_CTX` khi một prompt ước lượng vượt giá trị đã đặt; gặp cảnh báo đó (schema rộng, nhiều cột có mô tả) thì
+  tăng, ví dụ `32768`. Ngữ cảnh lớn hơn cần thêm bộ nhớ K/V, xem bằng `ollama ps`.
+- Bước phân loại câu hỏi chạy trước bước viết SQL nên có trần riêng `CLASSIFY_TIMEOUT_SECS`, không dài hơn trần của nhà
+  cung cấp. Quá trần thì backend dùng luật từ khóa và câu hỏi chạy tiếp. Với Ollama, lần gọi đầu còn nạp mô hình vào
+  RAM nên có thể quá trần; máy chậm thì tăng giá trị này.
+
+`EVAL_GEMINI_API_KEY` dùng cho mọi lệnh bắt đầu bằng `eval` (`eval`, `eval-classify`, `eval-judge`, `eval-lessons`), để
+chạy bộ đánh giá không ăn vào hạn mức của `GEMINI_API_KEY`. Không đặt thì các lệnh đó dùng `GEMINI_API_KEY`. Cách chạy
+bộ đánh giá: [eval/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/eval/README.md).
+
+### Dữ liệu, dừng, cập nhật, gỡ
+
+Dữ liệu nằm trong hai volume Docker: `xdi-platform_pgdata` (Postgres) và `xdi-platform_xdidata` (file Parquet, khóa
+nguồn). Tiền tố là tên project compose, mặc định là tên thư mục chứa `docker-compose.yml`; image backend cũng mang tên
+đó, ví dụ `xdi-platform-backend`.
 
 ```bash
 docker compose down                       # dừng, giữ dữ liệu
-git pull && docker compose up -d --build  # cập nhật; backend tự áp migration database khi khởi động
+git pull && docker compose up -d --build  # cập nhật; backend tự áp migration khi khởi động
 docker compose down -v                    # gỡ hẳn, XÓA cả hai volume dữ liệu
+docker compose down -v --rmi local        # gỡ hẳn và xóa image backend
 ```
 
-Cẩn thận với `docker compose --profile demo down -v`: có `--profile demo` thì volume của database mẫu
-(`xdi-demo-db_demo-db-data`) cũng thuộc project này và bị xóa theo, phải tải và nạp lại bằng `load.sh`. Chỉ gỡ ứng dụng
-thì chạy `docker compose down -v` không kèm profile, hoặc `docker compose --profile demo down` (không `-v`).
-
-Gỡ hẳn và xóa luôn image backend: `docker compose down -v --rmi local`. `docker builder prune` xóa cache build (của
-mọi project trên máy, không riêng project này).
+`docker compose --profile demo down -v` xóa cả volume của database mẫu (`xdi-demo-db_demo-db-data`), phải tải và nạp lại
+bằng `load.sh`. Chỉ gỡ ứng dụng thì chạy `down -v` không kèm profile. `docker builder prune` xóa cache build của mọi
+project trên máy.
 
 ## 2. Build từ mã nguồn
 
-Cần:
-
-- Rust stable từ 1.89 trở lên (`rustup`), kèm trình biên dịch C++ (`g++` hoặc `clang`) để biên dịch DuckDB.
-- Node.js 24 (hoặc 22.22 trở lên) để build giao diện.
-- GNU Make, Docker (chỉ để chạy Postgres).
+Cần Rust stable (`rustup`; CI dùng bản stable mới nhất, image Docker dùng 1.96) kèm trình biên dịch C++ (`g++` hoặc
+`clang`) để biên dịch DuckDB, Node.js 24 (CI dùng bản này), GNU Make và Docker (chỉ để chạy Postgres).
 
 ```bash
 git clone https://github.com/pgiahuy/xdi-platform.git
 cd xdi-platform
 cp .env.example .env
-make hooks          # một lần: hook pre-push chạy kiểm tra trước khi push (dành cho người đóng góp)
-make dev            # Postgres trong Docker, backend chạy bằng cargo run ở cổng 8000; dùng database mẫu ở
-                    # 127.0.0.1:5440 nếu nó đang chạy (data/postgres-demo), không thì nạp dataco.csv
+make hooks          # một lần: hook pre-push chạy kiểm tra trước khi push (cho người đóng góp)
+make dev            # Postgres trong Docker, backend bằng cargo run ở cổng 8000
+make dev-frontend   # terminal khác: giao diện ở http://localhost:5173, gọi /api sang cổng 8000
 ```
 
-Giao diện, ở terminal khác:
-
-```bash
-make dev-frontend   # http://localhost:5173, gọi /api sang backend ở cổng 8000
-```
-
-Hoặc build giao diện một lần rồi để backend phục vụ, giống bản chạy thật:
+`make dev` dùng database mẫu ở `127.0.0.1:5440` nếu nó đang chạy ([data/postgres-demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/README.md)),
+không thì nạp `dataco.csv`. Muốn backend phục vụ giao diện như bản chạy thật:
 
 ```bash
 cd frontend && npm ci && npm run build && cd ..
 STATIC_DIR=$PWD/frontend/dist make dev   # mở http://localhost:8000
 ```
 
-Backend chạy bằng `make dev` không đọc `.env` (chỉ bước bật Postgres bằng `docker compose` đọc); biến cần đổi thì đặt
-trên dòng lệnh. Ví dụ đã đổi `POSTGRES_PORT=5434` trong `.env` và muốn backend ở cổng 8001:
+Backend chạy bằng `make dev` không đọc `.env` (chỉ bước bật Postgres đọc); biến cần đổi thì đặt trên dòng lệnh, ví dụ
+khi đã đổi `POSTGRES_PORT=5434` và muốn backend ở cổng 8001, hay khi dùng Gemini:
 
 ```bash
 DATABASE_URL=postgres://xdi:xdi@localhost:5434/xdi BACKEND_PORT=8001 make dev
-BACKEND_URL=http://localhost:8001 make dev-frontend   # giao diện dev gọi /api sang đúng cổng đó
+BACKEND_URL=http://localhost:8001 make dev-frontend
+LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> make dev
 ```
 
-Mô hình ngôn ngữ cũng đặt trên dòng lệnh như vậy, ví dụ `LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> make dev`.
+Mã thiết lập in ra terminal. File dữ liệu nằm ở `backend/data` (`DATA_DIR` mặc định `./data`, tính từ `backend/`), git
+bỏ qua thư mục này. Đã chạy bản Docker trong cùng thư mục thì `make dev` dùng lại Postgres của bản đó (tài khoản đã có,
+không in mã thiết lập), còn file dữ liệu thì không chung. Backend Docker đang giữ cổng 8000 thì dừng nó
+(`docker compose stop backend`) hoặc đặt `BACKEND_PORT` khác.
 
-Lần chạy đầu mã thiết lập in ra terminal, tạo tài khoản như mục 1. File dữ liệu nằm ở `backend/data` (`DATA_DIR`
-mặc định `./data`, tính từ thư mục `backend`); git bỏ qua thư mục này nên dữ liệu nạp thử không lẫn vào commit.
+`backend/target` lớn dần qua mỗi lần build, có thể lên hàng chục GB (`cargo clean` để xóa). Máy ít RAM thì giới hạn số
+tiến trình biên dịch, ví dụ `CARGO_BUILD_JOBS=4 make dev`. `make help` liệt kê mọi lệnh.
 
-Đã chạy bản Docker ở mục 1 trong cùng thư mục thì `make dev` dùng lại Postgres của bản đó: tài khoản đã có nên không
-in mã thiết lập, còn file dữ liệu thì không chung (bản Docker giữ trong volume, bản dev ở `backend/data`). Backend
-Docker đang giữ cổng 8000 thì dừng nó trước bằng `docker compose stop backend`, hoặc đặt `BACKEND_PORT` khác.
-
-Lần build đầu biên dịch DuckDB từ mã nguồn C++, mất vài phút; thư mục `backend/target` lớn dần qua mỗi lần build, có
-thể lên hàng chục GB (`cargo clean` để xóa). Như build Docker, cargo biên dịch song song trên mọi nhân CPU; máy ít RAM
-thì giới hạn số tiến trình, ví dụ `CARGO_BUILD_JOBS=4 make dev`. `make help`
-liệt kê mọi lệnh, `make check` chạy toàn bộ kiểm tra.
-
-Cài binary vào hệ thống (mặc định `/usr/local/bin`, đổi bằng `PREFIX`):
+Cài binary vào hệ thống (mặc định `/usr/local/bin`, đổi bằng `PREFIX`; binary lấy từ `backend/target` hay
+`CARGO_TARGET_DIR`):
 
 ```bash
 make install PREFIX=$HOME/.local
 make uninstall PREFIX=$HOME/.local
 ```
 
-`make install` build bản release rồi chép binary từ `backend/target`, hoặc từ `CARGO_TARGET_DIR` nếu biến này được đặt.
+Binary cần một Postgres (`DATABASE_URL`), thư mục dữ liệu ghi được (`DATA_DIR`), thư mục giao diện đã build nếu muốn có
+giao diện (`STATIC_DIR`), và `SAMPLES_DIR` trỏ tới `data/samples` nếu muốn có dataset mẫu lúc thiết lập lần đầu (không
+thấy file mẫu thì backend bỏ qua bước này).
 
-Binary cần một Postgres (`DATABASE_URL`), thư mục dữ liệu ghi được (`DATA_DIR`) và, nếu muốn có giao diện, thư mục
-giao diện đã build (`STATIC_DIR`). Gói binary trong mỗi bản phát hành trên GitHub chỉ có backend, kèm file extension
-`postgres_scanner.duckdb_extension`: chép file đó vào `/usr/local/lib/xdi/` hoặc đặt `SOURCE_POSTGRES_EXTENSION` trỏ tới
-nó.
-
-**Extension `postgres` của DuckDB** (#246). Chụp bảng với `SOURCE_SNAPSHOT_MODE=direct` cần file extension đúng bản
-DuckDB mà crate `duckdb` biên dịch kèm (hiện `v1.5.6`). Backend nạp file bằng đường dẫn, tắt tự cài và tự nạp extension,
-nên máy chạy không cần ra Internet. File được tải lúc build, từ `extensions.duckdb.org`, bằng
-`scripts/fetch-duckdb-extension.sh`; script ghi phiên bản và SHA-256 của file cho `linux_amd64` và `linux_arm64`, sai
-checksum thì dừng. Ba chỗ gọi script: stage `duckdb-extension` của `backend/Dockerfile`, `make release-artifacts`, và
-`make duckdb-extension` (`make dev` gọi sẵn; tải một lần vào `duckdb-extensions/` của repo, git bỏ qua thư mục này).
-File khoảng 14 MB khi tải (gzip), 40 MB sau khi giải nén. Nâng crate `duckdb` thì sửa phiên bản và checksum trong
-script; test `duckdb_version_matches_the_extension_pin` báo lỗi khi hai bên lệch nhau. Giấy phép: MIT (duckdb-postgres),
-kèm libpq (PostgreSQL License) và OpenSSL 3 (Apache-2.0) liên kết tĩnh, văn bản ở
-`backend/third-party/duckdb-postgres-extension-licenses.txt`. Muốn có dataset mẫu
-lúc thiết lập lần đầu thì đặt `SAMPLES_DIR` trỏ tới thư mục `data/samples` của repo; không thấy file mẫu thì backend bỏ
-qua bước này.
+Extension `postgres` của DuckDB cho `SOURCE_SNAPSHOT_MODE=direct` là một file nạp bằng đường dẫn; backend không tải
+extension lúc chạy. `make dev` tự tải vào `duckdb-extensions/` (`make duckdb-extension`, kiểm SHA-256) và trỏ tới đó;
+image Docker có sẵn file; gói binary của mỗi bản phát hành kèm `postgres_scanner.duckdb_extension`, chép vào
+`/usr/local/lib/xdi/` hoặc đặt `SOURCE_POSTGRES_EXTENSION`. Cách nâng phiên bản: chú thích đầu
+`scripts/fetch-duckdb-extension.sh`. Giấy phép của extension: [LICENSES.md](LICENSES.md).
 
 ## 3. Đưa lên Internet
 
 Cần:
 
-- Một máy chủ Linux có Docker như mục 1.
-- Một tên miền hoặc subdomain riêng (ví dụ `du-lieu.example.com`) đã trỏ về địa chỉ IP của máy chủ (bản ghi A hoặc
-  AAAA). Chạy dưới đường dẫn con của một trang khác (`example.com/xdi/`) chưa hỗ trợ: giao diện và API dùng đường dẫn
-  tính từ gốc tên miền (`/api`, `/assets`).
-- Cổng 80 và 443 mở ra Internet, cho reverse proxy (Caddy hoặc nginx, bên dưới) nhận HTTPS.
+- Một máy chủ Linux có Docker như mục 1, Docker Compose 2.24.4 trở lên (bản đầu có thẻ `!override` mà
+  `docker-compose.prod.yml` dùng, theo https://docs.docker.com/reference/compose-file/merge/).
+- Một tên miền hoặc subdomain riêng (ví dụ `du-lieu.example.com`) trỏ về IP của máy chủ. Chạy dưới đường dẫn con
+  (`example.com/xdi/`) chưa hỗ trợ: giao diện và API dùng đường dẫn tính từ gốc tên miền.
+- Cổng 80 và 443 mở ra Internet cho reverse proxy.
 
 ### Cấu hình bản chạy thật
 
-1. Clone và tạo `.env` như mục 1, nhưng **trước khi chạy lần đầu**, thêm ba dòng vào `.env` (thay tên miền; mật khẩu
-   Postgres sinh ngẫu nhiên):
+1. Clone và tạo `.env` như mục 1, rồi **trước khi chạy lần đầu** thêm ba dòng (thay tên miền):
 
    ```bash
    cat >> .env <<EOF
@@ -314,31 +291,22 @@ Cần:
    ```
 
    Dòng `COMPOSE_FILE` làm mọi lệnh `docker compose` (và `make backup`, `make restore`) dùng thêm
-   `docker-compose.prod.yml`. File đó chỉ ghi phần khác với bản chạy trên máy:
+   `docker-compose.prod.yml`, file chỉ ghi phần khác với bản chạy trên máy:
 
-   - Postgres không mở cổng ra máy host, chỉ backend nối tới được. Docker tự mở cổng của container qua iptables, tường
-     lửa như ufw không chặn được, nên cách chắc chắn là không mở.
+   - Postgres không mở cổng ra máy host. Docker tự mở cổng của container qua iptables, tường lửa như ufw không chặn
+     được, nên cách chắc chắn là không mở.
    - Backend chỉ nghe trên `127.0.0.1:8000`; reverse proxy trên cùng máy nhận HTTPS rồi chuyển vào.
-   - Thiếu `POSTGRES_PASSWORD` hoặc `PUBLIC_URL` thì `docker compose` dừng và báo thiếu biến nào, không chạy với mật
-     khẩu mẫu.
-   - `PUBLIC_URL` bắt đầu bằng `https://` thì cookie đăng nhập có cờ `Secure`: trình duyệt không gửi nó qua HTTP thường.
+   - Thiếu `POSTGRES_PASSWORD` hoặc `PUBLIC_URL` thì `docker compose` dừng và báo thiếu biến nào.
+   - `PUBLIC_URL` bắt đầu bằng `https://` thì cookie đăng nhập có cờ `Secure`.
    - Hai container tự chạy lại khi máy chủ khởi động lại.
-   - Không chạy database mẫu (`demo-db` trong profile `demo`): thiết lập lần đầu nạp `data/samples/dataco.csv`. Kết nối database của tổ chức
-     cần `SOURCE_ALLOWED_HOSTS` trong `.env`, và nên đặt `SOURCE_SECRET_KEY` (`openssl rand -base64 32`) thay vì để
-     backend tự sinh khóa trong volume dữ liệu (Cấu hình, mục 1). Muốn thử database mẫu trên máy chủ thì chạy thêm
+   - `SAMPLE_DATABASE_URL` rỗng: thiết lập lần đầu nạp `dataco.csv`. Muốn thử database mẫu trên máy chủ thì chạy thêm
      `--profile demo` và đặt `SAMPLE_DATABASE_URL` trước lần thiết lập đầu.
 
-   Chọn cách đè thêm một file thay vì một file compose đầy đủ thứ hai, vì người cài chỉ thêm một dòng vào `.env` mà
-   không phải nhớ `-f` ở mỗi lệnh, và hai file không lệch nhau khi file gốc đổi. Cần Docker Compose 2.24.4 trở lên
-   (`docker compose version`), bản đầu tiên có thẻ `!override` mà file này dùng (theo
-   https://docs.docker.com/reference/compose-file/merge/).
+   Kết nối database của tổ chức cần `SOURCE_ALLOWED_HOSTS`, và nên đặt `SOURCE_SECRET_KEY` (mục 1, Cấu hình). Tự đặt
+   mật khẩu Postgres thì chỉ dùng chữ và số: mật khẩu nằm trong chuỗi kết nối, ký tự như `@`, `:`, `/` làm hỏng chuỗi.
 
-   Tự đặt mật khẩu thì chỉ dùng chữ và số (lệnh `openssl` trên cho ra đúng như vậy): mật khẩu nằm trong chuỗi kết nối
-   của backend, ký tự như `@`, `:`, `/` làm hỏng chuỗi đó.
-
-2. Chạy và tạo tài khoản quản trị như mục 1 (lệnh `curl` gọi `http://localhost:8000` vẫn chạy trên máy chủ).
-
-   Kiểm Postgres không mở cổng ra máy host, nhất là khi không chắc phiên bản Compose:
+2. Chạy và tạo tài khoản quản trị như mục 1 (`curl http://localhost:8000` vẫn chạy trên máy chủ). Kiểm Postgres không
+   mở cổng ra máy host:
 
    ```bash
    docker compose ps                         # cột PORTS của postgres chỉ có 5432/tcp, không có 0.0.0.0:...->5432
@@ -350,19 +318,19 @@ Cần:
 3. Cài một reverse proxy theo một trong hai mẫu dưới.
 
 **Đã chạy bằng mật khẩu mẫu rồi mới chuyển sang cấu hình này.** `POSTGRES_PASSWORD` chỉ có tác dụng khi Postgres tạo
-volume lần đầu, nên phải đổi mật khẩu trong database trước, khi chưa sửa `.env`:
+volume lần đầu, nên đổi mật khẩu trong database trước, khi chưa sửa `.env`:
 
 ```bash
 docker compose exec postgres psql -U xdi -d xdi -c "ALTER USER xdi PASSWORD 'mat-khau-moi'"
 ```
 
 Rồi thêm ba dòng trên vào `.env` (cùng mật khẩu đó) và chạy `docker compose up -d`. Backend còn dùng mật khẩu mẫu thì
-mỗi lần khởi động in cảnh báo `DATABASE_URL uses the sample Postgres password` ra log.
+mỗi lần khởi động in cảnh báo `DATABASE_URL uses the sample Postgres password`.
 
 ### Caddy
 
 Caddy tự xin và gia hạn chứng chỉ HTTPS, không giới hạn dung lượng file gửi lên hay thời gian chờ backend. Cài theo
-https://caddyserver.com/docs/install, rồi thay nội dung `/etc/caddy/Caddyfile` (gói cài sẵn đã tạo file này) bằng:
+https://caddyserver.com/docs/install, rồi thay nội dung `/etc/caddy/Caddyfile` bằng:
 
 ```
 du-lieu.example.com {
@@ -371,13 +339,12 @@ du-lieu.example.com {
 }
 ```
 
-Rồi `sudo systemctl reload caddy`. Mở https://du-lieu.example.com.
+Rồi `sudo systemctl reload caddy` và mở https://du-lieu.example.com.
 
 ### nginx
 
-Máy chủ đã có nginx thì dùng nó thay Caddy. Chứng chỉ lấy bằng certbot (https://certbot.eff.org), mẫu dưới giả sử
-certbot đã ghi chứng chỉ vào `/etc/letsencrypt/live/du-lieu.example.com/`. Ghi vào
-`/etc/nginx/conf.d/xdi.conf`, thay tên miền:
+Máy chủ đã có nginx thì dùng nó thay Caddy. Chứng chỉ lấy bằng certbot (https://certbot.eff.org); mẫu dưới giả sử
+certbot đã ghi chứng chỉ vào `/etc/letsencrypt/live/du-lieu.example.com/`. Ghi vào `/etc/nginx/conf.d/xdi.conf`:
 
 ```nginx
 server {
@@ -388,13 +355,13 @@ server {
 
     # MAX_UPLOAD_MB cộng 1 (mặc định 200 + 1). Mặc định nginx chỉ nhận 1m, file lớn hơn bị trả 413.
     client_max_body_size 201m;
-    # Backend chỉ trả lời khi đã đọc và chuyển xong file. Một file Excel được đọc tới 360 giây và mỗi lúc chỉ đọc
-    # một file, file thứ hai phải chờ file trước. Mặc định nginx chờ 60 giây rồi trả 504.
+    # Backend chỉ trả lời khi đã đọc xong file. Một file Excel được đọc tới 360 giây và mỗi lúc chỉ đọc một file,
+    # file thứ hai phải chờ file trước. Mặc định nginx chờ 60 giây rồi trả 504.
     proxy_read_timeout 900s;
     # Chuyển file sang backend ngay khi nhận, không ghi tạm ra đĩa của nginx trước.
     proxy_request_buffering off;
 
-    # HSTS: proxy gửi, vì chỉ proxy biết chắc trình duyệt đang vào bằng HTTPS. Backend tự gửi các header bảo mật khác.
+    # HSTS do proxy gửi, vì chỉ proxy biết chắc trình duyệt đang vào bằng HTTPS.
     add_header Strict-Transport-Security "max-age=31536000" always;
 
     location / {
@@ -412,86 +379,71 @@ server {
 }
 ```
 
-Rồi `sudo nginx -t && sudo systemctl reload nginx`. Đổi `MAX_UPLOAD_MB` trong `.env` thì đổi `client_max_body_size`
-theo.
+Rồi `sudo nginx -t && sudo systemctl reload nginx`. Đổi `MAX_UPLOAD_MB` thì đổi `client_max_body_size` theo.
 
 ### Header bảo mật
 
 Backend tự gửi `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` và
-`Referrer-Policy: same-origin` cho cả giao diện và API, chạy qua proxy nào cũng vậy. `Strict-Transport-Security`
-(HSTS) để proxy gửi như hai mẫu trên. HSTS làm trình duyệt chỉ vào tên miền này bằng HTTPS trong một năm: chỉ bật khi
-tên miền đó sẽ luôn có HTTPS.
+`Referrer-Policy: same-origin` cho cả giao diện và API. `Strict-Transport-Security` (HSTS) để proxy gửi như hai mẫu
+trên; HSTS làm trình duyệt chỉ vào tên miền này bằng HTTPS trong một năm, nên chỉ bật khi tên miền sẽ luôn có HTTPS.
 
 ## 4. Sao lưu và khôi phục
 
-Bản sao lưu gồm hai phần: database (`db.dump`) và thư mục file Parquet (`data.tgz`). Chạy trong thư mục chứa
-`docker-compose.yml`:
+Bản sao lưu gồm database (`db.dump`) và thư mục dữ liệu (`data.tgz`: file Parquet, file khóa nguồn). Chạy trong thư mục
+chứa `docker-compose.yml`:
 
 ```bash
 make backup                                     # ghi vào ~/xdi-backups/<ngày-giờ>/
 make backup BACKUP_DIR=/mnt/backup/xdi          # chỗ khác
 ```
 
-Bản sao lưu có dữ liệu và chuỗi băm mật khẩu: lệnh tạo thư mục chỉ chủ sở hữu đọc được, mặc định nằm ngoài thư mục
-repo. Chép nó sang một máy hoặc ổ đĩa khác, vì hỏng máy chủ thì mất cả bản sao lưu nằm trên đó.
+Bản sao lưu có dữ liệu và chuỗi băm mật khẩu: thư mục chỉ chủ sở hữu đọc được, mặc định nằm ngoài thư mục repo. Chép
+nó sang một máy hoặc ổ đĩa khác.
 
-Sao lưu chạy được khi backend vẫn chạy, nhưng database và file được chụp ở hai thời điểm liền nhau. Ai đó nạp file, xóa
-dataset hay xóa workspace đúng lúc đó thì hai phần có thể không khớp, ví dụ database còn một workspace mà file của nó đã
-bị xóa. Nên sao lưu lúc ít người dùng; cần chắc chắn thì dừng backend trong lúc sao lưu:
+Sao lưu chạy được khi backend đang chạy, nhưng database và file được chụp ở hai thời điểm liền nhau: ai đó nạp hay xóa
+dữ liệu đúng lúc đó thì hai phần có thể không khớp. Cần chắc chắn thì dừng backend trong lúc sao lưu:
 
 ```bash
 docker compose stop backend && make backup && docker compose up -d
 ```
 
-Khôi phục, trên bản cài đang chạy hoặc một bản cài mới (đã clone và tạo `.env` như mục 1 hoặc mục 3, chưa cần chạy):
+Khôi phục, trên bản cài đang chạy hoặc một bản cài mới (đã clone và tạo `.env` như mục 1 hoặc mục 3):
 
 ```bash
 make restore FROM=~/xdi-backups/20261022-101500
 ```
 
-Lệnh này **thay toàn bộ** dữ liệu hiện có bằng bản sao lưu. Trước hết nó đọc hết `db.dump` và `data.tgz`; file nào
-thiếu, hỏng hay bị cắt cụt (chép dở, ổ đầy) thì dừng và báo, chưa dừng hay xóa gì. Hai file đọc được thì nó dừng
-backend, xóa và tạo lại database từ `db.dump`, xóa và giải nén lại thư mục dữ liệu từ `data.tgz`, rồi chạy lại cả hệ
-thống. Tài khoản, mật khẩu đăng nhập, workspace và dataset trở về như lúc sao lưu; mật khẩu Postgres thì giữ của bản cài
-hiện tại.
+Lệnh này **thay toàn bộ** dữ liệu hiện có. Trước hết nó đọc hết `db.dump` và `data.tgz`; file nào thiếu, hỏng hay bị
+cắt cụt thì dừng và báo, chưa xóa gì. Đọc được thì nó dừng backend, tạo lại database từ `db.dump`, giải nén lại thư mục
+dữ liệu, rồi chạy lại. Tài khoản, workspace và dataset trở về như lúc sao lưu; mật khẩu Postgres giữ của bản cài hiện
+tại.
 
-Khôi phục vào bản cài cùng phiên bản với lúc sao lưu, hoặc mới hơn. Bản cài mới hơn thì backend tự áp thêm các migration
-còn thiếu khi khởi động. Bản cài cũ hơn thì backend không khởi động được, vì database có migration mà code cũ không
-biết: cập nhật bản cài (`git pull`) trước khi khôi phục.
-
-Không dùng Makefile thì chạy tay đúng các lệnh trong target `backup` và `restore` của `Makefile`.
+Khôi phục vào bản cài cùng phiên bản hoặc mới hơn (backend tự áp migration còn thiếu). Bản cài cũ hơn thì backend không
+khởi động được vì database có migration mà code cũ không biết: `git pull` trước khi khôi phục. Không dùng Makefile thì
+chạy tay đúng các lệnh trong target `backup` và `restore`.
 
 ## 5. Quản trị
 
-Quên mật khẩu quản trị, không còn ai đăng nhập được: chạy trên máy chủ, lệnh in một mật khẩu tạm và đăng xuất mọi phiên
-của tài khoản đó. Đăng nhập bằng mật khẩu tạm rồi đổi ở **Tài khoản và mật khẩu** (menu
-tài khoản: tên người dùng ở chân thanh bên, hoặc góc phải thanh trên khi màn hẹp).
+Quên mật khẩu quản trị: chạy trên máy chủ, lệnh in một mật khẩu tạm và đăng xuất mọi phiên của tài khoản đó. Đăng nhập
+bằng mật khẩu tạm rồi đổi ở **Tài khoản và mật khẩu** (menu tài khoản ở chân thanh bên).
 
 ```bash
 docker compose exec backend xdi-backend reset-password --email ban@example.com
 docker compose exec backend xdi-backend list-admins   # các quản trị hệ thống: email, tên, trạng thái
 ```
 
-Build từ mã nguồn (mục 2) thì chạy cùng lệnh với cùng `DATABASE_URL` mà backend dùng, ví dụ
-`cd backend && cargo run -- list-admins`, hoặc `xdi-backend list-admins` nếu đã `make install`.
+Build từ mã nguồn thì chạy cùng lệnh với cùng `DATABASE_URL`, ví dụ `cd backend && cargo run -- list-admins`, hoặc
+`xdi-backend list-admins` nếu đã `make install`. Tạo tài khoản và thêm thành viên trên giao diện:
+[Dùng lần đầu](USAGE.md#9-mời-thành-viên).
 
 ## 6. Lỗi hay gặp
 
-**Build Docker làm máy đứng, chậm hẳn, hoặc tiến trình biên dịch bị dừng vì hết RAM.** Mặc định cargo biên dịch song
-song trên mọi nhân CPU, mỗi tiến trình cần khoảng 1 GiB RAM khi biên dịch DuckDB. Đặt số tiến trình bằng khoảng số
-GiB RAM còn trống (`free -g`, cột `available`) vào dòng `CARGO_BUILD_JOBS=` của `.env`, ví dụ `CARGO_BUILD_JOBS=4`
-(`.env` chép từ bản cũ của `.env.example` chưa có dòng này thì thêm vào), rồi build như thường:
+**Build Docker làm máy đứng hoặc tiến trình biên dịch bị dừng vì hết RAM.** Đặt số tiến trình bằng khoảng số GiB RAM
+còn trống (`free -g`, cột `available`) vào `.env`, ví dụ `CARGO_BUILD_JOBS=4`, rồi `docker compose up -d --build`. Biến
+này giới hạn cả phần C++ của DuckDB; giữ dòng đó thì các lần cập nhật sau cũng theo giới hạn.
 
-```bash
-docker compose up -d --build
-```
-
-Biến này giới hạn cả phần C++ của DuckDB. Kết quả đo ở mục 1. Giữ dòng đó trong `.env` thì các lần cập nhật sau
-(`git pull && docker compose up -d --build`) cũng theo giới hạn.
-
-Phương án phụ, khi đã đặt `CARGO_BUILD_JOBS` mà máy vẫn đứng: `CARGO_BUILD_JOBS` chỉ giới hạn cargo, còn các bước
-khác của build (cài gói npm, build giao diện) chạy cùng lúc vẫn dùng mọi nhân. Builder buildx riêng giới hạn mọi bước
-trong `N` nhân (`N` không quá `nproc`), rồi chạy không build lại:
+Đã đặt `CARGO_BUILD_JOBS` mà máy vẫn đứng: các bước khác của build (cài gói npm, build giao diện) vẫn dùng mọi nhân.
+Builder buildx riêng giới hạn mọi bước trong `N` nhân (`N` không quá `nproc`):
 
 ```bash
 N=4   # số nhân dùng để build
@@ -501,323 +453,52 @@ docker buildx build --builder xdi-build --load -f backend/Dockerfile \
 docker compose up -d --no-build
 ```
 
-Đo trên máy 16 nhân với cách đo ở mục 1: `N=4` thì build dùng tới 4,0 GiB RAM và mất 19 phút. Lần cập nhật sau:
-`git pull` rồi chạy lại hai lệnh `docker buildx build` và `docker compose up -d --no-build`, thay cho
-`docker compose up -d --build`. Giữ builder `xdi-build` giữa các lần cập nhật, vì cache build nằm trong nó: xóa
-builder (`docker buildx rm xdi-build`) thì lần sau phải build lại từ đầu.
+Lần cập nhật sau: `git pull`, rồi chạy lại `docker buildx build` và `docker compose up -d --no-build`. Giữ builder
+`xdi-build` vì cache build nằm trong nó.
 
 **Build Docker lỗi `spurious network error` hoặc `transfer too slow` khi tải crate.** Mạng của Docker trên một số máy
-Linux chậm hoặc chập chờn. Build bằng mạng của máy host rồi chạy không build lại:
+Linux chậm hoặc chập chờn. Build bằng mạng của máy host (tên image lấy từ `docker compose config` cho khớp tên compose):
 
 ```bash
 docker build --network host -f backend/Dockerfile -t "$(docker compose config --images | grep backend)" .
 docker compose up -d --no-build
 ```
 
-Tên image phải khớp tên compose dùng (`<tên project>-backend`, mục 1), nên lệnh trên lấy tên từ `docker compose config`.
+**Cổng đã có chương trình khác dùng.** `docker compose up` báo `port is already allocated` hay `address already in
+use`; `make dev` báo `cannot bind port, check BACKEND_PORT`.
 
-**Cổng đã có chương trình khác dùng.** `docker compose up` báo `Bind for 0.0.0.0:5433 failed: port is already
-allocated` (một container khác giữ cổng) hoặc `failed to bind host port ... address already in use` (một chương trình
-ngoài Docker giữ cổng); `make dev` báo `cannot bind port, check BACKEND_PORT`.
+- Docker: đổi `BACKEND_PORT` hoặc `POSTGRES_PORT` trong `.env`.
+- `make dev`: đặt `BACKEND_PORT` trên dòng lệnh; đã đổi `POSTGRES_PORT` thì đặt cả `DATABASE_URL`, không thì backend báo
+  `cannot connect to postgres, check DATABASE_URL`.
 
-- Chạy bằng Docker: đổi `BACKEND_PORT` hoặc `POSTGRES_PORT` trong `.env` rồi chạy lại.
-- `make dev`: backend không đọc `.env`, nên đặt `BACKEND_PORT` trên dòng lệnh (mục 2). Đã đổi `POSTGRES_PORT` trong
-  `.env` thì đặt cả `DATABASE_URL`, không thì backend báo `cannot connect to postgres, check DATABASE_URL`.
+Hai bản cài trên cùng máy thì bản thứ hai đổi cả hai cổng. Hai thư mục cùng tên (cùng là `xdi-platform`) thì còn phải
+đặt `COMPOSE_PROJECT_NAME` khác, không thì bản thứ hai dùng chung volume của bản thứ nhất.
 
-Postgres cài sẵn trên máy thường ở cổng 5432 nên không đụng cổng mặc định 5433. Chạy hai bản cài trên cùng máy thì bản
-thứ hai đổi cả `BACKEND_PORT` và `POSTGRES_PORT`. Hai thư mục cùng tên (ví dụ cùng là `xdi-platform`) thì đổi cổng chưa
-đủ: hai bản có cùng tên project compose, bản thứ hai tạo lại container và dùng chung volume dữ liệu của bản thứ nhất.
-Bản thứ hai đặt thêm `COMPOSE_PROJECT_NAME` khác trong `.env` (mục 1).
-
-**Không thấy mã thiết lập trong log.** Backend chỉ in mã khi database chưa có tài khoản nào. Đã tạo tài khoản ở lần
-chạy trước (`docker compose down` giữ dữ liệu; `make dev` dùng chung Postgres với bản Docker trong cùng thư mục) thì
-không in nữa; quên mật khẩu thì dùng lệnh `reset-password` ở mục 5. Mã in ở mức `warn`, nên đặt `RUST_LOG=error` cũng
-làm mất dòng này.
+**Không thấy mã thiết lập trong log.** Backend chỉ in mã khi database chưa có tài khoản nào. Đã tạo tài khoản ở lần chạy
+trước thì dùng `reset-password` (mục 5). Mã in ở mức `warn`, nên `RUST_LOG=error` cũng làm mất dòng này.
 
 **Hỏi thì nhận `Chế độ mock chỉ trả lời các câu hỏi mẫu của dataset mẫu`, hoặc trang hỏi ghi "Mô hình hiện tại không lập
-được câu gợi ý cho dataset này".** Backend đang chạy với `LLM_PROVIDER=mock` (mặc định), mà mock chỉ có câu trả lời
-viết sẵn cho các bảng của database mẫu và cho dataset DataCo (mục 7, bước 1). Đổi sang `gemini` hoặc `ollama` rồi khởi động lại backend; lúc khởi động,
-backend lập hồ sơ cho các dataset còn thiếu, không phải nạp lại file.
+được câu gợi ý cho dataset này".** Backend đang chạy với `LLM_PROVIDER=mock`. Đổi sang `gemini` hoặc `ollama` rồi khởi
+động lại; backend lập hồ sơ cho các dataset còn thiếu, không phải nạp lại.
 
-**Lỗi khi dùng Gemini.** Lời báo hiện dưới ô câu hỏi trên trang **Cuộc trò chuyện**. Log của backend có thêm dòng
-`gemini returned an error` kèm mã HTTP (`status`), mã của Google (`gemini_status`) và lời gốc của Google. Lỗi lúc lập
-hồ sơ dataset sau khi nạp thì không hiện trên giao diện, chỉ có trong log; sửa xong và khởi động lại backend thì backend
-lập lại hồ sơ. Đổi `.env` rồi chạy `docker compose up -d` là đủ để backend nhận giá trị mới.
+**Lỗi khi dùng Gemini.** Lời báo hiện dưới ô câu hỏi. Log có thêm dòng `gemini returned an error` kèm mã HTTP
+(`status`), mã của Google (`gemini_status`) và lời gốc. Lỗi lúc lập hồ sơ sau khi nạp chỉ có trong log; sửa xong và khởi
+động lại backend thì backend lập lại hồ sơ.
 
-- `Thiếu khóa Gemini: đặt GEMINI_API_KEY trong .env rồi khởi động lại backend`: chưa đặt khóa. Đặt khóa rồi khởi động
-  lại.
-- `Gemini từ chối khóa API (mã 403): kiểm tra GEMINI_API_KEY` (có khi là mã 400 hoặc 401): khóa sai, chép thiếu ký tự,
-  hoặc không đúng loại (không phải khóa Gemini API tạo trong Google AI Studio). Tạo khóa trong Google AI Studio rồi
-  đặt lại `GEMINI_API_KEY`.
-- `Gemini không có mô hình gemini-2.5-flash: kiểm tra GEMINI_MODEL` (mã 404): khóa này không gọi được mô hình đó; đã
-  gặp với khóa mới tạo và mô hình cũ như `gemini-2.5-flash`. Bỏ dòng `GEMINI_MODEL` để dùng mặc định
-  `gemini-3.5-flash-lite`, hoặc chọn một mô hình có trong danh sách của Google AI Studio.
-- `Gemini đang lỗi hoặc quá tải (mã 503). Thử lại sau`: phía Google đang quá tải. Chờ một lúc rồi hỏi lại; lặp lại
-  nhiều lần thì thử một mô hình khác bằng `GEMINI_MODEL`.
-- `Đã hết hạn mức gọi Gemini của khóa này. Chờ một lúc rồi thử lại, hoặc xem hạn mức trong Google AI Studio` (mã 429):
-  đã dùng hết số lần gọi được phép của khóa. Hạn mức theo phút thì chờ một phút; hạn mức theo ngày thì chờ sang ngày,
-  hoặc xem hạn mức và gói trả phí của khóa trong Google AI Studio.
+- `Thiếu khóa Gemini: đặt GEMINI_API_KEY trong .env rồi khởi động lại backend`.
+- `Gemini từ chối khóa API (mã 403): kiểm tra GEMINI_API_KEY` (có khi mã 400 hay 401): khóa sai, chép thiếu, hoặc không
+  phải khóa Gemini API tạo trong Google AI Studio.
+- `Gemini không có mô hình ...: kiểm tra GEMINI_MODEL` (mã 404): khóa này không gọi được mô hình đó, đã gặp với khóa mới
+  và mô hình cũ như `gemini-2.5-flash`. Bỏ dòng `GEMINI_MODEL` để dùng mặc định, hoặc chọn mô hình có trong Google AI
+  Studio.
+- `Gemini đang lỗi hoặc quá tải (mã 503). Thử lại sau`: chờ rồi hỏi lại; lặp lại nhiều lần thì thử mô hình khác.
+- `Đã hết hạn mức gọi Gemini của khóa này...` (mã 429): hạn mức theo phút thì chờ một phút, theo ngày thì chờ sang ngày,
+  đặt `GEMINI_BACKUP_API_KEY`, hoặc xem gói trả phí trong Google AI Studio.
 - `Không kết nối được tới Gemini` hoặc `Gemini không trả lời trong 60 giây`: máy chủ không ra được Internet (tường lửa,
-  proxy) hoặc mô hình trả lời chậm; lời báo ghi cách xử lý, số giây theo `GEMINI_TIMEOUT_SECS`.
+  proxy `HTTPS_PROXY`) hoặc mô hình trả lời chậm; số giây theo `GEMINI_TIMEOUT_SECS`.
 
-**Hết dung lượng đĩa.** Bản build DuckDB nặng. `cargo clean` trong `backend/` xóa thư mục build; `docker image prune`
-xóa image cũ, `docker builder prune` xóa cache build của Docker, `docker buildx rm xdi-build` xóa builder riêng (nếu đã
-tạo theo mục trên) cùng cache của nó.
+**Hết dung lượng đĩa.** `cargo clean` trong `backend/` xóa thư mục build; `docker image prune` xóa image cũ,
+`docker builder prune` xóa cache build, `docker buildx rm xdi-build` xóa builder riêng cùng cache của nó.
 
-**Caddy không khởi động, báo cổng 80 hoặc 443 đang bận.** Có web server khác (nginx, apache) đang dùng cổng đó. Tắt nó,
-hoặc cấu hình chính web server đó làm reverse proxy tới `localhost:8000`.
-
-## 7. Dùng lần đầu
-
-Từ màn thiết lập tới câu trả lời đầu tiên, theo giao diện hiện tại. Địa chỉ là http://localhost:8000 (cổng theo
-`BACKEND_PORT`); chạy giao diện bằng `make dev-frontend` thì là http://localhost:5173.
-
-### Bước 1. Chọn mô hình ngôn ngữ
-
-Chọn trước khi nạp dữ liệu. Sau mỗi lần nạp, backend gọi mô hình đang cấu hình để lập hồ sơ dataset (mô tả cột, bí
-danh, câu gợi ý), nên mô hình lúc nạp quyết định dataset có câu gợi ý ngay sau khi nạp hay không; đổi mô hình rồi khởi động lại
-backend thì backend lập lại (bước 4).
-
-| `LLM_PROVIDER` | Cần | Hỏi được |
-|---|---|---|
-| `mock` (mặc định) | Không cần gì, không gọi ra ngoài | Chỉ các câu hỏi mẫu viết sẵn cho các bảng của database mẫu và cho dataset DataCo (bên dưới); câu khác nhận lời báo `Chế độ mock chỉ trả lời các câu hỏi mẫu của dataset mẫu`; trên dataset khác, kể cả câu mẫu cũng lỗi (SQL viết cho bảng của dữ liệu mẫu) |
-| `gemini` | `GEMINI_API_KEY`, khóa tạo trong Google AI Studio | Câu tự do trên dataset bất kỳ |
-| `ollama` | Ollama đang chạy và mô hình đã tải (mục 1, Cấu hình) | Câu tự do trên dataset bất kỳ |
-
-Chạy bằng Docker: sửa `.env`, ví dụ `LLM_PROVIDER=gemini` và `GEMINI_API_KEY=<khóa>`, rồi `docker compose up -d`. Build
-từ nguồn: đặt trên dòng lệnh, ví dụ `LLM_PROVIDER=gemini GEMINI_API_KEY=<khóa> make dev` (mục 2). Mô hình đang dùng ghi ở
-dòng **Mô hình**, góc dưới thanh bên và dưới màn thiết lập.
-
-Thử với `mock` mà không tải gì: khi bước 2 tạo xong workspace đầu tiên, backend nạp dataset `DataCo` (bảng `dataco`,
-1500 dòng lấy từ DataCo Smart Supply Chain, giấy phép CC BY 4.0, file `data/samples/dataco.csv`) kèm vài chỉ số mẫu như
-"Doanh thu", "Lợi nhuận", "Tỷ lệ giao trễ". Câu mẫu của nó nằm trong `backend/src/engine/llm/mock_answers.json`, ví dụ
-"Doanh thu theo thị trường", "Top 10 danh mục có doanh thu cao nhất", "Vì sao doanh thu tháng 5 năm 2017 tăng".
-
-Thử luồng chính, kết nối database, với database mẫu duy nhất của repo
-([data/postgres-demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/README.md): hai database
-`sales_demo` với DataCo và `edu_demo` với OULAD, đầy đủ, 13 bảng có khóa ngoại, có nguyên nhân cài sẵn để thử câu "tại
-sao"). Làm trước bước 2:
-
-1. Tải và nạp một lần: `sh data/download.sh dataco`, `sh data/download.sh oulad`,
-   `docker compose -f data/postgres-demo/docker-compose.yml up -d demo-db`, `sh data/postgres-demo/load.sh`.
-2. Gỡ container của bản chạy riêng đó, volume giữ nguyên:
-   `docker compose -f data/postgres-demo/docker-compose.yml rm -sf demo-db`.
-3. Ở gốc repo: `docker compose --profile demo up -d`. Compose gốc chạy cùng dịch vụ đó (cùng tên container `xdi-demo-db`,
-   cùng volume `xdi-demo-db_demo-db-data`, nên không phải nạp lại) trong mạng của backend; backend kết nối
-   `demo-db:5432` bằng tài khoản chỉ đọc `analyst`. Compose in cảnh báo volume có sẵn không do project này tạo: bình
-   thường. Nạp lại dữ liệu sau này thì `docker compose rm -sf demo-db` ở gốc repo trước khi chạy `load.sh`.
-
-Khi bước 2 tạo xong workspace đầu tiên, backend thêm hai dataset, `sales_demo` và `edu_demo`, mỗi dataset một database,
-và chụp mọi bảng tài khoản `analyst` đọc được (#247), kèm quan hệ: `sales_demo` (`order_items`, `orders`, `customers`, `products`, `categories`, `departments`) và `edu_demo` (`students`,
-`courses`, `registrations`, `assessments`, `student_assessments`, `vle_materials`), kèm chỉ số mẫu "Doanh thu", "Lợi
-nhuận" của `order_items` và "Điểm trung bình" của `student_assessments`. Từ khi không còn trần dòng mặc
-định, `edu.student_daily_clicks` (1,8 triệu dòng) cũng được chụp, cùng khóa ngoại của nó tới `students`: 13 bảng, 12
-quan hệ; trước đó bảng này chỉ lưu metadata. Đo trên máy dev ngày 31/10/2026 (khi còn trần dòng): bước tạo tài khoản quản trị kèm chụp 12 bảng
-mất 5,4 giây (đo trước #246, chép bằng `copy`, một database `company_demo`); sau khi tách hai nguồn, chép bằng
-`direct`, đo một lần qua compose `--profile demo`: 4,5 giây. Câu mẫu của các bảng này nằm trong `backend/src/engine/llm/mock_answers_database.json` và hiện thành câu
-gợi ý của dataset, ví dụ "Tỷ lệ bỏ học theo môn học" và "Số sinh viên theo kết quả cuối khóa" trên `students`, "Điểm
-trung bình theo loại bài đánh giá" trên `student_assessments` (nối `assessments`), "Doanh thu theo phân khúc khách
-hàng" trên `order_items` (nối `orders`, `customers`). Một database không tới được thì backend ghi cảnh báo và giữ nguồn
-còn lại; không database nào tới được (chưa nạp, không bật profile) thì nạp `DataCo` như trên.
-
-Bản cài đã thiết lập trước khi có dataset mẫu, hay đặt `SEED_SAMPLE=false`, thì kết nối database mẫu ở bước 3 (máy
-chủ `demo-db`, cổng 5432, database `sales_demo` rồi thêm nguồn thứ hai với `edu_demo`, tài khoản và mật khẩu
-`analyst`, `sslmode` `disable`; máy của
-`SAMPLE_DATABASE_URL`, đúng cổng đó, luôn được phép), hoặc nạp tay: file
-`data/samples/dataco.csv` trong repo, hoặc bản đầy đủ tải bằng `sh data/download.sh dataco`. Đặt tên dataset là
-`DataCo` để tên bảng là `dataco`, đúng bảng mà các câu mẫu viết cho; để trống tên thì bảng mang tên file và câu mẫu chạy
-lỗi. Mỗi file là một dataset riêng, nên nạp DataCo lần nữa (nội dung khác) vẫn có bảng tên `dataco` (#257).
-
-### Bước 2. Tạo tài khoản quản trị
-
-Lần đầu mở giao diện, màn **Thiết lập lần đầu** hiện ra. Lấy mã thiết lập trong log: chạy bằng Docker thì
-`docker compose logs backend | grep setup_code`, build từ nguồn thì tìm dòng có `setup_code=` trong terminal đang chạy
-`make dev`. Điền **Mã thiết lập**, **Email quản trị**, **Mật khẩu** và **Nhập lại mật khẩu** (8 đến 128 ký tự); **Tên
-hiển thị** và **Tên workspace đầu tiên** không bắt buộc (để trống thì workspace tên là "Workspace đầu tiên"). Bấm **Tạo
-tài khoản quản trị**: giao diện đăng nhập luôn và mở trang **Cuộc trò chuyện** của workspace vừa tạo, đã có các dataset
-chụp từ database mẫu (bước 1, dataset chọn sẵn là `students`) hay dataset `DataCo` khi không có database mẫu, trừ khi `SEED_SAMPLE=false`. Chi tiết về mã thiết lập ở mục 1, Tạo tài khoản quản trị.
-
-Workspace thứ hai trở đi: mở ô chọn workspace ở đầu thanh bên, chọn **Tạo workspace** ở cuối danh sách, nhập tên.
-Người tạo thành `admin` của workspace mới và giao diện mở trang đầu của nó. Tài khoản nào cũng tạo được workspace.
-
-### Bước 3. Kết nối database hoặc nạp file
-
-Mục **Dữ liệu** ở thanh bên.
-
-Kết nối database (chỉ `admin`, máy chủ phải có trong `SOURCE_ALLOWED_HOSTS` ở mục Cấu hình; `SOURCE_SECRET_KEY` để
-trống thì backend tự sinh khóa): khung **Kết nối database** đứng đầu trang **Dữ liệu**, form mở sẵn khi workspace chưa có nguồn nào,
-không thì bấm **Thêm database**. Nhập máy chủ, cổng, database, tài khoản, mật khẩu và `sslmode`: `prefer` (mặc định; thử TLS khi máy chủ nhận TLS, bắt
-tay lỗi thì báo lỗi chứ không quay về kết nối thường; trước #230 `prefer` luôn là kết nối thường),
-`require` khi máy chủ bắt buộc TLS, `verify-full` để kiểm chứng chỉ máy chủ (kèm ô **Chứng chỉ CA** cho CA riêng của tổ
-chức; bảng ở [Dữ liệu](DATA.md), mục Nguồn database). Bấm **Kết nối**: backend thử kết nối trước khi lưu. Kết nối xong, khung
-liệt kê mọi bảng, view tài khoản đọc được, nhóm theo schema, tick sẵn, mỗi bảng kèm số dòng ước lượng, dung lượng, số
-cột, comment, và nhãn **Quá trần dung lượng, chỉ lưu cấu trúc** khi riêng bảng đã quá `SOURCE_TABLE_MAX_MB` (hay
-**Quá trần dòng, chỉ lưu cấu trúc** khi admin đặt `SOURCE_MAX_ROWS` và bảng quá trần đó). Bỏ tick bảng không cần (hay
-**Chọn hết**, **Bỏ hết** cho cả schema); bỏ tick một bảng mà bảng đang tick trỏ tới thì khung báo ngay bảng nào mất
-quan hệ. Bấm **Chụp N bảng**: mọi bảng chụp trong một giao dịch, xong thì khung ghi bảng đã chụp, bảng chỉ lưu cấu trúc
-kèm lý do. Nguồn đã chụp rồi thì **Chụp thêm bảng** mở lại danh sách, tick sẵn các bảng nguồn đang giữ. Thẻ dataset của
-database có nút **Chụp lại** (chụp lại mọi bảng dataset đang giữ); mở **Xem bảng** thì bảng chỉ có cấu trúc ghi
-**Chỉ có cấu trúc** kèm lý do, và `admin` có nút **Chụp bảng này** sau khi tăng trần. Giới hạn và cách chụp: [Dữ liệu](DATA.md), mục Nguồn database.
-
-Nạp file, khi dữ liệu chưa nằm trong database: bấm **Nạp file CSV, Parquet hoặc Excel** dưới khung database để mở khung
-**Nạp dữ liệu** (chỉ `admin` của workspace thấy):
-
-1. **File**: chọn một hoặc nhiều file CSV hoặc Parquet cùng cột (gộp thành một bảng), hoặc một file Excel `.xlsx`. CSV
-   đọc được UTF-8, windows-1252 và latin-1. Giao diện không cho chọn file `.xls`: mở bằng Excel rồi lưu lại dạng `.xlsx`.
-2. File Excel: giao diện đọc danh sách sheet rồi hiện **Chọn sheet cần nạp**, mỗi sheet kèm số cột và số dòng ước lượng.
-   Các sheet chọn mà khác cột nhau thì thành nhiều dataset riêng, giao diện báo trước số dataset.
-3. **Tên dataset (không bắt buộc)**: để trống thì lấy tên file. Tên bảng dùng trong SQL đặt theo tên dataset: chữ
-   thường, bỏ dấu, khoảng trắng thành `_`, ví dụ "Bán hàng 2024" thành `ban_hang_2024`.
-4. Bấm **Nạp**. Xong thì hiện `Đã nạp vào <tên>, phiên bản 1, <số> dòng.` và số cột (bấm để xem danh sách cột).
-
-Tổng dung lượng một lần nạp tối đa `MAX_UPLOAD_MB` (mặc định 200 MB); file Excel còn vài giới hạn riêng. Định dạng, giới
-hạn, phiên bản và tên cột: [Dữ liệu](DATA.md). Nạp lại đúng file đã có thì nhận `Đã có: dữ liệu này giống hệt phiên bản
-...`, không tạo bản mới. Dữ liệu tháng sau của cùng bảng thì bấm **Nạp phiên bản mới** ở dòng của dataset đó: phiên bản
-mới thành dữ liệu hiện hành, phiên bản cũ vẫn giữ.
-
-Bỏ một dataset: bấm **Xóa** ở dòng của nó rồi xác nhận **Xóa dataset** (chỉ `admin`). Mọi phiên bản, hồ sơ cột, chỉ
-số, cuộc trò chuyện, lịch sử câu hỏi (câu hỏi, SQL, bảng phân rã của câu "tại sao") và file Parquet của dataset bị
-xóa hẳn, không khôi phục được. Bản sao lưu làm trước đó vẫn còn chúng ([PRIVACY.md](PRIVACY.md)).
-
-### Bước 4. Chờ hồ sơ dữ liệu
-
-Phần cấu trúc của hồ sơ (kiểu và vai trò từng cột) xong ngay trong lần nạp. Phần do mô hình viết (mô tả cột, bí danh,
-câu gợi ý) chạy nền sau đó, mỗi lúc một dataset. Trong lúc chờ, trang **Cuộc trò chuyện** ghi dưới ô **Dataset**:
-"Đang lập hồ sơ dataset: câu gợi ý và mô tả cột sẽ có sau ít phút." Trang tự kiểm lại trong vài phút đầu; xong thì
-hiện thẻ **Câu gợi ý**, chờ lâu hơn thì tải lại trang. Hỏi được ngay cả khi hồ sơ chưa xong.
-
-- Với `mock`, chỉ các bảng của database mẫu và dataset `dataco` có hồ sơ viết sẵn. Dataset khác không có câu gợi ý; sau lượt thử, dòng "Đang lập hồ
-  sơ" đổi thành "Mô hình hiện tại không lập được câu gợi ý cho dataset này; vẫn hỏi được bình thường." Dòng này cũng hiện
-  khi mô hình thật trả lời mà không dùng được (ví dụ JSON hỏng, hay chặn prompt vì nội dung). Đổi `LLM_PROVIDER` (hoặc
-  model) rồi khởi động lại backend thì trang lại ghi "Đang lập hồ sơ" trong lúc backend thử với mô hình mới (mục 6).
-- Mô hình lỗi lúc lập hồ sơ (khóa sai, quá tải, hết hạn mức) thì giao diện không báo, chỉ log ghi lỗi; backend thử lại
-  ở lần khởi động sau.
-- "Lập hồ sơ dataset lỗi nên chưa hỏi được phiên bản này" nghĩa là phần cấu trúc lỗi: nạp lại file ở trang **Dữ liệu**.
-
-### Chỉ số và cách gộp (không bắt buộc)
-
-Trang **Dữ liệu** có nút **Chỉ số** ở mỗi dataset. Màn này liệt kê chỉ số của dataset (tên, mô tả, công thức, đơn vị)
-và cách gộp của từng cột số đo; mọi thành viên xem được, chỉ `admin` sửa được.
-
-- **Thêm chỉ số**: đặt **Tên** (tên người dùng gõ khi hỏi, ví dụ "Doanh thu"), **Mô tả**, rồi chọn **Phép tính**
-  (tổng, trung bình, đếm dòng, đếm giá trị khác nhau) và **Cột**, hoặc bấm **Viết bằng SQL** để gõ công thức như
-  `SUM("Order Item Total") / COUNT(DISTINCT "Order Id")`. **Điều kiện**, **Cột thời gian**, **Đơn vị** không bắt buộc.
-  Backend chạy thử công thức trên phiên bản hiện hành trước khi lưu; sai cột, không phải hàm gộp hay bị guard từ chối
-  thì lời báo hiện ngay dưới ô sai. Câu hỏi kế tiếp nhắc tên chỉ số thì mô hình dùng đúng công thức này (xem ở tab SQL).
-- **Sửa** (biểu tượng bút) lưu một phiên bản mới cùng tên, bản cũ giữ lại; không đổi tên được. **Xóa** (biểu tượng
-  thùng rác) xóa chỉ số cùng mọi phiên bản sau khi hỏi lại.
-- **Cách gộp của cột số đo**: **Tổng** cho tiền, số lượng hàng; **Trung bình** cho giá trị mô tả một dòng (tuổi, điểm,
-  số tín chỉ, số ngày). Mô hình đề xuất lúc lập hồ sơ; đổi ở đây có hiệu lực từ câu hỏi kế tiếp, cho phiên bản hiện
-  hành. Câu hỏi trên cột trung bình dùng AVG, câu "vì sao" so trung bình mỗi dòng.
-
-### Bước 5. Hỏi
-
-Trang **Cuộc trò chuyện** là một khung trò chuyện: ô **Dataset** ở đầu khung (dính khi cuộn) chọn sẵn dataset tạo gần nhất,
-đổi được (đổi dataset là bắt đầu cuộc mới); ô hỏi dính đáy màn. Gõ câu hỏi rồi bấm **Hỏi** (Enter để hỏi, Shift+Enter để
-xuống dòng), hoặc bấm một câu gợi ý khi cuộc còn trống để hỏi ngay. Câu gợi ý đặt câu khó lên trước, gồm hai câu "vì
-sao". Với `mock` trên dataset `students` của database mẫu, bấm câu gợi ý "Tỷ lệ bỏ học theo môn học"; đổi sang
-`student_assessments` rồi hỏi "Điểm trung bình theo loại bài đánh giá" (câu nối `assessments`, khung Minh chứng ghi hai
-bảng đã đọc). Trên DataCo từ file, gõ "Doanh thu theo thị trường", rồi hỏi tiếp "5 danh mục có doanh thu cao nhất ở châu
-Âu" trong cùng cuộc.
-
-Mỗi lượt là câu hỏi (căn phải) và câu trả lời (căn trái). Nút **Lịch sử trò chuyện** đứng đầu thanh bên (thanh bên không có
-mục riêng cho trang **Cuộc trò chuyện**: vào workspace là mở trang này, chưa hỏi gì thì có câu mời hỏi; màn hẹp: trong
-menu mở từ nút ở góc trái thanh trên), mở một khung nổi đè lên trang: mọi cuộc bạn đã hỏi trên mọi dataset của
-workspace, mới trước, mỗi cuộc ghi tiêu đề, ngày giờ bắt đầu và dataset của cuộc; tối đa 8 cuộc một lúc, nhiều hơn thì
-cuộn. Bấm một cuộc để mở lại và hỏi tiếp vào cuộc đó, trên đúng dataset của nó; nút dấu cộng (**Cuộc trò chuyện mới**)
-ở đầu khung mở cuộc mới trên dataset đang chọn ở trang **Cuộc trò chuyện** (chưa chọn thì dataset tạo gần nhất). Khung đóng khi chọn, khi bấm ra ngoài hoặc nhấn Esc; đang chờ
-câu trả lời thì các nút trong khung tạm tắt. Nút ở góc trên phải thanh bên thu thanh bên thành dải icon. Lượt cũ chỉ
-hiện câu hỏi và tóm tắt phần đã hiểu, vì bảng kết quả không được lưu; bấm **Hỏi lại** để chạy lại câu đó. Đường dẫn
-của trang ghi cuộc đang mở, nên tải lại trang vẫn mở đúng cuộc.
-
-Câu có cụm khớp nhiều cột thì backend trả lời ngay bằng một cột, cột còn lại hiện trong thẻ **Hệ thống đã hiểu là**;
-bấm cột khác là hỏi lại theo cột đó. Mô hình chưa rõ câu hỏi thì hỏi lại: chọn cách hiểu rồi bấm **Hỏi lại**. Lỗi (mô hình lỗi,
-SQL bị từ chối hay chạy lỗi) hiện ngay trên ô hỏi; lỗi của Gemini và cách xử lý ở mục 6.
-
-Chưa biết dataset có gì thì mở mục **Tổng quan dữ liệu** trên thanh bên rồi chọn dataset ở ô **Dataset** đầu trang (nút
-**Tổng quan** ở dòng của dataset trên trang **Dữ liệu** mở trang này trên đúng dataset đó). Khung ghi số dòng và khoảng thời gian có dữ liệu, các cột xếp theo nhóm **Số đo**, **Chia nhóm theo**,
-**Thời gian**, **Mã**, **Chữ khác** (tên cột, nhãn tiếng Việt trong ngoặc, mô tả, % ô trống, số giá trị khác nhau, các
-giá trị nhiều dòng nhất), biểu đồ dựng sẵn (độ đo chính và số dòng theo tháng hay theo ngày, số dòng theo giá trị của
-từng cột chia nhóm) và các chỉ số đã định nghĩa. Bấm một cột, một giá trị, một chỉ số hay tiêu đề một biểu đồ thì câu
-hỏi được điền vào ô hỏi của trang **Cuộc trò chuyện** trên đúng dataset đó, ví dụ bấm `Market` trên DataCo thì "Doanh
-thu theo Market"; sửa câu rồi bấm **Hỏi**. Khung không gọi mô hình. Hồ sơ đang lập thì khung ghi phần
-nào chưa có; người có vai dữ liệu chỉ xem một phần dòng thì không thấy số ô trống, số giá trị khác nhau và số dòng theo
-giá trị, vì các số đó tính trên mọi dòng.
-
-### Bước 6. Đọc kết quả và minh chứng
-
-Câu trả lời nằm trong thẻ **Trả lời** ngay dưới câu đã hỏi. Đầu thẻ là lời trả lời ngắn (câu "tại sao" thì hàng ba số và
-lời giải thích, xem dưới). Tiếp theo là biểu đồ khi kết quả hợp: biểu đồ đường khi cột nhóm duy nhất là thời gian, biểu
-đồ cột khi cột nhóm duy nhất là một chiều và có đúng một độ đo ("Doanh thu theo thị trường" trên DataCo ra biểu đồ cột);
-các dạng khác chỉ có bảng. Bảng **Kết quả** ghi số dòng (`5 dòng.`; kết quả dài thì `Hiện 1.000 trên <tổng> dòng.`),
-phân trang, số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân). **Tải CSV** tải các dòng giao diện đã
-nhận, tối đa 1000 dòng, giữ giá trị gốc. Cuối thẻ là khung **Hệ thống đã hiểu là**: cách hệ thống hiểu câu hỏi, đọc từ
-câu SQL đã chạy, gồm các dòng **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**, **Giới hạn**, **Khoảng thời gian** (dòng nào
-không có thì không hiện); câu có giả định thì kèm **Giả định, bấm để đổi rồi hỏi lại**. Bấm tiêu đề **Kết quả** hay **Hệ
-thống đã hiểu là** để thu gọn hoặc mở phần đó; khung **Hệ thống đã hiểu là** mở sẵn ở lượt mới nhất, thu gọn ở các lượt
-trước.
-
-Pane **Minh chứng** nằm bên phải trên màn rộng, dưới khung trò chuyện trên màn hẹp, và hiện minh chứng của lượt đang
-chọn (mặc định lượt mới nhất); nút **Minh chứng** ở cuối mỗi câu trả lời chọn lượt đó. Nút **Thu gọn** ẩn pane, chỉ
-còn một nút nhỏ dính mép phải; bấm nút đó (**Mở minh chứng**) để hiện lại. Bốn tab:
-
-- **SQL**: **Mô hình viết** là câu mô hình viết (ghi "bản đã sửa" khi câu đầu lỗi và mô hình sửa lại); **Sau guard
-  (bản đã chạy)** là câu đã chạy trên dữ liệu, kèm những gì guard thêm, ví dụ `Thêm LIMIT 100000`. Mỗi bản có nút chép
-  nguyên văn. Guard là gì: [GUARD.md](GUARD.md).
-- **Phân rã**: chỉ có với câu hỏi "tại sao" (xem dưới), mở sẵn khi câu trả lời có phân rã. Đầu tab ghi số dòng dữ liệu
-  (và số đơn khi tách được) của hai bên, và các cách chia đã bỏ kèm lý do (cột chỉ là tên khác của hai bên đang so, như
-  Type khi so COMPLETE với CANCELED, hay cột chia nhóm giống hệt một cột khác). Mỗi chiều một bảng, cột **Nhóm**, hai
-  bên, **Chênh lệch** (bên so sánh trừ bên gốc, cộng lại bằng dòng **Tổng**), **% tác động** (phần của tổng chênh lệch;
-  số âm kèm chữ "kéo ngược" là nhóm đi ngược chiều) và **% thay đổi** (trong nhóm, so với bên gốc; nhóm chỉ có ở một bên
-  ghi "mới" hay "không còn", nhóm trái dấu hai bên ghi "đổi dấu"); nghĩa mỗi cột ghi ngay dưới tiêu đề. Nhóm khác thường
-  (lệch % thay đổi chung từ 10 điểm và chiếm từ 1% chênh lệch, hay chỉ có ở một bên) in đậm; bảng có nhóm như vậy ghi
-  **Có nhóm khác thường** và đứng trước các bảng **Dàn đều**. Chênh lệch tổng gần 0 thì không có cột % tác động. Pane
-  hẹp thì bảng cuộn ngang, cột Nhóm đứng yên. Chiều nhiều nhóm chỉ hiện 8 nhóm lớn nhất và một dòng **Còn lại**, bấm
-  **Xem tất cả** để mở hết; cuối tab là bảng **Lượng và giá** khi tách được. Câu thường thì tab này ghi `Câu hỏi này
-  không có phần phân rã.`
-- **Dòng nguồn**: các dòng dữ liệu đứng sau một con số, mở bằng cách bấm một ô số đo của bảng **Kết quả**, hay số của
-  một kỳ hay một nhóm trong bảng phân rã; kèm câu SQL đã chạy và cột `_source_file` ghi file gốc của từng dòng.
-- **Các bước**: từng bước kèm thời gian, `đạt` hay `lỗi` và chi tiết: Đọc hồ sơ dữ liệu, Phân loại câu hỏi, Mô hình
-  viết SQL, Kiểm SQL (guard), Chạy SQL, Mô hình sửa SQL (nếu có), Tính phân rã và Mô hình viết lời giải thích (câu "tại
-  sao"), Lưu vào lịch sử. Bước có gọi mô hình ghi `có mô hình`, để thấy mô hình chỉ phân loại câu hỏi, viết SQL, điền
-  form và viết lời, còn con số do DuckDB và backend tính. Bước **Phân loại câu hỏi** ghi câu được hiểu là câu thường
-  hay câu hỏi tìm nguyên nhân kèm lý do; mô hình lỗi thì bước này ghi `lỗi` và "Dùng luật từ khóa vì ...", câu hỏi
-  vẫn chạy.
-
-Backend nhận ra câu hỏi "tại sao" ở bước Phân loại câu hỏi: mô hình đọc câu hỏi, tên cột và các câu hỏi trước của
-cuộc, nên nhận cả cách hỏi như "Doanh thu giảm do gì?" hay "Còn tháng 6 thì sao?" sau một câu "tại sao", còn câu đếm
-theo một cột tên "lý do" như "Số đơn theo lý do hủy" vẫn là câu thường. Mô hình lỗi, hay với `mock` khi câu không phải
-câu mẫu, thì backend dùng các cụm "tại sao", "vì sao", "sao lại", "vì đâu", "lý do", "nguyên nhân", "do đâu", gõ không
-dấu cũng được.
-
-Câu hỏi "tại sao": mô hình không viết SQL mà điền một form (đo gì, so hai kỳ tháng, quý, năm hay hai nhóm), backend kiểm
-form rồi tự dựng mọi câu SQL. Đầu thẻ trả lời là một hàng ba số (hai kỳ hay hai nhóm và chênh lệch), khung **Giải
-thích**, rồi thanh chênh lệch của từng nhóm theo chiều giải thích tốt nhất. Lời giải thích nói so gì với gì, chênh bao
-nhiêu, rồi nhóm nào tạo ra phần lớn chênh lệch. So hai kỳ thì nói "tăng", "giảm"; so hai nhóm thì nói "cao hơn", "thấp
-hơn" và luôn là câu do backend viết. Lời của mô hình được kiểm: số nào không có trong bảng phân rã, hay chữ "tăng",
-"giảm" ngược dấu của số đứng sau, thì backend dùng câu của mình và ghi "Câu viết theo khuôn từ số đã tính". Không phân
-rã được (ví dụ kỳ so sánh không có dòng nào) thì vẫn có bảng tổng kèm lời báo lý do. Hỏi "vì sao giảm" mà số thật ra
-tăng (hay không đổi) thì kết quả có thêm một cảnh báo nói chênh lệch thực tế. Với `mock` trên DataCo, thử "Vì sao doanh
-thu tháng 5 năm 2017 tăng", và "Tại sao doanh thu quý 3 năm 2017 giảm" để thấy cảnh báo đó.
-
-Câu "tại sao" không nêu kỳ ("Tại sao doanh thu giảm") vẫn có phân rã: backend chọn kỳ gần nhất có dữ liệu (theo tháng
-nếu câu không nói tháng, quý hay năm) và so với kỳ liền trước. Kỳ cuối có chưa tới một nửa số dòng của kỳ trước nó
-(dữ liệu dừng giữa kỳ) thì lùi một kỳ. Thẻ **Hệ thống đã hiểu là** ghi giả định này, ví dụ "Kỳ gần nhất có dữ liệu: Quý
-4/2017 so với Quý 3/2017", kèm nút cho các kỳ gần nhất có dữ liệu; bấm một nút để hỏi lại với kỳ đó.
-
-Câu hỏi cần thông tin dataset không có (ví dụ "Tại sao khách hàng không hài lòng?" khi không có cột đánh giá, hay hỏi
-dự báo) thì không có bảng số: kết quả báo dữ liệu không có thông tin này, nói lý do và gợi ý các cột gần nhất để hỏi.
-Với `mock`, thử đúng câu "Tại sao khách hàng không hài lòng?".
-
-### Bước 7. Mời thành viên
-
-Chưa có thư mời qua email hay tự đăng ký. Thành viên cần có tài khoản trước, rồi được thêm vào workspace:
-
-1. Quản trị hệ thống mở **Quản lý tài khoản** ở thanh bên, khung **Tạo tài khoản**: **Email**, **Tên hiển thị**,
-   **Mật khẩu ban đầu** (8 đến 128 ký tự), bấm **Tạo tài khoản**. Chuyển mật khẩu cho người đó; họ đổi lại ở **Tài khoản
-   và mật khẩu** trong menu tài khoản (tên người dùng ở chân thanh bên, hoặc góc phải thanh trên khi màn hẹp).
-2. `admin` của workspace mở **Thành viên**, khung **Thêm thành viên**: **Email** của tài khoản vừa tạo, **Vai** là
-   **Admin** hoặc **Thành viên**, bấm **Thêm**.
-
-**Thành viên** chọn dataset, hỏi và xem chỉ số, không nạp được file. **Admin** thêm nạp và xóa dataset, sửa chỉ số
-và cách gộp, thêm, xóa, đổi vai thành viên, đổi tên và xóa workspace. Người được thêm thấy workspace trong ô chọn workspace sau khi đăng nhập.
+**Caddy không khởi động, báo cổng 80 hoặc 443 đang bận.** Một web server khác (nginx, apache) đang dùng cổng đó. Tắt nó,
+hoặc cấu hình chính nó làm reverse proxy tới `localhost:8000`.

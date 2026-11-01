@@ -24,7 +24,7 @@ use crate::service::metrics::contract::{
 };
 use crate::state::AppState;
 
-// Trần độ dài, đếm theo ký tự. Tên và mô tả vào prompt của mọi câu hỏi trên dataset và hiện trên thẻ "Đã hiểu là".
+// Trần độ dài, đếm theo ký tự. Tên và mô tả vào prompt của mọi câu hỏi trên dataset và hiện trên thẻ "Cách tính".
 const NAME_MAX_CHARS: usize = 80;
 const DESCRIPTION_MAX_CHARS: usize = 300;
 const EXPRESSION_MAX_CHARS: usize = 2000;

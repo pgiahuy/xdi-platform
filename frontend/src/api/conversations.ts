@@ -4,7 +4,7 @@ bảng của một dataset, mới trước, #257) và GET .../datasets/{table_id
 của một cuộc; route nhận đúng bảng cuộc nằm trên, ConversationItem.table_id), route ở backend/src/api/catalog.rs và
 backend/src/api/conversations.rs. Cuộc được tạo và nối lượt qua route hỏi (api/ask.ts), nên mỗi lần hỏi xong thì
 useAsk làm mới danh sách của dataset (catalogConversationsKey).
-Lượt đã ghi chỉ có câu hỏi, trạng thái, dòng tóm tắt "Đã hiểu là" và SQL đã chạy, không có bảng kết quả: trang hiện
+Lượt đã ghi chỉ có câu hỏi, trạng thái, dòng tóm tắt "Cách tính" và SQL đã chạy, không có bảng kết quả: trang hiện
 những gì có và cho hỏi lại, không dựng lại câu trả lời. */
 
 import { useQueries, useQuery } from '@tanstack/react-query'

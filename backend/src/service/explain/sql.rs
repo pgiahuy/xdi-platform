@@ -232,7 +232,7 @@ fn build_period_condition(time: &PlanTime, period: Period) -> Expr {
     )
 }
 
-/// Các vế WHERE chung của mọi câu, theo thứ tự trong câu. build_where ghép chúng bằng AND; thẻ "Đã hiểu là"
+/// Các vế WHERE chung của mọi câu, theo thứ tự trong câu. build_where ghép chúng bằng AND; thẻ "Cách tính"
 /// (understanding/why.rs) đọc từng vế để mỗi mục có đoạn SQL nguyên văn của câu đã chạy.
 pub struct WhyConditions {
     /// Bộ lọc của câu hỏi và của chỉ số; vế có OR đã bọc ngoặc.

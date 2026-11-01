@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* engine/sql_shape.rs - đọc hình dạng của một câu SELECT từ cây sqlparser: cột kết quả (cột nào là tổng hợp), các vế
-lọc, khóa nhóm, thứ tự, LIMIT và bảng đọc. Thẻ "Đã hiểu là" (service/understanding/mod.rs, #35), truy dòng nguồn (#34) và
+lọc, khóa nhóm, thứ tự, LIMIT và bảng đọc. Thẻ "Cách tính" (service/understanding/mod.rs, #35), truy dòng nguồn (#34) và
 kiểm hợp lý kết quả (#36) cùng đọc câu đã chạy (sql_guarded) qua đây, để ba chỗ hiểu câu giống nhau. Test ở
 engine/sql_shape_tests.rs.
 

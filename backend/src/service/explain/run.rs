@@ -100,7 +100,7 @@ pub struct WhyOutcome {
     /// Form đã chạy, nguyên object JSON của mô hình, để ask/why.rs lưu vào queries.explanation cùng Explanation.
     /// None khi chạy như câu thường.
     pub form: Option<serde_json::Value>,
-    /// Form đã kiểm, cho thẻ "Đã hiểu là" (understanding/why.rs). None khi chạy như câu thường.
+    /// Form đã kiểm, cho thẻ "Cách tính" (understanding/why.rs). None khi chạy như câu thường.
     pub plan: Option<WhyPlan>,
     /// Như RunOutcome::limit_kept; câu do code dựng không có LIMIT nên luôn false.
     pub limit_kept: bool,
@@ -499,7 +499,7 @@ fn build_unavailable(
     steps.push(build_step(StepName::Explain, started, false, Some(&reason)));
     outcome.warnings.push(Warning {
         code: WarningCode::ExplanationUnavailable,
-        message: format!("{reason}, nên kết quả chưa có phần giải thích."),
+        message: format!("{reason}, nên kết quả chưa có lời giải thích."),
     });
     Round::Done(Box::new(build_finished(outcome, steps)))
 }

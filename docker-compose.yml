@@ -64,6 +64,7 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BACKUP_API_KEY: ${GEMINI_BACKUP_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
       GEMINI_TIMEOUT_SECS: ${GEMINI_TIMEOUT_SECS:-60}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
@@ -93,6 +94,8 @@ services:
       SOURCE_SNAPSHOT_MODE: ${SOURCE_SNAPSHOT_MODE:-direct}
       # Cố định, không lấy từ .env: dataset mẫu nằm ở volume chỉ đọc bên dưới.
       SAMPLES_DIR: /samples
+      # Không truyền STATIC_DIR và SOURCE_POSTGRES_EXTENSION: image đặt sẵn đường dẫn trong container. Lấy từ .env thì
+      # đường dẫn đặt cho lúc chạy ngoài Docker sẽ lọt vào container và backend không tìm thấy file.
     ports:
       - "${BACKEND_BIND:+${BACKEND_BIND}:}${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
     # Cho backend gọi Ollama chạy trên máy host, kể cả trên Linux.

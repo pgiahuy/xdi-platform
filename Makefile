@@ -105,7 +105,7 @@ restore: ## Khôi phục, THAY dữ liệu hiện có: make restore FROM=~/xdi-b
 		sh -c 'find /data -mindepth 1 -delete && tar xzf - -C /data && chown -R 10001 /data' < "$(FROM)/data.tgz"
 	$(COMPOSE) up -d
 
-eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco.csv, rồi trên sales_demo và edu_demo nếu container xdi-demo-db đang chạy (#230); thoát mã 1 khi accuracy dưới eval/baseline.json
+eval: ## Bộ đánh giá câu hỏi mẫu: mock trên data/samples/dataco.csv, rồi trên sales_demo và edu_demo nếu container xdi-demo-db đang chạy; thoát mã 1 khi accuracy dưới eval/baseline.json
 	@# Database riêng xdi_eval để không rác vào db dev; lệnh createdb bỏ qua lỗi khi compose chưa chạy (CI đặt sẵn DATABASE_URL).
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
 	cd backend && cargo build -q
@@ -125,19 +125,19 @@ eval: ## Bộ đánh giá câu hỏi mẫu (#37): mock trên data/samples/dataco
 	  --baseline eval/baseline.json --out eval/result-edu_demo.json; \
 	else echo "xdi-demo-db is not running: skipping the evaluation on the sample database (data/postgres-demo/README.md)"; fi
 
-eval-lessons: ## Bộ đánh giá hai lượt, không và có bài học trong eval/lessons.json (#228); mock luôn như nhau, LLM_PROVIDER=gemini để đo thật
+eval-lessons: ## Bộ đánh giá hai lượt, không và có bài học trong eval/lessons.json; mock luôn như nhau, LLM_PROVIDER=gemini để đo thật
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
 	cd backend && cargo build -q
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=$(or $(LLM_PROVIDER),mock) DATA_DIR=backend/target/eval-data \
 	  $(CARGO_TARGET)/debug/xdi-backend eval --data data/samples/dataco.csv --cases eval/dataco.json --lessons eval/lessons.json
 
-eval-classify: ## Bộ câu thử phân loại câu hỏi (#197): tỷ lệ đúng của luật từ khóa và của mô hình; mặc định mock, LLM_PROVIDER=gemini để đo thật
+eval-classify: ## Bộ câu thử phân loại câu hỏi: tỷ lệ đúng của luật từ khóa và của mô hình; mặc định mock, LLM_PROVIDER=gemini để đo thật
 	-$(COMPOSE) exec -T postgres createdb -U xdi xdi_eval 2>/dev/null
 	cd backend && cargo build -q
 	DATABASE_URL=$(or $(DATABASE_URL),postgres://xdi:xdi@localhost:5433/xdi_eval) LLM_PROVIDER=$(or $(LLM_PROVIDER),mock) DATA_DIR=backend/target/eval-data \
 	  $(CARGO_TARGET)/debug/xdi-backend eval-classify --data data/samples/dataco.csv --cases eval/classify.json $(if $(PAUSE_MS),--pause-ms $(PAUSE_MS))
 
-eval-judge: ## Bộ đo mô hình chấm của cổng 2 (#201): số ca đúng trên tổng, bỏ lọt, chặn nhầm; không cần database; LLM_PROVIDER=gemini và GEMINI_API_KEY để đo thật, mock không có câu chấm
+eval-judge: ## Bộ đo mô hình chấm của bước kiểm nghĩa: số ca đúng trên tổng, bỏ lọt, chặn nhầm; không cần database; LLM_PROVIDER=gemini và GEMINI_API_KEY để đo thật, mock không có câu chấm
 	cd backend && cargo build -q
 	LLM_PROVIDER=$(or $(LLM_PROVIDER),mock) $(CARGO_TARGET)/debug/xdi-backend eval-judge --cases eval/judge.json $(if $(PAUSE_MS),--pause-ms $(PAUSE_MS))
 

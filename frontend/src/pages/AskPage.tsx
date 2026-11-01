@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AskPage.tsx - trang đầu của một workspace: hỏi dữ liệu. Chọn dataset (một database hay một file, #257; mở
-database ra thì ghim được một bảng bắt đầu, askScope.ts), gõ câu hỏi, xem thẻ "Đã hiểu là", đổi
+database ra thì ghim được một bảng bắt đầu, askScope.ts), gõ câu hỏi, xem thẻ "Cách tính", đổi
 giả định hoặc trả lời câu hỏi lại; phần hiện response ở AskOutcome.tsx, pane bằng chứng ở AskEvidence.tsx.
 Quy tắc gửi lựa chọn theo hợp đồng (ARCHITECTURE mục 8): đổi giả định hay trả lời câu hỏi lại thì gửi lại đúng câu
 hỏi đó kèm choices của response gần nhất (buildChoicesWith); gõ câu khác là câu mới, choices rỗng. Response gần nhất

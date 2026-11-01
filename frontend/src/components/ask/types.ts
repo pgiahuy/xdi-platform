@@ -37,7 +37,7 @@ export type ChoiceView = {
   options: ChoiceOptionView[]
 }
 
-/** Thẻ "Đã hiểu là": nhãn tiếng Việt của từng mục, backend viết sẵn. */
+/** Thẻ "Cách tính": nhãn tiếng Việt của từng mục, backend viết sẵn. */
 export type UnderstandingView = {
   measures: string[]
   filters: string[]

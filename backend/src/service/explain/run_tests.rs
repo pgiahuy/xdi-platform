@@ -739,7 +739,7 @@ pub(super) fn items(understanding: &Understanding) -> Vec<&UnderstoodItem> {
         .collect()
 }
 
-/// Thẻ "Đã hiểu là" dựng từ form: hai kỳ là khoảng thời gian, mỗi đoạn SQL là đoạn nguyên văn của sql_guarded; bảng tổng
+/// Thẻ "Cách tính" dựng từ form: hai kỳ là khoảng thời gian, mỗi đoạn SQL là đoạn nguyên văn của sql_guarded; bảng tổng
 /// theo quý vẽ đường.
 #[tokio::test]
 async fn why_card_names_the_two_periods() {

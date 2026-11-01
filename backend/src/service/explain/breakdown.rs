@@ -78,7 +78,7 @@ pub enum CodeQuery {
         /// Bản đã qua guard, trên tên logic: hiện cho người dùng.
         shown: String,
         result: ResultTable,
-        /// Điều kiện phân quyền guard đã thêm (GuardedSql::row_filters), để thẻ "Đã hiểu là" gắn nhãn phân quyền.
+        /// Điều kiện phân quyền guard đã thêm (GuardedSql::row_filters), để thẻ "Cách tính" gắn nhãn phân quyền.
         row_filters: Vec<String>,
     },
     /// Guard từ chối; lý do tiếng Việt.

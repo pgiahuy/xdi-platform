@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /* components/ask/SavedTurnBody.tsx - khối trả lời của một lượt đã lưu khi mở lại cuộc trò chuyện cũ (#164), kể cả khi
-tải lại trang. Lượt đã lưu có câu hỏi, trạng thái, dòng tóm tắt "Đã hiểu là" và lời trả lời đã hiện lúc hỏi (TurnItem,
+tải lại trang. Lượt đã lưu có câu hỏi, trạng thái, dòng tóm tắt "Cách tính" và lời trả lời đã hiện lúc hỏi (TurnItem,
 api/conversations.ts; lời lưu từ #201, câu hỏi trước đó không có), không có bảng kết quả, nên khối này hiện lại lời đó,
 nói rõ bảng và biểu đồ không được lưu và cho hỏi lại câu đó trên dữ liệu hiện tại. */
 
@@ -10,7 +10,7 @@ import { UnclearPoints } from './UnclearPoints'
 
 type Props = {
   status: 'answered' | 'needs_choice' | 'rejected' | 'failed'
-  /** Các dòng "Đã hiểu là" của lượt; rỗng khi lượt không có câu trả lời. Dòng không nhãn hiện nguyên chữ. */
+  /** Các dòng "Cách tính" của lượt; rỗng khi lượt không có câu trả lời. Dòng không nhãn hiện nguyên chữ. */
   understood: { label: string | null; text: string }[]
   /** Lời trả lời đã hiện lúc hỏi; warnings là các chỗ mô hình chấm thấy chưa rõ. null khi lượt không có lời đã lưu. */
   answer: { text: string; warnings: string[] } | null
@@ -38,7 +38,7 @@ export function SavedTurnBody({ status, understood, answer, onAskAgain, disabled
       )}
       {understood.length > 0 && (
         <div className="flex flex-col gap-1">
-          <p className="text-xs font-semibold tracking-wider text-label uppercase">Hệ thống đã hiểu là</p>
+          <p className="text-xs font-semibold tracking-wider text-label uppercase">Cách tính</p>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
             {understood.map((line, index) =>
               line.label ? (
