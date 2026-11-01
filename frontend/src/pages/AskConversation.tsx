@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/AskConversation.tsx - khung trò chuyện của trang hỏi (#164): các lượt xếp dọc theo thứ tự hỏi, mỗi lượt là
 bong bóng câu hỏi và khối trả lời (ChatTurn). Thứ tự: các lượt đã lưu của cuộc vừa mở lại (chỉ có câu hỏi và tóm tắt,
-kèm nút Hỏi lại), rồi các lượt hỏi trong phiên này (AskOutcome đủ thẻ "Đã hiểu là", bảng, câu hỏi lại), rồi lượt đang
+kèm nút Hỏi lại), rồi các lượt hỏi trong phiên này (AskOutcome đủ thẻ "Cách tính", bảng, câu hỏi lại), rồi lượt đang
 chờ câu trả lời nếu đang hỏi câu mới. Lượt đã ghi (có query_id) có hai nút đánh giá Tốt, Chưa đạt (#212), và lượt đã
 trả lời có nút Thêm vào báo cáo.
 Bấm hay đưa focus vào một lượt của phiên này thì pane bằng chứng hiện của lượt đó (AskPage giữ lượt đang chọn).

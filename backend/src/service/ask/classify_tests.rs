@@ -167,7 +167,7 @@ async fn model_answer_decides_the_kind() {
     assert!(by_model && ok);
     assert_eq!(
         detail,
-        "Câu hỏi thường: Câu hỏi đếm đơn theo cột lý do hủy."
+        "Câu hỏi số liệu: Câu hỏi đếm đơn theo cột lý do hủy."
     );
 
     // Câu bỏ sót của luật từ khóa; câu trả lời bọc trong khối ```json vẫn đọc được.
@@ -183,7 +183,7 @@ async fn long_reason_is_cut() {
     let long = format!(r#"{{"kind": "plain", "reason": "{}"}}"#, "a".repeat(500));
     let reply: &'static str = Box::leak(long.into_boxed_str());
     let (_, _, _, detail) = run(&StubLlm(Ok(reply)), "Doanh thu theo tháng").await;
-    let reason = detail.strip_prefix("Câu hỏi thường: ").unwrap();
+    let reason = detail.strip_prefix("Câu hỏi số liệu: ").unwrap();
     assert_eq!(reason.chars().count(), MAX_REASON_CHARS);
 }
 
@@ -201,7 +201,7 @@ async fn model_error_falls_back_to_keywords() {
         "{detail}"
     );
     assert!(
-        detail.ends_with("Kết quả: câu hỏi tìm nguyên nhân."),
+        detail.ends_with("Kết quả: câu hỏi nguyên nhân."),
         "{detail}"
     );
 }

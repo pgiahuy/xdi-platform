@@ -183,18 +183,18 @@ async fn relations(
     path = "/workspaces/{ws}/sources/{id}/snapshot",
     tag = "sources",
     operation_id = "snapshotSource",
-    summary = "Snapshot tables of the source, every readable table by default, one dataset per table (admin only)",
+    summary = "Snapshot tables of the source into its database dataset, every readable table by default (admin only)",
     description = "Without `table`, `tables` and `dataset_id`, every table and view the account can read is \
                    snapshotted; `tables` lists the ticked tables instead, and one name snapshots that table alone \
                    (for example one kept as metadata only). All tables are copied in one read-only REPEATABLE READ \
                    transaction, then stored as Parquet versions like uploaded files; a table snapshotted before from \
-                   this source gets a new version of its dataset, and one with unchanged content creates nothing \
+                   this source gets a new version of that table, and one with unchanged content creates nothing \
                    (`created` false). Every declared foreign key between tables snapshotted from this source is \
                    recorded as a relation; relations are never inferred. Limits are checked on Postgres sizes before \
                    copying: a table over SOURCE_TABLE_MAX_MB, or that would take the snapshot over \
                    SOURCE_SNAPSHOT_MAX_MB (smallest tables first), or over SOURCE_MAX_ROWS when that is set, keeps \
                    columns, types, keys and comments only (`metadata_only`). There is no row limit by default. \
-                   `dataset_id` snapshots that dataset again with every dataset linked to it.",
+                   `dataset_id` (a table id) snapshots that table again with every table linked to it.",
     params(
         ("ws" = String, Path, description = "Workspace slug"),
         ("id" = Uuid, Path, description = "Source id")

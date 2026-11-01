@@ -29,7 +29,7 @@ const stepLabels: Record<ErrorStep, string> = {
   guard: 'Guard từ chối SQL',
   run: 'SQL lỗi khi chạy',
   fanout: 'Chặn cộng lặp khi nối bảng',
-  why_form: 'Form câu hỏi tìm nguyên nhân sai',
+  why_form: 'Form câu hỏi nguyên nhân sai',
   narrate: 'Bộ kiểm chặn lời mô hình viết',
   feedback: 'Người hỏi đánh giá Chưa đạt',
 }
@@ -136,7 +136,7 @@ function AdminLessons({ ws, enabled }: { ws: string; enabled: boolean }) {
           Nhật ký lỗi
         </h3>
         <p className="text-sm text-muted-foreground">
-          Ghi tự động mỗi khi guard từ chối SQL, SQL lỗi khi chạy, câu cộng lặp bị chặn, form câu hỏi tìm nguyên nhân sai,
+          Ghi tự động mỗi khi guard từ chối SQL, SQL lỗi khi chạy, câu cộng lặp bị chặn, form câu hỏi nguyên nhân sai,
           bộ kiểm chặn lời mô hình viết, hay người hỏi bấm Chưa đạt. Nhật ký có câu hỏi của mọi thành viên.
         </p>
         {errors.error && <FormMessage kind="error">{errors.error.message}</FormMessage>}

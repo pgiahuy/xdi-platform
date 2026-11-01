@@ -15,8 +15,7 @@ Các bước, sắp để lỗi ở bước đầu không để lại gì:
    hiện hành, để phiên bản hiện hành luôn có file và có hồ sơ.
 6. Trả 201 rồi lập hồ sơ lớp ngữ nghĩa nền (service/semantic/mod.rs): mô tả, bí danh, câu hỏi gợi ý.
 Thư mục tạm xóa khi Staging ra khỏi phạm vi, kể cả khi lỗi; backend chết giữa chừng thì lần khởi động sau xóa
-(clear_staging). Bước 4 và 5 chưa nằm trong một giao dịch: lỗi giữa hai bước có thể để lại dòng thừa trong Postgres
-(#79).
+(clear_staging). Bước 4 và 5 chưa nằm trong một giao dịch: lỗi giữa hai bước có thể để lại dòng thừa trong Postgres.
 
 Thao tác file (tạo, đổi tên, xóa thư mục) dùng std::fs đồng bộ: đều là thao tác ngắn trên metadata; riêng xóa thư mục
 tạm có thể chạm file tới MAX_UPLOAD_MB, chấp nhận ở quy mô một bản cài. Lúc nạp, thư mục tạm chứa file gửi lên, Parquet

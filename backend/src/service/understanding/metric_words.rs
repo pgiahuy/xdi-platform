@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/understanding/metric_words.rs - dòng "Đo" của thẻ "Đã hiểu là" cho một chỉ số (#185): tên chỉ số kèm cách
+/* service/understanding/metric_words.rs - dòng "Đo" của thẻ "Cách tính" cho một chỉ số (#185): tên chỉ số kèm cách
 tính bằng lời, để người dùng không phải đọc SQL mới biết "Doanh thu" là cộng cột nào. Có mô tả thì dùng mô tả (admin
 viết ở màn Chỉ số); không có thì đọc công thức: "tổng cột X", "trung bình cột X"... Công thức dạng khác (thương, biểu
 thức lồng) không đọc thành lời được thì chỉ có tên. Thẻ câu thường (labels.rs) và câu "tại sao" (why.rs) cùng gọi. */

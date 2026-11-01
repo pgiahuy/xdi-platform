@@ -608,7 +608,7 @@ pub fn build_answer_verdict(
     if case.is_why() && response.explanation.is_none() {
         return (
             Verdict::Fail,
-            format!("câu tìm nguyên nhân chạy như câu thường; sql sinh ra: {sql}"),
+            format!("câu hỏi nguyên nhân chạy như câu hỏi số liệu; sql sinh ra: {sql}"),
         );
     }
     let Some(result) = &response.result else {

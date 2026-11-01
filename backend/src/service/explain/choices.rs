@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/explain/choices.rs - giả định của câu "tại sao" mà người hỏi đổi được (thẻ "Đã hiểu là", #35): kỳ so sánh của
+/* service/explain/choices.rs - giả định của câu "tại sao" mà người hỏi đổi được (thẻ "Cách tính", #35): kỳ so sánh của
 câu so hai kỳ (id why:base) và chỉ số chưa xác nhận (build_assumption_choices của ask/choices.rs, #29). explain/run.rs
 gọi sau khi kiểm form; lần hỏi sau người hỏi gửi lại lựa chọn, explain/check.rs áp nó lên base của form
 (build_chosen_base). Test ở explain/check_tests.rs.

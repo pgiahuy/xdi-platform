@@ -109,7 +109,7 @@ pub struct GuardedSql {
     pub runnable: String,
     /// Guard đã đổi LIMIT thế nào, chữ cho người dùng ("Thêm LIMIT 100000"); None khi giữ LIMIT của câu.
     pub limit_note: Option<String>,
-    /// Điều kiện lọc dòng guard đã thêm, in đúng như trong `shown`, để thẻ "Đã hiểu là" (#35) gắn nhãn điều kiện nào do
+    /// Điều kiện lọc dòng guard đã thêm, in đúng như trong `shown`, để thẻ "Cách tính" (#35) gắn nhãn điều kiện nào do
     /// phân quyền chứ không do câu hỏi. Mỗi điều kiện một lần dù bảng được đọc ở nhiều chỗ; rỗng khi không lọc.
     pub row_filters: Vec<String>,
     /// Tên các bảng câu thật sự đọc (AllowedTable::name), theo thứ tự gặp, mỗi bảng một lần. Luồng hỏi (#213) ghi phiên

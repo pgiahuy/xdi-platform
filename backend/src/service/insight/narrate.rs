@@ -86,7 +86,7 @@ pub async fn narrate_insight(
 ) -> Narrated {
     let started = Instant::now();
     if !enabled {
-        let detail = "INSIGHT_TEXT=false nên phần giải thích dùng câu do code viết";
+        let detail = "INSIGHT_TEXT=false nên lời giải thích dùng câu do code viết";
         return build_code_narrated(parts, started, detail.to_string());
     }
     // Bài học đã duyệt nối vào prompt gốc, nên lần viết lại cũng mang theo.
@@ -194,7 +194,7 @@ pub async fn narrate_insight(
         return finish_unclear(unclear, started);
     }
     let detail = format!(
-        "Lời của mô hình chưa qua hai cổng kiểm sau {MAX_NARRATE_ATTEMPTS} lần viết: {}",
+        "Lời của mô hình chưa qua kiểm số và kiểm nghĩa sau {MAX_NARRATE_ATTEMPTS} lần viết: {}",
         problems.join("; ")
     );
     // Lời trượt mọi lần viết thì không trả cho người dùng: câu của code thay vào, kết luận ghi là mismatch.

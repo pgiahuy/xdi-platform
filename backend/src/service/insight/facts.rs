@@ -100,7 +100,7 @@ pub fn build_value_number(value: Decimal) -> String {
     build_number_text(&value.normalize().to_string())
 }
 
-/// "tổng doanh thu"; độ đo đã mở đầu bằng "Tổng" (nhãn "Tổng doanh thu" của thẻ "Đã hiểu là") thì không thêm chữ
+/// "tổng doanh thu"; độ đo đã mở đầu bằng "Tổng" (nhãn "Tổng doanh thu" của thẻ "Cách tính") thì không thêm chữ
 /// "tổng" thứ hai.
 fn build_total_words(measure: &str) -> String {
     let measure = lower_first(measure);
@@ -479,7 +479,7 @@ pub fn build_top_parts(
     parts
 }
 
-/// Danh sách dòng không gộp: chỉ số dòng và điều kiện lọc (nhãn của thẻ "Đã hiểu là").
+/// Danh sách dòng không gộp: chỉ số dòng và điều kiện lọc (nhãn của thẻ "Cách tính").
 pub fn build_rows_parts(total_rows: u64, limit_reached: bool, filters: &[String]) -> InsightParts {
     let count = build_value_number(Decimal::from(total_rows));
     let title = if limit_reached {

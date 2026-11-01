@@ -2,7 +2,7 @@
 /* service/ask/mod.rs - luồng một câu hỏi (docs/ARCHITECTURE.md mục 2): dataset và phiên bản đang dùng, ngữ cảnh
 (ask/context.rs) cùng chỉ số, câu mẫu đã duyệt và gói ngành, mô hình viết SQL (prompt ở ask/prompt.rs), guard, chạy và sửa
 một lần (ask/run.rs), ghi lịch sử (engine/store/queries.rs), rồi dựng AskResponse (ask/contract.rs). Mỗi bước đo thời
-gian thành một AskStep. Lựa chọn của response dựng ở ask/choices.rs và ask/response_choices.rs; thẻ "Đã hiểu là", vai
+gian thành một AskStep. Lựa chọn của response dựng ở ask/choices.rs và ask/response_choices.rs; thẻ "Cách tính", vai
 trò cột và gợi ý biểu đồ ở ask/view.rs. Sau bước context, bước classify (ask/classify.rs) nhờ mô hình phân loại câu
 hỏi, mô hình lỗi thì dùng luật từ khóa; câu hỏi tìm nguyên nhân rẽ sang ask/why.rs, dùng chung ngữ cảnh, bảng được
 phép và cách ghi lịch sử ở đây.
@@ -426,7 +426,7 @@ async fn ask_steps(
     }
     apply_unrelated_message(&database, &mut outcome);
     apply_needed_table_message(state, ws, &dataset, question, &mut outcome).await?;
-    // Giả định thành Choice một lần, dùng cho cả thẻ "Đã hiểu là" lẫn AskResponse.choices để hai chỗ cùng id.
+    // Giả định thành Choice một lần, dùng cho cả thẻ "Cách tính" lẫn AskResponse.choices để hai chỗ cùng id.
     let answer = SqlAnswer {
         terms: outcome.terms.clone(),
         assumptions: outcome.assumptions.clone(),
@@ -953,7 +953,7 @@ pub(super) fn build_base_response(
     }
 }
 
-/// Hồ sơ cột cho thẻ "Đã hiểu là" và nhãn của câu trả lời: cột của bảng đang chọn (ngữ cảnh), thêm cột của các bảng
+/// Hồ sơ cột cho thẻ "Cách tính" và nhãn của câu trả lời: cột của bảng đang chọn (ngữ cảnh), thêm cột của các bảng
 /// liên quan chưa trùng tên. Câu nối bảng tính trên order_items."sales" mà chỉ có hồ sơ của bảng đang chọn thì nhãn
 /// thành "Tổng sales" thay vì tên tiếng Việt của cột. Tên trùng giữa hai bảng (thường là cột khóa nối) giữ cột của bảng
 /// đang chọn.

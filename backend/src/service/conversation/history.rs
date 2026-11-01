@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/* service/conversation/history.rs - khối "Hội thoại trước" gửi mô hình (#164) và phần "Đã hiểu là" dạng chữ ngắn lưu
+/* service/conversation/history.rs - khối "Hội thoại trước" gửi mô hình (#164) và phần "Cách tính" dạng chữ ngắn lưu
 cùng mỗi lượt (queries.understood).
 
 Mỗi lượt chỉ có câu hỏi, trạng thái, câu SQL đã chạy và phần đã hiểu (độ đo, bộ lọc, nhóm, kỳ). Không có dòng dữ liệu,
@@ -81,7 +81,7 @@ fn build_status_text(status: &str) -> &str {
     }
 }
 
-/// Phần "Đã hiểu là" dạng một dòng chữ: độ đo, bộ lọc (trừ điều kiện phân quyền), nhóm, kỳ. Chỉ có nhãn, nhãn dựng từ
+/// Phần "Cách tính" dạng một dòng chữ: độ đo, bộ lọc (trừ điều kiện phân quyền), nhóm, kỳ. Chỉ có nhãn, nhãn dựng từ
 /// câu SQL và hồ sơ cột, không từ kết quả. None khi thẻ không có mục nào.
 pub fn build_understood_text(understanding: &Understanding) -> Option<String> {
     let filters: Vec<&UnderstoodItem> = understanding

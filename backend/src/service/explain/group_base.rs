@@ -2,7 +2,7 @@
 /* service/explain/group_base.rs - nhóm gốc khi câu "tại sao" so hai nhóm (#244): một giá trị của cột ("Europe so với
 LATAM"), hay mọi nhóm còn lại của cột đó ("vì sao Scotland rút học nhiều" so Scotland với các vùng khác gộp lại).
 explain/check.rs dựng GroupBase khi kiểm form; explain/sql.rs lấy điều kiện lát cắt, explain/breakdown.rs,
-explain/premise.rs và thẻ "Đã hiểu là" (understanding/why.rs) lấy nhãn ở đây, để mọi chỗ gọi lát gốc cùng một tên.
+explain/premise.rs và thẻ "Cách tính" (understanding/why.rs) lấy nhãn ở đây, để mọi chỗ gọi lát gốc cùng một tên.
 
 Nhãn của phần còn lại viết thường ("các thị trường còn lại") vì nó luôn đứng giữa câu: câu khuôn "cao hơn các thị
 trường còn lại", thẻ "Thị trường: Pacific Asia so với các thị trường còn lại", và lời của mô hình chép nhãn này. */

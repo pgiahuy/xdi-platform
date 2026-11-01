@@ -297,7 +297,7 @@ async fn admin_manages_roles_and_member_is_refused() {
     r.asking.db.drop().await;
 }
 
-/// Cùng câu hỏi: admin thấy mọi thị trường; Minh chỉ thấy phần vai cho phép, thẻ "Đã hiểu là" có mục lọc theo quyền
+/// Cùng câu hỏi: admin thấy mọi thị trường; Minh chỉ thấy phần vai cho phép, thẻ "Cách tính" có mục lọc theo quyền
 /// xem; đổi luật hay vai có hiệu lực từ request kế tiếp; AND trong một vai, OR giữa hai vai; admin mang vai vẫn thấy hết.
 #[tokio::test]
 async fn member_with_roles_sees_only_allowed_rows() {

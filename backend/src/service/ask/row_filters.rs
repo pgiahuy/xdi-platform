@@ -24,8 +24,7 @@ Luật đã chốt:
 - Bảng cha bị lọc mà không đọc được (chưa có phiên bản, chưa có file Parquet): ẩn mọi dòng của bảng con, vì không kiểm
   được dòng nào trỏ tới phần được thấy.
 
-Đi theo mọi quan hệ trong workspace, không giới hạn số bước như nhóm bảng của câu hỏi (ask/related.rs): dừng ở bước
-thứ ba thì bảng xa hơn một bước lại thấy hết.
+Đi theo mọi quan hệ trong workspace, không giới hạn số bước: dừng ở bước nào thì bảng xa hơn bước đó lại thấy hết.
 
 Nhiều vai (#45): một thành viên mang được nhiều vai dữ liệu. Điều kiện của từng vai dựng riêng như trên (AND trong một
 vai: mọi luật của vai trên bảng và mọi đường lan); giữa các vai là OR (RowFilter::AnyOf), tức người đó thấy hợp phần

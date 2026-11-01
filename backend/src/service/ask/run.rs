@@ -86,7 +86,7 @@ pub struct RunOutcome {
     pub sql_guarded: Option<String>,
     pub result: Option<ResultTable>,
     /// Guard giữ nguyên LIMIT của câu mô hình viết (GuardedSql::limit_note là None), nên LIMIT trong sql_guarded là ý
-    /// của câu hỏi chứ không phải trần guard thêm; thẻ "Đã hiểu là" (understanding/mod.rs) chỉ hiện mục limit khi đó. Chỉ có
+    /// của câu hỏi chứ không phải trần guard thêm; thẻ "Cách tính" (understanding/mod.rs) chỉ hiện mục limit khi đó. Chỉ có
     /// nghĩa khi answered, còn lại là false.
     pub limit_kept: bool,
     /// Điều kiện phân quyền guard đã thêm vào sql_guarded (GuardedSql::row_filters), để thẻ gắn nhãn phân quyền; rỗng
