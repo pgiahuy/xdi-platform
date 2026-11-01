@@ -10,8 +10,8 @@
 | ----------------- | ------- | ------- | -------- | -------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
 | id_assessment     | integer |         | false    |          | [edu.assessments](edu.assessments.md) | Mã bài đánh giá, khóa ngoại tới edu.assessments                                    |
 | id_student        | integer |         | false    |          | [edu.students](edu.students.md)       | Mã sinh viên                                                                       |
-| code_module       | text    |         | false    |          | [edu.students](edu.students.md)       | Mã môn của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students |
-| code_presentation | text    |         | false    |          | [edu.students](edu.students.md)       | Mã kỳ của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students  |
+| code_module       | text    |         | false    |          | [edu.students](edu.students.md)       | Mã môn học của bài đánh giá. Chép từ edu.assessments để có khóa ngoại tới edu.students |
+| code_presentation | text    |         | false    |          | [edu.students](edu.students.md)       | Mã kỳ của bài đánh giá. Chép từ edu.assessments để có khóa ngoại tới edu.students  |
 | date_submitted    | integer |         | false    |          |                                       | Ngày nộp, tính bằng số ngày từ ngày bắt đầu học phần                               |
 | is_banked         | boolean |         | false    |          |                                       | Điểm chuyển từ lần học trước (true) hay làm trong lần này (false)                  |
 | score             | numeric |         | true     |          |                                       | Điểm từ 0 đến 100; dưới 40 là trượt bài. Rỗng khi nguồn ghi "?"                    |

@@ -30,7 +30,7 @@ use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::significance::{build_change_weight, ChangeWeight};
 use crate::service::insight::facts::{
     build_group_parts, build_rows_parts, build_series_parts, build_single_parts, build_top_parts,
-    find_largest_step, InsightParts, Point,
+    find_largest_step, InsightParts, MeasureText, Point,
 };
 use crate::service::insight::narrate::{
     build_insight_check, build_insight_prompt, find_causal_word, narrate_insight,
@@ -85,7 +85,7 @@ fn groups_give_the_top_share_the_count_to_80_percent_and_outliers() {
         point("Africa", 50),
     ];
     let parts = build_group_parts(
-        "Doanh thu",
+        MeasureText::total("Doanh thu"),
         "Thị trường",
         &groups,
         Some(Decimal::from(1000)),
@@ -110,7 +110,7 @@ fn groups_give_the_top_share_the_count_to_80_percent_and_outliers() {
 #[test]
 fn parts_get_readable_numbers_and_the_reading() {
     let groups = [point("Europe", 7_000_000), point("LATAM", 3_000_000)];
-    let mut parts = build_group_parts("Doanh thu", "Thị trường", &groups, None);
+    let mut parts = build_group_parts(MeasureText::total("Doanh thu"), "Thị trường", &groups, None);
     parts.add_reading("doanh thu", "doanh thu sau chiết khấu");
     parts.apply_readable_numbers();
     assert!(
@@ -133,7 +133,12 @@ fn even_groups_are_not_notable() {
         point("C", 95),
         point("D", 105),
     ];
-    let parts = build_group_parts("Doanh thu", "Nhóm", &groups, Some(Decimal::from(410)));
+    let parts = build_group_parts(
+        MeasureText::total("Doanh thu"),
+        "Nhóm",
+        &groups,
+        Some(Decimal::from(410)),
+    );
     assert!(!parts.notable);
     assert_eq!(
         parts.points.last().unwrap().lead,
@@ -144,14 +149,18 @@ fn even_groups_are_not_notable() {
 #[test]
 fn top_n_gives_the_share_of_the_total_and_the_gap() {
     let shown = [point("Europe", 600), point("LATAM", 400)];
-    let parts = build_top_parts("Doanh thu", &shown, Some((Decimal::from(2000), 5)));
+    let parts = build_top_parts(
+        MeasureText::total("Doanh thu"),
+        &shown,
+        Some((Decimal::from(2000), 5)),
+    );
     assert_eq!(
         parts.title,
         "2 nhóm đầu chiếm 50% tổng doanh thu (2.000 trên 5 nhóm)."
     );
     assert_eq!(parts.points[0].text, "Europe cao hơn LATAM 200 (50%).");
     let close = [point("Europe", 1000), point("LATAM", 990)];
-    assert!(!build_top_parts("Doanh thu", &close, None).notable);
+    assert!(!build_top_parts(MeasureText::total("Doanh thu"), &close, None).notable);
 }
 
 #[test]
@@ -162,7 +171,13 @@ fn series_names_the_largest_step_or_says_nothing_notable() {
         point("Tháng 11/2017", 800),
     ];
     assert_eq!(find_largest_step(&series), Some(2));
-    let parts = build_series_parts("Doanh thu", &series, None, Some((40, 40)));
+    let parts = build_series_parts(
+        MeasureText::total("Doanh thu"),
+        &series,
+        None,
+        Some((40, 40)),
+        false,
+    );
     assert!(parts.notable);
     assert_eq!(
         parts.title,
@@ -177,7 +192,7 @@ fn series_names_the_largest_step_or_says_nothing_notable() {
         point("Tháng 10/2017", 1010),
         point("Tháng 11/2017", 1005),
     ];
-    let parts = build_series_parts("Doanh thu", &flat, None, None);
+    let parts = build_series_parts(MeasureText::total("Doanh thu"), &flat, None, None, false);
     assert!(!parts.notable);
     assert_eq!(parts.title, "Không có thay đổi đáng kể giữa các kỳ.");
 }
@@ -186,7 +201,12 @@ fn series_names_the_largest_step_or_says_nothing_notable() {
 fn single_value_with_a_small_sample_is_not_notable() {
     let current = point("tháng 11/2017", 900);
     let previous = point("tháng 10/2017", 300);
-    let parts = build_single_parts("Doanh thu", &current, Some((&previous, Some((9, 4)))), None);
+    let parts = build_single_parts(
+        MeasureText::total("Doanh thu"),
+        &current,
+        Some((&previous, Some((9, 4)))),
+        None,
+    );
     assert!(!parts.notable);
     assert_eq!(parts.title, "Doanh thu tháng 11/2017 là 900.");
     assert_eq!(
@@ -194,7 +214,7 @@ fn single_value_with_a_small_sample_is_not_notable() {
         "tháng 10/2017 có 9 dòng, tháng 11/2017 có 4 dòng: quá ít dòng để kết luận."
     );
     let parts = build_single_parts(
-        "Doanh thu",
+        MeasureText::total("Doanh thu"),
         &current,
         Some((&previous, Some((90, 40)))),
         None,
@@ -366,7 +386,13 @@ fn top_n_total_drops_the_limit_and_sums_every_group() {
 
 fn checked_parts() -> InsightParts {
     let series = [point("Tháng 10/2017", 400), point("Tháng 11/2017", 800)];
-    build_series_parts("Doanh thu", &series, None, Some((40, 40)))
+    build_series_parts(
+        MeasureText::total("Doanh thu"),
+        &series,
+        None,
+        Some((40, 40)),
+        false,
+    )
 }
 
 #[test]

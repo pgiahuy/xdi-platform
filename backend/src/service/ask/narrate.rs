@@ -25,6 +25,7 @@ use crate::service::ask::contract::{
 use crate::service::ask::failures::{FailedStep, StepFailure};
 use crate::service::ask::judge::judge;
 use crate::service::ask::lessons::build_with_lessons;
+use crate::service::ask::narrate_text::{build_tidy_text, upper_first};
 use crate::service::ask::repair::build_user_text;
 use crate::service::explain::claims::{
     build_claim_check, build_narrate_schema, build_rewrite_prompt, parse_narrate_reply, Claim,
@@ -232,8 +233,12 @@ pub async fn narrate(
 /// đưa vào prompt viết lại và vào detail của bước.
 fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<String>> {
     let mut parsed = parse_narrate_reply(reply).map_err(|problem| vec![problem])?;
+    let labels = build_column_labels(explanation);
+    parsed.headline = upper_first(&build_tidy_text(parsed.headline.trim(), &labels));
     for reason in &mut parsed.reasons {
-        reason.text = build_text_without_lead(&reason.lead, &reason.text);
+        reason.lead = upper_first(&build_tidy_text(reason.lead.trim(), &labels));
+        let text = build_text_without_lead(&reason.lead, &reason.text);
+        reason.text = build_tidy_text(&text, &labels);
     }
     if parsed.headline.trim().is_empty() {
         return Err(vec!["Câu mở đầu trống".to_string()]);
@@ -284,6 +289,16 @@ fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<St
         },
         claims: parsed.claims,
     })
+}
+
+/// Nhãn cột của bảng phân rã và của cột hai nhóm đang so, cho build_tidy_text.
+fn build_column_labels(explanation: &Explanation) -> Vec<&str> {
+    explanation
+        .dimensions
+        .iter()
+        .filter_map(|d| d.label.as_deref())
+        .chain(explanation.slice_column_label.as_deref())
+        .collect()
 }
 
 /// Câu của một ý bỏ phần lặp lại đầu ý: mô hình hay viết "Hiệu ứng tỷ suất tăng" làm đầu ý rồi mở câu bằng đúng cụm đó,

@@ -26,6 +26,7 @@ use crate::engine::store::{ProfileColumn, ProfileRole};
 use crate::service::ask::fanout::JoinLink;
 use crate::service::explain::check::DIMENSION_MAX_VALUES;
 use crate::service::explain::sql::build_ident;
+use crate::service::understanding::labels::{build_display_name, lower_first};
 
 /// Số bước tối đa đi từ bảng chính lên các bảng liên quan khi tìm chiều phân rã (order_items, orders, customers là hai
 /// bước). Nhóm bảng của câu hỏi không còn giới hạn số bước (#249, ask/related.rs), nhưng mỗi bảng thêm vào là thêm các
@@ -211,14 +212,10 @@ fn is_dimension(column: &ProfileColumn) -> bool {
             .is_some_and(|n| (2..=DIMENSION_MAX_VALUES).contains(&n))
 }
 
-// Bí danh đầu tiên của hồ sơ ngữ nghĩa, như build_labels của explain/check.rs.
+// Nhãn của cột trong lời, như build_labels của explain/check.rs.
 fn build_label(column: &ProfileColumn) -> Option<String> {
-    let alias = column
-        .aliases
-        .iter()
-        .map(|a| a.trim())
-        .find(|a| !a.is_empty())?;
-    (alias.to_lowercase() != column.name.to_lowercase()).then(|| alias.to_string())
+    build_display_name(&column.name, &column.aliases, column.description.as_deref())
+        .map(|label| lower_first(&label))
 }
 
 /// Phần FROM của một câu: tên bảng chính khi câu không cần cột liên quan nào, hay câu con nối các bảng cần cho các cột

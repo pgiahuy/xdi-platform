@@ -13,7 +13,7 @@ use crate::service::ask::contract::{
 use crate::service::ask::summary::{
     build_answer, build_rows_answer, build_template_answer, SummaryInput, NO_DATA_ANSWER,
 };
-use crate::service::insight::facts::{build_group_parts, Point};
+use crate::service::insight::facts::{build_group_parts, MeasureText, Point};
 use crate::service::insight::find_unsendable_key;
 use crate::service::insight::narrate::build_insight_prompt;
 use crate::service::insight::plan::PlainTable;
@@ -234,6 +234,23 @@ fn checked_insight_text_becomes_the_answer() {
     assert!(!build_answer(&off).unwrap().by_model);
 }
 
+/// Lời của mô hình không được dùng mà câu khuôn chỉ đếm dòng (bảng không xếp theo số đo): đoạn trả lời là câu chính của
+/// phần giải thích do code tính, không phải "Kết quả có 12 dòng, xem bảng bên dưới." (lỗi gặp với Gemini, 01/11).
+#[test]
+fn unsorted_table_without_model_text_uses_the_main_sentence() {
+    let result = table(&[("Cleats", 10.0), ("Fishing", 20.0)]);
+    let mut code = insight(InsightKind::TimeSeries, "câu của code", false);
+    code.title =
+        "Tháng 11/2017 đổi mạnh nhất so với kỳ trước: giảm 402.687,94 (41,7%).".to_string();
+    let outcome = build_answer(&input(&result, None, Some(&code))).unwrap();
+    assert_eq!(outcome.text, code.title);
+    assert!(!outcome.by_model);
+    // Không có câu chính thì vẫn là câu khuôn.
+    code.title = String::new();
+    let outcome = build_answer(&input(&result, None, Some(&code))).unwrap();
+    assert_eq!(outcome.text, "Kết quả có 2 dòng, xem bảng bên dưới.");
+}
+
 /// Danh sách dòng không gộp ("danh sách khách hàng ở Scotland"): chỉ câu khuôn số dòng và điều kiện lọc, kể cả khi
 /// insight có lời của mô hình (insight/mod.rs không gọi mô hình cho loại này).
 #[test]
@@ -314,7 +331,7 @@ fn insight_prompt_has_no_result_rows_or_sensitive_values() {
             value: value.to_string().parse().unwrap(),
         })
         .collect();
-    let parts = build_group_parts("Doanh thu", "Danh mục", &points, None);
+    let parts = build_group_parts(MeasureText::total("Doanh thu"), "Danh mục", &points, None);
     let prompt = build_insight_prompt("Doanh thu theo danh mục", &parts);
     for (_, email, value) in rows {
         assert!(!prompt.contains(email), "{prompt}");

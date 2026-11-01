@@ -27,6 +27,7 @@ use crate::service::explain::form::{FieldError, WhyForm};
 use crate::service::explain::measure_column::check_column_measure;
 use crate::service::explain::sql::build_total_aggregate;
 use crate::service::profile::is_integer_type;
+use crate::service::understanding::labels::build_display_name;
 
 /// Độ đo đã kiểm.
 #[derive(Debug, Clone, PartialEq)]
@@ -78,13 +79,10 @@ pub(super) fn check_measure(
     check_column_measure(measure, profile, errors)
 }
 
-/// Tên tiếng Việt của cột: bí danh đầu tiên trong hồ sơ ngữ nghĩa, như build_labels của explain/check.rs.
-pub(super) fn build_vietnamese_name(column: &ProfileColumn) -> Option<&str> {
-    column
-        .aliases
-        .iter()
-        .map(|a| a.trim())
-        .find(|a| !a.is_empty())
+/// Tên tiếng Việt của cột: bí danh có dấu đầu tiên của hồ sơ ngữ nghĩa, không có thì phần đầu của mô tả
+/// (understanding/labels.rs, build_display_name), như build_labels của explain/check.rs.
+pub(super) fn build_vietnamese_name(column: &ProfileColumn) -> Option<String> {
+    build_display_name(&column.name, &column.aliases, column.description.as_deref())
 }
 
 pub(super) fn build_plan_measure(

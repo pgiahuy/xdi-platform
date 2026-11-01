@@ -41,8 +41,8 @@ CREATE TABLE edu.students (
     FOREIGN KEY (code_module, code_presentation) REFERENCES edu.courses (code_module, code_presentation)
 );
 COMMENT ON TABLE edu.students IS 'Sinh viên trong một học phần (từ studentInfo.csv). Mỗi dòng một sinh viên học một môn trong một kỳ';
-COMMENT ON COLUMN edu.students.code_module IS 'Mã môn học, cùng edu.courses';
-COMMENT ON COLUMN edu.students.code_presentation IS 'Mã kỳ, cùng edu.courses';
+COMMENT ON COLUMN edu.students.code_module IS 'Mã môn học';
+COMMENT ON COLUMN edu.students.code_presentation IS 'Mã kỳ';
 COMMENT ON COLUMN edu.students.id_student IS 'Mã sinh viên (đã ẩn danh). Một sinh viên có thể có nhiều dòng nếu học nhiều học phần';
 COMMENT ON COLUMN edu.students.gender IS 'Giới tính: M nam, F nữ';
 COMMENT ON COLUMN edu.students.region IS 'Vùng địa lý nơi sinh viên sống khi học';
@@ -69,7 +69,7 @@ COMMENT ON COLUMN edu.registrations.code_module IS 'Mã môn học';
 COMMENT ON COLUMN edu.registrations.code_presentation IS 'Mã kỳ';
 COMMENT ON COLUMN edu.registrations.id_student IS 'Mã sinh viên';
 COMMENT ON COLUMN edu.registrations.date_registration IS 'Ngày đăng ký, tính bằng số ngày so với ngày bắt đầu học phần (âm là đăng ký trước). Rỗng khi nguồn ghi "?"';
-COMMENT ON COLUMN edu.registrations.date_unregistration IS 'Ngày hủy đăng ký, cùng cách tính. Rỗng nếu sinh viên không hủy';
+COMMENT ON COLUMN edu.registrations.date_unregistration IS 'Ngày hủy đăng ký, tính bằng số ngày so với ngày bắt đầu học phần. Rỗng nếu sinh viên không hủy';
 
 CREATE TABLE edu.assessments (
     id_assessment integer PRIMARY KEY,
@@ -103,8 +103,8 @@ CREATE TABLE edu.student_assessments (
 COMMENT ON TABLE edu.student_assessments IS 'Điểm từng bài đánh giá của sinh viên (từ studentAssessment.csv). Mỗi dòng một sinh viên nộp một bài';
 COMMENT ON COLUMN edu.student_assessments.id_assessment IS 'Mã bài đánh giá, khóa ngoại tới edu.assessments';
 COMMENT ON COLUMN edu.student_assessments.id_student IS 'Mã sinh viên';
-COMMENT ON COLUMN edu.student_assessments.code_module IS 'Mã môn của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students';
-COMMENT ON COLUMN edu.student_assessments.code_presentation IS 'Mã kỳ của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students';
+COMMENT ON COLUMN edu.student_assessments.code_module IS 'Mã môn học của bài đánh giá. Chép từ edu.assessments để có khóa ngoại tới edu.students';
+COMMENT ON COLUMN edu.student_assessments.code_presentation IS 'Mã kỳ của bài đánh giá. Chép từ edu.assessments để có khóa ngoại tới edu.students';
 COMMENT ON COLUMN edu.student_assessments.date_submitted IS 'Ngày nộp, tính bằng số ngày từ ngày bắt đầu học phần';
 COMMENT ON COLUMN edu.student_assessments.is_banked IS 'Điểm chuyển từ lần học trước (true) hay làm trong lần này (false)';
 COMMENT ON COLUMN edu.student_assessments.score IS 'Điểm từ 0 đến 100; dưới 40 là trượt bài. Rỗng khi nguồn ghi "?"';

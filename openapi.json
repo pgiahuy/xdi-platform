@@ -8337,7 +8337,7 @@
       },
       "InsightKind": {
         "type": "string",
-        "description": "- `single_value`: one number; compared with the period before when the question names a period.\n- `time_series`: one measure over periods; overall direction and the period that changed most against the one\n  before, broken down by dimension in `AskResponse.explanation`.\n- `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the\n  total, groups far from the mean.\n- `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the\n  first two.\n- `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.",
+        "description": "- `single_value`: one number; compared with the period before when the question names a period.\n- `time_series`: one measure over periods; overall direction and the period that changed most against the one\n  before, broken down by dimension in `AskResponse.explanation`.\n- `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the\n  total, groups far from the mean (for a measure that does not add up, such as an average or a rate: the highest\n  and the lowest group). Also one measure over two columns: the top combinations and the top group of each\n  column.\n- `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the\n  first two.\n- `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.",
         "enum": [
           "single_value",
           "time_series",

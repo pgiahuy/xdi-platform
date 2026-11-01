@@ -10,7 +10,8 @@ Không gửi dòng kết quả vì dòng có thể chứa giá trị của mọi
 viết lại cùng các con số.
 
 Danh sách dòng không gộp (insight kind rows) luôn dùng câu khuôn: số dòng và điều kiện lọc, hay từng ô khi chỉ có một
-dòng ít cột. ANSWER_TEXT=false thì luôn dùng câu khuôn. Test ở ask/summary_tests.rs. */
+dòng ít cột. ANSWER_TEXT=false thì không dùng lời của mô hình. Không có lời của mô hình mà câu khuôn chỉ đếm dòng thì đoạn
+trả lời là câu chính code đã tính cho phần giải thích. Test ở ask/summary_tests.rs. */
 
 use rust_decimal::Decimal;
 
@@ -95,8 +96,20 @@ pub fn build_answer(input: &SummaryInput<'_>) -> Option<SummaryOutcome> {
             text: insight.summary.clone(),
             by_model: true,
         }),
+        // Không có lời của mô hình (trượt kiểm, tắt, lỗi) mà câu khuôn chỉ đếm dòng: câu chính phần giải thích đã tính
+        // ("Tháng 11/2017 đổi mạnh nhất...", "First Class đứng đầu với 95,3%.") nói được nhiều hơn "Kết quả có 12 dòng".
+        Some(insight) if !insight.title.is_empty() && only_counts_rows(result) => {
+            code(insight.title.clone())
+        }
         _ => code(build_template_answer(input)),
     }
+}
+
+/// Câu khuôn của bảng này chỉ là "Kết quả có N dòng, xem bảng bên dưới.": không phải một ô, một dòng ngắn, hay bảng
+/// xếp giảm dần theo số đo.
+fn only_counts_rows(result: &ResultTable) -> bool {
+    let one_cell = result.columns.len() == 1 && result.total_rows == 1;
+    !one_cell && !is_short_row(result) && build_top_group(result).is_none()
 }
 
 /// Câu khuôn của danh sách dòng không gộp: "Có 37 dòng khớp điều kiện: <lọc>." Điều kiện là nhãn khoảng thời gian và

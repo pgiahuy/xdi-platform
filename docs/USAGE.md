@@ -145,6 +145,12 @@ theo một chiều với một độ đo), bảng **Kết quả** và nút **T�
 ghi `Hiện 1.000 trên <tổng> dòng.` Số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân); CSV giữ giá
 trị gốc. Chỗ lời giải thích chưa rõ nghĩa hiện ngay dưới lời, để người đọc đối chiếu với số đã tính.
 
+Lời giải thích của câu hỏi số liệu do code chọn ý theo hình dạng kết quả: theo nhóm thì nhóm đứng đầu và tỷ trọng (độ đo
+là trung bình hay tỷ lệ thì nhóm cao nhất và thấp nhất), theo hai cột nhóm thì các tổ hợp lớn nhất và nhóm đứng đầu của
+từng cột, theo thời gian thì tổng các kỳ, xu hướng và kỳ đổi mạnh nhất. Tỷ lệ viết bằng phần trăm và điểm phần trăm. Câu
+hỏi chung kiểu "tình hình doanh thu" được trả lời theo tháng. Lời của mô hình không qua kiểm số hay kiểm nghĩa thì đoạn
+trả lời là câu chính hệ thống đã tính.
+
 Thẻ **Cách tính** ghi cách hệ thống hiểu câu hỏi, đọc từ câu SQL đã chạy: **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**,
 **Giới hạn**, **Khoảng thời gian**, và bộ lọc theo quyền xem khi người hỏi có vai dữ liệu. Câu có giả định thì kèm
 **Giả định, bấm để đổi rồi hỏi lại**.

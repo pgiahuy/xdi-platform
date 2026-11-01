@@ -15,6 +15,7 @@ use crate::service::explain::breakdown::{QueryEnv, ASK_STOP_HINT};
 use crate::service::explain::lower_first;
 use crate::service::insight::plan::PlainTable;
 use crate::service::insight::{build_insight, ColumnReading, InsightInput, InsightOutcome};
+use crate::service::understanding::labels::build_display_name;
 use crate::state::AppState;
 
 /// None khi câu chưa answered hay không có bảng kết quả. lessons là bài học đã duyệt liên quan câu hỏi, cho prompt
@@ -75,7 +76,7 @@ pub(super) async fn run_insight(
 }
 
 /// Cụm ngữ cảnh đã tự chọn một trong nhiều cột (còn cột khác để đổi, người hỏi chưa chọn), với tên tiếng Việt của cột:
-/// bí danh đầu của hồ sơ, không có thì mô tả, cuối cùng là tên cột.
+/// bí danh có dấu của hồ sơ, không có thì phần đầu của mô tả (build_display_name), cuối cùng là tên cột.
 fn build_readings(context: &AskContext) -> Vec<ColumnReading> {
     context
         .picks
@@ -83,17 +84,12 @@ fn build_readings(context: &AskContext) -> Vec<ColumnReading> {
         .filter(|pick| !pick.others.is_empty() && !pick.chosen_by_user)
         .map(|pick| {
             let profile = context.columns.iter().find(|c| c.name == pick.column);
-            let alias =
-                profile.and_then(|c| c.aliases.iter().map(|a| a.trim()).find(|a| !a.is_empty()));
-            let description = profile
-                .and_then(|c| c.description.as_deref())
-                .map(str::trim);
-            let label = alias
-                .or(description.filter(|d| !d.is_empty()))
-                .unwrap_or(&pick.column);
+            let label = profile
+                .and_then(|c| build_display_name(&c.name, &c.aliases, c.description.as_deref()))
+                .unwrap_or_else(|| pick.column.clone());
             ColumnReading {
                 phrase: pick.phrase.clone(),
-                label: lower_first(label),
+                label: lower_first(&label),
             }
         })
         .collect()

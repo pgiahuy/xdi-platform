@@ -22,7 +22,7 @@ use crate::service::explain::annotate::{
     build_value_presences, Totals,
 };
 use crate::service::explain::summary::apply_summary_parts;
-use crate::service::insight::facts::{build_group_parts, Point};
+use crate::service::insight::facts::{build_group_parts, MeasureText, Point};
 use crate::service::insight::narrate::build_code_text;
 
 const MODEL: &str = "gemini-2.5-flash";
@@ -515,7 +515,12 @@ fn build_group_insight(rows: &[(&str, f64)]) -> Insight {
         })
         .collect();
     let total = points.iter().map(|p| p.value).sum();
-    let parts = build_group_parts("Doanh thu", "Thị trường (Market)", &points, Some(total));
+    let parts = build_group_parts(
+        MeasureText::total("Doanh thu"),
+        "Thị trường (Market)",
+        &points,
+        Some(total),
+    );
     Insight {
         kind: InsightKind::Groups,
         summary: build_code_text(&parts),

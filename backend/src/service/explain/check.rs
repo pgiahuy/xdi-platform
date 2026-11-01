@@ -26,6 +26,7 @@ use crate::service::explain::period::{Grain, Period};
 use crate::service::explain::source::{PlanSource, RelatedTables};
 use crate::service::explain::sql::{build_ident, build_time_expr};
 use crate::service::explain::unusual::check_find;
+use crate::service::understanding::labels::{build_display_name, lower_first};
 
 /// Chiều có tới ngần này giá trị khác nhau mới phân rã (#39): nhiều hơn thì bảng đóng góp dài mà mỗi nhóm nhỏ.
 pub const DIMENSION_MAX_VALUES: i64 = 50;
@@ -514,17 +515,17 @@ pub(crate) fn build_volume(profile: &WhyProfile) -> Option<String> {
         .map(|(c, _)| c.name.clone())
 }
 
-// Bí danh của hồ sơ ngữ nghĩa là tiếng Việt (luật của prompt lập hồ sơ); bí danh đầu là tên mô hình thấy hợp nhất.
-// Bí danh trùng tên cột (khác hoa thường) thì không thêm gì cho người đọc, nên bỏ.
+// Nhãn của cột trong lời: bí danh có dấu đầu tiên của hồ sơ ngữ nghĩa, không có thì phần đầu của mô tả
+// (understanding/labels.rs, build_display_name), viết thường chữ đầu vì nhãn đứng giữa câu ("theo cách giao"). Bí danh
+// không dấu ("thi truong") và nhãn trùng tên cột bị bỏ; không còn gì thì lời dùng tên cột.
 pub(crate) fn build_labels(profile: &WhyProfile) -> HashMap<String, String> {
     profile
         .columns
         .iter()
         .chain(&profile.joined.profile)
         .filter_map(|c| {
-            let alias = c.aliases.iter().map(|a| a.trim()).find(|a| !a.is_empty())?;
-            (alias.to_lowercase() != c.name.to_lowercase())
-                .then(|| (c.name.clone(), alias.to_string()))
+            let label = build_display_name(&c.name, &c.aliases, c.description.as_deref())?;
+            Some((c.name.clone(), lower_first(&label)))
         })
         .collect()
 }

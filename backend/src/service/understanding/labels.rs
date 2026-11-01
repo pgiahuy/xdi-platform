@@ -3,8 +3,9 @@
 từ cây sqlparser của một biểu thức trong engine/sql_shape.rs và hồ sơ cột. Nhãn chỉ để người dùng đọc; đoạn SQL đi kèm
 mỗi mục mới là thứ đối chiếu được, nên dạng nào không theo khuôn thì nhãn là chính đoạn SQL, không đoán nghĩa.
 
-Tên cột: mô tả (#23) kèm tên trong ngoặc, thiếu mô tả thì chỉ tên, để người dùng thấy cả nghĩa lẫn đúng cột trong dữ
-liệu của mình. */
+Tên cột: phần đầu của mô tả (#23) kèm tên trong ngoặc, thiếu mô tả thì chỉ tên, để người dùng thấy cả nghĩa lẫn đúng
+cột trong dữ liệu của mình. Chỉ lấy phần đầu (build_short_description): mô tả thường kèm tên gốc, ví dụ giá trị hay ghi
+chú của hồ sơ trong ngoặc, chép cả vào mọi câu thì nhãn dài cả dòng. */
 
 use std::ops::ControlFlow;
 
@@ -41,9 +42,12 @@ const TIME_PART_FUNCTIONS: &[&str] = &["date_trunc", "datetrunc", "date_part", "
 
 pub fn build_column_label(name: &str, profile: &[ColumnProfile], mid_sentence: bool) -> String {
     let column = profile.iter().find(|c| c.name.eq_ignore_ascii_case(name));
-    match column.and_then(|c| c.description.as_deref()) {
-        Some(description) if !build_plain_description(description).is_empty() => {
-            let description = build_plain_description(description);
+    let short = column
+        .and_then(|c| c.description.as_deref())
+        .map(build_short_description)
+        .filter(|d| !d.is_empty() && !d.eq_ignore_ascii_case(name));
+    match short {
+        Some(description) => {
             let description = if mid_sentence {
                 lower_first(description)
             } else {
@@ -51,8 +55,43 @@ pub fn build_column_label(name: &str, profile: &[ColumnProfile], mid_sentence: b
             };
             format!("{description} ({name})")
         }
-        _ => name.to_string(),
+        None => name.to_string(),
     }
+}
+
+/// Phần đầu của một mô tả cột, đủ làm nhãn: tới dấu ngoặc mở, chấm phẩy, hai chấm, dấu phẩy, " - " hay hết câu đầu.
+/// Mô tả của database mẫu và của hồ sơ ngữ nghĩa là cả câu kèm tên gốc, ví dụ, ghi chú: "Thành tiền sau giảm giá (Order
+/// Item Total; cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng)" thành "Thành tiền sau giảm giá", "Tên danh
+/// mục, ví dụ Cleats, Fishing" thành "Tên danh mục". Mô tả mở đầu bằng ngoặc thì trả chuỗi rỗng, bên gọi dùng tên cột.
+pub fn build_short_description(description: &str) -> &str {
+    let text = build_plain_description(description);
+    let mut end = text.len();
+    for stop in ["(", ";", ":", ",", " - ", ". "] {
+        if let Some(at) = text.find(stop) {
+            end = end.min(at);
+        }
+    }
+    build_plain_description(&text[..end])
+}
+
+/// Tên tiếng Việt ngắn của một cột cho lời giải thích ("theo cách giao", "Khác thường theo thị trường"): bí danh đầu
+/// tiên có dấu tiếng Việt, không có thì phần đầu của mô tả (build_short_description). Giữ nguyên hoa thường, bên gọi
+/// viết thường chữ đầu khi ghép giữa câu. None khi không có cả hai: bên gọi dùng tên cột. Bí danh không dấu ("ten danh muc", "cach giao") bị bỏ: hồ sơ
+/// ngữ nghĩa ghi chúng để khớp câu hỏi gõ không dấu, nhưng in vào lời thì đọc như lỗi chính tả. Bí danh hay mô tả trùng
+/// tên cột (khác hoa thường) cũng bỏ, vì không thêm gì cho người đọc.
+pub fn build_display_name(
+    name: &str,
+    aliases: &[String],
+    description: Option<&str>,
+) -> Option<String> {
+    let differs = |text: &&str| !text.is_empty() && !text.eq_ignore_ascii_case(name);
+    let alias = aliases
+        .iter()
+        .map(|a| a.trim())
+        .filter(differs)
+        .find(|a| !a.is_ascii());
+    let short = description.map(build_short_description).filter(differs);
+    alias.or(short).map(str::to_string)
 }
 
 /// Nhãn của thứ được đo, nhóm hay lọc: cột, phần thời gian của cột, hoặc đoạn SQL khi không theo khuôn.
@@ -95,6 +134,17 @@ fn build_function_subject(
         }
     }
     let part = match (name.as_str(), args.as_slice()) {
+        // strftime(ngày, '%Y-%m') viết kỳ thành chữ: nhãn là phần nhỏ nhất mà khuôn giữ lại ("Tháng của ...").
+        // DuckDB nhận cả hai thứ tự tham số, nên tham số là hằng chữ là khuôn.
+        ("strftime", [first, second]) => {
+            let (inner, format) = match build_literal_text(second) {
+                Some(format) => (*first, Some(format)),
+                None => (*second, build_literal_text(first)),
+            };
+            format
+                .and_then(|format| find_format_part(&format))
+                .map(|part| (part, inner))
+        }
         (unit_function, [unit, inner]) if TIME_PART_FUNCTIONS.contains(&unit_function) => {
             build_literal_text(unit)
                 .and_then(|unit| find_time_part(&unit.to_lowercase()))
@@ -115,6 +165,19 @@ fn build_field_name(field: &DateTimeField) -> String {
     match field {
         DateTimeField::Custom(ident) => ident.value.to_lowercase(),
         other => other.to_string().to_lowercase(),
+    }
+}
+
+/// Phần thời gian nhỏ nhất một khuôn strftime giữ lại: có ngày thì "Ngày", có tháng thì "Tháng", chỉ có năm thì "Năm".
+fn find_format_part(format: &str) -> Option<&'static str> {
+    if format.contains("%d") {
+        Some("Ngày")
+    } else if format.contains("%m") {
+        Some("Tháng")
+    } else if format.contains("%Y") {
+        Some("Năm")
+    } else {
+        None
     }
 }
 
@@ -485,7 +548,7 @@ fn build_total_label(arg: &Expr, profile: &[ColumnProfile]) -> Option<String> {
     let column = profile.iter().find(|c| c.name.eq_ignore_ascii_case(name));
     let meaning = column
         .and_then(|c| c.description.as_deref())
-        .map(build_plain_description)
+        .map(build_short_description)
         .filter(|d| !d.is_empty())
         .unwrap_or(name);
     let total = build_total_name(meaning)?;

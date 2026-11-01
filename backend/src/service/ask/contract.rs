@@ -504,7 +504,9 @@ pub struct Insight {
 /// - `time_series`: one measure over periods; overall direction and the period that changed most against the one
 ///   before, broken down by dimension in `AskResponse.explanation`.
 /// - `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the
-///   total, groups far from the mean.
+///   total, groups far from the mean (for a measure that does not add up, such as an average or a rate: the highest
+///   and the lowest group). Also one measure over two columns: the top combinations and the top group of each
+///   column.
 /// - `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the
 ///   first two.
 /// - `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.

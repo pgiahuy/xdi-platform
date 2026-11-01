@@ -12,7 +12,7 @@ Ngày đăng ký và ngày hủy đăng ký học phần của sinh viên (từ 
 | code_presentation   | text    |         | false    |          | [edu.students](edu.students.md) | Mã kỳ                                                                                                      |
 | id_student          | integer |         | false    |          | [edu.students](edu.students.md) | Mã sinh viên                                                                                               |
 | date_registration   | integer |         | true     |          |                                 | Ngày đăng ký, tính bằng số ngày so với ngày bắt đầu học phần (âm là đăng ký trước). Rỗng khi nguồn ghi "?" |
-| date_unregistration | integer |         | true     |          |                                 | Ngày hủy đăng ký, cùng cách tính. Rỗng nếu sinh viên không hủy                                             |
+| date_unregistration | integer |         | true     |          |                                 | Ngày hủy đăng ký, tính bằng số ngày so với ngày bắt đầu học phần. Rỗng nếu sinh viên không hủy                                             |
 
 ## Constraints
 
