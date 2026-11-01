@@ -6,6 +6,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 
 ### Added
 
+- `GEMINI_BACKUP_API_KEY` nhận nhiều khóa cách nhau bằng dấu phẩy, dùng lần lượt khi khóa trước hết hạn mức.
 - Gemini hết hạn mức với mọi khóa thì gọi lại bằng mô hình dự phòng `GEMINI_FALLBACK_MODEL` (mặc định `gemini-3.1-flash-lite`).
 - Kết nối database Postgres là luồng chính ở trang Dữ liệu: chụp mọi bảng tài khoản đọc được (admin bỏ tick bảng không cần), mỗi database là một dataset, khóa ngoại thành quan hệ giữa các bảng; TLS `require` và `verify-full` kèm CA riêng; chụp lại bằng tay hay theo lịch `SOURCE_RESNAPSHOT_HOURS` (#165, #230, #247, #257).
 - Bảng quá trần dung lượng (`SOURCE_TABLE_MAX_MB`, `SOURCE_SNAPSHOT_MAX_MB`) chỉ lưu cấu trúc; câu hỏi cần bảng đó được báo đúng tên bảng và cách chụp nó (#247, #278).

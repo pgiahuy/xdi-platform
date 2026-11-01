@@ -3,8 +3,8 @@
 Khóa lấy từ GEMINI_API_KEY và chỉ đi trong header x-goog-api-key, không đặt vào URL: lỗi của reqwest in URL đầy đủ,
 khóa nằm trong query string thì sẽ theo lỗi vào log. Header đánh dấu nhạy cảm để reqwest không in nó khi debug.
 Mọi chữ ghi vào log đi qua redact(), phòng khi Gemini trả lại khóa trong thông báo lỗi.
-Có GEMINI_BACKUP_API_KEY thì khóa đầu hết hạn mức (429) chuyển sang khóa dự phòng ngay trong lần gọi đó: hạn mức theo
-phút của khóa miễn phí hết giữa một câu hỏi (mỗi câu "tại sao" gọi mô hình nhiều lần) làm cả câu hỏi rơi về câu khuôn.
+Có GEMINI_BACKUP_API_KEY (một hay nhiều khóa, cách nhau bằng dấu phẩy) thì khóa trước hết hạn mức (429) chuyển sang
+khóa kế tiếp ngay trong lần gọi đó: hạn mức theo phút của khóa miễn phí hết giữa một câu hỏi (mỗi câu "tại sao" gọi mô hình nhiều lần) làm cả câu hỏi rơi về câu khuôn.
 Mọi khóa đều hết hạn mức thì gọi lại bằng mô hình dự phòng (GEMINI_FALLBACK_MODEL, mặc định gemini-3.1-flash-lite),
 lần lượt từng khóa: hạn mức của gói miễn phí tính riêng cho từng mô hình. Thứ tự: mô hình chính với khóa chính, mô hình
 chính với khóa dự phòng, mô hình dự phòng với khóa chính, mô hình dự phòng với khóa dự phòng.
