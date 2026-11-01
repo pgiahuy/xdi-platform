@@ -31,6 +31,9 @@ pub struct Config {
     /// Khóa Gemini dự phòng (GEMINI_BACKUP_API_KEY), dùng khi khóa chính hết hạn mức; rỗng thì không có.
     pub gemini_backup_api_key: Secret,
     pub gemini_model: String,
+    /// Mô hình dùng khi mọi khóa hết hạn mức với gemini_model (GEMINI_FALLBACK_MODEL, mặc định gemini-3.1-flash-lite);
+    /// đặt rỗng thì không có.
+    pub gemini_fallback_model: String,
     /// Thời gian tối đa cho một lần gọi Gemini, kể cả lúc chờ mô hình trả lời.
     pub gemini_timeout: Duration,
     pub ollama_url: String,
@@ -140,6 +143,9 @@ impl Config {
             gemini_api_key: Secret::new(var_or("GEMINI_API_KEY", "")),
             gemini_backup_api_key: Secret::new(var_or("GEMINI_BACKUP_API_KEY", "")),
             gemini_model: var_or("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+            // Khác var_or: đặt rỗng (GEMINI_FALLBACK_MODEL=) là tắt mô hình dự phòng, không đặt mới dùng mặc định.
+            gemini_fallback_model: env::var("GEMINI_FALLBACK_MODEL")
+                .unwrap_or_else(|_| "gemini-3.1-flash-lite".to_string()),
             gemini_timeout: timeout_secs("GEMINI_TIMEOUT_SECS", 60),
             ollama_url: var_or("OLLAMA_URL", "http://localhost:11434"),
             ollama_model: var_or("OLLAMA_MODEL", "qwen2.5-coder:7b"),

@@ -66,6 +66,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_BACKUP_API_KEY: ${GEMINI_BACKUP_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      # Không có dấu hai chấm: đặt rỗng trong .env là tắt mô hình dự phòng.
+      GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL-gemini-3.1-flash-lite}
       GEMINI_TIMEOUT_SECS: ${GEMINI_TIMEOUT_SECS:-60}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:7b}

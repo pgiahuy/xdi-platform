@@ -5,7 +5,10 @@ khóa nằm trong query string thì sẽ theo lỗi vào log. Header đánh dấ
 Mọi chữ ghi vào log đi qua redact(), phòng khi Gemini trả lại khóa trong thông báo lỗi.
 Có GEMINI_BACKUP_API_KEY thì khóa đầu hết hạn mức (429) chuyển sang khóa dự phòng ngay trong lần gọi đó: hạn mức theo
 phút của khóa miễn phí hết giữa một câu hỏi (mỗi câu "tại sao" gọi mô hình nhiều lần) làm cả câu hỏi rơi về câu khuôn.
-Lỗi khác (khóa sai, mô hình không có, máy chủ lỗi) không đổi khóa: khóa khác cũng gặp đúng lỗi đó. */
+Mọi khóa đều hết hạn mức thì gọi lại bằng mô hình dự phòng (GEMINI_FALLBACK_MODEL, mặc định gemini-3.1-flash-lite),
+lần lượt từng khóa: hạn mức của gói miễn phí tính riêng cho từng mô hình. Thứ tự: mô hình chính với khóa chính, mô hình
+chính với khóa dự phòng, mô hình dự phòng với khóa chính, mô hình dự phòng với khóa dự phòng.
+Lỗi khác (khóa sai, mô hình không có, máy chủ lỗi) không đổi khóa hay mô hình: lần gọi khác cũng gặp đúng lỗi đó. */
 
 use std::time::Duration;
 
@@ -24,29 +27,49 @@ pub const API_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 pub const QUOTA_MESSAGE: &str = "Đã hết hạn mức gọi Gemini của khóa này. Chờ một lúc rồi thử lại, hoặc xem hạn mức trong Google AI Studio";
 
 pub struct Gemini {
-    /// Địa chỉ đầy đủ của generateContent cho mô hình đã chọn.
-    endpoint: String,
+    /// Mô hình chính rồi mô hình dự phòng (nếu có), mỗi mô hình kèm địa chỉ đầy đủ của generateContent.
+    models: Vec<ModelEndpoint>,
     /// Khóa chính rồi khóa dự phòng, chỉ các khóa không rỗng.
     api_keys: Vec<Secret>,
-    model: String,
     timeout: Duration,
     /// Lỗi dựng client (máy không có chứng chỉ CA) giữ lại để báo khi có câu hỏi, không làm backend dừng.
     client: Result<reqwest::Client, String>,
 }
 
+struct ModelEndpoint {
+    model: String,
+    url: String,
+}
+
 impl Gemini {
-    pub fn new(base_url: &str, api_keys: Vec<Secret>, model: String, timeout: Duration) -> Self {
+    /// models: mô hình chính rồi mô hình dự phòng; tên rỗng và tên trùng mô hình trước bị bỏ.
+    pub fn new(
+        base_url: &str,
+        api_keys: Vec<Secret>,
+        models: Vec<String>,
+        timeout: Duration,
+    ) -> Self {
         let client = http::build_client(timeout, http::CONNECT_TIMEOUT);
         if let Err(err) = &client {
             tracing::error!(error = %err, "cannot build HTTP client for Gemini");
         }
+        let mut endpoints: Vec<ModelEndpoint> = Vec::new();
+        for model in models {
+            let model = model.trim().to_string();
+            if model.is_empty() || endpoints.iter().any(|e| e.model == model) {
+                continue;
+            }
+            endpoints.push(ModelEndpoint {
+                url: format!(
+                    "{}/models/{model}:generateContent",
+                    base_url.trim_end_matches('/')
+                ),
+                model,
+            });
+        }
         Self {
-            endpoint: format!(
-                "{}/models/{model}:generateContent",
-                base_url.trim_end_matches('/')
-            ),
+            models: endpoints,
             api_keys: api_keys.into_iter().filter(|k| !k.is_empty()).collect(),
-            model,
             timeout,
             client,
         }
@@ -81,13 +104,14 @@ impl Gemini {
     }
 
     /// Lỗi Gemini trả về bằng mã HTTP. Chi tiết chỉ ghi vào log; người dùng nhận lời hướng dẫn.
-    fn status_error(&self, status: reqwest::StatusCode, body: &str) -> AppError {
+    fn status_error(&self, model: &str, status: reqwest::StatusCode, body: &str) -> AppError {
         let detail = serde_json::from_str::<ErrorResponse>(body)
             .map(|response| response.error)
             .unwrap_or_default();
         tracing::warn!(
             status = status.as_u16(),
             gemini_status = %detail.status,
+            model,
             message = %self.redact(&detail.message),
             "gemini returned an error"
         );
@@ -99,10 +123,7 @@ impl Gemini {
                 "Gemini trả về chuyển hướng (mã {}); backend không đi theo để khóa không bị gửi sang máy khác. Kiểm tra proxy của máy chủ",
                 status.as_u16()
             ),
-            404 => format!(
-                "Gemini không có mô hình {}: kiểm tra GEMINI_MODEL",
-                self.model
-            ),
+            404 => format!("Gemini không có mô hình {model}: kiểm tra GEMINI_MODEL và GEMINI_FALLBACK_MODEL"),
             429 => QUOTA_MESSAGE.to_string(),
             500..=599 => format!(
                 "Gemini đang lỗi hoặc quá tải (mã {}). Thử lại sau",
@@ -124,7 +145,10 @@ fn key_rejected(status: reqwest::StatusCode) -> String {
 #[async_trait]
 impl LlmProvider for Gemini {
     fn name(&self) -> String {
-        self.model.clone()
+        self.models
+            .first()
+            .map(|e| e.model.clone())
+            .unwrap_or_default()
     }
 
     async fn complete(&self, request: &LlmRequest<'_>) -> Result<String, AppError> {
@@ -137,6 +161,12 @@ impl LlmProvider for Gemini {
         if self.api_keys.is_empty() {
             return Err(AppError::Unavailable(
                 "Thiếu khóa Gemini: đặt GEMINI_API_KEY trong .env rồi khởi động lại backend"
+                    .to_string(),
+            ));
+        }
+        if self.models.is_empty() {
+            return Err(AppError::Unavailable(
+                "Thiếu tên mô hình Gemini: đặt GEMINI_MODEL trong .env rồi khởi động lại backend"
                     .to_string(),
             ));
         }
@@ -156,14 +186,20 @@ impl LlmProvider for Gemini {
                 "responseJsonSchema": schema,
             });
         }
-        for (index, api_key) in self.api_keys.iter().enumerate() {
+        // Mỗi lần thử là một cặp (mô hình, khóa), theo thứ tự ghi ở đầu file.
+        let attempts: Vec<(&ModelEndpoint, usize)> = self
+            .models
+            .iter()
+            .flat_map(|endpoint| (0..self.api_keys.len()).map(move |index| (endpoint, index)))
+            .collect();
+        for (attempt, (endpoint, index)) in attempts.iter().enumerate() {
             // Lỗi của from_str không chứa giá trị header, nên không lộ khóa.
-            let mut key = HeaderValue::from_str(api_key.expose()).map_err(|_| {
+            let mut key = HeaderValue::from_str(self.api_keys[*index].expose()).map_err(|_| {
                 AppError::Unavailable("Khóa Gemini chứa ký tự không hợp lệ".to_string())
             })?;
             key.set_sensitive(true);
             let response = client
-                .post(&self.endpoint)
+                .post(&endpoint.url)
                 .header("x-goog-api-key", key)
                 .json(&body)
                 .send()
@@ -176,20 +212,24 @@ impl LlmProvider for Gemini {
                 .text()
                 .await
                 .map_err(|err| self.transport_error(err))?;
-            let has_next = index + 1 < self.api_keys.len();
+            let has_next = attempt + 1 < attempts.len();
             if status == reqwest::StatusCode::TOO_MANY_REQUESTS && has_next {
                 tracing::warn!(
+                    model = %endpoint.model,
                     key_index = index,
-                    "gemini key is out of quota, trying the backup key"
+                    "gemini is out of quota for this model and key, trying the next one"
                 );
                 continue;
             }
             if !status.is_success() {
-                return Err(self.status_error(status, &text));
+                return Err(self.status_error(&endpoint.model, status, &text));
+            }
+            if endpoint.model != self.name() {
+                tracing::info!(model = %endpoint.model, "gemini answered with the fallback model");
             }
             return build_answer(&text);
         }
-        unreachable!("the loop returns on the last key")
+        unreachable!("the loop returns on the last attempt")
     }
 }
 
@@ -353,7 +393,7 @@ mod tests {
         Gemini::new(
             base_url,
             vec![Secret::new(key)],
-            "gemini-test".to_string(),
+            vec!["gemini-test".to_string()],
             timeout,
         )
     }
@@ -395,12 +435,79 @@ mod tests {
         let two_keys = Gemini::new(
             &url,
             vec![Secret::new(KEY), Secret::new("AIzaTEST-backup-key")],
-            "gemini-test".to_string(),
+            vec!["gemini-test".to_string()],
             Duration::from_secs(5),
         );
         assert_eq!(ask(&two_keys).await.unwrap(), "SELECT 1");
         // Chỉ có khóa chính thì vẫn báo hết hạn mức như trước.
         let (_, message) = failure(ask(&gemini(&url, KEY, Duration::from_secs(5))).await);
+        assert!(message.contains("hạn mức"), "{message}");
+    }
+
+    /// Mọi khóa hết hạn mức với mô hình chính thì gọi lại bằng mô hình dự phòng; máy chủ giả trả 429 cho mô hình chính
+    /// và trả lời bình thường cho mô hình dự phòng. Thứ tự: hai khóa với mô hình chính, rồi khóa chính với mô hình dự
+    /// phòng.
+    #[tokio::test]
+    async fn fallback_model_is_used_when_every_key_is_out_of_quota() {
+        let _serial = SERIAL.lock().await;
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let seen = calls.clone();
+        let app = axum::Router::new().fallback(
+            move |uri: axum::http::Uri, headers: axum::http::HeaderMap| {
+                let seen = seen.clone();
+                async move {
+                    let key = headers
+                        .get("x-goog-api-key")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    let path = uri.path().to_string();
+                    seen.lock().unwrap().push(format!("{path} {key}"));
+                    if path.contains("gemini-main") {
+                        (
+                            axum::http::StatusCode::TOO_MANY_REQUESTS,
+                            r#"{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}"#,
+                        )
+                    } else {
+                        (axum::http::StatusCode::OK, OK_BODY)
+                    }
+                }
+            },
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let url = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let provider = Gemini::new(
+            &url,
+            vec![Secret::new(KEY), Secret::new("AIzaTEST-backup-key")],
+            vec!["gemini-main".to_string(), "gemini-fallback".to_string()],
+            Duration::from_secs(5),
+        );
+        assert_eq!(ask(&provider).await.unwrap(), "SELECT 1");
+        assert_eq!(provider.name(), "gemini-main");
+        let calls = calls.lock().unwrap().clone();
+        assert_eq!(
+            calls,
+            vec![
+                format!("/models/gemini-main:generateContent {KEY}"),
+                "/models/gemini-main:generateContent AIzaTEST-backup-key".to_string(),
+                format!("/models/gemini-fallback:generateContent {KEY}"),
+            ]
+        );
+        // Không có mô hình dự phòng (hay trùng mô hình chính) thì vẫn báo hết hạn mức.
+        let same = Gemini::new(
+            &url,
+            vec![Secret::new(KEY)],
+            vec![
+                "gemini-main".to_string(),
+                "gemini-main".to_string(),
+                String::new(),
+            ],
+            Duration::from_secs(5),
+        );
+        let (_, message) = failure(ask(&same).await);
         assert!(message.contains("hạn mức"), "{message}");
     }
 
