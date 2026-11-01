@@ -44,6 +44,9 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 ### Fixed
 
 - Câu hỏi nguyên nhân trên database: bắt đầu từ bảng giữ độ đo và dùng được cột của bảng nối cho kỳ, nhóm, bộ lọc; so đúng hai nhóm câu hỏi nêu, một nhóm thì so với trung bình các nhóm còn lại; lời nêu nhóm chính của từng chiều, viết tỷ lệ bằng phần trăm.
+- Lời giải thích câu hỏi số liệu: nhãn độ đo ngắn, tỷ lệ viết bằng phần trăm, trung bình và tỷ lệ nêu nhóm cao nhất và thấp nhất, bảng hai cột nhóm có các tổ hợp lớn nhất; lời của mô hình trượt kiểm thì đoạn trả lời là câu chính hệ thống tính.
+- Lời câu hỏi nguyên nhân không còn nhãn cột không dấu hay lặp, không nêu nhóm có phần chênh lệch gần bằng 0.
+- Báo cáo ghi đúng lời của mô hình trượt kiểm số hay kiểm nghĩa, không ghi "Không khớp" cạnh câu của hệ thống; trục biểu đồ ghi "2.000", "2,5 triệu"; chép được số trong bảng kết quả.
 - Docker Compose truyền `GEMINI_BACKUP_API_KEY` tới backend; trước đây khóa dự phòng trong `.env` không có tác dụng.
 - Điều kiện lọc có câu con hay "hoặc" đọc thành lời thay cho nguyên câu SQL; câu nối bảng gọi số đo bằng mô tả tiếng Việt của bảng nối; kết quả toàn ô trống nói rõ không có dữ liệu khớp (#201).
 - Nạp và chụp bảng lớn tốn ít RAM hơn: DuckDB có trần `DUCKDB_MEMORY_LIMIT_MB` (mặc định 1024), chạm trần thì ghi phần dư ra đĩa; bảng 5 triệu dòng 60 cột từ 3,6 GiB xuống khoảng 1,1 GiB.

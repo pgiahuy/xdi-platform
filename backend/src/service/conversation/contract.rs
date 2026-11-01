@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::service::ask::contract::{AnswerVerdict, AskStatus};
+use crate::service::ask::contract::{AnswerVerdict, AskStatus, FailedCheck};
 use crate::service::feedback::contract::QueryFeedback;
 
 /// One conversation on a dataset.
@@ -64,6 +64,11 @@ pub struct SavedAnswer {
     /// (`match`, `warning`, `mismatch`); null when the check did not run.
     #[schema(required)]
     pub verdict: Option<AnswerVerdict>,
+    /// With `verdict` `mismatch`: the check that rejected the model's text, which the backend's text replaced; null
+    /// otherwise, and for answers stored before this field existed.
+    #[serde(default)]
+    #[schema(required)]
+    pub failed_check: Option<FailedCheck>,
     /// Points the check found unclear in the model's text; empty when `by_model` is false.
     pub warnings: Vec<String>,
 }

@@ -97,6 +97,7 @@ fn small_explanation(
         summary_by_model: false,
         summary_warnings: Vec::new(),
         summary_verdict: None,
+        summary_failed_check: None,
         dropped_dimensions: Vec::new(),
         notes: Default::default(),
     };
@@ -1083,4 +1084,66 @@ fn group_text_with_a_change_phrase_is_caught() {
         None
     );
     assert_eq!(find_change_phrase("AAA tạo ra phần lớn mức chênh."), None);
+}
+
+/// Lỗi chữ đã gặp với Gemini trên edu_demo (01/11): nhãn cột lặp, "cao hơn mức chênh". Số và tên nhóm giữ nguyên.
+#[test]
+fn model_text_drops_repeated_labels_and_the_gap_word() {
+    use crate::service::ask::narrate_text::{build_tidy_text, upper_first};
+    let labels = ["nhóm tuổi", "vùng", "mã kỳ"];
+    assert_eq!(
+        build_tidy_text(
+            "Nhóm tuổi nhóm tuổi 0-35 có mức chênh cao hơn 3,81 điểm phần trăm.",
+            &labels
+        ),
+        "Nhóm tuổi 0-35 có mức chênh cao hơn 3,81 điểm phần trăm."
+    );
+    assert_eq!(
+        build_tidy_text("Vùng vùng Scotland cao hơn 3,23 điểm phần trăm.", &labels),
+        "Vùng Scotland cao hơn 3,23 điểm phần trăm."
+    );
+    assert_eq!(
+        build_tidy_text(
+            "Tỷ lệ của kỳ 2014J là 37,36%, cao hơn mức chênh 3,88 điểm phần trăm so với 33,48% của kỳ 2014B.",
+            &labels
+        ),
+        "Tỷ lệ của kỳ 2014J là 37,36%, cao hơn 3,88 điểm phần trăm so với 33,48% của kỳ 2014B."
+    );
+    // Không có gì để sửa thì giữ nguyên cả khoảng trắng; hai ý ngăn bằng dấu phẩy không phải lặp.
+    assert_eq!(
+        build_tidy_text("Vùng  Wales, vùng Scotland.", &labels),
+        "Vùng  Wales, vùng Scotland."
+    );
+    assert_eq!(
+        upper_first("loại bài đánh giá CMA"),
+        "Loại bài đánh giá CMA"
+    );
+}
+
+/// Nhóm đi ngược chênh lệch chung mà chỉ chiếm dưới 5%, hay có phần chênh lệch làm tròn bằng 0, không gửi cho mô hình
+/// (đã gặp: "đi ngược chiều ... thấp hơn 0,0006 điểm phần trăm").
+#[test]
+fn negligible_groups_are_not_sent_to_the_model() {
+    let explanation = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[
+            (Some("Europe"), "-103.00"),
+            (Some("LATAM"), "-0.001"),
+            (Some("USCA"), "3.00"),
+        ],
+    );
+    let prompt = build_narrate_prompt(QUESTION, &explanation);
+    assert!(prompt.contains("\"Europe\""), "{prompt}");
+    assert!(!prompt.contains("\"LATAM\""), "{prompt}");
+    assert!(!prompt.contains("\"USCA\""), "{prompt}");
+    // Nhóm ngược chiều từ 5% trở lên vẫn gửi.
+    let explanation = small_explanation(
+        "1000.00",
+        "900.00",
+        "-100.00",
+        &[(Some("Europe"), "-110.00"), (Some("USCA"), "10.00")],
+    );
+    assert!(build_narrate_prompt(QUESTION, &explanation).contains("\"USCA\""));
 }

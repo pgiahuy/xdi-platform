@@ -45,8 +45,9 @@ use crate::service::explain::{
     TEMPLATE_GROUP_CHARS,
 };
 
-/// Nhóm ngược chiều chiếm từ ngần này phần trăm chênh lệch (âm) trở lên mới nêu.
-const AGAINST_MIN_SHARE: i64 = 5;
+/// Nhóm ngược chiều chiếm từ ngần này phần trăm chênh lệch (âm) trở lên mới nêu; prompt của mô hình cũng không nhận nhóm
+/// ngược chiều nhỏ hơn (explain/narrate_prompt.rs).
+pub(crate) const AGAINST_MIN_SHARE: i64 = 5;
 /// Số nhóm, số cột nêu tên trong một ý; nhiều hơn thì câu dài mà không thêm ý.
 const LIST_MAX: usize = 3;
 

@@ -343,7 +343,7 @@ fn build_question_type(kind: QuestionType) -> &'static str {
 fn build_number_check_text(check: Option<NumberCheck>) -> &'static str {
     match check {
         Some(NumberCheck::Passed) => "Đạt",
-        Some(NumberCheck::Replaced) => "Không đạt, dùng câu của hệ thống",
+        Some(NumberCheck::Replaced) => "Không đạt, đã thay bằng câu hệ thống tính",
         Some(NumberCheck::NotNeeded) => "Không cần: câu do hệ thống viết từ số",
         None => "",
     }
@@ -353,7 +353,8 @@ fn build_meaning_check_text(verdict: Option<AnswerVerdict>) -> &'static str {
     match verdict {
         Some(AnswerVerdict::Match) => "Khớp",
         Some(AnswerVerdict::Warning) => "Có chỗ chưa rõ",
-        Some(AnswerVerdict::Mismatch) => "Không khớp",
+        // Mismatch của báo cáo luôn là lời của mô hình đã bị thay (report/render.rs, build_checks).
+        Some(AnswerVerdict::Mismatch) => "Không đạt, đã thay bằng câu hệ thống tính",
         None => "Không chạy",
     }
 }

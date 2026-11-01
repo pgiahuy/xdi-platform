@@ -3,8 +3,9 @@
 từ cây cú pháp của câu đã chạy): một con số, chuỗi thời gian, theo nhóm, top N hay danh sách dòng. service/insight/mod.rs
 chọn loại giải thích theo hình dạng này. Hàm thuần, test ở insight/tests.rs.
 
-Chỉ xét bảng có đúng một khóa nhóm (hay không khóa nào): bảng hai khóa (thời gian và nhóm) không có một câu giải thích
-ngắn nào đúng cho mọi ô, nên chỉ ghi số dòng như danh sách dòng. */
+Bảng có một khóa nhóm (hay không khóa nào), và bảng theo đúng hai cột nhóm (insight/matrix.rs: tổ hợp đứng đầu, nhóm
+đứng đầu của từng cột). Bảng thời gian kèm nhóm hay nhiều khóa hơn không có một câu giải thích ngắn nào đúng cho mọi ô,
+nên chỉ ghi số dòng như danh sách dòng. */
 
 use rust_decimal::Decimal;
 
@@ -19,6 +20,8 @@ pub struct ResultShape {
     pub measure: Option<usize>,
     /// Cột khóa: cột thời gian của chuỗi, cột nhóm của bảng theo nhóm và top N.
     pub key: Option<usize>,
+    /// Cột nhóm thứ hai của bảng theo hai cột nhóm (kind là groups); None với mọi bảng khác.
+    pub second_key: Option<usize>,
 }
 
 /// None khi bảng không có dòng nào hay mọi ô đều trống: cảnh báo kết quả rỗng (ask/checks.rs) đã nói điều đó.
@@ -47,6 +50,7 @@ pub fn build_result_shape(
         kind: InsightKind::Rows,
         measure: None,
         key: None,
+        second_key: None,
     };
     let Some(&measure) = measures.first() else {
         return Some(rows);
@@ -68,6 +72,8 @@ pub fn build_result_shape(
                 InsightKind::Groups
             }
         }
+        // Hai cột nhóm, như "doanh thu theo danh mục và phân khúc khách hàng".
+        ([], [_, _]) if result.rows.len() >= 2 => InsightKind::Groups,
         _ => return Some(rows),
     };
     let key = times.first().or(dimensions.first()).copied();
@@ -75,6 +81,7 @@ pub fn build_result_shape(
         kind,
         measure: Some(measure),
         key,
+        second_key: dimensions.get(1).copied().filter(|_| times.is_empty()),
     })
 }
 

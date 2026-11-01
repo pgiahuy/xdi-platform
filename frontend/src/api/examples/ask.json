@@ -248,6 +248,7 @@
       ],
       "summary": "Europe đứng đầu với 10.845.230,42, chiếm 29,6% tổng doanh thu. Mức tập trung: 4 trên 5 nhóm chiếm từ 80% tổng trở lên. Thấp hẳn mức trung bình: Africa (2.340.560,12); trung bình mỗi nhóm 7.331.570,41.",
       "summary_by_model": false,
+      "summary_failed_check": null,
       "summary_verdict": null,
       "summary_warnings": [],
       "title": "Europe đứng đầu với 10.845.230,42, chiếm 29,6% tổng doanh thu."
@@ -612,6 +613,7 @@
       "slice_column_label": null,
       "summary": "Doanh thu Quý 3/2017 giảm 1.283.400,00 (13,6%) so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Số đơn ít đi: Số đơn giảm từ 5.000 xuống 4.400, làm doanh thu giảm 1.117.725,00, chiếm 87,1% mức giảm. Giá trị đơn trung bình thấp hơn: Giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25, làm doanh thu giảm thêm 165.675,00. Thị trường Europe giảm nhiều nhất: Europe giảm 639.780,25, sau đó là LATAM giảm 339.049,50.",
       "summary_by_model": true,
+      "summary_failed_check": null,
       "summary_points": [
         {
           "kind": "reason",

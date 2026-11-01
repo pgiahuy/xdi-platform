@@ -146,6 +146,12 @@ theo một chiều với một độ đo), bảng **Kết quả** và nút **T�
 ghi `Hiện 1.000 trên <tổng> dòng.` Số hiện theo kiểu Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân); CSV giữ giá
 trị gốc. Chỗ lời giải thích chưa rõ nghĩa hiện ngay dưới lời, để người đọc đối chiếu với số đã tính.
 
+Lời giải thích của câu hỏi số liệu do code chọn ý theo hình dạng kết quả: theo nhóm thì nhóm đứng đầu và tỷ trọng (độ đo
+là trung bình hay tỷ lệ thì nhóm cao nhất và thấp nhất), theo hai cột nhóm thì các tổ hợp lớn nhất và nhóm đứng đầu của
+từng cột, theo thời gian thì tổng các kỳ, xu hướng và kỳ đổi mạnh nhất. Tỷ lệ viết bằng phần trăm và điểm phần trăm. Câu
+hỏi chung kiểu "tình hình doanh thu" được trả lời theo tháng. Lời của mô hình không qua kiểm số hay kiểm nghĩa thì đoạn
+trả lời là câu chính hệ thống đã tính.
+
 Thẻ **Cách tính** ghi cách hệ thống hiểu câu hỏi, đọc từ câu SQL đã chạy: **Đo**, **Lọc**, **Nhóm theo**, **Sắp xếp**,
 **Giới hạn**, **Khoảng thời gian**, và bộ lọc theo quyền xem khi người hỏi có vai dữ liệu. Câu có giả định thì kèm
 **Giả định, bấm để đổi rồi hỏi lại**.
@@ -214,8 +220,9 @@ Dưới mỗi câu trả lời có nút **Thêm vào báo cáo**. Trang **Báo c
   nhóm) với đúng quyền xem của người bấm, mô hình viết lời cho từng phần.
 
 Trong một báo cáo: sửa tiêu đề và đoạn mở đầu, đổi thứ tự, bỏ mục. Mỗi mục có câu hỏi, lời trả lời kèm kết quả kiểm số
-và kiểm nghĩa, biểu đồ, bảng, phân rã, Cách tính, SQL, bảng và phiên bản dữ liệu, lúc hỏi. Số liệu tính lại mỗi lần mở,
-trên đúng phiên bản câu hỏi đã đọc, với quyền xem của người đang mở; quyền hẹp hơn lúc hỏi thì lời đã lưu không hiện.
+và kiểm nghĩa (lời là câu hệ thống tính thì một dòng ghi lời của mô hình đã không qua bước nào), biểu đồ, bảng, phân
+rã, Cách tính, SQL, bảng và phiên bản dữ liệu, lúc hỏi. Số liệu tính lại mỗi lần mở, trên đúng phiên bản câu hỏi đã
+đọc, với quyền xem của người đang mở; quyền hẹp hơn lúc hỏi thì lời đã lưu không hiện.
 
 **Xuất PDF** mở hộp in của trình duyệt (chọn lưu thành PDF): bản in ẩn thanh bên và nút, mỗi mục một trang. **Tải
 Excel** tải file có sheet tóm tắt, mỗi mục một sheet và sheet cách tính.

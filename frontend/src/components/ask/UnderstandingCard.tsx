@@ -63,8 +63,11 @@ export function UnderstandingCard({ understanding: u, onChangeAssumption, disabl
                     <span key={`${i}-${item}`}>
                       {i > 0 && '; '}
                       {item}
+                      {/* Khoảng trắng thật, không chỉ lề: chép chữ hay đọc bằng trình đọc màn hình không thành
+                          "(code_module)từ câu trước". */}
+                      {fromPrevious.has(item) && ' '}
                       {fromPrevious.has(item) && (
-                        <span className="ml-1.5 rounded border border-label-border px-1 py-px text-xs font-normal text-muted-foreground">
+                        <span className="ml-0.5 rounded border border-label-border px-1 py-px text-xs font-normal text-muted-foreground">
                           từ câu trước
                         </span>
                       )}

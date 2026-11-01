@@ -13,6 +13,7 @@ use chrono::NaiveDate;
 
 use crate::engine::store::{ProfileColumn, ProfileRole};
 use crate::service::ask::contract::DataRange;
+use crate::service::understanding::labels::build_display_name;
 
 /// None khi bảng không có cột thời gian dùng được (không có, nhạy cảm, hay hồ sơ chưa có ngày đầu, ngày cuối).
 pub fn build_data_range(columns: &[ProfileColumn], sql: Option<&str>) -> Option<DataRange> {
@@ -32,12 +33,7 @@ pub fn build_data_range(columns: &[ProfileColumn], sql: Option<&str>) -> Option<
         .or_else(|| usable.first())?;
     Some(DataRange {
         column: column.name.clone(),
-        label: column
-            .aliases
-            .iter()
-            .map(|a| a.trim())
-            .find(|a| !a.is_empty())
-            .map(str::to_string),
+        label: build_display_name(&column.name, &column.aliases, column.description.as_deref()),
         from: from.to_string(),
         to: to.to_string(),
         partial: sql.is_some_and(|s| asks_past(s, *to)),

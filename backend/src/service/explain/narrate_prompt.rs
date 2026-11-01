@@ -19,6 +19,7 @@ use crate::service::ask::contract::{
 use crate::service::explain::annotate::{DropReason, GroupNotes, GroupPresence};
 use crate::service::explain::number::{build_change_parts, build_number_text_with};
 use crate::service::explain::split::build_split;
+use crate::service::explain::summary::AGAINST_MIN_SHARE;
 use crate::service::explain::{
     build_direction_word, build_fraction_digits, build_points_amount, build_share_text,
     build_value_text, comparison_name, same_direction, MAX_SUMMARY_CHARS, NARRATE_DIMENSIONS,
@@ -100,7 +101,8 @@ pub fn build_narrate_prompt(question: &str, explanation: &Explanation) -> String
          and by its value alone when it has none. Never use the words \"đóng góp\", \"chiều\" or \"phân rã\". \"headline\" and \"reasons\" together at most {MAX_SUMMARY_CHARS} characters.\n\
          - With \"groups\", never call the two sides periods, never say \"tăng\" or \"giảm\" between them and \
          never write \"từ ... lên\" or \"từ ... xuống\"; use the direction words given, and call the gap between \
-         them \"mức chênh\", never \"mức tăng\" or \"mức giảm\".\n\
+         them \"mức chênh\", never \"mức tăng\" or \"mức giảm\"; write \"cao hơn 3,88\", never \"cao hơn mức \
+         chênh 3,88\".\n\
          - Numbers are written the Vietnamese way: a dot between groups of thousands and a comma before the \
          decimals. Copy every number exactly as it appears, separators and decimal digits included: never round, \
          never compute a new number, never spell a number out in words. In \"headline\" and \"reasons\" write the \
@@ -141,6 +143,7 @@ fn build_facts_json(e: &Explanation) -> serde_json::Value {
                 .iter()
                 .zip(&notes.groups)
                 .take(NARRATE_GROUPS)
+                .filter(|(group, _)| !is_negligible(e, group))
                 .map(|(group, group_notes)| build_group_json(e, group, group_notes))
                 .collect();
             let mut json = serde_json::json!({
@@ -212,6 +215,31 @@ fn build_facts_json(e: &Explanation) -> serde_json::Value {
         json["measure_kind"] = serde_json::json!("ratio");
     }
     json
+}
+
+/// Nhóm không đáng gửi cho mô hình: phần chênh lệch làm tròn như lời viết thì bằng 0, hay nhóm đi ngược chênh lệch chung
+/// mà chiếm dưới AGAINST_MIN_SHARE phần trăm (như ý "Ngược chiều" của câu khuôn). Gửi thì mô hình hay nêu nó thành ý "đi
+/// ngược chiều" với một số gần 0 ("thấp hơn 0,0006 điểm phần trăm" khi chênh lệch chung là 3,88 điểm), không giúp người
+/// đọc hiểu thêm gì.
+pub(crate) fn is_negligible(e: &Explanation, group: &GroupContribution) -> bool {
+    let (Ok(contribution), Ok(change)) = (
+        group.contribution.parse::<Decimal>(),
+        e.change.parse::<Decimal>(),
+    ) else {
+        return false;
+    };
+    if change.is_zero() {
+        return false;
+    }
+    let shown = if e.notes.fraction {
+        (contribution * Decimal::ONE_HUNDRED).round_dp(build_fraction_digits(e).saturating_sub(2))
+    } else {
+        contribution.round_dp(build_fraction_digits(e))
+    };
+    let against = !contribution.is_zero() && !same_direction(&group.contribution, change);
+    let small =
+        contribution.abs() * Decimal::ONE_HUNDRED < change.abs() * Decimal::from(AGAINST_MIN_SHARE);
+    shown.is_zero() || (against && small)
 }
 
 fn build_group_json(

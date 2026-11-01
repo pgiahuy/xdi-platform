@@ -20,7 +20,7 @@ use crate::service::explain::source::build_tables_used;
 use crate::service::explain::sql::{build_slices_sql, build_why_sql};
 use crate::service::explain::{build_template_summary, summary::apply_summary_parts};
 use crate::service::insight::facts::{
-    build_series_parts, build_single_parts, find_largest_step, InsightParts, Point,
+    build_series_parts, build_single_parts, find_largest_step, InsightParts, MeasureText, Point,
 };
 use crate::service::insight::periods::{read_cell_period, read_filter_period, read_series_time};
 use crate::service::insight::shape::build_cell_decimal;
@@ -29,9 +29,10 @@ use crate::service::insight::{build_points, read_query, Found, InsightInput};
 pub(super) async fn build_single(
     input: &InsightInput<'_>,
     measure: usize,
-    label: &str,
+    text: MeasureText<'_>,
     found: &mut Found,
 ) -> Result<InsightParts, AppError> {
+    let label = text.label;
     let value = build_cell_decimal(input.result.rows[0][measure].as_ref()).unwrap_or_default();
     let alone = |found: &mut Found, reason: &str| {
         found.detail = Some(reason.to_string());
@@ -39,7 +40,7 @@ pub(super) async fn build_single(
             label: String::new(),
             value,
         };
-        build_single_parts(label, &point, None, None)
+        build_single_parts(text, &point, None, None)
     };
     let Some(query) = read_query(input, measure, label) else {
         return Ok(alone(found, "Không đọc được câu SQL để so với kỳ trước"));
@@ -71,7 +72,7 @@ pub(super) async fn build_single(
     let notable = build_change_weight(ran.base, value, Some(ran.rows)) == ChangeWeight::Notable;
     let explanation = if notable { ran.explanation } else { None };
     let parts = build_single_parts(
-        label,
+        text,
         &current,
         Some((&base, Some(ran.rows))),
         explanation.as_ref(),
@@ -84,10 +85,12 @@ pub(super) async fn build_series(
     input: &InsightInput<'_>,
     measure: usize,
     key: Option<usize>,
-    label: &str,
+    text: MeasureText<'_>,
     found: &mut Found,
 ) -> Result<InsightParts, AppError> {
+    let label = text.label;
     let result = input.result;
+    let complete = !result.truncated && !result.limit_reached;
     let mut points = build_points(result, measure, key);
     let query = read_query(input, measure, label);
     let time = query.as_ref().and_then(|q| {
@@ -118,7 +121,7 @@ pub(super) async fn build_series(
         (query, time, dated, find_largest_step(&points))
     else {
         found.detail = Some("Không đọc được kỳ của chuỗi thời gian để phân rã".to_string());
-        return Ok(build_series_parts(label, &points, None, None));
+        return Ok(build_series_parts(text, &points, None, None, complete));
     };
     let (before, after) = (pairs[index - 1].0, pairs[index].0);
     let expected = (pairs[index - 1].1.value, pairs[index].1.value);
@@ -127,10 +130,16 @@ pub(super) async fn build_series(
         Ok(ran) => ran,
         Err(reason) => {
             found.detail = Some(reason);
-            return Ok(build_series_parts(label, &points, None, None));
+            return Ok(build_series_parts(text, &points, None, None, complete));
         }
     };
-    let parts = build_series_parts(label, &points, ran.explanation.as_ref(), Some(ran.rows));
+    let parts = build_series_parts(
+        text,
+        &points,
+        ran.explanation.as_ref(),
+        Some(ran.rows),
+        complete,
+    );
     let explanation = if parts.notable { ran.explanation } else { None };
     keep_explanation(found, &plan, explanation);
     Ok(parts)

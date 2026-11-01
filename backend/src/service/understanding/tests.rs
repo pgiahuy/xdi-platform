@@ -25,8 +25,8 @@ use ColumnRole::{Dimension, Measure, Other, Time};
 const MAX_ROWS: u64 = 100_000;
 
 const MARKET: &str = "Thị trường nơi giao đơn hàng (Market)";
-const ORDER_DATE: &str =
-    "ngày giờ đặt hàng, dạng tháng/ngày/năm giờ:phút (order date (DateOrders))";
+// Nhãn lấy phần đầu của mô tả: ", dạng tháng/ngày/năm giờ:phút" của mô tả không vào nhãn.
+const ORDER_DATE: &str = "ngày giờ đặt hàng (order date (DateOrders))";
 const DATE_SQL: &str = r#"strptime("order date (DateOrders)", '%m/%d/%Y %H:%M')"#;
 
 #[derive(serde::Deserialize)]
@@ -277,10 +277,7 @@ fn limit_lowered_by_the_guard_is_not_the_question() {
 fn measures_without_metric_use_aggregate_words() {
     let sql = mock_answers().remove(4).1.sql;
     let u = build_card(&sql, vec![], &[]).understanding;
-    assert_eq!(
-        u.measures[0].label,
-        "Số mã đơn hàng; một đơn có thể có nhiều dòng (Order Id) khác nhau"
-    );
+    assert_eq!(u.measures[0].label, "Số mã đơn hàng (Order Id) khác nhau");
     let sql = mock_answers().remove(3).1.sql;
     let u = build_card(&sql, vec![], &[]).understanding;
     // Tỷ lệ không theo khuôn nào: nhãn là tên cột kết quả, đoạn SQL cho thấy cách tính.
@@ -448,8 +445,7 @@ fn time_range_from_bounds_and_between() {
     let range = pair(&u.time_range).unwrap();
     assert_eq!(
         range.0,
-        "Ngày giờ đặt hàng, dạng tháng/ngày/năm giờ:phút (order date (DateOrders)) từ 2017-07-01 đến trước \
-         2017-10-01"
+        "Ngày giờ đặt hàng (order date (DateOrders)) từ 2017-07-01 đến trước 2017-10-01"
     );
     assert_eq!(
         range.1,

@@ -42,7 +42,18 @@ const plainBarColor = 'var(--chart-2)'
 const highlightBarColor = 'var(--chart-1)'
 const seriesDashes = [undefined, '6 3', '2 3', '8 3 2 3', '4 4']
 const axisTick = { fill: 'var(--muted-foreground)', fontSize: 12 }
-const compactFormat = new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 })
+// Trục số: dưới một triệu viết đủ số ("2.000"); từ một triệu viết bằng chữ ("2,5 triệu", "1,2 tỷ"). Dạng gọn ngắn của
+// vi-VN ("2 N", "2 Tr") người đọc không nhận ra là nghìn, triệu.
+const fullFormat = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 })
+const longFormat = new Intl.NumberFormat('vi-VN', {
+  notation: 'compact',
+  compactDisplay: 'long',
+  maximumFractionDigits: 1,
+})
+
+function formatAxisTick(value: number): string {
+  return Math.abs(value) < 1_000_000 ? fullFormat.format(value) : longFormat.format(value)
+}
 const tooltipStyle = {
   background: 'var(--popover)',
   color: 'var(--popover-foreground)',
@@ -121,7 +132,7 @@ function ChartPanel({ title, chart, data, small }: PanelProps) {
   const numberAxisProps = {
     tick: axisTick,
     tickLine: false,
-    tickFormatter: (value: number) => compactFormat.format(value),
+    tickFormatter: formatAxisTick,
   }
 
   if (chart.kind === 'bar') {

@@ -2236,6 +2236,7 @@ export interface components {
              *     the text failed the checks twice (one rewrite is asked).
              */
             summary_by_model: boolean;
+            summary_failed_check: components["schemas"]["FailedCheck"] | null;
             /**
              * @description Points under the main answer (Vietnamese). When `summary_by_model`, the main causes the model wrote, all of kind
              *     `reason`; otherwise written by the backend, each said only when the numbers support it.
@@ -2266,6 +2267,13 @@ export interface components {
             /** @description Value of the measure on the slice. */
             value: string;
         };
+        /**
+         * @description Check that rejected the model's text on its last attempt, when the shown text was written by the backend instead:
+         *     `number` (the backend compared every number and direction of the text with the computed facts) or `meaning` (a
+         *     separate model call compared the meaning of the text with them).
+         * @enum {string}
+         */
+        FailedCheck: "number" | "meaning";
         /**
          * @description Why an answer is `bad`.
          * @enum {string}
@@ -2366,6 +2374,7 @@ export interface components {
              *     with `title` and `points`; when a check fails or finds an unclear point, the model rewrites once.
              */
             summary_by_model: boolean;
+            summary_failed_check: components["schemas"]["FailedCheck"] | null;
             summary_verdict: components["schemas"]["AnswerVerdict"] | null;
             /**
              * @description Parts of `summary` that the separate check found unclear but not certainly wrong, one Vietnamese sentence each,
@@ -2381,7 +2390,9 @@ export interface components {
          *     - `time_series`: one measure over periods; overall direction and the period that changed most against the one
          *       before, broken down by dimension in `AskResponse.explanation`.
          *     - `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the
-         *       total, groups far from the mean.
+         *       total, groups far from the mean (for a measure that does not add up, such as an average or a rate: the highest
+         *       and the lowest group). Also one measure over two columns: the top combinations and the top group of each
+         *       column.
          *     - `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the
          *       first two.
          *     - `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.
@@ -2650,8 +2661,10 @@ export interface components {
         };
         /**
          * @description Outcome of the number check (the backend compares every number and direction of the model's text with the computed
-         *     facts): `passed` (the shown text is the model's and passed), `replaced` (the model's text failed and the shown text
-         *     was written by the backend), `not_needed` (the backend wrote the text from the numbers, no model text to check).
+         *     facts): `passed` (the model's text passed; it is the shown text, or it failed the meaning check afterwards and the
+         *     backend's text replaced it, see `ReportItem.meaning_check`), `replaced` (the model's text failed this check and the
+         *     shown text was written by the backend), `not_needed` (the backend wrote the text from the numbers, no model text to
+         *     check).
          * @enum {string}
          */
         NumberCheck: "passed" | "replaced" | "not_needed";
@@ -3020,6 +3033,7 @@ export interface components {
         SavedAnswer: {
             /** @description True when a language model wrote the text and it passed the checks; false when the backend wrote it. */
             by_model: boolean;
+            failed_check: components["schemas"]["FailedCheck"] | null;
             /** @description Vietnamese text for the end user. */
             text: string;
             verdict: components["schemas"]["AnswerVerdict"] | null;

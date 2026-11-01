@@ -82,13 +82,13 @@
           "name": "code_module",
           "type": "text",
           "nullable": false,
-          "comment": "Mã môn học, cùng edu.courses"
+          "comment": "Mã môn học"
         },
         {
           "name": "code_presentation",
           "type": "text",
           "nullable": false,
-          "comment": "Mã kỳ, cùng edu.courses"
+          "comment": "Mã kỳ"
         },
         {
           "name": "id_student",
@@ -246,7 +246,7 @@
           "name": "date_unregistration",
           "type": "integer",
           "nullable": true,
-          "comment": "Ngày hủy đăng ký, cùng cách tính. Rỗng nếu sinh viên không hủy"
+          "comment": "Ngày hủy đăng ký, tính bằng số ngày so với ngày bắt đầu học phần. Rỗng nếu sinh viên không hủy"
         }
       ],
       "indexes": [
@@ -404,13 +404,13 @@
           "name": "code_module",
           "type": "text",
           "nullable": false,
-          "comment": "Mã môn của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students"
+          "comment": "Mã môn học của bài đánh giá. Chép từ edu.assessments để có khóa ngoại tới edu.students"
         },
         {
           "name": "code_presentation",
           "type": "text",
           "nullable": false,
-          "comment": "Mã kỳ của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students"
+          "comment": "Mã kỳ của bài đánh giá. Chép từ edu.assessments để có khóa ngoại tới edu.students"
         },
         {
           "name": "date_submitted",

@@ -68,7 +68,7 @@ COMMENT ON COLUMN sales.customers.state IS 'Bang nơi khách ở, mã hai chữ,
 COMMENT ON COLUMN sales.customers.country IS 'Nước nơi khách ở, như trong nguồn: EE. UU. (Hoa Kỳ) hoặc Puerto Rico';
 COMMENT ON COLUMN sales.customers.zipcode IS 'Mã bưu chính, như trong nguồn (số 0 ở đầu đã mất, ví dụ 725 là 00725). Không trống ở khách nào sau khi dời 3 khách bị lệch cột';
 COMMENT ON COLUMN sales.customers.latitude IS 'Vĩ độ. Mô tả của DataCo gọi là vị trí cửa hàng, nhưng trong dữ liệu mỗi khách chỉ có một giá trị';
-COMMENT ON COLUMN sales.customers.longitude IS 'Kinh độ, cùng ghi chú với latitude';
+COMMENT ON COLUMN sales.customers.longitude IS 'Kinh độ. Như latitude, mỗi khách chỉ có một giá trị';
 
 CREATE TABLE sales.orders (
     order_id integer PRIMARY KEY,
@@ -130,6 +130,6 @@ COMMENT ON COLUMN sales.order_items.unit_price IS 'Đơn giá lúc bán, đô la
 COMMENT ON COLUMN sales.order_items.sales IS 'Doanh số trước giảm giá, bằng đơn giá nhân số lượng (Sales)';
 COMMENT ON COLUMN sales.order_items.discount IS 'Số tiền giảm giá (Order Item Discount)';
 COMMENT ON COLUMN sales.order_items.discount_rate IS 'Tỷ lệ giảm giá, từ 0 đến 1 (Order Item Discount Rate)';
-COMMENT ON COLUMN sales.order_items.item_total IS 'Thành tiền sau giảm giá (Order Item Total; cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng)';
-COMMENT ON COLUMN sales.order_items.profit IS 'Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order; cột Benefit per order có cùng giá trị ở mọi dòng). Tên nguồn nói "per order" nhưng giá trị đổi theo từng dòng hàng';
+COMMENT ON COLUMN sales.order_items.item_total IS 'Thành tiền sau giảm giá (Order Item Total). Cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng';
+COMMENT ON COLUMN sales.order_items.profit IS 'Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order). Cột Benefit per order có cùng giá trị ở mọi dòng; tên nguồn nói "per order" nhưng giá trị đổi theo từng dòng hàng';
 COMMENT ON COLUMN sales.order_items.profit_ratio IS 'Tỷ suất lợi nhuận, bằng profit chia item_total (Order Item Profit Ratio)';

@@ -74,12 +74,13 @@ pub(super) fn check_column_measure(
 /// tên cột. Tên có phần "mỗi đơn vị" ("lợi nhuận mỗi đơn", "Benefit per order") thì gọi là tổng (#260,
 /// explain/per_unit.rs): cộng lợi nhuận của từng đơn ra tổng lợi nhuận, gọi "lợi nhuận mỗi đơn" là nói sai con số.
 fn build_sum_label(column: &ProfileColumn) -> String {
-    let name = build_vietnamese_name(column).unwrap_or(&column.name);
+    let vietnamese = build_vietnamese_name(column);
+    let name = vietnamese.as_deref().unwrap_or(&column.name);
     if let Some(total) = build_total_name(name) {
         return total;
     }
-    match build_vietnamese_name(column) {
-        Some(name) => name.to_string(),
+    match vietnamese {
+        Some(name) => name,
         None => format!("Tổng {}", column.name),
     }
 }
@@ -143,7 +144,7 @@ fn build_distinct(column: &ProfileColumn, errors: &mut Vec<FieldError>) -> Optio
         return None;
     }
     // "Mã khách hàng" thành "Số khách hàng", như nhãn lượng của #40.
-    let entity = build_entity_name(&column.name, build_vietnamese_name(column));
+    let entity = build_entity_name(&column.name, build_vietnamese_name(column).as_deref());
     let additive = Additive::CountDistinct {
         value: build_ident(&column.name),
     };
@@ -194,7 +195,7 @@ fn build_share(
 /// Tên cột giữa câu: tên tiếng Việt viết thường chữ đầu, chưa có thì tên cột.
 fn build_name(column: &ProfileColumn) -> String {
     match build_vietnamese_name(column) {
-        Some(name) => lower_first(name),
+        Some(name) => lower_first(&name),
         None => column.name.clone(),
     }
 }

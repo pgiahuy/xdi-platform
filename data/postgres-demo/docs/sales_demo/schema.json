@@ -238,7 +238,7 @@
           "name": "longitude",
           "type": "numeric",
           "nullable": false,
-          "comment": "Kinh độ, cùng ghi chú với latitude"
+          "comment": "Kinh độ. Như latitude, mỗi khách chỉ có một giá trị"
         }
       ],
       "indexes": [
@@ -465,13 +465,13 @@
           "name": "item_total",
           "type": "numeric",
           "nullable": false,
-          "comment": "Thành tiền sau giảm giá (Order Item Total; cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng)"
+          "comment": "Thành tiền sau giảm giá (Order Item Total). Cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng"
         },
         {
           "name": "profit",
           "type": "numeric",
           "nullable": false,
-          "comment": "Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order; cột Benefit per order có cùng giá trị ở mọi dòng). Tên nguồn nói \"per order\" nhưng giá trị đổi theo từng dòng hàng"
+          "comment": "Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order). Cột Benefit per order có cùng giá trị ở mọi dòng; tên nguồn nói \"per order\" nhưng giá trị đổi theo từng dòng hàng"
         },
         {
           "name": "profit_ratio",

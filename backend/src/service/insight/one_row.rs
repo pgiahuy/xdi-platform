@@ -17,6 +17,7 @@ use crate::service::ask::summary::build_cell_text;
 use crate::service::explain::{drop_column_name, lower_first, upper_first};
 use crate::service::insight::facts::InsightParts;
 use crate::service::insight::{build_measure_label, find_unsendable_key, InsightInput};
+use crate::service::understanding::labels::build_display_name;
 
 /// Kết quả một dòng có tới chừng này cột thì kể từng ô; nhiều hơn thì câu dài như một bảng, giữ câu đếm dòng.
 const MAX_COLUMNS: usize = 5;
@@ -154,8 +155,8 @@ fn build_cells_title(
     format!("{}.", upper_first(&said.join(", ")))
 }
 
-/// Tên tiếng Việt của một cột kết quả: số đo lấy nhãn của thẻ "Cách tính"; cột trơn không đặt bí danh lấy bí danh
-/// đầu của hồ sơ cột; còn lại là tên cột kết quả (bí danh câu SQL đặt).
+/// Tên tiếng Việt của một cột kết quả: số đo lấy nhãn của thẻ "Cách tính"; cột trơn không đặt bí danh lấy tên tiếng
+/// Việt của hồ sơ cột (build_display_name); còn lại là tên cột kết quả (bí danh câu SQL đặt).
 fn build_cell_label(input: &InsightInput<'_>, shape: &QueryShape, i: usize) -> String {
     let result = input.result;
     if result.columns[i].role == ColumnRole::Measure {
@@ -174,12 +175,8 @@ fn build_cell_label(input: &InsightInput<'_>, shape: &QueryShape, i: usize) -> S
                 .tables
                 .iter()
                 .flat_map(|t| t.columns.iter())
-                .find(|c| c.name.eq_ignore_ascii_case(s))?
-                .aliases
-                .iter()
-                .map(|a| a.trim())
-                .find(|a| !a.is_empty())
-                .map(str::to_string)
-        });
+                .find(|c| c.name.eq_ignore_ascii_case(s))
+        })
+        .and_then(|c| build_display_name(&c.name, &c.aliases, c.description.as_deref()));
     alias.unwrap_or_else(|| name.clone())
 }

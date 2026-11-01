@@ -20,11 +20,13 @@ use rust_decimal::Decimal;
 
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::service::ask::contract::{
-    AnswerVerdict, AskStep, Comparison, Explanation, StepName, SummaryPoint, SummaryPointKind,
+    AnswerVerdict, AskStep, Comparison, Explanation, FailedCheck, StepName, SummaryPoint,
+    SummaryPointKind,
 };
 use crate::service::ask::failures::{FailedStep, StepFailure};
 use crate::service::ask::judge::judge;
 use crate::service::ask::lessons::build_with_lessons;
+use crate::service::ask::narrate_text::{build_tidy_text, upper_first};
 use crate::service::ask::repair::build_user_text;
 use crate::service::explain::claims::{
     build_claim_check, build_narrate_schema, build_rewrite_prompt, parse_narrate_reply, Claim,
@@ -50,6 +52,9 @@ pub struct NarrateOutcome {
     pub warnings: Vec<String>,
     /// Kết luận của hai cổng (Explanation.summary_verdict); None khi không cổng nào chạy xong.
     pub verdict: Option<AnswerVerdict>,
+    /// Bước kiểm chặn lời ở lần viết cuối khi verdict là mismatch (Explanation.summary_failed_check); None trong mọi
+    /// trường hợp khác.
+    pub failed_check: Option<FailedCheck>,
     pub step: AskStep,
     /// Lời mô hình viết bị hai cổng chặn ở mọi lần viết: lý do và lời của lần cuối, cho nhật ký lỗi (#228). None khi lời
     /// được dùng, hay khi rơi về câu khuôn vì lý do khác (mô hình lỗi, quá giờ, không chấm được).
@@ -102,6 +107,8 @@ pub async fn narrate(
     let mut unclear: Option<Unclear> = None;
     // Lời của lần viết gần nhất, ghi vào nhật ký lỗi khi mọi lần viết đều bị chặn.
     let mut last_text: Option<String> = None;
+    // Bước kiểm chặn lời ở lần viết gần nhất, để lời báo và báo cáo nói đúng lời trượt ở đâu.
+    let mut failed_check = FailedCheck::Number;
     for attempt in 1..=MAX_NARRATE_ATTEMPTS {
         let prompt = if problems.is_empty() {
             first_prompt.clone()
@@ -147,6 +154,7 @@ pub async fn narrate(
                     "narrate reply failed gate 1"
                 );
                 problems = found;
+                failed_check = FailedCheck::Number;
                 continue;
             }
         };
@@ -171,6 +179,7 @@ pub async fn narrate(
                     insight: Some(insight),
                     warnings: Vec::new(),
                     verdict: Some(AnswerVerdict::Match),
+                    failed_check: None,
                     step: build_step(started, true, Some(detail)),
                     failure: None,
                 };
@@ -196,6 +205,7 @@ pub async fn narrate(
                 });
             }
             Ok(Verdict::Mismatch(found)) => {
+                failed_check = FailedCheck::Meaning;
                 tracing::warn!(
                     attempt,
                     problems = found.len(),
@@ -215,13 +225,15 @@ pub async fn narrate(
         return finish_unclear(unclear, started);
     }
     let detail = format!(
-        "Lời của mô hình chưa qua kiểm số và kiểm nghĩa sau {MAX_NARRATE_ATTEMPTS} lần viết: {}",
+        "Lời của mô hình không qua {} sau {MAX_NARRATE_ATTEMPTS} lần viết, đã thay bằng câu hệ thống tính: {}",
+        build_check_name(failed_check),
         problems.join("; ")
     );
     // Lời trượt mọi lần viết thì không trả cho người dùng: câu khuôn thay vào, kết luận ghi là mismatch.
     let failure = StepFailure::new(FailedStep::Narrate, &detail, last_text.as_deref());
     NarrateOutcome {
         verdict: Some(AnswerVerdict::Mismatch),
+        failed_check: Some(failed_check),
         failure: Some(failure),
         ..fallback(explanation, build_step(started, false, Some(detail)))
     }
@@ -232,8 +244,12 @@ pub async fn narrate(
 /// đưa vào prompt viết lại và vào detail của bước.
 fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<String>> {
     let mut parsed = parse_narrate_reply(reply).map_err(|problem| vec![problem])?;
+    let labels = build_column_labels(explanation);
+    parsed.headline = upper_first(&build_tidy_text(parsed.headline.trim(), &labels));
     for reason in &mut parsed.reasons {
-        reason.text = build_text_without_lead(&reason.lead, &reason.text);
+        reason.lead = upper_first(&build_tidy_text(reason.lead.trim(), &labels));
+        let text = build_text_without_lead(&reason.lead, &reason.text);
+        reason.text = build_tidy_text(&text, &labels);
     }
     if parsed.headline.trim().is_empty() {
         return Err(vec!["Câu mở đầu trống".to_string()]);
@@ -284,6 +300,24 @@ fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<St
         },
         claims: parsed.claims,
     })
+}
+
+/// Tên bước kiểm trong lời cho người dùng: "kiểm số" hay "kiểm nghĩa" (thuật ngữ ở docs/ARCHITECTURE.md).
+pub(crate) fn build_check_name(check: FailedCheck) -> &'static str {
+    match check {
+        FailedCheck::Number => "kiểm số",
+        FailedCheck::Meaning => "kiểm nghĩa",
+    }
+}
+
+/// Nhãn cột của bảng phân rã và của cột hai nhóm đang so, cho build_tidy_text.
+fn build_column_labels(explanation: &Explanation) -> Vec<&str> {
+    explanation
+        .dimensions
+        .iter()
+        .filter_map(|d| d.label.as_deref())
+        .chain(explanation.slice_column_label.as_deref())
+        .collect()
 }
 
 /// Câu của một ý bỏ phần lặp lại đầu ý: mô hình hay viết "Hiệu ứng tỷ suất tăng" làm đầu ý rồi mở câu bằng đúng cụm đó,
@@ -360,6 +394,7 @@ fn finish_unclear(unclear: Unclear, started: Instant) -> NarrateOutcome {
         insight: Some(unclear.insight),
         warnings: unclear.warnings,
         verdict: Some(AnswerVerdict::Warning),
+        failed_check: None,
         step: build_step(started, true, Some(detail)),
         failure: None,
     }
@@ -386,6 +421,7 @@ fn fallback(explanation: &Explanation, step: AskStep) -> NarrateOutcome {
         insight: None,
         warnings: Vec::new(),
         verdict: None,
+        failed_check: None,
         step,
         failure: None,
     }

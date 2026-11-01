@@ -99,8 +99,10 @@ pub struct ReportResponse {
 }
 
 /// Outcome of the number check (the backend compares every number and direction of the model's text with the computed
-/// facts): `passed` (the shown text is the model's and passed), `replaced` (the model's text failed and the shown text
-/// was written by the backend), `not_needed` (the backend wrote the text from the numbers, no model text to check).
+/// facts): `passed` (the model's text passed; it is the shown text, or it failed the meaning check afterwards and the
+/// backend's text replaced it, see `ReportItem.meaning_check`), `replaced` (the model's text failed this check and the
+/// shown text was written by the backend), `not_needed` (the backend wrote the text from the numbers, no model text to
+/// check).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum NumberCheck {
@@ -174,8 +176,9 @@ pub struct ReportItem {
     /// Number check of `answer`; null when `answer` is null.
     #[schema(required)]
     pub number_check: Option<NumberCheck>,
-    /// Meaning check of `answer` (a separate model call compared the text with the computed facts); null when it did
-    /// not run or `answer` is null.
+    /// Meaning check of the model's text (a separate model call compared it with the computed facts): `mismatch` means
+    /// the model's text failed and the shown text is the backend's; never a verdict on the backend's text. Null when it
+    /// did not run or `answer` is null.
     #[schema(required)]
     pub meaning_check: Option<AnswerVerdict>,
     /// Facts computed again from `result`; null when the result shape has none.

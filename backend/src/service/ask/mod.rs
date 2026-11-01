@@ -53,6 +53,7 @@ pub mod missing_tables;
 pub mod narrate;
 #[cfg(test)]
 mod narrate_tests;
+mod narrate_text;
 pub mod other_text;
 pub mod phrases;
 mod plain_insight;

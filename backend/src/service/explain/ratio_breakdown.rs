@@ -181,6 +181,7 @@ pub(super) async fn build_ratio_breakdown(
         summary_by_model: false,
         summary_warnings: Vec::new(),
         summary_verdict: None,
+        summary_failed_check: None,
         dropped_dimensions: notes.dropped.clone(),
         notes,
     })))

@@ -22,7 +22,7 @@ use crate::error::AppError;
 use crate::service::ask::contract::InsightPoint;
 use crate::service::ask::judge::{build_judge_timeout, judge};
 use crate::service::explain::judge::{build_judge_prompt, JudgeFacts, Verdict};
-use crate::service::insight::facts::InsightParts;
+use crate::service::insight::facts::{InsightParts, ValueStyle};
 use crate::service::insight::narrate::build_insight_judge_prompt;
 
 /// File ca.
@@ -126,6 +126,7 @@ fn build_parts(facts: &InsightFacts) -> InsightParts {
         notable: true,
         changes: Vec::new(),
         names: Vec::new(),
+        style: ValueStyle::Number,
     }
 }
 

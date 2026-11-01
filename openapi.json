@@ -2255,6 +2255,7 @@
                         ],
                         "summary": "Europe đứng đầu với 10.845.230,42, chiếm 29,6% tổng doanh thu. Mức tập trung: 4 trên 5 nhóm chiếm từ 80% tổng trở lên. Thấp hẳn mức trung bình: Africa (2.340.560,12); trung bình mỗi nhóm 7.331.570,41.",
                         "summary_by_model": false,
+                        "summary_failed_check": null,
                         "summary_verdict": null,
                         "summary_warnings": [],
                         "title": "Europe đứng đầu với 10.845.230,42, chiếm 29,6% tổng doanh thu."
@@ -2622,6 +2623,7 @@
                         "slice_column_label": null,
                         "summary": "Doanh thu Quý 3/2017 giảm 1.283.400,00 (13,6%) so với Quý 2/2017, từ 9.402.500,00 xuống 8.119.100,00. Số đơn ít đi: Số đơn giảm từ 5.000 xuống 4.400, làm doanh thu giảm 1.117.725,00, chiếm 87,1% mức giảm. Giá trị đơn trung bình thấp hơn: Giá trị đơn trung bình giảm từ 1.880,50 xuống 1.845,25, làm doanh thu giảm thêm 165.675,00. Thị trường Europe giảm nhiều nhất: Europe giảm 639.780,25, sau đó là LATAM giảm 339.049,50.",
                         "summary_by_model": true,
+                        "summary_failed_check": null,
                         "summary_points": [
                           {
                             "kind": "reason",
@@ -7972,6 +7974,7 @@
           "summary_by_model",
           "summary_warnings",
           "summary_verdict",
+          "summary_failed_check",
           "dropped_dimensions"
         ],
         "properties": {
@@ -8046,6 +8049,17 @@
             "type": "boolean",
             "description": "False when `summary` is a template sentence written by the backend: the change is zero (the model is not\ncalled), the model was not reached, the independent check could not judge the text, or\nthe text failed the checks twice (one rewrite is asked)."
           },
+          "summary_failed_check": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FailedCheck",
+                "description": "With `mismatch`: the check that rejected the model's text on its last attempt; null otherwise."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "summary_points": {
             "type": "array",
             "items": {
@@ -8114,6 +8128,14 @@
             "description": "Value of the measure on the slice."
           }
         }
+      },
+      "FailedCheck": {
+        "type": "string",
+        "description": "Check that rejected the model's text on its last attempt, when the shown text was written by the backend instead:\n`number` (the backend compared every number and direction of the text with the computed facts) or `meaning` (a\nseparate model call compared the meaning of the text with them).",
+        "enum": [
+          "number",
+          "meaning"
+        ]
       },
       "FeedbackReason": {
         "type": "string",
@@ -8294,6 +8316,7 @@
           "summary_by_model",
           "summary_warnings",
           "summary_verdict",
+          "summary_failed_check",
           "notable"
         ],
         "properties": {
@@ -8318,6 +8341,17 @@
           "summary_by_model": {
             "type": "boolean",
             "description": "True when `summary` was written by the language model; false when it is the backend's text (the model failed,\ntimed out, its text failed the checks on every attempt, or `INSIGHT_TEXT=false`). The checks: every number and\ndirection must come from the points, no causal word, then a separate model call compares the meaning of the text\nwith `title` and `points`; when a check fails or finds an unclear point, the model rewrites once."
+          },
+          "summary_failed_check": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FailedCheck",
+                "description": "With `mismatch`: the check that rejected the model's text on its last attempt; null otherwise."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "summary_verdict": {
             "oneOf": [
@@ -8345,7 +8379,7 @@
       },
       "InsightKind": {
         "type": "string",
-        "description": "- `single_value`: one number; compared with the period before when the question names a period.\n- `time_series`: one measure over periods; overall direction and the period that changed most against the one\n  before, broken down by dimension in `AskResponse.explanation`.\n- `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the\n  total, groups far from the mean.\n- `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the\n  first two.\n- `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.",
+        "description": "- `single_value`: one number; compared with the period before when the question names a period.\n- `time_series`: one measure over periods; overall direction and the period that changed most against the one\n  before, broken down by dimension in `AskResponse.explanation`.\n- `groups`: one measure over the groups of one column; share of the top group, how many groups make 80% of the\n  total, groups far from the mean (for a measure that does not add up, such as an average or a rate: the highest\n  and the lowest group). Also one measure over two columns: the top combinations and the top group of each\n  column.\n- `top_n`: the first groups by a measure (the SQL has a limit); their share of the total and the gap between the\n  first two.\n- `rows`: anything else, such as rows without aggregates; only the number of rows and the filters.",
         "enum": [
           "single_value",
           "time_series",
@@ -9031,7 +9065,7 @@
       },
       "NumberCheck": {
         "type": "string",
-        "description": "Outcome of the number check (the backend compares every number and direction of the model's text with the computed\nfacts): `passed` (the shown text is the model's and passed), `replaced` (the model's text failed and the shown text\nwas written by the backend), `not_needed` (the backend wrote the text from the numbers, no model text to check).",
+        "description": "Outcome of the number check (the backend compares every number and direction of the model's text with the computed\nfacts): `passed` (the model's text passed; it is the shown text, or it failed the meaning check afterwards and the\nbackend's text replaced it, see `ReportItem.meaning_check`), `replaced` (the model's text failed this check and the\nshown text was written by the backend), `not_needed` (the backend wrote the text from the numbers, no model text to\ncheck).",
         "enum": [
           "passed",
           "replaced",
@@ -9717,7 +9751,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/AnswerVerdict",
-                "description": "Meaning check of `answer` (a separate model call compared the text with the computed facts); null when it did\nnot run or `answer` is null."
+                "description": "Meaning check of the model's text (a separate model call compared it with the computed facts): `mismatch` means\nthe model's text failed and the shown text is the backend's; never a verdict on the backend's text. Null when it\ndid not run or `answer` is null."
               },
               {
                 "type": "null"
@@ -10083,12 +10117,24 @@
           "text",
           "by_model",
           "verdict",
+          "failed_check",
           "warnings"
         ],
         "properties": {
           "by_model": {
             "type": "boolean",
             "description": "True when a language model wrote the text and it passed the checks; false when the backend wrote it."
+          },
+          "failed_check": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FailedCheck",
+                "description": "With `verdict` `mismatch`: the check that rejected the model's text, which the backend's text replaced; null\notherwise, and for answers stored before this field existed."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "text": {
             "type": "string",

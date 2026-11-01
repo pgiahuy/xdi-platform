@@ -650,7 +650,7 @@
         },
         {
           "name": "longitude",
-          "description": "Kinh độ, cùng ghi chú với latitude"
+          "description": "Kinh độ. Như latitude, mỗi khách chỉ có một giá trị"
         }
       ],
       "values": [],
@@ -820,7 +820,7 @@
         },
         {
           "name": "item_total",
-          "description": "Thành tiền sau giảm giá (Order Item Total; cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng)",
+          "description": "Thành tiền sau giảm giá (Order Item Total). Cột Sales per customer trong nguồn có cùng giá trị ở mọi dòng",
           "aliases": [
             "doanh thu",
             "thành tiền"
@@ -828,7 +828,7 @@
         },
         {
           "name": "profit",
-          "description": "Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order; cột Benefit per order có cùng giá trị ở mọi dòng). Tên nguồn nói \"per order\" nhưng giá trị đổi theo từng dòng hàng",
+          "description": "Lợi nhuận của dòng hàng, có thể âm (Order Profit Per Order). Cột Benefit per order có cùng giá trị ở mọi dòng; tên nguồn nói \"per order\" nhưng giá trị đổi theo từng dòng hàng",
           "aliases": [
             "lợi nhuận"
           ]
@@ -893,14 +893,14 @@
       "columns": [
         {
           "name": "code_module",
-          "description": "Mã môn học, cùng edu.courses",
+          "description": "Mã môn học",
           "aliases": [
             "môn học"
           ]
         },
         {
           "name": "code_presentation",
-          "description": "Mã kỳ, cùng edu.courses",
+          "description": "Mã kỳ",
           "aliases": [
             "kỳ học"
           ]
@@ -1028,7 +1028,7 @@
         },
         {
           "name": "date_unregistration",
-          "description": "Ngày hủy đăng ký, cùng cách tính. Rỗng nếu sinh viên không hủy",
+          "description": "Ngày hủy đăng ký, tính bằng số ngày so với ngày bắt đầu học phần. Rỗng nếu sinh viên không hủy",
           "aliases": [
             "ngày hủy đăng ký"
           ]
@@ -1103,11 +1103,11 @@
         },
         {
           "name": "code_module",
-          "description": "Mã môn của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students"
+          "description": "Mã môn học của bài đánh giá. Chép từ edu.assessments để có khóa ngoại tới edu.students"
         },
         {
           "name": "code_presentation",
-          "description": "Mã kỳ của bài đánh giá, chép từ edu.assessments để có khóa ngoại tới edu.students"
+          "description": "Mã kỳ của bài đánh giá. Chép từ edu.assessments để có khóa ngoại tới edu.students"
         },
         {
           "name": "date_submitted",

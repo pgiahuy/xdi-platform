@@ -18,7 +18,7 @@ Khách hàng. Email và mật khẩu trong nguồn đã bị che (cùng một gi
 | country     | text    |         | false    |                                 |         | Nước nơi khách ở, như trong nguồn: EE. UU. (Hoa Kỳ) hoặc Puerto Rico                                                           |
 | zipcode     | text    |         | true     |                                 |         | Mã bưu chính, như trong nguồn (số 0 ở đầu đã mất, ví dụ 725 là 00725). Không trống ở khách nào sau khi dời 3 khách bị lệch cột |
 | latitude    | numeric |         | false    |                                 |         | Vĩ độ. Mô tả của DataCo gọi là vị trí cửa hàng, nhưng trong dữ liệu mỗi khách chỉ có một giá trị                               |
-| longitude   | numeric |         | false    |                                 |         | Kinh độ, cùng ghi chú với latitude                                                                                             |
+| longitude   | numeric |         | false    |                                 |         | Kinh độ. Như latitude, mỗi khách chỉ có một giá trị                                                                                             |
 
 ## Constraints
 

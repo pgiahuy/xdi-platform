@@ -10,15 +10,15 @@ use uuid::Uuid;
 
 use crate::engine::store::{DatasetRelation, MetricDefinition, ProfileColumn};
 use crate::service::ask::contract::{
-    AnswerVerdict, CellValue, ColumnRole, QuestionType, ResultColumn, ResultTable, Understanding,
-    UnderstoodItem, ValueKind,
+    AnswerVerdict, CellValue, ColumnRole, FailedCheck, QuestionType, ResultColumn, ResultTable,
+    Understanding, UnderstoodItem, ValueKind,
 };
 use crate::service::conversation::contract::SavedAnswer;
 use crate::service::report::auto::{build_auto_plan, AutoTable};
 use crate::service::report::contract::{
     NumberCheck, ReportItem, ReportKind, ReportResponse, ReportSummary, ReportTableVersion,
 };
-use crate::service::report::render::{build_number_check, is_within_filters};
+use crate::service::report::render::{build_checks, is_within_filters};
 use crate::service::report::xlsx::build_report_xlsx;
 
 fn column(name: &str, role: &str, groups: i64) -> ProfileColumn {
@@ -197,24 +197,41 @@ fn answer(by_model: bool, verdict: Option<AnswerVerdict>) -> SavedAnswer {
         text: "Europe dẫn đầu".to_string(),
         by_model,
         verdict,
+        failed_check: None,
         warnings: Vec::new(),
     }
 }
 
 #[test]
-fn number_check_follows_who_wrote_the_text() {
+fn checks_follow_who_wrote_the_text() {
     assert_eq!(
-        build_number_check(&answer(true, Some(AnswerVerdict::Match))),
-        NumberCheck::Passed
+        build_checks(&answer(true, Some(AnswerVerdict::Match))),
+        (NumberCheck::Passed, Some(AnswerVerdict::Match))
     );
     assert_eq!(
-        build_number_check(&answer(false, Some(AnswerVerdict::Mismatch))),
-        NumberCheck::Replaced
+        build_checks(&answer(false, None)),
+        (NumberCheck::NotNeeded, None)
     );
+    // Lưu trước khi có failed_check: không biết bước nào chặn.
     assert_eq!(
-        build_number_check(&answer(false, None)),
-        NumberCheck::NotNeeded
+        build_checks(&answer(false, Some(AnswerVerdict::Mismatch))),
+        (NumberCheck::Replaced, Some(AnswerVerdict::Mismatch))
     );
+}
+
+/// Lời của mô hình qua kiểm số nhưng trượt kiểm nghĩa (lỗi gặp 01/11): kiểm số ghi đạt, chỉ kiểm nghĩa ghi không đạt;
+/// lời trượt kiểm số thì kiểm nghĩa không chạy, không gắn "không khớp" lên câu của hệ thống.
+#[test]
+fn checks_name_the_step_that_rejected_the_model_text() {
+    let mut meaning = answer(false, Some(AnswerVerdict::Mismatch));
+    meaning.failed_check = Some(FailedCheck::Meaning);
+    assert_eq!(
+        build_checks(&meaning),
+        (NumberCheck::Passed, Some(AnswerVerdict::Mismatch))
+    );
+    let mut number = answer(false, Some(AnswerVerdict::Mismatch));
+    number.failed_check = Some(FailedCheck::Number);
+    assert_eq!(build_checks(&number), (NumberCheck::Replaced, None));
 }
 
 fn label(text: &str) -> UnderstoodItem {

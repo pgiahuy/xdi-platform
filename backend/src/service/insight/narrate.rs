@@ -22,11 +22,11 @@ use std::time::{Duration, Instant};
 
 use crate::engine::llm::{LlmProvider, LlmRequest, LlmTask};
 use crate::engine::prompts::{self, fill};
-use crate::service::ask::contract::{AnswerVerdict, AskStep, InsightPoint, StepName};
+use crate::service::ask::contract::{AnswerVerdict, AskStep, FailedCheck, InsightPoint, StepName};
 use crate::service::ask::failures::{FailedStep, StepFailure};
 use crate::service::ask::judge::judge;
 use crate::service::ask::lessons::build_with_lessons;
-use crate::service::ask::narrate::MAX_NARRATE_ATTEMPTS;
+use crate::service::ask::narrate::{build_check_name, MAX_NARRATE_ATTEMPTS};
 use crate::service::ask::repair::build_user_text;
 use crate::service::ask::run::build_duration_text;
 use crate::service::explain::claims::build_rewrite_prompt;
@@ -61,6 +61,9 @@ pub struct Narrated {
     pub warnings: Vec<String>,
     /// Kết luận hai cổng (Insight.summary_verdict); None khi không cổng nào chạy xong.
     pub verdict: Option<AnswerVerdict>,
+    /// Bước kiểm chặn lời ở lần viết cuối khi verdict là mismatch (Insight.summary_failed_check); None trong mọi trường
+    /// hợp khác.
+    pub failed_check: Option<FailedCheck>,
     pub step: AskStep,
     /// Hai cổng chặn lời của mô hình ở mọi lần viết: lý do và lời của lần cuối, cho nhật ký lỗi (#228); None trong mọi
     /// trường hợp khác.
@@ -94,6 +97,8 @@ pub async fn narrate_insight(
     let mut problems: Vec<String> = Vec::new();
     let mut unclear: Option<Unclear> = None;
     let mut last_text: Option<String> = None;
+    // Bước kiểm chặn lời ở lần viết gần nhất, để lời báo và báo cáo nói đúng lời trượt ở đâu.
+    let mut failed_check = FailedCheck::Number;
     for attempt in 1..=MAX_NARRATE_ATTEMPTS {
         let prompt = if problems.is_empty() {
             first_prompt.clone()
@@ -128,6 +133,7 @@ pub async fn narrate_insight(
         last_text = Some(text.clone());
         if let Err(problem) = build_insight_check(&text, parts) {
             tracing::warn!(attempt, %problem, "insight text failed gate 1");
+            failed_check = FailedCheck::Number;
             problems = vec![problem];
             continue;
         }
@@ -154,6 +160,7 @@ pub async fn narrate_insight(
                     by_model: true,
                     warnings: Vec::new(),
                     verdict: Some(AnswerVerdict::Match),
+                    failed_check: None,
                     step: build_step(started, true, Some(detail)),
                     failure: None,
                 };
@@ -177,6 +184,7 @@ pub async fn narrate_insight(
                 });
             }
             Ok(Verdict::Mismatch(found)) => {
+                failed_check = FailedCheck::Meaning;
                 tracing::warn!(
                     attempt,
                     problems = found.len(),
@@ -194,13 +202,15 @@ pub async fn narrate_insight(
         return finish_unclear(unclear, started);
     }
     let detail = format!(
-        "Lời của mô hình chưa qua kiểm số và kiểm nghĩa sau {MAX_NARRATE_ATTEMPTS} lần viết: {}",
+        "Lời của mô hình không qua {} sau {MAX_NARRATE_ATTEMPTS} lần viết, đã thay bằng câu hệ thống tính: {}",
+        build_check_name(failed_check),
         problems.join("; ")
     );
     // Lời trượt mọi lần viết thì không trả cho người dùng: câu của code thay vào, kết luận ghi là mismatch.
     let failure = StepFailure::new(FailedStep::Narrate, &detail, last_text.as_deref());
     Narrated {
         verdict: Some(AnswerVerdict::Mismatch),
+        failed_check: Some(failed_check),
         failure: Some(failure),
         ..fallback(parts, started, false, detail)
     }
@@ -224,6 +234,7 @@ fn finish_unclear(unclear: Unclear, started: Instant) -> Narrated {
         by_model: true,
         warnings: unclear.warnings,
         verdict: Some(AnswerVerdict::Warning),
+        failed_check: None,
         step: build_step(started, true, Some(detail)),
         failure: None,
     }
@@ -376,6 +387,7 @@ fn fallback(parts: &InsightParts, started: Instant, ok: bool, detail: String) ->
         by_model: false,
         warnings: Vec::new(),
         verdict: None,
+        failed_check: None,
         step: build_step(started, ok, Some(detail)),
         failure: None,
     }

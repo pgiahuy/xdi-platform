@@ -27,14 +27,18 @@ Phần này không bao giờ làm câu hỏi dừng: lỗi của câu SQL do cod
 chủ (không mở được DuckDB) vẫn là Err như mọi bước khác. Test ở insight/tests.rs. */
 
 pub mod facts;
+pub mod matrix;
 pub mod narrate;
 mod one_row;
 mod period_breakdown;
 pub mod periods;
 pub mod plan;
+pub mod rate;
 pub mod shape;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod text_tests;
 
 use std::ops::ControlFlow;
 use std::time::{Duration, Instant};
@@ -49,21 +53,25 @@ use crate::engine::sql_shape::{build_query_shape, QueryShape};
 use crate::engine::store::{ProfileColumn, ProfileRole};
 use crate::error::AppError;
 use crate::service::ask::contract::{
-    AskStep, ColumnRole, Explanation, Insight, InsightKind, ResultTable, StepName, Understanding,
+    AskStep, CellValue, ColumnRole, Explanation, Insight, InsightKind, ResultTable, StepName,
+    Understanding,
 };
 use crate::service::ask::failures::StepFailure;
 use crate::service::ask::fanout::JoinLink;
 use crate::service::ask::run::build_step;
 use crate::service::ask::summary::build_cell_text;
 use crate::service::explain::breakdown::{run_code_query, CodeQuery, QueryEnv};
-use crate::service::explain::is_vietnamese_alias;
 use crate::service::explain::per_unit::build_alias_label;
+use crate::service::explain::{drop_column_name, is_vietnamese_alias};
 use crate::service::insight::facts::{
-    build_group_parts, build_rows_parts, build_top_parts, InsightParts, Point,
+    build_group_parts, build_rows_parts, build_top_parts, InsightParts, MeasureText, Point,
+    ValueStyle,
 };
+use crate::service::insight::matrix::{build_matrix_parts, Cell};
 use crate::service::insight::narrate::{build_code_narrated, narrate_insight};
 use crate::service::insight::periods::read_series_time;
 use crate::service::insight::plan::{read_plain_query, PlainQuery, PlainTable};
+use crate::service::insight::rate::build_value_style;
 use crate::service::insight::shape::{build_cell_decimal, build_result_shape, ResultShape};
 
 /// Đầu vào của build_insight: câu đã chạy và bảng kết quả đã có vai trò cột.
@@ -128,7 +136,10 @@ pub async fn build_insight(
     };
     // Khóa nhóm là kỳ viết thành chữ (strftime(ngày, '%Y-%m')) thì vai trò cột là dimension, nhưng bảng vẫn là chuỗi
     // thời gian.
-    if result_shape.kind == InsightKind::Groups && is_time_key(input, result_shape) {
+    if result_shape.kind == InsightKind::Groups
+        && result_shape.second_key.is_none()
+        && is_time_key(input, result_shape)
+    {
         result_shape.kind = InsightKind::TimeSeries;
     }
     let started = Instant::now();
@@ -141,8 +152,12 @@ pub async fn build_insight(
         Some(row) => (row.parts, Some(row.code_only)),
         None => {
             let additive = result_shape.measure.is_some_and(|m| is_additive(&shape, m));
+            let style = match result_shape.measure {
+                Some(m) => build_measure_style(input, &shape, m),
+                None => ValueStyle::Number,
+            };
             (
-                build_parts(input, result_shape, additive, &mut found).await?,
+                build_parts(input, result_shape, additive, style, &mut found).await?,
                 None,
             )
         }
@@ -185,6 +200,7 @@ pub async fn build_insight(
             summary_by_model: narrated.by_model,
             summary_warnings: narrated.warnings,
             summary_verdict: narrated.verdict,
+            summary_failed_check: narrated.failed_check,
             notable: parts.notable,
         },
         explanation: found.explanation,
@@ -297,10 +313,23 @@ fn is_additive(shape: &QueryShape, measure: usize) -> bool {
     }
 }
 
+/// Cách viết giá trị của cột độ đo (insight/rate.rs): tỷ lệ thì phần trăm.
+fn build_measure_style(input: &InsightInput<'_>, shape: &QueryShape, measure: usize) -> ValueStyle {
+    let tree = shape.outputs.get(measure).and_then(|o| o.tree.as_ref());
+    let values: Vec<Decimal> = input
+        .result
+        .rows
+        .iter()
+        .filter_map(|row| build_cell_decimal(row[measure].as_ref()))
+        .collect();
+    build_value_style(tree, input.tables, &values)
+}
+
 async fn build_parts(
     input: &InsightInput<'_>,
     shape: ResultShape,
     additive: bool,
+    style: ValueStyle,
     found: &mut Found,
 ) -> Result<InsightParts, AppError> {
     let result = input.result;
@@ -312,19 +341,32 @@ async fn build_parts(
         ));
     };
     let label = build_measure_label(input, measure);
+    let text = MeasureText {
+        label: &label,
+        additive,
+        style,
+    };
+    let complete = !result.truncated && !result.limit_reached;
     let parts = match shape.kind {
         InsightKind::SingleValue => {
-            period_breakdown::build_single(input, measure, &label, found).await?
+            period_breakdown::build_single(input, measure, text, found).await?
         }
         InsightKind::TimeSeries => {
-            period_breakdown::build_series(input, measure, key, &label, found).await?
+            period_breakdown::build_series(input, measure, key, text, found).await?
+        }
+        InsightKind::Groups if shape.second_key.is_some() => {
+            let cells = build_cells(result, measure, key, shape.second_key);
+            let columns = (
+                build_column_name(input, key, 0),
+                build_column_name(input, shape.second_key, 1),
+            );
+            build_matrix_parts(text, (&columns.0, &columns.1), &cells, complete)
         }
         InsightKind::Groups => {
             let points = build_points(result, measure, key);
-            let complete = !result.truncated && !result.limit_reached && additive;
-            let total = complete.then(|| points.iter().map(|p| p.value).sum());
+            let total = (complete && additive).then(|| points.iter().map(|p| p.value).sum());
             let column = build_key_label(input, key);
-            build_group_parts(&label, &column, &points, total)
+            build_group_parts(text, &column, &points, total)
         }
         InsightKind::TopN => {
             let points = build_points(result, measure, key);
@@ -332,7 +374,7 @@ async fn build_parts(
                 true => run_total(input, measure).await?,
                 false => None,
             };
-            build_top_parts(&label, &points, all)
+            build_top_parts(text, &points, all)
         }
         InsightKind::Rows => build_rows_parts(
             result.total_rows,
@@ -343,8 +385,9 @@ async fn build_parts(
     Ok(parts)
 }
 
-/// Tên độ đo: bí danh tiếng Việt câu SQL đặt cho cột (is_vietnamese_alias), không thì nhãn của thẻ "Cách tính" (cùng
-/// thứ tự với các cột tổng hợp), không có thẻ thì tên cột.
+/// Tên độ đo trong câu: bí danh tiếng Việt câu SQL đặt cho cột (is_vietnamese_alias), không thì nhãn của thẻ "Cách
+/// tính" (cùng thứ tự với các cột tổng hợp) bỏ tên cột trong ngoặc cuối, không có thẻ thì tên cột. Tên cột đã có ở thẻ
+/// "Cách tính"; lặp nó trong mỗi câu chỉ làm câu dài ("tổng thành tiền sau giảm giá (item_total) giảm ...").
 pub(super) fn build_measure_label(input: &InsightInput<'_>, measure: usize) -> String {
     let result = input.result;
     let position = result.columns[..measure]
@@ -353,7 +396,7 @@ pub(super) fn build_measure_label(input: &InsightInput<'_>, measure: usize) -> S
         .count();
     let name = &result.columns[measure].name;
     match input.understanding.and_then(|u| u.measures.get(position)) {
-        Some(item) if !is_vietnamese_alias(name, &item.sql) => item.label.clone(),
+        Some(item) if !is_vietnamese_alias(name, &item.sql) => drop_column_name(&item.label),
         // Bí danh "Lợi nhuận mỗi đơn" đặt cho một SUM là tổng (#260): gọi "Tổng lợi nhuận".
         Some(item) => build_alias_label(name, &item.sql),
         None => name.clone(),
@@ -369,6 +412,49 @@ fn build_key_label(input: &InsightInput<'_>, key: Option<usize>) -> String {
         .and_then(|u| u.group_by.first())
         .map(|g| g.label.clone())
         .unwrap_or_else(|| input.result.columns[key].name.clone())
+}
+
+/// Tên một cột nhóm trong câu: bí danh tiếng Việt câu SQL đặt ("Phân khúc khách hàng"), không thì nhãn của thẻ "Cách
+/// tính" (mục nhóm thứ position) bỏ tên cột trong ngoặc, cuối cùng là tên cột kết quả.
+fn build_column_name(input: &InsightInput<'_>, key: Option<usize>, position: usize) -> String {
+    let Some(key) = key else {
+        return String::new();
+    };
+    let name = &input.result.columns[key].name;
+    if !name.is_ascii() {
+        return name.clone();
+    }
+    input
+        .understanding
+        .and_then(|u| u.group_by.get(position))
+        .map(|g| drop_column_name(&g.label))
+        .unwrap_or_else(|| name.clone())
+}
+
+/// Ô của bảng hai chiều: chữ của hai ô khóa như bảng hiện, bỏ dòng có ô độ đo trống.
+fn build_cells(
+    result: &ResultTable,
+    measure: usize,
+    first: Option<usize>,
+    second: Option<usize>,
+) -> Vec<Cell> {
+    let text =
+        |row: &[Option<CellValue>], key: Option<usize>| match key.and_then(|k| row[k].as_ref()) {
+            Some(cell) => build_cell_text(cell, result.columns[key.unwrap_or(0)].kind),
+            None => "trống".to_string(),
+        };
+    result
+        .rows
+        .iter()
+        .filter_map(|row| {
+            let value = build_cell_decimal(row[measure].as_ref())?;
+            Some(Cell {
+                first: text(row, first),
+                second: text(row, second),
+                value,
+            })
+        })
+        .collect()
 }
 
 fn build_filter_labels(understanding: Option<&Understanding>) -> Vec<String> {

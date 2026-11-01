@@ -204,8 +204,9 @@ function DrillCell({ cell, kind, target, onDrill }: DrillCellProps) {
     <Button
       variant="link"
       size="xs"
-      // Nút phủ cả ô (đệm của ô chuyển vào nút): bấm vào khoảng trống trong ô cũng mở dòng nguồn.
-      className="group/drill flex h-auto w-full justify-end gap-1 rounded-none px-3.5 py-2 tabular-nums underline decoration-label/60 decoration-dotted underline-offset-4"
+      // Nút phủ cả ô (đệm của ô chuyển vào nút): bấm vào khoảng trống trong ô cũng mở dòng nguồn. select-text thay
+      // select-none của Button: chép bảng ra vẫn có số đo.
+      className="group/drill flex h-auto w-full justify-end gap-1 rounded-none px-3.5 py-2 tabular-nums underline decoration-label/60 decoration-dotted underline-offset-4 select-text"
       aria-label={`Xem dòng nguồn: ${describeDrillTarget(target)}`}
       onClick={(event) => {
         // Dòng cũng bắt click khi bảng có một cột số đo; chặn để không mở hai lần.
