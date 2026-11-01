@@ -150,12 +150,13 @@ Một dòng là một **dataset** theo nghĩa của giao diện: một database 
 | `secret_encrypted` | Toàn bộ thông tin kết nối kể cả mật khẩu, mã hóa AES-256-GCM bằng `SOURCE_SECRET_KEY`; không bao giờ trả qua API |
 
 Ai ghi: admin kết nối database hay nạp file ở trang Dữ liệu; thiết lập lần đầu thêm mỗi database mẫu làm một nguồn
-(`SAMPLE_DATABASE_URL`); xóa nguồn bị chặn khi còn bảng (`ON DELETE RESTRICT` từ `datasets`).
+(`SAMPLE_DATABASE_URL`); `domain` do admin chọn ở màn Khái niệm ngành, hay thiết lập lần đầu đặt cho dataset mẫu theo
+`data/samples/domains.json`; xóa nguồn bị chặn khi còn bảng (`ON DELETE RESTRICT` từ `datasets`).
 
 | id | name | kind | domain | config (cắt) | secret_encrypted |
 |---|---|---|---|---|---|
-| `0085…` | `sales_demo` | postgres | null | `{"host": "127.0.0.1", "port": 5440, "database": "sales_demo", "user": "analyst", "sslmode": "prefer", "tables": {"6734…": "sales.order_items", …}}` | (bản mã) |
-| `affc…` | `edu_demo` | postgres | null | `{"database": "edu_demo", "tables": {"56f3…": "edu.students", …}, …}` | (bản mã) |
+| `0085…` | `sales_demo` | postgres | `retail` | `{"host": "127.0.0.1", "port": 5440, "database": "sales_demo", "user": "analyst", "sslmode": "prefer", "tables": {"6734…": "sales.order_items", …}}` | (bản mã) |
+| `affc…` | `edu_demo` | postgres | `education` | `{"database": "edu_demo", "tables": {"56f3…": "edu.students", …}, …}` | (bản mã) |
 
 ### datasets
 

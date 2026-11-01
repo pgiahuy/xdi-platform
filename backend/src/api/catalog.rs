@@ -5,7 +5,8 @@ kiểu response ở service/catalog/contract.rs.
 
 Đường dẫn là /catalog chứ không phải /datasets vì /datasets/{id} đã là route của một bảng (id bảng) từ trước, giao diện
 cũ còn dùng; hai nghĩa trên một đường dẫn thì không khai được kiểu response. Route của bảng (tổng quan, chỉ số, truy dòng
-nguồn, mở một cuộc) vẫn ở /datasets/{id} với id là DatasetTable.id. Mọi thành viên đọc và hỏi được; chụp lại chỉ admin. */
+nguồn, mở một cuộc) vẫn ở /datasets/{id} với id là DatasetTable.id. Mọi thành viên đọc và hỏi được; chụp lại và chọn gói
+ngành chỉ admin. */
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
@@ -27,6 +28,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(list))
         .routes(routes!(detail))
         .routes(routes!(snapshot))
+        .routes(routes!(set_domain))
         .routes(routes!(ask))
         .routes(routes!(conversations))
 }
@@ -134,6 +136,43 @@ async fn snapshot(
         StatusCode::OK
     };
     Ok((status, Json(result)))
+}
+
+/// Domain pack to bind to a dataset.
+#[derive(Deserialize, ToSchema)]
+pub struct DatasetDomainRequest {
+    /// Pack `key` from `GET .../domains`, for example `retail`. Null or an empty string removes the pack.
+    #[schema(required)]
+    pub domain: Option<String>,
+}
+
+#[utoipa::path(
+    put,
+    path = "/workspaces/{ws}/catalog/{id}/domain",
+    tag = "catalog",
+    operation_id = "setCatalogDatasetDomain",
+    summary = "Bind a domain pack to a dataset, or remove it (admin only)",
+    description = "The next question on any table of the dataset gets the enabled concepts of this pack in its SQL \
+                   prompt and in the form prompt of a why question. Returns the dataset as `GET .../catalog/{id}`.",
+    params(
+        ("ws" = String, Path, description = "Workspace slug"),
+        ("id" = String, Path, description = "Dataset id (UUID)")
+    ),
+    request_body = DatasetDomainRequest,
+    responses(
+        (status = 200, body = DatasetSummary, description = "Saved"),
+        (status = "4XX", body = ErrorBody, description = "400 no such pack in the workspace, `field` is `domain`; \
+                                                         401; 403 not admin; 404 not a member or no such dataset")
+    )
+)]
+async fn set_domain(
+    State(state): State<AppState>,
+    member: Member,
+    PathParams((_ws, id)): PathParams<(String, String)>,
+    JsonBody(req): JsonBody<DatasetDomainRequest>,
+) -> Result<Json<DatasetSummary>, AppError> {
+    let summary = service::catalog::set_domain(&state, &member, &id, req.domain.as_deref()).await?;
+    Ok(Json(summary))
 }
 
 #[utoipa::path(

@@ -6,7 +6,7 @@ Hỏi trên dataset ở api/ask.ts, cuộc trò chuyện của dataset ở api/c
 
 import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost } from './client'
+import { apiGet, apiPost, apiPut } from './client'
 import type { components } from './schema'
 
 type Schemas = components['schemas']
@@ -15,6 +15,7 @@ export type CatalogTable = Schemas['DatasetTable']
 export type CatalogRelation = Schemas['DatasetRelation']
 export type CatalogKind = Schemas['DatasetKind']
 export type CatalogSnapshotResponse = Schemas['SnapshotResponse']
+export type DatasetDomainRequest = Schemas['DatasetDomainRequest']
 
 export function catalogPath(ws: string, id?: string): string {
   const base = `/workspaces/${encodeURIComponent(ws)}/catalog`
@@ -73,6 +74,20 @@ export function useSnapshotCatalog(ws: string) {
       void queryClient.invalidateQueries({ queryKey: catalogKey(ws) })
       void queryClient.invalidateQueries({ queryKey: ['workspaces', ws, 'datasets'] })
       void queryClient.invalidateQueries({ queryKey: ['workspaces', ws, 'sources'] })
+    },
+  })
+}
+
+/** Gắn gói ngành cho dataset, hay bỏ gói với domain null (chỉ admin). Xong thì tải lại danh sách dataset và danh sách
+ * bảng cũ (api/datasets.ts), vì cả hai có trường domain. */
+export function useSetDatasetDomain(ws: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, domain }: { id: string; domain: string | null }) =>
+      apiPut<CatalogDataset>(`${catalogPath(ws, id)}/domain`, { domain } satisfies DatasetDomainRequest),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: catalogKey(ws) })
+      void queryClient.invalidateQueries({ queryKey: ['workspaces', ws, 'datasets'] })
     },
   })
 }

@@ -97,6 +97,7 @@ mọi bảng đã chụp từ nó. Phiên bản, hồ sơ cột, chỉ số, câ
 | `POST .../catalog/{id}/ask` | mọi thành viên | Hỏi trên dataset (mục Hỏi dữ liệu) |
 | `GET .../catalog/{id}/conversations` | mọi thành viên | Cuộc trò chuyện của người gọi trên dataset |
 | `POST .../catalog/{id}/snapshot` | admin | Chụp lại mọi bảng của dataset là database |
+| `PUT .../catalog/{id}/domain` | admin | Chọn gói ngành của dataset (mục Khái niệm ngành) |
 | `DELETE .../datasets/{id}` | admin | Xóa hẳn một bảng (`{id}` là id bảng) |
 
 - `DatasetSummary`: `id` (với database, trùng id nguồn ở `.../sources/{id}`), `kind` (`database` hay `file`), `name`,
@@ -317,6 +318,10 @@ tắt. Lần gọi đầu trong workspace chép các gói của `data/domains/` 
 
 Body: `name`, `description`, `synonyms` (ít nhất một), `calculations` (tối đa ba `{name, description}`), `dimensions`,
 `sanity_checks`, `enabled` (mặc định true). Sai thì 400 với `field`; gói hay khái niệm không có trả 404.
+
+`PUT .../catalog/{id}/domain` với `{"domain": "retail"}` gắn gói cho dataset `{id}`; `{"domain": null}` (hay chuỗi rỗng)
+bỏ gói. Chỉ admin (member 403). Trả `DatasetSummary` sau khi lưu. Khóa không có trong workspace trả 400 với `field`
+`domain`; dataset không có trả 404. Câu hỏi kế tiếp trên mọi bảng của dataset nhận các khái niệm đang bật của gói.
 
 ## Phản hồi, câu mẫu, bài học
 

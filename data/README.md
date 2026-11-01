@@ -9,6 +9,7 @@ thêm một file JSON.
 |---|---|---|---|
 | `dataco.csv` (1500 dòng lấy ngẫu nhiên) | Mendeley Data, https://doi.org/10.17632/8gx2fvg2k6.5 | CC BY 4.0 | Dataset mẫu của workspace đầu tiên khi không chụp được database mẫu, bộ đánh giá câu hỏi mẫu (`make eval`), thử nhanh với mock |
 | `dataco.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Chỉ số mẫu của dataset DataCo (bảng `metrics`) |
+| `domains.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Gói ngành thiết lập lần đầu gắn cho từng dataset mẫu, theo tên dataset ([docs/DOMAINS.md](../docs/DOMAINS.md#gói-của-một-dataset)) |
 | `order_items.metrics.json`, `student_assessments.metrics.json` | Viết cho dự án này | Apache 2.0, như mã nguồn | Chỉ số mẫu của hai bảng thiết lập lần đầu chụp từ database mẫu ([postgres-demo](postgres-demo/README.md)) |
 
 ## Dữ liệu mẫu lúc thiết lập lần đầu
@@ -17,7 +18,8 @@ Thiết lập lần đầu thêm mỗi database mẫu tới được ([postgres-
 `SAMPLE_DATABASE_URL`) làm một dataset của workspace đầu tiên và chụp mọi bảng tài khoản `analyst` đọc được, như admin
 kết nối ở trang **Dữ liệu** mà không bỏ tick bảng nào: 13 bảng, khóa ngoại ghi thành quan hệ. Bảng có
 `<tên bảng>.metrics.json` (hiện là `order_items`, `student_assessments`) thì có thêm chỉ số mẫu. Hồ sơ cột và câu mẫu
-của `mock` cho các bảng này nằm ở `backend/src/engine/llm/mock_answers_database.json`.
+của `mock` cho các bảng này nằm ở `backend/src/engine/llm/mock_answers_database.json`. Dataset mẫu nhận gói ngành ghi
+cho tên của nó trong `domains.json`.
 
 Không database nào chụp được (không đặt `SAMPLE_DATABASE_URL`, database mẫu không chạy hay chưa nạp, không có khóa
 mã hóa nguồn dùng được), backend ghi cảnh báo và nạp `<SAMPLES_DIR>/dataco.csv` thành dataset `DataCo` (bảng

@@ -91,4 +91,23 @@ impl Store {
         .await
         .map_err(|e| db_error("list catalog columns", e))
     }
+
+    /// Gắn gói ngành (khóa của domain_packs) cho dataset `source_id`, hay bỏ gói khi `domain` là None. Trả false khi
+    /// không có dataset này trong workspace. Không kiểm khóa gói: service/domains/assign.rs kiểm trước khi gọi.
+    pub async fn set_source_domain(
+        &self,
+        ws: &WorkspaceId,
+        source_id: Uuid,
+        domain: Option<&str>,
+    ) -> Result<bool, AppError> {
+        let done =
+            sqlx::query("UPDATE sources SET domain = $3 WHERE workspace_id = $1 AND id = $2")
+                .bind(ws.as_uuid())
+                .bind(source_id)
+                .bind(domain)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| db_error("set source domain", e))?;
+        Ok(done.rows_affected() == 1)
+    }
 }

@@ -378,6 +378,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspaces/{ws}/catalog/{id}/domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Bind a domain pack to a dataset, or remove it (admin only)
+         * @description The next question on any table of the dataset gets the enabled concepts of this pack in its SQL prompt and in the form prompt of a why question. Returns the dataset as `GET .../catalog/{id}`.
+         */
+        put: operations["setCatalogDatasetDomain"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workspaces/{ws}/catalog/{id}/snapshot": {
         parameters: {
             query?: never;
@@ -1799,6 +1819,11 @@ export interface components {
              *     (two steps, eight tables at most).
              */
             table_id?: string | null;
+        };
+        /** @description Domain pack to bind to a dataset. */
+        DatasetDomainRequest: {
+            /** @description Pack `key` from `GET .../domains`, for example `retail`. Null or an empty string removes the pack. */
+            domain: string | null;
         };
         /**
          * @description What a dataset is.
@@ -4308,6 +4333,53 @@ export interface operations {
                 };
             };
             /** @description 401; 404 not a member or no such dataset */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    setCatalogDatasetDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workspace slug */
+                ws: string;
+                /** @description Dataset id (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetDomainRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetSummary"];
+                };
+            };
+            /** @description Internal error; details are in the server log, not in the response */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description 400 no such pack in the workspace, `field` is `domain`; 401; 403 not admin; 404 not a member or no such dataset */
             "4XX": {
                 headers: {
                     [name: string]: unknown;

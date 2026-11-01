@@ -48,6 +48,7 @@ pub(crate) mod prompt_fixtures;
 pub mod report;
 pub mod samples;
 pub mod samples_db;
+pub mod samples_domains;
 #[cfg(test)]
 mod samples_tests;
 pub mod semantic;

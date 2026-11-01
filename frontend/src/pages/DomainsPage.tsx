@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /* pages/DomainsPage.tsx - màn Khái niệm ngành của workspace (/w/:ws/domains): mỗi gói ngành một mục, bảng khái niệm,
-form thêm và sửa, nút tắt và bật. Mọi thành viên xem; nút thêm, sửa, tắt chỉ hiện với admin, quyền thật do backend
-kiểm. Khái niệm lưu xong dùng ngay ở câu hỏi kế tiếp trên dataset gắn gói đó. */
+form thêm và sửa, nút tắt và bật; đầu màn là gói của từng dataset. Mọi thành viên xem; nút thêm, sửa, tắt và ô chọn gói
+của dataset chỉ hiện với admin, quyền thật do backend kiểm. Khái niệm lưu xong dùng ngay ở câu hỏi kế tiếp trên dataset
+gắn gói đó. */
 
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { useMe } from '@/api/auth'
+import { type CatalogDataset, useCatalog, useSetDatasetDomain } from '@/api/catalog'
 import { ApiError } from '@/api/client'
 import { type Concept, type ConceptRequest, type ConceptsResponse, useConcepts, useSaveConcept } from '@/api/domains'
 import { EmptyState } from '@/components/EmptyState'
 import { ConceptForm } from '@/components/domains/ConceptForm'
 import { ConceptTable } from '@/components/domains/ConceptTable'
-import type { ConceptDraft, ConceptField, ConceptItem, PackItem } from '@/components/domains/types'
+import { DatasetPacks } from '@/components/domains/DatasetPacks'
+import type { ConceptDraft, ConceptField, ConceptItem, DatasetPackItem, PackItem } from '@/components/domains/types'
 import type { FormError } from '@/components/forms/formError'
 import { FormMessage } from '@/components/forms/FormMessage'
 import { Button } from '@/components/ui/button'
@@ -35,6 +38,10 @@ function toItem(c: Concept): ConceptItem {
 
 function toPacks(data: ConceptsResponse): PackItem[] {
   return data.packs.map((p) => ({ key: p.key, name: p.name, description: p.description, concepts: p.concepts.map(toItem) }))
+}
+
+function toDatasetPacks(datasets: CatalogDataset[]): DatasetPackItem[] {
+  return datasets.map((d) => ({ id: d.id, name: d.name, pack: d.domain }))
 }
 
 /** "a, b, , c" thành ["a", "b", "c"]; backend vẫn bỏ khoảng trắng và kiểm lại. */
@@ -81,6 +88,8 @@ function WorkspaceConcepts({ ws }: { ws: string }) {
   const concepts = useConcepts(ws)
   const save = useSaveConcept(ws)
   const toggle = useSaveConcept(ws)
+  const catalog = useCatalog(ws)
+  const setPack = useSetDatasetDomain(ws)
   // Form đang mở: pack là gói của form, editing là khái niệm đang sửa (không có là thêm mới); key tăng mỗi lần mở để
   // form đọc lại giá trị đầu, kể cả khi mở sửa khái niệm khác lúc form đang mở.
   const [editor, setEditor] = useState<{ key: number; pack: string; editing?: ConceptItem }>()
@@ -116,10 +125,20 @@ function WorkspaceConcepts({ ws }: { ws: string }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold tracking-tight">Khái niệm ngành</h2>
         <p className="text-sm text-muted-foreground">
-          Thuật ngữ quen dùng của từng ngành, gửi kèm câu hỏi trên dataset gắn gói đó để mô hình hiểu đúng chữ. Công thức
-          trên cột thật nằm ở màn Chỉ số của từng dataset.
+          Thuật ngữ quen dùng của từng ngành, gửi kèm câu hỏi số liệu và câu hỏi nguyên nhân trên dataset gắn gói đó để mô
+          hình hiểu đúng chữ. Công thức trên cột thật nằm ở màn Chỉ số của từng dataset.
         </p>
       </div>
+      {catalog.error && <FormMessage kind="error">{`Không tải được danh sách dataset: ${catalog.error.message}`}</FormMessage>}
+      {catalog.data && (
+        <DatasetPacks
+          datasets={toDatasetPacks(catalog.data)}
+          packs={packs}
+          onChange={isAdmin ? (id, domain) => setPack.mutate({ id, domain }) : undefined}
+          savingId={setPack.isPending ? setPack.variables?.id : undefined}
+        />
+      )}
+      {setPack.error && <FormMessage kind="error">{setPack.error.message}</FormMessage>}
       {toggle.error && <FormMessage kind="error">{toggle.error.message}</FormMessage>}
       {packs.length === 0 && <EmptyState title="Chưa có gói ngành nào" />}
       {packs.map((pack) => (

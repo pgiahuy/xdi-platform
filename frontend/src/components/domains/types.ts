@@ -41,3 +41,10 @@ export type ConceptDraft = {
 
 /** Tên trường backend trả trong lỗi (ApiError.field), trùng tên trường JSON của request. */
 export type ConceptField = 'name' | 'description' | 'synonyms' | 'calculations' | 'dimensions' | 'sanity_checks'
+
+/** Một dataset trên màn Khái niệm ngành: pack là khóa gói đang gắn, null khi không dùng gói. */
+export type DatasetPackItem = {
+  id: string
+  name: string
+  pack: string | null
+}

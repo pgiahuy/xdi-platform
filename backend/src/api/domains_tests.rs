@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /* api/domains_tests.rs - test API khái niệm ngành qua route thật (#229): workspace mới có sẵn các gói của
 data/domains/, member xem mà không sửa được (403), admin thêm, sửa, tắt khái niệm, khái niệm sai báo đúng trường; khái
-niệm vừa sửa tới prompt sinh SQL của câu hỏi kế tiếp, khái niệm tắt thì không. Dùng start_on của api/ask_tests.rs và
+niệm vừa sửa tới prompt sinh SQL của câu hỏi kế tiếp, khái niệm tắt thì không; gói admin chọn cho dataset
+(PUT /catalog/{id}/domain) tới prompt, bỏ gói thì không. Dùng start_on của api/ask_tests.rs và
 mô hình giả, add_member của api/metrics_tests.rs; không có DATABASE_URL thì bỏ qua. */
 
 use std::collections::VecDeque;
@@ -13,13 +14,16 @@ use serde_json::{json, Value};
 use crate::api::ask_tests::{sql_reply, start_on, Asking};
 use crate::api::metrics_tests::{add_member, RecordingLlm};
 use crate::api::test_support::call;
-use crate::engine::store::test_support::exec;
 
 const CSV: &str = "Market,Order Region,Order Item Total\n\
                    Europe,Western Europe,100.5\n\
                    LATAM,South America,200\n";
 
 const LIST_URL: &str = "/api/workspaces/cua-hang/domains";
+const CATALOG_URL: &str = "/api/workspaces/cua-hang/catalog";
+
+/// Dòng của một khái niệm retail trong prompt viết SQL (build_domain_section của service/ask/prompt.rs).
+const REVENUE_LINE: &str = "- Doanh thu (doanh thu, doanh số";
 
 fn concepts_url(pack: &str) -> String {
     format!("{LIST_URL}/{pack}/concepts")
@@ -46,6 +50,34 @@ async fn find_concept(asking: &Asking, pack: &str, key: &str) -> Value {
         .find(|c| c["key"] == key)
         .unwrap()
         .clone()
+}
+
+/// Id của dataset dataco mà start_on nạp (id dataset của /catalog, không phải id bảng).
+async fn dataset_id(asking: &Asking) -> String {
+    let (status, _, body) =
+        call(&asking.app, "GET", CATALOG_URL, Some(&asking.session), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let dataset = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["name"] == "dataco")
+        .unwrap();
+    dataset["id"].as_str().unwrap().to_string()
+}
+
+/// Gắn gói cho dataset dataco qua route thật, với phiên `session`.
+async fn set_domain(asking: &Asking, session: &str, domain: Value) -> (StatusCode, Value) {
+    let url = format!("{CATALOG_URL}/{}/domain", dataset_id(asking).await);
+    let (status, _, body) = call(
+        &asking.app,
+        "PUT",
+        &url,
+        Some(session),
+        Some(json!({"domain": domain})),
+    )
+    .await;
+    (status, body)
 }
 
 #[tokio::test]
@@ -145,8 +177,8 @@ async fn edited_concept_reaches_the_next_sql_prompt() {
     let Some(asking) = start_on(Some(llm), CSV, |_| {}).await else {
         return;
     };
-    // Chưa có API gắn gói cho dataset; đặt thẳng cột sources.domain (gói của dataset, migration 0017).
-    exec(&asking.db.store, "UPDATE sources SET domain = 'retail'").await;
+    let (status, _) = set_domain(&asking, &asking.session, json!("retail")).await;
+    assert_eq!(status, StatusCode::OK);
     let question = "Doanh thu theo thị trường";
 
     let (status, answer) = asking.ask(question, json!([])).await;
@@ -195,4 +227,52 @@ async fn edited_concept_reaches_the_next_sql_prompt() {
     let third = prompts.lock().unwrap()[2].clone();
     assert!(!third.contains("- Doanh thu ("), "{third}");
     assert!(third.contains("- Số đơn hàng ("), "{third}");
+}
+
+/// Gói chọn qua API tới prompt viết SQL: không gói thì prompt không có khái niệm nào, gói retail thì có, bỏ gói thì
+/// lại không. Member không chọn được (403), gói không có trả 400 với field domain.
+#[tokio::test]
+async fn chosen_pack_reaches_the_sql_prompt_and_none_removes_it() {
+    let reply =
+        sql_reply("SELECT \"Market\", SUM(\"Order Item Total\") AS revenue FROM dataco GROUP BY 1");
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let llm = Arc::new(RecordingLlm {
+        replies: Mutex::new(VecDeque::from(vec![reply.to_string(); 3])),
+        prompts: prompts.clone(),
+    });
+    let Some(asking) = start_on(Some(llm), CSV, |_| {}).await else {
+        return;
+    };
+    let question = "Doanh thu theo thị trường";
+    let minh = add_member(&asking).await;
+
+    // Dataset vừa nạp chưa có gói: prompt không có phần khái niệm ngành.
+    let (status, answer) = asking.ask(question, json!([])).await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    let first = prompts.lock().unwrap()[0].clone();
+    assert!(!first.contains(REVENUE_LINE), "{first}");
+
+    let (status, _) = set_domain(&asking, &minh, json!("retail")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, body) = set_domain(&asking, &asking.session, json!("khong-co")).await;
+    assert_eq!(
+        (status, body["field"].as_str()),
+        (StatusCode::BAD_REQUEST, Some("domain")),
+        "{body}"
+    );
+
+    let (status, body) = set_domain(&asking, &asking.session, json!("retail")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["domain"], "retail");
+    asking.ask(question, json!([])).await;
+    let second = prompts.lock().unwrap()[1].clone();
+    assert!(second.contains("Bán lẻ và chuỗi cung ứng"), "{second}");
+    assert!(second.contains(REVENUE_LINE), "{second}");
+
+    let (status, body) = set_domain(&asking, &asking.session, Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["domain"].is_null());
+    asking.ask(question, json!([])).await;
+    let third = prompts.lock().unwrap()[2].clone();
+    assert!(!third.contains(REVENUE_LINE), "{third}");
 }
