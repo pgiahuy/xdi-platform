@@ -9,8 +9,10 @@ lần đầu cần gói: mở màn này hay hỏi trên dataset có gói (load_f
 trước migration, đều có gói mà không phải nhớ gọi ở từng chỗ. Mỗi lần đọc tốn một câu SELECT để so khóa; chỉ khi thiếu
 mới ghi (ensure_seeded).
 
-Khái niệm admin lưu vào prompt của câu hỏi kế tiếp trên dataset gắn gói đó (sources.domain), không cần build lại. */
+Khái niệm admin lưu vào prompt của câu hỏi kế tiếp trên dataset gắn gói đó (sources.domain), không cần build lại. Gắn gói
+cho dataset ở assign.rs. */
 
+pub mod assign;
 pub mod check;
 pub mod contract;
 

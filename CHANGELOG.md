@@ -27,6 +27,8 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Bộ đánh giá: `make eval` thêm câu trên database mẫu, `make eval-judge`, `make eval-classify`, bộ 57 câu OULAD với báo cáo theo loại câu ([eval/README.md](eval/README.md)) (#201, #202, #230).
 - Bộ đánh giá có 100 câu hỏi (thêm 12 câu trên `sales_demo`, `edu_demo`, 11 câu nối bảng), 50 câu phân loại, 80 lời giải thích có nhãn, nửa đúng nửa sai.
 
+- Admin chọn gói ngành cho từng dataset ở màn Khái niệm ngành; dataset mẫu có sẵn gói, khái niệm của gói vào prompt của câu hỏi số liệu và câu hỏi nguyên nhân.
+
 ### Changed
 
 - Chữ trên giao diện theo một bộ từ: "câu hỏi nguyên nhân", "câu hỏi số liệu", "Cách tính", "Minh chứng", "kiểm số" và "kiểm nghĩa".

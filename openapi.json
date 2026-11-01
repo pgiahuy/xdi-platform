@@ -1131,6 +1131,78 @@
         }
       }
     },
+    "/workspaces/{ws}/catalog/{id}/domain": {
+      "put": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Bind a domain pack to a dataset, or remove it (admin only)",
+        "description": "The next question on any table of the dataset gets the enabled concepts of this pack in its SQL prompt and in the form prompt of a why question. Returns the dataset as `GET .../catalog/{id}`.",
+        "operationId": "setCatalogDatasetDomain",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "description": "Workspace slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dataset id (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetDomainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetSummary"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "400 no such pack in the workspace, `field` is `domain`; 401; 403 not admin; 404 not a member or no such dataset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; details are in the server log, not in the response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workspaces/{ws}/catalog/{id}/snapshot": {
       "post": {
         "tags": [
@@ -6936,6 +7008,22 @@
             ],
             "format": "uuid",
             "description": "Table to start from (`DatasetTable.id`). Leave out to let the backend pick it from the question; the answer\ntells which one in `AskResponse.table_id`. Either way the question also reads tables linked to it by relations\n(two steps, eight tables at most)."
+          }
+        }
+      },
+      "DatasetDomainRequest": {
+        "type": "object",
+        "description": "Domain pack to bind to a dataset.",
+        "required": [
+          "domain"
+        ],
+        "properties": {
+          "domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pack `key` from `GET .../domains`, for example `retail`. Null or an empty string removes the pack."
           }
         }
       },

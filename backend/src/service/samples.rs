@@ -4,7 +4,8 @@ SAMPLE_DATABASE_URL thì thêm mỗi database mẫu làm một nguồn và chụ
 chính, compose trỏ vào sales_demo và edu_demo của dịch vụ demo-db trong data/postgres-demo khi bật profile demo). Không
 có, hay không database nào chụp được, thì nạp <SAMPLES_DIR>/dataco.csv thành dataset "DataCo"
 (bảng dataco) qua đúng đường nạp file thường (service/ingest.rs, kể cả hồ sơ cột), rồi ghi các chỉ số trong
-dataco.metrics.json vào bảng metrics. Câu mẫu của mock viết cho cả hai (engine/llm/mock_answers.json). Bộ đánh giá câu
+dataco.metrics.json vào bảng metrics. Cả hai nhánh gắn gói ngành ghi trong <SAMPLES_DIR>/domains.json cho dataset mẫu
+(service/samples_domains.rs). Câu mẫu của mock viết cho cả hai (engine/llm/mock_answers.json). Bộ đánh giá câu
 hỏi mẫu (service/eval.rs) nạp file qua cùng hàm upload_local_file.
 
 Gắn vào thiết lập lần đầu (service/accounts.rs), không vào lúc khởi động: thiết lập chỉ thành công một lần cho mỗi bản
@@ -23,6 +24,7 @@ use crate::error::AppError;
 use crate::service::ingest::{self, StagedFile, Staging, Upload, UploadResult};
 use crate::service::metrics::check::{build_check_table, check_metric};
 use crate::service::samples_db;
+use crate::service::samples_domains::assign_sample_domain;
 use crate::state::AppState;
 
 /// Tên dataset mẫu. Tên bảng lấy từ tên dataset (dataco), đúng bảng mà mock_answers.json viết SQL cho.
@@ -139,6 +141,7 @@ async fn seed_csv(state: &AppState, member: &Member) -> Result<SeedOutcome, AppE
     if !uploaded.created {
         return Ok(SeedOutcome::AlreadyPresent);
     }
+    assign_sample_domain(state, member, uploaded.dataset.parent_id, SAMPLE_NAME).await;
     let metrics = load_metrics(&dir.join(SAMPLE_METRICS))?;
     let runnable =
         keep_runnable(state, member, &uploaded.dataset, &uploaded.version, metrics).await?;

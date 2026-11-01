@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* service/samples_tests.rs - test nạp dataset mẫu (service/samples.rs, service/samples_db.rs) qua thiết lập lần đầu
 thật: trên file mẫu của repo (data/samples), và trên database mẫu là chính database của test (chụp bảng, quan hệ, chỉ
-số; không tới được thì nạp file). Mỗi test một database mới vì thiết lập cần "chưa có tài khoản nào"; bỏ qua khi không có
+số, gói ngành; không tới được thì nạp file). Mỗi test một database mới vì thiết lập cần "chưa có tài khoản nào"; bỏ qua khi không có
 DATABASE_URL. */
 
 use std::path::{Path, PathBuf};
@@ -89,6 +89,8 @@ async fn setup_seeds_dataco_and_metrics_once() {
     assert_eq!(datasets.len(), 1);
     assert_eq!(datasets[0].name, SAMPLE_NAME);
     assert_eq!(datasets[0].logical_table, "dataco");
+    // data/samples/domains.json gắn gói retail cho DataCo.
+    assert_eq!(datasets[0].domain.as_deref(), Some("retail"));
     // Hồ sơ cấu trúc xong ngay trong lần nạp; lớp ngữ nghĩa chạy nền nên có thể đã lên semantic.
     assert!(matches!(
         datasets[0].current_profile_status.as_deref(),
@@ -241,6 +243,12 @@ async fn build_sample_database(
     ] {
         exec(&db.store, &sql).await;
     }
+    // Gói ngành của dataset mẫu theo tên database, như data/samples/domains.json ghi cho sales_demo và edu_demo.
+    std::fs::write(
+        samples.join("domains.json"),
+        format!(r#"{{"{}": "education"}}"#, db.name()),
+    )
+    .unwrap();
     std::fs::write(
         samples.join("orders.metrics.json"),
         r#"[{"name": "total", "expression": "SUM(amount)"}]"#,
@@ -285,6 +293,10 @@ async fn setup_snapshots_the_sample_database() {
     let mut tables: Vec<&str> = datasets.iter().map(|d| d.logical_table.as_str()).collect();
     tables.sort();
     assert_eq!(tables, ["customers", "orders"]);
+    // Gói của dataset nằm trên dataset, nên mọi bảng của nó đọc cùng một gói.
+    assert!(datasets
+        .iter()
+        .all(|d| d.domain.as_deref() == Some("education")));
     let relations = state
         .store
         .list_relations(&member.workspace, None)
