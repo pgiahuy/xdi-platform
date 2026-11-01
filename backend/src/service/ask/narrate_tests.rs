@@ -1046,3 +1046,41 @@ async fn judge_is_told_that_scale_is_the_main_point() {
     let judged = llm.prompts(LlmTask::Judge);
     assert!(judged[0].contains("\"scale_main\": true"), "{}", judged[0]);
 }
+
+/// Đã gặp: "Hiệu ứng tỷ suất tăng: Hiệu ứng tỷ suất tăng 0,1081 ...". Câu bỏ phần lặp đầu ý; lặp nửa từ hay câu chỉ có
+/// đầu ý thì giữ nguyên.
+#[test]
+fn a_reason_does_not_repeat_its_lead() {
+    use crate::service::ask::narrate::build_text_without_lead;
+    assert_eq!(
+        build_text_without_lead(
+            "Hiệu ứng tỷ suất tăng",
+            "Hiệu ứng tỷ suất tăng 0,1081 trong khi hiệu ứng cơ cấu giảm 0,0057."
+        ),
+        "0,1081 trong khi hiệu ứng cơ cấu giảm 0,0057."
+    );
+    assert_eq!(
+        build_text_without_lead("Cách giao", "Cách giao: Standard Class tăng."),
+        "Standard Class tăng."
+    );
+    assert_eq!(
+        build_text_without_lead("Giảm", "Giảm giá nhiều hơn ở Europe."),
+        "Giảm giá nhiều hơn ở Europe."
+    );
+    assert_eq!(build_text_without_lead("Europe", "Europe"), "Europe");
+}
+
+/// So hai nhóm: "mức giảm" là lời sai (đã gặp: "tạo ra phần lớn mức giảm"); "giảm giá" trong tên độ đo thì không bắt.
+#[test]
+fn group_text_with_a_change_phrase_is_caught() {
+    use crate::service::ask::narrate::find_change_phrase;
+    assert_eq!(
+        find_change_phrase("Môn AAA tạo ra phần lớn mức giảm."),
+        Some("mức giảm")
+    );
+    assert_eq!(
+        find_change_phrase("Thành tiền sau giảm giá của AAA thấp hơn."),
+        None
+    );
+    assert_eq!(find_change_phrase("AAA tạo ra phần lớn mức chênh."), None);
+}

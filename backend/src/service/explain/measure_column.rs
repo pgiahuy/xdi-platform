@@ -33,6 +33,19 @@ pub(super) fn check_column_measure(
     errors: &mut Vec<FieldError>,
 ) -> Option<PlanMeasure> {
     let column = find_column(profile, &measure.column, FIELD, errors)?;
+    // Cột của bảng cha đọc trên từng dòng của bảng bắt đầu thì lặp theo số dòng con (một đơn nhiều dòng hàng): cộng hay
+    // đếm nó ra số sai, nên độ đo chỉ lấy cột của bảng bắt đầu.
+    if profile.is_joined(&column.name) {
+        errors.push(FieldError::new(
+            FIELD,
+            format!(
+                "\"{}\" is a column of a joined table; the measure must be a column of {}, use joined columns only in \
+                 \"time\", \"groups\" and \"filters\"",
+                column.name, profile.table
+            ),
+        ));
+        return None;
+    }
     let ident = build_ident(&column.name);
     match measure.agg {
         FormAgg::Sum => {

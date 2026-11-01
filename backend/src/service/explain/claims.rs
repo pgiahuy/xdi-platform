@@ -21,9 +21,10 @@ use serde_json::json;
 
 use crate::service::ask::contract::Explanation;
 use crate::service::explain::claim_cell::check_claim;
+use crate::service::explain::narrate_prompt::build_strong_groups;
 use crate::service::explain::number::build_number_text_with;
 use crate::service::explain::split::build_split;
-use crate::service::explain::{build_fraction_digits, lower_first};
+use crate::service::explain::{build_fraction_digits, build_value_text, lower_first};
 
 /// Câu trả lời của mô hình ở bước narrate, đúng build_narrate_schema: insight (câu mở đầu và các ý "Nguyên nhân
 /// chính") kèm khai số.
@@ -250,11 +251,36 @@ pub fn build_claim_check(
     if let Some(problem) = check_scale_claims(claims, explanation) {
         problems.push(problem);
     }
+    problems.extend(check_strong_claims(claims, explanation));
     if problems.is_empty() {
         Ok(claims.len())
     } else {
         Err(problems)
     }
+}
+
+/// Nhóm một mình làm ra từ nửa chênh lệch trở lên ở một chiều gửi cho mô hình (build_strong_groups) mà lời không nhắc:
+/// lời thiếu nguyên nhân chính. Đủ khi có một khẳng định bất kỳ về đúng nhóm đó (nguyên nhân, phần chênh lệch, số của
+/// nhóm).
+fn check_strong_claims(claims: &[Claim], explanation: &Explanation) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (dimension, group) in build_strong_groups(explanation) {
+        let Some(value) = group.value.as_ref().map(build_value_text) else {
+            continue;
+        };
+        let named = claims
+            .iter()
+            .any(|c| c.column == dimension.column && c.group == value);
+        if !named {
+            let label = dimension.label.as_deref().unwrap_or(&dimension.column);
+            problems.push(format!(
+                "Lời thiếu nguyên nhân chính: theo {label}, nhóm {value} một mình làm ra từ một nửa chênh lệch trở lên; \
+                 phải nêu nhóm này kèm khẳng định cause (column {}, group {value})",
+                dimension.column
+            ));
+        }
+    }
+    problems
 }
 
 /// Quy mô là ý chính mà không khẳng định nào nói về lượng: lý do trượt, gửi lại cho mô hình ở lần viết lại. Đủ khi có

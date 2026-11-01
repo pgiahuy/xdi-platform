@@ -136,7 +136,7 @@ fn sales_join_cases_pass_the_guard() {
 fn edu_cases_pass_the_guard() {
     use crate::engine::guard::{build_guarded_sql, AllowedTable, JoinLink};
 
-    let schema: [(&str, &[&str]); 5] = [
+    let schema: [(&str, &[&str]); 7] = [
         (
             "students",
             &[
@@ -198,6 +198,27 @@ fn edu_cases_pass_the_guard() {
                 "num_sites",
             ],
         ),
+        (
+            "registrations",
+            &[
+                "code_module",
+                "code_presentation",
+                "id_student",
+                "date_registration",
+                "date_unregistration",
+            ],
+        ),
+        (
+            "vle_materials",
+            &[
+                "id_site",
+                "code_module",
+                "code_presentation",
+                "activity_type",
+                "week_from",
+                "week_to",
+            ],
+        ),
     ];
     let tables: Vec<AllowedTable> = schema
         .iter()
@@ -224,6 +245,8 @@ fn edu_cases_pass_the_guard() {
         link("student_assessments", "assessments", &["id_assessment"]),
         link("student_assessments", "students", &student),
         link("student_daily_clicks", "students", &student),
+        link("registrations", "students", &student),
+        link("vle_materials", "courses", &course),
     ];
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../eval/edu.json");
     let cases = load_cases(std::path::Path::new(path)).unwrap();

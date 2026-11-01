@@ -172,7 +172,10 @@ hỏi số liệu. Mô hình lỗi hay quá giờ (và với `mock` khi câu kh�
 sao", "sao lại", "vì đâu", "lý do", "nguyên nhân", "do đâu", gõ không dấu cũng được.
 
 Với câu hỏi nguyên nhân, mô hình không viết SQL mà điền một form: đo gì, so hai kỳ, hai nhóm hay một nhóm với các nhóm
-còn lại, lọc gì. Backend kiểm form rồi tự dựng mọi câu SQL. Câu không nêu kỳ ("Tại sao doanh thu giảm") thì so kỳ gần
+còn lại, lọc gì. Backend kiểm form rồi tự dựng mọi câu SQL. Câu nêu tên hai nhóm ("giữa Europe và LATAM") thì so đúng
+hai nhóm đó; câu chỉ nêu một nhóm ("vì sao AAA ít sinh viên") thì so với trung bình các nhóm còn lại, và lời ghi rõ
+"trung bình các ... còn lại". Độ đo là tỷ lệ dòng (tỷ lệ giao trễ, tỷ lệ bỏ học) thì lời viết phần trăm và điểm phần
+trăm. Câu không nêu kỳ ("Tại sao doanh thu giảm") thì so kỳ gần
 nhất có dữ liệu với kỳ liền trước, lùi một kỳ khi kỳ cuối dừng giữa chừng; thẻ **Cách tính** ghi giả định này kèm nút
 chọn kỳ khác.
 

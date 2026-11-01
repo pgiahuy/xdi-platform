@@ -116,8 +116,9 @@ Sửa `.env` rồi chạy lại `docker compose up -d`. Danh sách đầy đủ,
 | `RUST_LOG` | `info` | Mức log |
 | `LLM_PROVIDER` | `mock` | `mock` (không gọi ra ngoài), `gemini` hay `ollama` (bên dưới) |
 | `GEMINI_API_KEY` | trống | Khóa Gemini, tạo trong Google AI Studio |
-| `GEMINI_BACKUP_API_KEY` | trống | Khóa dự phòng: khóa chính hết hạn mức (lỗi 429) thì backend gọi lại bằng khóa này trong cùng lần gọi |
+| `GEMINI_BACKUP_API_KEY` | trống | Một hay nhiều khóa dự phòng, cách nhau bằng dấu phẩy: khóa trước hết hạn mức (lỗi 429) thì backend gọi lại bằng khóa kế tiếp trong cùng lần gọi |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Mô hình Gemini |
+| `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` | Mô hình dự phòng: mọi khóa trả 429 với `GEMINI_MODEL` thì gọi lại bằng mô hình này, khóa chính trước; đặt rỗng để tắt |
 | `GEMINI_TIMEOUT_SECS` | `60` | Thời gian chờ tối đa một lần gọi Gemini |
 | `EVAL_GEMINI_API_KEY` | trống | Khóa Gemini cho các lệnh `xdi-backend eval*`; server không đọc biến này (bên dưới) |
 | `OLLAMA_URL` | compose: `http://host.docker.internal:11434` | Địa chỉ Ollama; chạy ngoài compose thì `http://localhost:11434` |
@@ -177,8 +178,9 @@ danh, câu gợi ý). Đổi mô hình rồi khởi động lại thì backend l
   ([Dùng lần đầu](USAGE.md#1-chọn-mô-hình-và-dữ-liệu-mẫu)).
 - `gemini`: đặt `GEMINI_API_KEY`. Thiếu khóa thì backend vẫn chạy, ghi cảnh báo lúc khởi động, câu hỏi nhận lỗi nhắc đặt
   khóa. Khóa chỉ gửi tới Google trong header, không ghi vào log. Mặc định là bản lite vì hạn mức miễn phí theo ngày cao
-  hơn bản flash; hạn mức hiện tại xem trong Google AI Studio. `GEMINI_BACKUP_API_KEY` (thường của một tài khoản Google
-  khác) chỉ được dùng khi khóa chính trả 429; lỗi khác không đổi khóa.
+  hơn bản flash; hạn mức hiện tại xem trong Google AI Studio. `GEMINI_BACKUP_API_KEY` (một hay nhiều khóa, thường của
+  tài khoản Google khác) chỉ được dùng khi khóa trước trả 429; lỗi khác không đổi khóa. Mọi khóa đều trả 429 thì backend thử lại với
+  `GEMINI_FALLBACK_MODEL`, vì hạn mức miễn phí tính riêng cho từng mô hình. Log ghi một dòng mỗi lần dùng mô hình dự phòng.
 - `ollama`: cần Ollama đang chạy và mô hình đã tải (`ollama pull qwen2.5-coder:7b`). Chạy compose thì backend gọi Ollama
   trên máy host qua `host.docker.internal`. Trên Linux, Ollama mặc định chỉ nghe `127.0.0.1`, container không gọi tới
   được: chạy Ollama với `OLLAMA_HOST=0.0.0.0` và chặn cổng 11434 từ bên ngoài, vì Ollama không có đăng nhập.

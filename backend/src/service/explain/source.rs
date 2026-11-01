@@ -153,6 +153,28 @@ pub fn build_related_tables(
     RelatedTables { source, dimensions }
 }
 
+/// Tên các bảng đi tới được từ base theo đúng luật của build_related_tables (nhiều-một, một-một, tối đa
+/// BREAKDOWN_MAX_HOPS bước), không kể base. ask/why_table.rs dùng để biết bảng nào làm bảng bắt đầu được cho câu hỏi
+/// nguyên nhân: mọi cột câu hỏi cần phải nằm ở bảng đó hay ở một bảng đi tới được từ nó.
+pub fn build_reachable(base: &str, links: &[JoinLink]) -> Vec<String> {
+    let mut reached = vec![base.to_string()];
+    let mut frontier = vec![base.to_string()];
+    for _ in 0..BREAKDOWN_MAX_HOPS {
+        let mut next = Vec::new();
+        for current in &frontier {
+            for (table, _) in build_steps(current, links) {
+                if !reached.iter().any(|t| t.eq_ignore_ascii_case(&table)) {
+                    reached.push(table.clone());
+                    next.push(table);
+                }
+            }
+        }
+        frontier = next;
+    }
+    reached.remove(0);
+    reached
+}
+
 /// Các bảng đi tới được từ current mà không nhân dòng: lên bên một của quan hệ current giữ khóa ngoại, hay sang bên
 /// kia của quan hệ một-một. Kèm cặp khóa (cột của current, cột của bảng tới). Bỏ quan hệ của một bảng với chính nó.
 fn build_steps(current: &str, links: &[JoinLink]) -> Vec<(String, Vec<(String, String)>)> {

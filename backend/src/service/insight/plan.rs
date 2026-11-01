@@ -165,6 +165,7 @@ impl PlainQuery {
             values: &empty,
             metrics: &[],
             row_count: self.row_count,
+            joined: &crate::service::explain::joined::NO_JOINED,
         };
         let used = build_used_names(&filters, &time);
         let mut plan = WhyPlan {
