@@ -472,6 +472,7 @@ async fn run_plan(
     }
     explanation.summary_warnings = narrated.warnings;
     explanation.summary_verdict = narrated.verdict;
+    explanation.summary_failed_check = narrated.failed_check;
     steps.push(narrated.step);
     outcome.explanation = Some(explanation);
     Ok(Round::Done(Box::new(build_finished(outcome, steps))))

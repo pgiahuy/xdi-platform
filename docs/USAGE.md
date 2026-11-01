@@ -219,8 +219,9 @@ Dưới mỗi câu trả lời có nút **Thêm vào báo cáo**. Trang **Báo c
   nhóm) với đúng quyền xem của người bấm, mô hình viết lời cho từng phần.
 
 Trong một báo cáo: sửa tiêu đề và đoạn mở đầu, đổi thứ tự, bỏ mục. Mỗi mục có câu hỏi, lời trả lời kèm kết quả kiểm số
-và kiểm nghĩa, biểu đồ, bảng, phân rã, Cách tính, SQL, bảng và phiên bản dữ liệu, lúc hỏi. Số liệu tính lại mỗi lần mở,
-trên đúng phiên bản câu hỏi đã đọc, với quyền xem của người đang mở; quyền hẹp hơn lúc hỏi thì lời đã lưu không hiện.
+và kiểm nghĩa (lời là câu hệ thống tính thì một dòng ghi lời của mô hình đã không qua bước nào), biểu đồ, bảng, phân
+rã, Cách tính, SQL, bảng và phiên bản dữ liệu, lúc hỏi. Số liệu tính lại mỗi lần mở, trên đúng phiên bản câu hỏi đã
+đọc, với quyền xem của người đang mở; quyền hẹp hơn lúc hỏi thì lời đã lưu không hiện.
 
 **Xuất PDF** mở hộp in của trình duyệt (chọn lưu thành PDF): bản in ẩn thanh bên và nút, mỗi mục một trang. **Tải
 Excel** tải file có sheet tóm tắt, mỗi mục một sheet và sheet cách tính.

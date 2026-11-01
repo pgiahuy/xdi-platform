@@ -325,6 +325,7 @@ pub fn build_saved_answer(response: &AskResponse) -> Option<SavedAnswer> {
             text: text.clone(),
             by_model,
             verdict: insight.and_then(|i| i.summary_verdict),
+            failed_check: insight.and_then(|i| i.summary_failed_check),
             warnings: match insight {
                 Some(insight) if by_model => insight.summary_warnings.clone(),
                 _ => Vec::new(),
@@ -336,6 +337,7 @@ pub fn build_saved_answer(response: &AskResponse) -> Option<SavedAnswer> {
         text: explanation.summary.clone(),
         by_model: explanation.summary_by_model,
         verdict: explanation.summary_verdict,
+        failed_check: explanation.summary_failed_check,
         warnings: if explanation.summary_by_model {
             explanation.summary_warnings.clone()
         } else {

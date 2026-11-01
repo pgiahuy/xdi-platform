@@ -462,6 +462,18 @@ pub enum AnswerVerdict {
     Mismatch,
 }
 
+// Kết luận mismatch không nói bước nào chặn lời: báo cáo và tab Các bước cần nói đúng "không qua kiểm số" hay "không qua
+// kiểm nghĩa", không gắn "Không khớp" lên câu của hệ thống.
+/// Check that rejected the model's text on its last attempt, when the shown text was written by the backend instead:
+/// `number` (the backend compared every number and direction of the text with the computed facts) or `meaning` (a
+/// separate model call compared the meaning of the text with them).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FailedCheck {
+    Number,
+    Meaning,
+}
+
 // Số trong phân rã là chuỗi chữ số thập phân như ô Decimal. Độ đo đổi sang DECIMAL ở từng dòng nguồn trước khi cộng
 // (số chữ số do #39 chọn), nên mọi tổng và hiệu sau đó là phép tính đúng: không làm tròn từng nhóm, tổng đóng góp bằng
 // đúng chênh lệch, và cổng 1 của #201 so số mô hình khai với đúng các chuỗi này. Bảng kết quả thì cộng theo kiểu cột
@@ -495,6 +507,9 @@ pub struct Insight {
     /// (the model was not called, failed or timed out, or the checking model failed).
     #[schema(required)]
     pub summary_verdict: Option<AnswerVerdict>,
+    /// With `mismatch`: the check that rejected the model's text on its last attempt; null otherwise.
+    #[schema(required)]
+    pub summary_failed_check: Option<FailedCheck>,
     /// False when the numbers show nothing notable: a change below the threshold, too few rows to conclude, groups of
     /// about the same size, or a plain list of rows.
     pub notable: bool,
@@ -585,6 +600,9 @@ pub struct Explanation {
     /// change to explain, or the model or the checking model failed).
     #[schema(required)]
     pub summary_verdict: Option<AnswerVerdict>,
+    /// With `mismatch`: the check that rejected the model's text on its last attempt; null otherwise.
+    #[schema(required)]
+    pub summary_failed_check: Option<FailedCheck>,
     /// Dimensions left out of `dimensions` or of the summary, with the reason; show them as a note with the
     /// breakdown so that a missing table is explained.
     pub dropped_dimensions: Vec<DroppedDimension>,

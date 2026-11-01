@@ -277,6 +277,7 @@ async fn run_section(
     let answer = summary.map(|s| SavedAnswer {
         by_model: s.by_model,
         verdict: insight.as_ref().and_then(|i| i.summary_verdict),
+        failed_check: insight.as_ref().and_then(|i| i.summary_failed_check),
         warnings: match &insight {
             Some(i) if s.by_model => i.summary_warnings.clone(),
             _ => Vec::new(),

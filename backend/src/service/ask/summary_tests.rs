@@ -97,6 +97,7 @@ fn insight(kind: InsightKind, summary: &str, by_model: bool) -> Insight {
         summary_by_model: by_model,
         summary_warnings: vec![],
         summary_verdict: None,
+        summary_failed_check: None,
         notable: true,
     }
 }

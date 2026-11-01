@@ -117,6 +117,7 @@ fn build(case: Case) -> Explanation {
         summary_by_model: false,
         summary_warnings: Vec::new(),
         summary_verdict: None,
+        summary_failed_check: None,
         dropped_dimensions: notes.dropped.clone(),
         notes,
     }

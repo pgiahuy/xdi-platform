@@ -200,6 +200,7 @@ pub async fn build_insight(
             summary_by_model: narrated.by_model,
             summary_warnings: narrated.warnings,
             summary_verdict: narrated.verdict,
+            summary_failed_check: narrated.failed_check,
             notable: parts.notable,
         },
         explanation: found.explanation,

@@ -70,7 +70,7 @@ export function ReportItemCard({ item, number, chart, actions }: Props) {
           {item.answer.byModel && item.answer.warnings.length > 0 && (
             <UnclearPoints warnings={item.answer.warnings} checkAgainst="bảng và mục Số liệu chính bên dưới" />
           )}
-          <ReportChecks numberCheck={item.numberCheck} meaningCheck={item.meaningCheck} />
+          <ReportChecks byModel={item.answer.byModel} numberCheck={item.numberCheck} meaningCheck={item.meaningCheck} />
         </div>
       )}
 

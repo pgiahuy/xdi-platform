@@ -22,7 +22,7 @@ use crate::engine::store::{ReportItemRow, VersionLabel};
 use crate::service::ask::build_allowed_table;
 use crate::service::ask::context::{build_profiles, ColumnProfile};
 use crate::service::ask::contract::{
-    AnswerVerdict, AskStatus, Explanation, QuestionType, ResultTable,
+    AnswerVerdict, AskStatus, Explanation, FailedCheck, QuestionType, ResultTable,
 };
 use crate::service::ask::fanout::build_join_links;
 use crate::service::ask::related::{load_group, TableGroup};
@@ -130,20 +130,28 @@ fn apply_answer(item: &mut ReportItem, answer: Option<SavedAnswer>) {
     let Some(answer) = answer else {
         return;
     };
-    item.number_check = Some(build_number_check(&answer));
-    item.meaning_check = answer.verdict;
+    let (number, meaning) = build_checks(&answer);
+    item.number_check = Some(number);
+    item.meaning_check = meaning;
     item.answer = Some(answer);
 }
 
-/// Kiểm số: lời của mô hình hiện ra nghĩa là đã qua; lời của code mà kết luận là mismatch nghĩa là lời của mô hình bị
-/// thay; còn lại là code viết từ số, không có lời nào để kiểm.
-pub(super) fn build_number_check(answer: &SavedAnswer) -> NumberCheck {
-    if answer.by_model {
-        NumberCheck::Passed
-    } else if answer.verdict == Some(AnswerVerdict::Mismatch) {
-        NumberCheck::Replaced
-    } else {
-        NumberCheck::NotNeeded
+/// Kiểm số và kiểm nghĩa của lời mô hình đã viết, theo bước đã chặn nó (SavedAnswer.failed_check):
+/// - lời của mô hình hiện ra: kiểm số đạt, kiểm nghĩa là kết luận đã lưu;
+/// - lời trượt kiểm nghĩa: nó đã qua kiểm số, kiểm nghĩa là mismatch;
+/// - lời trượt kiểm số: kiểm nghĩa không chạy trên lời đó;
+/// - lời lưu trước khi có failed_check mà kết luận là mismatch: không biết bước nào, ghi cả hai không đạt;
+/// - còn lại là code viết từ số, không có lời nào để kiểm.
+///
+/// Kết luận mismatch chỉ thuộc lời của mô hình đã bị thay, không bao giờ thuộc câu của hệ thống đang hiện.
+pub(super) fn build_checks(answer: &SavedAnswer) -> (NumberCheck, Option<AnswerVerdict>) {
+    let mismatch = answer.verdict == Some(AnswerVerdict::Mismatch);
+    match (answer.by_model, answer.failed_check) {
+        (true, _) => (NumberCheck::Passed, answer.verdict),
+        (false, Some(FailedCheck::Meaning)) => (NumberCheck::Passed, Some(AnswerVerdict::Mismatch)),
+        (false, Some(FailedCheck::Number)) => (NumberCheck::Replaced, None),
+        (false, None) if mismatch => (NumberCheck::Replaced, Some(AnswerVerdict::Mismatch)),
+        (false, None) => (NumberCheck::NotNeeded, answer.verdict),
     }
 }
 
