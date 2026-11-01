@@ -61,5 +61,59 @@
       "SELECT age_band, gender, COUNT(*) AS students FROM students GROUP BY age_band, gender ORDER BY age_band, gender"
     ],
     "ordered": false
+  },
+  {
+    "id": "e09",
+    "dataset": "students",
+    "question": "Tỷ lệ rút học theo vùng",
+    "expected_sql": [
+      "SELECT region, AVG(CASE WHEN final_result = 'Withdrawn' THEN 1.0 ELSE 0.0 END) AS withdrawn_rate FROM students GROUP BY region ORDER BY withdrawn_rate DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e10",
+    "dataset": "students",
+    "question": "Số sinh viên theo môn và năm bắt đầu học phần",
+    "expected_sql": [
+      "SELECT s.code_module, c.presentation_year, COUNT(*) AS students FROM students s JOIN courses c ON s.code_module = c.code_module AND s.code_presentation = c.code_presentation GROUP BY s.code_module, c.presentation_year ORDER BY s.code_module, c.presentation_year"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e11",
+    "dataset": "student_assessments",
+    "question": "Điểm trung bình theo môn và loại bài đánh giá",
+    "expected_sql": [
+      "SELECT a.code_module, a.assessment_type, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment GROUP BY a.code_module, a.assessment_type ORDER BY a.code_module, a.assessment_type"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e12",
+    "dataset": "student_assessments",
+    "question": "Điểm trung bình bài thi Exam theo giới tính",
+    "expected_sql": [
+      "SELECT s.gender, AVG(sa.score) AS avg_score FROM student_assessments sa JOIN assessments a ON sa.id_assessment = a.id_assessment JOIN students s ON sa.code_module = s.code_module AND sa.code_presentation = s.code_presentation AND sa.id_student = s.id_student WHERE a.assessment_type = 'Exam' GROUP BY s.gender ORDER BY s.gender"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e13",
+    "dataset": "registrations",
+    "question": "Số sinh viên hủy đăng ký theo vùng",
+    "expected_sql": [
+      "SELECT s.region, COUNT(*) AS students FROM registrations r JOIN students s ON r.code_module = s.code_module AND r.code_presentation = s.code_presentation AND r.id_student = s.id_student WHERE r.date_unregistration IS NOT NULL GROUP BY s.region ORDER BY students DESC"
+    ],
+    "ordered": false
+  },
+  {
+    "id": "e14",
+    "dataset": "vle_materials",
+    "question": "Số tài liệu học trực tuyến theo loại hoạt động và năm bắt đầu học phần",
+    "expected_sql": [
+      "SELECT v.activity_type, c.presentation_year, COUNT(*) AS materials FROM vle_materials v JOIN courses c ON v.code_module = c.code_module AND v.code_presentation = c.code_presentation GROUP BY v.activity_type, c.presentation_year ORDER BY v.activity_type, c.presentation_year"
+    ],
+    "ordered": false
   }
 ]

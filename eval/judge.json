@@ -2345,6 +2345,363 @@
      }
     ]
    }
+  },
+  {
+   "id": "j73",
+   "expected": "match",
+   "error": "none",
+   "text": "Tỷ lệ bỏ học của Scotland cao hơn Ireland 0,1432 (0,3738 so với 0,2306). Phần lớn chênh lệch do tỷ lệ bỏ học trong từng môn của Scotland cao hơn (góp 0,1105); việc sinh viên Scotland học nhiều hơn ở các môn có tỷ lệ bỏ học cao chỉ góp 0,0327.",
+   "facts": {
+    "measure": "Tỷ lệ bỏ học",
+    "comparison": "groups",
+    "base": "Ireland",
+    "compare": "Scotland",
+    "volume_label": "",
+    "price_label": "",
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "0,1432"
+     },
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "0,2306"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "0,3738"
+     },
+     {
+      "field": "rate_effect",
+      "column": "code_module",
+      "group": "",
+      "value": "0,1105"
+     },
+     {
+      "field": "mix_effect",
+      "column": "code_module",
+      "group": "",
+      "value": "0,0327"
+     }
+    ]
+   }
+  },
+  {
+   "id": "j74",
+   "expected": "match",
+   "error": "none",
+   "text": "Doanh thu tháng 11/2017 giảm 402.688,00 so với tháng 10/2017. Pacific Asia giảm nhiều nhất (giảm 171.240,00), chiếm 42,5% mức giảm; Europe giảm 120.806,40.",
+   "facts": {
+    "measure": "Doanh thu",
+    "comparison": "periods",
+    "base": "Tháng 10/2017",
+    "compare": "Tháng 11/2017",
+    "volume_label": "Số đơn hàng",
+    "price_label": "Doanh thu trên mỗi đơn hàng",
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "-402.688,00"
+     },
+     {
+      "field": "contribution",
+      "column": "Market",
+      "group": "Pacific Asia",
+      "value": "-171.240,00"
+     },
+     {
+      "field": "share_of_change",
+      "column": "Market",
+      "group": "Pacific Asia",
+      "value": "42,5"
+     },
+     {
+      "field": "cause",
+      "column": "Market",
+      "group": "Pacific Asia",
+      "value": ""
+     },
+     {
+      "field": "contribution",
+      "column": "Market",
+      "group": "Europe",
+      "value": "-120.806,40"
+     }
+    ]
+   }
+  },
+  {
+   "id": "j75",
+   "expected": "match",
+   "error": "none",
+   "text": "Doanh thu của Consumer cao hơn Home Office 2.512.300,00 (3.657.900,00 so với 1.145.600,00), gần như toàn bộ do số đơn hàng: Consumer có 10.150 đơn hàng, Home Office có 3.200 đơn hàng, góp 2.488.100,00 (99,04% chênh lệch); doanh thu trên mỗi đơn hàng của hai bên gần bằng nhau (360,38 so với 358,00).",
+   "facts": {
+    "measure": "Doanh thu",
+    "comparison": "groups",
+    "base": "Home Office",
+    "compare": "Consumer",
+    "volume_label": "Số đơn hàng",
+    "price_label": "Doanh thu trên mỗi đơn hàng",
+    "scale_main": true,
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "2.512.300,00"
+     },
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "1.145.600,00"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "3.657.900,00"
+     },
+     {
+      "field": "base_volume",
+      "column": "",
+      "group": "",
+      "value": "3.200"
+     },
+     {
+      "field": "compare_volume",
+      "column": "",
+      "group": "",
+      "value": "10.150"
+     },
+     {
+      "field": "base_price",
+      "column": "",
+      "group": "",
+      "value": "358,00"
+     },
+     {
+      "field": "compare_price",
+      "column": "",
+      "group": "",
+      "value": "360,38"
+     },
+     {
+      "field": "volume_effect",
+      "column": "",
+      "group": "",
+      "value": "2.488.100,00"
+     },
+     {
+      "field": "volume_share",
+      "column": "",
+      "group": "",
+      "value": "99,04"
+     },
+     {
+      "field": "price_effect",
+      "column": "",
+      "group": "",
+      "value": "24.200,00"
+     }
+    ]
+   }
+  },
+  {
+   "id": "j76",
+   "expected": "match",
+   "error": "none",
+   "text": "Số sinh viên đăng ký kỳ 2014J tăng 2.517 so với kỳ 2013J, từ 8.845 lên 11.362. Gần như toàn bộ mức tăng do môn CCC: môn này không có sinh viên ở kỳ 2013J và có 2.498 sinh viên ở kỳ 2014J.",
+   "facts": {
+    "measure": "Số sinh viên đăng ký",
+    "comparison": "periods",
+    "base": "2013J",
+    "compare": "2014J",
+    "volume_label": "",
+    "price_label": "",
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "2.517"
+     },
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "8.845"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "11.362"
+     },
+     {
+      "field": "contribution",
+      "column": "code_module",
+      "group": "CCC",
+      "value": "2.498"
+     },
+     {
+      "field": "new",
+      "column": "code_module",
+      "group": "CCC",
+      "value": ""
+     },
+     {
+      "field": "cause",
+      "column": "code_module",
+      "group": "CCC",
+      "value": ""
+     }
+    ]
+   }
+  },
+  {
+   "id": "j77",
+   "expected": "match",
+   "error": "none",
+   "text": "Scotland có tỷ lệ bỏ học cao nhất trong 13 vùng (0,3738), cao hơn Ireland, vùng thấp nhất, 0,1432; tỷ lệ chung của các vùng là 0,3233.",
+   "facts": {
+    "title": "Scotland có tỷ lệ bỏ học cao nhất trong 13 vùng: 0,3738.",
+    "points": [
+     {
+      "lead": "Khoảng cách",
+      "text": "Scotland cao hơn Ireland, vùng thấp nhất, 0,1432."
+     },
+     {
+      "lead": "Trung bình",
+      "text": "Tỷ lệ bỏ học chung của các vùng là 0,3233."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j78",
+   "expected": "match",
+   "error": "none",
+   "text": "Fan Shop dẫn đầu 11 phòng ban với 15.378.581,71, chiếm 46,5% tổng doanh thu, cao hơn Apparel, phòng ban thứ hai, 8.210.927,50.",
+   "facts": {
+    "title": "Fan Shop có tổng doanh thu cao nhất trong 11 phòng ban: 15.378.581,71.",
+    "points": [
+     {
+      "lead": "Tỷ trọng",
+      "text": "Fan Shop chiếm 46,5% tổng doanh thu của 11 phòng ban."
+     },
+     {
+      "lead": "Khoảng cách",
+      "text": "Fan Shop cao hơn Apparel, phòng ban thứ hai, 8.210.927,50."
+     }
+    ]
+   }
+  },
+  {
+   "id": "j79",
+   "expected": "mismatch",
+   "error": "new_as_growth",
+   "text": "Số sinh viên đăng ký kỳ 2014J tăng 2.517 so với kỳ 2013J, chủ yếu do môn CCC, môn đã có sinh viên từ kỳ 2013J, tăng thêm 2.498 sinh viên.",
+   "facts": {
+    "measure": "Số sinh viên đăng ký",
+    "comparison": "periods",
+    "base": "2013J",
+    "compare": "2014J",
+    "volume_label": "",
+    "price_label": "",
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "2.517"
+     },
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "8.845"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "11.362"
+     },
+     {
+      "field": "contribution",
+      "column": "code_module",
+      "group": "CCC",
+      "value": "2.498"
+     },
+     {
+      "field": "new",
+      "column": "code_module",
+      "group": "CCC",
+      "value": ""
+     },
+     {
+      "field": "cause",
+      "column": "code_module",
+      "group": "CCC",
+      "value": ""
+     }
+    ]
+   }
+  },
+  {
+   "id": "j80",
+   "expected": "mismatch",
+   "error": "swapped_effects",
+   "text": "Tỷ lệ bỏ học của Scotland cao hơn Ireland 0,1432, chủ yếu do sinh viên Scotland học nhiều hơn ở các môn có tỷ lệ bỏ học cao (góp 0,1105).",
+   "facts": {
+    "measure": "Tỷ lệ bỏ học",
+    "comparison": "groups",
+    "base": "Ireland",
+    "compare": "Scotland",
+    "volume_label": "",
+    "price_label": "",
+    "claims": [
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "0,1432"
+     },
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "0,2306"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "0,3738"
+     },
+     {
+      "field": "rate_effect",
+      "column": "code_module",
+      "group": "",
+      "value": "0,1105"
+     },
+     {
+      "field": "mix_effect",
+      "column": "code_module",
+      "group": "",
+      "value": "0,0327"
+     }
+    ]
+   }
   }
  ]
 }

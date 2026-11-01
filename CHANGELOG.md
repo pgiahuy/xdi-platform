@@ -23,6 +23,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Câu trả lời ghi khoảng ngày của dữ liệu, số lớn có dạng rút gọn kèm số đủ, cột tự chọn khi một từ khớp nhiều cột; mở lại cuộc trò chuyện cũ thấy lại lời trả lời (#201).
 - Tab Các bước ghi từng lượt gọi mô hình (thời gian, token); lệnh `xdi-backend llm-stats`; `GEMINI_BACKUP_API_KEY` dùng khi khóa chính hết hạn mức (#184).
 - Bộ đánh giá: `make eval` thêm câu trên database mẫu, `make eval-judge`, `make eval-classify`, bộ 57 câu OULAD với báo cáo theo loại câu ([eval/README.md](eval/README.md)) (#201, #202, #230).
+- Bộ đánh giá có 100 câu hỏi (thêm 12 câu trên `sales_demo`, `edu_demo`, 11 câu nối bảng), 50 câu phân loại, 80 lời giải thích có nhãn, nửa đúng nửa sai.
 
 ### Changed
 

@@ -334,6 +334,7 @@ fn sales_join_cases_are_not_flagged() {
             &[
                 "order_id",
                 "customer_id",
+                "order_date",
                 "order_status",
                 "late_delivery_risk",
                 "days_for_shipping_real",
@@ -342,7 +343,10 @@ fn sales_join_cases_are_not_flagged() {
             ],
         ),
         table("customers", &["customer_id", "segment", "country"]),
-        table("products", &["product_id", "category_id", "price"]),
+        table(
+            "products",
+            &["product_id", "product_name", "category_id", "price"],
+        ),
         table(
             "categories",
             &["category_id", "category_name", "department_id"],
