@@ -24,6 +24,8 @@ mod ask_privacy_tests;
 #[cfg(test)]
 mod ask_related_tests;
 #[cfg(test)]
+mod ask_row_filter_error_tests;
+#[cfg(test)]
 mod ask_tests;
 #[cfg(test)]
 mod ask_why_frames_tests;
