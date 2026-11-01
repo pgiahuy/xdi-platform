@@ -141,7 +141,8 @@ async fn run_errors_of_a_filtered_member_quote_only_visible_rows() {
     assert_eq!(day["status"], "answered", "{day}");
     assert!(step_details(&day).contains("1/31/2018"), "{day}");
 
-    let requests = requests.lock().unwrap();
+    // Chép ra khỏi khóa: phần sau còn chờ Postgres, không giữ khóa qua await.
+    let requests = requests.lock().unwrap().clone();
     let member_requests = &requests[admin_calls..];
     let repairs: Vec<&(LlmTask, String, String)> = member_requests
         .iter()
