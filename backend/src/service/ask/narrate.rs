@@ -239,6 +239,24 @@ pub async fn narrate(
     }
 }
 
+/// Ý rỗng nghĩa: nội dung chỉ chép lại đầu ý ("LATAM không còn đơn ở năm 2016: LATAM không còn đơn ở năm 2016."), hay
+/// quá ngắn mà không có số ("Europe giảm: số đơn hàng."). Đã gặp với Gemini sau khi bỏ phần lặp đầu ý; mô hình chấm chỉ
+/// gắn cờ chưa rõ nên lời vẫn hiện, người đọc thấy một ý không có thông tin. Ý như vậy thì nhờ mô hình viết lại.
+pub(super) fn is_hollow_point(lead: &str, text: &str) -> bool {
+    let words = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let text_words = words(text);
+    if text_words == words(lead) {
+        return true;
+    }
+    let has_digit = text.chars().any(|c| c.is_ascii_digit());
+    !has_digit && text_words.len() <= 3
+}
+
 /// Đọc và kiểm một câu trả lời: đúng khuôn JSON, có câu mở đầu, từ 1 tới MAX_REASONS ý không trống, cả insight không
 /// quá dài, rồi cổng 1 (khẳng định so với bảng). Ok là insight và các khẳng định đã khớp bảng; Err là mọi lý do trượt,
 /// đưa vào prompt viết lại và vào detail của bước.
@@ -266,6 +284,17 @@ fn check_reply(reply: &str, explanation: &Explanation) -> Result<Checked, Vec<St
         .any(|r| r.lead.trim().is_empty() || r.text.trim().is_empty())
     {
         return Err(vec!["Có ý trống đầu ý hay trống câu".to_string()]);
+    }
+    if let Some(reason) = parsed
+        .reasons
+        .iter()
+        .find(|r| is_hollow_point(&r.lead, &r.text))
+    {
+        return Err(vec![format!(
+            "Ý \"{}\" chưa nói gì thêm: nội dung chỉ chép lại đầu ý hay quá ngắn mà không có số; nêu số của nhóm \
+             trong bảng phân rã",
+            reason.lead.trim()
+        )]);
     }
     let text = parsed.build_text();
     if text.chars().count() > MAX_SUMMARY_CHARS {
@@ -322,7 +351,8 @@ fn build_column_labels(explanation: &Explanation) -> Vec<&str> {
 
 /// Câu của một ý bỏ phần lặp lại đầu ý: mô hình hay viết "Hiệu ứng tỷ suất tăng" làm đầu ý rồi mở câu bằng đúng cụm đó,
 /// giao diện in "Hiệu ứng tỷ suất tăng: Hiệu ứng tỷ suất tăng 0,1081...". Chỉ bỏ khi đầu ý có từ hai từ; bỏ phần lặp mà câu
-/// còn trống thì giữ nguyên.
+/// còn trống hay chỉ còn dấu câu thì giữ nguyên (đã gặp với Gemini: câu chỉ chép lại đầu ý kèm dấu chấm, giao diện in
+/// "LATAM không còn đơn hàng nào ở năm 2016: .").
 pub(super) fn build_text_without_lead(lead: &str, text: &str) -> String {
     let (lead, text) = (lead.trim(), text.trim());
     let lead_chars = lead.chars().count();
@@ -345,7 +375,7 @@ pub(super) fn build_text_without_lead(lead: &str, text: &str) -> String {
         .chars()
         .nth(lead_chars)
         .is_none_or(|c| !c.is_alphanumeric());
-    if rest.is_empty() || !boundary {
+    if !rest.chars().any(char::is_alphanumeric) || !boundary {
         return text.to_string();
     }
     rest.to_string()

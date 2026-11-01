@@ -27,7 +27,7 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Câu trả lời ghi khoảng ngày của dữ liệu, số lớn có dạng rút gọn kèm số đủ, cột tự chọn khi một từ khớp nhiều cột; mở lại cuộc trò chuyện cũ thấy lại lời trả lời (#201).
 - Tab Các bước ghi từng lượt gọi mô hình (thời gian, token); lệnh `xdi-backend llm-stats`; `GEMINI_BACKUP_API_KEY` dùng khi khóa chính hết hạn mức (#184).
 - Bộ đánh giá: `make eval` thêm câu trên database mẫu, `make eval-judge`, `make eval-classify`, bộ 57 câu OULAD với báo cáo theo loại câu ([eval/README.md](eval/README.md)) (#201, #202, #230).
-- Bộ đánh giá có 100 câu hỏi (thêm 12 câu trên `sales_demo`, `edu_demo`, 11 câu nối bảng), 50 câu phân loại, 80 lời giải thích có nhãn, nửa đúng nửa sai.
+- Bộ đánh giá có 100 câu hỏi (thêm 12 câu trên `sales_demo`, `edu_demo`, 11 câu nối bảng), 50 câu phân loại, 84 lời giải thích có nhãn (43 đúng, 41 sai).
 
 - Admin chọn gói ngành cho từng dataset ở màn Khái niệm ngành; dataset mẫu có sẵn gói, khái niệm của gói vào prompt của câu hỏi số liệu và câu hỏi nguyên nhân.
 
@@ -52,6 +52,8 @@ Theo [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Số phiên bản
 - Điều kiện lọc có câu con hay "hoặc" đọc thành lời thay cho nguyên câu SQL; câu nối bảng gọi số đo bằng mô tả tiếng Việt của bảng nối; kết quả toàn ô trống nói rõ không có dữ liệu khớp (#201).
 - Nạp và chụp bảng lớn tốn ít RAM hơn: DuckDB có trần `DUCKDB_MEMORY_LIMIT_MB` (mặc định 1024), chạm trần thì ghi phần dư ra đĩa; bảng 5 triệu dòng 60 cột từ 3,6 GiB xuống khoảng 1,1 GiB.
 - Vòng sửa SQL ẩn cả giá trị của cột nhạy cảm mà lời báo lỗi của DuckDB đặt trong nháy kép (đổi sang ngày, giờ, số thập phân, `strptime`); trước đây chỉ ẩn giá trị trong nháy đơn.
+- Câu hỏi nguyên nhân so một nhóm với trung bình các nhóm còn lại bỏ cột chỉ đi theo nhóm đang so (năm, tháng bắt đầu của mã kỳ); kiểm nghĩa nhận đủ số của các nhóm mà lời nói tới, nên lời đúng không còn bị thay bằng câu của hệ thống.
+- Tab Các bước ghi bước viết lời dùng câu của hệ thống là "Đã dùng câu của hệ thống" màu vàng, không còn là "lỗi" màu đỏ.
 
 ## [0.2.0] - 2026-10-27
 

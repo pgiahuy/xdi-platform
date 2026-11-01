@@ -7635,10 +7635,11 @@
       },
       "DropReason": {
         "type": "string",
-        "description": "- `separates_slices`: every value of the column is found in one slice only, so the column only renames the two\n  slices.\n- `duplicates`: the column splits the rows into exactly the groups of another column (`duplicate_of`).",
+        "description": "- `separates_slices`: every value of the column is found in one slice only, so the column only renames the two\n  slices.\n- `duplicates`: the column splits the rows into exactly the groups of another column (`duplicate_of`).\n- `follows_slices`: each value of the compared column (`duplicate_of`) has exactly one value of this column, so the\n  column only regroups the slices; set when one group is compared with the other groups.",
         "enum": [
           "separates_slices",
-          "duplicates"
+          "duplicates",
+          "follows_slices"
         ]
       },
       "DroppedDimension": {
@@ -7675,7 +7676,7 @@
               "string",
               "null"
             ],
-            "description": "Column with the same groups, for `duplicates`."
+            "description": "Column with the same groups, for `duplicates`; the compared column, for `follows_slices`."
           },
           "label": {
             "type": [

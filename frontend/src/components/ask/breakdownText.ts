@@ -26,6 +26,10 @@ export function droppedText(
   if (dropped.reason === 'duplicates') {
     return `${name}: chia nhóm giống hệt ${dropped.duplicateOf ?? 'một cột khác'}.`
   }
+  if (dropped.reason === 'follows_slices') {
+    const compared = dropped.duplicateOf ?? 'cột đang so'
+    return `${name}: mỗi giá trị của ${compared} chỉ có một giá trị của cột này, nên cột này chỉ chia lại các nhóm đang so.`
+  }
   const sides = comparison === 'periods' ? 'hai kỳ' : 'hai nhóm'
   return (
     `${name}: ${baseLabel} chỉ có ${listValues(dropped.baseOnly)}, ${compareLabel} chỉ có ` +

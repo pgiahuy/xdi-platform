@@ -1069,6 +1069,13 @@ fn a_reason_does_not_repeat_its_lead() {
         "Giảm giá nhiều hơn ở Europe."
     );
     assert_eq!(build_text_without_lead("Europe", "Europe"), "Europe");
+    assert_eq!(
+        build_text_without_lead(
+            "Thị trường LATAM không còn đơn hàng nào ở năm 2016",
+            "Thị trường LATAM không còn đơn hàng nào ở năm 2016."
+        ),
+        "Thị trường LATAM không còn đơn hàng nào ở năm 2016."
+    );
 }
 
 /// So hai nhóm: "mức giảm" là lời sai (đã gặp: "tạo ra phần lớn mức giảm"); "giảm giá" trong tên độ đo thì không bắt.
@@ -1146,4 +1153,22 @@ fn negligible_groups_are_not_sent_to_the_model() {
         &[(Some("Europe"), "-110.00"), (Some("USCA"), "10.00")],
     );
     assert!(build_narrate_prompt(QUESTION, &explanation).contains("\"USCA\""));
+}
+
+/// Ý chỉ chép lại đầu ý hay quá ngắn mà không có số thì là ý rỗng; ý có số hay đủ dài thì không (đã gặp với Gemini trên
+/// câu số đơn 2016 so với 2015 của sales_demo).
+#[test]
+fn hollow_points_are_caught() {
+    use crate::service::ask::narrate::is_hollow_point;
+    let lead = "Thị trường LATAM không còn số đơn hàng nào ở Năm 2016";
+    assert!(is_hollow_point(
+        lead,
+        "Thị trường LATAM không còn số đơn hàng nào ở Năm 2016."
+    ));
+    assert!(is_hollow_point("Thị trường Europe giảm", "số đơn hàng."));
+    assert!(!is_hollow_point(
+        "Thị trường Europe giảm",
+        "Europe giảm 7.041 đơn."
+    ));
+    assert!(!is_hollow_point("Thị trường", "Europe giảm nhiều nhất."));
 }

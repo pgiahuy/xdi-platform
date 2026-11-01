@@ -196,7 +196,8 @@ function buildSteps(response: AskResponse): TabData<StepsView> {
       steps: response.steps.map((step) => ({
         label: stepLabels[step.name],
         durationMs: step.duration_ms,
-        ok: step.ok,
+        // narrate không làm câu hỏi dừng: bước không đạt nghĩa là câu trả lời dùng câu của hệ thống (hợp đồng AskStep).
+        state: step.ok ? 'ok' : step.name === 'narrate' ? 'fallback' : 'error',
         // Bước phân loại đạt thì cờ đã nói loại câu, lý do của mô hình chỉ lặp lại điều đó; bước lỗi giữ chi tiết để thấy
         // vì sao phải dùng luật từ khóa.
         detail: step.name === 'classify' && step.ok && questionType ? null : step.detail,

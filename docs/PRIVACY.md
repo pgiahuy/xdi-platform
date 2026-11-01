@@ -178,7 +178,8 @@ lượt trước.
 
 - Một lần gọi riêng sau khi lời qua kiểm số, không kèm câu hỏi hay prompt viết lời.
 - Câu hỏi nguyên nhân: lời vừa viết; tên độ đo, kiểu so sánh, nhãn hai bên, tên lượng và giá, cờ quy mô là ý chính; các
-  khẳng định của lời (số, tên cột, giá trị nhóm đã khớp bảng phân rã).
+  khẳng định của lời (số, tên cột, giá trị nhóm đã khớp bảng phân rã); số của các nhóm lượt viết lời đã nhận (giá trị
+  hai bên, phần đóng góp, % thay đổi, nhóm chỉ có ở một bên), cùng số của nhóm khác mà khẳng định nêu tên.
 - Câu hỏi số liệu: lời vừa viết và các câu code đã viết, như lượt viết lời.
 
 ### Báo cáo tự động

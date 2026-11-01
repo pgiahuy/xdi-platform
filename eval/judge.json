@@ -2702,6 +2702,730 @@
      }
     ]
    }
+  },
+  {
+   "id": "j81",
+   "expected": "match",
+   "error": "none",
+   "text": "Số đơn hàng Năm 2016 giảm 4.443 (33,8%) so với Năm 2015, từ 13.133 xuống còn 8.690. Giảm ở thị trường châu Âu: Thị trường châu Âu giảm 7.041 đơn hàng. Giảm ở vùng giao hàng Tây Âu: Vùng giao hàng Western Europe giảm 4.777 đơn hàng. Không còn đơn ở LATAM và Central America: Thị trường LATAM và vùng giao hàng Central America không có đơn hàng nào ở Năm 2016. Tăng ở thị trường USCA: Thị trường USCA chỉ có đơn ở Năm 2016, tăng 3.238 đơn hàng.",
+   "facts": {
+    "measure": "Số đơn hàng",
+    "comparison": "periods",
+    "base": "Năm 2015",
+    "compare": "Năm 2016",
+    "volume_label": "",
+    "price_label": "",
+    "claims": [
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "13.133"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "8.690"
+     },
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "-4.443"
+     },
+     {
+      "field": "percent_change",
+      "column": "",
+      "group": "",
+      "value": "-33,8"
+     },
+     {
+      "field": "cause",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": ""
+     },
+     {
+      "field": "cause",
+      "column": "market",
+      "group": "Europe",
+      "value": ""
+     },
+     {
+      "field": "gone",
+      "column": "order_region",
+      "group": "Central America",
+      "value": ""
+     },
+     {
+      "field": "gone",
+      "column": "market",
+      "group": "LATAM",
+      "value": ""
+     },
+     {
+      "field": "new",
+      "column": "market",
+      "group": "USCA",
+      "value": ""
+     },
+     {
+      "field": "base_value",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": "4.828"
+     },
+     {
+      "field": "compare_value",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": "51"
+     },
+     {
+      "field": "contribution",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": "-4.777"
+     },
+     {
+      "field": "percent_change",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": "-98,9"
+     },
+     {
+      "field": "base_value",
+      "column": "order_region",
+      "group": "Central America",
+      "value": "1.778"
+     },
+     {
+      "field": "compare_value",
+      "column": "order_region",
+      "group": "Central America",
+      "value": "0"
+     },
+     {
+      "field": "contribution",
+      "column": "order_region",
+      "group": "Central America",
+      "value": "-1.778"
+     },
+     {
+      "field": "share_of_change",
+      "column": "order_region",
+      "group": "Central America",
+      "value": "40"
+     },
+     {
+      "field": "base_value",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "1.801"
+     },
+     {
+      "field": "compare_value",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "33"
+     },
+     {
+      "field": "contribution",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "-1.768"
+     },
+     {
+      "field": "percent_change",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "-98,2"
+     },
+     {
+      "field": "share_of_change",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "39,8"
+     },
+     {
+      "field": "base_value",
+      "column": "market",
+      "group": "Europe",
+      "value": "8.315"
+     },
+     {
+      "field": "compare_value",
+      "column": "market",
+      "group": "Europe",
+      "value": "1.274"
+     },
+     {
+      "field": "contribution",
+      "column": "market",
+      "group": "Europe",
+      "value": "-7.041"
+     },
+     {
+      "field": "percent_change",
+      "column": "market",
+      "group": "Europe",
+      "value": "-84,7"
+     },
+     {
+      "field": "base_value",
+      "column": "market",
+      "group": "LATAM",
+      "value": "3.290"
+     },
+     {
+      "field": "compare_value",
+      "column": "market",
+      "group": "LATAM",
+      "value": "0"
+     },
+     {
+      "field": "contribution",
+      "column": "market",
+      "group": "LATAM",
+      "value": "-3.290"
+     },
+     {
+      "field": "share_of_change",
+      "column": "market",
+      "group": "LATAM",
+      "value": "74"
+     },
+     {
+      "field": "base_value",
+      "column": "market",
+      "group": "USCA",
+      "value": "0"
+     },
+     {
+      "field": "compare_value",
+      "column": "market",
+      "group": "USCA",
+      "value": "3.238"
+     },
+     {
+      "field": "contribution",
+      "column": "market",
+      "group": "USCA",
+      "value": "3.238"
+     }
+    ]
+   }
+  },
+  {
+   "id": "j82",
+   "expected": "match",
+   "error": "none",
+   "text": "Số sinh viên của 2014J là 10.670, cao hơn 3.722,67 (53,6%) so với trung bình các mã kỳ còn lại là 6.947,33. Năm 2014 và tháng bắt đầu 10: Nhóm năm 2014 cao hơn 8.225,67 (336,5%) và nhóm tháng bắt đầu 10 cao hơn 7.726,67 (262,5%) so với trung bình các mã kỳ còn lại. Năm 2013 và tháng bắt đầu 2: Hai nhóm này không có sinh viên nào ở 2014J.",
+   "facts": {
+    "measure": "Số sinh viên",
+    "comparison": "groups",
+    "base": "trung bình các mã kỳ còn lại",
+    "compare": "2014J",
+    "volume_label": "",
+    "price_label": "",
+    "claims": [
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "6.947,33"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "10.670"
+     },
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "3.722,67"
+     },
+     {
+      "field": "percent_change",
+      "column": "",
+      "group": "",
+      "value": "53,6"
+     },
+     {
+      "field": "cause",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": ""
+     },
+     {
+      "field": "gone",
+      "column": "courses.presentation_year",
+      "group": "2013",
+      "value": ""
+     },
+     {
+      "field": "cause",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": ""
+     },
+     {
+      "field": "gone",
+      "column": "courses.presentation_start_month",
+      "group": "2",
+      "value": ""
+     },
+     {
+      "field": "base_value",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": "2.444,33"
+     },
+     {
+      "field": "compare_value",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": "10.670"
+     },
+     {
+      "field": "contribution",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": "8.225,67"
+     },
+     {
+      "field": "percent_change",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": "336,5"
+     },
+     {
+      "field": "base_value",
+      "column": "courses.presentation_year",
+      "group": "2013",
+      "value": "4.503"
+     },
+     {
+      "field": "compare_value",
+      "column": "courses.presentation_year",
+      "group": "2013",
+      "value": "0"
+     },
+     {
+      "field": "contribution",
+      "column": "courses.presentation_year",
+      "group": "2013",
+      "value": "-4.503"
+     },
+     {
+      "field": "base_value",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": "2.943,33"
+     },
+     {
+      "field": "compare_value",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": "10.670"
+     },
+     {
+      "field": "contribution",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": "7.726,67"
+     },
+     {
+      "field": "percent_change",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": "262,5"
+     },
+     {
+      "field": "base_value",
+      "column": "courses.presentation_start_month",
+      "group": "2",
+      "value": "4.004"
+     },
+     {
+      "field": "compare_value",
+      "column": "courses.presentation_start_month",
+      "group": "2",
+      "value": "0"
+     },
+     {
+      "field": "contribution",
+      "column": "courses.presentation_start_month",
+      "group": "2",
+      "value": "-4.004"
+     }
+    ]
+   }
+  },
+  {
+   "id": "j83",
+   "expected": "mismatch",
+   "error": "swapped_presence",
+   "text": "Số sinh viên của 2014J cao hơn 3.722,67 (53,6%) so với trung bình các mã kỳ còn lại, đạt 10.670 so với 6.947,33. Năm 2014: Nhóm năm 2014 có mức chênh 8.225,67 (336,5%) so với trung bình các mã kỳ còn lại. Tháng bắt đầu 10: Nhóm tháng bắt đầu 10 có mức chênh 7.726,67 (262,5%) so với trung bình các mã kỳ còn lại. Năm 2013: Nhóm năm 2013 không có giá trị số sinh viên trên trung bình các mã kỳ còn lại.",
+   "facts": {
+    "measure": "Số sinh viên",
+    "comparison": "groups",
+    "base": "trung bình các mã kỳ còn lại",
+    "compare": "2014J",
+    "volume_label": "",
+    "price_label": "",
+    "claims": [
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "6.947,33"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "10.670"
+     },
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "3.722,67"
+     },
+     {
+      "field": "percent_change",
+      "column": "",
+      "group": "",
+      "value": "53,6"
+     },
+     {
+      "field": "cause",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": ""
+     },
+     {
+      "field": "gone",
+      "column": "courses.presentation_year",
+      "group": "2013",
+      "value": ""
+     },
+     {
+      "field": "cause",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": ""
+     },
+     {
+      "field": "gone",
+      "column": "courses.presentation_start_month",
+      "group": "2",
+      "value": ""
+     },
+     {
+      "field": "base_value",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": "2.444,33"
+     },
+     {
+      "field": "compare_value",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": "10.670"
+     },
+     {
+      "field": "contribution",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": "8.225,67"
+     },
+     {
+      "field": "percent_change",
+      "column": "courses.presentation_year",
+      "group": "2014",
+      "value": "336,5"
+     },
+     {
+      "field": "base_value",
+      "column": "courses.presentation_year",
+      "group": "2013",
+      "value": "4.503"
+     },
+     {
+      "field": "compare_value",
+      "column": "courses.presentation_year",
+      "group": "2013",
+      "value": "0"
+     },
+     {
+      "field": "contribution",
+      "column": "courses.presentation_year",
+      "group": "2013",
+      "value": "-4.503"
+     },
+     {
+      "field": "base_value",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": "2.943,33"
+     },
+     {
+      "field": "compare_value",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": "10.670"
+     },
+     {
+      "field": "contribution",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": "7.726,67"
+     },
+     {
+      "field": "percent_change",
+      "column": "courses.presentation_start_month",
+      "group": "10",
+      "value": "262,5"
+     },
+     {
+      "field": "base_value",
+      "column": "courses.presentation_start_month",
+      "group": "2",
+      "value": "4.004"
+     },
+     {
+      "field": "compare_value",
+      "column": "courses.presentation_start_month",
+      "group": "2",
+      "value": "0"
+     },
+     {
+      "field": "contribution",
+      "column": "courses.presentation_start_month",
+      "group": "2",
+      "value": "-4.004"
+     }
+    ]
+   }
+  },
+  {
+   "id": "j84",
+   "expected": "match",
+   "error": "none",
+   "text": "Số đơn hàng Năm 2016 là 8.690, giảm 4.443 (33,8%) so với Năm 2015 là 13.133. Giảm ở vùng giao hàng: Vùng giao hàng Western Europe giảm 4.777. Thay đổi theo thị trường: Thị trường Europe giảm 7.041 và thị trường LATAM giảm 3.290, trong khi thị trường USCA tăng 3.238.",
+   "facts": {
+    "measure": "Số đơn hàng",
+    "comparison": "periods",
+    "base": "Năm 2015",
+    "compare": "Năm 2016",
+    "volume_label": "",
+    "price_label": "",
+    "claims": [
+     {
+      "field": "base_value",
+      "column": "",
+      "group": "",
+      "value": "13.133"
+     },
+     {
+      "field": "compare_value",
+      "column": "",
+      "group": "",
+      "value": "8.690"
+     },
+     {
+      "field": "change",
+      "column": "",
+      "group": "",
+      "value": "-4.443"
+     },
+     {
+      "field": "percent_change",
+      "column": "",
+      "group": "",
+      "value": "-33,8"
+     },
+     {
+      "field": "cause",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": ""
+     },
+     {
+      "field": "cause",
+      "column": "market",
+      "group": "Europe",
+      "value": ""
+     },
+     {
+      "field": "gone",
+      "column": "order_region",
+      "group": "Central America",
+      "value": ""
+     },
+     {
+      "field": "gone",
+      "column": "market",
+      "group": "LATAM",
+      "value": ""
+     },
+     {
+      "field": "new",
+      "column": "market",
+      "group": "USCA",
+      "value": ""
+     },
+     {
+      "field": "base_value",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": "4.828"
+     },
+     {
+      "field": "compare_value",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": "51"
+     },
+     {
+      "field": "contribution",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": "-4.777"
+     },
+     {
+      "field": "percent_change",
+      "column": "order_region",
+      "group": "Western Europe",
+      "value": "-98,9"
+     },
+     {
+      "field": "base_value",
+      "column": "order_region",
+      "group": "Central America",
+      "value": "1.778"
+     },
+     {
+      "field": "compare_value",
+      "column": "order_region",
+      "group": "Central America",
+      "value": "0"
+     },
+     {
+      "field": "contribution",
+      "column": "order_region",
+      "group": "Central America",
+      "value": "-1.778"
+     },
+     {
+      "field": "share_of_change",
+      "column": "order_region",
+      "group": "Central America",
+      "value": "40"
+     },
+     {
+      "field": "base_value",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "1.801"
+     },
+     {
+      "field": "compare_value",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "33"
+     },
+     {
+      "field": "contribution",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "-1.768"
+     },
+     {
+      "field": "percent_change",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "-98,2"
+     },
+     {
+      "field": "share_of_change",
+      "column": "order_region",
+      "group": "Northern Europe",
+      "value": "39,8"
+     },
+     {
+      "field": "base_value",
+      "column": "market",
+      "group": "Europe",
+      "value": "8.315"
+     },
+     {
+      "field": "compare_value",
+      "column": "market",
+      "group": "Europe",
+      "value": "1.274"
+     },
+     {
+      "field": "contribution",
+      "column": "market",
+      "group": "Europe",
+      "value": "-7.041"
+     },
+     {
+      "field": "percent_change",
+      "column": "market",
+      "group": "Europe",
+      "value": "-84,7"
+     },
+     {
+      "field": "base_value",
+      "column": "market",
+      "group": "LATAM",
+      "value": "3.290"
+     },
+     {
+      "field": "compare_value",
+      "column": "market",
+      "group": "LATAM",
+      "value": "0"
+     },
+     {
+      "field": "contribution",
+      "column": "market",
+      "group": "LATAM",
+      "value": "-3.290"
+     },
+     {
+      "field": "share_of_change",
+      "column": "market",
+      "group": "LATAM",
+      "value": "74"
+     },
+     {
+      "field": "base_value",
+      "column": "market",
+      "group": "USCA",
+      "value": "0"
+     },
+     {
+      "field": "compare_value",
+      "column": "market",
+      "group": "USCA",
+      "value": "3.238"
+     },
+     {
+      "field": "contribution",
+      "column": "market",
+      "group": "USCA",
+      "value": "3.238"
+     }
+    ]
+   }
   }
  ]
 }

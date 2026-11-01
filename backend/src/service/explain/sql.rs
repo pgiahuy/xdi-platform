@@ -163,6 +163,20 @@ pub fn build_pair_count_sql(plan: &WhyPlan, first: &str, second: &str) -> String
     )
 }
 
+/// Số cặp giá trị khác nhau của cột hai nhóm đang so (slice) và một cột chiều, cùng số giá trị khác nhau của cột slice,
+/// trên đúng tập dòng của câu từng chiều: hai số bằng nhau thì mỗi giá trị của slice ứng với đúng một giá trị của cột
+/// chiều (explain/dimension_pick.rs, follows_slices).
+pub fn build_follow_count_sql(plan: &WhyPlan, slice: &str, column: &str) -> String {
+    format!(
+        "SELECT COUNT(*) AS pairs, COUNT(DISTINCT {slice_ident}) AS slices FROM (SELECT DISTINCT {slice_ident}, {} \
+         FROM {} WHERE {}) AS pair_values",
+        build_ident(column),
+        build_from(plan, &[slice, column]),
+        build_where(plan),
+        slice_ident = build_ident(slice),
+    )
+}
+
 /// Phần FROM: bảng chính, hay câu con nối bảng liên quan khi câu cần cột của chúng (explain/source.rs).
 fn build_from(plan: &WhyPlan, columns: &[&str]) -> String {
     build_from_sql(&plan.table, &plan.source, columns)
