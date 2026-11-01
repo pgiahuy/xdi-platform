@@ -1,545 +1,337 @@
 # Kiến trúc
 
-Tài liệu này mô tả hệ thống như được thiết kế. Mục "Trạng thái" ở cuối ghi phần nào đã có, phần nào chưa.
+Hệ thống chia phần thế nào và vì sao. Phần nào đã có, phần nào chưa: mục Trạng thái ngay dưới đây.
+
+## Thuật ngữ
+
+| Thuật ngữ | Nghĩa |
+|---|---|
+| Dataset | Một database đã kết nối hay một file đã nạp; bảng nằm bên trong ([SCHEMA.md](SCHEMA.md#điểm-hay-hiểu-nhầm)) |
+| Câu hỏi số liệu | Câu hỏi một con số, một bảng hay một danh sách: mô hình viết SQL |
+| Câu hỏi nguyên nhân | Câu hỏi vì sao một số tăng, giảm hay khác nhau giữa hai nhóm: mô hình điền form, code dựng SQL |
+| Cách tính | Thẻ dưới câu trả lời: hệ thống đã đo gì, lọc gì, nhóm theo gì, kể cả điều kiện lọc theo quyền xem |
+| Lời giải thích | Đoạn lời viết từ các số code đã tính; giao diện ghi "giải thích", API gọi trường `insight` |
+| Phân rã | Bảng chia chênh lệch thành phần của từng nhóm; tổng các phần bằng đúng chênh lệch |
+| Dòng nguồn | Các dòng dữ liệu đứng sau một con số, mở bằng cách bấm vào số đó |
+| Minh chứng | Những gì cho thấy con số đến từ đâu: các ý code đã tính dưới lời, SQL, phân rã, dòng nguồn, các bước |
+| Kiểm số | Code so từng số, chiều tăng giảm và từ ngữ trong lời với bảng đã tính |
+| Kiểm nghĩa | Một lần gọi mô hình riêng chấm nghĩa của lời so với các số đã khai |
+
+## Trạng thái
+
+| Phần | Trạng thái |
+|---|---|
+| Tài khoản, phiên, mã thiết lập, quản trị hệ thống (mục 5) | Có |
+| Workspace, vai `admin` và `member` (mục 5) | Có |
+| Vai dữ liệu: luật lọc dòng, nhiều vai mỗi người, API và màn Vai dữ liệu (mục 5) | Có |
+| Nạp file CSV, Parquet, Excel ([DATA.md](DATA.md)) | Có; chưa xóa riêng một phiên bản hay chọn lại phiên bản cũ |
+| Kết nối Postgres, chụp mọi bảng đọc được, trần dung lượng, chụp lại theo lịch ([DATA.md](DATA.md)) | Có; chưa có MySQL, SQLite, truy vấn thẳng lúc hỏi |
+| Hồ sơ cột lớp cấu trúc và lớp ngữ nghĩa, cột nhạy cảm ([DATA.md](DATA.md)) | Có; chưa có màn sửa mô tả, bí danh, vai trò cột |
+| Hỏi trên mọi bảng của database, chọn bảng gửi chi tiết (mục 7) | Có; chọn bảng theo embedding chưa làm |
+| Guard SQL, nối bảng chỉ theo khóa ngoại ([GUARD.md](GUARD.md)) | Có |
+| Chặn cộng lặp khi nối bảng ([GUARD.md](GUARD.md#kiểm-cộng-lặp-sau-guard)) | Có; chưa xét `COUNT(*)` và bảng tạm đã nối |
+| Câu hỏi số liệu: bảng, biểu đồ, Cách tính, lời giải thích qua kiểm số và kiểm nghĩa | Có |
+| Câu hỏi nguyên nhân: form, phân rã, lượng và giá, tỷ lệ, lời qua kiểm số và kiểm nghĩa | Có; chưa có biểu đồ thác nước |
+| Cuộc trò chuyện, lịch sử của chính người hỏi | Có; chưa có màn xem lịch sử của cả workspace |
+| Minh chứng: SQL, phân rã, dòng nguồn kể cả câu nối bảng, các bước | Có; chưa truy được câu có HAVING, hàm cửa sổ, bảng tạm gộp nhóm |
+| Chọn biểu đồ theo IBCS (mục 8) | Có |
+| Tổng quan dataset, Chỉ số, Khái niệm ngành ([DOMAINS.md](DOMAINS.md)) | Có |
+| Đánh giá câu trả lời, câu mẫu, nhật ký lỗi, bài học ([API.md](API.md)) | Có |
+| Báo cáo tự gom và báo cáo tự động, xuất PDF và Excel | Có; chưa chia sẻ báo cáo cho người khác |
+| Mô hình `mock`, Gemini (kèm khóa dự phòng), Ollama ([INSTALL.md](INSTALL.md)) | Có |
+| OpenAPI sinh từ code, kiểu TypeScript sinh từ đặc tả (mục 10) | Có |
+| Chạy thật: compose prod, cookie `Secure`, header bảo mật, sao lưu ([INSTALL.md](INSTALL.md)) | Có; chưa có role Postgres riêng cho Row Level Security |
+| Bộ đánh giá ([eval/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/eval/README.md)) | Có; CI chỉ chạy phần DataCo với `mock` |
+| Chế độ demo (`POST /api/auth/demo-login`) | Chưa có; route trả 501 |
 
 ## 1. Sơ đồ tổng thể
 
 ```
-                                 TRÌNH DUYỆT
-                 React, Vite, Tailwind, shadcn/ui, Recharts
-  Trang hỏi 2 cột: hỏi, bảng, biểu đồ | minh chứng; lịch sử ở thanh bên
-                                      |
-                                  REST JSON
-                     kiểu TypeScript sinh từ openapi.json
-                                      |
-=================================== docker compose =============================
-                                      |
-   +----------------------------------v-----------------------------------+
-   |          BACKEND  (Rust, Axum, 1 container, phục vụ cả giao diện)    |
-   |                                                                      |
-   |  api/       handler, request/response struct, kiểm phiên, OpenAPI    |
-   |     |                                                                |
-   |  service/   ingest (register, profile, materialize)                  |
-   |             ask    (schema context -> LLM -> guard -> run -> explain)|
-   |             explain (phân rã chênh lệch, tổng đóng góp = chênh lệch) |
-   |     |                                                                |
-   |  engine/    store/        sqlx  ----------------> POSTGRES           |
-   |             analytics.rs  [DuckDB nhúng, chạy trong tiến trình này,  |
-   |                            không container] -----> volume Parquet    |
-   |             guard/        sqlparser, whitelist bảng và cột, tiêm RLS |
-   |             llm/          trait LlmProvider ----> gemini | ollama | mock
-   |  auth/      mật khẩu argon2, mã phiên, mã thiết lập, WorkspaceId     |
-   +----------------------------------------------------------------------+
-            |                              |
-   +--------v-----------+        +---------v-------------------+
-   |   POSTGRES         |        |  VOLUME /data               |
-   |  (1 container)     |        |  <workspace>/<dataset>/     |
-   |  workspace_id ở    |        |    <ver>/*.parquet          |
-   |  bảng nghiệp vụ    |        |  samples/ gắn ở /samples:ro |
-   |                    |        +-----------------------------+
-   |  workspaces        |
-   |  memberships       |                   ngoài compose, tùy chọn
-   |  users             |        +--------------------+   +-----------------+
-   |  sources           |        |  Gemini API        |   |  Ollama local   |
-   |  datasets          |        |  (có key)          |   |  (offline)      |
-   |  dataset_relations |        +--------------------+   +-----------------+
-   |  dataset_versions  |
-   |  columns           |
-   |  column_values     |
-   |  metrics           |
-   |  rls_policies      |
-   |  queries, settings |
-   |  conversations     |
-   |  sessions          |
-   +--------------------+
+TRÌNH DUYỆT  React, Vite, Tailwind, shadcn/ui, Recharts; kiểu TypeScript sinh từ openapi.json
+     |  REST JSON, cùng địa chỉ (/api)
+BACKEND  Rust, Axum, một container, phục vụ cả giao diện
+     api/      handler, request/response, kiểm phiên, OpenAPI
+     service/  ask, explain, insight, drill, sources, report, ...
+     engine/   store/ (sqlx)  -------------------->  POSTGRES: dữ liệu ứng dụng (SCHEMA.md)
+               analytics.rs, query.rs (DuckDB nhúng) ->  VOLUME /data/<workspace>/<dataset>/<bảng>/<phiên bản>/*.parquet
+               guard/ (sqlparser, danh sách được phép, lọc dòng)
+               llm/ (trait LlmProvider)  ----------->  Gemini API | Ollama | mock
+     auth/     Argon2, mã phiên, mã thiết lập, WorkspaceId
+
+Postgres của tổ chức: chỉ đọc, lúc kết nối và chụp bảng
 ```
 
-Hai container: `backend`, `postgres`. Giao diện build ra file tĩnh, backend phục vụ cùng địa chỉ với API (`/api`), nên
-không cần CORS và cookie đăng nhập đơn giản. DuckDB là thư viện nằm trong backend, không có tiến trình riêng.
+Mặc định có hai container, `backend` và `postgres`; `docker compose --profile demo` thêm `demo-db` (database mẫu,
+[data/postgres-demo](https://github.com/pgiahuy/xdi-platform/blob/main/data/postgres-demo/README.md)). Giao diện cùng
+địa chỉ với API nên không cần CORS. DuckDB là thư viện trong backend, không có tiến trình riêng.
 
-## 2. Một câu hỏi đi qua chín bước
+## 2. Luồng một câu hỏi
+
+Sơ đồ đủ 16 bước: [images/luong-cau-hoi.png](images/luong-cau-hoi.png). Tóm tắt:
 
 ```
-1. api        kiểm phiên đăng nhập, lấy workspace, role và dataset id
-2. store      đọc hồ sơ cột, giá trị phân loại, chính sách phân quyền của role     (Postgres)
-3. ask        ghép prompt: schema context + bí danh + câu mẫu admin đã duyệt + bài học đã duyệt + các lượt trước;
-               dataset chụp từ database: thêm cột của các bảng liên quan và danh sách quan hệ khóa ngoại
-4. llm        phân loại câu hỏi -> JSON {kind, reason}: câu thường hay câu hỏi tìm nguyên nhân (lỗi thì luật từ khóa)
-               câu thường: LlmProvider::complete -> JSON {terms, assumptions, clarify, unanswerable, sql}, SQL trên
-               tên bảng logic
-               câu "tại sao": mô hình điền form JSON, code kiểm form và tự dựng mọi SQL
-5. guard      parse AST, chỉ SELECT, whitelist bảng và cột, tiêm WHERE theo phân quyền, giới hạn dòng
-6. analytics  resolve tên logic -> Parquet, chạy SQL, trả dòng và thời gian           (DuckDB)
-7. explain    câu "tại sao": phân rã chênh lệch theo chiều (cả cột của bảng nối nhiều-một), LLM viết insight khi so
-               hai kỳ hay hai nhóm, qua hai cổng kiểm (khẳng định so với bảng, mô hình chấm so nghĩa);
-               câu thường: code chọn phần giải thích theo hình dạng kết quả, tính số và phân rã khi cần, LLM viết
-               lại lời từ các câu code đã viết; lời đó (hay câu khuôn) cũng là đoạn trả lời ngắn
-8. store      ghi queries: câu hỏi, SQL thô, SQL sau guard, thời gian, version_id, phiên bản mọi bảng đã đọc
-9. api        trả gói: SQL thô, SQL sau guard, thẻ "Hệ thống đã hiểu là", dòng, gợi ý biểu đồ, cảnh báo, phân rã, timeline
+1. api        kiểm phiên, lấy workspace, vai trong workspace, dataset và bảng bắt đầu
+2. context    đọc hồ sơ cột, giá trị phân loại, quan hệ, chỉ số, câu mẫu và bài học đã duyệt, vai dữ liệu (Postgres)
+3. classify   mô hình nói câu hỏi số liệu hay câu hỏi nguyên nhân, kèm cột và bảng cần; lỗi thì dùng luật từ khóa
+4. llm        câu hỏi số liệu: mô hình trả JSON {terms, assumptions, clarify, unanswerable, sql} trên tên bảng logic
+              câu hỏi nguyên nhân: mô hình điền form JSON, code kiểm form và tự dựng mọi SQL
+5. guard      chỉ một SELECT chỉ đọc, bảng, cột, hàm được phép, nối đúng khóa ngoại, lọc dòng theo vai, trần dòng
+6. run        DuckDB chạy trên Parquet của phiên bản đang dùng; lỗi hay guard từ chối thì mô hình sửa một lần
+7. explain    câu hỏi nguyên nhân: phân rã; câu hỏi số liệu: code chọn ý theo hình dạng kết quả, phân rã khi cần;
+              mô hình viết lời giải thích, qua kiểm số và kiểm nghĩa
+8. record     ghi queries: câu hỏi, SQL trước và sau guard, các bước, phiên bản mọi bảng đã đọc, lời đã hiện
+9. api        trả một JSON: kết quả, Cách tính, biểu đồ, cảnh báo, phân rã, lời, các bước
 ```
 
-Gói trả về là một response JSON, hình dạng ở mục 8.
+Lúc hỏi, mô hình ngôn ngữ làm các việc sau, mỗi việc là một lần gọi:
 
-Lúc hỏi, mô hình ngôn ngữ chỉ làm năm việc:
+- Phân loại câu hỏi (`service/ask/classify.rs`). Mô hình lỗi, quá `CLASSIFY_TIMEOUT_SECS` hay trả JSON không đọc được
+  thì luật từ khóa quyết định và bước `classify` ghi lý do.
+- Viết SQL kèm cách hiểu từng cụm chữ, hoặc điền form của câu hỏi nguyên nhân. Câu trả lời là JSON theo schema gửi
+  kèm; prompt có luật của guard sinh từ chính guard.
+- Gửi lại một lần khi cần: SQL chạy lỗi, guard từ chối, câu trả lời không đọc được, form sai
+  (`service/ask/repair.rs`); SQL đọc bảng mới có tên trong danh sách gọn (`service/ask/missing_tables.rs`); giá trị lọc
+  không có trong danh sách đã gửi (`service/ask/value_retry.rs`).
+- Viết lời giải thích từ các số code đã tính: phân rã của câu hỏi nguyên nhân (`service/ask/narrate.rs`), các ý của
+  câu hỏi số liệu (`service/insight/narrate.rs`, tắt bằng `INSIGHT_TEXT=false`).
+- Kiểm nghĩa lời đó (`service/ask/judge.rs`). Trượt kiểm số hay kiểm nghĩa thì viết lại một lần; vẫn trượt thì dùng
+  câu của code. Lời qua kiểm cũng là đoạn trả lời ngắn ở đầu câu trả lời (`service/ask/summary.rs`).
 
-- Phân loại câu hỏi là câu thường hay câu hỏi tìm nguyên nhân (bước 4, `service/ask/classify.rs`), trước khi viết SQL
-  hay điền form. Mô hình lỗi, quá giờ hay trả JSON không đọc được thì luật từ khóa (`build_question_kind`,
-  `service/explain/form.rs`) quyết định, câu hỏi vẫn chạy, bước `classify` trong `steps` ghi lý do. Luật từ khóa bỏ
-  sót những câu không có cụm nào của nó ("Doanh thu giảm do gì?") và bắt nhầm câu đếm theo một cột tên "lý do"; bộ câu
-  thử `eval/classify.json` (`make eval-classify`) đo cả hai cách.
-- Viết SQL kèm cách nó hiểu từng cụm chữ của câu hỏi, hoặc điền form với câu "tại sao" (bước 4). Câu trả lời là một
-  object JSON theo schema gửi kèm request; prompt có luật của guard sinh từ chính guard.
-- Sửa đúng một lần khi SQL chạy lỗi, khi guard từ chối vì bất kỳ lý do nào, khi câu trả lời không đọc được (bước 5,
-  6), hoặc khi form câu "tại sao" sai.
-- Viết insight cho bảng phân rã mà code đã tính, khi so hai kỳ hay hai nhóm (bước 7), rồi chấm lời đó trong một lần gọi riêng (cổng 2 của #201).
-- Viết lại phần giải thích của câu thường từ câu chính và các ý code đã viết (bước 7, `service/insight/`, tắt bằng
-  `INSIGHT_TEXT=false`): một lần gọi mỗi câu; lời được kiểm số, chiều tăng giảm và từ chỉ nguyên nhân, sai thì dùng câu
-  của code. Lời qua bước kiểm cũng là đoạn trả lời ngắn ở đầu thẻ (`service/ask/summary.rs`); không có lần gọi riêng
-  cho đoạn trả lời. Danh sách dòng không gộp và bảng nhóm theo cột nhạy cảm, cột khóa hay cột chữ tự do thì không gọi
-  mô hình.
+Mô hình không nhận dòng của bảng kết quả, trừ kết quả một dòng mà mọi ô là số tổng hợp hay giá trị của cột phân loại,
+thời gian không nhạy cảm. Nó không biết vai dữ liệu của người hỏi; prompt chỉ nói hệ thống tự lọc theo quyền. Danh sách
+đủ những gì gửi đi ở từng lần gọi: [PRIVACY.md](PRIVACY.md).
 
-Nó không nhận bảng dữ liệu. Khi phân loại câu hỏi, nó nhận câu hỏi, tên cột kèm bí danh và mô tả, và câu hỏi của các
-lượt trước, không có giá trị nào của cột. Khi viết SQL hay điền form, nó nhận siêu dữ liệu của cột và giá trị của cột
-phân loại không nhạy cảm; khi viết lời cho câu "tại sao", nó nhận số đã tính; khi viết lời cho câu thường, nó nhận các
-câu code đã viết (số đã tính, tên nhóm của cột phân loại, tên kỳ). Nó không bao giờ nhận dòng của bảng kết quả. Nó không biết phân quyền của người hỏi (prompt chỉ nói chung rằng
-hệ thống tự lọc theo quyền). Mọi bước đều được ghi lại và trả về cho giao diện hiển thị. Phần gửi cho mô hình, chi tiết
-từng lúc: [PRIVACY.md](PRIVACY.md).
-
-Chữ cố định của các prompt (luật, khuôn câu) nằm trong `backend/prompts/`, mỗi prompt một file: đọc ở đó để thấy
-nguyên văn những gì gửi cho mô hình. Chỗ trống viết `{{tên}}`, code điền phần dữ liệu (dòng cột, danh sách giá trị,
-JSON, lượt trước) qua `engine/prompts.rs`; file nhúng vào binary lúc biên dịch, và mỗi prompt có file mẫu so từng byte
-trong `backend/src/service/testdata/`. Riêng prompt diễn giải câu "tại sao" còn trong `service/explain/mod.rs`.
-Luật viết tiếng Anh vì là phần máy đọc; bản dịch tiếng Việt để cả đội đọc nằm ở `backend/prompts/vi/`, không gửi cho
-mô hình, và một test báo lỗi khi bản dịch thiếu hay khác chỗ trống với bản gốc.
+Chữ cố định của prompt nằm trong `backend/prompts/`, mỗi prompt một file, nhúng vào binary; `engine/prompts.rs` điền
+chỗ trống `{{tên}}`, mỗi prompt có file mẫu so từng byte trong `backend/src/service/testdata/`. Riêng prompt viết lời câu
+hỏi nguyên nhân dựng trong `service/explain/narrate_prompt.rs`. Bản tiếng Việt cho cả đội đọc ở `backend/prompts/vi/`,
+không gửi cho mô hình.
 
 ## 3. Ba tầng, phụ thuộc một chiều
 
 ```
 backend/src/
-  main.rs            khởi động: đọc config, mở Postgres, dựng AppState và router; hoặc chạy lệnh quản trị (cli.rs),
-                     tiến trình con đọc Excel (engine/excel_worker.rs)
-  config.rs          biến môi trường
-  api/               tầng HTTP: handler, request/response struct, lỗi -> status
-  service/           tầng nghiệp vụ: ingest.rs, excel.rs, samples.rs, eval.rs và các module con ask/, explain/,
-                     drill/, understanding/, semantic/, conversation/; không biết gì về HTTP
-  engine/            tầng hạ tầng: analytics.rs, query.rs (DuckDB), excel.rs (đọc xlsx), store/ (Postgres, chia theo
-                     bảng), guard/ (guard SQL, GUARD.md), llm/, prompts.rs (điền chữ của backend/prompts/)
-  auth/              mật khẩu, mã phiên, mã thiết lập, vai, kiểu WorkspaceId
-  error.rs           một enum lỗi chung
+  main.rs     khởi động: đọc config, mở Postgres, dựng AppState và router; hoặc chạy lệnh quản trị (cli.rs),
+              tiến trình con đọc Excel (engine/excel_worker.rs)
+  config.rs   biến môi trường
+  api/        tầng HTTP: handler, request/response struct, lỗi thành mã HTTP
+  service/    tầng nghiệp vụ, không biết gì về HTTP: ask/, explain/, insight/, drill/, sources/, catalog/,
+              conversation/, report/, data_roles/, metrics/, semantic/, understanding/, overview/, feedback/,
+              lessons/, domains/, cùng ingest.rs, samples*.rs, eval*.rs
+  engine/     tầng hạ tầng: analytics.rs, query.rs (DuckDB), excel.rs, store/ (Postgres, chia theo bảng),
+              guard/ (GUARD.md), llm/, prompts.rs
+  auth/       mật khẩu, mã phiên, mã thiết lập, vai, kiểu WorkspaceId
+  error.rs    một enum lỗi chung
 ```
 
 - `api` chỉ gọi `service`. `service` gọi `engine` và `auth`. Không có chiều ngược.
-- Trait duy nhất là `LlmProvider` với hàm `complete`; hàm `embed` thêm khi bật tìm theo nghĩa. Chọn implementation
-  lúc khởi động theo cấu hình: `gemini`, `ollama`, hoặc `mock`. Mock trả câu trả lời viết sẵn cho bộ câu hỏi mẫu, dùng
-  khi không có khóa và trong test.
-- Postgres và DuckDB không bọc trait. Service nhận struct `Store` cụ thể; DuckDB đi qua hàm của `engine/analytics.rs`
-  và `engine/query.rs`, mỗi lần nạp hay chạy câu mở một kết nối DuckDB trong bộ nhớ.
-- Câu SQL của `Store` viết dạng chuỗi với `sqlx::query_as`, không dùng macro `query!` kiểm lúc biên dịch: không cần thư
-  mục `.sqlx/` và `sqlx-cli`, build không cần Postgres; đổi lại, mọi câu SQL được kiểm bằng test trên Postgres thật.
-- Trạng thái chia sẻ qua một `AppState`: config, `Arc<dyn LlmProvider>`, `Store`, mã thiết lập, bộ nhớ đệm giá trị
-  của cột và các semaphore giới hạn việc chạy cùng lúc (đọc Excel, chạy SQL, lập hồ sơ ngữ nghĩa). Không biến toàn cục.
-- Test ở tầng service và qua route (`api/*_tests.rs`), với mock LLM, DuckDB in-memory và Postgres thật (CI có
-  Postgres).
+- Trait duy nhất là `LlmProvider` (`name`, `complete`, `complete_with_usage` trả kèm số token). Implementation chọn lúc
+  khởi động theo `LLM_PROVIDER`: `gemini`, `ollama` hay `mock`. Mock trả câu viết sẵn cho bộ câu hỏi mẫu, dùng khi
+  không có khóa và trong test.
+- Postgres và DuckDB không bọc trait. Service nhận struct `Store`; câu SQL của nó viết bằng `sqlx::query_as` (không
+  macro `query!`, build không cần Postgres) và được kiểm bằng test trên Postgres thật. Mỗi lần nạp hay chạy câu mở một
+  kết nối DuckDB trong bộ nhớ.
+- Trạng thái chia sẻ qua `AppState`: config, `Arc<dyn LlmProvider>`, `Store`, bộ nhớ đệm giá trị cột, các semaphore
+  giới hạn việc chạy cùng lúc. Không biến toàn cục.
+- Test ở tầng service và qua route (`api/*_tests.rs`), với mock LLM, DuckDB trong bộ nhớ và Postgres thật.
 
 ## 4. Hai kho dữ liệu
 
 | Kho | Chứa | Vì sao |
 |---|---|---|
-| Postgres (sqlx, migrations trong `backend/migrations/`) | Dữ liệu ứng dụng: tài khoản, phiên, workspace, thành viên, dataset và bảng, phiên bản, hồ sơ cột, chỉ số, quan hệ, khái niệm ngành, lịch sử câu hỏi, nhật ký lỗi, bài học (20 bảng, [SCHEMA.md](SCHEMA.md)); mọi bảng có `workspace_id`, trừ `workspaces`, `users` và `sessions` | Nhiều ghi nhỏ, nhiều kết nối, đúng việc của database giao dịch |
-| DuckDB nhúng | Không giữ gì bền. Đọc Parquet trên volume theo từng câu SQL | Engine phân tích theo cột, nhận SQL chuẩn, đọc thẳng CSV, Parquet, không thêm tiến trình; file Excel đổi sang CSV trước (mục 5) |
+| Postgres (`backend/migrations/`) | Dữ liệu ứng dụng: tài khoản, workspace, dataset và bảng, phiên bản, hồ sơ cột, chỉ số, vai dữ liệu, lịch sử câu hỏi, báo cáo ([SCHEMA.md](SCHEMA.md)) | Nhiều ghi nhỏ, nhiều kết nối, đúng việc của database giao dịch |
+| DuckDB nhúng | Không giữ gì bền; đọc Parquet trên volume theo từng câu SQL | Engine phân tích theo cột, SQL chuẩn, đọc thẳng Parquet, không thêm tiến trình |
 
-Image Postgres là `pgvector/pgvector`, có sẵn `unaccent`, `pg_trgm`, `vector`. Ý nghĩa từng bảng, ai ghi, ví dụ vài dòng
-và sơ đồ ER: [SCHEMA.md](SCHEMA.md).
+Image Postgres là `pgvector/pgvector`, có sẵn `unaccent`, `pg_trgm`, `vector`.
 
-## 4b. Workspace và phân quyền
+## 5. Workspace và phân quyền
 
-Một bản cài phục vụ một tổ chức. Workspace là phòng ban trong tổ chức đó, mỗi workspace có dataset, chỉ số và vai
-riêng, vì các phòng thường tính chỉ số khác nhau: phòng kinh doanh tính doanh thu gộp theo ngày đặt, phòng tài chính
-tính doanh thu ròng theo ngày giao. Lần thiết lập đầu tạo luôn workspace đầu tiên, người thiết lập là admin của nó.
-Không có workspace chung mà mọi tài khoản tự thuộc vào: tài khoản tạo sau chỉ vào được workspace khi được admin thêm,
-hoặc tự tạo workspace riêng.
-
-Ba tầng tách riêng:
+Một bản cài phục vụ một tổ chức. Workspace là phòng ban trong tổ chức đó, có dataset, chỉ số và vai riêng, vì các
+phòng thường tính chỉ số khác nhau. Lần thiết lập đầu tạo workspace đầu tiên, người thiết lập là admin của nó. Tài khoản
+tạo sau chỉ vào được workspace khi admin thêm, hoặc tự tạo workspace riêng.
 
 | Tầng | Câu hỏi | Ví dụ |
 |---|---|---|
-| Workspace | Người dùng thuộc phòng ban nào | Người phòng kinh doanh không thấy dataset, chỉ số, lịch sử của phòng tài chính, trừ khi được mời |
-| Vai trong workspace | Trong workspace, được làm gì | `admin` nạp dữ liệu, quản lý thành viên; `member` xem và hỏi |
-| Lọc dòng | Trong dataset, thấy dòng nào | Thành viên mang vai dữ liệu "Miền Nam" chỉ thấy `region = South`; guard thêm điều kiện vào SQL |
+| Workspace | Thuộc phòng ban nào | Người phòng kinh doanh không thấy dataset, chỉ số, lịch sử của phòng tài chính |
+| Vai trong workspace | Được làm gì | `admin` nạp dữ liệu, quản lý thành viên; `member` xem và hỏi |
+| Vai dữ liệu | Thấy dòng nào | Thành viên mang vai "Châu Âu" chỉ thấy `orders.market = Europe`; guard thêm điều kiện vào SQL |
 
-Vai trong workspace (`role`, cột của `memberships`) và vai dữ liệu là hai thứ riêng: một `member` có thể chỉ thấy miền
-Nam, một `member` khác thấy toàn bộ. Vai dữ liệu (#45, #167, migration 0020) là một dòng của `data_roles` (tên, mô tả,
-không trùng tên trong workspace); luật của vai nằm ở `rls_policies` (một bảng, một cột chiều, các giá trị được thấy);
-vai của từng người ở `member_data_roles`, mỗi người nhiều vai. Admin đặt cả ba qua API (`/data-roles`, [API.md](API.md))
-hay màn **Vai dữ liệu**. Luật ghép: trong một vai, mọi luật trên một bảng và mọi điều kiện lan theo khóa ngoại nối AND;
-giữa các vai nối OR, chỉ tính vai có điều kiện trên bảng đang đọc (vai chỉ có luật trên `products` không mở thêm dòng
-nào của `customers`). Không mang vai nào, hay không vai nào có điều kiện trên bảng, thì thấy mọi dòng; `admin` không bị
-lọc dù mang vai. Chỉ gán được vai đã có luật, vai đang gán không xóa được và không được mất hết luật (người chỉ mang vai
-đó sẽ thấy mọi dòng), hai vai không được trùng đúng bộ luật. Vai và luật đọc lại mỗi request, nên đổi có hiệu lực từ
-request kế tiếp. Mọi bảng dùng chung, có cột `workspace_id`. Mọi hàm trong `engine/store/`
-nhận kiểu `WorkspaceId`, chỉ tạo được từ phiên đăng nhập đã kiểm, nên quên lọc theo workspace là lỗi biên dịch. Lớp chặn
-thứ hai nằm trong database: khóa ngoại giữa các bảng nghiệp vụ gồm cả `workspace_id`, nên một dòng không trỏ được sang
-dòng của workspace khác. Postgres Row Level Security sẽ thêm sau làm lớp thứ ba. File Parquet nằm dưới
-`/data/<workspace>/`, prompt gửi mô hình ngôn ngữ chỉ chứa hồ sơ của workspace hiện tại.
+**Cách chặn giữa workspace.** Mọi bảng nghiệp vụ có `workspace_id`. Mọi hàm trong `engine/store/` nhận kiểu
+`WorkspaceId`, chỉ tạo được từ phiên đăng nhập đã kiểm, nên quên lọc theo workspace là lỗi biên dịch. Khóa ngoại giữa
+các bảng nghiệp vụ gồm cả `workspace_id`, nên một dòng không trỏ được sang workspace khác. Postgres Row Level Security
+là lớp thứ ba dự định thêm sau. File Parquet nằm dưới `/data/<workspace>/`; prompt chỉ chứa hồ sơ của workspace đang hỏi.
 
-Đăng nhập: luôn bật, kể cả bản cài chỉ có một người. Lần chạy đầu, khi chưa có tài khoản nào, backend in ra log một mã
-thiết lập; ai nhập đúng mã thì tạo được tài khoản quản trị (quản lý tài khoản của cả bản cài) kèm workspace đầu tiên.
-Mật khẩu băm bằng Argon2id. Phiên lưu trong Postgres (bảng `sessions` giữ SHA-256 của mã phiên), mã phiên nằm trong
-cookie httpOnly. Không dùng JWT: đăng xuất, khóa tài khoản, đổi vai phải có hiệu lực ngay ở request kế tiếp, mà JWT đã
-cấp thì không thu hồi được nếu không lưu thêm danh sách phiên.
+**Vai dữ liệu.** Một vai (`data_roles`) có tên, mô tả và các luật (`rls_policies`: một bảng, một cột chiều, các giá trị
+được thấy); một thành viên mang được nhiều vai (`member_data_roles`). Admin đặt qua API `/data-roles` ([API.md](API.md))
+hay màn **Vai dữ liệu**. Luật ghép:
 
-Quản trị hệ thống tạo tài khoản, khóa, mở tài khoản và đặt lại mật khẩu (sinh mật khẩu tạm hiện một lần, đăng xuất mọi
-phiên của người đó). Quản trị duy nhất quên mật khẩu thì chạy trên máy chủ: `xdi-backend reset-password --email <email>`
-(trong compose: `docker compose exec backend xdi-backend reset-password --email <email>`); ai chạy được lệnh trên máy
-chủ là chủ bản cài.
+- Trong một vai, các luật trên một bảng và điều kiện lan theo khóa ngoại nối AND. Giữa các vai nối OR, chỉ tính vai có
+  điều kiện trên bảng đang đọc hay bảng nó trỏ tới (vai chỉ có luật trên `products` không mở thêm dòng `customers`).
+- Bảng trỏ tới một bảng bị lọc nhận điều kiện lan theo khóa ngoại ([GUARD.md](GUARD.md#điều-kiện-lan-theo-khóa-ngoại)).
+- Không mang vai nào, hay không vai nào có điều kiện trên bảng, thì thấy mọi dòng. `admin` không bị lọc dù mang vai.
+- Chỉ gán được vai đã có luật; vai đang gán không xóa được và không được bỏ hết luật; hai vai không được trùng đúng bộ
+  luật. Vai và luật đọc lại mỗi request, nên đổi có hiệu lực ngay request kế tiếp.
 
-Trong workspace có hai vai. Người tạo workspace là `admin` của nó; workspace luôn còn ít nhất một `admin` (hạ vai hay
-xóa admin cuối cùng bị từ chối, kể cả khi hai admin hạ vai nhau cùng lúc). Admin có tài khoản đã khóa vẫn được tính;
-workspace chỉ còn admin như vậy thì quản trị hệ thống chỉ định admin mới.
+Lọc áp ở mọi chỗ chạy SQL trên dữ liệu (`load_row_filters` trong `service/ask/row_filters.rs`): hỏi, phân rã, truy dòng
+nguồn, tổng quan, báo cáo. Thẻ Cách tính ghi điều kiện đó với nhãn "Lọc theo quyền xem". Người bị lọc không nhận danh
+sách giá trị cột trong prompt, vì danh sách lấy từ hồ sơ của cả cột.
+
+**Đăng nhập** luôn bật. Lần chạy đầu backend in ra log một mã thiết lập; nhập đúng mã thì tạo được tài khoản quản trị
+kèm workspace đầu tiên. Mật khẩu băm bằng Argon2id. Phiên lưu trong Postgres (`sessions` giữ SHA-256 của mã phiên), mã
+phiên trong cookie httpOnly; không dùng JWT để đăng xuất, khóa tài khoản, đổi vai có hiệu lực ngay request kế tiếp.
+
+**Quản trị hệ thống** (`users.is_system_admin`) là thuộc tính tài khoản: tạo, khóa, mở tài khoản, đặt lại mật khẩu,
+xem mọi workspace kèm thành viên. Họ không tự vào được dữ liệu của workspace mình không thuộc (404), nhưng chỉ định
+được admin cho bất kỳ workspace nào, kể cả chính mình; mỗi lần chỉ định ghi một dòng log cảnh báo, chưa lưu vào
+database. Quản trị duy nhất quên mật khẩu thì chạy `xdi-backend reset-password --email <email>` trên máy chủ.
+
+**Vai trong workspace.** Người tạo workspace là `admin`; workspace còn ít nhất một `admin`, kể cả khi hai admin hạ vai
+nhau cùng lúc. Admin thêm thành viên theo email (tài khoản phải đang hoạt động), nên người đăng nhập biết được một email
+có tài khoản hay không; chấp nhận vì tài khoản là của người trong cùng tổ chức, người bị thêm tự rời được.
 
 | Việc | `admin` | `member` |
 |---|---|---|
-| Xem dataset, hỏi, xem minh chứng | Có | Có |
-| Xem danh sách thành viên | Có | Có |
+| Xem dataset, hỏi, xem minh chứng, xem lại cuộc trò chuyện của mình | Có | Có |
+| Xem danh sách thành viên, chỉ số, khái niệm ngành; xem vai dữ liệu của mình | Có | Có |
+| Đánh giá Tốt, Chưa đạt câu trả lời của mình; tạo báo cáo của mình | Có | Có |
 | Tự rời workspace | Có, nếu còn admin khác | Có |
-| Nạp file, tạo phiên bản mới | Có | Không (403) |
-| Đổi tên, xóa workspace (xóa cả file Parquet) | Có | Không (403) |
-| Thêm thành viên theo email, đổi vai, xóa thành viên | Có | Không (403) |
-| Xóa dataset (xóa cả file Parquet) | Có | Không (403) |
-| Xem chỉ số và cách gộp của cột số đo | Có | Có |
-| Tạo, sửa, xóa chỉ số; đổi cách gộp của cột số đo | Có | Không |
-| Xem khái niệm ngành của workspace | Có | Có |
-| Thêm, sửa, tắt khái niệm ngành | Có | Không |
-| Đánh giá Tốt, Chưa đạt câu trả lời của mình | Có | Có |
-| Xem câu được đánh giá Tốt, duyệt làm câu mẫu, xuất câu mẫu cho bộ đánh giá | Có | Không (403) |
-| Xem nhật ký lỗi; viết, bật, tắt, xóa bài học | Có | Không (403) |
-| Sửa mô tả cột, bí danh | Có | Không |
-| Xem lại câu hỏi của mình (qua cuộc trò chuyện) | Có | Có |
+| Nạp file, kết nối và chụp database, xóa bảng và nguồn | Có | Không (403) |
+| Đổi tên, xóa workspace; thêm, đổi vai, xóa thành viên | Có | Không (403) |
+| Tạo, sửa, xóa chỉ số; đổi cách gộp cột số đo; sửa khái niệm ngành | Có | Không (403) |
+| Tạo vai dữ liệu, đặt luật, gán vai | Có | Không (403) |
+| Duyệt câu mẫu, xem nhật ký lỗi, viết và bật bài học | Có | Không (403) |
 
-Dòng sửa mô tả cột, bí danh chưa có endpoint; cũng chưa có lưu riêng một câu
-hỏi. Câu đã trả lời, bị từ chối hay lỗi đều được ghi vào lịch sử; mỗi
-người mới xem lại được câu hỏi của mình qua danh sách cuộc trò chuyện (mục 8), chưa có màn xem lịch sử chung. Khi
-thêm, việc chỉ admin làm được gọi `member.require_admin()` ở đầu service hoặc handler, kèm test cho cả hai vai.
+Việc chỉ admin làm được gọi `member.require_admin()` ở đầu service hay handler, kèm test cho cả hai vai.
 
-Quản trị hệ thống (`users.is_system_admin`) là thuộc tính của tài khoản, không phải vai trong workspace. Quản trị hệ
-thống quản lý tài khoản, xem danh sách mọi workspace kèm thành viên (`GET /api/admin/workspaces`), nhưng không tự có
-quyền vào dữ liệu của workspace mình không thuộc: gọi vào đó nhận 404 như mọi người ngoài. Quản trị hệ thống chỉ định
-được admin cho bất kỳ workspace nào, lúc nào cũng được, kể cả chính mình (`POST /api/admin/workspaces/{id}/admins`);
-dùng khi workspace mất admin, ví dụ admin cuối nghỉ việc và bị khóa tài khoản. Vì vậy tách quyền giữa quản trị hệ
-thống và dữ liệu workspace chỉ là tách mềm: mỗi lần chỉ định ghi một dòng log mức cảnh báo trong log của máy chủ,
-chưa lưu vào database.
+## 6. Dataset, bảng và nạp dữ liệu
 
-Thành viên mới phải có tài khoản đang hoạt động, do quản trị hệ thống tạo; admin thêm họ theo email. Vì ai cũng tạo được
-workspace của mình, mọi người đăng nhập đều biết được một email có tài khoản trong bản cài hay không, và thêm được người
-khác vào workspace mà không cần họ đồng ý (người bị thêm tự rời được). Chấp nhận vì một bản cài phục vụ một tổ chức,
-tài khoản là của người trong tổ chức đó.
+Một dataset là một database đã kết nối hay một file đã nạp; bảng nằm bên trong. Trong Postgres dòng `sources` là dataset
+và dòng `datasets` là bảng ([SCHEMA.md](SCHEMA.md#điểm-hay-hiểu-nhầm)). Gắn theo dataset: tên, gói ngành, tên chỉ số
+(không trùng trong một dataset), câu mẫu, bài học. Gắn theo bảng: phiên bản, hồ sơ cột, quan hệ, luật lọc dòng, lịch sử
+câu hỏi, nên câu hỏi cũ và dòng nguồn trỏ đúng phiên bản bảng đã đọc.
 
-Bốn vai Owner, Admin, Analyst, Viewer của bản thiết kế đầu được gộp còn hai (migration `0003_two_roles.sql`): hai vai đủ
-cho nhóm nhỏ, tách thêm sau này chỉ cần thêm giá trị vào ràng buộc của cột `role` và một dòng trong bảng trên.
+Mô hình viết SQL trên tên bảng logic; guard đổi tên đó thành thư mục Parquet của phiên bản đang dùng
+(`<DATA_DIR>/<workspace>/<dataset>/<bảng>/<phiên bản>/`, mỗi file gốc một `part-NNNN.parquet`, cột `_source_file` ghi
+file hay sheet gốc). Bảng Postgres được chụp thành Parquet như file nạp, nên guard, prompt và lịch sử không phân biệt hai
+nguồn:
 
-## 5. Nạp dữ liệu và lấy ngữ cảnh
+- Nạp file: CSV, Parquet, Excel (sheet đổi sang CSV bằng `calamine` trong một tiến trình con có trần RAM và CPU). Nhiều
+  file cùng cột gộp thành một bảng.
+- Chụp database: mặc định DuckDB đọc thẳng Postgres bằng extension `postgres` đóng gói sẵn (`SOURCE_SNAPSHOT_MODE=direct`);
+  không nạp được extension thì dùng `COPY` ra CSV (`copy`). Mọi bảng đọc trong một giao dịch `REPEATABLE READ`. Bảng quá
+  trần dung lượng chỉ lưu cấu trúc. Khóa ngoại khai báo giữa hai bảng đã chụp ghi vào `dataset_relations`; không đoán
+  quan hệ theo tên cột và không nối thành bảng phẳng (cột phía một sẽ lặp trên mọi dòng phía nhiều và bị cộng nhầm).
 
-**Dataset và bảng** (#257). Một dataset là một database đã kết nối hay một file đã nạp; bảng nằm bên trong. Trong
-Postgres tên bảng giữ như cũ để không phải sửa mọi câu SQL: dòng `sources` là một dataset (nguồn `postgres` là một
-database, nguồn `local_file` là một file và có đúng một bảng), dòng `datasets` là một bảng, nối qua
-`datasets.source_id`. Trong code, kiểu `Dataset` và mọi `dataset_id` cũ là bảng; kiểu mới của API
-(`service/catalog/contract.rs`: `DatasetSummary`, `DatasetTable`) dùng đúng nghĩa mới. Gắn theo dataset: tên, gói
-ngành (`sources.domain`), tên chỉ số (không trùng trong một dataset, `metrics.source_id`), câu mẫu và bài học (câu hỏi
-trên một bảng đọc câu mẫu, bài học viết trên mọi bảng cùng dataset). Gắn theo bảng: phiên bản, hồ sơ cột, quan hệ, bộ
-lọc dòng theo vai dữ liệu, lịch sử câu hỏi và bằng chứng, nên câu hỏi cũ và dòng nguồn vẫn trỏ đúng phiên bản bảng đã
-đọc. Tên bảng logic chỉ không trùng trong một dataset, vì mọi câu hỏi chỉ đọc bảng của một dataset. Migration
-`0017_dataset_tables.sql` chuyển dữ liệu cũ: mỗi nguồn database thành một dataset tên theo database, mỗi file một
-dataset; tên bảng logic đã có không đổi (SQL đã lưu dùng chúng).
+Định dạng nhận, trần, cách chụp, phiên bản, tên cột, hồ sơ cột: [DATA.md](DATA.md). Truy vấn thẳng database ngoài lúc
+hỏi chưa làm, cần quyết định riêng.
 
-Nạp chạy một lần cho mỗi phiên bản bảng, ba bước độc lập: đăng ký nguồn, lập hồ sơ, vật chất hóa.
+## 7. Ngữ cảnh và hỏi trên nhiều bảng
 
-| Lưu | Dùng để |
-|---|---|
-| File gốc chuyển sang Parquet trên volume: mỗi phiên bản một thư mục `<DATA_DIR>/<workspace>/<dataset>/<bảng>/<thư mục phiên bản>/` (phiên bản ghi trước #257 ở `<workspace>/<bảng>/<phiên bản>`, vẫn đọc được vì database lưu đường dẫn của từng phiên bản), mỗi file gốc một phần `part-NNNN.parquet` kèm cột `_source_file` ghi tên file gốc | DuckDB đọc cả thư mục như một bảng (`read_parquet` với `union_by_name`); nhiều file cùng cột (mỗi tháng một file) thành một bảng, truy dòng nguồn biết dòng đến từ file nào |
-| `sources`, `datasets`, `dataset_versions` | Nguồn (kind, cấu hình), tên, hồ sơ tại thời điểm, đường dẫn và hash nếu là file |
-| `columns`: tên, kiểu, vai trò (chiều, độ đo, thời gian), min, max, null, giá trị mẫu, mô tả và bí danh | Ghép vào prompt |
-| `column_values`: giá trị phân loại của cột ít giá trị, kèm bí danh | Ánh xạ "miền Nam" sang "South" |
+**Phạm vi.** Câu hỏi trên dataset database đọc được mọi bảng đã chụp, không giới hạn số bước theo quan hệ; dataset
+file chỉ có một bảng. Câu vẫn có một bảng bắt đầu: người hỏi ghim (`table_id`), không thì `pick_start_table`
+(`service/ask/scope.rs`) chọn bảng giữ cột số đo câu hỏi gọi tên, rồi bảng khớp tên, rồi khớp mô tả, rồi bảng của cuộc
+đang tiếp.
 
-File Excel (.xlsx) đọc bằng crate `calamine` (`engine/excel.rs`): mỗi sheet được chọn ghi thành CSV rồi đi tiếp như
-CSV, cột `_source_file` ghi tên sheet. Không dùng extension `excel` của DuckDB vì extension đó phải tải từ Internet lúc
-chạy và không liệt kê được sheet.
+**Bảng gửi chi tiết** (`service/ask/table_pick.rs`). Tổng metadata cột mọi bảng tới nửa trần prompt thì gửi đủ mọi bảng
+(hai database mẫu ở trường hợp này). Vượt thì gửi chi tiết bảng bắt đầu, bảng khớp chữ, bảng lượt phân loại chọn, bảng
+giữa trên đường khóa ngoại ngắn nhất, rồi bảng nối một bước khi còn dưới trần. Bảng còn lại và bảng chưa chụp chỉ có tên
+và một dòng mô tả trong danh sách gọn. SQL đọc bảng chỉ có trong danh sách gọn thì gửi lại một lần kèm chi tiết bảng đó.
+Bước `context` ghi bảng nào đã gửi chi tiết và vì sao.
 
-- Người dùng xem danh sách sheet (`POST .../datasets/sheets`: tên, sheet có ẩn không, tên cột, số dòng ước lượng) rồi
-  chọn. Không chọn thì file phải có đúng một sheet đang hiện.
-- Các sheet chọn cùng lúc phải cùng cột và gộp thành một dataset. Sheet khác cột thì nạp riêng từng lần, mỗi lần một
-  dataset: route nạp luôn trả về một dataset, giao diện gửi một lần nạp cho mỗi nhóm sheet cùng cột.
-- Dòng đầu có dữ liệu là dòng tiêu đề. Tên cột bỏ khoảng trắng hai đầu, ô tiêu đề trống lấy chữ cột Excel, tên trùng
-  thêm hậu tố, nên tên ở danh sách sheet trùng tên cột của dataset. Ô gộp và tiêu đề lệch dòng chưa hỗ trợ.
-- File Excel được đọc trong một tiến trình con (`xdi-backend excel-worker`, `engine/excel_worker.rs`) có trần RAM 2 GB
-  và 5 phút CPU, mỗi lúc một tiến trình. calamine tin những con số file tự khai, nên một file vài KB cố ý làm sai có
-  thể khiến nó cấp phát hàng trăm GB hay đọc rất lâu; khi đó chỉ tiến trình con dừng, request đó nhận 400, backend vẫn
-  phục vụ người khác. Client ngắt kết nối thì tiến trình con bị tắt theo. Trước khi đọc còn kiểm kích thước giải nén
-  (tổng tối đa 10 lần `MAX_UPLOAD_MB`, bảng chuỗi dùng chung tối đa 64 MB hoặc `MAX_UPLOAD_MB` nếu nhỏ hơn), số sheet
-  (100), độ dài tên sheet (100 ký tự), độ dài một dòng (16 MB) và dung lượng CSV ghi ra; kết quả tiến trình con trả về
-  tối đa 8 MB, để báo lỗi rõ thay vì để tiến trình con chạm trần. Một file như vậy vẫn giữ
-  lượt đọc Excel tới khi chạm trần, nên người khác nạp Excel lúc đó phải chờ.
+**Cột và giá trị** (`service/ask/context.rs`). Mọi cột của các bảng gửi chi tiết có metadata đủ; không bỏ cột nào khi
+prompt dài, chỉ rút cột không liên quan về dòng gọn. Danh sách giá trị của cột chiều không nhạy cảm gửi đủ khi tổng còn
+dưới trần, vượt thì chỉ cột liên quan. Một cụm khớp tên nhiều cột thì không hỏi lại: dùng cột điểm cao nhất và ghi các
+cột còn lại thành giả định đổi được. Các trần cụ thể ghi ở chú thích đầu `context.rs`, `prompt.rs`; số gửi đi ở
+[PRIVACY.md](PRIVACY.md).
 
-Mô tả và bí danh do mô hình ngôn ngữ viết một lần lúc nạp. Lúc hỏi, ngữ cảnh lấy từ ba nguồn trong Postgres:
+**Nối bảng.** Prompt có khối cột mỗi bảng, danh sách quan hệ và luật nối (`backend/prompts/sql_joins.txt`). Guard chỉ
+nhận phép nối đúng cột của một khóa ngoại đã ghi ([GUARD.md](GUARD.md#bước-2-bảng-hàm-cột-theo-danh-sách-được-phép)).
+Sau guard, `service/ask/fanout.rs` bắt câu SUM hay AVG cột của bảng phía một sau khi nối bảng phía nhiều; câu đó vào
+vòng sửa, sửa vẫn cộng lặp thì bị từ chối. Câu không trả lời được mà hai bảng không nối được qua chuỗi khóa ngoại nào
+thì lời báo nói hai bảng không có quan hệ. Response trả các bảng đã đọc (`tables_read`), lịch sử ghi phiên bản của
+chúng (`queries.read_versions`).
 
-| Tầng | Nguồn | Cách lấy |
-|---|---|---|
-| Schema context | `columns` | Câu hỏi tách thành cụm 1 đến 5 âm tiết; cụm bằng tên hay bí danh cột chọn cột đó, so có dấu khi cả hai bên có dấu, sau khi bỏ dấu khi một bên không dấu (cột `khu_vuc` khớp "khu vực"). Cả lượt phân loại lẫn lượt viết SQL nhận metadata đủ của mọi cột của mọi bảng câu hỏi đọc: tên, kiểu, vai trò, đơn vị, cách gộp, mô tả, bí danh (#230); cột nhạy cảm cũng vậy, không bao giờ kèm giá trị. Không bỏ cột nào khi prompt dài. Chỉ khi tổng metadata vượt 60 000 ký tự (cỡ 600 cột) thì cột không liên quan rút về dòng gọn (tên, kiểu, vai trò). Cột liên quan: khớp một cụm hay có gợi ý giá trị, lượt phân loại chọn (trường `columns`, dạng bảng.cột, tên không có thật bị bỏ; rơi về luật từ khóa thì rỗng), cột thời gian, cột khóa nối bảng, cột dùng trong công thức chỉ số. Khớp cụm dùng để chọn cột liên quan, gợi ý giá trị và giả định đổi được, không để lọc cột. Prompt SQL quá 24 000 ký tự thì bỏ giá trị mẫu trước, rồi giá trị của cột không liên quan; vẫn quá thì gửi nguyên và ghi log (Ollama cần `OLLAMA_NUM_CTX` lớn hơn với schema rất nhiều cột). Một cụm khớp tên của nhiều cột thì không hỏi lại: người hỏi đã chọn cột cho cụm thì dùng cột đó, không thì chọn cột điểm cao nhất (bằng điểm thì cột đứng trước trong bảng), trả lời ngay và ghi các cột còn lại thành giả định đổi được (id lựa chọn `column:<cụm đã bỏ dấu>`). Hỏi trước rồi mới trả lời bắt người hỏi chọn cả khi cách hiểu mặc định đã đúng |
-| Value mapping | `column_values` | Lượt viết SQL và prompt form câu "tại sao" nhận danh sách giá trị, kèm bí danh, nhiều dòng nhất trước; lượt phân loại không nhận giá trị nào. Người hỏi bị lọc dòng theo vai dữ liệu không nhận danh sách hay gợi ý giá trị nào, vì danh sách lấy từ hồ sơ của cả cột (`apply_question_columns`, `service/ask/group_prompt.rs`). Tổng giá trị của mọi cột chiều không nhạy cảm của mọi bảng câu hỏi đọc tới 1000 thì gửi đủ danh sách của mọi cột đó; vượt thì chỉ cột liên quan (như hàng trên: khớp chữ, cột lượt phân loại chọn, cột có giá trị khớp câu hỏi, thời gian, khóa nối, cột trong công thức chỉ số) nhận đủ giá trị, tới 200 giá trị mỗi cột, cột khác không có danh sách (#230). Cột nhạy cảm không bao giờ có giá trị. Câu SQL (hay `terms`) lọc theo một giá trị cột không có (luật `filter_value_not_found`) mà danh sách của cột đó chưa gửi đủ thì gọi lại lượt viết SQL đúng một lần kèm đủ giá trị của cột, ghi thành một bước `llm` ở tab Các bước (`service/ask/value_retry.rs`); đã gửi đủ thì giữ cảnh báo. Chỉ xét cột của bảng đang chọn, và không gửi lại cho người bị lọc dòng theo vai dữ liệu. Mô hình tự ánh xạ chữ người dùng sang giá trị trong danh sách ("miền Nam" thành `South`) và trả `{terms, sql}` (#29); endpoint hỏi (#33) báo `filter_value_not_found` khi một giá trị trong `terms` không có trong danh sách đủ của cột. Code chỉ thêm gợi ý khi một cụm từ hai âm tiết, không chứa từ chỉ thời gian, số hay từ nối, bằng chính xác một giá trị hay bí danh (dấu thanh kiểu cũ và mới là một). Giá trị tải một lần cho mỗi phiên bản rồi giữ trong bộ nhớ (32 phiên bản, 200 000 chuỗi); tải quá 2 giây thì đi tiếp không có giá trị |
-| Few-shot | `queries` được người hỏi đánh giá Tốt và admin duyệt làm câu mẫu (#212) | Từ khóa trùng, tối đa 3 câu |
+**Câu hỏi nguyên nhân.** Form chỉ nêu cột của bảng bắt đầu; phân rã xét thêm cột chiều của bảng nối nhiều-một, tới hai
+bước (`BREAKDOWN_MAX_HOPS`, `service/explain/source.rs`).
 
-Cột `embedding` có sẵn trên ba bảng; trait sẽ có thêm `embed`. Khi so chuỗi không đủ (cách diễn đạt không lường trước,
-nguồn nhiều bảng), bật tìm theo vector trong cùng Postgres, gộp với so chuỗi thành một danh sách ứng viên.
+**Câu mẫu và bài học.** Tối đa 3 câu mẫu admin đã duyệt có từ khóa trùng với câu hỏi, và tối đa 3 bài học đã bật, vào
+prompt.
 
-## 6. Engine không biết trước schema
+## 8. Chọn biểu đồ
 
-Mọi thứ phụ thuộc cột được suy ra lúc nạp, không ghi cứng:
+Luật theo IBCS (International Business Communication Standards) và *Say It With Charts* của Gene Zelazny. Chọn đúng
+phải biết bốn điều về kết quả: so sánh gì, số đo cộng được không, bao nhiêu nhóm hay kỳ, các số đo cùng đơn vị không.
+`service/ask/chart.rs` đọc vai trò cột, hàm tổng hợp trong SQL đã chạy và `columns.unit`; giao diện vẽ từ chính các
+dòng của kết quả. Biểu đồ của trang tổng quan đi qua cùng hàm.
 
-| Phụ thuộc schema | Cách làm |
-|---|---|
-| Prompt | Ghép từ `columns` và `column_values` |
-| Phân quyền theo dòng | `rls_policies` theo vai dữ liệu: bảng, cột chiều, giá trị; cột phải có trong hồ sơ |
-| Câu "tại sao" | Vai trò cột từ hồ sơ: chuỗi ít giá trị là chiều, số là độ đo, ngày là thời gian |
-| Câu hỏi gợi ý | Sinh từ hồ sơ lúc nạp, lưu lại |
-| Biểu đồ | Theo vai trò cột, loại số đo và đơn vị của kết quả; luật ở mục 6b |
-
-Mô hình ngôn ngữ sinh SQL trên tên bảng logic. Engine resolve tên logic thành nguồn vật lý, hiện luôn là file Parquet
-của một phiên bản. Nguồn Postgres (#165) chụp bảng thành phiên bản Parquet như nạp file (đọc bằng sqlx `COPY`, không
-qua extension của DuckDB vì extension phải tải từ Internet lúc chạy), nên không đổi guard, prompt hay lịch sử. Nhiều
-bảng liên quan chụp cùng lúc thành nhiều dataset, khóa ngoại giữa chúng ghi vào `dataset_relations`, không nối thành
-một bảng phẳng (cột của bảng phía một sẽ lặp lại trên mọi dòng phía nhiều và bị cộng nhầm). Truy vấn thẳng database
-ngoài lúc hỏi để sau, cần quyết định riêng.
-
-Hỏi trên cả một dataset (#257, #249, `POST .../catalog/{id}/ask`): câu hỏi đọc được mọi bảng đã chụp của database,
-không giới hạn số bước theo quan hệ; dataset nạp từ file đứng riêng, chỉ đúng bảng đó. Câu vẫn có một bảng bắt đầu,
-bảng neo của ngữ cảnh cột, lựa chọn, chỉ số, lịch sử và truy dòng nguồn. Người hỏi ghim bảng bằng `table_id`, không thì
-`pick_start_table` (`service/ask/scope.rs`) chọn: bảng giữ cột số đo câu hỏi nhắc tới (bảng sự kiện, như
-`order_items` của "doanh thu"), rồi bảng có nhiều cụm từ trùng tên bảng, tên cột hay bí danh cột nhất, rồi bảng có
-nhiều cụm trùng mô tả bảng hay mô tả cột, rồi bảng của cuộc đang tiếp, bảng giữ nhiều khóa ngoại, bảng nhiều dòng.
-
-Bảng nào gửi chi tiết cho mô hình (`service/ask/table_pick.rs`): tổng metadata cột mọi bảng tới nửa trần prompt (12 000
-ký tự) thì gửi đủ mọi bảng, không có bước chọn (hai database mẫu ở trường hợp này). Vượt trần thì gửi chi tiết hợp của:
-bảng bắt đầu, bảng khớp chữ (tên, mô tả bảng, tên chỉ số, cột khớp câu hỏi kể cả qua giá trị), bảng lượt phân loại chọn
-từ danh sách gọn (`classify` trả thêm `tables`), các bảng giữa trên đường khóa ngoại ngắn nhất tới chúng, và bảng nối
-một bước khóa ngoại (bảng có cột thời gian trước) khi còn dưới trần. Bảng còn lại và bảng chưa chụp, mới có metadata
-(#247, ghi "no data yet"), nằm trong danh sách gọn của prompt: tên và một dòng mô tả (`COMMENT ON TABLE`, không có thì
-tên vài cột). Câu SQL đọc bảng chỉ có trong danh sách gọn, hay mô hình ghi bảng đó vào `needed_tables`, thì luồng hỏi
-gửi lại một lần kèm chi tiết bảng đó trước khi qua guard (`service/ask/missing_tables.rs`). Câu không trả lời được mà
-SQL đọc hai bảng không nối được qua chuỗi khóa ngoại nào thì lời báo nói hai bảng không có quan hệ trong database. Bước
-context ghi các bảng đã gửi chi tiết và vì sao, khung Minh chứng hiện lại. Chưa có: chọn bảng theo embedding chạy tại
-chỗ, đo độ phủ bảng trên bộ đánh giá.
-
-Hỏi trên một bảng có quan hệ (#213, `service/ask/related.rs`): câu thường được đọc thêm các bảng cùng database (nối
-hay không nối qua `dataset_relations`), chỉ dataset có phiên bản đang dùng và đã lập hồ sơ. Mỗi bảng vào guard với bộ lọc dòng của riêng nó. Prompt SQL có một khối cột mỗi bảng, danh sách quan
-hệ dạng `order_items.order_id = orders.order_id (many order_items rows per orders row)` và luật nối bảng
-(`backend/prompts/sql_joins.txt`): chỉ nối theo quan hệ đã liệt kê, ghi tên bảng trước cột, gộp bảng phía nhiều trước
-khi SUM hay AVG cột của bảng phía một. Guard kiểm lại luật nối (#256): phép nối giữa hai bảng phải đúng cột của một
-khóa ngoại đã ghi, hai bảng không có quan hệ thì không được nối ([GUARD.md](GUARD.md), mục Nối bảng). Trần metadata và trần 1000 giá trị tính chung cho mọi bảng; trần 24 000 ký tự tính trên
-cả prompt. Hỏi lại khi một cụm khớp nhiều cột, giả định cột và cảnh báo giá trị lọc không có chỉ xét bảng đang chọn,
-vì tên cột ở đó không kèm tên bảng. Câu "tại sao" vẫn đọc một bảng chính; truy dòng nguồn truy được câu nối bảng (mục 8). Guard báo các bảng câu đã đọc; response trả chúng trong `tables_read` và lịch sử ghi phiên bản của chúng vào
-`queries.read_versions`. Khi mô hình bỏ qua luật gộp trước, `service/ask/fanout.rs` (#214) bắt câu SUM hay AVG cột của
-bảng phía một sau khi nối bảng phía nhiều, sau guard và trước khi chạy: câu không chạy mà vào vòng sửa một lần, câu sửa
-vẫn cộng lặp thì bị từ chối. Luật và giới hạn ở [GUARD.md](GUARD.md), mục Kiểm cộng lặp sau guard.
-
-Bộ lọc dòng lan theo khóa ngoại (#215, `service/ask/row_filters.rs`): chính sách chỉ gắn với bảng có cột lọc, nên người
-bị lọc theo `customers.region` mà đọc `orders` (không có cột vùng) sẽ thấy đơn của mọi vùng. Vì vậy bảng trỏ tới một
-bảng bị lọc (theo `dataset_relations`, chiều khóa ngoại, đi hết mọi bước) nhận thêm điều kiện do code dựng
-`"customer_id" IN (SELECT "id" FROM "customers" WHERE <điều kiện của customers>)`. Điều kiện nằm trong hộp lọc của
-guard, nên áp ở mọi chỗ đọc bảng đó: câu thường, câu "tại sao", truy dòng nguồn, tổng quan dataset, kể cả khi chọn thẳng
-`orders` để hỏi. Hai đường tới bảng bị lọc, hay chính sách riêng cộng điều kiện lan, nối `AND`. Khóa ngoại rỗng: một
-đường thì dòng bị ẩn; nhiều đường thì đường rỗng được bỏ qua (khóa tùy chọn), nhưng mọi đường rỗng thì ẩn. Chi tiết và hạn chế ở [GUARD.md](GUARD.md), mục Bước 3. Vai và chính sách vẫn chưa đặt được qua API (#45).
-
-## 6b. Chọn biểu đồ
-
-Biểu đồ là cách người đọc báo cáo tài chính so số, nên luật theo chuẩn của họ chứ không tự đặt: IBCS (International
-Business Communication Standards), cùng *Say It With Charts* của Gene Zelazny cho cách chia loại so sánh. Một luật duy
-nhất không đủ, vì chọn đúng phải biết bốn điều về kết quả: so sánh gì (các nhóm, theo thời gian, cơ cấu theo thời
-gian, chênh lệch hai kỳ), số đo cộng được hay không (tổng, đếm so với trung bình, tỷ lệ), có bao nhiêu nhóm hay kỳ, và
-các số đo cùng đơn vị không. Chọn sai làm người đọc hiểu sai: nối đường giữa các nhóm như thể chúng liên tục, cột
-không bắt đầu từ 0 làm chênh lệch nhỏ trông lớn, hai trục khác thang đo làm hai số đo trông cùng chiều hay ngược chiều
-tùy cách chọn thang.
-
-`service/ask/chart.rs` chọn từ vai trò cột (`service/understanding/mod.rs`), cây SQL đã chạy (loại hàm tổng hợp) và
-đơn vị trong hồ sơ cột (`columns.unit`, [Dữ liệu](DATA.md)); giao diện vẽ từ chính các dòng của `result`. Biểu đồ
-dựng sẵn của trang tổng quan dataset (`service/overview/charts.rs`) đi qua cùng hàm, kể cả số dòng theo giá trị lấy từ
-hồ sơ: luật đọc câu `GROUP BY` lẽ ra tính ra bảng đó.
-
-1. Một khóa là nhóm (doanh thu theo thị trường): thanh ngang, xếp lớn trước, vì IBCS đặt cấu trúc trên trục đứng và tên
-   nhóm dài vẫn đọc được. Quá 15 nhóm thì vẽ 15 nhóm lớn nhất; số đo cộng được và đủ dòng thì phần còn lại gộp "Khác".
-   IBCS không đặt số cho thanh đơn: 15 chọn ở đây.
-2. Một khóa là thời gian: thời gian luôn trên trục ngang (IBCS). Tới 10 kỳ là cột đứng, hơn 10 kỳ là đường có điểm
-   đánh dấu ở từng kỳ (mẫu C07 của IBCS: đường hợp khi hơn 10 kỳ).
+1. Một khóa là nhóm: thanh ngang, xếp lớn trước. Quá 15 nhóm thì vẽ 15 nhóm lớn nhất, số đo cộng được và đủ dòng thì
+   phần còn lại gộp "Khác". IBCS không đặt số cho thanh đơn; 15 chọn ở đây.
+2. Một khóa là thời gian: thời gian trên trục ngang. Tới 10 kỳ là cột đứng, hơn 10 kỳ là đường có điểm ở từng kỳ.
 3. Một dòng: không vẽ, bảng đã hiện con số.
-4. Thời gian và một nhóm, một số đo: số đo cộng được và tới 25 kỳ thì cột chồng, tối đa 6 phần (5 nhóm lớn nhất cộng
-   "Khác"), theo mẫu C01 của IBCS. Số đo không cộng được (trung bình, đếm phân biệt) hay quá 25 kỳ thì mỗi nhóm một
-   đường, khi không quá 5 nhóm (số này chọn ở đây); nhiều hơn thì chỉ bảng. Không dùng biểu đồ tròn: IBCS không xếp nó
-   vào các loại chính, Zelazny khuyên dùng cho dưới 5% số biểu đồ.
-5. Câu "tại sao": thác nước (tổng kỳ trước, phần tăng giảm của từng nhóm, tổng kỳ sau), loại IBCS dùng cho phân tích
-   chênh lệch; vẽ từ `explanation`, không qua `chart`.
-6. Nhiều số đo khác đơn vị hay chưa biết đơn vị: mỗi số đo một biểu đồ nhỏ, chung trục nhóm hay thời gian, không dùng
-   hai trục.
-7. Nhiều số đo cùng đơn vị (số ngày giao thực tế và dự kiến; doanh thu năm nay và năm trước): cạnh nhau trên một thang
-   đo.
+4. Thời gian và một nhóm: số đo cộng được và tới 25 kỳ thì cột chồng, tối đa 6 phần (5 nhóm lớn nhất cộng "Khác"). Số đo
+   không cộng được hay quá 25 kỳ thì mỗi nhóm một đường khi không quá 5 nhóm; nhiều hơn thì chỉ bảng. Không dùng biểu
+   đồ tròn.
+5. Câu hỏi nguyên nhân: vẽ từ phân rã, không qua `chart`. Giao diện hiện thanh hai phía cho đóng góp từng nhóm; thác
+   nước chưa làm.
+6. Nhiều số đo khác đơn vị hay chưa biết đơn vị: mỗi số đo một biểu đồ nhỏ, chung trục, không dùng hai trục.
+7. Nhiều số đo cùng đơn vị: cạnh nhau trên một thang đo.
 
-Chung cho mọi biểu đồ: cột và thanh bắt đầu từ 0; số đo không cộng được vẽ cột hẹp (IBCS: rộng 1/3 thay vì 2/3) và
-không bao giờ gộp "Khác"; tối đa 4 số đo; hai khóa đều là nhóm, hay ba khóa trở lên, thì chỉ bảng.
+Chung: cột và thanh bắt đầu từ 0; số đo không cộng được vẽ cột hẹp và không gộp "Khác"; tối đa 4 số đo; hai khóa đều là
+nhóm, hay ba khóa trở lên, thì chỉ bảng.
 
-## 7. Dữ liệu thay đổi
+## 9. Phiên bản
 
-Mỗi lần nạp file là một phiên bản, không ghi đè. `queries` trỏ tới `version_id`.
+Mỗi lần nạp file, hay chụp lại một bảng có nội dung đổi, là một phiên bản mới, không ghi đè. Nội dung trùng hash thì
+không tạo phiên bản. `queries` ghi phiên bản của mọi bảng đã đọc, nên câu hỏi cũ, dòng nguồn và mục báo cáo chạy lại
+đúng dữ liệu lúc hỏi. Nguồn database chụp lại khi admin bấm hay theo lịch (`SOURCE_RESNAPSHOT_HOURS`).
 
-- Hash SHA-256: trùng thì bỏ qua, khác thì phiên bản mới.
-- So hồ sơ cũ và mới cho ra khác biệt schema: cột mất, thêm, đổi kiểu, giá trị phân loại mới. Hiện cho người dùng
-  trước khi chuyển phiên bản hiện hành; cảnh báo nếu chính sách phân quyền trỏ tới giá trị không còn.
-- Nguồn sống: phiên bản là bản chụp hồ sơ tại thời điểm, làm mới theo lịch hoặc khi bấm.
+Chưa có: so schema giữa hai phiên bản (cột mất, thêm, đổi kiểu) trước khi đổi phiên bản hiện hành, và cảnh báo khi luật
+lọc dòng trỏ tới giá trị không còn. Hiện phiên bản mới thành hiện hành ngay.
 
-## 8. API
+## 10. API và hợp đồng
 
-REST và JSON. API dữ liệu nằm dưới workspace trong đường dẫn: `/api/workspaces/{ws}/catalog` (dataset kèm bảng),
-`/api/workspaces/{ws}/catalog/{id}/ask`, `/api/workspaces/{ws}/datasets/{id}/...` (route của một bảng; tên `datasets`
-trong đường dẫn có từ trước #257, khi mỗi bảng còn gọi là một dataset). Workspace đang làm việc không lưu trong phiên,
-nên mỗi tab trình duyệt làm việc độc lập, tab này không đổi workspace của tab kia. Mỗi request kiểm phiên (chưa đăng
-nhập: 401) và kiểm người dùng thuộc workspace đó (không thuộc hoặc không có workspace: cùng một lỗi 404, không dò được
-tên workspace).
+REST và JSON, dưới `/api`. API dữ liệu nằm dưới workspace trong đường dẫn (`/api/workspaces/{ws}/catalog/...` cho
+dataset, `/api/workspaces/{ws}/datasets/{id}/...` cho một bảng), nên mỗi tab trình duyệt làm việc độc lập. Chưa đăng
+nhập: 401; không thuộc workspace hay workspace không có: cùng một 404. Câu hỏi không trả lời được vẫn trả 200, lý do
+nằm ở `status` (`answered`, `needs_choice`, `rejected`, `failed`), để giao diện hiện cùng minh chứng. Route, trường và
+mã lỗi: [API.md](API.md).
 
-OpenAPI 3.1 sinh từ code bằng `utoipa`: mỗi handler khai báo đường dẫn, tham số, request và response bằng
-`#[utoipa::path]`, struct request và response derive `ToSchema`. Router đăng ký handler qua `OpenApiRouter` của
-`utoipa-axum` (`api/mod.rs`), nên route có trong router thì có trong đặc tả; phần chung (tên API, địa chỉ gốc `/api`,
-cookie phiên, kiểu lỗi `{code, message}`) ở `api/openapi.rs`. Mô tả trong đặc tả viết tiếng Anh, vì người đọc là người
-dùng API.
+OpenAPI 3.1 sinh từ code bằng `utoipa`; router đăng ký handler qua `OpenApiRouter`, nên route có trong router thì có trong
+đặc tả. Đặc tả ở `/api/openapi.json`, Swagger UI (kèm sẵn trong binary) ở `/api/docs`.
 
-Đặc tả phục vụ ở `/api/openapi.json`, Swagger UI ở `/api/docs`; cả hai không cần đăng nhập, gọi thử endpoint thì cần
-cookie phiên như giao diện. Swagger UI kèm sẵn trong binary (feature `vendored` của `utoipa-swagger-ui`), build không
-tải gì từ Internet; thông báo giấy phép của nó ở `/api/docs/licenses.txt` (LICENSES.md). Công khai đặc tả không lộ gì
-mới: mọi đường dẫn đã có trong file JavaScript của giao diện, vốn tải được khi chưa đăng nhập, và đặc tả không chứa bí
-mật. Swagger UI chạy cùng địa chỉ với cookie phiên (httpOnly, SameSite=Lax), nên một lỗi XSS của Swagger UI sẽ gọi được
-API bằng quyền người đang mở trang; chấp nhận ở giai đoạn này. Tham số `?url=` của Swagger UI bị bỏ qua (cấu hình cố
-định), nên không nạp được đặc tả từ nơi khác.
-
-Hợp đồng nằm trong repo:
-
-| File | Sinh từ | Kiểm lệch |
+| File hợp đồng | Sinh từ | Kiểm lệch |
 |---|---|---|
-| `openapi.json` (gốc repo) | `xdi-backend openapi`, không cần database | Test `openapi_json_is_up_to_date` trong `make check-fast` (CI job backend, hook pre-push) |
-| `frontend/src/api/schema.ts` | `openapi.json`, bằng `openapi-typescript` (`frontend/scripts/api-types.mjs`) | `npm run api:check` trong `make check-frontend` (CI job frontend) |
-| `frontend/src/api/examples/ask.json` | `xdi-backend ask-examples` (`service/ask/examples.rs`), không cần database | Test `ask_examples_json_is_up_to_date` trong `make check-fast` |
+| `openapi.json` | `xdi-backend openapi` | Test `openapi_json_is_up_to_date` trong `make check-fast` |
+| `frontend/src/api/schema.ts` | `openapi.json`, bằng `openapi-typescript` | `npm run api:check` trong `make check-frontend` |
+| `frontend/src/api/examples/ask.json` | `xdi-backend ask-examples` (`service/ask/examples.rs`) | Test `ask_examples_json_is_up_to_date` |
 
-Đổi API: sửa handler hoặc struct, chạy `make openapi`, commit cả ba file. Hook trong `frontend/src/api` lấy kiểu từ
-`schema.ts`, không khai lại. Khái niệm chung (phiên, workspace, vai) và bảng mã lỗi: [API.md](API.md).
+Kiểu request và response của hỏi dữ liệu và truy dòng nguồn ở `service/ask/contract.rs`, `service/drill/contract.rs`
+(service dựng response mà không gọi ngược lên `api/`). Đổi API: sửa handler hay struct, chạy `make openapi`, commit cả ba
+file.
 
-### Hỏi dữ liệu
+**Truy dòng nguồn** (`service/drill/`). Request gửi `query_id` và khóa của chỗ được bấm, không gửi SQL. Backend dựng câu
+từ `sql_guarded` đã lưu: giữ FROM, JOIN, WHERE, thêm điều kiện khóa của ô, bỏ GROUP BY; cho qua guard với vai dữ liệu
+của người đang bấm, chạy trên phiên bản câu hỏi đã đọc. Câu nối bảng trả dòng của bảng mà độ đo cộng, kèm cột khóa và cột
+lọc của bảng nối; mỗi độ đo tính lại trên mọi dòng nguồn để so với ô. Câu có phép tập hợp, HAVING, hàm cửa sổ, bảng tạm
+gộp nhóm trả 400 kèm lý do.
 
-`POST /api/workspaces/{ws}/catalog/{id}/ask` (hỏi trên dataset, thêm `table_id`) và route cũ `POST
-/api/workspaces/{ws}/datasets/{id}/ask` (id bảng) nhận `{question, choices, conversation_id}` và trả một `AskResponse`,
-JSON một lần, không SSE: giao diện gọi bằng `useMutation` và chờ đủ gói. Kiểu nằm ở `service/ask/contract.rs` chứ không
-ở `api/`, vì service dựng response mà không được gọi ngược lên api; nghĩa từng trường ghi trong đặc tả.
-`service/ask/mod.rs` ghép các bước của mục 2 cho câu thường ([#33](https://github.com/pgiahuy/xdi-platform/issues/33)).
-Câu answered có thẻ "Hệ thống đã hiểu là", vai trò cột và gợi ý biểu đồ (`service/ask/view.rs`). Câu "tại sao" rẽ sang
-`service/ask/why.rs` sau bước context: gọi `run_why` ([#38](https://github.com/pgiahuy/xdi-platform/issues/38)), thẻ "Đã
-hiểu là" dựng từ form đã kiểm (`service/understanding/why.rs`), ghi `{form, explanation}` vào `queries.explanation` để
-truy dòng phân rã. Mọi SQL của cả hai đường qua guard với lọc dòng theo vai dữ liệu của người hỏi (admin không bị lọc).
-Cảnh báo kiểm hợp lý ([#36](https://github.com/pgiahuy/xdi-platform/issues/36)) dựng ở `service/ask/checks.rs` sau khi
-chạy, không đổi `status`; câu "tại sao" chỉ nhận `empty_result`.
+**Báo cáo** (`service/report/`). Mục báo cáo trỏ tới một câu hỏi đã trả lời; mở báo cáo hay xuất Excel thì chạy lại SQL
+đã lưu qua guard với quyền của người xem, trên phiên bản câu hỏi đã đọc. Báo cáo tự động dựng SQL bằng code (độ đo chính
+theo thời gian và theo hai cột chiều), lời qua kiểm số và kiểm nghĩa. PDF là bản in của trang báo cáo trên trình duyệt.
 
-| Điểm | Chọn | Vì sao |
-|---|---|---|
-| Câu không trả lời được | Vẫn 200, `status` trong body: `answered`, `needs_choice` (câu mơ hồ), `rejected` (guard từ chối), `failed` (SQL chạy lỗi cả sau vòng sửa, mô hình lỗi trong vòng sửa, câu trả lời của mô hình không đọc được cả sau vòng sửa, hoặc câu chạy quá thời gian hay quá bộ nhớ), kèm `message` tiếng Việt. Mã lỗi chỉ cho request sai (400), quyền (401, 404), dịch vụ mô hình lỗi (502) hay chưa cấu hình (503) khi chưa có SQL nào | Các trường hợp này là kết quả bình thường, phải hiện cùng bằng chứng: SQL bị từ chối, các bước, lựa chọn; `ErrorBody` chỉ có `code` và `message`. `useMutation` coi mã lỗi là lỗi, giao diện sẽ phải gỡ dữ liệu ra khỏi lỗi. Câu bị từ chối và câu lỗi vẫn ghi vào `queries` (status `rejected`, `error`) nên có `query_id`. Câu mơ hồ không ghi; nó đến sau khi gọi mô hình (mô hình hỏi lại, hay câu "tại sao" không xác định được độ đo hay hai lát cắt, [#38](https://github.com/pgiahuy/xdi-platform/issues/38)). Một từ khớp nhiều cột không hỏi lại mà thành giả định đổi được |
-| Giá trị ô | Mỗi cột có `kind`, ô là giá trị JSON theo `kind`, quyết định theo kiểu cột chứ không theo từng giá trị. Số nguyên tới 32 bit, FLOAT, DOUBLE: số JSON (NaN, vô cực thành null). BIGINT, HUGEINT, DECIMAL: chuỗi chữ số thập phân. Ngày `YYYY-MM-DD`, giờ ISO 8601 (TIMESTAMPTZ đổi sang UTC, có `Z`). NULL: null | Số JavaScript chỉ giữ đúng số nguyên tới 2^53 và làm tròn số thập phân, mà con số là bằng chứng. Cùng một cột luôn một dạng, giao diện đọc theo `kind` thay vì đoán từng ô. `COUNT` trả BIGINT nên số đếm cũng là chuỗi; vẽ biểu đồ hay sắp xếp thì đổi bằng `Number()` |
-| Cột | Tên cột trong `result.columns` là duy nhất: DuckDB trả tên trùng nguyên văn, nên backend đổi từ trái sang phải, tên đã dùng nhận hậu tố `_2`, `_3`... nhỏ nhất mà không cột nào có (`a, a, a_2` thành `a, a_3, a_2`), bằng `build_unique_names` trong `service/ask/contract.rs`, drill dùng lại đúng hàm này; `chart`, tiêu đề CSV và khóa truy dòng nguồn trỏ cột bằng tên. Mỗi cột có `role`: `dimension`, `time`, `measure`, `other`, lấy từ cây cú pháp | Tên đọc được hơn chỉ số và đủ khi đã duy nhất. `role` cho giao diện biết ô nào bấm được (độ đo) và khóa của dòng (các cột `dimension`, `time`) |
-| Số dòng | `rows` là mảng theo thứ tự cột, tối đa 1000 dòng đầu. `total_rows` là số dòng SQL sau guard trả về; `truncated` khi gửi ít hơn `total_rows`; `limit_reached` khi `total_rows` chạm trần số dòng của guard, dù guard thêm LIMIT hay hạ LIMIT có sẵn (kết quả đầy đủ có thể còn nữa) | Mảng gọn hơn object theo tên cột. 1000 dòng đủ cho bảng và biểu đồ của kết quả đã gộp. Giao diện của v0.1.0 phân trang trong các dòng đã gửi; khi `truncated` ghi rõ "1000 trên N dòng", khi `limit_reached` ghi "ít nhất N dòng" để không nói sai tổng. Tải CSV lấy đúng các dòng đã gửi, kèm ghi chú khi bị cắt. Tải đủ mọi dòng (endpoint riêng theo `query_id`, chạy lại SQL sau guard trên phiên bản đã lưu) làm sau. Trần của guard là `ASK_MAX_ROWS` (mặc định 100 000) và hiện ngay trong SQL |
-| Thẻ "Hệ thống đã hiểu là" | `understanding`: `measures`, `filters`, `group_by`, `order_by`, `limit`, `time_range`, mỗi mục có nhãn và đoạn SQL nó lấy ra; `filters` gồm cả điều kiện phân quyền guard thêm vào, nhãn nói rõ; `assumptions` là danh sách `Choice` đã chọn | [#35](https://github.com/pgiahuy/xdi-platform/issues/35) sinh từ cây cú pháp và kiểm từng mục khớp câu đã chạy; [#50](https://github.com/pgiahuy/xdi-platform/issues/50) vẽ chip từ `Choice`. Người dùng biết mình chỉ thấy một phần dữ liệu |
-| Đổi giả định, trả lời câu hỏi lại | Response nào cũng có `choices`: mọi lựa chọn đã áp dụng, kể cả mặc định và câu hỏi lại đã trả lời, cùng dạng `[{choice_id, option_id}]` của request. Hỏi lại thì gửi cùng câu hỏi kèm `choices` của response gần nhất, thay hoặc thêm mục vừa chọn. Người dùng sửa chữ câu hỏi thì đó là câu mới, giao diện gửi `choices` rỗng. Câu mơ hồ trả `clarifications`, cùng kiểu `Choice` nhưng chưa chọn. Id của lựa chọn ổn định cho cùng câu hỏi trên cùng phiên bản dữ liệu: đặt từ loại lựa chọn và đối tượng của nó (một từ và các cột ứng viên, kỳ để so sánh), như `region_column`, `base_period` trong mẫu, không đặt từ chữ của SQL. Id không nhận ra thì bỏ qua, không có trong `choices` trả về, kèm cảnh báo `choice_not_applied`: giả định dùng mặc định, câu hỏi lại thì được hỏi lại. Nếu `needs_choice` quay lại đúng câu vừa trả lời kèm cảnh báo đó, giao diện hiện `message` thay vì hỏi lại y nguyên | Backend không giữ trạng thái giữa hai lần hỏi, và giao diện chỉ cần response gần nhất: thiếu một lựa chọn đã trả lời thì backend sẽ hỏi lại chỗ đó mãi. Id sinh từ SQL sẽ đổi khi mô hình viết SQL khác ở lần hỏi sau, và câu "tại sao" hỏi lại sau khi gọi mô hình sẽ lặp mãi. Bỏ qua thay vì 400 vì một giả định có thể thật sự không còn khi SQL đổi; trả 400 thì người dùng kẹt. Câu đã sửa mà giữ lựa chọn cũ thì lựa chọn hoặc áp dụng ngầm, hoặc sinh cảnh báo khó hiểu |
-| Phân rã | `explanation`, chỉ có ở câu "tại sao": hai lát cắt (`base`, `compare`, mỗi lát có nhãn, điều kiện SQL, giá trị), chênh lệch, mỗi chiều một bảng đóng góp của từng nhóm kèm SQL đã chạy sau guard (chiều giải thích tốt nhất trước), tách lượng và giá kèm SQL, đoạn tóm tắt và cờ `summary_by_model`, các chiều đã bỏ kèm lý do (`dropped_dimensions`). `comparison` cho biết hai lát cắt là hai kỳ (`periods`, chữ "tăng", "giảm") hay hai nhóm cùng lúc (`groups`, chữ "cao hơn", "thấp hơn"); lời viết theo khuôn, prompt của mô hình và giao diện chọn chữ theo trường này. Không phân rã được thì cảnh báo `explanation_unavailable` nói lý do. Số là chuỗi chữ số thập phân; độ đo đổi sang DECIMAL ở từng dòng nguồn trước khi cộng, không làm tròn từng nhóm. Phần lượng và giá có một phép chia (giá = độ đo / lượng): giá làm tròn tới số chữ số cố định (#40 chọn) và là chỗ làm tròn duy nhất, `volume_effect` tính đúng từ giá đã làm tròn, `price_effect = change - volume_effect` nhận phần lệch do làm tròn. Bảng kết quả cộng theo kiểu cột (DOUBLE là số thực), nên giá trị hai lát cắt có thể lệch ô của bảng ở chữ số cuối; con số của phân rã lấy từ `explanation`. Độ đo tỷ lệ (`measure_kind` là `ratio`: chỉ số dạng AVG(x), SUM(a) / SUM(b), COUNT(...) / COUNT(*)) không cộng được theo nhóm: giá trị lát cắt và nhóm là tỷ lệ bốn chữ số thập phân, đóng góp của nhóm tách đối xứng theo Kitagawa thành `mix_effect` (tỷ trọng mẫu số của nhóm đổi) và `rate_effect` (tỷ lệ trong nhóm đổi), mỗi chiều có tổng hai phần; nhóm chỉ có ở một lát cắt lấy tỷ lệ của lát còn lại nên chỉ có phần cơ cấu; phần lệch làm tròn chia theo cách phần dư lớn nhất để tổng đóng góp bằng đúng chênh lệch; không có tách lượng và giá | Mọi con số kiểm được trên giao diện bằng SQL đứng sau nó ([#52](https://github.com/pgiahuy/xdi-platform/issues/52)). Phép cộng trên DECIMAL là đúng, nên tổng đóng góp bằng đúng chênh lệch ([#39](https://github.com/pgiahuy/xdi-platform/issues/39), [#40](https://github.com/pgiahuy/xdi-platform/issues/40)) và [#41](https://github.com/pgiahuy/xdi-platform/issues/41) so số trong lời với đúng các chuỗi này |
-| Biểu đồ | `chart`: `kind` (`bar` thanh ngang, `column` cột đứng, `line` đường, `stacked_column` cột chồng), `x` là trục nhóm hay thời gian, `y` các số đo, `layout` (`single`, `grouped` cạnh nhau, `panels` mỗi số đo một biểu đồ), `series` là cột chia phần hay chia đường, `ratio` các số đo không cộng được, `top` và `other_bucket` cho số nhóm vẽ và phần "Khác"; null thì chỉ hiện bảng | Luật ở mục 6b (`service/ask/chart.rs`). Gợi ý chỉ nêu tên cột, số liệu lấy từ `result` nên biểu đồ luôn khớp bảng |
-| Các bước | `steps`: tên bước, thời gian (ms), thành công hay không, chi tiết. `classify` là bước phân loại câu hỏi, chi tiết là loại câu kèm lý do của mô hình, hoặc lý do dùng luật từ khóa (khi đó `ok` là false). `explain` (code tính phân rã) tách khỏi `narrate` (mô hình viết lời); `repair` là lần mô hình sửa SQL, tối đa một lần: sau `run` lỗi, sau `guard` từ chối vì bất kỳ lý do nào, hoặc khi câu trả lời đầu của mô hình không đọc được (khi đó `repair` là bước đầu tiên; câu quá giờ hay quá bộ nhớ thì không sửa). Bước lỗi không nhất thiết dừng câu hỏi (`run` hay `guard` lỗi có thể theo sau là `repair`, `narrate` lỗi thì dùng câu khuôn); `status` cho biết câu hỏi có dừng không, và gọi theo bước đã dừng nó: guard thì `rejected`, chạy hay vòng sửa thì `failed` | Tab Các bước của pane Minh chứng hiện danh sách này, thấy được mô hình chỉ tham gia ở đâu; giao diện tự đặt nhãn cho từng tên bước |
+## 11. Hướng phát triển
 
-Truy dòng nguồn ([#34](https://github.com/pgiahuy/xdi-platform/issues/34)): `POST .../datasets/{id}/drill`, hợp đồng
-ở `service/drill/contract.rs`. Request gửi `query_id` cùng khóa của chỗ được bấm, không bao giờ gửi SQL. Bấm một ô của
-bảng: `cell`, giá trị các cột `dimension` và `time` của dòng đó, theo tên trong `result.columns`. Bấm một dòng phân rã:
-`breakdown`, lát cắt (`base` hay `compare`), cột (tên trong dataset, không phải tên trong `result.columns`) và giá trị
-của nhóm. Hai loại tên này khác nhau nên ở hai trường riêng. Client không đưa được SQL vào, và nạp phiên bản mới không
-làm drill ra số của phiên bản khác.
-
-| Điểm | Chọn | Vì sao |
-|---|---|---|
-| Dựng câu của ô | Từ `sql_guarded` đọc bằng `QueryShape`: giữ WITH, FROM (kể cả `JOIN` và hộp lọc phân quyền của người đã hỏi) và WHERE, thêm `(<biểu thức của cột khóa>) = <giá trị>` cho mỗi cột khóa (`IS NULL` khi ô trống), literal dựng trong cây; bỏ GROUP BY, ORDER BY, LIMIT; trang có `LIMIT`, `OFFSET`, cộng một câu `count(*)` kèm các độ đo tính lại. Tên cột khóa so với tên DuckDB trả cho câu gốc (chạy lại câu đó với `LIMIT 0`) | Đó là câu đã ra con số người dùng thấy. DuckDB tự đặt tên cột (`SELECT market` trên cột `Market` ra tên `Market`), đoán từ cây thì lệch. Khóa phải đủ mọi cột nhóm, thiếu thì trang gồm dòng của nhiều ô |
-| Quyền | Guard với vai dữ liệu của người đang bấm, chạy trên `version_id` của câu hỏi | Câu do admin hỏi, thành viên bị lọc bấm vào chỉ thấy phần của mình; hộp lọc của người hỏi giữ lại nên không ai thấy dòng ngoài con số |
-| Câu nối bảng | Câu đọc một chỗ: `SELECT *`. Câu nối bảng (`service/drill/sources.rs`, `service/drill/columns.rs`): `<bảng>.*` của bảng mà độ đo cộng (bảng duy nhất độ đo đọc cột; không thì gốc của chuỗi nhiều-một, như `order_items` dưới `orders`, `customers`), rồi cột khóa nhóm và cột lọc thuộc bảng nối khác (tên theo cột kết quả hay `bảng.cột`). Response ghi `source_table` và `joined_columns`. Câu con, bảng tạm chỉ lọc, chọn cột hay nối bảng (như câu con `LEFT JOIN` của phân rã theo bảng liên quan, #227) truy được | Guard chỉ nhận nối đúng khóa ngoại (#256) và câu đã qua kiểm cộng lặp, nên mỗi dòng của phép nối là một dòng đã góp vào con số; giữ nguyên FROM thì tập dòng đúng là tập đã ra ô, bảng chọn chỉ quyết định cột nào hiện |
-| Tổng khớp ô | `measures`: mỗi cột tổng hợp tính lại một lần trên mọi dòng nguồn bằng đúng hàm của câu (`service/drill/measures.rs`). `SUM(x)` có thêm cột x của từng dòng trên trang (tên theo cột kết quả), `COUNT(*)` bằng số dòng, hàm khác (AVG, COUNT DISTINCT, tỷ lệ) chỉ có giá trị tính lại. Tab Dòng nguồn so giá trị đó với ô đã bấm | Người dùng thấy các dòng cộng ra đúng con số; lệch khi người bấm bị lọc hẹp hơn người hỏi, giao diện nói vậy. `SUM(CASE ...)` thì cột từng dòng là biểu thức CASE, dòng ngoài điều kiện trống |
-| Dạng chưa truy được | 400 "Câu hỏi này chưa truy được dòng nguồn: <lý do>": phép tập hợp, HAVING, hàm cửa sổ, ROLLUP, CUBE, GROUPING SETS, `*`, câu không có độ đo, khóa nhóm không có trong SELECT; bảng tạm hay câu con ở FROM gộp nhóm, DISTINCT, LIMIT, hàm cửa sổ, WITH lồng bên trong, WITH RECURSIVE; độ đo cộng trên bảng tạm hay câu con nối với bảng khác; hàm sinh bảng, LATERAL | Không trả dòng có thể sai: một dòng của bảng tạm gộp nhóm là tổng của nhiều dòng, không phải dòng nguồn |
-| Phân trang | `ORDER BY ALL` (sắp theo mọi cột của trang); mặc định 100 dòng, tối đa 1000 | Câu nối bảng không giữ thứ tự dòng giữa hai lần chạy: trước khi sắp, đọc hết 32 226 dòng nguồn của một ô trên database mẫu theo trang 1000 dòng chỉ ra 24 000 tới 27 000 mã dòng khác nhau; sau khi sắp ra đủ 32 226 (đo qua route drill, bản debug, mỗi trang khoảng 0,2 tới 0,3 giây). Có test các trang không trùng dòng |
-| Dòng phân rã | Đọc `queries.explanation`: câu SQL của chiều được bấm (`DimensionBreakdown.sql`, đã qua guard khi hỏi) và điều kiện của lát cắt được bấm; truy như một ô của câu chiều đó, cộng điều kiện lát cắt. Câu không có phân rã, hay chiều không có trong phân rã: 400 | Câu chiều đã mang mọi bộ lọc của câu hỏi, của chỉ số và hộp phân quyền của người hỏi, nên dùng lại đúng cách dựng câu của ô; câu chiều đọc cả hai lát cắt, nên phải thêm điều kiện lát cắt. Điều kiện và SQL luôn lấy từ chỗ đã lưu, request chỉ gửi tên |
-
-`service/ask/examples.rs` dựng năm response mẫu trên bảng `dataco`: câu "tại sao" có phân rã (`why`), câu một chiều một
-độ đo (`simple`), câu mơ hồ (`needs_choice`), câu bị guard từ chối (`rejected`), câu chạy lỗi cả sau vòng sửa
-(`failed`). Mẫu là example của response 200 trong đặc tả, và nằm ở `frontend/src/api/examples/ask.json` làm mẫu cho
-người viết giao diện. Test kiểm file khớp code và mẫu khớp schema trong đặc tả, vì TypeScript không kiểm được file JSON theo enum. Số trong mẫu, kể cả
-thời gian các bước, là số minh họa, không phải số tính hay đo trên dữ liệu thật.
-
-## 9. Hướng phát triển
-
-Bản hiện tại nhắm dự án cỡ nhỏ và vừa, một instance. Các giới hạn và đường nâng cấp:
+Bản hiện tại nhắm dự án cỡ nhỏ và vừa, một instance.
 
 | Giới hạn | Nguyên nhân | Đường nâng cấp |
 |---|---|---|
-| Một instance backend cho phần phân tích | DuckDB nhúng trong tiến trình; dữ liệu ứng dụng đã ở Postgres nên không vướng | Tách engine phân tích thành service riêng đọc Parquet trên object storage |
-| Phiên đăng nhập tự quản trong Postgres | Không có identity provider | OIDC (Zitadel, Keycloak); `auth/` là module riêng |
-| Dataset trên đĩa local | Volume docker | S3 hoặc MinIO, chỉ đổi phần nạp file trong `engine/analytics.rs` |
-| Một crate | Chưa có gì để tách | Rút engine hoặc guard thành crate trong workspace khi cần dùng lại |
-| Không cache, không queue | Chưa có tải | Redis cho cache câu hỏi, queue cho nạp file lớn, cắm vào tầng service |
-| Nguồn là file hoặc bản chụp bảng Postgres | Chụp giữ được bằng chứng tái lập | MySQL, SQLite; truy vấn thẳng database ngoài lúc hỏi |
+| Một instance backend cho phần phân tích | DuckDB nhúng trong tiến trình | Tách engine phân tích thành service đọc Parquet trên object storage |
+| Phiên đăng nhập tự quản | Không có identity provider | OIDC (Zitadel, Keycloak); `auth/` là module riêng |
+| Dataset trên đĩa local | Volume Docker | S3 hay MinIO, đổi phần ghi file trong `engine/analytics.rs` |
+| Một crate | Chưa có gì để tách | Rút engine hay guard thành crate trong workspace khi cần dùng lại |
+| Không cache, không queue | Chưa có tải | Cache câu hỏi, queue cho nạp file lớn, ở tầng service |
+| Nguồn là file hay bản chụp Postgres | Chụp giữ được bằng chứng tái lập | MySQL, SQLite; truy vấn thẳng database ngoài lúc hỏi |
+| Khớp chữ, chưa khớp theo nghĩa | Cột `embedding` có sẵn trên ba bảng nhưng chưa dùng | Tìm theo vector trong cùng Postgres |
+| Câu SQL chạy trong tiến trình backend | Phần đổi kết quả nằm ngoài trần bộ nhớ DuckDB ([GUARD.md](GUARD.md#hạn-chế-đã-biết)) | Chạy câu trong tiến trình con có trần RAM của hệ điều hành |
 
 Ba điều giữ cho các nâng cấp trên không phải viết lại: state đi qua `AppState`; hợp đồng API là tài liệu và kiểu dữ
 liệu; mọi lời gọi ra ngoài đi qua một chỗ để thêm retry, timeout, cache.
-
-## Trạng thái
-
-Cập nhật khi có thay đổi.
-
-| Phần | Trạng thái |
-|---|---|
-| Khung bốn tầng, `AppState`, `AppError`, cấu hình | Có |
-| `/api/health`, `/api/version`; mọi API dưới `/api`, đường dẫn API sai trả 404 JSON | Có |
-| OpenAPI (mục 8): đặc tả sinh từ code ở `/api/openapi.json`, Swagger UI ở `/api/docs`, `openapi.json` và kiểu TypeScript `frontend/src/api/schema.ts` trong repo, test và CI báo khi lệch code | Có |
-| Trait `LlmProvider` và ba cài đặt; `complete` nhận loại việc, câu hỏi gốc, prompt và JSON Schema của câu trả lời nếu cần | Mock trả lời các câu viết sẵn trên các bảng chụp từ database mẫu (`engine/llm/mock_answers_database.json`: hồ sơ ngữ nghĩa và câu gợi ý của 13 bảng, 17 câu thường của `eval/sales_joins.json` và `eval/edu.json` cộng một câu trên `student_daily_clicks`, phần lớn nối bảng, kèm câu phân loại) và trên DataCo (bảng logic `dataco`, `engine/llm/mock_answers.json`): 16 câu thường, trong đó một câu cố ý đọc sai định dạng ngày và có câu sửa để thử vòng sửa, ba câu để thử nhánh bị từ chối, chạy lỗi cả sau khi sửa và giá trị lọc không có trong cột; 5 câu "tại sao", trong đó một câu dữ liệu không trả lời được; câu phân loại cho cả 21 câu đó; cùng hồ sơ ngữ nghĩa và một lời diễn giải viết sẵn; câu trả lời sinh SQL là object `{terms, assumptions, clarify, unanswerable, sql}` (`service/ask/reply.rs`), Gemini nhận schema qua `responseJsonSchema`, Ollama qua `format`; Gemini (`generateContent`) và Ollama (`/api/generate`, kèm `options.num_ctx` theo `OLLAMA_NUM_CTX`) gọi qua HTTP, có timeout theo cấu hình, không theo chuyển hướng; lỗi trả lời hướng dẫn tiếng Việt với mã 502 (`upstream`, dịch vụ mô hình lỗi) hoặc 503 (`unavailable`, máy chủ thiếu cấu hình); khóa Gemini không vào log; hồ sơ ngữ nghĩa (#23) gọi `complete` sau mỗi lần nạp, kèm JSON Schema của câu trả lời (`service/semantic/schema.rs`); endpoint hỏi (#33) gọi `complete` để sinh SQL và sửa; đã chạy với Gemini thật trên DataCo (hồ sơ ngữ nghĩa và một câu thường, #135), Ollama mới thử với server giả |
-| Nạp dataset: `POST /api/workspaces/{ws}/datasets` (multipart, một hoặc nhiều file CSV hoặc Parquet, hoặc một file Excel kèm sheet đã chọn), mỗi lần nạp một phiên bản, bộ file trùng thì bỏ qua, giới hạn `MAX_UPLOAD_MB`; liệt kê sheet của file Excel ở `POST .../datasets/sheets`; xóa dataset cùng mọi phiên bản, hồ sơ, chỉ số, cuộc trò chuyện, lịch sử câu hỏi và file Parquet ở `DELETE .../datasets/{id}` (chỉ admin; migration `0011_delete_query_history.sql`, #187) | Có; sheet Excel khác cột nạp riêng từng lần; chưa xóa riêng một phiên bản hay chọn lại phiên bản cũ |
-| Nguồn database (`service/sources/`, `api/sources.rs`, [DATA.md](DATA.md)): admin thêm nguồn Postgres (thử kết nối trước khi lưu, máy chủ trong `SOURCE_ALLOWED_HOSTS`, thông tin kết nối mã hóa bằng `SOURCE_SECRET_KEY`), liệt kê bảng và view, chụp một bảng thành phiên bản Parquet qua đường nạp CSV, chụp lại thành phiên bản mới, xóa nguồn; trang Dữ liệu có khung "Kết nối database". Kết nối xong thì mặc định chụp mọi bảng, view tài khoản đọc được, admin bỏ tick bảng không muốn (#247), một giao dịch `REPEATABLE READ`, không giới hạn số bảng mà có trần dung lượng từng bảng (`SOURCE_TABLE_MAX_MB`) và cả lần (`SOURCE_SNAPSHOT_MAX_MB`), trần dòng (`SOURCE_MAX_ROWS`) chỉ khi đặt; bảng quá trần chỉ lưu metadata. Mỗi bảng thành một bảng của dataset là database đó (#257), bảng đã chụp thì thêm phiên bản, mọi khóa ngoại khai báo giữa các bảng đã chụp ghi vào `dataset_relations`; chụp lại cả dataset (`POST .../catalog/{id}/snapshot`) bằng tay hay theo lịch `SOURCE_RESNAPSHOT_HOURS`. Giao diện chọn bảng tách hai chiều, mở thêm một bước từ bảng đã chọn, danh sách dataset ghi dataset liên quan, hộp xóa báo quan hệ mất theo. Trang Dữ liệu đặt khung "Kết nối database" lên đầu, nạp file là nút phụ (#230). TLS bằng rustls: `sslmode` `disable`, `prefer`, `require`, `verify-full` (CA của hệ thống, cộng CA dán vào). Comment của bảng và cột (`COMMENT ON`) đọc cùng lần chụp, thành mô tả cột nguồn `database` mà lớp ngữ nghĩa không viết lại (#245) | Có, chỉ Postgres (#165); TLS có test luật và test qua route với máy chủ không bật TLS, `require` và `verify-full` mới thử tay với một Postgres bật TLS trên máy dev; chưa có `verify-ca`, chứng chỉ phía client, MySQL, SQLite, truy vấn thẳng database ngoài lúc hỏi |
-| Hỏi qua bảng liên quan (`service/ask/related.rs`, `service/ask/group_prompt.rs`, #213): câu thường trên dataset chụp từ database đọc thêm mọi bảng cùng database (#249: không giới hạn bước, vượt trần metadata thì chọn bảng gửi chi tiết, bảng còn lại trong danh sách gọn, gửi lại một lần khi thiếu bảng), mỗi bảng một bộ lọc dòng; prompt có khối cột mỗi bảng, danh sách quan hệ và luật nối bảng; guard nhận tối đa 6 nguồn mỗi `FROM`; `tables_read` trong response, `queries.read_versions` trong lịch sử, khung Minh chứng ghi bảng đã đọc; bảng trỏ tới bảng bị lọc nhận điều kiện lan theo khóa ngoại (#215) | Có, kèm test prompt, test luật chọn bảng và test qua route trên ảnh chụp Postgres thật với mô hình giả. Chưa chạy với mô hình thật; `make eval` chạy bộ 10 câu JOIN trên schema `sales` (`eval/sales_joins.json`) và 7 câu trên schema `edu` (`eval/edu.json`) trên ảnh chụp database mẫu với mock khi nó đang chạy, CI không có database này nên bỏ qua (#230); chặn cộng lặp (`service/ask/fanout.rs`, #214) có test luật và test qua route, chưa xét `COUNT(*)` và bảng `WITH`; form câu "tại sao" chỉ nêu cột của bảng đang hỏi (phân rã thì xét cả bảng liên quan, #227); truy dòng nguồn trả dòng của bảng mà độ đo cộng kèm cột khóa và cột lọc của bảng nối, chưa truy câu cộng trên bảng tạm gộp nhóm |
-| Route ask, drill | Có route dưới `/api/workspaces/{ws}/`, kiểm đăng nhập và thành viên. Ask chạy luồng hỏi câu thường (`service/ask/mod.rs`, #33) và câu "tại sao" (`service/ask/why.rs`, #38), trả thẻ "Hệ thống đã hiểu là", vai trò cột và gợi ý biểu đồ: từ khớp nhiều cột thì trả lời bằng một cột kèm giả định đổi được, câu cần thông tin không cột nào có thì mô hình báo `unanswerable` và trả `rejected` không chạy SQL (`service/ask/unanswerable.rs`), câu trả lời, câu bị từ chối và câu lỗi ghi vào `queries`; drill truy được dòng nguồn của một ô và của một dòng phân rã (mục 8). Hợp đồng request và response của ask (mục 8) có trong đặc tả, kèm response mẫu cho giao diện |
-| Trang hỏi dữ liệu (`pages/AskPage.tsx`): ô chọn dataset ở đầu khung trò chuyện, dính khi cuộn (`components/ask/DatasetPicker.tsx`), kèm dòng báo hồ sơ đang lập, không có câu gợi ý với mô hình hiện tại, hoặc lỗi; câu gợi ý của dataset (tự tải lại khi hồ sơ đang lập); ô hỏi dính đáy khung; câu trả lời gồm đoạn trả lời ngắn, biểu đồ theo gợi ý của backend (Recharts, tải riêng khi có biểu đồ), bảng kết quả phân trang kèm tải CSV các dòng đã nhận, thẻ "Hệ thống đã hiểu là" với giả định đổi được; câu "tại sao" có một hàng ba số (hai lát cắt và chênh lệch), lời giải thích và thanh đóng góp của từng nhóm ở chiều đầu; câu hỏi lại, lời báo khi bị từ chối, chạy lỗi, mô hình lỗi | Có, dựng trên hợp đồng; trang gọi route ask thật |
-| Hồ sơ cột lớp cấu trúc (`service/profile.rs`, `engine/profile.rs`, [DATA.md](DATA.md)): kiểu, số ô trống, số giá trị khác nhau, min, max, vai trò, định dạng của cột ngày dạng chữ, tần suất giá trị của cột tối đa 200 giá trị; đánh dấu cột nhạy cảm theo luật tên cột và dạng giá trị trong cùng giao dịch ghi hồ sơ; lập lúc nạp, phiên bản cũ lập nền và quét đánh dấu lại lúc khởi động | Có; đọc qua route tổng quan dataset (dòng dưới) |
-| Hồ sơ cột lớp ngữ nghĩa (`service/semantic/mod.rs`, [DATA.md](DATA.md)): sau khi nạp trả 201, mô hình đề xuất mô tả, bí danh cột và giá trị, đơn vị của cột số đo (danh sách cố định, `columns.unit`), cách gộp mặc định của cột số đo (`sum` hay `avg`, `columns.aggregation`, #185), tối đa 5 câu hỏi gợi ý (câu khó trước: hai câu "vì sao" theo khuôn trung tính, không nêu chiều tăng giảm, số đo là số dòng, tổng của cột `sum` hay trung bình của cột `avg`; câu còn chỗ trống `<...>` của khuôn bị bỏ), cột nhạy cảm cần đánh dấu thêm (chỉ chiều bật), sửa vai trò trong phạm vi hẹp (measure số nguyên thành key, hoặc thành dimension khi tối đa 200 giá trị; dimension thành text); chạy nền một lượt mỗi lúc, lỗi giữ `structure` và đánh dấu đã thử; thử lại khi khởi động cho phiên bản chưa thử với provider đang cấu hình và khi nạp lại cùng bộ file; prompt chỉ chứa siêu dữ liệu và giá trị (có trần kích thước) của cột dimension không nhạy cảm; câu gợi ý và `current_profile_status` trả ra trong API dataset | Có, kèm test; đã chạy với Gemini thật trên DataCo (#135, #180); chưa có API và màn xem, sửa hồ sơ; phiên bản đã lập hồ sơ trước #180 giữ câu gợi ý cũ tới khi nạp phiên bản mới |
-| Gói khái niệm ngành ([DOMAINS.md](DOMAINS.md)): file `data/domains/*.json` nhúng vào binary (`build.rs`, `engine/domains.rs`) là dữ liệu khởi tạo; mỗi workspace có bản riêng trong `domain_packs`, `domain_concepts` (`engine/store/domains.rs`), chép gói và khái niệm còn thiếu lúc workspace lần đầu cần, không ghi đè bản đã sửa (`service/domains/`); màn **Khái niệm ngành**: mọi thành viên xem, admin thêm, sửa, tắt khái niệm, kiểm trước khi lưu (#229) | Có gói `retail` và `education`; prompt câu thường và form câu "tại sao" đọc khái niệm đang bật từ bảng theo `sources.domain`, kèm test qua route (sửa khái niệm thì prompt câu kế tiếp đổi); chưa có chỗ nào đặt `sources.domain` (lúc nạp hay qua API), nên hiện chưa dataset nào dùng gói ngoài test |
-| Schema Postgres (migration `0001_init.sql` tới `0021_reports.sql`, [SCHEMA.md](SCHEMA.md)), kết nối và tự migrate lúc khởi động | Có |
-| Tầng lưu trữ theo workspace: nguồn, dataset, phiên bản, lịch sử câu hỏi; kiểu `WorkspaceId` | Có; liệt kê, xem và xóa dataset đã dùng |
-| Workspace: liệt kê, tạo mới (người tạo là admin), đổi tên, xóa; mọi API dữ liệu kiểm thành viên; `WorkspaceId` chỉ tạo từ dòng memberships của người đăng nhập | Có; giao diện tạo workspace từ ô chọn workspace, đổi tên và xóa ở trang Thành viên |
-| Vai dữ liệu (#45, #167; migration 0020 `data_roles`, `member_data_roles`, `rls_policies.data_role_id`; `service/data_roles/`, `api/data_roles.rs`): admin tạo, đổi tên, xóa vai, thay bộ luật của vai (bảng, cột chiều của phiên bản hiện hành, giá trị; giá trị không có trong hồ sơ vẫn lưu kèm lời báo), gán nhiều vai cho một thành viên; member nhận 403, chỉ xem được vai của mình; nhiều vai ghép OR trong `service/ask/row_filters.rs` | Có, kèm test store (gán, thay luật, luật trùng, khóa workspace), test migration chuyển dữ liệu cũ, test thuần luật ghép vai, test guard trên DuckDB (hai vai ra đúng hợp các dòng), test qua route (403, kiểm cột, AND, OR, admin không bị lọc, đổi luật có hiệu lực ngay). Giao diện: màn **Vai dữ liệu** (mục quản trị trên thanh bên) chọn dataset, bảng, cột, tick giá trị đã biết hay gõ giá trị khác, tick thành viên mang vai; trang Thành viên ghi vai của từng người (member chỉ thấy vai mình) |
-| Vai `admin` và `member` (mục 4b): quản lý thành viên, luật còn ít nhất một admin, quản trị hệ thống xem mọi workspace và chỉ định admin | Có |
-| Khung giao diện React và Vite; bố cục chung: thanh bên có hàng thương hiệu, ô đổi workspace (kèm mục tạo workspace) hiện vai trong workspace đang mở, mục điều hướng có icon Lucide, tài khoản, đăng xuất và phiên bản ở chân; màn rộng thu gọn được thanh bên thành dải icon (nút ở hàng thương hiệu, nhớ trong localStorage); vùng nội dung rộng hết phần còn lại của màn; màn hẹp: thanh bên vào ngăn kéo, tài khoản ở góc thanh trên; dùng được ở bề ngang điện thoại; trang làm việc dưới `/w/<workspace>`, trang quản trị hệ thống và trang tài khoản ngoài workspace (`/admin/...`, `/account`) | Có |
-| Backend phục vụ giao diện cùng cổng với API (`STATIC_DIR`), một image chứa cả hai | Có |
-| Chạy thật: `docker-compose.prod.yml` (Postgres không mở cổng, mật khẩu bắt buộc, backend nghe `127.0.0.1`), cookie `Secure` theo `PUBLIC_URL`, header bảo mật trên mọi response (`api/security_headers.rs`), `make backup`, `make restore`, mẫu Caddy và nginx | Có; role Postgres riêng không phải superuser cho RLS chưa có |
-| Tài khoản: mã thiết lập in ra log lần đầu, tạo tài khoản quản trị kèm workspace đầu tiên, đăng nhập, đăng xuất, đổi mật khẩu; quản trị hệ thống tạo, khóa, mở tài khoản, đặt lại mật khẩu; lệnh `reset-password`, `list-admins` (API, phiên lưu trong Postgres) | Có; giao diện có màn thiết lập lần đầu và đăng nhập (panel giới thiệu sản phẩm cạnh form, xếp dọc khi màn hẹp), đổi mật khẩu, quản lý tài khoản của quản trị hệ thống |
-| DuckDB nhúng: đổi CSV (UTF-8; file không phải UTF-8 đổi sang UTF-8 theo windows-1252, gồm cả latin-1, trừ file UTF-8 có byte hỏng thì báo lỗi kèm số dòng; `engine/csv_encoding.rs`) và Parquet sang Parquet, gộp nhiều file cùng cột kèm cột `_source_file` (`engine/analytics.rs`); sheet Excel đổi sang CSV bằng `calamine` (`engine/excel.rs`) | Có |
-| Guard SQL (`engine/guard/`, [GUARD.md](GUARD.md)): một câu `SELECT` chỉ đọc, danh sách bảng, hàm, cột được phép, nối bảng chỉ theo khóa ngoại service truyền vào (`engine/guard/joins.rs`, #256), lọc dòng theo chính sách service truyền vào, giới hạn dòng, bản `shown` và bản `runnable` đọc Parquet | Có, kèm test; luật nối bảng có test từng ca (khóa một và nhiều cột, sai cột, thiếu cột, không quan hệ, tích chéo, nối qua `WHERE`, câu con, `WITH`, `IN`, `EXISTS`, khóa tự trỏ) và test câu do code dựng của câu "tại sao" trên bảng liên quan, chưa chạy với mô hình thật; endpoint hỏi (#33, #38), drill (#34) và tổng quan (#198) đọc chính sách lọc dòng theo vai dữ liệu của người hỏi, người bấm hay người xem (admin không bị lọc), kèm điều kiện lan theo khóa ngoại giữa các dataset chụp từ database (#215); nhiều vai ghép OR thành `RowFilter::AnyOf` |
-| Chạy SQL và vòng sửa (`engine/query.rs`, `service/ask/run.rs`, `service/ask/result.rs`): chạy bản `runnable` trên DuckDB, hai câu cùng lúc, dừng câu quá `QUERY_TIMEOUT_SECS` (mặc định 30 giây) và trần 1 GB cho phần bộ nhớ DuckDB quản lý; cột kiểu DuckDB chưa đọc được (TIME_NS, TIMETZ, BIT, BIGNUM, VARIANT, GEOMETRY, kiểu không rõ) báo lỗi để mô hình đổi sang VARCHAR; kết quả thành `ResultTable` (ô theo `kind`, 1000 dòng đầu, `truncated`, `limit_reached`); lỗi DuckDB hay guard từ chối vì bất kỳ lý do nào thì mô hình sửa một lần, câu sửa vẫn bị từ chối thì người hỏi nhận lời của hệ thống; lời báo lỗi không chứa đường dẫn file | Có, kèm test; endpoint hỏi (#33) gọi; trần 1 GB và hai câu cùng lúc chưa đo lại trên DataCo; hai giới hạn không chặn được biểu thức hằng DuckDB tính lúc chuẩn bị câu; guard thu hẹp bằng luật kích thước hàm, tối đa 4 tầng câu, 20 mảnh ghép, chuỗi hằng 1000 byte, 200 cột mỗi SELECT, 4 nguồn mỗi FROM, 10 nhánh UNION (ca một dòng kết quả đo dưới 270 MB); câu nhân theo số dòng (cả `UNION ALL` 10 nhánh) vẫn lên khoảng 1,4 đến 1,9 GB, bảo đảm thật cần tiến trình con (#119; [GUARD.md](GUARD.md), mục Hạn chế đã biết) |
-| Ngữ cảnh câu hỏi (`service/ask/context.rs`, `service/ask/phrases.rs`, `service/ask/matching.rs`, `service/ask/values.rs`): cột gửi cho mô hình, danh sách giá trị của cột chiều kèm bí danh, gợi ý khớp chính xác, cột mặc định kèm giả định đổi được khi một cụm khớp tên nhiều cột; đọc hồ sơ của đúng phiên bản trong workspace người hỏi, theo hai tầng đầu của mục 5; cột nhạy cảm không kèm giá trị | Có hàm kèm test trên Postgres, gồm hồ sơ mẫu của DataCo; prompt (#29) và endpoint hỏi (#33) dùng; khớp gần, chịu gõ sai và tìm theo vector chưa làm |
-| Giải thích câu "tại sao", phần toán (`service/explain/mod.rs`, `service/explain/ratio.rs`): đóng góp từng nhóm bằng số thập phân chính xác, xếp hạng chiều theo Adtributor, tách lượng và giá với giá hai chữ số làm tròn nửa xa số 0; độ đo tỷ lệ tách phần cơ cấu và phần hiệu suất, chiều xếp theo cách Effect. Đọc bảng sau khi xếp cho lời tóm tắt (`service/explain/annotate.rs`, #186): % tác động (phần của chênh lệch, không tính khi chênh lệch tổng dưới 0,5% bên lớn hơn) và % thay đổi của từng nhóm, nhóm chỉ có ở một bên ("mới", "không còn"), nhóm hai bên trái dấu ("đổi dấu", không có % thay đổi), nhóm khác thường (lệch % thay đổi chung từ 10 điểm và chiếm từ 1% chênh lệch, hay chỉ có ở một bên, hay đổi dấu); các số và cờ này cũng ghi vào bảng phân rã trả qua API (`presence`, `share_of_change`, `percent_change`, `sign_flip`, `outlier` của nhóm, `has_outliers` của chiều), chiều có nhóm khác thường xếp trước chiều dàn đều, nên tab Phân rã và lời tóm tắt dùng cùng một luật; chiều lời tóm tắt bỏ qua: mọi nhóm chỉ có ở một bên (tên khác của hai lát cắt, như hình thức thanh toán khi so trạng thái đơn) hay trùng nhóm một chiều khác (giữ chiều có giá trị chữ). Nhãn tiếng Việt của cột (`label`) lấy từ bí danh đầu tiên trong hồ sơ | Có hàm thuần kèm test; độ đo tỷ lệ chỉ nhận qua chỉ số trong metrics (form chưa có `avg`), mẫu số có NULLIF chưa nhận |
-| Đường câu "tại sao" (`service/explain/run.rs`, `service/explain/form.rs`, `service/explain/check.rs`, `service/explain/sql.rs`, `service/explain/breakdown.rs`): bước phân loại (`service/ask/classify.rs`) nhận câu, luật từ khóa là đường dự phòng; mô hình điền form (độ đo là chỉ số hoặc một cột với `sum`, `avg`, `count`, `count_distinct` trên cột `key`, `share` là tỷ lệ dòng có một giá trị; hai kỳ ngày, tuần ISO, tháng, quý, năm, so với kỳ liền trước hay cùng kỳ năm trước; hai nhóm, hay một nhóm so với mọi nhóm còn lại của cột (`service/explain/group_base.rs`): với độ đo tổng hay đếm dòng, lát gốc là trung bình mỗi nhóm còn lại (tổng, số dòng, lượng và từng nhóm phân rã chia cho số nhóm còn lại, chia phần dư lớn nhất để các nhóm vẫn cộng ra đúng tổng; `service/explain/rest_average.rs`), nhãn "trung bình các ... còn lại"; độ đo tỷ lệ, trung bình, đếm không trùng so với phần còn lại gộp lại; truy dòng nguồn của lát gốc trả các dòng thật của các nhóm còn lại; bộ lọc `=`, `in`, `between`, `>`, `>=`, `<`, `<=` kiểm theo kiểu cột (`service/explain/filter.rs`); `find` để code tự tìm kỳ đổi mạnh nhất hay nhóm góp nhiều nhất vào chênh lệch rồi phân rã như hai kỳ (`service/explain/unusual.rs`), #244), code kiểm form với hồ sơ, `column_values` và `metrics`, sửa form một lần theo lỗi từng trường, sai lần hai thì chạy như câu thường kèm `explanation_unavailable`; code dựng bảng tổng theo kỳ, điều kiện hai lát cắt, SQL từng chiều cho mọi cột chiều từ 2 tới 50 giá trị (tối đa 30 cột ứng viên); `service/explain/dimension_pick.rs` bỏ chiều chỉ một nhóm, chiều chia y hệt một chiều khác (một câu SQL đếm cặp giá trị xác nhận, giữ cột chữ) và, khi so hai nhóm, chiều mà mọi nhóm chỉ có ở một bên (chiều bỏ vì trùng hay một bên vẫn vào ghi chú `dropped` của `service/explain/annotate.rs`, để lời tóm tắt có ý "Bỏ qua"); rồi chấm điểm và xếp các chiều còn lại, chiều giải thích rõ nhất trước (không cắt theo số chiều); và SQL lượng (trong các cột `key` lặp lại, cột có nhiều giá trị nhất, như mã đơn khi một đơn có nhiều dòng), mọi câu qua guard có lọc dòng theo vai dữ liệu; câu nói hướng ("giảm", "cao hơn") ngược chênh lệch tính được thì cảnh báo `premise_mismatch` (`service/explain/premise.rs`); câu so hai kỳ không nêu kỳ thì code đếm dòng theo kỳ và chọn kỳ gần nhất có đủ dữ liệu, ghi thành giả định đổi được `why:compare` (`service/explain/latest.rs`); dataset chụp từ database thì phân rã xét thêm cột chiều của các bảng nối nhiều-một qua `dataset_relations` (`service/explain/source.rs`, #227): code dựng câu con `LEFT JOIN` từ quan hệ đã ghi, chỉ đi từ bên nhiều lên bên một (tối đa 2 bước) như luật chặn cộng lặp, guard lọc dòng từng bảng được đọc, `tables_read` và `queries.read_versions` ghi cả bảng liên quan đã đọc | Có, kèm test trên Parquet tạm với mock và qua route; route hỏi gọi `run_why` và ghi form cùng `Explanation` vào `queries.explanation`; kỳ so sánh do người hỏi chọn mà không có dòng nào thì trả bảng tổng kèm `explanation_unavailable`, không gọi lại mô hình; lượng chưa lấy từ `metrics` vì bảng chưa có trường đánh dấu chỉ số lượng |
-| Diễn giải bảng phân rã bằng lời (`service/ask/narrate.rs`, prompt ở `service/explain/narrate_prompt.rs`): so hai kỳ hay hai nhóm thì mô hình viết toàn bộ insight từ số code đã tính, code không đọc lời văn. Code tính nhận định, mô hình chỉ viết: prompt gửi số của bảng phân rã (hai chiều đầu, mỗi chiều ba nhóm đầu), ghi chú của `service/explain/annotate.rs` dạng số và cờ (% thay đổi, phần của chênh lệch khi cùng chiều và không quá 100%, nhóm khác thường, nhóm chỉ có ở một bên, chiều bỏ qua), `main_group` (nhóm đóng góp lớn nhất cùng chiều với chênh lệch ở chiều đầu) và phần tách lượng và giá của `service/explain/split.rs` (chỉ khi có lượng `volume_price`, như số đơn; không tách theo số dòng; kèm phần trăm của mỗi phần khi hai phần cùng chiều); không gửi câu nào do code viết; luật chung cho mọi ngành, không ví dụ theo bộ dữ liệu. Tên độ đo và nhãn lượng, giá lấy tên tiếng Việt của hồ sơ khi có (`service/explain/measure.rs`, `build_entity_name`: "Doanh thu", "Số đơn hàng", "Doanh thu trên mỗi đơn hàng"); tổng của một cột "mỗi đơn vị" (bí danh, mô tả hay tên cột có "mỗi" hay "per", như "lợi nhuận mỗi đơn", "Benefit per order") gọi là tổng ("Tổng lợi nhuận") ở thẻ "Hệ thống đã hiểu là", câu chính, tiêu đề bảng phân rã, lời câu thường và bí danh câu SQL mô hình đặt (`service/explain/per_unit.rs`, `service/ask/total_alias.rs`, #260), còn trung bình và đếm giữ nghĩa "mỗi đơn"; prompt dặn gọi tên bằng các nhãn này như lời thường và cho viết số tròn kèm "khoảng" (tối đa ba chữ số có nghĩa), còn số khai phải chép đúng. Mô hình trả `{headline, reasons, claims}`: câu mở đầu, tối đa 4 ý "Nguyên nhân chính" (đầu ý và một câu), và `claims`: mỗi mục là một số hay một nhóm insight dùng, trỏ vào một ô của bảng, số ghi có dấu như ô (âm là giảm); cổng 1 (`service/explain/claims.rs`, #201) so từng mục với đúng ô: giá trị chép đúng kể cả dấu, nhóm nêu là nguyên nhân chính cùng chiều chênh lệch và trong ba nhóm đầu của cột, nhóm kéo lại ngược chiều, nhóm nêu là chỉ có ở một bên (`new`, `gone`) đúng như ghi chú, và khi quy mô là ý chính (`scale_main`: lượng một bên gấp từ hai lần bên kia và phần do lượng lớn hơn phần do giá, như COMPLETE 597 đơn với CANCELED 19 đơn) thì phải có khẳng định về lượng hai bên hay phần do lượng (#260); prompt gửi sẵn số có dấu của mỗi chênh lệch để mô hình chép y nguyên. Qua cổng 1 thì tới cổng 2 (`service/ask/judge.rs`, phần chữ ở `service/explain/judge.rs`): một lần gọi mô hình riêng, prompt `backend/prompts/judge_answer.txt`, nhận lời và một JSON gồm tên độ đo, kiểu so sánh, tên hai lát cắt, tên lượng và giá (code lấy từ bảng), cờ `scale_main` (lời không nói chênh lệch chủ yếu do lượng là thiếu ý chính) cùng `claims`; prompt giải thích nghĩa từng khóa, dặn mô hình so nghĩa của từng ý trong lời với JSON và trả `{verdict, problems}`: `mismatch` khi có ý trái JSON hay nêu số, nguyên nhân, kết luận JSON không có; `warning` khi không ý nào sai nhưng có ý đọc được nhiều nghĩa; còn lại `match`. Mô hình chấm dùng cùng nhà cung cấp với lần viết lời; độ tin của nó đo bằng `make eval-judge` (dòng bộ đo bên dưới). Trượt cổng 1, bị chấm `mismatch` hay `warning` thì mô hình viết lại một lần, prompt kèm các lỗi và chỗ chưa rõ của lần trước; lần viết lại không khớp hẳn thì lời bị chấm `warning` vẫn được dùng, các chỗ chưa rõ trả trong `summary_warnings` và hiện ngay dưới insight, còn không có lời nào như vậy thì dùng câu khuôn; kết luận ở `summary_verdict`; bài học đã duyệt (#235) nối vào prompt viết lời, lời bị chặn ở mọi lần viết ghi vào nhật ký lỗi (#228); qua cổng 2 thì chi tiết bước `narrate` ghi số khẳng định đã đối soát. Insight qua hai cổng thì thay câu chính và các ý trong `summary_title`, `summary_points` (mọi ý của mô hình có `kind` là `reason`), `summary` là các phần đó nối lại. Câu khuôn do code viết (`service/explain/summary.rs`, #186) là đường dự phòng: một câu chính và các ý "Lý do chính" (khi có lượng: phần lớn hơn trong hai phần của `service/explain/split.rs`; độ đo tỷ lệ: cơ cấu hay hiệu suất), "Khác thường theo <cột>" (phần của chênh lệch chỉ nêu khi không quá 100%) hay "Không nhóm nào khác thường", "Ngược chiều", "Bỏ qua <cột>", mỗi ý chỉ nói khi số xác nhận; cột gọi bằng nghĩa tiếng Việt của hồ sơ, không kèm tên cột gốc. Chênh lệch bằng 0 thì không gọi mô hình, dùng câu khuôn (`build_template_summary`); so hai nhóm trước #201 luôn dùng câu khuôn, giờ cũng do mô hình viết vì con chấm nhận tên hai bên và kiểu so sánh nên bắt được lời đảo nhóm nào cao hơn. Mô hình lỗi, quá giờ, mô hình chấm không chấm được, hay lời trượt cả lần viết lại thì cũng dùng câu khuôn, câu hỏi vẫn `answered` và bước `narrate` có `ok = false` kèm lý do | Có, kèm test; mock trả lời câu "tại sao" mẫu; `run_why` gọi sau bước explain, qua route hỏi |
-| Đoạn trả lời ngắn cho câu thường (`service/ask/summary.rs`, `AskResponse.answer_text`): lời mô hình viết cho phần giải thích khi lời đó qua bước kiểm, không thì câu khuôn do code viết; danh sách dòng không gộp là câu khuôn số dòng và điều kiện lọc, trừ kết quả một dòng tới 5 cột: câu kể dòng đó của phần giải thích; câu khuôn kể tên nhóm đứng đầu và các nhóm theo sau (tới 5 dòng), số từ một triệu trở lên có dạng rút gọn kèm số đủ; không gọi mô hình, không bước riêng trong `steps`; `ANSWER_TEXT=false` thì luôn là câu khuôn | Có, kèm test; mock không có lời viết sẵn nên luôn trả câu khuôn; giao diện hiện đoạn này đầu câu trả lời, trước biểu đồ và bảng, và khi đoạn này là lời của phần giải thích thì phần giải thích bên dưới chỉ hiện các câu của code |
-| Phần giải thích của câu thường theo hình dạng kết quả (`service/insight/`, `AskResponse.insight`, #227): một con số so với kỳ liền trước khi câu lọc đúng một tháng, quý hay năm; chuỗi thời gian nêu xu hướng chung, kỳ đổi mạnh nhất so với kỳ trước rồi phân rã đúng kỳ đó bằng đường của câu "tại sao" (plan dựng từ câu SQL đã chạy, không gọi mô hình điền form; tổng hai kỳ do code tính phải khớp ô của bảng, lệch thì bỏ phân rã), phân rã ở `AskResponse.explanation` và `queries.explanation`; theo nhóm nêu tỷ trọng nhóm đầu, số nhóm đạt 80% tổng, nhóm lệch hẳn mức trung bình; top N nêu tỷ trọng trên tổng (một câu tổng do code dựng, bỏ `LIMIT`) và chênh hạng đầu với hạng kế; danh sách dòng chỉ nêu số dòng và điều kiện lọc, riêng kết quả một dòng tới 5 cột thì kể dòng đó bằng tên tiếng Việt của cột ("New York City có tổng doanh thu cao nhất: ..." khi câu xếp theo số đo rồi lấy một dòng), mô hình được viết lại chỉ khi mọi ô gửi được (`insight/one_row.rs`); cụm của câu hỏi khớp nhiều cột mà hệ thống tự chọn một thì thêm ý "Cách hiểu" nói đã tính theo cột nào; số từ một triệu trở lên có dạng rút gọn kèm số đủ. Chênh lệch dưới 2% hay một bên dưới 30 dòng (`service/explain/significance.rs`) thì nói không có thay đổi đáng kể. Code viết câu chính và các ý; mô hình viết lại thành một đoạn trong một lần gọi thêm (`backend/prompts/insight.txt`), lời được lời qua hai cổng như câu "tại sao" (#201): code kiểm số, chiều tăng giảm và từ chỉ nguyên nhân, rồi mô hình chấm so nghĩa của lời với câu chính và các ý (`insight/narrate.rs`, prompt `judge_answer.txt` với `judge_meaning_plain.txt`); trượt hay có chỗ chưa rõ thì viết lại một lần, vẫn trượt thì dùng câu của code, chỉ còn chỗ chưa rõ thì giữ lời kèm `summary_warnings`; kết luận ở `insight.summary_verdict`; `INSIGHT_TEXT=false` chỉ dùng câu của code; bước `explain` và `narrate` thứ hai trong `steps` | Có, kèm test từng hình dạng, trường hợp không đáng kể, bước kiểm lời, và trọn đường trên Parquet tạm hai bảng; chạy thử với Gemini trên database mẫu (`data/postgres-demo`): "Doanh thu theo tháng năm 2017 của thị trường Europe" nêu tháng 11/2017 giảm so với tháng 10 và nhóm Computers theo `categories.category_name`, số khớp bảng phân rã; giao diện hiện phần này trên thẻ trả lời (`components/ask/AnswerSummary.tsx`). Lời chưa khai số bằng JSON như câu "tại sao": cổng 1 vẫn là bộ dò số trong lời; số lần gọi và thời gian đo ở [PERFORMANCE.md](PERFORMANCE.md); ngưỡng 2% và 30 dòng chưa đo trên dữ liệu; khóa nhóm và vế lọc thời gian chỉ nhận vài dạng (`date_trunc`, `strftime`, `year`, `month`, `quarter`, khoảng ngày), dạng khác thì không có phần so kỳ trước; mock không có lời viết sẵn nên luôn dùng câu của code; dòng phân rã theo cột của bảng liên quan truy được dòng nguồn như ô của câu nối bảng |
-| Thẻ "Hệ thống đã hiểu là" và vai trò cột kết quả (`engine/sql_shape.rs`, `service/understanding/mod.rs`, `service/understanding/labels.rs`): đọc `sql_guarded` bằng cây cú pháp ra cột kết quả, vế lọc, khóa nhóm, thứ tự, LIMIT, bảng (đọc xuyên hộp phân quyền của guard); thẻ có nhãn tiếng Việt và đoạn SQL nguyên văn cho từng mục, cụm vế thời gian liền nhau đầu tiên thành `time_range`, điều kiện lọc dòng theo vai nhãn "Lọc theo quyền xem: ...", giả định là danh sách `Choice` của `service/ask/choices.rs` | Có hàm kèm test trên 15 câu SQL của mock qua guard; endpoint hỏi (#33) gọi cho câu thường đã answered, đọc cây không được thì trả lời không kèm thẻ và ghi log; câu có CTE, câu con ở FROM chỉ đọc câu ngoài cùng, UNION chỉ có thứ tự và LIMIT, `SELECT *` thì mọi cột là `other`; câu "tại sao" dựng thẻ từ form đã kiểm (`service/understanding/why.rs`): hai kỳ là `time_range`, hai nhóm là một mục lọc, mỗi đoạn SQL vẫn nguyên văn trong `sql_guarded` |
-| Tổng quan dataset (#198, `service/overview/`, `GET /api/workspaces/{ws}/datasets/{id}/overview`, [API.md](API.md)): hồ sơ cột (nhãn là bí danh đầu, mô tả, vai trò, đơn vị, % ô trống, số giá trị khác nhau, số dòng theo giá trị của cột chia nhóm không nhạy cảm) và chỉ số đọc từ Postgres; biểu đồ dựng sẵn theo luật mục 6b: số dòng theo giá trị từ `column_values`, không chạy câu; tóm tắt (số dòng, ngày đầu, ngày cuối), độ đo chính (chỉ số đã xác nhận, không có thì cột số đo tiền hay số lượng) và số dòng theo ngày hay tháng là ba câu SQL do code dựng, qua guard với vai dữ liệu của người xem; kết quả giữ trong bộ nhớ (`AppState::overview_cache`, khóa là phiên bản và câu chạy, tối đa 256 kết quả), không thêm migration; người bị lọc dòng không nhận số đếm của hồ sơ | Có, kèm test phần thuần và qua route (cột nhạy cảm, lọc theo vai, chỉ số); không gọi mô hình. Giao diện: khung "Tổng quan dữ liệu" (`components/overview/`, `pages/OverviewPanel.tsx`) là nội dung của trang **Tổng quan dữ liệu**, một mục riêng trên thanh bên (`/w/:ws/overview?dataset=...`, `pages/OverviewPage.tsx`, `pages/DatasetOverviewSection.tsx`) có ô chọn dataset ở đầu trang; nút **Tổng quan** của từng dataset ở trang Dữ liệu mở trang này trên đúng dataset đó; bấm cột, giá trị, chỉ số hay biểu đồ thì mở trang cuộc trò chuyện với `?dataset=...&q=...`, câu hỏi điền sẵn vào ô hỏi, không gửi (`components/overview/questions.ts`) |
-| Chọn biểu đồ theo IBCS (`service/ask/chart.rs`, mục 6b): loại số đo đọc từ hàm tổng hợp, đơn vị từ `columns.unit`, bảy luật kèm ngưỡng của IBCS | Có, kèm test phía backend; giao diện (`components/ask/ResultChart.tsx`, `chartData.ts`) vẽ thanh ngang xếp lớn trước, cột đứng (số đo không cộng được rộng 1/3), đường có điểm ở từng kỳ, cột chồng, cột đôi, mỗi số đo một biểu đồ nhỏ, phần "Khác"; chưa có thác nước cho câu "tại sao", thay vào đó là thanh hai phía cho đóng góp của từng nhóm ở chiều đầu (`components/ask/ContributionBars.tsx`); giao diện chưa có test tự động |
-| Kiểm hợp lý kết quả (`service/ask/checks.rs`, `service/ask/magnitude.rs`): `empty_result`; `all_null` (xét dòng đã gửi, kết quả bị cắt thì lời ghi "trong n dòng đầu"); `filter_value_not_found` cho vế `cột = 'x'`, `cột IN (...)` và giá trị mô hình nêu trên cột chiều không nhạy cảm, gợi ý giá trị khác hoa thường, dấu, bí danh hay khác một hai chữ; `unusual_magnitude` cho tỷ lệ hai số đếm hay AVG cột 0/1 ngoài [0, 1], AVG, MIN, MAX ngoài [min, max] của hồ sơ, SUM cột không âm ra âm. Không kiểm điều kiện phân quyền; tra danh sách giá trị lỗi thì bỏ luật đó và ghi log | Có, kèm test từng luật và qua route; giao diện hiện cảnh báo phía trên kết quả; câu "tại sao" chỉ có `empty_result`; kiểm theo chuỗi thời gian và chỉ số dùng sai công thức (`build_metric_mismatches`) chưa làm |
-| Pane Minh chứng của trang hỏi (`pages/AskEvidence.tsx`, `components/ask/Evidence*.tsx`), cột phải từ màn rộng, dưới khung trò chuyện khi màn hẹp hơn: bốn tab SQL (trước và sau guard), Phân rã (bảng đóng góp từng chiều, lượng và giá), Dòng nguồn (bấm số của một kỳ trong bảng phân rã hoặc một ô số đo của bảng kết quả), Các bước; SQL hiện xuống dòng theo mệnh đề, nút chép chép nguyên văn; pane chỉ hiện khi có câu trả lời, thu gọn được (nhớ trong localStorage); hai lát cắt, chênh lệch và lời giải thích chỉ ở câu trả lời, tab Phân rã không nhắc lại | Có, dựng trên hợp đồng ask; tab Dòng nguồn gọi route drill với khóa dòng phân rã hoặc khóa của ô (giá trị các cột `dimension`, `time` của dòng), ghi đang xem ô nào, dòng đến từ bảng nào và cột nào lấy từ bảng nối, tổng của độ đo trên mọi dòng nguồn so với ô đã bấm, tổng số dòng nguồn và phân trang theo `offset`, cột khóa và cột nguồn của số đo đứng đầu bảng dòng nguồn; `npm run dev` có dòng mẫu; điều kiện phân quyền guard thêm chưa tách riêng trong response nên chưa chỉ ra từng điều kiện |
-| Cuộc trò chuyện (#164, `service/conversation/`, migration `0008_conversations.sql`): bảng `conversations`, `queries.conversation_id` và `queries.understood`; ask nhận và trả `conversation_id`; prompt câu thường và prompt form câu "tại sao" nhận khối "Hội thoại trước" (tối đa 4 lượt: câu hỏi, trạng thái, SQL, phần đã hiểu; trần 4 000 ký tự); route liệt kê và mở cuộc của chính người gọi; trang hỏi là khung trò chuyện (bong bóng câu hỏi, khối trả lời, ô hỏi dính đáy), pane Minh chứng theo lượt được chọn; danh sách cuộc cũ trong khung nổi "Lịch sử trò chuyện" mở từ thanh bên (`components/shell/ConversationFlyout.tsx`, `pages/SidebarConversations.tsx`; dataset của trang hỏi, nút dấu cộng mở cuộc mới); đường dẫn `?dataset=...&c=...` mở đúng cuộc khi tải lại và khi chọn từ khung nổi | Có, kèm test qua route với mô hình giả (khối lịch sử có trong prompt, không có giá trị kết quả; người khác nhận 404); thẻ "Hệ thống đã hiểu là" ghi "từ câu trước" cạnh mục giống lượt trước mà câu hỏi không nhắc tới (`service/conversation/carryover.rs`, trường `from_previous`); câu "tại sao" thiếu kỳ dùng kỳ gần nhất có dữ liệu làm giả định đổi được; mở lại cuộc cũ (kể cả tải lại trang) hiện câu hỏi, lời trả lời đã hiện lúc hỏi (`queries.answer`, migration `0016_query_answer.sql`, #201; lượt ghi trước đó không có) và tóm tắt "Hệ thống đã hiểu là" của từng lượt kèm nút **Hỏi lại**, vì backend không lưu bảng kết quả; lời đã lưu không vào khối "Hội thoại trước" |
-| Chế độ demo (#46): route `POST /api/auth/demo-login` có trong đặc tả | Chưa có; route trả 501 (`not_implemented`) |
-| Dữ liệu mẫu đóng gói sẵn (`service/samples.rs`, `service/samples_db.rs`, [data/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/data/README.md)): database mẫu duy nhất là `data/postgres-demo` (hai database `sales_demo` với DataCo và `edu_demo` với OULAD, đầy đủ, nạp bằng `load.sh`, #250), chạy trong compose gốc bằng `--profile demo` (dịch vụ `demo-db`, `extends` từ file của nó, cùng container và volume, #230); thiết lập lần đầu thêm mỗi database tới được làm một nguồn (`SAMPLE_DATABASE_URL`, nhiều chuỗi cách nhau bằng dấu phẩy) và chụp mọi bảng tài khoản mẫu đọc được trong database đó (#247) kèm quan hệ và chỉ số mẫu; không có hay không database nào chụp được thì nạp `SAMPLES_DIR/dataco.csv` thành dataset `DataCo` qua đường nạp thường, rồi ghi chỉ số của `dataco.metrics.json` (`origin` `sample`, đã xác nhận) sau khi chạy thử từng chỉ số qua guard; `SEED_SAMPLE=false` tắt; `data/download.sh` tải bản đầy đủ DataCo, Online Retail II và OULAD (dữ liệu giáo dục), kiểm SHA-256 | Có, kèm test trên Postgres (chụp database mẫu kèm quan hệ và chỉ số, một trong hai database không tới được thì giữ database kia, không tới được thì nạp file, nạp một lần, tắt, thiếu file, chỉ số chạy lỗi bị bỏ); fresh install bằng `docker compose up` đã thử trên máy dev, có và không có database mẫu; bản cài đã thiết lập trước đó không được nạp mẫu; Online Retail II và OULAD chưa có chỉ số mẫu |
-| Bộ đánh giá câu hỏi mẫu (`service/eval.rs`, lệnh `xdi-backend eval`, `make eval`): tạo workspace tạm; nạp `data/samples/dataco.csv` và hỏi `eval/dataco.json` (phần CI chạy); khi container `xdi-demo-db` đang chạy thì thêm hai lượt chụp database mẫu như thiết lập lần đầu (`--sample-database`): `eval/sales_joins.json` trên `sales_demo`, `eval/edu.json` trên `edu_demo`, trên đúng dataset ghi ở từng câu; mỗi câu qua đúng luồng hỏi, so tập dòng kết quả với SQL đúng viết tay (cũng qua guard), ghi báo cáo ra `--out` (mặc định `eval/result.json`; phần database mẫu của `make eval` ghi `eval/result-sales_demo.json` và `eval/result-edu_demo.json`, không commit), thoát mã 1 khi tỷ lệ đúng dưới `eval/baseline.json` | Có; 14 câu trên DataCo và 17 câu trên database mẫu, mock đúng cả 31; `make eval` và CI luôn chạy với mock; chạy với mô hình thật thì gọi thẳng `xdi-backend eval` kèm `LLM_PROVIDER` ([RELEASING.md](RELEASING.md)) |
-| Màn Chỉ số (#185, `service/metrics/`, `api/metrics.rs`, `pages/MetricsPage.tsx`, [API.md](API.md)): mọi thành viên xem chỉ số và cột của phiên bản hiện hành; admin tạo, sửa (thêm phiên bản, `origin` `ui`, đã xác nhận), xóa chỉ số bằng chọn phép tính và cột hoặc viết SQL, và đổi cách gộp của cột số đo; công thức chạy thử qua guard và DuckDB trước khi lưu, lỗi trả theo từng trường (`ErrorBody.field`). Prompt sinh SQL ghi cột `avg` phải gộp bằng AVG; form câu "tại sao" đổi tổng của cột `avg` thành trung bình mỗi dòng và phân rã như tỷ lệ; dòng "Đo" của thẻ "Hệ thống đã hiểu là" ghi cách tính bằng lời khi chỉ số không có mô tả | Có, kèm test API (quyền, kiểm công thức, phiên bản, prompt); đã chạy một lần với Gemini trên OULAD (`studentInfo.csv`): câu "Số tín chỉ theo kết quả cuối khóa", không nói "trung bình", ra `AVG("studied_credits")`; cách gộp admin đặt chưa chép sang phiên bản nạp sau |
-| Bộ đo mô hình chấm của cổng 2 (`service/eval_judge.rs`, lệnh `xdi-backend eval-judge`, `make eval-judge`, #201): 72 ca trong `eval/judge.json`. 58 ca lời giải thích câu "tại sao" trên bốn bảng phân rã (doanh thu DataCo mẫu, doanh thu DataCo đầy đủ quý 2 và quý 3/2017, số sinh viên rút học phần kiểu OULAD, tỷ lệ giao trễ), mỗi ca là lời và JSON gửi mô hình chấm (tên độ đo, tên hai lát cắt, `claims`), 28 ca lời đúng và 30 ca lời sai cố ý (2 ca thêm cho #260: COMPLETE 597 đơn với CANCELED 19 đơn, lời nói chênh lệch chủ yếu do số đơn là đúng, lời gán chủ yếu cho một nhóm là sai); 8 ca lấy từ lỗi thật khi chạy Gemini (phần đóng góp lớn hơn mức chung, số kiểu Việt Nam đọc sai độ lớn, nhóm không còn ở kỳ sau, phần trăm thiếu dấu %); 16 ca thêm ngày 31/10/2026 có số lời tự tính từ các số đã khai (phần trăm, hiệu, tổng, gấp mấy lần), đúng hay sai phép tính, hay đúng số mà sai nghĩa. 14 ca lời phần giải thích câu thường trên bốn bộ câu chính và ý do code viết (nước đứng đầu kèm phần trăm của tổng, ba danh mục, một tháng so với tháng trước, thị trường đứng đầu với số rút gọn "khoảng 10,9 triệu (...)"), 6 lời đúng và 8 lời sai (sai số, sai nghĩa, sai thứ hạng, thêm nguyên nhân, tính sai, sai chiều, sai độ lớn, gọi một tổng là giá trị trên mỗi đơn). Mỗi ca sai ghi loại lỗi cài vào (số gán nhầm nhóm, sai chiều, thêm lý do, nhóm không khai, đảo kỳ, lời gài lệnh, tính sai, sai nghĩa phép tính...). Mỗi ca gửi cho mô hình chấm qua đúng prompt và hàm bước `narrate` dùng; in số ca đúng trên tổng và tỷ lệ; trên số ca sai: số bỏ lọt (mô hình nói `match`) và số chỉ bị cảnh báo (`warning`); trên số ca đúng: số chặn nhầm (`mismatch`) và số cảnh báo thừa (`warning`); số ca không chấm được, trung vị thời gian. Nhãn do người viết ca gắn, chưa có người thứ hai duyệt; 31 ca thêm ngày 31/10 do trợ lý AI viết cả lời lẫn nhãn (nhãn theo phép tính lại từng số), cùng người sửa prompt mô hình chấm; 3 ca cuối (j68 tới j70) chấm thử một lượt với `gemini-3.5-flash-lite`: đúng 3/3 | Có, kèm test file ca và cách đếm; mock không có câu chấm cho các ca này. Đo ngày 31/10/2026 với `gemini-3.5-flash-lite`, một lượt, nghỉ 1 giây giữa hai ca, sau khi sửa luật 2 và luật 6 của prompt: đúng 50/55, bỏ lọt 2/28 (lời ghi sai độ lớn, phần trăm tính trên sai gốc), chặn nhầm 3/27 (chê số đã làm tròn đúng, một câu đọc được hai nghĩa), không cảnh báo nào, trung vị thời gian chấm 1057 ms; trước khi sửa hai luật đó, 16 ca số tự tính chỉ đúng 11/16 (chặn nhầm 5/9 lời đúng có phần trăm). 12 ca câu thường, một lượt: đúng 10/12, bỏ lọt 1/7 (lời viết "3,9 triệu" cho 3.928,55; trong luồng thật bộ dò số của cổng 1 chặn số này trước), cảnh báo thừa 1/5. Kết quả đổi giữa các lượt chạy |
-| Phân loại câu hỏi (`service/ask/classify.rs`, #197) và bộ câu thử (`service/eval_classify.rs`, lệnh `xdi-backend eval-classify`, `make eval-classify`): 48 câu trên DataCo trong `eval/classify.json` (20 câu hỏi tìm nguyên nhân, 22 câu thường, 6 câu tiếp nối kèm câu hỏi trước), so loại câu viết tay với luật từ khóa và với bước `classify`, in trung vị thời gian của bước `classify` | Có, kèm test với mô hình giả và qua route; không có baseline, không chạy trong CI. Đo ngày 28/10/2026 với `gemini-3.5-flash-lite`, hai lượt, nghỉ 4 giây giữa hai câu: luật từ khóa đúng 32/48, bước `classify` đúng 48/48 ở cả hai lượt, không câu nào rơi về luật từ khóa; trung vị thời gian bước `classify` 1320 ms và 1173 ms (thấp nhất 879 ms, cao nhất 12793 ms). Bước này chạy nối tiếp trước bước viết SQL hay điền form, nên thời gian của nó là phần thêm vào mỗi câu hỏi. Ví dụ trong prompt khác các câu của bộ thử, nhưng cả hai do cùng người viết |
-| Đánh giá câu trả lời và câu mẫu (#212, `service/feedback/`, `api/feedback.rs`, `pages/ExamplesPage.tsx`, [API.md](API.md)): nút Tốt, Chưa đạt (lý do, ghi chú) dưới mỗi câu trả lời, hiện lại khi mở cuộc trò chuyện; admin duyệt câu Tốt làm câu mẫu, ghi người duyệt và thời điểm; chỉ câu đã duyệt vào prompt SQL (câu thường) hay prompt form (câu "tại sao"); bước `llm` ghi câu mẫu đã dùng; xuất câu mẫu thành ca ứng viên cho bộ đánh giá | Có, kèm test API cho cả hai vai và test prompt; ca xuất ra chưa được đưa vào file ca nào |
-| Nhật ký lỗi và bài học (#228, `service/lessons/`, `service/ask/lessons.rs`, `service/ask/failures.rs`, `api/lessons.rs`, `pages/LessonsPage.tsx`, [API.md](API.md)): các bước dùng mô hình gom chỗ sai (guard từ chối, SQL lỗi khi chạy, cộng lặp bị chặn, form câu "tại sao" sai, bộ kiểm số hay kiểm chiều chặn lời viết) kèm câu mô hình trả, luồng hỏi ghi vào `error_log` sau bước record; bấm Chưa đạt cũng ghi một dòng. Admin viết bài học (tay hay từ một dòng nhật ký) cho một dataset hay cả workspace, bài mới là nháp, bật là duyệt (ghi người và thời điểm). Tối đa 3 bài đã bật liên quan tới câu hỏi (từ chung, hay nhắc cột câu hỏi khớp) vào prompt SQL, prompt form, prompt diễn giải và prompt trả lời, trong khối riêng (`backend/prompts/lessons.txt`); bước `llm` ghi số bài. `xdi-backend eval --lessons <file>` (`make eval-lessons`, `eval/lessons.json`) chạy bộ đánh giá hai lượt, không và có bài học, báo tỷ lệ đúng hai lượt và câu đổi kết quả | Có, kèm test API cho cả hai vai, test từng loại lỗi vào nhật ký, test chọn bài; LLM chấm báo không khớp (#201) chưa có nên chưa ghi; với mock hai lượt eval như nhau (14/14), chưa đo với mô hình thật |
-| Báo cáo (`service/report/`, `api/reports.rs`, `pages/ReportsPage.tsx`, `pages/ReportPage.tsx`, migration `0021_reports.sql`, [API.md](API.md)): báo cáo tự gom từ câu trả lời (nút Thêm vào báo cáo), tiêu đề và đoạn mở đầu sửa được, đổi thứ tự; mỗi mục dựng lại khi mở bằng cách chạy lại câu SQL đã lưu qua guard với quyền của người xem, trên phiên bản câu hỏi đã đọc; báo cáo tự động cho một dataset (độ đo theo thời gian và theo hai chiều, SQL do code dựng, lời qua hai cổng kiểm); xuất Excel (`rust_xlsxwriter`) và PDF qua hộp in của trình duyệt | Có; chỉ người tạo đọc được báo cáo, chưa có chia sẻ báo cáo cho người khác |
-| Màn xem lịch sử câu hỏi, sửa mô tả cột và bí danh | Chưa có |

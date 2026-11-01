@@ -15,6 +15,18 @@ Quy trình ra một phiên bản mới. Số phiên bản theo Semantic Versioni
      --data data/samples/dataco.csv --cases eval/dataco.json
    ```
 
+   Luồng chính là database: chạy thêm trên `edu_demo` khi database mẫu đang chạy (`data/postgres-demo`). Khóa miễn phí
+   cần `--pause-ms` để không chạm hạn mức theo phút; `--subset` chọn một phần bộ câu. Đủ cờ và các bộ câu:
+   [eval/README.md](https://github.com/pgiahuy/xdi-platform/blob/main/eval/README.md).
+
+   ```bash
+   DATABASE_URL=postgres://xdi:xdi@localhost:5433/xdi_eval LLM_PROVIDER=gemini EVAL_GEMINI_API_KEY=<khóa dành cho đánh giá> \
+     DATA_DIR=backend/target/eval-data SAMPLES_DIR=data/samples \
+     SAMPLE_DATABASE_URL=postgres://analyst:analyst@127.0.0.1:5440/edu_demo \
+     SOURCE_POSTGRES_EXTENSION=$PWD/duckdb-extensions/postgres_scanner.duckdb_extension \
+     backend/target/debug/xdi-backend eval --sample-database --cases eval/oulad_db.json --subset 30 --pause-ms 4500
+   ```
+
    Đặt `CARGO_TARGET_DIR` thì binary nằm ở `$CARGO_TARGET_DIR/debug/xdi-backend` thay cho `backend/target/debug/`.
 2. Đổi số phiên bản ở hai chỗ, cùng một số: `backend/Cargo.toml`, `frontend/package.json`. Chạy `cargo build` trong
    `backend/` và `npm install` trong `frontend/` để `Cargo.lock`, `package-lock.json` mang số mới (build phát hành
@@ -43,7 +55,8 @@ Workflow `release.yml` chạy khi có tag `v*`:
 - Kiểm số phiên bản ở tag khớp `backend/Cargo.toml`, `frontend/package.json` và `openapi.json`
   (`scripts/check-version.sh`).
 - `make release-artifacts VERSION=x.y.z`: binary Linux `xdi-backend-x.y.z-linux-x86_64.tar.gz` (kèm LICENSE, README,
-  LICENSES.md, licenses-dependencies.md, thông báo giấy phép của Swagger UI), mã nguồn `xdi-platform-x.y.z.tar.gz`
+  LICENSES.md, licenses-dependencies.md, thông báo giấy phép của Swagger UI, file extension `postgres` của DuckDB
+  `postgres_scanner.duckdb_extension` và giấy phép của nó), mã nguồn `xdi-platform-x.y.z.tar.gz`
   giải nén ra thư mục `xdi-platform-x.y.z/`, ghi chú lấy từ mục `[x.y.z]` của CHANGELOG.md
   (`scripts/release-notes.sh`). Thiếu mục đó thì workflow dừng.
 - Build image `ghcr.io/pgiahuy/xdi-platform`, đẩy với tag `x.y.z` và `latest`.
@@ -56,12 +69,12 @@ CI không build image trên mỗi PR.
 
 ## Sau khi phát hành
 
-1. Kiểm tra trên máy sạch rằng image vừa đẩy chạy được. Dịch vụ `backend` của compose chỉ có `build:`, nên
-   `docker compose up` tự build local; dùng image đã đẩy thì kéo về rồi gắn tên compose dùng (thư mục clone tên
-   `xdi-platform`): `docker pull ghcr.io/pgiahuy/xdi-platform:x.y.z`,
-   `docker tag ghcr.io/pgiahuy/xdi-platform:x.y.z xdi-platform-backend`, rồi `docker compose up -d --no-build`.
+1. Kiểm image vừa đẩy trên máy sạch (thư mục clone tên `xdi-platform`): `docker pull ghcr.io/pgiahuy/xdi-platform:x.y.z`,
+   `docker tag ghcr.io/pgiahuy/xdi-platform:x.y.z xdi-platform-backend`, rồi `docker compose up -d --no-build`. Dịch vụ
+   `backend` của compose chỉ có `build:`, nên thiếu `--no-build` thì compose tự build local.
 2. Tải `xdi-backend-x.y.z-linux-x86_64.tar.gz` từ Release, giải nén, chạy binary với `DATABASE_URL` trỏ tới một
-   Postgres, `/api/health` trả ok. Không cần Rust. Gói này chỉ có backend: muốn có giao diện thì đặt `STATIC_DIR` trỏ
+   Postgres, `/api/health` trả ok. Không cần Rust. Đặt `SOURCE_POSTGRES_EXTENSION` trỏ tới
+   `postgres_scanner.duckdb_extension` trong gói, kết nối một database và chụp thử: log không có cảnh báo quay về `copy`. Gói này chỉ có backend: muốn có giao diện thì đặt `STATIC_DIR` trỏ
    tới một bản `frontend/dist` đã build, hoặc dùng image Docker. Tarball mã nguồn thì cần Rust:
    `make install PREFIX=/tmp/xdi`.
 3. Đăng một bài ở Discussions mục Announcements: phiên bản, ba thay đổi đáng chú ý, link Release.

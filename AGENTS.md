@@ -23,7 +23,9 @@ tắc làm việc; tài liệu khác trỏ về đây, không chép lại.
 backend/     một crate Rust: api/ -> service/ -> engine/ và auth/. Phụ thuộc một chiều, không gọi ngược.
 frontend/    React với Vite, build ra file tĩnh, backend phục vụ. Kiểu API sinh từ openapi.json, không viết tay.
 docs/        tài liệu, cũng là nguồn GitHub Pages.
-data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB (DataCo mẫu), domains/ gói khái niệm ngành.
+data/        README nguồn và giấy phép, download.sh, samples/ dưới 1 MB (DataCo mẫu), postgres-demo/ database mẫu,
+             domains/ gói khái niệm ngành.
+eval/        bộ đánh giá câu hỏi, phân loại và mô hình chấm (eval/README.md).
 scripts/     hook pre-push, kiểm số phiên bản, ghi chú phát hành, danh sách giấy phép, sơ đồ schema Postgres.
 ```
 
@@ -127,7 +129,7 @@ nên mỗi người tự cài; chạy lại khi `scripts/pre-push` thay đổi.
   kiểm kiểu, build.
 - [ ] Chạy được bằng `make dev`, không lỗi trong log.
 - [ ] Đụng compose, Dockerfile hoặc biến môi trường thì `docker compose up` vẫn chạy được.
-- [ ] Các luồng chính ra đúng: nạp dataset, hỏi, xem bằng chứng, đổi role.
+- [ ] Các luồng chính ra đúng: kết nối database và chụp bảng, nạp file, hỏi, xem minh chứng, đổi vai thành viên.
 - [ ] Đổi cấu hình thì toàn hệ thống đổi theo, không chỗ nào ghi cứng.
 - [ ] Người viết giải thích được từng dòng mình vừa thêm.
 - [ ] Tiêu đề PR tiếng Anh theo Conventional Commits, nội dung PR tiếng Việt, dòng CHANGELOG nếu cần.

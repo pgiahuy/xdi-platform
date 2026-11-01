@@ -24,5 +24,5 @@ trong chính báo cáo đó, và công bố lỗ hổng kèm bản vá sau khi b
 ## Mô hình an toàn
 
 Dữ liệu nằm ở đâu, gửi gì cho mô hình ngôn ngữ: [docs/PRIVACY.md](docs/PRIVACY.md). Câu SQL nào được chạy, câu nào bị
-từ chối, các hạn chế đã biết: [docs/GUARD.md](docs/GUARD.md). Workspace, vai và phân quyền: mục 4b của
+từ chối, các hạn chế đã biết: [docs/GUARD.md](docs/GUARD.md). Workspace, vai và phân quyền: mục 5 của
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Cấu hình khi đưa lên Internet: mục 3 của [docs/INSTALL.md](docs/INSTALL.md).

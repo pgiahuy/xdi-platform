@@ -1,9 +1,8 @@
 # Schema Postgres của ứng dụng
 
-Trang này nói từng bảng trong Postgres của xdi-platform dùng để làm gì, cột nào quan trọng, ai ghi và lúc nào, kèm ví
-dụ vài dòng. Schema hiện có 24 bảng, dựng bởi các migration `0001_init.sql` tới `0021_reports.sql` (không có 0019) trong
-[`backend/migrations/`](https://github.com/pgiahuy/xdi-platform/tree/main/backend/migrations); backend tự chạy migration
-lúc khởi động.
+Mỗi bảng trong Postgres của xdi-platform: dùng để làm gì, cột chính, ai ghi và lúc nào, ví dụ vài dòng. Schema dựng
+bởi các migration trong [`backend/migrations/`](https://github.com/pgiahuy/xdi-platform/tree/main/backend/migrations);
+backend tự chạy migration lúc khởi động.
 
 Postgres chỉ giữ dữ liệu của ứng dụng: tài khoản, workspace, mô tả của dataset và bảng, hồ sơ cột, chỉ số, lịch sử câu
 hỏi, nhật ký lỗi, bài học, báo cáo. Dữ liệu để phân tích (các dòng của file nạp lên hay của bảng chụp từ database) nằm ở file
@@ -45,10 +44,6 @@ Một tài khoản của cả bản cài, không thuộc riêng workspace nào; 
 Ai ghi: màn thiết lập lần đầu tạo tài khoản quản trị đầu tiên; sau đó quản trị hệ thống tạo, khóa, mở, đặt lại mật
 khẩu; người dùng tự đổi mật khẩu; lệnh `xdi-backend reset-password` trên máy chủ.
 
-| id | email | display_name | password_hash | is_active | is_system_admin |
-|---|---|---|---|---|---|
-| `4b1e…` | `admin@example.com` | Admin | (chuỗi Argon2, không in) | true | true |
-
 ### sessions
 
 Một phiên đăng nhập. Mã phiên chỉ nằm trong cookie; bảng giữ SHA-256 của mã, nên đọc được bảng cũng không đăng nhập
@@ -62,10 +57,6 @@ Một phiên đăng nhập. Mã phiên chỉ nằm trong cookie; bảng giữ SH
 
 Ai ghi: backend, khi đăng nhập (thêm), đăng xuất, khóa tài khoản, đặt lại mật khẩu (xóa).
 
-| token_hash | user_id | created_at | expires_at |
-|---|---|---|---|
-| (64 ký tự hex, không in) | `4b1e…` | 2026-10-31 09:12 | 2026-11-30 09:12 |
-
 ### workspaces
 
 Một phòng ban (`team`), một workspace cá nhân (`personal`), hay workspace tạm của phiên demo (`demo_session`, bắt buộc có
@@ -77,10 +68,6 @@ Một phòng ban (`team`), một workspace cá nhân (`personal`), hay workspace
 | `kind` | `team`, `personal`, `demo_session` |
 
 Ai ghi: thiết lập lần đầu tạo workspace đầu tiên; người dùng tạo workspace mới; admin của workspace đổi tên, xóa.
-
-| id | name | slug | kind | expires_at |
-|---|---|---|---|---|
-| `6a71…` | Demo | `demo` | team | null |
 
 ### memberships
 
@@ -102,7 +89,7 @@ người) được migration 0020 chuyển sang `member_data_roles` rồi bỏ.
 
 ### data_roles
 
-Vai dữ liệu của một workspace (#45, #167): tên và mô tả. Tên không trùng trong workspace, không phân biệt hoa thường.
+Vai dữ liệu của một workspace: tên và mô tả. Tên không trùng trong workspace, không phân biệt hoa thường.
 Luật của vai ở `rls_policies`, người mang vai ở `member_data_roles`.
 
 Ai ghi: admin, qua `/api/workspaces/{ws}/data-roles` hay màn Vai dữ liệu. Vai đang gán cho ai thì không xóa được.
@@ -152,8 +139,7 @@ chưa có code nào đọc hay ghi; mọi cấu hình đang nằm ở biến mô
 ### sources
 
 Một dòng là một **dataset** theo nghĩa của giao diện: một database đã kết nối (`kind = postgres`) hay một file đã nạp
-(`kind = local_file`, đúng một bảng). Tên bảng giữ là `sources` từ trước khi đổi nghĩa (#266), xem mục Điểm hay hiểu
-nhầm.
+(`kind = local_file`, đúng một bảng). Vì sao tên bảng là `sources`: mục Điểm hay hiểu nhầm.
 
 | Cột | Ý nghĩa |
 |---|---|
@@ -213,8 +199,9 @@ Ai ghi: backend, lúc chụp hay nạp; lớp ngữ nghĩa chạy nền điền 
 
 ### source_metadata_tables
 
-Bảng của một nguồn database chỉ có cấu trúc, chưa có dữ liệu: quá `SOURCE_MAX_ROWS` dòng khi đặt (`row_limit`), quá `SOURCE_TABLE_MAX_MB` hay cộng vào thì
-quá `SOURCE_SNAPSHOT_MAX_MB` (`size_limit`). Không có dòng `datasets` cho các bảng này. Câu hỏi cần bảng đó thì luồng hỏi
+Bảng của một nguồn database chỉ có cấu trúc, chưa có dữ liệu: quá `SOURCE_TABLE_MAX_MB`, hay cộng vào thì quá
+`SOURCE_SNAPSHOT_MAX_MB` (`size_limit`); quá `SOURCE_MAX_ROWS` khi biến này được đặt (`row_limit`, mặc định không có
+trần dòng). Không có dòng `datasets` cho các bảng này. Câu hỏi cần bảng đó thì luồng hỏi
 nêu đúng tên bảng và nói nó chưa được chụp ([DATA.md](DATA.md), mục Chụp mọi bảng đọc được).
 
 | Cột | Ý nghĩa |
@@ -226,9 +213,11 @@ nêu đúng tên bảng và nói nó chưa được chụp ([DATA.md](DATA.md), 
 Ai ghi: backend, lúc chụp. Admin chụp riêng bảng đó sau (khi đã tăng trần) thì dòng ở đây bị xóa và bảng thành một dòng
 `datasets` như mọi bảng.
 
+Ví dụ khi đặt `SOURCE_MAX_ROWS=1000000` (với cấu hình mặc định bảng này được chụp đủ):
+
 | source_id | table_name | cause | row_count | reason (cắt) | columns (cắt) |
 |---|---|---|---|---|---|
-| `affc…` | `edu.student_daily_clicks` | row_limit | 1808119 | Bảng edu.student_daily_clicks có 1808119 dòng, quá giới hạn 1000000 dòng … | `[{"name": "code_module", "data_type": "text", "primary_key": true, …}, …]` |
+| `affc…` | `edu.student_daily_clicks` | row_limit | 1808119 | Bảng edu.student_daily_clicks có …, quá giới hạn 1000000 dòng của một bảng (SOURCE_MAX_ROWS) … | `[{"name": "code_module", "data_type": "text", "primary_key": true, …}, …]` |
 
 ### dataset_relations
 
@@ -296,7 +285,7 @@ Ai ghi: backend lúc lập hồ sơ cấu trúc, cho cột có tối đa 200 gi�
 
 ### metrics
 
-Chỉ số do tổ chức định nghĩa, ví dụ "Doanh thu" là tổng thành tiền sau giảm giá. Prompt sinh SQL và form câu "tại sao"
+Chỉ số do tổ chức định nghĩa, ví dụ "Doanh thu" là tổng thành tiền sau giảm giá. Prompt sinh SQL và form câu hỏi nguyên nhân
 dùng đúng công thức này thay vì để mô hình tự đoán. Sửa một chỉ số là thêm phiên bản mới (`version` tăng), câu hỏi cũ
 vẫn tái lập được.
 
@@ -323,14 +312,10 @@ gói và là giá trị của `sources.domain`.
 Ai ghi: backend chép gói và khái niệm còn thiếu vào workspace lần đầu cần đọc (màn Khái niệm ngành, hay câu hỏi trên
 dataset có `domain`), không ghi đè bản admin đã sửa.
 
-| id | key | name | description (cắt) |
-|---|---|---|---|
-| `d71a…` | `retail` | Bán lẻ và chuỗi cung ứng | Khái niệm chung của doanh nghiệp bán lẻ có giao hàng … |
-
 ### domain_concepts
 
 Một khái niệm trong gói: tên, từ đồng nghĩa, các cách tính, chiều hay dùng. Khái niệm đang bật vào prompt sinh SQL và form
-câu "tại sao" của dataset dùng gói đó.
+câu hỏi nguyên nhân của dataset dùng gói đó.
 
 | Cột | Ý nghĩa |
 |---|---|
@@ -349,8 +334,9 @@ Ai ghi: backend khi chép gói; admin thêm, sửa, tắt ở màn Khái niệm 
 
 ### conversations
 
-Một cuộc trò chuyện trên một bảng: câu sau hiểu theo các câu trước. Chỉ người tạo đọc và hỏi tiếp được. Các lượt là dòng
-`queries` có `conversation_id`.
+Một cuộc trò chuyện: câu sau hiểu theo các câu trước. `dataset_id` là bảng bắt đầu của câu đầu; danh sách cuộc của một
+dataset gồm cuộc trên mọi bảng của nó. Chỉ người tạo đọc và hỏi tiếp được. Các lượt là dòng `queries` có
+`conversation_id`.
 
 Ai ghi: backend, khi người dùng gửi câu đầu của một cuộc mới; tiêu đề là câu hỏi đầu.
 
@@ -368,10 +354,10 @@ bằng cách hỏi lại. Câu được admin duyệt làm câu mẫu cũng nằ
 | `dataset_id`, `version_id`, `read_versions` | Bảng đang hỏi, phiên bản đã đọc, và mọi bảng, phiên bản đã đọc khi nối bảng |
 | `sql_generated`, `sql_guarded` | SQL mô hình viết và SQL sau guard (thêm `LIMIT`, lọc dòng) |
 | `status`, `error` | `ok`, `rejected` (guard từ chối), `error` (chạy lỗi) |
-| `timings` | JSON các bước (`context`, `classify`, `llm`, `guard`, `run`, `explain`, `narrate`) kèm thời gian |
-| `understood` | Phần "Hệ thống đã hiểu là" dạng chữ ngắn, gửi lại mô hình ở lượt sau |
-| `answer` | Lời trả lời đã hiện kèm kết luận của hai cổng kiểm, để mở lại cuộc trò chuyện thấy đúng lời đó |
-| `explanation` | Với câu "tại sao": form mô hình điền và bảng phân rã đã tính |
+| `timings` | JSON: `steps` (các bước kèm thời gian), `model_calls` (từng lượt gọi mô hình, thời gian, token), `elapsed_ms`; dòng ghi trước khi có `model_calls` là mảng các bước |
+| `understood` | Thẻ Cách tính dạng chữ ngắn, gửi lại mô hình ở lượt sau |
+| `answer` | Lời trả lời đã hiện kèm kết luận kiểm số và kiểm nghĩa, để mở lại cuộc trò chuyện thấy đúng lời đó |
+| `explanation` | Với câu hỏi nguyên nhân: form mô hình điền và bảng phân rã đã tính |
 | `feedback`, `feedback_reason`, `feedback_note` | Người hỏi bấm Tốt (`correct`) hay Chưa đạt (`incorrect`), lý do, ghi chú |
 | `example_approved_by`, `example_approved_at` | Admin duyệt câu Tốt làm câu mẫu; chỉ câu đã duyệt vào prompt |
 
@@ -401,7 +387,7 @@ trả nên chỉ admin của workspace đọc được ([PRIVACY.md](PRIVACY.md)
 
 | Cột | Ý nghĩa |
 |---|---|
-| `step` | `guard` (guard từ chối), `run` (SQL lỗi khi chạy), `fanout` (chặn cộng lặp khi nối bảng), `why_form` (form câu "tại sao" sai), `narrate` (lời bị bộ kiểm chặn), `feedback` (người hỏi bấm Chưa đạt) |
+| `step` | `guard` (guard từ chối), `run` (SQL lỗi khi chạy), `fanout` (chặn cộng lặp khi nối bảng), `why_form` (form câu hỏi nguyên nhân sai), `narrate` (lời bị bộ kiểm chặn), `feedback` (người hỏi bấm Chưa đạt) |
 | `error` | Lời báo lỗi |
 | `model_output` | Câu mô hình trả ở bước đó (SQL, form JSON, lời viết); null khi không có |
 | `query_id` | Dòng lịch sử, nếu có |
@@ -474,10 +460,10 @@ không thuộc cuộc trò chuyện nào. Xóa câu hỏi (khi xóa dataset hay 
 
 ## Điểm hay hiểu nhầm
 
-- **`sources` là dataset, `datasets` là bảng.** Từ #266, một dataset là một database đã kết nối hay một file; bảng nằm
-  bên trong. Tên bảng Postgres giữ như cũ để không phải sửa mọi câu SQL: dòng `sources` là dataset, dòng `datasets` là
-  một bảng của nó, nối qua `datasets.source_id`. Trong code, kiểu `Dataset` và mọi `dataset_id` cũ là bảng; kiểu của
-  API `/catalog` dùng nghĩa mới ([ARCHITECTURE.md](ARCHITECTURE.md), mục 5).
+- **`sources` là dataset, `datasets` là bảng.** Một dataset là một database đã kết nối hay một file; bảng nằm bên
+  trong. Tên bảng Postgres có từ khi mỗi bảng còn gọi là một dataset, giữ như cũ để không phải sửa mọi câu SQL: dòng
+  `sources` là dataset, dòng `datasets` là một bảng của nó, nối qua `datasets.source_id`. Trong code, kiểu `Dataset` và
+  mọi `dataset_id` là bảng; kiểu của API `/catalog` dùng nghĩa mới ([ARCHITECTURE.md](ARCHITECTURE.md), mục 6).
 - **Phiên bản theo từng bảng.** Mỗi bảng có dãy phiên bản riêng; không có phiên bản chung của dataset. Chụp lại cả
   database là chụp lại từng bảng. Hồ sơ cột gắn với phiên bản; câu hỏi ghi phiên bản đã đọc.
 - **Quan hệ chỉ từ khóa ngoại đã khai báo.** `dataset_relations` chép khóa ngoại của database nguồn lúc chụp. Không đoán
@@ -486,14 +472,10 @@ không thuộc cuộc trò chuyện nào. Xóa câu hỏi (khi xóa dataset hay 
   null. Người hỏi tự bấm Tốt chưa đủ, phải có admin duyệt.
 - **Nhật ký lỗi tự động, bài học do admin.** `error_log` do backend ghi, không ai sửa. `lessons` chỉ admin viết, và chỉ
   bài `enabled = true` (đã duyệt) vào prompt.
-- **Chỉ số theo dataset, công thức theo bảng.** Tên chỉ số không trùng trong một dataset (`metrics.source_id`), còn
-  `metrics.dataset_id` là bảng mà công thức đọc cột.
 - **Vai trong workspace và vai dữ liệu là hai thứ.** `memberships.role` quyết định được làm gì; `data_roles` cùng
   `member_data_roles` và `rls_policies` quyết định thấy dòng nào. Admin mang vai dữ liệu vẫn không bị lọc.
 - **Báo cáo không lưu số liệu.** `report_items` chỉ trỏ tới câu hỏi; số của mỗi mục tính lại mỗi lần mở, nên người có
   vai dữ liệu hẹp hơn lúc hỏi thấy số theo quyền hiện tại. Lời trả lời đã lưu (`queries.answer`) khi đó không hiện.
-- **Dữ liệu phân tích không nằm trong Postgres.** Các dòng dữ liệu là file Parquet dưới `DATA_DIR`
-  (`dataset_versions.parquet_path`). Postgres chỉ có hồ sơ: số dòng, min, max, danh sách giá trị của cột phân loại.
 
 ## Sinh lại sơ đồ
 
